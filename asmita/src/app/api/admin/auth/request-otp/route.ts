@@ -1,0 +1,40 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createOtpForEmail } from "@/lib/auth/otp";
+import { isAdminEmail } from "@/lib/auth/admin-allowlist";
+import { verifyCsrfRequest } from "@/lib/csrf";
+import { sendOtp } from "@/lib/email";
+import { hashEmail } from "@/lib/hash";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/request-ip";
+import { logSecurityEvent } from "@/lib/security-log";
+
+const schema = z.object({ email: z.email() });
+
+export async function POST(request: Request) {
+  if (!verifyCsrfRequest(request)) {
+    logSecurityEvent({ event: "csrf_failed", route: "/api/admin/auth/request-otp" });
+    return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
+  }
+
+  const parsed = schema.safeParse(await request.json());
+  if (!parsed.success || !isAdminEmail(parsed.data.email)) {
+    logSecurityEvent({ event: "admin_denied", route: "/api/admin/auth/request-otp" });
+    return NextResponse.json({ error: "admin_not_allowed" }, { status: 403 });
+  }
+
+  const emailHash = hashEmail(parsed.data.email);
+  const emailLimit = await checkRateLimitAsync(`admin-otp:${emailHash}`, 5, 60 * 60_000);
+  const ipLimit = await checkRateLimitAsync(`admin-login-ip:${getClientIp(request)}`, 10, 60 * 60_000);
+  if (!emailLimit.allowed || !ipLimit.allowed) {
+    logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/admin/auth/request-otp" });
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
+
+  const otp = await createOtpForEmail(parsed.data.email);
+  await sendOtp(parsed.data.email, otp.token);
+  return NextResponse.json({
+    success: true,
+    devOtp: process.env.RESEND_API_KEY || process.env.NODE_ENV === "production" ? undefined : otp.token,
+  });
+}

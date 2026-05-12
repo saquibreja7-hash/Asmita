@@ -1,0 +1,389 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  VICTIM
+  SUPPORTER
+  NGO_WORKER
+  ADMIN
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  LEGAL_ADVISOR
+  CASE_REVIEWER
+  GO_EDITOR
+  SUPPORT_AGENT
+}
+
+enum CaseStatus {
+  OPEN
+  PARTIALLY_RESOLVED
+  RESOLVED
+  CLOSED
+  ESCALATED
+}
+
+enum PlatformTier {
+  TIER_1
+  TIER_2
+  TIER_3
+}
+
+enum NoticeBasis {
+  IT_RULES_2021
+  DMCA
+  IT_RULES_AND_DMCA
+  EMAIL_ONLY
+  FORM_ONLY
+}
+
+enum UrlStatus {
+  PENDING_REVIEW
+  NOTICE_QUEUED
+  NOTICE_SENT
+  ESCALATED
+  REMOVED
+  UNRESOLVED
+  REJECTED
+}
+
+enum NoticeMethod {
+  API
+  EMAIL
+  FORM_HANDOFF
+}
+
+enum ResponseType {
+  ACKNOWLEDGED
+  REMOVED
+  REJECTED
+  NO_RESPONSE
+}
+
+enum TemplateType {
+  IT_RULES_2021
+  DMCA
+  IT_RULES_AND_DMCA
+  ESCALATION_L1
+  ESCALATION_L2
+  FIR_PACKAGE
+}
+
+enum AuditEventType {
+  USER_REGISTERED
+  USER_VERIFIED
+  DECLARATION_SIGNED
+  CASE_CREATED
+  URL_SUBMITTED
+  URL_FLAGGED
+  URL_APPROVED
+  URL_REJECTED
+  NOTICE_QUEUED
+  NOTICE_SENT
+  NOTICE_FAILED
+  ESCALATION_L1_TRIGGERED
+  ESCALATION_L2_TRIGGERED
+  ESCALATION_L3_TRIGGERED
+  CONTENT_REMOVED
+  CASE_CLOSED
+  ADMIN_ACTION
+  NGO_VERIFIED
+  IDENTITY_VERIFICATION
+  CASE_EXPORT
+  CASE_DELETION_REQUESTED
+  CASE_HARD_DELETED
+  GO_DATABASE_CHANGED
+  TEMPLATE_ACTIVATED
+}
+
+enum DeletionJobStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+model User {
+  id                 String     @id @default(uuid())
+  emailHash          String     @unique
+  emailEncrypted     String
+  emailVerified      Boolean    @default(false)
+  aadhaarVerified    Boolean    @default(false)
+  digilockerVerified Boolean    @default(false)
+  role               UserRole   @default(VICTIM)
+  ageOver18          Boolean
+  createdAt          DateTime   @default(now())
+  lastActiveAt       DateTime?
+  deactivatedAt      DateTime?
+
+  cases         Case[]     @relation("VictimCases")
+  verifiedCases Case[]     @relation("NgoVerifiedCases")
+  auditLogs     AuditLog[]
+  adminProfile  AdminProfile?
+  sessionTokens SessionToken[]
+  ngoApiKeys    NgoApiKey[]
+}
+
+model Case {
+  id                  String     @id @default(uuid())
+  referenceNumber     String     @unique
+  userId              String
+  status              CaseStatus @default(OPEN)
+  state               String?
+  city                String?
+  ngoVerified         Boolean    @default(false)
+  ngoVerifierId       String?
+  declarationSignedAt DateTime?
+  declarationIpHash   String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  user          User           @relation("VictimCases", fields: [userId], references: [id])
+  ngoVerifier   User?          @relation("NgoVerifiedCases", fields: [ngoVerifierId], references: [id])
+  submittedUrls SubmittedUrl[]
+  feedback      Feedback[]
+  deletionJobs  DeletionJob[]
+}
+
+model Platform {
+  id                         String       @id @default(uuid())
+  name                       String
+  domainPatterns             String[]
+  tier                       PlatformTier
+  noticeBasis                NoticeBasis
+  grievanceEmail             String?
+  grievanceName              String?
+  grievanceAddress           String?
+  formUrl                    String?
+  apiEndpoint                String?
+  responseRate7d             Float?
+  lastContactVerifiedAt      DateTime?
+  lastContactVerifiedByHuman Boolean      @default(false)
+  isActive                   Boolean      @default(true)
+  createdAt                  DateTime     @default(now())
+  updatedAt                  DateTime     @updatedAt
+
+  submittedUrls   SubmittedUrl[]
+  noticeTemplates NoticeTemplate[]
+  goHistory       PlatformGoHistory[]
+}
+
+model PlatformGoHistory {
+  id          String   @id @default(uuid())
+  platformId  String
+  fieldName   String
+  oldValue    String?
+  newValue    String?
+  sourceUrl   String?
+  verifiedBy  String?
+  changedById String?
+  createdAt   DateTime @default(now())
+
+  platform Platform @relation(fields: [platformId], references: [id])
+
+  @@index([platformId])
+  @@index([createdAt])
+}
+
+model SubmittedUrl {
+  id               String    @id @default(uuid())
+  caseId           String
+  urlEncrypted     String
+  urlHash          String
+  domain           String
+  platformId       String?
+  status           UrlStatus @default(PENDING_REVIEW)
+  submittedAt      DateTime  @default(now())
+  flaggedForReview Boolean   @default(false)
+  flagReason       String?
+
+  case     Case      @relation(fields: [caseId], references: [id])
+  platform Platform? @relation(fields: [platformId], references: [id])
+  notices  Notice[]
+}
+
+model NoticeTemplate {
+  id              String       @id @default(uuid())
+  platformId      String?
+  templateType    TemplateType
+  subjectTemplate String
+  bodyTemplate    String
+  legalCitations  Json
+  reviewedByLegal Boolean      @default(false)
+  reviewedAt      DateTime?
+  reviewedByName  String?
+  isActive        Boolean      @default(true)
+  version         Int          @default(1)
+  createdAt       DateTime     @default(now())
+
+  platform Platform? @relation(fields: [platformId], references: [id])
+  notices  Notice[]
+}
+
+model Notice {
+  id                 String        @id @default(uuid())
+  urlId              String
+  templateId         String?
+  routingTier        Int
+  method             NoticeMethod
+  sentAt             DateTime?
+  recipientEmail     String?
+  messageId          String?
+  payloadHash        String?
+  responseReceivedAt DateTime?
+  responseType       ResponseType?
+  removedAt          DateTime?
+  escalationLevel    Int           @default(0)
+  createdAt          DateTime      @default(now())
+
+  submittedUrl SubmittedUrl    @relation(fields: [urlId], references: [id])
+  template     NoticeTemplate? @relation(fields: [templateId], references: [id])
+  escalations  Escalation[]
+}
+
+model EmailDeliveryProof {
+  id           String   @id @default(uuid())
+  provider     String
+  messageId    String
+  eventType    String
+  platformId   String?
+  rawEventHash String
+  receivedAt   DateTime @default(now())
+
+  @@index([messageId])
+  @@index([platformId])
+  @@index([receivedAt])
+  @@unique([provider, messageId, eventType, rawEventHash])
+}
+
+model Escalation {
+  id          String    @id @default(uuid())
+  noticeId    String
+  level       Int
+  triggeredAt DateTime  @default(now())
+  actionType  String
+  completedAt DateTime?
+
+  notice Notice @relation(fields: [noticeId], references: [id])
+}
+
+model AuditLog {
+  id           String         @id @default(uuid())
+  sequence     Int            @unique
+  eventType    AuditEventType
+  entityType   String?
+  entityId     String?
+  actorId      String?
+  data         Json?
+  ipHash       String?
+  previousHash String
+  eventHash    String         @unique
+  createdAt    DateTime       @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+model OtpToken {
+  id        String   @id @default(uuid())
+  emailHash String
+  tokenHash String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([emailHash])
+}
+
+model SessionToken {
+  id           String   @id @default(uuid())
+  userId       String
+  tokenHash    String   @unique
+  namespace    String
+  expiresAt    DateTime
+  lastSeenAt   DateTime @default(now())
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AdminProfile {
+  id        String    @id @default(uuid())
+  userId    String    @unique
+  role      AdminRole
+  mfaSecret String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model AdminAccessLog {
+  id        String   @id @default(uuid())
+  adminId   String?
+  action    String
+  ipHash    String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([createdAt])
+}
+
+model NgoApiKey {
+  id          String    @id @default(uuid())
+  partnerName String
+  keyHash     String    @unique
+  scopes      String[]  @default([])
+  issuedById  String?
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  issuedBy User? @relation(fields: [issuedById], references: [id])
+
+  @@index([partnerName])
+}
+
+model Feedback {
+  id            String   @id @default(uuid())
+  caseId        String?
+  caseReference String?
+  rating        Int
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  case Case? @relation(fields: [caseId], references: [id])
+
+  @@index([caseId])
+  @@index([createdAt])
+}
+
+model DeletionJob {
+  id          String            @id @default(uuid())
+  caseId      String
+  requestedAt DateTime          @default(now())
+  scheduledAt DateTime
+  completedAt DateTime?
+  status      DeletionJobStatus @default(SCHEDULED)
+  error       String?
+
+  case Case @relation(fields: [caseId], references: [id])
+
+  @@index([caseId])
+  @@index([scheduledAt])
+  @@index([status])
+}

@@ -1,0 +1,119 @@
+import { Resend } from "resend";
+
+let resend: Resend | null = null;
+
+function getResend() {
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY || "re_dev_placeholder");
+  }
+  return resend;
+}
+
+export function getTransactionalEmailFrom() {
+  return process.env.TRANSACTIONAL_EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "updates@asmita.in";
+}
+
+export function getNoticeEmailFrom() {
+  return process.env.NOTICE_EMAIL_FROM || process.env.EMAIL_FROM || "notices@asmita.in";
+}
+
+export async function sendOtp(to: string, otp: string) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: `dev-otp-${otp}` };
+  }
+  return getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject: "Your Asmita verification code",
+    text: `Your Asmita verification code is ${otp}. It expires in 10 minutes.`,
+  });
+}
+
+export async function sendNoticeDraft(to: string, subject: string, text: string) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-notice-message" };
+  }
+  return getResend().emails.send({
+    from: getNoticeEmailFrom(),
+    to,
+    subject,
+    text,
+  });
+}
+
+export function createVictimConfirmationEmail(referenceNumber: string, dashboardUrl: string) {
+  const subject = `Asmita case ${referenceNumber}`;
+  const text = [
+    `Your Asmita case has been created: ${referenceNumber}.`,
+    `You can track progress here: ${dashboardUrl}`,
+    "For privacy, this email does not include any submitted URLs.",
+  ].join("\n");
+  return { subject, text };
+}
+
+export function createNoticeSentEmail(referenceNumber: string, dashboardUrl: string) {
+  return {
+    subject: `Notice sent for Asmita case ${referenceNumber}`,
+    text: [
+      `A notice has been sent for your Asmita case: ${referenceNumber}.`,
+      `You can track progress here: ${dashboardUrl}`,
+      "For privacy, this email does not include submitted URLs.",
+    ].join("\n"),
+  };
+}
+
+export function createEscalationSentEmail(referenceNumber: string, dashboardUrl: string, level: 1 | 2 | 3) {
+  return {
+    subject: `Escalation update for Asmita case ${referenceNumber}`,
+    text: [
+      `Escalation level ${level} has been recorded for your Asmita case: ${referenceNumber}.`,
+      `You can track progress here: ${dashboardUrl}`,
+      "If the case reaches the 7-day point, your legal support package will be available from the dashboard.",
+    ].join("\n"),
+  };
+}
+
+export function createLegalPackageReadyEmail(referenceNumber: string, dashboardUrl: string) {
+  return {
+    subject: `Legal package ready for Asmita case ${referenceNumber}`,
+    text: [
+      `Your 7-day legal support package is ready for case ${referenceNumber}.`,
+      `Download it from your dashboard: ${dashboardUrl}`,
+      "The package summarizes case activity and does not include intimate image or video files.",
+    ].join("\n"),
+  };
+}
+
+export function createDeletionRequestedEmail(referenceNumber: string, hardDeleteAfter: string) {
+  return {
+    subject: `Deletion scheduled for Asmita case ${referenceNumber}`,
+    text: [
+      `Deletion has been scheduled for Asmita case ${referenceNumber}.`,
+      `Hard deletion is scheduled after: ${hardDeleteAfter}`,
+      "Audit metadata for the deletion request may be retained for integrity and compliance.",
+    ].join("\n"),
+  };
+}
+
+export function createDeletionCompletedEmail(referenceNumber: string) {
+  return {
+    subject: `Deletion completed for Asmita case ${referenceNumber}`,
+    text: [
+      `Hard deletion has completed for Asmita case ${referenceNumber}.`,
+      "Audit metadata for the deletion action may remain, but case PII has been removed.",
+    ].join("\n"),
+  };
+}
+
+export async function sendVictimConfirmation(to: string, referenceNumber: string, dashboardUrl: string) {
+  const { subject, text } = createVictimConfirmationEmail(referenceNumber, dashboardUrl);
+  if (!process.env.RESEND_API_KEY) {
+    return { id: `dev-confirmation-${referenceNumber}` };
+  }
+  return getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text,
+  });
+}

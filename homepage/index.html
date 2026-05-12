@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asmita — You don't have to face this alone.</title>
+  <meta name="description" content="Asmita helps Indian women remove non-consensual intimate images from the internet — free, confidential, and grounded in Indian law." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+
+    /* ═══════════════════════════════════════
+       TOKENS
+    ═══════════════════════════════════════ */
+    :root {
+      --accent:        #0A5E5A;
+      --accent-light:  #0D7A75;
+      --accent-hover:  #085250;
+      --accent-tint:   #EFF9F8;
+      --accent-border: #C0E4E2;
+      --dark:          #0D1F1E;
+      --white:         #FFFFFF;
+      --off:           #F8F7F5;
+      --border:        #E8E8E5;
+      --text:          #0F0F0F;
+      --text-2:        #3A3A3A;
+      --text-3:        #717171;
+      --text-4:        #A0A0A0;
+
+      --r-sm: 6px;
+      --r-md: 10px;
+      --r-lg: 14px;
+      --r-xl: 20px;
+
+      --font:      'Inter', 'Noto Sans Devanagari', system-ui, sans-serif;
+      --font-deva: 'Noto Sans Devanagari', 'Inter', sans-serif;
+
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --t:    200ms;
+    }
+
+    /* ═══════════════════════════════════════
+       RESET
+    ═══════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: var(--font);
+      font-feature-settings: "cv02","cv03","cv04","cv11";
+      font-optical-sizing: auto;
+      color: var(--text);
+      background: var(--white);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: var(--font); cursor: pointer; border: none; background: none; }
+
+    /* ═══════════════════════════════════════
+       LAYOUT
+    ═══════════════════════════════════════ */
+    .wrap     { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 40px; }
+    .wrap--md { max-width: 880px;  margin: 0 auto; padding: 0 40px; }
+    .wrap--sm { max-width: 660px;  margin: 0 auto; padding: 0 40px; }
+
+    /* ═══════════════════════════════════════
+       LANGUAGE
+    ═══════════════════════════════════════ */
+    [data-lang="en"] .hi { display: none !important; }
+    [data-lang="hi"] .en { display: none !important; }
+
+    /* ═══════════════════════════════════════
+       BUTTONS
+    ═══════════════════════════════════════ */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      font-family: var(--font); font-size: 14.5px; font-weight: 500;
+      height: 44px; padding: 0 20px; border-radius: var(--r-md);
+      transition: background var(--t) var(--ease), box-shadow var(--t) var(--ease),
+                  border-color var(--t) var(--ease), color var(--t) var(--ease);
+      white-space: nowrap; cursor: pointer; line-height: 1;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 2px 16px rgba(10,94,90,0.28);
+    }
+    .btn-ghost {
+      background: transparent; color: var(--text-2);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--off); border-color: #d4d4d0; }
+    .btn-lg { height: 52px; padding: 0 28px; font-size: 15.5px; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+    /* ═══════════════════════════════════════
+       NAVBAR
+    ═══════════════════════════════════════ */
+    #nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+      background: rgba(255,255,255,0.82);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid transparent;
+      transition: border-color var(--t), box-shadow var(--t), background var(--t);
+    }
+    #nav.scrolled {
+      border-color: var(--border);
+      box-shadow: 0 1px 28px rgba(0,0,0,0.06);
+      background: rgba(255,255,255,0.96);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 62px;
+    }
+    .nav-logo { display: flex; align-items: baseline; gap: 8px; }
+    .nav-logo-en { font-size: 19px; font-weight: 700; color: var(--text); letter-spacing: -0.025em; }
+    .nav-logo-hi { font-family: var(--font-deva); font-size: 14px; font-weight: 400; color: var(--text-3); }
+    .nav-right { display: flex; align-items: center; gap: 16px; }
+
+    .lang { display: flex; align-items: center; gap: 1px; }
+    .lang-btn {
+      padding: 5px 9px; border-radius: var(--r-sm);
+      font-size: 12.5px; font-weight: 500; color: var(--text-3);
+      transition: color var(--t), background var(--t);
+    }
+    .lang-btn.on { color: var(--accent); background: var(--accent-tint); }
+    .lang-btn:hover:not(.on) { color: var(--text); }
+    .lang-pipe { font-size: 12px; color: var(--border); user-select: none; }
+
+    .hamburger {
+      display: none; flex-direction: column; justify-content: center;
+      gap: 5px; width: 34px; height: 34px; border-radius: var(--r-sm);
+      transition: background var(--t);
+    }
+    .hamburger:hover { background: var(--off); }
+    .hamburger span {
+      display: block; height: 1.5px; background: var(--text); border-radius: 2px;
+      transition: opacity var(--t), transform var(--t);
+      transform-origin: center;
+    }
+    .hamburger.open span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+    .hamburger.open span:nth-child(2) { opacity: 0; }
+    .hamburger.open span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+
+    .drawer {
+      display: none; position: fixed;
+      top: 62px; left: 0; right: 0;
+      background: var(--white); border-bottom: 1px solid var(--border);
+      padding: 18px 24px 22px; z-index: 299;
+    }
+    .drawer.open { display: block; }
+    .drawer-helpline {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 14px; background: var(--accent-tint);
+      border: 1px solid var(--accent-border); border-radius: var(--r-md);
+      margin-bottom: 14px; font-size: 13.5px; color: var(--text-3);
+    }
+    .drawer-helpline strong { color: var(--accent); font-size: 17px; }
+    .drawer-langs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .drawer-lang {
+      flex: 1; padding: 9px; text-align: center;
+      border: 1px solid var(--border); border-radius: var(--r-md);
+      font-size: 13.5px; font-weight: 500; color: var(--text-3);
+      transition: border-color var(--t), color var(--t), background var(--t);
+    }
+    .drawer-lang.on { border-color: var(--accent); color: var(--accent); background: var(--accent-tint); }
+
+    /* ═══════════════════════════════════════
+       HERO
+       Clean white, centered, Stripe-style
+    ═══════════════════════════════════════ */
+    #hero {
+      padding: 150px 0 104px;
+      position: relative;
+      background: var(--white);
+      overflow: hidden;
+    }
+
+    /* Single soft radial glow from top-center */
+    #hero::before {
+      content: '';
+      position: absolute;
+      top: -80px; left: 50%; transform: translateX(-50%);
+      width: 1100px; height: 800px;
+      background: radial-gradient(ellipse at 50% 0%, rgba(10,94,90,0.08) 0%, transparent 62%);
+      pointer-events: none; z-index: 0;
+    }
+
+    .hero-inner { position: relative; z-index: 1; text-align: center; }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 16px; margin-bottom: 34px;
+      background: var(--accent-tint);
+      border: 1px solid var(--accent-border);
+      border-radius: 99px;
+      font-size: 11.5px; font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    .hero-badge-sep {
+      width: 3px; height: 3px; border-radius: 50%;
+      background: var(--accent); opacity: 0.45;
+    }
+
+    .hero-h {
+      font-size: clamp(46px, 6.2vw, 76px);
+      font-weight: 800;
+      line-height: 1.035;
+      letter-spacing: -0.04em;
+      color: var(--text);
+      margin-bottom: 26px;
+      max-width: 840px;
+      margin-left: auto; margin-right: auto;
+    }
+    .hero-h-hi {
+      font-family: var(--font-deva);
+      font-size: clamp(36px, 4.8vw, 58px);
+      line-height: 1.18; letter-spacing: -0.01em; font-weight: 700;
+    }
+    .accent-word {
+      color: var(--accent);
+      background: linear-gradient(135deg, #0A5E5A 0%, #1CA09A 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .accent-word-hi { color: var(--accent); }
+
+    .hero-sub {
+      font-size: clamp(16px, 1.9vw, 18.5px);
+      font-weight: 400; line-height: 1.75;
+      color: var(--text-3);
+      max-width: 480px;
+      margin: 0 auto 46px;
+    }
+    .hero-sub-hi { font-family: var(--font-deva); font-size: clamp(15px, 1.65vw, 17.5px); line-height: 1.9; }
+
+    .hero-cta {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 12px; margin-bottom: 36px;
+    }
+
+    .hero-trust {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 8px;
+    }
+    .trust-pill {
+      font-size: 12px; color: var(--text-3);
+      padding: 5px 13px;
+      background: var(--off);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      white-space: nowrap;
+    }
+    .trust-pill-hi { font-family: var(--font-deva); font-size: 12px; }
+
+    /* ═══════════════════════════════════════
+       PLATFORM STRIP
+    ═══════════════════════════════════════ */
+    #platforms {
+      background: var(--off);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+    }
+    .platforms-inner {
+      display: flex; align-items: center;
+      overflow-x: auto; scrollbar-width: none;
+    }
+    .platforms-inner::-webkit-scrollbar { display: none; }
+    .platforms-label {
+      font-size: 11px; font-weight: 600; color: var(--text-4);
+      white-space: nowrap; padding-right: 28px; flex-shrink: 0;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      border-right: 1px solid var(--border);
+    }
+    .platforms-list { display: flex; align-items: center; flex-wrap: nowrap; }
+    .platform-chip {
+      font-size: 13px; font-weight: 500; color: var(--text-3);
+      padding: 0 20px; white-space: nowrap;
+      border-right: 1px solid var(--border);
+    }
+    .platform-chip:last-child { border-right: none; }
+
+    /* ═══════════════════════════════════════
+       SECTION SHELL
+    ═══════════════════════════════════════ */
+    .section { padding: 96px 0; background: var(--white); }
+    .section--tint { background: var(--off); }
+
+    .section-tag {
+      font-size: 11.5px; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 10px;
+    }
+    .section-tag-hi { font-family: var(--font-deva); letter-spacing: 0.03em; font-size: 12px; }
+
+    .section-h {
+      font-size: clamp(24px, 3vw, 33px);
+      font-weight: 700; letter-spacing: -0.022em;
+      color: var(--text); line-height: 1.18; margin-bottom: 14px;
+    }
+    .section-h-hi { font-family: var(--font-deva); font-size: clamp(22px, 2.6vw, 28px); line-height: 1.3; }
+
+    .section-sub { font-size: 16px; color: var(--text-3); line-height: 1.72; }
+    .section-sub-hi { font-family: var(--font-deva); font-size: 15.5px; line-height: 1.85; }
+
+    /* ═══════════════════════════════════════
+       WHAT WE DO
+    ═══════════════════════════════════════ */
+    .what-header { text-align: center; margin-bottom: 52px; }
+
+    .what-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .what-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      padding: 36px 30px;
+      transition: border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+    }
+    .what-card:hover {
+      border-color: var(--accent-border);
+      box-shadow: 0 4px 28px rgba(10,94,90,0.08);
+    }
+    .what-icon {
+      width: 42px; height: 42px;
+      background: var(--accent-tint); border-radius: var(--r-md);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--accent); margin-bottom: 22px;
+    }
+    .what-card-n {
+      font-size: 11px; font-weight: 600; color: var(--text-4);
+      letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 9px;
+    }
+    .what-card-title {
+      font-size: 16px; font-weight: 600; color: var(--text);
+      margin-bottom: 10px; line-height: 1.35;
+    }
+    .what-card-title-hi { font-family: var(--font-deva); font-size: 15.5px; }
+    .what-card-body { font-size: 14px; color: var(--text-3); line-height: 1.72; }
+    .what-card-body-hi { font-family: var(--font-deva); font-size: 13.5px; line-height: 1.8; }
+
+    /* ═══════════════════════════════════════
+       HOW IT WORKS
+    ═══════════════════════════════════════ */
+    .how-header { margin-bottom: 60px; }
+
+    .how-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 72px; align-items: start;
+    }
+    .how-steps { display: flex; flex-direction: column; gap: 2px; }
+
+    .how-step {
+      display: flex; gap: 20px;
+      padding: 22px 18px; border-radius: var(--r-lg);
+      cursor: default; transition: background var(--t);
+    }
+    .how-step.active, .how-step:hover { background: var(--white); }
+
+    .how-step-n {
+      width: 30px; height: 30px; flex-shrink: 0;
+      border: 1.5px solid var(--border); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12.5px; font-weight: 600; color: var(--text-4);
+      transition: border-color var(--t), color var(--t), background var(--t);
+    }
+    .how-step.active .how-step-n,
+    .how-step:hover .how-step-n {
+      border-color: var(--accent); color: var(--accent); background: var(--accent-tint);
+    }
+    .how-step-text-wrap { padding-top: 3px; }
+    .how-step-label {
+      font-size: 15px; font-weight: 600; color: var(--text);
+      margin-bottom: 6px; line-height: 1.3;
+    }
+    .how-step-label-hi { font-family: var(--font-deva); font-size: 14.5px; }
+    .how-step-desc { font-size: 14px; color: var(--text-3); line-height: 1.7; }
+    .how-step-desc-hi { font-family: var(--font-deva); font-size: 13.5px; line-height: 1.8; }
+
+    .how-visual {
+      position: sticky; top: 96px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      padding: 28px 24px;
+      display: flex; flex-direction: column; gap: 18px;
+      box-shadow: 0 2px 28px rgba(0,0,0,0.05);
+    }
+    .how-visual-label {
+      font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--text-4);
+    }
+
+    .mock-card {
+      background: var(--off); border: 1px solid var(--border);
+      border-radius: var(--r-lg); overflow: hidden;
+    }
+    .mock-bar {
+      background: #EDECEA; border-bottom: 1px solid var(--border);
+      padding: 9px 14px; display: flex; align-items: center; gap: 7px;
+    }
+    .mock-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .mock-body { padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; }
+    .mock-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .mock-url {
+      font-size: 11.5px; color: var(--text-3);
+      font-family: 'Courier New', monospace;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
+    }
+    .mock-badge {
+      font-size: 10.5px; font-weight: 600; padding: 3px 8px;
+      border-radius: 99px; white-space: nowrap; flex-shrink: 0;
+    }
+    .badge-sent { background: var(--accent-tint); color: var(--accent); border: 1px solid var(--accent-border); }
+    .badge-done { background: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; }
+    .badge-wait { background: #FFF7ED; color: #D97706; border: 1px solid #FDE68A; }
+
+    .mock-timeline { display: flex; flex-direction: column; gap: 10px; }
+    .mock-trow { display: flex; align-items: flex-start; gap: 10px; }
+    .mock-tline-dot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px;
+    }
+    .dot-done { background: var(--accent); }
+    .dot-wait { background: #E5E7EB; border: 1.5px solid #D1D5DB; }
+    .mock-t-text { font-size: 11.5px; color: var(--text-3); line-height: 1.5; }
+    .mock-t-time { font-size: 10.5px; color: var(--text-4); margin-top: 1px; }
+
+    /* ═══════════════════════════════════════
+       LAW SECTION
+    ═══════════════════════════════════════ */
+    .law-grid {
+      display: grid; grid-template-columns: 1fr 340px;
+      gap: 72px; align-items: start;
+    }
+    .law-body { font-size: 15.5px; color: var(--text-2); line-height: 1.8; margin-bottom: 18px; }
+    .law-body:last-of-type { margin-bottom: 0; }
+    .law-body-hi { font-family: var(--font-deva); font-size: 15px; line-height: 1.9; }
+
+    .trust-card { border: 1px solid var(--border); border-radius: var(--r-xl); overflow: hidden; }
+    .trust-card-head {
+      padding: 14px 22px; border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-4);
+      background: var(--off);
+    }
+    .trust-items { padding: 6px 22px 14px; }
+    .trust-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 13px 0; border-bottom: 1px solid var(--border);
+    }
+    .trust-item:last-child { border-bottom: none; }
+    .trust-check { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+    .trust-text { font-size: 13.5px; color: var(--text-2); line-height: 1.55; }
+    .trust-text-hi { font-family: var(--font-deva); font-size: 13px; line-height: 1.65; }
+
+    /* ═══════════════════════════════════════
+       PRIVACY  — clean 3-col, open layout
+    ═══════════════════════════════════════ */
+    .privacy-header { text-align: center; margin-bottom: 56px; }
+
+    .privacy-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 52px;
+    }
+    .privacy-item { display: flex; flex-direction: column; gap: 14px; }
+    .privacy-icon {
+      width: 44px; height: 44px;
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      display: flex; align-items: center; justify-content: center; color: var(--accent);
+    }
+    .privacy-title { font-size: 15.5px; font-weight: 600; color: var(--text); line-height: 1.3; }
+    .privacy-title-hi { font-family: var(--font-deva); font-size: 14.5px; }
+    .privacy-body { font-size: 14px; color: var(--text-3); line-height: 1.72; }
+    .privacy-body-hi { font-family: var(--font-deva); font-size: 13.5px; line-height: 1.8; }
+
+    /* ═══════════════════════════════════════
+       SUPPORT
+    ═══════════════════════════════════════ */
+    .support-header { margin-bottom: 48px; }
+
+    .support-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .support-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--r-xl); padding: 28px 24px;
+      transition: border-color var(--t), box-shadow var(--t);
+    }
+    .support-card:hover {
+      border-color: var(--accent-border);
+      box-shadow: 0 4px 24px rgba(10,94,90,0.07);
+    }
+    .support-org { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+    .support-desc { font-size: 13.5px; color: var(--text-3); line-height: 1.65; margin-bottom: 20px; }
+    .support-desc-hi { font-family: var(--font-deva); font-size: 13px; }
+    .support-contact { font-size: 18px; font-weight: 700; color: var(--accent); }
+    .support-label { font-size: 12px; color: var(--text-4); margin-top: 3px; }
+    .support-label-hi { font-family: var(--font-deva); font-size: 12px; }
+
+    /* ═══════════════════════════════════════
+       FINAL CTA  — dark bookend
+    ═══════════════════════════════════════ */
+    #cta {
+      background: var(--dark);
+      padding: 100px 0; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    #cta::before {
+      content: ''; position: absolute; inset: 0; z-index: 0;
+      background: radial-gradient(ellipse 70% 80% at 50% 50%, rgba(10,94,90,0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-inner { position: relative; z-index: 1; }
+    .cta-tag {
+      font-size: 11.5px; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--accent-border); margin-bottom: 20px;
+    }
+    .cta-tag-hi { font-family: var(--font-deva); letter-spacing: 0.04em; font-size: 12px; }
+    .cta-h {
+      font-size: clamp(30px, 4vw, 44px); font-weight: 700;
+      letter-spacing: -0.025em; color: #fff; line-height: 1.1; margin-bottom: 14px;
+    }
+    .cta-h-hi { font-family: var(--font-deva); font-size: clamp(26px, 3.5vw, 38px); line-height: 1.2; }
+    .cta-sub { font-size: 16px; color: rgba(255,255,255,0.5); margin-bottom: 40px; line-height: 1.6; }
+    .cta-sub-hi { font-family: var(--font-deva); font-size: 15.5px; }
+
+    .btn-cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 52px; padding: 0 30px; border-radius: var(--r-md);
+      font-size: 15.5px; font-weight: 500; font-family: var(--font);
+      background: var(--accent); color: #fff;
+      transition: background var(--t) var(--ease), box-shadow var(--t) var(--ease);
+    }
+    .btn-cta:hover { background: var(--accent-hover); box-shadow: 0 4px 24px rgba(10,94,90,0.45); }
+
+    /* ═══════════════════════════════════════
+       FOOTER
+    ═══════════════════════════════════════ */
+    footer {
+      background: var(--dark);
+      border-top: 1px solid rgba(255,255,255,0.07);
+      padding: 52px 0 36px;
+    }
+    .footer-top {
+      display: grid; grid-template-columns: 1fr auto 1fr;
+      gap: 40px; align-items: center;
+      padding-bottom: 40px; margin-bottom: 32px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .footer-brand-logo { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+    .footer-en { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: -0.025em; }
+    .footer-hi { font-family: var(--font-deva); font-size: 14px; color: rgba(255,255,255,0.35); }
+    .footer-desc { font-size: 13px; color: rgba(255,255,255,0.35); line-height: 1.6; max-width: 260px; }
+    .footer-desc-hi { font-family: var(--font-deva); font-size: 13px; }
+
+    .footer-childline { text-align: center; }
+    .footer-cl-label {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; color: rgba(255,255,255,0.3); margin-bottom: 6px;
+    }
+    .footer-cl-num { font-size: 42px; font-weight: 800; color: #fff; letter-spacing: -0.04em; line-height: 1; }
+    .footer-cl-sub { font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 5px; }
+
+    .footer-links { display: flex; justify-content: flex-end; }
+    .footer-nav { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+    .footer-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 18px; }
+    .footer-row a { font-size: 13px; color: rgba(255,255,255,0.35); transition: color var(--t); }
+    .footer-row a:hover { color: rgba(255,255,255,0.75); }
+
+    .footer-bottom {
+      text-align: center; font-size: 12px; color: rgba(255,255,255,0.25); line-height: 1.7;
+    }
+    .footer-bottom-hi { font-family: var(--font-deva); font-size: 12px; }
+
+    /* ═══════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════ */
+    @media (max-width: 1024px) {
+      .how-grid  { grid-template-columns: 1fr; gap: 48px; }
+      .how-visual { position: static; }
+      .law-grid  { grid-template-columns: 1fr; gap: 40px; }
+      .trust-card { max-width: 480px; }
+    }
+    @media (max-width: 768px) {
+      .wrap, .wrap--md, .wrap--sm { padding: 0 20px; }
+      .section { padding: 72px 0; }
+      #hero { padding: 120px 0 72px; }
+      .what-cards   { grid-template-columns: 1fr; }
+      .privacy-grid { grid-template-columns: 1fr; gap: 36px; }
+      .support-grid { grid-template-columns: 1fr; gap: 14px; }
+      .footer-top   { grid-template-columns: 1fr; text-align: center; }
+      .footer-brand-logo { justify-content: center; }
+      .footer-desc  { margin: 0 auto; }
+      .footer-links { justify-content: center; }
+      .footer-nav   { align-items: center; }
+      .footer-row   { justify-content: center; }
+      .nav-right .btn { display: none; }
+      .hamburger { display: flex; }
+    }
+    @media (max-width: 540px) {
+      .wrap, .wrap--md, .wrap--sm { padding: 0 16px; }
+      #hero { padding: 108px 0 60px; }
+      .hero-h { letter-spacing: -0.025em; }
+      .footer-cl-num { font-size: 32px; }
+      .platforms-label { display: none; }
+    }
+
+  </style>
+</head>
+<body>
+
+<!-- ─── NAVBAR ─── -->
+<header id="nav" role="banner">
+  <div class="wrap">
+    <nav class="nav-inner" aria-label="Main navigation">
+
+      <a href="/" class="nav-logo" aria-label="Asmita home">
+        <span class="nav-logo-en">Asmita</span>
+        <span class="nav-logo-hi" aria-hidden="true">अस्मिता</span>
+      </a>
+
+      <div class="nav-right">
+        <div class="lang" role="group" aria-label="Language">
+          <button class="lang-btn on" id="b-en" onclick="setLang('en')" aria-pressed="true">EN</button>
+          <span class="lang-pipe" aria-hidden="true">|</span>
+          <button class="lang-btn"    id="b-hi" onclick="setLang('hi')" aria-pressed="false">HI</button>
+        </div>
+        <a href="/start" class="btn btn-primary">
+          <span class="en">Start Your Case</span>
+          <span class="hi" style="font-family:var(--font-deva)">केस शुरू करें</span>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M2 7h10M8 3.5l3.5 3.5L8 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+        <button class="hamburger" id="hbg" aria-label="Open menu" aria-expanded="false" onclick="toggleDrawer()">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+
+    </nav>
+  </div>
+</header>
+
+<!-- Mobile drawer -->
+<div class="drawer" id="drawer" role="dialog" aria-label="Navigation menu">
+  <div class="drawer-helpline">
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+      <path d="M13 10.1c0 .3 0 .5-.2.8-.1.2-.3.5-.5.7-.4.4-.8.5-1.3.6-.8.1-1.6-.1-2.3-.4a10.8 10.8 0 01-4.5-3.2A10.2 10.2 0 012.5 4c-.1-.6-.2-1.2 0-1.7.1-.3.3-.6.5-.8.3-.3.7-.5 1.1-.5.2 0 .3 0 .5.1.1.1.3.2.4.4l1.5 2c.1.1.2.3.2.4 0 .2-.1.3-.2.5l-.7.7a.4.4 0 000 .5 8.5 8.5 0 004.5 4.6.4.4 0 00.5 0l.7-.7c.1-.1.3-.2.5-.2.1 0 .3.1.4.2l2 1.5c.2.1.3.3.3.5v.1z" stroke="currentColor" stroke-width="1.2" fill="none"/>
+    </svg>
+    Need help right now? CHILDLINE: <strong>1098</strong>
+  </div>
+  <div class="drawer-langs">
+    <button class="drawer-lang on" id="d-en" onclick="setLang('en')">EN — English</button>
+    <button class="drawer-lang"    id="d-hi" onclick="setLang('hi')">HI — हिन्दी</button>
+  </div>
+  <a href="/start" class="btn btn-primary" style="width:100%;height:48px;border-radius:10px;font-size:15px;">
+    <span class="en">Start Your Case</span>
+    <span class="hi" style="font-family:var(--font-deva)">केस शुरू करें</span>
+  </a>
+</div>
+
+<main>
+
+<!-- ─── HERO ─── -->
+<section id="hero" aria-labelledby="hero-h">
+  <div class="wrap">
+    <div class="hero-inner">
+
+      <div class="hero-badge">
+        <span class="en">Free</span><span class="hi" style="font-family:var(--font-deva)">निःशुल्क</span>
+        <span class="hero-badge-sep"></span>
+        <span class="en">Confidential</span><span class="hi" style="font-family:var(--font-deva)">गोपनीय</span>
+        <span class="hero-badge-sep"></span>
+        <span class="en">India</span><span class="hi" style="font-family:var(--font-deva)">भारत</span>
+      </div>
+
+      <h1 id="hero-h">
+        <span class="hero-h en">You don't have to<br>face this <span class="accent-word">alone.</span></span>
+        <span class="hero-h hero-h-hi hi">आपको यह अकेले<br>सहने की <span class="accent-word-hi">ज़रूरत नहीं।</span></span>
+      </h1>
+
+      <p class="hero-sub en">If intimate images of you have been shared without your consent, Asmita sends legal takedown notices on your behalf — across every platform, automatically.</p>
+      <p class="hero-sub hero-sub-hi hi">अगर आपकी निजी तस्वीरें बिना सहमति के साझा की गई हैं, तो Asmita आपकी ओर से हर प्लेटफॉर्म पर स्वचालित रूप से कानूनी नोटिस भेजता है।</p>
+
+      <div class="hero-cta">
+        <a href="/start" class="btn btn-primary btn-lg">
+          <span class="en">Start Your Case</span>
+          <span class="hi" style="font-family:var(--font-deva)">अपना केस शुरू करें</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+        <a href="#how" class="btn btn-ghost btn-lg">
+          <span class="en">See how it works</span>
+          <span class="hi" style="font-family:var(--font-deva)">यह कैसे काम करता है</span>
+        </a>
+      </div>
+
+      <div class="hero-trust en">
+        <span class="trust-pill">No images ever uploaded</span>
+        <span class="trust-pill">No lawyers needed</span>
+        <span class="trust-pill">~10 minutes</span>
+      </div>
+      <div class="hero-trust hi">
+        <span class="trust-pill trust-pill-hi">कोई तस्वीर अपलोड नहीं</span>
+        <span class="trust-pill trust-pill-hi">वकील की जरूरत नहीं</span>
+        <span class="trust-pill trust-pill-hi">~10 मिनट</span>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ─── PLATFORM STRIP ─── -->
+<div id="platforms">
+  <div class="wrap">
+    <div class="platforms-inner">
+      <p class="platforms-label en" style="margin-right:28px;">Works with</p>
+      <p class="platforms-label hi" style="font-family:var(--font-deva);margin-right:28px;">इन पर काम करता है</p>
+      <div class="platforms-list">
+        <span class="platform-chip">Instagram</span>
+        <span class="platform-chip">YouTube</span>
+        <span class="platform-chip">Twitter / X</span>
+        <span class="platform-chip">Telegram</span>
+        <span class="platform-chip">WhatsApp</span>
+        <span class="platform-chip">ShareChat</span>
+        <span class="platform-chip">Google Search</span>
+        <span class="platform-chip">Pornhub</span>
+        <span class="platform-chip en">+ more</span>
+        <span class="platform-chip hi" style="font-family:var(--font-deva)">+ और भी</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── WHAT WE DO ─── -->
+<section class="section" aria-labelledby="what-h">
+  <div class="wrap--md">
+
+    <div class="what-header">
+      <p class="section-tag en">What we do</p>
+      <p class="section-tag section-tag-hi hi">हम क्या करते हैं</p>
+      <h2 id="what-h" class="section-h en">Three steps. We handle the hard part.</h2>
+      <h2 class="section-h section-h-hi hi">तीन कदम। मुश्किल काम हम करते हैं।</h2>
+    </div>
+
+    <div class="what-cards">
+
+      <div class="what-card">
+        <div class="what-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M8.5 11.5a3.5 3.5 0 005 0l2.5-2.5a3.5 3.5 0 00-5-5L9.5 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M11.5 8.5a3.5 3.5 0 00-5 0L4 11a3.5 3.5 0 005 5l1.5-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="what-card-n">01</p>
+        <h3 class="what-card-title en">Paste the URL</h3>
+        <h3 class="what-card-title what-card-title-hi hi">URL पेस्ट करें</h3>
+        <p class="what-card-body en">Paste the link where the content appears. That's all we need — no images, no uploads, just a link and your email.</p>
+        <p class="what-card-body what-card-body-hi hi">जहाँ कंटेंट है उसका लिंक पेस्ट करें। बस इतना काफी है — कोई तस्वीर नहीं, बस एक लिंक।</p>
+      </div>
+
+      <div class="what-card">
+        <div class="what-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M18 2L8 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M18 2l-5.5 16-4-6-6-4 15.5-6z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="what-card-n">02</p>
+        <h3 class="what-card-title en">We send the legal notice</h3>
+        <h3 class="what-card-title what-card-title-hi hi">हम कानूनी नोटिस भेजते हैं</h3>
+        <p class="what-card-body en">Asmita routes a legally grounded takedown notice to the platform's Grievance Officer, citing Indian law requiring a response within 24 hours.</p>
+        <p class="what-card-body what-card-body-hi hi">Asmita प्लेटफॉर्म के ग्रीवेंस ऑफिसर को नोटिस भेजता है — जिसका 24 घंटे में जवाब देना कानूनन जरूरी है।</p>
+      </div>
+
+      <div class="what-card">
+        <div class="what-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="2" y="12" width="3" height="6" rx="1" stroke="currentColor" stroke-width="1.6"/>
+            <rect x="8.5" y="7" width="3" height="11" rx="1" stroke="currentColor" stroke-width="1.6"/>
+            <rect x="15" y="2" width="3" height="16" rx="1" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </div>
+        <p class="what-card-n">03</p>
+        <h3 class="what-card-title en">Track every removal</h3>
+        <h3 class="what-card-title what-card-title-hi hi">हर रिमूवल ट्रैक करें</h3>
+        <p class="what-card-body en">One dashboard for all your notices. We escalate automatically at 24h, 48h, and 7 days if a platform doesn't respond.</p>
+        <p class="what-card-body what-card-body-hi hi">सभी नोटिस के लिए एक डैशबोर्ड। 24h, 48h और 7 दिन पर अपने आप एस्केलेशन।</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ─── HOW IT WORKS ─── -->
+<section class="section section--tint" id="how" aria-labelledby="how-h">
+  <div class="wrap--md">
+
+    <div class="how-header">
+      <p class="section-tag en">The process</p>
+      <p class="section-tag section-tag-hi hi">प्रक्रिया</p>
+      <h2 id="how-h" class="section-h en">Simple. Guided. Private.</h2>
+      <h2 class="section-h section-h-hi hi">सरल। मार्गदर्शित। निजी।</h2>
+    </div>
+
+    <div class="how-grid">
+
+      <div class="how-steps" role="list">
+
+        <div class="how-step active" role="listitem">
+          <div class="how-step-n" aria-hidden="true">1</div>
+          <div class="how-step-text-wrap">
+            <p class="how-step-label en">Register privately</p>
+            <p class="how-step-label how-step-label-hi hi">निजी तौर पर रजिस्टर करें</p>
+            <p class="how-step-desc en">Only your email. No government ID required to start. We send a one-time code — no passwords, nothing to remember.</p>
+            <p class="how-step-desc how-step-desc-hi hi">केवल आपका ईमेल। कोई सरकारी ID जरूरी नहीं। हम एक बार का कोड भेजते हैं — कोई पासवर्ड नहीं।</p>
+          </div>
+        </div>
+
+        <div class="how-step" role="listitem">
+          <div class="how-step-n" aria-hidden="true">2</div>
+          <div class="how-step-text-wrap">
+            <p class="how-step-label en">Submit the URL</p>
+            <p class="how-step-label how-step-label-hi hi">URL सबमिट करें</p>
+            <p class="how-step-desc en">Paste the link. You can add more than one. We never open or view the content — the URL is used only to identify the platform.</p>
+            <p class="how-step-desc how-step-desc-hi hi">लिंक पेस्ट करें। एक से अधिक जोड़ सकते हैं। हम उसे कभी नहीं खोलते।</p>
+          </div>
+        </div>
+
+        <div class="how-step" role="listitem">
+          <div class="how-step-n" aria-hidden="true">3</div>
+          <div class="how-step-text-wrap">
+            <p class="how-step-label en">We send the notice</p>
+            <p class="how-step-label how-step-label-hi hi">हम नोटिस भेजते हैं</p>
+            <p class="how-step-desc en">A takedown notice goes directly to the Grievance Officer citing Indian law. No lawyers. No court orders needed.</p>
+            <p class="how-step-desc how-step-desc-hi hi">टेकडाउन नोटिस सीधे ग्रीवेंस ऑफिसर को जाता है। वकील या अदालती आदेश की जरूरत नहीं।</p>
+          </div>
+        </div>
+
+        <div class="how-step" role="listitem">
+          <div class="how-step-n" aria-hidden="true">4</div>
+          <div class="how-step-text-wrap">
+            <p class="how-step-label en">Track removal</p>
+            <p class="how-step-label how-step-label-hi hi">रिमूवल ट्रैक करें</p>
+            <p class="how-step-desc en">Check your case any time. We escalate automatically at 24h, 48h, and 7 days — and generate a legal package if needed.</p>
+            <p class="how-step-desc how-step-desc-hi hi">कभी भी स्थिति जांचें। 24h, 48h और 7 दिन पर खुद एस्केलेशन — और जरूरत पड़ने पर कानूनी पैकेज।</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Visual panel -->
+      <div class="how-visual" aria-hidden="true">
+        <p class="how-visual-label">Case Dashboard — ASMITA-202605-00042</p>
+
+        <div class="mock-card">
+          <div class="mock-bar">
+            <div class="mock-dot" style="background:#FF5F57"></div>
+            <div class="mock-dot" style="background:#FEBC2E"></div>
+            <div class="mock-dot" style="background:#28C840"></div>
+          </div>
+          <div class="mock-body">
+            <div class="mock-row">
+              <span class="mock-url">instagram.com/p/C8xK…</span>
+              <span class="mock-badge badge-done">✓ Removed</span>
+            </div>
+            <div class="mock-row">
+              <span class="mock-url">twitter.com/user/status/…</span>
+              <span class="mock-badge badge-sent">Notice Sent</span>
+            </div>
+            <div class="mock-row">
+              <span class="mock-url">t.me/channel/msg_4921</span>
+              <span class="mock-badge badge-wait">Escalated</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mock-timeline">
+          <p style="font-size:11px;font-weight:600;color:var(--text-3);margin-bottom:4px;">Timeline — twitter.com/user/status/…</p>
+          <div class="mock-trow">
+            <div class="mock-tline-dot dot-done"></div>
+            <div>
+              <p class="mock-t-text">Notice sent to @twitter Grievance Officer</p>
+              <p class="mock-t-time">12 May · 10:34 IST</p>
+            </div>
+          </div>
+          <div class="mock-trow">
+            <div class="mock-tline-dot dot-done"></div>
+            <div>
+              <p class="mock-t-text">24h escalation notice sent</p>
+              <p class="mock-t-time">13 May · 10:34 IST</p>
+            </div>
+          </div>
+          <div class="mock-trow">
+            <div class="mock-tline-dot dot-wait"></div>
+            <div>
+              <p class="mock-t-text">Awaiting 48h escalation</p>
+              <p class="mock-t-time">14 May · 10:34 IST</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── THE LAW ─── -->
+<section class="section" aria-labelledby="law-h">
+  <div class="wrap--md">
+    <div class="law-grid">
+
+      <div>
+        <p class="section-tag en">The law is on your side</p>
+        <p class="section-tag section-tag-hi hi">कानून आपके साथ है</p>
+        <h2 id="law-h" class="section-h en" style="margin-bottom:24px;">Platforms are legally required to respond.</h2>
+        <h2 class="section-h section-h-hi hi" style="margin-bottom:24px;">प्लेटफॉर्म को कानूनन जवाब देना होगा।</h2>
+        <p class="law-body en">Under IT Rules 2021 Rule 3(2)(b), every major social media platform in India must designate a Grievance Officer — and must remove non-consensual intimate content within 24 hours of a complaint.</p>
+        <p class="law-body law-body-hi hi">IT नियम 2021 के नियम 3(2)(b) के तहत, भारत में हर प्रमुख प्लेटफॉर्म को ग्रीवेंस ऑफिसर रखना होगा — और शिकायत के 24 घंटे के भीतर ऐसी सामग्री हटानी होगी।</p>
+        <p class="law-body en">This is a legal right that almost no victim knows exists. You don't need a lawyer or a court order. Asmita operationalises this right — automatically, for every platform at once.</p>
+        <p class="law-body law-body-hi hi">यह अधिकार लगभग कोई पीड़ित नहीं जानता। वकील या अदालती आदेश की जरूरत नहीं। Asmita इसे सभी प्लेटफॉर्म पर एक साथ लागू करता है।</p>
+      </div>
+
+      <div>
+        <div class="trust-card">
+          <div class="trust-card-head en">Why it works</div>
+          <div class="trust-card-head hi" style="font-family:var(--font-deva)">यह क्यों काम करता है</div>
+          <div class="trust-items">
+
+            <div class="trust-item">
+              <svg class="trust-check" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M3 9l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div>
+                <p class="trust-text en">Templates reviewed by IFF &amp; SFLC.in — India's leading digital rights organisations</p>
+                <p class="trust-text trust-text-hi hi">IFF और SFLC.in द्वारा समीक्षित — भारत के शीर्ष डिजिटल अधिकार संगठन</p>
+              </div>
+            </div>
+
+            <div class="trust-item">
+              <svg class="trust-check" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M3 9l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div>
+                <p class="trust-text en">Grounded in IT Act 2000, BNS 2023, IT Rules 2021</p>
+                <p class="trust-text trust-text-hi hi">IT अधिनियम 2000, BNS 2023 और IT नियम 2021 पर आधारित</p>
+              </div>
+            </div>
+
+            <div class="trust-item">
+              <svg class="trust-check" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M3 9l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div>
+                <p class="trust-text en">24-hour legal obligation — not a request, not goodwill</p>
+                <p class="trust-text trust-text-hi hi">24 घंटे की कानूनी बाध्यता — अनुरोध नहीं, कानून है</p>
+              </div>
+            </div>
+
+            <div class="trust-item">
+              <svg class="trust-check" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M3 9l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div>
+                <p class="trust-text en">Free. Always.</p>
+                <p class="trust-text trust-text-hi hi">हमेशा निःशुल्क।</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ─── PRIVACY ─── -->
+<section class="section section--tint" aria-labelledby="priv-h">
+  <div class="wrap--md">
+
+    <div class="privacy-header">
+      <p class="section-tag en">Your privacy</p>
+      <p class="section-tag section-tag-hi hi">आपकी गोपनीयता</p>
+      <h2 id="priv-h" class="section-h en">We never see your content.</h2>
+      <h2 class="section-h section-h-hi hi">हम आपका कंटेंट कभी नहीं देखते।</h2>
+    </div>
+
+    <div class="privacy-grid">
+
+      <div class="privacy-item">
+        <div class="privacy-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="3" y="9" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M6.5 9V6.5a3.5 3.5 0 017 0V9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <circle cx="10" cy="13.5" r="1.2" fill="currentColor"/>
+          </svg>
+        </div>
+        <p class="privacy-title en">No uploads, ever</p>
+        <p class="privacy-title privacy-title-hi hi">कभी अपलोड नहीं</p>
+        <p class="privacy-body en">Your images and videos are never sent to Asmita. We don't want them and will never ask for them.</p>
+        <p class="privacy-body privacy-body-hi hi">आपकी तस्वीरें Asmita को कभी नहीं भेजी जातीं। हम उन्हें कभी नहीं माँगेंगे।</p>
+      </div>
+
+      <div class="privacy-item">
+        <div class="privacy-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M4 7h12M4 10.5h8M4 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="privacy-title en">URLs as text only</p>
+        <p class="privacy-title privacy-title-hi hi">URL सिर्फ टेक्स्ट</p>
+        <p class="privacy-body en">The link you paste is plain text — used only to identify the platform. We never open it or view what's there.</p>
+        <p class="privacy-body privacy-body-hi hi">आपका URL सिर्फ टेक्स्ट है — प्लेटफॉर्म पहचानने के लिए। हम उसे कभी नहीं खोलते।</p>
+      </div>
+
+      <div class="privacy-item">
+        <div class="privacy-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2L3.5 5v5c0 4 2.7 7.7 6.5 8.8C13.8 17.7 16.5 14 16.5 10V5L10 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M7.5 10l2 2 3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="privacy-title en">Encrypted and yours alone</p>
+        <p class="privacy-title privacy-title-hi hi">एन्क्रिप्टेड, सिर्फ आपका</p>
+        <p class="privacy-body en">Your email is encrypted. Your case is referenced by an anonymous case ID. Delete everything, any time.</p>
+        <p class="privacy-body privacy-body-hi hi">आपका ईमेल एन्क्रिप्टेड है। आप किसी भी समय सब कुछ मिटा सकते हैं।</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ─── SUPPORT ─── -->
+<section class="section" aria-labelledby="sup-h">
+  <div class="wrap--md">
+
+    <div class="support-header">
+      <p class="section-tag en">Support is here</p>
+      <p class="section-tag section-tag-hi hi">सहायता यहाँ है</p>
+      <h2 id="sup-h" class="section-h en">You're not alone in this.</h2>
+      <h2 class="section-h section-h-hi hi">आप इसमें अकेले नहीं हैं।</h2>
+      <p class="section-sub en" style="margin-top:10px;">Asmita works alongside these organisations. Reach out to them at any time — no account needed.</p>
+      <p class="section-sub section-sub-hi hi" style="margin-top:10px;">Asmita इन संगठनों के साथ मिलकर काम करता है। किसी भी समय संपर्क करें।</p>
+    </div>
+
+    <div class="support-grid">
+
+      <div class="support-card">
+        <p class="support-org">iCall — TISS</p>
+        <p class="support-desc en">Free mental health counselling. Available in Hindi and English.</p>
+        <p class="support-desc support-desc-hi hi">निःशुल्क मानसिक स्वास्थ्य परामर्श। हिंदी और अंग्रेजी में।</p>
+        <p class="support-contact">9152987821</p>
+        <p class="support-label en">Call or WhatsApp</p>
+        <p class="support-label support-label-hi hi">कॉल या WhatsApp</p>
+      </div>
+
+      <div class="support-card">
+        <p class="support-org">Cyber Peace Foundation</p>
+        <p class="support-desc en">Cyber safety and legal guidance for digital harassment and online abuse.</p>
+        <p class="support-desc support-desc-hi hi">साइबर सुरक्षा और डिजिटल उत्पीड़न में कानूनी मार्गदर्शन।</p>
+        <p class="support-contact" style="font-size:15px;letter-spacing:0;">cyberpeace.org</p>
+        <p class="support-label en">Online support</p>
+        <p class="support-label support-label-hi hi">ऑनलाइन सहायता</p>
+      </div>
+
+      <div class="support-card">
+        <p class="support-org">Red Dot Foundation</p>
+        <p class="support-desc en">Safe spaces and support for women facing sexual violence in India.</p>
+        <p class="support-desc support-desc-hi hi">यौन हिंसा का सामना करने वाली महिलाओं के लिए सुरक्षित सहायता।</p>
+        <p class="support-contact" style="font-size:15px;letter-spacing:0;">reddotfoundation.org</p>
+        <p class="support-label en">Online support</p>
+        <p class="support-label support-label-hi hi">ऑनलाइन सहायता</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ─── FINAL CTA ─── -->
+<section id="cta" aria-label="Get started">
+  <div class="wrap">
+    <div class="cta-inner">
+      <p class="cta-tag en">When you're ready</p>
+      <p class="cta-tag cta-tag-hi hi">जब आप तैयार हों</p>
+      <h2 class="cta-h en">Ready when you are.</h2>
+      <h2 class="cta-h cta-h-hi hi">आपका इंतज़ार है।</h2>
+      <p class="cta-sub en">Free. Confidential. Takes about 10 minutes.</p>
+      <p class="cta-sub cta-sub-hi hi">निःशुल्क। गोपनीय। लगभग 10 मिनट।</p>
+      <a href="/start" class="btn-cta">
+        <span class="en">Start Your Case</span>
+        <span class="hi" style="font-family:var(--font-deva)">अपना केस शुरू करें</span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ─── FOOTER ─── -->
+<footer role="contentinfo">
+  <div class="wrap">
+
+    <div class="footer-top">
+
+      <div>
+        <div class="footer-brand-logo">
+          <span class="footer-en">Asmita</span>
+          <span class="footer-hi">अस्मिता</span>
+        </div>
+        <p class="footer-desc en">An independent platform for dignity restoration. Not affiliated with any government body.</p>
+        <p class="footer-desc footer-desc-hi hi">गरिमा बहाली के लिए एक स्वतंत्र मंच। किसी सरकारी संस्था से संबद्ध नहीं।</p>
+      </div>
+
+      <div class="footer-childline">
+        <p class="footer-cl-label en">Emergency helpline</p>
+        <p class="footer-cl-label hi" style="font-family:var(--font-deva)">आपातकालीन हेल्पलाइन</p>
+        <p class="footer-cl-num">1098</p>
+        <p class="footer-cl-sub">CHILDLINE · 24 hours · Free</p>
+      </div>
+
+      <div class="footer-links">
+        <nav class="footer-nav" aria-label="Footer navigation">
+          <div class="footer-row">
+            <a href="/about"><span class="en">About</span><span class="hi" style="font-family:var(--font-deva)">हमारे बारे में</span></a>
+            <a href="/resources"><span class="en">Resources</span><span class="hi" style="font-family:var(--font-deva)">संसाधन</span></a>
+            <a href="/faq">FAQ</a>
+          </div>
+          <div class="footer-row">
+            <a href="/privacy"><span class="en">Privacy</span><span class="hi" style="font-family:var(--font-deva)">गोपनीयता</span></a>
+            <a href="/legal"><span class="en">Legal</span><span class="hi" style="font-family:var(--font-deva)">कानूनी</span></a>
+            <a href="/contact"><span class="en">Contact</span><span class="hi" style="font-family:var(--font-deva)">संपर्क</span></a>
+          </div>
+        </nav>
+      </div>
+
+    </div>
+
+    <p class="footer-bottom en">© 2026 Asmita. Free to use, always. · If you are in immediate danger, call <strong style="color:rgba(255,255,255,0.65)">112</strong>.</p>
+    <p class="footer-bottom footer-bottom-hi hi">© 2026 Asmita. हमेशा निःशुल्क। · अगर आप तुरंत खतरे में हैं, तो <strong style="color:rgba(255,255,255,0.65)">112</strong> पर कॉल करें।</p>
+
+  </div>
+</footer>
+
+<script>
+  function setLang(l) {
+    document.documentElement.setAttribute('data-lang', l);
+    document.documentElement.setAttribute('lang', l === 'hi' ? 'hi' : 'en');
+    ['en','hi'].forEach(x => {
+      document.getElementById('b-'+x).classList.toggle('on', x===l);
+      document.getElementById('b-'+x).setAttribute('aria-pressed', String(x===l));
+      document.getElementById('d-'+x).classList.toggle('on', x===l);
+    });
+    try { localStorage.setItem('asmita_lang', l); } catch(_){}
+  }
+  try { const s = localStorage.getItem('asmita_lang'); if(s==='hi') setLang('hi'); } catch(_){}
+
+  const nav = document.getElementById('nav');
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 20);
+  }, {passive:true});
+
+  const drawer = document.getElementById('drawer');
+  const hbg    = document.getElementById('hbg');
+  function toggleDrawer() {
+    const o = drawer.classList.toggle('open');
+    hbg.classList.toggle('open', o);
+    hbg.setAttribute('aria-expanded', String(o));
+  }
+  document.addEventListener('click', e => {
+    if (drawer.classList.contains('open') && !drawer.contains(e.target) && !hbg.contains(e.target)) {
+      drawer.classList.remove('open');
+      hbg.classList.remove('open');
+      hbg.setAttribute('aria-expanded','false');
+    }
+  });
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 768) { drawer.classList.remove('open'); hbg.classList.remove('open'); }
+  }, {passive:true});
+
+  document.querySelectorAll('.how-step').forEach(s => {
+    s.addEventListener('mouseenter', () => {
+      document.querySelectorAll('.how-step').forEach(x => x.classList.remove('active'));
+      s.classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "auth.enterEmail": "अपना ईमेल पता दर्ज करें",
+  "auth.otpInstructions": "हमने आपके ईमेल पर छह अंकों का कोड भेजा है।",
+  "auth.ageAdult": "मैं पुष्टि करती/करता हूं कि मेरी उम्र 18 वर्ष या अधिक है।",
+  "auth.ageMinor": "मेरी उम्र 18 वर्ष से कम है।",
+  "submit.declarationTitle": "घोषणा",
+  "submit.noUpload": "निजी तस्वीरें या वीडियो अपलोड न करें।",
+  "support.childline": "चाइल्डलाइन 1098",
+  "minor.noAdultFlow": "अस्मिता नाबालिगों से वयस्क केस URL एकत्र नहीं करती।",
+  "nav.howItWorks": "कैसे काम करता है",
+  "nav.resources": "संसाधन",
+  "nav.privacy": "गोपनीयता",
+  "nav.start": "शुरू करें",
+  "support.button": "सहायता",
+  "support.title": "तत्काल सहायता",
+  "support.close": "बंद करें",
+  "support.childlineBody": "24 घंटे, निशुल्क, नाबालिगों और बाल सुरक्षा चिंताओं के लिए।",
+  "support.emergency": "आपातकालीन 112",
+  "support.emergencyBody": "यदि आप तत्काल खतरे में हैं, तो कॉल करें।",
+  "support.icallBody": "भारत में मानसिक स्वास्थ्य परामर्श।"
+}
