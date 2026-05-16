@@ -23,9 +23,32 @@ export type UrlRecord = {
   flagReason?: string;
 };
 
-export const cases = new Map<string, CaseRecord>();
-export const deactivatedUsers = new Map<string, { deactivatedAt: string; hardDeleteAfter: string }>();
-export const users = new Map<string, { emailHash: string; emailEncrypted: string }>();
+type StoreGlobals = {
+  cases?: Map<string, CaseRecord>;
+  deactivatedUsers?: Map<string, { deactivatedAt: string; hardDeleteAfter: string }>;
+  users?: Map<string, { emailHash: string; emailEncrypted: string }>;
+};
+
+function assertDevOrTest() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "[store.ts] In-memory store cannot be used in production. All data paths must use case-ops.ts (Prisma).",
+    );
+  }
+}
+
+const storeGlobals = globalThis as typeof globalThis & { __asmitaStore?: StoreGlobals };
+storeGlobals.__asmitaStore ??= {};
+
+export const cases = (storeGlobals.__asmitaStore.cases ??= new Map<string, CaseRecord>());
+export const deactivatedUsers = (storeGlobals.__asmitaStore.deactivatedUsers ??= new Map<
+  string,
+  { deactivatedAt: string; hardDeleteAfter: string }
+>());
+export const users = (storeGlobals.__asmitaStore.users ??= new Map<
+  string,
+  { emailHash: string; emailEncrypted: string }
+>());
 
 export function createReferenceNumber() {
   const year = new Date().getFullYear();
@@ -34,6 +57,7 @@ export function createReferenceNumber() {
 }
 
 export async function createCase(userId: string) {
+  assertDevOrTest();
   const record: CaseRecord = {
     id: randomUUID(),
     referenceNumber: createReferenceNumber(),
@@ -52,7 +76,23 @@ export async function createCase(userId: string) {
   return record;
 }
 
+export function ensureCaseForUser(caseId: string, userId: string) {
+  const existing = cases.get(caseId);
+  if (existing) return existing;
+  const record: CaseRecord = {
+    id: caseId,
+    referenceNumber: createReferenceNumber(),
+    userId,
+    createdAt: new Date().toISOString(),
+    status: "OPEN",
+    urls: [],
+  };
+  cases.set(record.id, record);
+  return record;
+}
+
 export async function addUrlsToCase(caseId: string, rawUrls: string[], options?: { flagReasons?: string[] }) {
+  assertDevOrTest();
   const record = cases.get(caseId);
   if (!record) throw new Error("case_not_found");
   const flaggedForReview = Boolean(options?.flagReasons?.length);
@@ -120,6 +160,7 @@ export function ensureDemoCase(userId = "demo-user") {
 }
 
 export function createUserTokenMaterial(email: string) {
+  assertDevOrTest();
   return {
     id: hashEmail(email).slice(0, 24),
     emailHash: hashEmail(email),
@@ -128,6 +169,7 @@ export function createUserTokenMaterial(email: string) {
 }
 
 export function rememberVerifiedUser(user: { id: string; emailHash: string; emailEncrypted: string }) {
+  assertDevOrTest();
   users.set(user.id, {
     emailHash: user.emailHash,
     emailEncrypted: user.emailEncrypted,
@@ -135,12 +177,14 @@ export function rememberVerifiedUser(user: { id: string; emailHash: string; emai
 }
 
 export function getVerifiedUserEmail(userId: string) {
+  assertDevOrTest();
   const user = users.get(userId);
   if (!user) return null;
   return decryptField(user.emailEncrypted);
 }
 
 export function deactivateUser(userId: string) {
+  assertDevOrTest();
   const deactivatedAt = new Date();
   const hardDeleteAfter = new Date(deactivatedAt);
   hardDeleteAfter.setDate(hardDeleteAfter.getDate() + 30);
@@ -152,6 +196,7 @@ export function deactivateUser(userId: string) {
 }
 
 export async function hardDeleteDueUsers(now = new Date()) {
+  assertDevOrTest();
   const deletedUserIds: string[] = [];
   for (const [userId, deletion] of deactivatedUsers.entries()) {
     if (new Date(deletion.hardDeleteAfter).getTime() > now.getTime()) {
@@ -183,6 +228,7 @@ export async function reviewSubmittedUrl(input: {
   reviewerId?: string;
   reason?: string;
 }) {
+  assertDevOrTest();
   const record = cases.get(input.caseId);
   const url = record?.urls.find((item) => item.id === input.urlId);
   if (!url) {

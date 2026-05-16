@@ -6,27 +6,38 @@
   --muted: #5b6472;
   --surface: #ffffff;
   --border: #e6e1d8;
+  --hairline: #ece8df;
   --teal: #0a5e5a;
   --teal-dark: #084c49;
   --teal-soft: #e8f5f3;
   --saffron: #9f4f17;
   --rose: #b24a5a;
   --radius: 8px;
+  --radius-lg: 14px;
   --shadow-soft: 0 16px 50px rgba(17, 24, 39, 0.06);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Inter", "Inter Fallback", "Noto Sans Devanagari", system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-sans: var(--font-inter), "Inter", "Noto Sans Devanagari", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-serif), "Iowan Old Style", Georgia, "Times New Roman", serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11", "kern";
+  letter-spacing: -0.005em;
   overflow-x: hidden;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-feature-settings: "kern", "liga";
+  letter-spacing: -0.01em;
 }
 
 a {
@@ -121,4 +132,145 @@ select {
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.btn-link {
+  background: transparent;
+  color: inherit;
+  padding: 0 4px;
+  min-height: 0;
+  min-width: 0;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+
+.btn-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.eyebrow::before {
+  content: "";
+  width: 18px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.hairline {
+  height: 1px;
+  background: var(--hairline);
+}
+
+/* Pill-shaped eyebrow badge — Notion/Vercel style */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--foreground);
+}
+
+.pill .dot {
+  background: var(--teal);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--teal) 15%, transparent);
+  margin-right: 0;
+}
+
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--teal);
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+/* Continuous canvas — every public page section shares one warm background.
+   A very faint mesh gradient sits behind everything; no per-section bg switches. */
+.page-canvas {
+  position: relative;
+  isolation: isolate;
+  background: var(--background);
+}
+
+.page-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(700px 420px at 90% 8%, rgba(10, 94, 90, 0.07), transparent 60%),
+    radial-gradient(800px 520px at 5% 55%, rgba(159, 79, 23, 0.05), transparent 60%),
+    radial-gradient(900px 600px at 60% 100%, rgba(10, 94, 90, 0.06), transparent 60%);
+}
+
+.page-canvas > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Gradient text — used sparingly for a single keyword */
+.text-gradient {
+  background: linear-gradient(120deg, var(--teal) 0%, #2a8f87 50%, var(--saffron) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Arrow CTA — minimal trailing chevron that slides on hover */
+.cta-arrow {
+  display: inline-block;
+  margin-left: 6px;
+  transition: transform 160ms ease;
+}
+
+.btn:hover .cta-arrow,
+.link-underline:hover .cta-arrow {
+  transform: translateX(3px);
+}
+
+/* Inline text link with animated underline */
+.link-underline {
+  position: relative;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.link-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.35;
+  transition: opacity 160ms ease;
+}
+
+.link-underline:hover::after {
+  opacity: 1;
 }

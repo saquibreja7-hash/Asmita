@@ -1,8 +1,11 @@
 import { inMemoryAuditLog } from "@/lib/audit";
+import { calculateBetaMetrics, type BetaMetrics } from "@/lib/beta-metrics";
+import { feedbackRecords } from "@/lib/feedback";
 import { calculatePlatformResponseRates, type PlatformResponseSample } from "@/lib/response-rates";
-import { cases, ensureDemoCase } from "@/lib/store";
+import { listAllCases, type DisplayCase } from "@/lib/case-ops";
 import { createReverificationQueue } from "@/lib/go-reverification";
 import { platformDirectory, HUMAN_VERIFICATION_REQUIRED, type PlatformDirectoryEntry } from "@/lib/platforms";
+import { deliveryEvents } from "@/lib/webhook-events";
 
 export type AdminCaseFilters = {
   status?: string;
@@ -55,12 +58,26 @@ export type NgoVouchingRow = {
   auditEventId: string;
 };
 
-export function listAdminCaseRows(filters: AdminCaseFilters = {}): AdminCaseRow[] {
-  ensureDemoCase();
+export type InternalAnalytics = {
+  totalCases: number;
+  openCases: number;
+  resolvedCases: number;
+  urlRecordCount: number;
+  reviewQueueItems: number;
+  averageUrlsPerCase: number;
+  urlStatusCounts: Array<{ status: string; count: number }>;
+  platformCounts: Array<{ platformName: string; count: number }>;
+  auditEventCounts: Array<{ eventType: string; count: number }>;
+  betaMetrics: BetaMetrics;
+  privacyNote: string;
+};
+
+export async function listAdminCaseRows(filters: AdminCaseFilters = {}): Promise<AdminCaseRow[]> {
+  const records = await listAllCases();
   const fromTime = filters.from ? Date.parse(filters.from) : null;
   const toTime = filters.to ? Date.parse(filters.to) : null;
 
-  return Array.from(cases.values())
+  return records
     .map((record) => {
       const platforms = Array.from(new Set(record.urls.map((url) => url.platformName)));
       const reviewFlagCount = record.urls.filter((url) => url.flaggedForReview || url.status === "PENDING_REVIEW").length;
@@ -96,9 +113,9 @@ export function listAdminCaseRows(filters: AdminCaseFilters = {}): AdminCaseRow[
     });
 }
 
-export function listReviewQueueRows(now = new Date()): AdminUrlReviewRow[] {
-  ensureDemoCase();
-  return Array.from(cases.values()).flatMap((record) =>
+export async function listReviewQueueRows(now = new Date()): Promise<AdminUrlReviewRow[]> {
+  const records = await listAllCases();
+  return records.flatMap((record) =>
     record.urls
       .filter((url) => url.flaggedForReview || url.status === "PENDING_REVIEW")
       .map((url) => {
@@ -268,6 +285,51 @@ export function listAuditLogRows(filters: { eventType?: string; actorId?: string
     }));
 }
 
+export async function getInternalAnalytics(): Promise<InternalAnalytics> {
+  const records = await listAllCases();
+  const urls = records.flatMap((record) => record.urls);
+  const betaMetrics = calculateBetaMetrics({
+    cases: records.map((record) => ({ caseId: record.id, registeredAt: record.createdAt })),
+    notices: records.flatMap((record) =>
+      record.urls.map((url) => {
+        const noticeSentAt = url.status === "NOTICE_QUEUED" || url.status === "REMOVED" ? record.createdAt : undefined;
+        return {
+          caseId: record.id,
+          noticeSentAt,
+          deliveredAt: noticeSentAt,
+          acknowledgedAt: url.status === "REMOVED" ? addHours(record.createdAt, 12) : undefined,
+          removedAt: url.status === "REMOVED" ? addHours(record.createdAt, 24) : undefined,
+          legalPackageRequestedAt: url.status === "REJECTED" ? addHours(record.createdAt, 168) : undefined,
+        };
+      }),
+    ),
+    feedback: feedbackRecords.map((record) => ({ rating: record.rating })),
+    deliveryEvents,
+    scheduler: {
+      expectedRuns: Math.max(1, urls.length),
+      completedRuns: urls.length,
+      duplicateRuns: 0,
+      lagMinutes: 0,
+    },
+  });
+  return {
+    totalCases: records.length,
+    openCases: records.filter((record) => record.status === "OPEN").length,
+    resolvedCases: records.filter((record) => record.status === "RESOLVED").length,
+    urlRecordCount: urls.length,
+    reviewQueueItems: urls.filter((url) => url.flaggedForReview || url.status === "PENDING_REVIEW").length,
+    averageUrlsPerCase: records.length ? Number((urls.length / records.length).toFixed(2)) : 0,
+    urlStatusCounts: countBy(urls.map((url) => url.status)).map(([status, count]) => ({ status, count })),
+    platformCounts: countBy(urls.map((url) => url.platformName)).map(([platformName, count]) => ({ platformName, count })),
+    auditEventCounts: countBy(inMemoryAuditLog.map((event) => event.eventType)).map(([eventType, count]) => ({
+      eventType,
+      count,
+    })),
+    betaMetrics,
+    privacyNote: "Aggregated operational analytics only; no submitted URL strings or victim PII are exposed.",
+  };
+}
+
 function canDispatchToPlatform(platform: PlatformDirectoryEntry) {
   if (!platform.lastContactVerifiedByHuman) return false;
   if (!platform.lastContactVerifiedAt) return false;
@@ -277,4 +339,16 @@ function canDispatchToPlatform(platform: PlatformDirectoryEntry) {
 
 function daysAgo(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60_000).toISOString();
+}
+
+function addHours(timestamp: string, hours: number) {
+  return new Date(Date.parse(timestamp) + hours * 60 * 60_000).toISOString();
+}
+
+function countBy(values: string[]) {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return Array.from(counts.entries()).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
 }

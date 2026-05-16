@@ -1,6 +1,6 @@
-import type { CaseRecord } from "@/lib/store";
+import type { DisplayCase } from "@/lib/case-ops";
 
-export function calculateCaseMilestone(cases: CaseRecord[], target = 100) {
+export function calculateCaseMilestone(cases: DisplayCase[], target = 100) {
   const totalCases = cases.length;
   const resolvedCases = cases.filter((item) => item.status === "RESOLVED").length;
   const openCases = totalCases - resolvedCases;

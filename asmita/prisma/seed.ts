@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { PrismaPg } from "@prisma/adapter-pg";
 import {
   NoticeBasis,
   PlatformTier,
@@ -7,7 +8,8 @@ import {
   UserRole,
 } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
 
 function hashEmail(email: string) {
   return createHash("sha256").update(email.trim().toLowerCase()).digest("hex");

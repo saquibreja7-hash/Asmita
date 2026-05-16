@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
-import { writeAuditLog } from "@/lib/audit";
-import { cases } from "@/lib/store";
+import { vouchCase } from "@/lib/case-ops";
 import { verifyNgoApiKey } from "@/lib/ngo-api-keys";
+import {
+  getCachedResponse,
+  readIdempotencyKey,
+  rememberResponse,
+} from "@/lib/idempotency";
+
+const SCOPE = "ngo:vouch";
 
 function readBearerToken(request: Request) {
   const header = request.headers.get("authorization");
@@ -17,25 +23,32 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   }
 
   const { caseId } = await context.params;
-  const record = cases.get(caseId);
-  if (!record) {
-    return NextResponse.json({ error: "case_not_found" }, { status: 404 });
+  const idemKey = readIdempotencyKey(request);
+  const idemActor = `${partner.id}:${caseId}`;
+  if (idemKey) {
+    const cached = getCachedResponse(SCOPE, idemActor, idemKey);
+    if (cached) {
+      return NextResponse.json(cached.body, {
+        status: cached.status,
+        headers: { "Idempotency-Replayed": "true" },
+      });
+    }
   }
 
-  record.urls.forEach((url) => {
-    if (url.status === "PENDING_REVIEW") {
-      url.status = "NOTICE_QUEUED";
-      url.flaggedForReview = false;
-      url.flagReason = `ngo_vouched:${partner.partnerName}`;
-    }
-  });
+  try {
+    await vouchCase(caseId, partner.partnerName, partner.id);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "error";
+    return NextResponse.json({ error: msg }, { status: 404 });
+  }
 
-  await writeAuditLog({
-    eventType: "NGO_VERIFIED",
-    entityType: "Case",
-    entityId: record.id,
-    data: { partnerId: partner.id, partnerName: partner.partnerName },
-  });
-
-  return NextResponse.json({ success: true, caseId: record.id, partnerName: partner.partnerName });
+  const body = {
+    success: true,
+    caseId,
+    partnerName: partner.partnerName,
+  };
+  if (idemKey) {
+    rememberResponse(SCOPE, idemActor, idemKey, 200, body);
+  }
+  return NextResponse.json(body);
 }

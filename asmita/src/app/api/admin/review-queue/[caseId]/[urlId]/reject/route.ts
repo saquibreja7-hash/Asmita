@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { verifyCsrfRequest } from "@/lib/csrf";
-import { reviewSubmittedUrl } from "@/lib/store";
+import { reviewSubmittedUrl } from "@/lib/case-ops";
 
 const schema = z.object({ reason: z.string().max(500).optional() });
 
@@ -22,12 +22,17 @@ export async function POST(
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
   const { caseId, urlId } = await context.params;
-  const url = await reviewSubmittedUrl({
-    caseId,
-    urlId,
-    decision: "reject",
-    reviewerId: auth.session.sub,
-    reason: parsed.data.reason,
-  });
-  return NextResponse.json({ success: true, url });
+  try {
+    const url = await reviewSubmittedUrl({
+      caseId,
+      urlId,
+      decision: "reject",
+      reviewerId: auth.session.sub,
+      reason: parsed.data.reason,
+    });
+    return NextResponse.json({ success: true, url });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "error";
+    return NextResponse.json({ error: msg }, { status: 404 });
+  }
 }

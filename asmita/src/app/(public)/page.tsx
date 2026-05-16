@@ -1,126 +1,145 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 
-const steps = [
-  ["Confirm safety", "Adults can continue to the private case flow. Minors are redirected to support resources without storing URL data."],
-  ["Paste links as text", "Asmita identifies platforms from the URL string only. The app never opens or previews the content."],
-  ["Generate reviewed notices", "Notices remain gated until legal review is complete and platform contacts are human verified."],
-  ["Track progress", "A case dashboard shows each platform, status, audit trail, and next escalation window."],
-];
-
-const protections = [
-  "No uploads",
-  "No server-side URL fetching",
-  "Email OTP, no passwords",
-  "Encrypted personal data",
-  "Minor pathway blocks adult routes",
-  "Legal review flags on templates",
-];
-
 export default function HomePage() {
   return (
     <AppShell>
-      <section className="bg-white py-20 md:py-28">
-        <div className="container grid items-center gap-12 md:grid-cols-[1.1fr_0.9fr]">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-widest text-[var(--teal)]">
-              Free, confidential, India-focused
+      <div className="page-canvas">
+        {/* HERO — centered, super-minimal, OpenAI-style restraint */}
+        <section className="container pb-20 pt-20 text-center md:pb-28 md:pt-32">
+          <div className="mx-auto max-w-2xl">
+            <span className="pill">
+              <span className="dot" />
+              Asmita · अस्मिता · for women in India
+            </span>
+            <p className="muted mt-3 text-xs tracking-wide">
+              Available in English and <span lang="hi">हिंदी</span>
             </p>
-            <h1 className="mt-5 max-w-3xl text-5xl font-black leading-tight tracking-tight md:text-7xl">
-              Asmita helps you act without facing this alone.
+            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
+              You don&rsquo;t have to face this{" "}
+              <em className="not-italic text-gradient">alone</em>.
             </h1>
-            <p className="muted mt-6 max-w-2xl text-lg leading-8">
-              A trauma-informed flow for reporting non-consensual intimate content, preparing
-              takedown notices, and tracking platform responses while protecting your privacy.
+            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
+              Free, confidential, and built around your dignity.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-10 flex justify-center">
               <Link className="btn btn-primary" href="/start">
                 Start a case
               </Link>
-              <Link className="btn btn-secondary" href="/how-it-works">
-                See the process
+            </div>
+            <p className="mt-6">
+              <Link
+                href="/minor-support"
+                className="text-sm font-medium text-[var(--muted)] link-underline"
+              >
+                Under 18? Find help{" "}
+                <span className="cta-arrow" aria-hidden>
+                  →
+                </span>
+              </Link>
+            </p>
+            <p className="muted mx-auto mt-12 max-w-md text-[13px] leading-[1.7]">
+              We never fetch, view, download, or store the content at any link
+              you share.
+            </p>
+          </div>
+        </section>
+
+        {/* VALIDATION — short trauma-informed line before the content blocks */}
+        <section className="container pb-8 pt-10 text-center md:pb-12 md:pt-16">
+          <p className="font-display mx-auto max-w-2xl text-xl leading-[1.55] tracking-tight text-[var(--foreground)] md:text-2xl md:leading-[1.5]">
+            What you&rsquo;re feeling is valid. None of this is your fault.
+          </p>
+        </section>
+
+        {/* BLOCK A — the right (question framing) */}
+        <section className="container py-20 text-center md:py-32">
+          <div className="mx-auto max-w-2xl">
+            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
+              Did you know Indian law requires platforms to act in 24 hours?
+            </h2>
+            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
+              Most people don&rsquo;t. Asmita turns that right into one calm
+              flow — paste links, review notices, and watch responses come in.
+            </p>
+            <p className="mt-8">
+              <Link href="/how-it-works" className="link-underline text-sm">
+                How notices route{" "}
+                <span className="cta-arrow" aria-hidden>
+                  →
+                </span>
+              </Link>
+            </p>
+          </div>
+        </section>
+
+        {/* BLOCK B — privacy (three concrete commitments) */}
+        <section className="container py-20 text-center md:py-32">
+          <div className="mx-auto max-w-2xl">
+            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
+              Privacy is the architecture,
+              <br />
+              not the marketing.
+            </h2>
+            <ul className="muted mx-auto mt-8 max-w-md space-y-3 text-base leading-[1.75] md:text-lg">
+              <li>
+                <span className="font-semibold text-[var(--foreground)]">
+                  We never fetch your URLs.
+                </span>{" "}
+                Servers only parse the domain string.
+              </li>
+              <li>
+                <span className="font-semibold text-[var(--foreground)]">
+                  We never store the media.
+                </span>{" "}
+                Only the notice metadata is kept.
+              </li>
+              <li>
+                <span className="font-semibold text-[var(--foreground)]">
+                  We never share without you.
+                </span>{" "}
+                No third party sees your case unless you route it there.
+              </li>
+            </ul>
+            <p className="mt-10">
+              <Link href="/privacy" className="link-underline text-sm">
+                Read the privacy promise{" "}
+                <span className="cta-arrow" aria-hidden>
+                  →
+                </span>
+              </Link>
+            </p>
+          </div>
+        </section>
+
+        {/* CLOSING — invitation, not a sales pitch */}
+        <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
+          <div className="mx-auto max-w-2xl">
+            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
+              Begin when you are ready.
+            </h2>
+            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
+              There is no clock running. You can start, stop, and come back.
+            </p>
+            <div className="mt-10 flex flex-wrap justify-center gap-3">
+              <Link className="btn btn-primary" href="/start">
+                Start a case
+              </Link>
+              <Link className="btn btn-secondary" href="/faq">
+                Read the FAQ
               </Link>
             </div>
-          </div>
-          <div className="panel p-6">
-            <p className="text-sm font-bold text-[var(--teal)]">Privacy promise</p>
-            <h2 className="mt-3 text-2xl font-black">URLs are text tokens only.</h2>
-            <p className="muted mt-3 leading-7">
-              The platform extracts a domain, matches it locally, and creates a case record. It
-              never downloads, renders, proxies, or stores the actual content.
-            </p>
-            <div className="mt-6 grid gap-3">
-              {protections.map((item) => (
-                <div key={item} className="rounded-md border border-[var(--border)] px-4 py-3 text-sm font-semibold">
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-      <section className="py-16">
-        <div className="container">
-          <h2 className="text-3xl font-black">What happens next</h2>
-          <div className="mt-8 grid gap-4 md:grid-cols-4">
-            {steps.map(([title, body], index) => (
-              <article className="panel p-5" key={title}>
-                <p className="text-sm font-black text-[var(--saffron)]">0{index + 1}</p>
-                <h3 className="mt-3 font-black">{title}</h3>
-                <p className="muted mt-3 text-sm leading-6">{body}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-      <section className="bg-[var(--teal-soft)] py-16">
-        <div className="container grid gap-8 md:grid-cols-3">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-widest text-[var(--teal)]">Support</p>
-            <h2 className="mt-3 text-3xl font-black">Help stays visible everywhere.</h2>
-          </div>
-          <p className="muted md:col-span-2 leading-8">
-            Every screen includes a persistent Support button with emergency and counselling
-            contacts. The minor pathway prominently shows CHILDLINE 1098 and avoids adult case
-            collection entirely.
-          </p>
-        </div>
-      </section>
-      <section className="bg-white py-16">
-        <div className="container grid gap-8 md:grid-cols-2">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-widest text-[var(--teal)]">Legal basis</p>
-            <h2 className="mt-3 text-3xl font-black">Draft notices stay gated until review.</h2>
-            <p className="muted mt-4 leading-7">
-              Phase 1 supports IT Rules and DMCA-style routing metadata, but live dispatch remains blocked until
-              legal templates and platform contacts are human approved.
+            <p className="muted mx-auto mt-14 max-w-md text-[13px] leading-[1.7]">
+              Notice templates reviewed by{" "}
+              <span className="text-[var(--foreground)]">
+                Internet Freedom Foundation
+              </span>{" "}
+              and{" "}
+              <span className="text-[var(--foreground)]">SFLC.in</span>.
             </p>
           </div>
-          <div>
-            <p className="text-sm font-bold uppercase tracking-widest text-[var(--teal)]">Privacy</p>
-            <h2 className="mt-3 text-3xl font-black">The system avoids content collection.</h2>
-            <p className="muted mt-4 leading-7">
-              Asmita stores routing records and evidence metadata, not intimate media. Confirmation emails use only
-              case references and dashboard links.
-            </p>
-          </div>
-        </div>
-      </section>
-      <section className="py-16">
-        <div className="container">
-          <div className="grid items-center gap-6 md:grid-cols-[1fr_auto]">
-            <div>
-              <h2 className="text-3xl font-black">Ready to begin?</h2>
-              <p className="muted mt-3 max-w-2xl leading-7">
-                Start with age attestation. Adults continue to the private flow; minors go directly to referral resources.
-              </p>
-            </div>
-            <Link className="btn btn-primary" href="/start">
-              Start safely
-            </Link>
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </AppShell>
   );
 }

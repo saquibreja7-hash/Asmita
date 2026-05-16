@@ -32,7 +32,17 @@ export async function POST(request: Request) {
   }
 
   const otp = await createOtpForEmail(parsed.data.email);
-  await sendOtp(parsed.data.email, otp.token);
+  try {
+    await sendOtp(parsed.data.email, otp.token);
+  } catch (error) {
+    logSecurityEvent({
+      event: "email_failed",
+      actorHash: emailHash,
+      route: "/api/admin/auth/request-otp",
+      reason: error instanceof Error ? error.message : "unknown_email_error",
+    });
+    return NextResponse.json({ error: "email_failed" }, { status: 502 });
+  }
   return NextResponse.json({
     success: true,
     devOtp: process.env.RESEND_API_KEY || process.env.NODE_ENV === "production" ? undefined : otp.token,

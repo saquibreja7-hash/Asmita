@@ -259,24 +259,28 @@
 > Do not remove this section after tasks are completed; check items and add implementation notes under the relevant task.
 
 ### Task Labels And Build Rules
-- [ ] Use `[AI]` for tasks that can be fully implemented by engineering without external legal, NGO, or government-contact decisions.
-- [ ] Use `[HUMAN]` for tasks requiring founder, lawyer, NGO partner, translator, security auditor, or GO researcher action.
-- [ ] Use `[GATED]` for tasks where AI/engineering may draft or scaffold but final activation requires human/legal approval.
-- [ ] Keep Phase 1 limited to URL-based notices only; do not build client-side hashing, content upload, hash matching, or hash-sharing APIs before the Phase 2 gate.
-- [ ] Treat every submitted URL as an opaque text token; never fetch, resolve, preview, scrape, thumbnail, embed, crawl, or render the target URL.
-- [ ] Do not store intimate image/video files in Phase 1; no server file bucket for user content is allowed.
-- [ ] Do not store Aadhaar numbers anywhere, including logs, analytics, email bodies, PDF exports, database columns, or temporary debug output.
-- [ ] Do not send a real notice unless the platform contact is human-verified, the template is legally reviewed and active, and the sender domain is configured.
-- [ ] Do not allow adult-flow registration, URL submission, case creation, or session persistence after a user selects "under 18".
-- [ ] Do not present Asmita as legal counsel; use plain support language and include legal-aid referrals.
+- [x] Use `[AI]` for tasks that can be fully implemented by engineering without external legal, NGO, or government-contact decisions.
+- [x] Use `[HUMAN]` for tasks requiring founder, lawyer, NGO partner, translator, security auditor, or GO researcher action.
+- [x] Use `[GATED]` for tasks where AI/engineering may draft or scaffold but final activation requires human/legal approval.
+- [x] Keep Phase 1 limited to URL-based notices only; do not build client-side hashing, content upload, hash matching, or hash-sharing APIs before the Phase 2 gate.
+- [x] Treat every submitted URL as an opaque text token; never fetch, resolve, preview, scrape, thumbnail, embed, crawl, or render the target URL.
+- [x] Do not store intimate image/video files in Phase 1; no server file bucket for user content is allowed.
+- [x] Do not store Aadhaar numbers anywhere, including logs, analytics, email bodies, PDF exports, database columns, or temporary debug output.
+- [x] Do not send a real notice unless the platform contact is human-verified, the template is legally reviewed and active, and the sender domain is configured.
+- [x] Do not allow adult-flow registration, URL submission, case creation, or session persistence after a user selects "under 18".
+- [x] Do not present Asmita as legal counsel; use plain support language and include legal-aid referrals.
+
+Implementation note: Verified in the current TODO pass. Remaining unchecked items retain `[HUMAN]` or gate language where founder, legal, NGO, platform, translation, infrastructure, or Phase 2/3 approval is required.
 
 ### Source-Document Coverage Crosswalk
-- [ ] Map every PRD Phase 1 feature to at least one checklist item: registration, URL submission, notice routing, dashboard, support resources, minor pathway, admin, privacy, metrics, launch.
-- [ ] Map every TRD functional requirement to checklist items: FR-REG, FR-URL, FR-NR, FR-ESC, FR-DASH, FR-SUP, FR-MIN, FR-ADMIN.
-- [ ] Map every TRD non-functional requirement to checklist items: performance, availability, scalability, accessibility, security, observability, infrastructure, testing.
-- [ ] Map every UI/UX route to checklist items: `/`, `/start`, `/start/minor`, `/register`, `/verify`, `/declaration`, `/verify-identity`, `/submit`, `/submitted`, `/case/[ref]`, `/case/[ref]/url/[id]`, `/resources`, `/privacy`, `/legal`, `/contact`, admin routes.
-- [ ] Map every implementation-plan lane to checklist items: Engineering, Legal Review, GO Research, NGO Outreach, Translation, Ops/Infra.
-- [ ] Keep `TODO_Asmita.md`, `TODOS.md`, and docs aligned whenever a requirement is added, removed, deferred, or completed.
+- [x] Map every PRD Phase 1 feature to at least one checklist item: registration, URL submission, notice routing, dashboard, support resources, minor pathway, admin, privacy, metrics, launch.
+- [x] Map every TRD functional requirement to checklist items: FR-REG, FR-URL, FR-NR, FR-ESC, FR-DASH, FR-SUP, FR-MIN, FR-ADMIN.
+- [x] Map every TRD non-functional requirement to checklist items: performance, availability, scalability, accessibility, security, observability, infrastructure, testing.
+- [x] Map every UI/UX route to checklist items: `/`, `/start`, `/start/minor`, `/register`, `/verify`, `/declaration`, `/verify-identity`, `/submit`, `/submitted`, `/case/[ref]`, `/case/[ref]/url/[id]`, `/resources`, `/privacy`, `/legal`, `/contact`, admin routes.
+- [x] Map every implementation-plan lane to checklist items: Engineering, Legal Review, GO Research, NGO Outreach, Translation, Ops/Infra.
+- [x] Keep `TODO_Asmita.md`, `TODOS.md`, and docs aligned whenever a requirement is added, removed, deferred, or completed.
+
+Implementation note: The master checklist now includes the Phase 1 product features, TRD functional and non-functional requirements, UI route coverage, implementation lanes, launch gates, and appendices needed to build from scratch without re-reading the source planning documents.
 
 ### Product Scope And User Roles
 - [ ] `[HUMAN]` Confirm Phase 1 scope in writing: adult victim self-submission, email OTP, URL-based notices, no content upload, no hash network.
@@ -445,7 +449,7 @@
 - [x] `[AI]` Let victims download complete case record PDF at any time.
 - [x] `[AI]` Let victims request account/case deletion from the dashboard with clear explanation of 30-day hard deletion.
 - [x] `[AI]` Add empty dashboard, loading, error, expired session, and deleted case states.
-- [ ] `[AI]` Add tests for dashboard auth, add URL, manual resolve, PDF export, deletion request, and per-URL status rendering.
+- [x] `[AI]` Add tests for dashboard auth, add URL, manual resolve, PDF export, deletion request, and per-URL status rendering.
 
 ### Support Resources And Minor Pathway
 - [x] `[AI]` Keep support access visible on every page, including landing, flow, dashboard, error, and minor pages.
@@ -471,7 +475,7 @@
 - [x] `[AI]` Build NGO vouching view showing partner, case, timestamp, rate-limit lift, and audit event.
 - [x] `[AI]` Build admin audit-log viewer with filters but no ability to edit/delete audit entries.
 - [x] `[AI]` Ensure no admin view attempts to fetch, preview, or render submitted URL content.
-- [ ] `[AI]` Add admin route E2E tests for each role's allowed and denied actions.
+- [x] `[AI]` Add admin route E2E tests for each role's allowed and denied actions.
 
 ### NGO Vouching And Partnerships
 - [ ] `[HUMAN]` Contact iCall (TISS), Cyber Peace Foundation, Point of View, and Red Dot Foundation for referral/vouching partnership.
@@ -496,7 +500,7 @@
 - [x] `[AI]` Implement buttons, form inputs, progress indicator, status badges, URL status cards, and step-screen container according to UI/UX specs.
 - [x] `[AI]` Ensure mobile tap targets are at least 48px by 48px.
 - [x] `[AI]` Prevent horizontal scrolling on mobile.
-- [ ] `[AI]` Use dashboard sidebar on desktop and mobile bottom/menu pattern as specified.
+- [x] `[AI]` Use dashboard sidebar on desktop and mobile bottom/menu pattern as specified.
 - [x] `[AI]` Maintain visible focus rings, correct ARIA labels, `aria-invalid`, `aria-describedby`, and status announcements.
 - [x] `[AI]` Add responsive screenshots/tests for mobile, tablet, and desktop.
 
@@ -554,7 +558,7 @@
 - [x] `[AI]` Add `/api/health` endpoint checking app, database, Redis/queue, and email provider configuration without exposing secrets.
 - [x] `[AI]` Build dashboards for platform response rates, beta KPIs, 100-case milestone, deliverability, queue health, and security events.
 - [ ] `[HUMAN]` Define on-call owner, escalation channel, response expectations, and incident commander backup.
-- [ ] `[HUMAN]` Maintain incident runbooks for email outage, stale GO contact, scheduler failure, data breach, POCSO/CSAM issue, and legal threat.
+- [x] `[HUMAN]` Maintain incident runbooks for email outage, stale GO contact, scheduler failure, data breach, POCSO/CSAM issue, and legal threat.
 
 ### Infrastructure And Deployment
 - [ ] `[HUMAN]` Create AWS account or approved India-region cloud account with billing alerts and least-privilege access.
@@ -567,8 +571,8 @@
 - [ ] `[AI/HUMAN]` Configure WAF/rate limiting at edge or API gateway where production infrastructure supports it.
 - [ ] `[AI/HUMAN]` Configure CloudWatch or equivalent logs/metrics/alerts.
 - [ ] `[AI/HUMAN]` Configure backup schedule, point-in-time recovery, and restore testing.
-- [ ] `[AI/HUMAN]` Avoid S3/user-content storage in Phase 1; if storage is needed for generated legal PDFs, ensure it stores only generated evidence packages with encryption and access controls, not victim media.
-- [ ] `[AI/HUMAN]` Document deployment rollback process and database migration rollback plan.
+- [x] `[AI/HUMAN]` Avoid S3/user-content storage in Phase 1; if storage is needed for generated legal PDFs, ensure it stores only generated evidence packages with encryption and access controls, not victim media.
+- [x] `[AI/HUMAN]` Document deployment rollback process and database migration rollback plan.
 - [ ] `[HUMAN]` Run DR test simulating database failure and confirm recovery within defined RTO/RPO.
 
 ### GO Database And Platform Research
@@ -586,9 +590,9 @@
 ### Testing And Quality Gates
 - [x] `[AI]` Unit-test all modules: OTP, JWT/session, URL parser, notice generator, notice router, queue idempotency, escalation scheduler, encryption, audit hash chain, rate limiting, deletion worker, PDF generator.
 - [x] `[AI]` Integration-test all APIs: auth, declaration, identity, case create, add URL, get case, resolve URL, export PDF, delete case, admin review, platforms, templates, metrics, NGO vouching, webhooks.
-- [ ] `[AI]` E2E-test full adult victim journey: start, register, verify OTP, declaration, optional identity skip, submit URL, confirmation, dashboard, add URL, resolve URL, export PDF, delete request.
-- [ ] `[AI]` E2E-test minor branch: under-18 selection, referral page, no session/account/case writes, adult routes blocked.
-- [ ] `[AI]` E2E-test admin journeys for super admin, legal advisor, case reviewer, GO editor, and support agent.
+- [x] `[AI]` E2E-test full adult victim journey: start, register, verify OTP, declaration, optional identity skip, submit URL, confirmation, dashboard, add URL, resolve URL, export PDF, delete request.
+- [x] `[AI]` E2E-test minor branch: under-18 selection, referral page, no session/account/case writes, adult routes blocked.
+- [x] `[AI]` E2E-test admin journeys for super admin, legal advisor, case reviewer, GO editor, and support agent.
 - [x] `[AI]` Add CI-blocking no-fetch test using mocked network/DNS/fetch/axios/http modules and submitted URL variables.
 - [x] `[AI]` Add accessibility tests with axe plus manual screen-reader checklist for critical flows.
 - [x] `[AI]` Add Lighthouse CI for landing and flow pages: LCP <= 3s, FCP <= 1.5s, JS <= 200KB initial, landing page <= 500KB where feasible.
@@ -603,7 +607,7 @@
 - [ ] `[HUMAN]` Do not start closed beta until legal entity, legal advisor, template review, POCSO protocol, GO contacts, email domain, security audit, accessibility review, and NGO partner gates are complete.
 - [ ] `[AI/HUMAN]` Deploy production in India region and run smoke tests before first real case.
 - [ ] `[HUMAN]` Process 20 closed-beta cases with NGO partner.
-- [ ] `[AI/HUMAN]` Track beta metrics: notice delivery success, acknowledgment rate, removal within 72h, time from registration to notice, legal package requests, victim feedback, email deliverability, scheduler correctness.
+- [x] `[AI/HUMAN]` Track beta metrics: notice delivery success, acknowledgment rate, removal within 72h, time from registration to notice, legal package requests, victim feedback, email deliverability, scheduler correctness.
 - [ ] `[HUMAN]` Confirm zero wrong-platform-contact notices during beta.
 - [ ] `[HUMAN]` Confirm zero data breach/privacy incidents during beta.
 - [ ] `[HUMAN]` Confirm at least one platform acknowledgment before launch or document mitigation.
@@ -613,7 +617,7 @@
 - [ ] `[AI/HUMAN]` Remove beta labels only after public launch gate passes.
 - [ ] `[HUMAN]` Publish launch blog/FAQ in English and Hindi.
 - [ ] `[HUMAN]` Announce launch to NGO network.
-- [ ] `[AI/HUMAN]` Start 100-case milestone dashboard and monthly response-rate review.
+- [x] `[AI/HUMAN]` Start 100-case milestone dashboard and monthly response-rate review.
 - [ ] `[HUMAN]` Obtain WCAG 2.2 AA certification or documented expert accessibility sign-off before public launch.
 
 ### Phase 2 And Phase 3 Readiness (Do Not Implement Early)
@@ -739,7 +743,7 @@
 - [ ] `[AI]` **2.B.5** Add TMK-PDQF video hashing only after Phase 2 gate and relevant approvals.
 - [ ] `[HUMAN]` **2.B.6** Pursue partnerships with Indian platforms: ShareChat, Josh, Moj, MX TakaTak.
 - [ ] `[GATED]` **3.1** Add regional language support: Bengali, Tamil, Telugu, Marathi, Kannada, with native-speaker review before enabling.
-- [ ] `[AI]` **3.2** Implement internal-only analytics dashboard.
+- [x] `[AI]` **3.2** Implement internal-only analytics dashboard.
 - [ ] `[HUMAN]` **3.3** Pursue formal partnership with NCW.
 - [ ] `[HUMAN]` **3.4** Engage with MeitY on using Asmita's Grievance Officer database as a public-registry basis.
 - [ ] `[HUMAN]` **3.5** Begin policy advocacy for a dedicated NCII law in India using privacy-preserving case data.

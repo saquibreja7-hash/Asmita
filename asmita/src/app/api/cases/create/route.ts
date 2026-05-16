@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
-import { createCase, getVerifiedUserEmail } from "@/lib/store";
+import { createCase, getVerifiedUserEmail } from "@/lib/case-ops";
 import { requireSession } from "@/lib/auth/middleware";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { logSecurityEvent } from "@/lib/security-log";
 import { sendVictimConfirmation } from "@/lib/email";
 import { writeAuditLog } from "@/lib/audit";
+import {
+  getCachedResponse,
+  readIdempotencyKey,
+  rememberResponse,
+} from "@/lib/idempotency";
+
+const SCOPE = "cases:create";
 
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
@@ -20,8 +27,18 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const idemKey = readIdempotencyKey(request);
+  if (idemKey) {
+    const cached = getCachedResponse(SCOPE, auth.session.sub, idemKey);
+    if (cached) {
+      return NextResponse.json(cached.body, {
+        status: cached.status,
+        headers: { "Idempotency-Replayed": "true" },
+      });
+    }
+  }
   const record = await createCase(auth.session.sub);
-  const email = getVerifiedUserEmail(auth.session.sub);
+  const email = await getVerifiedUserEmail(auth.session.sub);
   if (email) {
     try {
       const dashboardUrl = new URL(`/case/${record.id}`, request.url).toString();
@@ -43,5 +60,9 @@ export async function POST(request: Request) {
       });
     }
   }
-  return NextResponse.json({ caseId: record.id, referenceNumber: record.referenceNumber });
+  const body = { caseId: record.id, referenceNumber: record.referenceNumber };
+  if (idemKey) {
+    rememberResponse(SCOPE, auth.session.sub, idemKey, 200, body);
+  }
+  return NextResponse.json(body);
 }

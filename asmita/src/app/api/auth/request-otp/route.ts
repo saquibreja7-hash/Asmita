@@ -30,7 +30,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   const otp = await createOtpForEmail(parsed.data.email);
-  await sendOtp(parsed.data.email, otp.token);
+  try {
+    await sendOtp(parsed.data.email, otp.token);
+  } catch (error) {
+    logSecurityEvent({
+      event: "email_failed",
+      actorHash: emailHash,
+      route: "/api/auth/request-otp",
+      reason: error instanceof Error ? error.message : "unknown_email_error",
+    });
+    return NextResponse.json({ error: "email_failed" }, { status: 502 });
+  }
   await writeAuditLog({ eventType: "USER_REGISTERED", entityType: "User", entityId: emailHash });
   return NextResponse.json({
     success: true,

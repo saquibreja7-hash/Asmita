@@ -37,60 +37,133 @@ export function AdminLoginForm() {
     });
     setLoading(false);
     if (!response.ok) {
-      setError("The email code or MFA code did not match.");
+      setError("The email code or authenticator code did not match.");
       return;
     }
     router.push("/admin/cases");
   }
 
   return (
-    <form className="panel mt-8 max-w-lg space-y-5 p-6">
-      <label className="block text-sm font-bold" htmlFor="admin-email">
-        Admin email
+    <form
+      className="space-y-8"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (step === "email") requestOtp();
+        else verify();
+      }}
+    >
+      <div className="text-center">
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+          {step === "email" ? "Step 01 of 02" : "Step 02 of 02"}
+        </p>
+        <h2 className="font-display mt-3 text-[24px] font-normal leading-[1.22] tracking-tight md:text-[32px] md:leading-[1.18]">
+          {step === "email" ? "Your admin email." : "Two codes, please."}
+        </h2>
+      </div>
+
+      <Row
+        label="Admin email"
+        hint="We will send a 6-digit code to this address."
+        htmlFor="admin-email"
+      >
         <input
-          className="field mt-2"
+          className="field"
           id="admin-email"
           onChange={(event) => setEmail(event.target.value)}
           required
           type="email"
+          autoComplete="email"
+          inputMode="email"
           value={email}
         />
-      </label>
-      {step === "verify" ? (
+      </Row>
+
+      {step === "verify" && (
         <>
-          <label className="block text-sm font-bold" htmlFor="admin-otp">
-            Email code
+          <Row
+            label="Email code"
+            hint="The 6-digit code we just sent to your inbox."
+            htmlFor="admin-otp"
+          >
             <input
-              className="field mt-2"
+              className="field font-mono text-center text-2xl tracking-[0.4em]"
               id="admin-otp"
               inputMode="numeric"
               maxLength={6}
-              onChange={(event) => setOtp(event.target.value)}
+              onChange={(event) =>
+                setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
               value={otp}
+              autoComplete="one-time-code"
             />
-          </label>
-          <label className="block text-sm font-bold" htmlFor="admin-totp">
-            Authenticator code
+          </Row>
+          <Row
+            label="Authenticator code"
+            hint="6-digit TOTP from your authenticator app."
+            htmlFor="admin-totp"
+          >
             <input
-              className="field mt-2"
+              className="field font-mono text-center text-2xl tracking-[0.4em]"
               id="admin-totp"
               inputMode="numeric"
               maxLength={6}
-              onChange={(event) => setTotp(event.target.value)}
+              onChange={(event) =>
+                setTotp(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
               value={totp}
             />
-          </label>
+          </Row>
         </>
-      ) : null}
-      {error ? <p className="text-sm font-bold text-[var(--rose)]">{error}</p> : null}
-      <button
-        className="btn btn-primary w-full"
-        disabled={loading || !email || (step === "verify" && (otp.length !== 6 || totp.length !== 6))}
-        onClick={step === "email" ? requestOtp : verify}
-        type="button"
-      >
-        {step === "email" ? "Send admin code" : "Open admin workspace"}
-      </button>
+      )}
+
+      {error && (
+        <p className="text-center text-sm font-semibold text-[var(--rose)]">
+          {error}
+        </p>
+      )}
+
+      <div className="pt-2 text-center">
+        <button
+          className="btn btn-primary"
+          disabled={
+            loading ||
+            !email ||
+            (step === "verify" && (otp.length !== 6 || totp.length !== 6))
+          }
+          type="submit"
+        >
+          {loading
+            ? "Working…"
+            : step === "email"
+            ? "Send admin code"
+            : "Open admin workspace"}
+        </button>
+      </div>
     </form>
+  );
+}
+
+function Row({
+  label,
+  hint,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  hint: string;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label
+        htmlFor={htmlFor}
+        className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--foreground)]"
+      >
+        {label}
+      </label>
+      <p className="muted mt-1 text-sm leading-[1.6]">{hint}</p>
+      <div className="mt-3">{children}</div>
+    </div>
   );
 }

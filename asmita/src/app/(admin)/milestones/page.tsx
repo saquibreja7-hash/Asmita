@@ -1,62 +1,105 @@
 import { calculateCaseMilestone } from "@/lib/milestones";
-import { cases, ensureDemoCase } from "@/lib/store";
+import { listAllCases } from "@/lib/case-ops";
 
-export default function MilestonesPage() {
-  ensureDemoCase();
-  const stats = calculateCaseMilestone(Array.from(cases.values()));
+export default async function MilestonesPage() {
+  const records = await listAllCases();
+  const stats = calculateCaseMilestone(records);
 
   return (
     <section>
-      <p className="text-sm font-bold uppercase text-[var(--muted)]">Milestone tracking</p>
-      <h1 className="mt-2 text-3xl font-black">100-case milestone</h1>
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
-        {[
-          ["Cases processed", stats.totalCases],
-          ["Remaining", stats.remaining],
-          ["Open", stats.openCases],
-          ["Resolved", stats.resolvedCases],
-        ].map(([label, value]) => (
-          <div className="panel p-5" key={label}>
-            <p className="text-sm text-[var(--muted)]">{label}</p>
-            <p className="mt-2 text-3xl font-black">{value}</p>
-          </div>
-        ))}
+      <div>
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+          Console · Milestones
+        </p>
+        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+          100-case milestone
+        </h1>
       </div>
-      <div className="panel mt-6 p-5">
-        <div className="flex items-center justify-between gap-4">
-          <p className="font-bold">Progress toward {stats.target} cases</p>
-          <p className="font-black">{stats.progressPercent}%</p>
+
+      <div className="mt-10 grid gap-6 md:grid-cols-4">
+        <Metric label="Cases processed" value={stats.totalCases} />
+        <Metric label="Remaining" value={stats.remaining} />
+        <Metric label="Open" value={stats.openCases} />
+        <Metric label="Resolved" value={stats.resolvedCases} />
+      </div>
+
+      <div className="mt-10">
+        <div className="flex items-end justify-between gap-4">
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+            Progress toward {stats.target} cases
+          </p>
+          <p className="font-display text-[24px] tabular-nums">
+            {stats.progressPercent}%
+          </p>
         </div>
-        <div className="mt-4 h-3 overflow-hidden rounded-full bg-[var(--surface)]">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--hairline)]">
           <div
             aria-label={`${stats.progressPercent}% of 100-case milestone`}
-            className="h-full bg-[var(--teal)]"
+            className="h-full bg-[var(--teal)] transition-[width] duration-500"
             style={{ width: `${stats.progressPercent}%` }}
           />
         </div>
       </div>
-      <div className="panel mt-6 overflow-hidden">
+
+      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
         <table className="w-full text-left text-sm">
-          <thead className="bg-[var(--surface)]">
-            <tr>
-              <th className="p-4">Reference</th>
-              <th className="p-4">Status</th>
-              <th className="p-4">Submitted URLs</th>
-              <th className="p-4">Created</th>
+          <thead>
+            <tr className="border-b border-[var(--hairline)]">
+              <Th>Reference</Th>
+              <Th>Status</Th>
+              <Th>Submitted URLs</Th>
+              <Th>Created</Th>
             </tr>
           </thead>
           <tbody>
-            {Array.from(cases.values()).map((record) => (
-              <tr className="border-t border-[var(--border)]" key={record.id}>
-                <td className="p-4 font-bold">{record.referenceNumber}</td>
-                <td className="p-4">{record.status}</td>
-                <td className="p-4">{record.urls.length}</td>
-                <td className="p-4">{new Date(record.createdAt).toLocaleDateString("en-IN")}</td>
+            {records.map((record) => (
+              <tr
+                className="border-t border-[var(--hairline)]"
+                key={record.id}
+              >
+                <td className="font-mono p-4">{record.referenceNumber}</td>
+                <td className="p-4 capitalize">
+                  {record.status.toLowerCase()}
+                </td>
+                <td className="p-4 tabular-nums">{record.urls.length}</td>
+                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                  {new Date(record.createdAt).toLocaleDateString("en-IN")}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {records.length === 0 && (
+          <p className="muted p-6 text-center text-sm">No cases yet.</p>
+        )}
       </div>
     </section>
+  );
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return (
+    <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+      {children}
+    </th>
+  );
+}
+
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string;
+}) {
+  return (
+    <div>
+      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+        {label}
+      </p>
+      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--foreground)] tabular-nums">
+        {value}
+      </p>
+    </div>
   );
 }

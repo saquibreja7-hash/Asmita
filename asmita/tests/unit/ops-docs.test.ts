@@ -33,4 +33,28 @@ describe("ops documentation", () => {
     expect(decisions).toContain("English and Hindi at launch");
     expect(decisions).toContain("post-launch supporter pathway");
   });
+
+  it("keeps incident runbooks for required operational failure modes", () => {
+    const runbooks = readFileSync(path.join(process.cwd(), "docs", "ops", "incident-runbooks.md"), "utf8");
+
+    expect(runbooks).toContain("Email Outage");
+    expect(runbooks).toContain("Stale GO Contact");
+    expect(runbooks).toContain("Scheduler Failure");
+    expect(runbooks).toContain("Data Breach");
+    expect(runbooks).toContain("POCSO Or CSAM Concern");
+    expect(runbooks).toContain("Legal Threat");
+    expect(runbooks).toContain("Do not request, view, store, forward, or summarize intimate media.");
+  });
+
+  it("documents environment provisioning and production smoke evidence", () => {
+    const environments = readFileSync(path.join(process.cwd(), "docs", "infra", "environments.md"), "utf8");
+
+    expect(environments).toContain("Local");
+    expect(environments).toContain("Staging");
+    expect(environments).toContain("Production");
+    expect(environments).toContain("India-region deployment");
+    expect(environments).toContain("ENABLE_HASH_UPLOAD=false");
+    expect(environments).toContain("/admin/milestones");
+    expect(environments).toContain("Smoke-Test Evidence");
+  });
 });

@@ -2,6 +2,11 @@ import { Resend } from "resend";
 
 let resend: Resend | null = null;
 
+export type EmailSendResult = {
+  id?: string;
+  data?: { id?: string } | null;
+};
+
 function getResend() {
   if (!resend) {
     resend = new Resend(process.env.RESEND_API_KEY || "re_dev_placeholder");
@@ -21,24 +26,24 @@ export async function sendOtp(to: string, otp: string) {
   if (!process.env.RESEND_API_KEY) {
     return { id: `dev-otp-${otp}` };
   }
-  return getResend().emails.send({
+  return assertEmailSent(await getResend().emails.send({
     from: getTransactionalEmailFrom(),
     to,
     subject: "Your Asmita verification code",
     text: `Your Asmita verification code is ${otp}. It expires in 10 minutes.`,
-  });
+  }));
 }
 
 export async function sendNoticeDraft(to: string, subject: string, text: string) {
   if (!process.env.RESEND_API_KEY) {
     return { id: "dev-notice-message" };
   }
-  return getResend().emails.send({
+  return assertEmailSent(await getResend().emails.send({
     from: getNoticeEmailFrom(),
     to,
     subject,
     text,
-  });
+  }));
 }
 
 export function createVictimConfirmationEmail(referenceNumber: string, dashboardUrl: string) {
@@ -110,10 +115,18 @@ export async function sendVictimConfirmation(to: string, referenceNumber: string
   if (!process.env.RESEND_API_KEY) {
     return { id: `dev-confirmation-${referenceNumber}` };
   }
-  return getResend().emails.send({
+  return assertEmailSent(await getResend().emails.send({
     from: getTransactionalEmailFrom(),
     to,
     subject,
     text,
-  });
+  }));
+}
+
+function assertEmailSent(result: unknown): EmailSendResult {
+  const response = result as { data?: { id?: string } | null; error?: { message?: string } | null };
+  if (response?.error) {
+    throw new Error(`email_send_failed:${response.error.message || "unknown_resend_error"}`);
+  }
+  return response.data ? { id: response.data.id, data: response.data } : (result as EmailSendResult);
 }

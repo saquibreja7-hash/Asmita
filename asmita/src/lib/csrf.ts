@@ -5,7 +5,7 @@ import { sha256 } from "@/lib/hash";
 const CSRF_COOKIE = "asmita_csrf";
 
 function secret() {
-  return process.env.JWT_SECRET || "dev-secret-change-before-prod-32chars";
+  return process.env.CSRF_SECRET || process.env.JWT_SECRET || "dev-secret-change-before-prod-32chars";
 }
 
 export function createCsrfPair() {

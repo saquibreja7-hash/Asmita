@@ -6,6 +6,9 @@ const IV_LENGTH = 12;
 function getKey() {
   const configured = process.env.ENCRYPTION_KEY;
   if (!configured) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("ENCRYPTION_KEY is required in production.");
+    }
     return Buffer.alloc(32, 0);
   }
   const key = Buffer.from(configured, "hex");

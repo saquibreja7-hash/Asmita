@@ -2,5 +2,10 @@
   "status": "DRAFT_REQUIRES_NATIVE_SPEAKER_REVIEW",
   "reviewedBy": null,
   "reviewedAt": null,
-  "notes": "AI-drafted Hindi strings. Do not mark production-ready until reviewed by a native Hindi speaker for trauma-informed tone."
+  "auditedAt": "2026-05-17",
+  "auditedBy": "claude",
+  "keyParity": "100% — every key in en.json is present in hi.json",
+  "scope": "Covers the i18n surface area used by the persistent UI chrome (nav, support panel, age attestation, declaration label, emergency labels). The redesigned marketing pages — homepage, /how-it-works, /resources, /faq, /privacy, /contact, /terms, /feedback, /start, /minor-support, victim flow, admin console — render English-primary copy directly in JSX and do NOT pull from this dictionary.",
+  "notes": "AI-drafted Hindi strings. Do not mark production-ready until reviewed by a native Hindi speaker for trauma-informed tone, gender-inclusive verb forms, and legal-citation accuracy. A separate translation pass is required for the marketing-copy on the redesigned pages — see asmita/docs/superpowers/specs/2026-05-17-homepage-redesign-design.md section 14.5.",
+  "policyOnGenderInclusiveForms": "Verb forms use both feminine and masculine endings (e.g., 'करती/करता हूं') to avoid presuming the survivor's gender. Keep this pattern in future translations."
 }

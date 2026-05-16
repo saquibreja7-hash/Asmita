@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { verifyCsrfRequest } from "@/lib/csrf";
-import { reviewSubmittedUrl } from "@/lib/store";
+import { reviewSubmittedUrl } from "@/lib/case-ops";
 
 export async function POST(
   request: Request,
@@ -15,6 +15,11 @@ export async function POST(
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
   const { caseId, urlId } = await context.params;
-  const url = await reviewSubmittedUrl({ caseId, urlId, decision: "approve", reviewerId: auth.session.sub });
-  return NextResponse.json({ success: true, url });
+  try {
+    const url = await reviewSubmittedUrl({ caseId, urlId, decision: "approve", reviewerId: auth.session.sub });
+    return NextResponse.json({ success: true, url });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "error";
+    return NextResponse.json({ error: msg }, { status: 404 });
+  }
 }

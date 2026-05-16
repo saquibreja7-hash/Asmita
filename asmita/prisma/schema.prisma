@@ -387,3 +387,15 @@ model DeletionJob {
   @@index([scheduledAt])
   @@index([status])
 }
+
+model SecurityEventLog {
+  id        String   @id @default(uuid())
+  event     String
+  actorHash String?
+  route     String?
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([event])
+  @@index([createdAt])
+}

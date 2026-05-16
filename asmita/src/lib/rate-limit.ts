@@ -39,6 +39,9 @@ export function checkMemoryRateLimit(key: string, limit: number, windowMs: numbe
 }
 
 export function checkRateLimit(key: string, limit: number, windowMs: number) {
+  if (process.env.E2E_TEST_BYPASS_RATE_LIMIT === "1") {
+    return { allowed: true, remaining: limit };
+  }
   if (shouldUseRedis()) {
     throw new Error("Use checkRateLimitAsync when RATE_LIMIT_DRIVER=redis.");
   }
@@ -46,6 +49,9 @@ export function checkRateLimit(key: string, limit: number, windowMs: number) {
 }
 
 export async function checkRateLimitAsync(key: string, limit: number, windowMs: number) {
+  if (process.env.E2E_TEST_BYPASS_RATE_LIMIT === "1") {
+    return { allowed: true, remaining: limit };
+  }
   if (shouldUseRedis()) {
     return checkRedisRateLimit(key, limit, windowMs);
   }

@@ -25,6 +25,18 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  // Bundle the Noto Sans Devanagari woff file into serverless function
+  // outputs. Without this, fir-package-generator.ts cannot read the font
+  // on Vercel because Next's file-tracing only follows `import` statements,
+  // not runtime fs.readFile paths.
+  outputFileTracingIncludes: {
+    "/api/cases/[caseId]/export/*": [
+      "./node_modules/@fontsource/noto-sans-devanagari/files/noto-sans-devanagari-devanagari-400-normal.woff",
+    ],
+    "/api/cases/[caseId]/fir-package/*": [
+      "./node_modules/@fontsource/noto-sans-devanagari/files/noto-sans-devanagari-devanagari-400-normal.woff",
+    ],
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

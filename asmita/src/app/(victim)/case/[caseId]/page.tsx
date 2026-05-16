@@ -1,86 +1,217 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
-import { cases, deactivatedUsers } from "@/lib/store";
+import { requireSession } from "@/lib/auth/middleware";
+import { getCaseForUser, isUserDeactivated } from "@/lib/case-ops";
+import { CaseDashboardActions } from "./CaseDashboardActions";
 
-export default async function CasePage({ params }: { params: Promise<{ caseId: string }> }) {
+export default async function CasePage({
+  params,
+}: {
+  params: Promise<{ caseId: string }>;
+}) {
   const { caseId } = await params;
-  const record = cases.get(caseId);
+  const auth = await requireSession({ adultOnly: true });
+  const record = auth.ok ? await getCaseForUser(caseId, auth.session.sub) : null;
+  const deactivated =
+    record && auth.ok ? await isUserDeactivated(auth.session.sub) : false;
+
   return (
     <AppShell>
-      <section className="container py-16">
-        <p className="text-sm font-bold uppercase tracking-widest text-[var(--teal)]">Case dashboard</p>
+      <div className="page-canvas">
         {!record ? (
-          <div className="panel mt-8 max-w-2xl p-6">
-            <h1 className="text-3xl font-black">We could not find this case.</h1>
-            <p className="muted mt-3 leading-7">
-              Check the dashboard link from your email or verify your email again to list your cases.
-            </p>
-            <Link className="btn btn-primary mt-6" href="/register">
-              Verify email
-            </Link>
-          </div>
-        ) : deactivatedUsers.has(record.userId) ? (
-          <div className="panel mt-8 max-w-2xl p-6">
-            <h1 className="text-3xl font-black">Deletion is scheduled for this case.</h1>
-            <p className="muted mt-3 leading-7">
-              Case access is paused while the 30-day hard deletion window is active.
-            </p>
-          </div>
+          <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
+            <div className="mx-auto max-w-2xl">
+              <span className="pill">
+                <span className="dot" />
+                Case not found
+              </span>
+              <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px] md:leading-[1.06]">
+                We could not find this{" "}
+                <em className="not-italic text-gradient">case</em>.
+              </h1>
+              <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
+                Check the dashboard link from your email, or verify your
+                email again to list your cases.
+              </p>
+              <div className="mt-10 flex flex-wrap justify-center gap-3">
+                <Link className="btn btn-primary" href="/register">
+                  Verify email
+                </Link>
+                <Link className="btn btn-secondary" href="/resources">
+                  Support resources
+                </Link>
+              </div>
+            </div>
+          </section>
+        ) : deactivated ? (
+          <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
+            <div className="mx-auto max-w-2xl">
+              <span className="pill">
+                <span className="dot" />
+                Deletion scheduled
+              </span>
+              <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px] md:leading-[1.06]">
+                This case is paused.
+              </h1>
+              <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
+                Case access is paused while the 30-day hard-deletion window is
+                active. If you wish to restore the account, please contact
+                support before the window closes.
+              </p>
+              <div className="mt-10 flex flex-wrap justify-center gap-3">
+                <Link className="btn btn-secondary" href="/contact">
+                  Contact Asmita
+                </Link>
+              </div>
+            </div>
+          </section>
         ) : (
           <>
-            <h1 className="mt-3 text-4xl font-black">{record.referenceNumber}</h1>
-            <p className="muted mt-3">
-              Created {new Date(record.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST
-            </p>
-            {record.urls.length === 0 ? (
-              <div className="panel mt-8 max-w-2xl p-6">
-                <h2 className="text-2xl font-black">No URLs have been added yet.</h2>
-                <p className="muted mt-3">Add links as text when you are ready. The app will not open them.</p>
+            {/* HEADER */}
+            <section className="container pb-10 pt-20 text-center md:pb-14 md:pt-32">
+              <div className="mx-auto max-w-2xl">
+                <span className="pill">
+                  <span className="dot" />
+                  Case dashboard
+                </span>
+                <h1 className="font-display mt-8 font-mono text-[28px] font-normal leading-[1.18] tracking-tight md:text-[44px] md:leading-[1.14]">
+                  {record.referenceNumber}
+                </h1>
+                <p className="font-mono mt-3 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                  Created{" "}
+                  {new Date(record.createdAt).toLocaleString("en-IN", {
+                    timeZone: "Asia/Kolkata",
+                  })}{" "}
+                  · IST
+                </p>
               </div>
-            ) : (
-              <div className="mt-8 overflow-hidden rounded-lg border border-[var(--border)] bg-white">
-                <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-                  <thead className="bg-[var(--teal-soft)]">
-                    <tr>
-                      <th className="p-4">Platform</th>
-                      <th className="p-4">Domain</th>
-                      <th className="p-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {record.urls.map((url) => (
-                      <tr className="border-t border-[var(--border)]" key={url.id}>
-                        <td className="p-4 font-bold">
-                          <Link href={`/case/${record.id}/url/${url.id}`}>{url.platformName}</Link>
-                        </td>
-                        <td className="p-4">{url.domain}</td>
-                        <td className="p-4">{url.status.replaceAll("_", " ")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            </section>
+
+            {/* URLS */}
+            <section id="urls" className="container py-10 md:py-14">
+              <div className="mx-auto max-w-3xl">
+                <p className="font-mono text-center text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                  URLs in this case · {record.urls.length}
+                </p>
+                <h2 className="font-display mt-4 text-center text-[28px] font-normal leading-[1.18] tracking-tight md:text-[40px] md:leading-[1.14]">
+                  {record.urls.length === 0
+                    ? "No URLs added yet."
+                    : "Status by URL."}
+                </h2>
+
+                {record.urls.length === 0 ? (
+                  <p className="muted mx-auto mt-6 max-w-lg text-center text-base leading-[1.75]">
+                    Add links as text when you are ready. Asmita will not open
+                    them.
+                  </p>
+                ) : (
+                  <div className="mt-8 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+                    <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-[var(--hairline)]">
+                          <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                            Platform
+                          </th>
+                          <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                            Domain
+                          </th>
+                          <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {record.urls.map((url) => (
+                          <tr
+                            className="border-t border-[var(--hairline)]"
+                            key={url.id}
+                          >
+                            <td className="p-4">
+                              <Link
+                                className="link-underline text-[var(--foreground)]"
+                                href={`/case/${record.id}/url/${url.id}`}
+                              >
+                                {url.platformName}
+                              </Link>
+                            </td>
+                            <td className="font-mono p-4 text-[var(--muted)]">
+                              {url.domain}
+                            </td>
+                            <td className="p-4 capitalize">
+                              {url.status.replaceAll("_", " ")}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            )}
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link className="btn btn-primary" href="/submit">
-                Add more URLs
+            </section>
+
+            {/* ACTIONS */}
+            <section id="actions" className="container py-10 md:py-14">
+              <div className="mx-auto max-w-3xl">
+                <CaseDashboardActions
+                  caseId={record.id}
+                  firstUrlId={record.urls[0]?.id}
+                />
+              </div>
+            </section>
+
+            {/* TOOLBOX */}
+            <section className="container pb-24 pt-10 text-center md:pb-32 md:pt-14">
+              <div className="mx-auto max-w-2xl">
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                  Case tools
+                </p>
+                <h2 className="font-display mt-4 text-[24px] font-normal leading-[1.2] tracking-tight md:text-[32px] md:leading-[1.18]">
+                  Download, audit, or close.
+                </h2>
+                <div className="mt-8 flex flex-wrap justify-center gap-3">
+                  <Link
+                    className="btn btn-secondary"
+                    href={`/api/cases/${record.id}/export`}
+                  >
+                    Download case PDF
+                  </Link>
+                  <Link
+                    className="btn btn-secondary"
+                    href={`/api/cases/${record.id}/audit-trail`}
+                  >
+                    View audit trail
+                  </Link>
+                  <Link className="btn btn-secondary" href="/delete-account">
+                    Request deletion
+                  </Link>
+                  <Link className="btn btn-secondary" href="/resources">
+                    Support resources
+                  </Link>
+                </div>
+              </div>
+            </section>
+
+            {/* MOBILE NAV */}
+            <nav
+              className="fixed inset-x-0 bottom-12 z-30 grid grid-cols-4 border-t border-[var(--hairline)] bg-white/95 backdrop-blur text-center font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--muted)] shadow-[0_-12px_30px_rgba(17,24,39,0.06)] lg:hidden"
+              aria-label="Mobile case navigation"
+            >
+              <a className="py-3" href="#urls">
+                URLs
+              </a>
+              <a className="py-3" href="#actions">
+                Actions
+              </a>
+              <Link className="py-3" href="/resources">
+                Support
               </Link>
-              <Link className="btn btn-secondary" href={`/api/cases/${record.id}/audit-trail`}>
-                View audit trail
+              <Link className="py-3" href="/delete-account">
+                Delete
               </Link>
-              <Link className="btn btn-secondary" href={`/api/cases/${record.id}/export`}>
-                Download case PDF
-              </Link>
-              <Link className="btn btn-secondary" href="/delete-account">
-                Request deletion
-              </Link>
-              <Link className="btn btn-secondary" href="/resources">
-                Support resources
-              </Link>
-            </div>
+            </nav>
           </>
         )}
-      </section>
+      </div>
     </AppShell>
   );
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/middleware";
-import { cases } from "@/lib/store";
+import { getCaseForUser } from "@/lib/case-ops";
 
 export async function GET(_request: Request, context: { params: Promise<{ caseId: string }> }) {
   const auth = await requireSession({ adultOnly: true });
@@ -8,8 +8,8 @@ export async function GET(_request: Request, context: { params: Promise<{ caseId
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
   const { caseId } = await context.params;
-  const record = cases.get(caseId);
-  if (!record || record.userId !== auth.session.sub) {
+  const record = await getCaseForUser(caseId, auth.session.sub);
+  if (!record) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   return NextResponse.json(record);

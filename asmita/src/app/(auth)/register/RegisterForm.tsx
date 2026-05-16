@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 
+type Step = "age" | "email" | "otp";
+
 export function RegisterForm() {
   const router = useRouter();
-  const [step, setStep] = useState<"age" | "email" | "otp">("age");
+  const [step, setStep] = useState<Step>("age");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [age, setAge] = useState<"adult" | "minor" | "">("");
@@ -51,76 +53,215 @@ export function RegisterForm() {
     router.push(age === "minor" ? "/minor-support" : "/submit");
   }
 
-  if (step === "age") {
-    return (
-      <form className="panel mt-8 max-w-lg space-y-5 p-6">
-        <fieldset className="space-y-3">
-          <legend className="text-sm font-bold">Age attestation</legend>
-          <label className="flex gap-3 rounded-md border border-[var(--border)] p-3">
-            <input checked={age === "adult"} onChange={() => setAge("adult")} type="radio" />
-            <span>I confirm I am 18 or older.</span>
-          </label>
-          <label className="flex gap-3 rounded-md border border-[var(--border)] p-3">
-            <input checked={age === "minor"} onChange={() => setAge("minor")} type="radio" />
-            <span>I am under 18.</span>
-          </label>
-        </fieldset>
-        <button
-          className="btn btn-primary w-full"
-          disabled={!hydrated || !age}
-          onClick={() => {
-            if (age === "minor") {
-              router.push("/minor-support");
-              return;
-            }
-            setStep("email");
-          }}
-          type="button"
-        >
-          Continue
-        </button>
-      </form>
-    );
-  }
+  return (
+    <div>
+      <StepHeader step={step} />
 
-  return step === "email" ? (
-    <form className="panel mt-8 max-w-lg p-6">
-      <label className="text-sm font-bold" htmlFor="email">
-        Email address
-      </label>
+      {step === "age" && (
+        <fieldset className="mt-10 space-y-3">
+          <legend className="sr-only">Age attestation</legend>
+          <AgeOption
+            label="I am 18 years of age or older."
+            checked={age === "adult"}
+            onSelect={() => setAge("adult")}
+          />
+          <AgeOption
+            label="I am under 18 years of age."
+            checked={age === "minor"}
+            onSelect={() => setAge("minor")}
+          />
+          <div className="pt-6 text-center">
+            <button
+              className="btn btn-primary"
+              disabled={!hydrated || !age}
+              onClick={() => {
+                if (age === "minor") {
+                  router.push("/minor-support");
+                  return;
+                }
+                setStep("email");
+              }}
+              type="button"
+            >
+              Continue
+            </button>
+          </div>
+        </fieldset>
+      )}
+
+      {step === "email" && (
+        <form
+          className="mt-10 space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            requestOtp();
+          }}
+        >
+          <Row
+            label="Email address"
+            hint="We will send a 6-digit code to this address."
+            htmlFor="email"
+          >
+            <input
+              className="field"
+              id="email"
+              name="email"
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              value={email}
+            />
+          </Row>
+          {error && <FormError message={error} />}
+          <div className="pt-4 text-center">
+            <button
+              className="btn btn-primary"
+              disabled={loading || !hydrated || !email}
+              type="submit"
+            >
+              {loading ? "Sending…" : "Send verification code"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {step === "otp" && (
+        <form
+          className="mt-10 space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            verify();
+          }}
+        >
+          <p className="muted text-center text-sm leading-[1.7]">
+            We sent a 6-digit code to{" "}
+            <span className="font-mono text-[var(--foreground)]">{email}</span>.
+          </p>
+          <Row
+            label="6-digit code"
+            hint="Check your inbox and spam folder. Codes expire in 10 minutes."
+            htmlFor="otp"
+          >
+            <input
+              className="field font-mono text-center text-2xl tracking-[0.4em]"
+              id="otp"
+              inputMode="numeric"
+              maxLength={6}
+              onChange={(event) =>
+                setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              required
+              value={otp}
+              autoComplete="one-time-code"
+            />
+          </Row>
+          {error && <FormError message={error} />}
+          <div className="pt-4 text-center">
+            <button
+              className="btn btn-primary"
+              disabled={loading || !hydrated || otp.length !== 6}
+              type="submit"
+            >
+              {loading ? "Verifying…" : "Continue"}
+            </button>
+          </div>
+          <p className="muted pt-4 text-center text-sm leading-[1.7]">
+            Didn&rsquo;t get the code?{" "}
+            <button
+              type="button"
+              onClick={() => setStep("email")}
+              className="link-underline text-[var(--foreground)]"
+            >
+              Use a different email
+            </button>
+            .
+          </p>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function StepHeader({ step }: { step: Step }) {
+  const labels: Record<Step, { label: string; title: string }> = {
+    age: { label: "Step 01 of 03", title: "First, confirm your age." },
+    email: { label: "Step 02 of 03", title: "Your email address." },
+    otp: { label: "Step 03 of 03", title: "Enter the code we sent." },
+  };
+  const { label, title } = labels[step];
+  return (
+    <div className="text-center">
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        {label}
+      </p>
+      <h2 className="font-display mt-3 text-[24px] font-normal leading-[1.22] tracking-tight md:text-[32px] md:leading-[1.18]">
+        {title}
+      </h2>
+    </div>
+  );
+}
+
+function AgeOption({
+  label,
+  checked,
+  onSelect,
+}: {
+  label: string;
+  checked: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <label
+      className={`flex cursor-pointer items-start gap-3 rounded-[14px] border p-4 transition-colors ${
+        checked
+          ? "border-[var(--teal)] bg-[var(--teal-soft)]"
+          : "border-[var(--hairline)] bg-white hover:border-[var(--border)]"
+      }`}
+    >
       <input
-        className="field mt-2"
-        id="email"
-        name="email"
-        onChange={(event) => setEmail(event.target.value)}
-        required
-        type="email"
-        value={email}
+        type="radio"
+        checked={checked}
+        onChange={onSelect}
+        className="mt-[3px] h-4 w-4 accent-[var(--teal)]"
       />
-      {error ? <p className="mt-3 text-sm font-bold text-[var(--rose)]">{error}</p> : null}
-      <button className="btn btn-primary mt-5 w-full" disabled={loading || !hydrated} onClick={requestOtp} type="button">
-        Send verification code
-      </button>
-    </form>
-  ) : (
-    <form className="panel mt-8 max-w-lg space-y-5 p-6">
-      <p className="font-bold">We sent a code to your email.</p>
-      <label className="block text-sm font-bold" htmlFor="otp">
-        6-digit code
-        <input
-          className="field mt-2"
-          id="otp"
-          inputMode="numeric"
-          maxLength={6}
-          onChange={(event) => setOtp(event.target.value)}
-          required
-          value={otp}
-        />
+      <span className="font-display text-[16px] leading-[1.4] tracking-tight text-[var(--foreground)] md:text-[18px]">
+        {label}
+      </span>
+    </label>
+  );
+}
+
+function Row({
+  label,
+  hint,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  hint: string;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label
+        htmlFor={htmlFor}
+        className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--foreground)]"
+      >
+        {label}
       </label>
-      {error ? <p className="text-sm font-bold text-[var(--rose)]">{error}</p> : null}
-      <button className="btn btn-primary w-full" disabled={loading || !hydrated || otp.length !== 6} onClick={verify} type="button">
-        Continue
-      </button>
-    </form>
+      <p className="muted mt-1 text-sm leading-[1.6]">{hint}</p>
+      <div className="mt-3">{children}</div>
+    </div>
+  );
+}
+
+function FormError({ message }: { message: string }) {
+  return (
+    <p className="text-center text-sm font-semibold text-[var(--rose)]">
+      {message}
+    </p>
   );
 }

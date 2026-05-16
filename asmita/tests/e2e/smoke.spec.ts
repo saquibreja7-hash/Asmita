@@ -1,5 +1,30 @@
 import { expect, test } from "@playwright/test";
 
+async function completeAdultRegistration(page: import("@playwright/test").Page, email: string) {
+  await page.goto("/register");
+  await page.getByLabel("I confirm I am 18 or older.").check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Email address").fill(email);
+  const otpResponse = page.waitForResponse("**/api/auth/request-otp");
+  await page.getByRole("button", { name: "Send verification code" }).click();
+  const otpPayload = (await (await otpResponse).json()) as { devOtp: string };
+  expect(otpPayload.devOtp).toMatch(/^\d{6}$/);
+  await page.getByLabel("6-digit code").fill(otpPayload.devOtp);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(/\/submit$/);
+}
+
+async function createCase(page: import("@playwright/test").Page) {
+  await page.getByLabel("Paste one URL per line").fill("https://www.instagram.com/p/abc");
+  await expect(page.getByText(/Detected: Instagram/)).toBeVisible();
+  await page.getByLabel(/I declare/).check();
+  const urlResponse = page.waitForResponse((response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"));
+  await page.getByRole("button", { name: "Create case" }).click();
+  expect((await urlResponse).ok()).toBe(true);
+  await expect(page).toHaveURL(/\/case\/.+\/confirmation$/, { timeout: 15_000 });
+  await expect(page.getByText(/ASMITA-/)).toBeVisible();
+}
+
 test("landing and support bar render", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Asmita helps/i })).toBeVisible();
@@ -28,22 +53,55 @@ test("minor registration branches before collecting email", async ({ page }) => 
 });
 
 test("full adult flow creates a case and reaches confirmation", async ({ page }, testInfo) => {
-  await page.goto("/register");
-  await page.getByLabel("I confirm I am 18 or older.").check();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Email address").fill(`adult-${testInfo.project.name}@example.com`);
-  const otpResponse = page.waitForResponse("**/api/auth/request-otp");
-  await page.getByRole("button", { name: "Send verification code" }).click();
-  const otpPayload = (await (await otpResponse).json()) as { devOtp: string };
-  await page.getByLabel("6-digit code").fill(otpPayload.devOtp);
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/\/submit$/);
-  await page.getByLabel("Paste one URL per line").fill("https://www.instagram.com/p/abc");
-  await expect(page.getByText(/Detected: Instagram/)).toBeVisible();
-  await page.getByLabel(/I declare/).check();
-  await page.getByRole("button", { name: "Create case" }).click();
-  await expect(page).toHaveURL(/\/case\/.+\/confirmation$/);
-  await expect(page.getByText(/ASMITA-/)).toBeVisible();
+  await completeAdultRegistration(
+    page,
+    `adult-${Date.now()}-${testInfo.project.name}@adult-${testInfo.workerIndex}-${Date.now()}.example.com`,
+  );
+  await createCase(page);
+});
+
+test("adult dashboard supports add URL, manual resolve, PDF export, and deletion request", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  await completeAdultRegistration(
+    page,
+    `dashboard-${Date.now()}-${testInfo.project.name}@dashboard-${testInfo.workerIndex}-${Date.now()}.example.com`,
+  );
+  await createCase(page);
+
+  const dashboardHref = await page.getByRole("link", { name: "Open dashboard" }).getAttribute("href");
+  expect(dashboardHref).toBeTruthy();
+  await page.goto(dashboardHref!);
+  await expect(page.getByRole("heading", { name: /ASMITA-/ })).toBeVisible();
+  await expect(page.getByText("NOTICE QUEUED")).toBeVisible();
+
+  await page.getByLabel("Add another URL").fill("https://www.youtube.com/watch?v=abc123");
+  const addUrlResponse = page.waitForResponse((response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"));
+  await page.getByRole("button", { name: "Add URL to case" }).click();
+  expect((await addUrlResponse).ok()).toBe(true);
+  await expect(page.getByText(/URL added/)).toBeVisible();
+
+  const resolvedResponse = page.waitForResponse((response) => response.url().includes("/mark-resolved"));
+  await page.getByRole("button", { name: "Mark first URL resolved" }).click();
+  expect((await resolvedResponse).ok()).toBe(true);
+  await expect(page.getByText(/manually resolved/i)).toBeVisible();
+
+  const exportHref = await page.getByRole("link", { name: "Download case PDF" }).getAttribute("href");
+  expect(exportHref).toBeTruthy();
+  const pdfResponse = await page.request.get(exportHref!);
+  expect(pdfResponse.ok()).toBe(true);
+  expect(pdfResponse.headers()["content-type"]).toContain("application/pdf");
+
+  await page.goto("/delete-account");
+  await page.getByLabel("Type DELETE to continue").fill("DELETE");
+  const deletionResponse = page.waitForResponse((response) => response.url().endsWith("/api/account/delete"));
+  await page.getByRole("button", { name: "Schedule deletion" }).click();
+  expect((await deletionResponse).ok()).toBe(true);
+  await expect(page.getByText(/Deletion scheduled/)).toBeVisible();
+});
+
+test("direct visits to protected victim flow redirect to start without session", async ({ page }) => {
+  await page.goto("/submit");
+  await expect(page).toHaveURL(/\/start$/);
 });
 
 test("language toggle persists Hindi preference", async ({ page }) => {
