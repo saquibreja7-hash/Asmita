@@ -320,15 +320,15 @@ const html = `<!DOCTYPE html>
   <div class="cover-meta">
     <div class="cover-meta-item">
       <span class="cover-meta-label">Version</span>
-      <span class="cover-meta-value">0.2 — Draft</span>
+      <span class="cover-meta-value">0.3 — Draft</span>
     </div>
     <div class="cover-meta-item">
       <span class="cover-meta-label">Date</span>
-      <span class="cover-meta-value">May 12, 2026</span>
+      <span class="cover-meta-value">May 17, 2026</span>
     </div>
     <div class="cover-meta-item">
       <span class="cover-meta-label">Status</span>
-      <span class="cover-meta-value">Pre-development</span>
+      <span class="cover-meta-value">Engine built; awaiting legal sign-off</span>
     </div>
     <div class="cover-meta-item">
       <span class="cover-meta-label">Scope</span>
