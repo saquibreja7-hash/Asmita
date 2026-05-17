@@ -1,8 +1,48 @@
 # Asmita — Product Requirements Document
 **Asmita (अस्मिता) — Dignity Restoration Platform for Non-Consensual Intimate Images**
-**Version:** 0.2 (Draft)
-**Date:** 2026-05-12
-**Status:** Pre-development
+**Version:** 0.3 (Draft)
+**Date:** 2026-05-17
+**Status:** Pre-development; engine substantially built and gated pending legal sign-off
+
+---
+
+## Changelog
+
+### v0.3 (2026-05-17) — Regulatory refresh + verified GO contacts
+
+Between v0.2 (2026-05-12) and v0.3, the regulatory landscape around NCII shifted significantly in both India and the United States. This version captures those changes and the product-level adjustments they require. None of the v0.2 architecture is being reversed; the changes are additive.
+
+**Indian regulatory updates incorporated:**
+- **MeitY Standard Operating Procedure of 11 November 2025** mandating a uniform 24-hour NCII takedown across intermediaries, with NCRP 1930 designated as the national victim intake (Section 4).
+- **IT (Intermediary Guidelines and Digital Media Ethics Code) Amendment Rules 2026**, notified 10 February 2026, operational 20 February 2026. New accelerated takedown windows: **2 hours for non-consensual nudity, 3 hours for government/court-ordered takedown of synthetic content, 7 days for grievance-officer resolution** (Sections 4 and 6).
+- **I4C national hash bank** maintained by the Indian Cybercrime Coordination Centre, with DoT-ISP coordination for URL-level blocking (Sections 4 and 9).
+- Madras HC and Delhi HC NCII-specific directives referenced in the legal framework (Section 4).
+
+**US regulatory updates incorporated:**
+- **TAKE IT DOWN Act of 2025** (15 U.S.C. § 6851), signed 19 May 2025, full implementation deadline 19 May 2026. Covered platforms (which includes every major social-media and adult site) must remove non-consensual intimate visual depictions within **48 hours** of valid notification. This is the strongest single legal lever for US-hosted platforms and is now cited as a primary basis in Templates B and C (Sections 4 and 10).
+- **FTC consent decree against Aylo (Pornhub's parent), September 2025** — $5M settlement obligating consent and identity verification; relevant for any notice routed to Pornhub-network sites (Section 10).
+
+**Product changes:**
+- New content-category flag at URL submission so the system can route NCN cases into the 2-hour regime (Feature 1.2, Section 6).
+- New conceptual platform tier `TIER_GOVT_ESCALATION_ONLY` for offshore aggregator sites where direct platform notice is known-futile and the only viable escalation is NCRP / DoT / Google de-indexing / Cloudflare abuse (Sections 9 and 10).
+- Notice templates rewritten to procedural-skeleton quality (full statutory shape per template type, hedged citation of the 2026 amendment pending legal review). Templates remain gated by `reviewedByLegal: false`; the escalation engine refuses to dispatch any notice whose template flag is false (Section 10).
+- Escalation timeline (Feature 1.4) updated to reflect the engine that is now actually implemented in code: L1 follow-up to platform GO (gated), L2 victim notification, L3 FIR readiness with PDF download.
+
+**Verified Grievance Officer contacts (Section 9):**
+- Snapchat — Uthara Ganesh, `grievance-officer-in@snap.com` (directly verified from canonical Snapchat help page on 2026-05-17).
+- Reddit India — Vijay Pamarathi, Bengaluru office (directly verified from Reddit help page on 2026-05-17).
+- Other Tier-1 GOs raised to medium-confidence from secondary sources; all still require final verification by a human researcher via the admin GO editor before being marked `lastContactVerifiedByHuman=true` in production.
+
+**Decisions closed since v0.2:**
+- D-02: Anonymous vs. registered submissions → registered (email OTP).
+- D-03: Launch languages → English + Hindi.
+- D-04: Supporter pathway → post-launch.
+
+**Decisions still open:**
+- D-01 (legal entity), D-05 (funding), D-06 (POCSO protocol), D-07 (platform DB maintenance owner), D-08 (non-response playbook) — these carry over from v0.2 with no change.
+
+**Engineering progress note (informational, not contractual):**
+The engine described in this PRD has been substantively implemented in the `asmita/` Next.js application as of 2026-05-17. Daily Vercel Cron, L1/L2/L3 escalation handlers, audit hash-chain validation, DB-backed admin GO editor, CSV import script, and procedural notice template drafts are all merged on `master`. Production launch remains gated on the human items (legal review, GO verification, DNS, NGO partnership, POCSO protocol).
 
 ---
 
@@ -134,35 +174,59 @@ Asmita is NOT a replacement for the above — it is an accelerator:
 
 ## 4. Legal Framework — India
 
-### Primary Laws Applicable to NCII
+### Primary Laws Applicable to NCII (Indian)
 
 | Law | Provision | Relevance |
 |-----|-----------|-----------|
 | IT Act 2000, Section 66E | Punishment for violation of privacy — capturing, publishing, transmitting private images without consent | Core offense; 3 years + ₹2 lakh fine |
 | IT Act 2000, Section 67 | Publishing obscene material in electronic form | Up to 5 years imprisonment |
 | IT Act 2000, Section 67A | Publishing sexually explicit material in electronic form | Up to 5 years + ₹10 lakh fine |
-| IPC Section 354C (now BNS Section 77) | Voyeurism — capturing or disseminating private images of women without consent | 1–3 years (first offense), 3–7 years (repeat) |
-| POCSO Act 2012, Section 13–15 | Child sexual abuse material — mandatory reporting; platforms must report to NCMEC/police | Zero tolerance; mandatory referral |
+| IT Act 2000, Section 79 | Intermediary safe-harbour limitation — basis for compelling intermediary action | Statutory hook for Asmita's notices |
+| BNS 2023 Section 77 (formerly IPC 354C) | Voyeurism — capturing or disseminating private images of women without consent | 1–3 years (first offense), 3–7 years (repeat) |
+| POCSO Act 2012, Section 13–15 | Child sexual abuse material — mandatory reporting; platforms must report to NCMEC/police | Zero tolerance; mandatory referral (see Section 13) |
 | Protection of Women from Domestic Violence Act | Applicable when perpetrator is intimate partner | Supports civil remedies |
-| IT (Intermediary Guidelines and Digital Media Ethics Code) Rules 2021 | Rule 3(2)(b): Platforms must remove content within 24 hours for specific sexual content; Grievance Officer mandatory | Most powerful tool for rapid takedown |
+| IT (Intermediary Guidelines and Digital Media Ethics Code) Rules 2021 | Rule 3(2)(b): Platforms must remove content within 24 hours for specific sexual content; Grievance Officer mandatory | Foundational framework; further accelerated by 2025 SOP and 2026 amendment (below) |
+| **MeitY Standard Operating Procedure (11 November 2025)** | **Uniform 24-hour NCII takedown across intermediaries; NCRP 1930 designated national victim intake; I4C hash bank for re-upload prevention; DoT coordination for ISP-level URL blocking** | **First nationally-mandated NCII SOP; binds every intermediary regardless of size** |
+| **IT (Intermediary Guidelines and Digital Media Ethics Code) Amendment Rules 2026** (notified 10 Feb 2026, operational 20 Feb 2026) | **Accelerated timelines: 2 hours for non-consensual nudity, 3 hours for government/court-ordered takedown of synthetic / deepfake content, 7-day grievance-officer resolution (was 15 days)** | **Strongest current Indian lever; cite alongside Rule 3(2)(b)** |
 | Digital Personal Data Protection Act 2023 | Governs how Asmita handles victim personal data | Design for DPDP principles; implementation rules pending notification |
 
+### Layered Indian timelines (as of 2026-05-17)
+
+| Trigger | Statutory window | Source |
+|---|---|---|
+| User reporting non-consensual nudity (NCN) | **2 hours** | IT Rules Amendment 2026 |
+| User reporting impersonation / deepfake | **2 hours** | IT Rules Amendment 2026 |
+| Government / court takedown order | **3 hours** | IT Rules Amendment 2026 |
+| General NCII reported via Grievance Officer | **24 hours** | IT Rules 2021 Rule 3(2)(b) + MeitY 2025 SOP |
+| Grievance Officer must resolve / acknowledge | **7 days** | IT Rules Amendment 2026 (down from 15 days) |
+
+**Source caveat:** The exact sub-rule citation numbers under the 2026 amendment have been intentionally hedged in Asmita's notice templates ("as amended in 2026 prescribing accelerated removal timelines"). The amendment is well-attested in secondary legal commentary (Mondaq, LawSikho, LiveLaw, Storyboard18, SCC Online), but the legal reviewers at IFF / SFLC.in must substitute verified gazette-text rule numbers before templates ship.
+
+### Recent judicial directives
+
+- **Madras High Court NCII directives (2025)**: Required MeitY to combat NCII spread proactively; directly precipitated the November 2025 SOP. Asmita's notices should be aware of this case-law thread.
+- **Delhi High Court directions to search engines (2024–2025)**: Specifically directed Google, Bing, and other search providers to act on NCII de-listing requests within tight timelines. IFF has written about these directions and they support Asmita's escalation-to-de-indexing path.
+- Both are starting points for IFF / SFLC.in's template review — they have litigated or written about these directives.
+
+### Primary Laws Applicable to NCII (United States, for international platforms)
+
+| Law | Provision | Relevance |
+|-----|-----------|-----------|
+| DMCA, 17 U.S.C. § 512(c)(3) | Standard copyright takedown procedure; requires six statutory elements | Foundational; cited in Templates B and C |
+| **TAKE IT DOWN Act, 15 U.S.C. § 6851** (signed 19 May 2025; implementation deadline 19 May 2026) | **Covered platforms must remove non-consensual intimate visual depictions within 48 hours of a valid notification. Does NOT require the complainant to hold copyright — applies to deepfakes and covertly-recorded content where DMCA does not.** | **Strongest single US lever for porn-platform NCII as of 2026. Cited as primary basis in Templates B and C.** |
+
 ### How Asmita Uses These Laws
-1. **IT Rules 2021 Rule 3(2)(b)** — Primary lever. Cited in every notice to Indian intermediaries. Triggers their 24-hour legal obligation without requiring a court order or police FIR. Any user can invoke this; Asmita makes it easy.
-2. **IT Act 66E / 67A + BNS 77** — Cited as the criminal offenses the content constitutes. Makes the platform's liability for continued hosting explicit.
-3. **DMCA Section 512** — Primary lever for international platforms (porn sites, US-hosted content). Victim authorizes Asmita to file as designated agent.
-4. **DPDP Act** — Governs how Asmita stores and processes victim data. Architecture designed for DPDP principles from day one.
+1. **IT Rules 2021 Rule 3(2)(b), as accelerated by the 2026 Amendment Rules** — Primary Indian lever. Cited in every notice to Indian intermediaries. Triggers the platform's 24-hour (general) or 2-hour (NCN-flagged) legal obligation without requiring a court order or police FIR. Any user can invoke this; Asmita makes it easy.
+2. **IT Act ss.66E / 67 / 67A / 79 + BNS 2023 s.77** — Cited as the criminal offenses the content constitutes. Makes the platform's liability for continued hosting explicit.
+3. **MeitY 2025 SOP + NCRP 1930** — For cases where direct platform notice is known-futile (offshore aggregator sites; see Section 9 `TIER_GOVT_ESCALATION_ONLY`), Asmita routes the victim to NCRP 1930 / cybercrime.gov.in for ISP-level blocking via DoT.
+4. **DMCA § 512(c)(3)** — Cited for international platforms where the complainant retains rights in the underlying work.
+5. **TAKE IT DOWN Act § 6851** — Primary lever for US-covered porn platforms; does not require copyright ownership. Cited in Templates B and C alongside DMCA.
+6. **DPDP Act 2023** — Governs how Asmita stores and processes victim data. Architecture designed for DPDP principles from day one.
 
 ### What Asmita Can and Cannot Claim
-- **Can claim:** "This content constitutes an offense under IT Act Section 66E and IPC Section 354C. Under IT Rules 2021 Rule 3(2)(b), you are required to remove this content within 24 hours. Failure to act may expose your platform to liability under Indian law."
-- **Cannot claim:** Government enforcement action, police FIR (unless one has been filed), court orders (unless obtained)
-- All notices will be drafted and reviewed by a legal advisor before templating
-
-### DMCA (for International Platforms)
-Most major porn platforms are US-hosted. Asmita will file DMCA Section 512 takedown notices on behalf of victims:
-- Victim assigns copyright to their own image/video (they are the subject and often creator)
-- Asmita acts as designated agent with victim's authorization
-- Platforms must respond within 10–14 days; repeat infringer policy kicks in
+- **Can claim:** "This content constitutes an offense under IT Act Section 66E and BNS Section 77. Under IT Rules 2021 Rule 3(2)(b), as amended in 2026 prescribing accelerated NCII timelines, you are required to remove this content within the applicable statutory window. For non-consensual nudity reported under the 2026 amendment, that window is 2 hours; for general NCII, 24 hours. Failure to act may expose your platform to liability under Indian law and to government-directed blocking under the November 2025 MeitY SOP."
+- **Cannot claim:** Government enforcement action, police FIR (unless one has been filed), court orders (unless obtained), gazette-specific sub-rule citations of the 2026 amendment until those citations have been verified by the legal review partners.
+- All notices will be drafted by Asmita and reviewed by IFF or SFLC.in before any template is flipped to `reviewedByLegal: true` and dispatched to a real platform.
 
 ---
 
@@ -211,6 +275,11 @@ This is the entire scope of Phase 1. Everything in this section must be function
 - Each URL is treated as a string token throughout — Asmita's servers **never fetch, download, or render the content at the URL**
 - Unknown platforms flagged for human review and platform database update
 - Multiple URLs per case supported (content often spreads to multiple platforms simultaneously)
+- **Content category flag (new in v0.3):** For each URL the victim is asked one optional question — "Does this content show non-consensual nudity, or is it a deepfake / synthetically-generated intimate depiction of you?" Three-state answer: yes-NCN, yes-deepfake, no/not-sure. Answer is used to:
+  - Route NCN and deepfake URLs into the 2-hour and 3-hour regimes under the IT Rules Amendment 2026 (otherwise they get the general 24-hour treatment).
+  - Surface the strongest applicable legal citation in the notice body.
+  - Tag the case for analytics so we can measure per-category response rates.
+  The question is optional because some victims will not be able to characterise the content in distress; absent an answer the case routes via the general 24-hour path.
 
 **Feature 1.3 — Notice Routing Engine (Core System)**
 
@@ -232,14 +301,25 @@ For each URL, the system routes the notice through a three-tier priority chain:
 - Links directly to the platform's abuse/DMCA form
 - Victim confirms submission; case status updated manually
 
-**Feature 1.4 — Auto-Escalation Timeline**
+**Feature 1.4 — Auto-Escalation Timeline (updated v0.3)**
 
-| Time Elapsed | Action |
-|---|---|
-| 0 hours | Initial notice sent; confirmation sent to victim |
-| 24 hours (no response) | Escalation notice sent to same contact; victim notified |
-| 48 hours (no response) | Notice sent to platform's Indian Grievance Officer (if separate from initial contact); victim advised to file cybercrime.gov.in complaint |
-| 7 days (no removal) | Escalation package generated: summary of notices sent, timestamps, non-response record — formatted for police FIR / legal filing |
+The previous v0.2 timeline (24h / 48h / 7d) is preserved as the default for "general NCII" cases, but the engine now also honors the IT Rules Amendment 2026 windows when the URL is flagged as non-consensual nudity (NCN) or deepfake via Feature 1.2.
+
+**Architectural note:** Asmita runs on Vercel daily Cron under the Hobby tier, which caps cron frequency at once-per-day. The 2-hour statutory window cannot be met by a follow-up cron alone, but it does not need to — the survivor's initial notice is sent **instantly** at submission. The 2-hour clock starts then. The follow-up cadence below is what Asmita controls after the initial send.
+
+| Time after initial notice | Action (general NCII) | Action (NCN / deepfake flagged) |
+|---|---|---|
+| 0 hours | Initial notice sent to platform (cites IT Rules 2021 Rule 3(2)(b), 2026 amendment, and applicable US statutes where the platform is US-hosted). Victim receives a confirmation email with their case reference and a link to the dashboard. | Same as general, plus body cites the 2-hour rule under the 2026 amendment as the primary statutory hook. |
+| 24 hours (no terminal response) | **L1 follow-up:** original notice re-sent verbatim with `[Follow-up #1]` subject prefix. Gated by `template.reviewedByLegal=true` AND `platform.lastContactVerifiedByHuman=true`; refuses to dispatch otherwise. Audit log records the refusal reason. | L1 follow-up fires 24h after initial send (same cadence) — but the notice now reflects that the 2-hour statutory window has been breached, escalating tone and citing breach. |
+| 48 hours (no terminal response) | **L2 victim notification:** transactional email to the survivor explaining the platform has not responded and Asmita's team is reviewing the case. Localised by `User.preferredLocale`. | Same. |
+| 7 days (no terminal response) | **L3 FIR package readiness:** `Case.firPackageGeneratedAt` is set, and the victim is emailed a direct link to `/api/cases/[caseId]/export` which generates the PDF on demand. The PDF is shaped for filing as an FIR or for handoff to a lawyer. | Same. |
+
+**For `TIER_GOVT_ESCALATION_ONLY` platforms** (offshore aggregators where platform notice is known-futile — see Section 9): the platform notice step is **skipped** entirely. The victim is routed directly to NCRP 1930 / cybercrime.gov.in, Google de-indexing, and (if Cloudflare-fronted) a Cloudflare abuse report. L3 still produces the FIR package.
+
+**Termination conditions** (engine refuses to escalate further):
+- Platform response of `ACKNOWLEDGED`, `REMOVED`, or `REJECTED` recorded by an admin or webhook.
+- URL status reaches `REMOVED`, `MANUALLY_RESOLVED`, or `REJECTED`.
+- Victim manually marks the URL resolved via the dashboard.
 
 **Feature 1.5 — Case Tracking Dashboard**
 - Victim logs in with case reference number + OTP
@@ -401,51 +481,90 @@ Under IT Rules 2021, all significant social media intermediaries must publish th
 
 **Pre-launch task:** Research and verify Grievance Officer contacts for all Tier 1 and Tier 2 platforms before launch. Do not launch with placeholder contacts.
 
-### Priority Tier 1: Social Media (India — Largest Reach)
-| Platform | India Users | Grievance Officer / Takedown Contact | Notice Basis |
-|----------|-------------|--------------------------------------|-------------|
-| Meta (Facebook/Instagram) | 500M+ | grievanceofficer@support.facebook.com (verify); also has NCII-specific form | IT Rules 2021 + DMCA |
-| YouTube (Google India) | 450M+ | Designated Grievance Officer published at support.google.com/youtube/answer/2801895 | IT Rules 2021 + DMCA |
-| Twitter / X | 25M+ | grievanceofficer-in@twitter.com (verify current contact); also help.twitter.com/forms/private_information | IT Rules 2021 + DMCA |
-| Telegram | 100M+ | abuse@telegram.org; no formal IT Rules registration as of 2024 — use DMCA + MeitY fallback | DMCA; MeitY escalation |
-| WhatsApp (Meta) | 550M+ | grievanceofficer@support.whatsapp.com (verify); forwarded message removal harder — focus on source | IT Rules 2021 |
-| ShareChat | 250M+ | grievance@sharechat.com (verify) | IT Rules 2021 |
-| Josh / Moj / MX TakaTak | 100M+ | Research required — all must publish Grievance Officer under IT Rules 2021 | IT Rules 2021 |
-| Snapchat | 20M+ | No Indian Grievance Officer as of 2024; use support.snapchat.com DMCA form | DMCA |
+### Tier model (v0.3)
 
-*All contacts must be verified before launch. IT Rules 2021 requires platforms to publish this; Asmita's team should pull from each platform's Terms/Privacy/Contact page directly.*
+Asmita's notice-router model now has **four tiers**, up from three in v0.2. The fourth tier handles offshore aggregator sites where direct platform notice is known to fail and the only viable response is government / search / CDN escalation.
+
+| Tier | What it covers | How a notice is dispatched |
+|---|---|---|
+| `TIER_1` (API) | Platforms with a formal NCII removal API or first-class form (Meta, Google) | Programmatic API call or pre-filled form handoff with API receipt |
+| `TIER_2` (Email) | Indian SSMIs with a verified Grievance Officer email under IT Rules 2021 | Direct email to the verified GO address |
+| `TIER_3` (Form handoff) | Platforms with a public form but no Grievance Officer email (X / Twitter, Pornhub, Telegram) | Asmita pre-fills a notice template; victim copy-pastes into platform form |
+| **`TIER_GOVT_ESCALATION_ONLY` (new)** | **Offshore aggregator sites with no functional takedown channel (Coomer.su, Kemono.su, Thothub, anonymous Indian-language piracy sites)** | **Platform notice skipped. Asmita generates an NCRP 1930 complaint form, a Google de-indexing request, and a Cloudflare abuse report if the domain is Cloudflare-fronted. L3 still produces an FIR package.** |
+
+### Priority Tier 1: Social Media (India — Largest Reach)
+
+Confidence column: **High** means directly verified from the platform's own canonical page as of the date noted. **Medium** means secondary-source confirmed but not yet verified on the platform's page. **Low** means historical or unsourced; must be re-researched before save.
+
+| Platform | India Users | Grievance Officer (name, contact) | Notice Basis | Confidence | Verified |
+|---|---|---|---|---|---|
+| Meta (Facebook / Instagram / Threads) | 500M+ | `fbgoindia@support.facebook.com` (verify); Gurgaon DLF address; specific GO rotates | IT Rules 2021 + DMCA + TAKE IT DOWN | Medium | Pending |
+| YouTube / Google India | 450M+ | Grievance page at `google.com/intl/en_in/contact/grievance-officer.html`; NCII-specific form at `reportcontent.google.com/forms/explicit_content_intimate_imagery` | IT Rules 2021 + DMCA | Medium | Pending |
+| X / Twitter | 25M+ | **No email by design** — form-only at `help.x.com/en/forms/report-to-grievance-officer-india`; Bangalore office | IT Rules 2021 | High | 2026-05-17 |
+| WhatsApp (Meta) | 550M+ | `grievance_officer_wa@support.whatsapp.com` (email historically stable); GO name rotates (Paresh B Lal → Varun Lamba → Siddhartha Nahar per secondary sources) | IT Rules 2021 | Medium | Pending |
+| Telegram | 100M+ | `abuse@telegram.org`, `stopCA@telegram.org`, `dmca@telegram.org`; **not an Indian SSMI**, no India GO | DMCA + MeitY escalation | High | 2026-05-17 |
+| ShareChat (Mohalla Tech) | 250M+ | Harleen Sethi (GO); `grievance@sharechat.co`. Note: `nodalofficer@sharechat.co` is LE-only, **never use for survivor reports** | IT Rules 2021 | Medium | Pending |
+| Josh, Moj, MX TakaTak | 100M+ | Research pending; all are Indian SSMIs and must publish GOs | IT Rules 2021 | Low | Pending |
+| Snapchat (Snap Inc.) | 20M+ | **Uthara Ganesh**; `grievance-officer-in@snap.com`; Mumbai office | IT Rules 2021 + DMCA | **High** | **2026-05-17** |
+| Reddit | 30M+ (est.) | **Vijay Pamarathi**; grievance form at `support.reddithelp.com/hc/en-us/articles/28417230073236`; Bengaluru office. Reddit also has a separate NCII-specific page | IT Rules 2021 + DMCA + TAKE IT DOWN | **High** | **2026-05-17** |
+| Imgur | (small in India) | Footer DMCA page; US-hosted; covered by TAKE IT DOWN Act | DMCA + TAKE IT DOWN | Low | Pending |
+
+*All medium-and-below entries must be re-verified by a human researcher via the admin GO editor before `lastContactVerifiedByHuman=true` is set. The escalation engine refuses to dispatch to platforms with that flag false.*
 
 ### Priority Tier 2: Pornographic Websites
-| Platform | Hosting | Takedown Process |
-|----------|---------|-----------------|
-| Pornhub (Aylo) | Canada | support.pornhub.com/hc/en-us/requests/new (DMCA) |
-| xVideos | Czech Republic | xvideos.com/abuse |
-| xHamster | Cyprus | xhamster.com/abuse |
-| XNXX (NKL Associates) | Czech Republic | xnxx.com/abuse |
-| RedTube (Aylo) | Canada | DMCA via Aylo |
-| XNXX | Czech Republic | xnxx.com/abuse |
-| Desi-specific sites | Offshore (India-targeted) | Research required; many have no formal process |
 
-*Indian-hosted porn sites:* Many are fly-by-night, frequently change domains, and have no formal takedown process. For these, the fallback is: MeitY complaint + cybercrime.gov.in + ISP blocking request via CERT-In.
+**Regulatory context refresh (v0.3):** Two changes since v0.2 materially affect this tier.
 
-### Priority Tier 3: Search Engines
-- Google: removals.google.com (explicit content removal tool — very effective)
-- Bing: microsoft.com/en-us/concern/bing
-- DuckDuckGo: duckduckgo.com/feedback
+1. **TAKE IT DOWN Act of 2025** (15 U.S.C. § 6851) requires US-covered platforms to remove non-consensual intimate visual depictions within 48 hours of valid notification. Full-implementation deadline 19 May 2026 (i.e. effectively immediate). This applies to Pornhub, xHamster (via US operations), Chaturbate, Imgur, and other US-jurisdictional adult platforms. It is now cited as the **primary** US legal basis, not just DMCA — because TAKE IT DOWN does not require copyright ownership and survivors of covertly-recorded or deepfake content rarely hold copyright.
+2. **FTC consent decree against Aylo** (September 2025) — $5M settlement obligating Aylo (Pornhub, RedTube, YouPorn) to verify the consent and identity of everyone in uploaded content and to implement technical NCII blocking. Notices to Aylo-network sites should reference this consent decree by name; the company is under active enforcement and notices that cite the decree are reported to land harder.
 
-Removing from search is often as important as removing from the source — even if source is slow to respond, delisting from search dramatically reduces discovery.
+| Platform | Hosting | Takedown Channel | Notice Basis | Confidence | Verified |
+|---|---|---|---|---|---|
+| Pornhub (Aylo) | Canada / US | Form at `pornhub.com/content-removal`. Email DMCA channel deprecated. | DMCA + TAKE IT DOWN + FTC consent decree (Sept 2025) | High | Pending |
+| RedTube / YouPorn (Aylo) | Same as Pornhub | Same form covers the Aylo network | Same | High | Pending |
+| xVideos (WGCZ, Czech Republic) | EU | `abuse@xvideos.com` (per secondary sources); verify on footer | DMCA + TAKE IT DOWN (via US user base) | Medium | Pending |
+| xHamster (Hammy Media, Cyprus) | EU | `xhamster.com/info/dmca` (page blocks programmatic access; human researcher to verify) | DMCA + TAKE IT DOWN + xHamster non-consensual content policy | Low | Pending |
+| XNXX (WGCZ, same parent as xVideos) | EU | Footer DMCA link; contact likely shared with xVideos | DMCA + TAKE IT DOWN | Low | Pending |
+| Chaturbate | US | DMCA form at `chaturbate.com/dmca/` | DMCA + TAKE IT DOWN | High | Pending |
+| SpankBang | US (Delaware) | Has a "Non-Consensual Explicit Content – Immediate Removal Request" category on their support portal; exact URL needs manual verification | DMCA + TAKE IT DOWN | Medium | Pending |
+| Eporner, Beeg | EU / unknown | Footer DMCA links; not surfaced in research yet | DMCA | Low | Pending |
+| Cam4, Stripchat, MyFreeCams, BongaCams | Various | Each has its own DMCA form; needs per-site research | DMCA + TAKE IT DOWN where applicable | Low | Pending |
+
+### TIER_GOVT_ESCALATION_ONLY: known-futile aggregators
+
+These platforms publish DMCA contact details but do not honour them in practice. Platform notice for these is a waste of cycles. Asmita routes them differently.
+
+| Platform | Why on this tier | Routing |
+|---|---|---|
+| Coomer.party / Coomer.su | Anonymous operators in offshore TLDs; Coomer.party already went offline once and rebranded | NCRP 1930 + Google de-index + Cloudflare abuse (if fronted) |
+| Kemono.su | Sister site to Coomer.su (Patreon/Pixiv-focused but hosts NCII) | Same |
+| Thothub, Thotsbay | Same operator pattern | Same |
+| Indian-language piracy sites (Antarvasna, DesiPapa, IndianPorn365, etc.) | No public DMCA infrastructure documented; many India-hosted, so directly subject to IT Rules 2026 + DoT-ISP blocking | NCRP 1930 + MeitY ISP-block request + Google de-index. **For India-hosted ones, this is the most effective path: the GoI blocked 63 such sites in 2022 and 857 in 2015 via this mechanism.** |
+| Telegram NCII-focused channels / bots | Telegram itself responds slowly; specific channels respond not at all | NCRP + StopCA email + Indian gov't direct request to Telegram |
+
+### Priority Tier 3: Search Engines (used as escalation, not first-line)
+- **Google**: `reportcontent.google.com/forms/explicit_content_intimate_imagery` (NCII-specific de-indexing — very effective; should be invoked in parallel with platform notice for any URL surfaced in Google Search)
+- **Bing**: `microsoft.com/concern/bing`
+- **DuckDuckGo**: `duckduckgo.com/feedback`
+
+Removing from search is often as important as removing from the source — even if source is slow to respond, de-listing from search dramatically reduces discovery. **Under the November 2025 MeitY SOP, search engines must de-index NCII within 24 hours.**
 
 ### Priority Tier 4: Messaging Apps (Distribution)
-- Telegram: File abuse report + request group/channel takedown
-- WhatsApp: Forwarded messages — harder to take down at source; focus on awareness
-- Hike, ShareChat groups — platform-specific reports
+- **Telegram**: File abuse report + request group/channel takedown. Recent Indian gov't pressure has made Telegram more responsive in 2025-2026.
+- **WhatsApp**: Forwarded messages — harder to take down at source; focus on the originating account.
+- **ShareChat groups**: Platform-specific reports via the GO email above.
+
+### Hosting / CDN escalation (last-resort)
+- **Cloudflare** (most offshore adult sites are Cloudflare-fronted): abuse form at `abuse.cloudflare.com/dmca`. Cloudflare cannot remove content but can stop fronting the domain and can disclose the origin host under legal compulsion.
+- **AWS, Hetzner, OVH, etc.**: For sites hosted outside Cloudflare, an abuse report to the hosting provider is occasionally effective.
+- **Domain registrars**: Last-resort. Most adult-site registrars are in DMCA-resistant jurisdictions, but a `gandi.net` or `namecheap.com` registrar will sometimes act on documented NCII.
 
 ---
 
 ## 10. Takedown Notice System
 
 ### Notice Architecture
-Each notice is tailored to the target platform and cites the correct legal basis. Three template categories:
+Each notice is tailored to the target platform and cites the correct legal basis. Three template categories. **As of v0.3, the templates have been rewritten in the codebase (`asmita/prisma/template-seeds.ts`) to full procedural-skeleton quality so the legal reviewer is editing, not drafting from scratch.** All three remain gated by `reviewedByLegal: false`; the escalation engine refuses to dispatch any notice whose template flag is false.
 
 **Template A: Indian Social Media Platforms (IT Rules 2021)**
 ```
@@ -480,11 +599,13 @@ Asmita Digital Safety Platform
 [website]
 ```
 
-**Template B: International Platforms (DMCA + Indian Law)**
-Similar to above but leads with DMCA Section 512 language and appends Indian law as additional basis. Includes victim's authorization for Asmita to act as DMCA agent.
+**Template B: International Platforms (DMCA + TAKE IT DOWN Act)**
+Leads with notification under **15 U.S.C. § 6851 (TAKE IT DOWN Act, 2025)** which obligates covered platforms to remove non-consensual intimate visual depictions within 48 hours, alongside **17 U.S.C. § 512(c)(3) (DMCA)** to the extent the complainant retains rights in the underlying work. Includes the full six-element 512(c)(3) statutory skeleton (identification, contact, good-faith, accuracy, signature) so the reviewer is editing procedurally-shaped text. The TAKE IT DOWN Act citation matters because it does not require copyright ownership — survivors of covertly-recorded or deepfake content rarely hold copyright, and pre-TAKE IT DOWN their DMCA notice could be challenged on that basis.
 
-**Template C: Pornographic Platforms (DMCA Primary)**
-DMCA-first (most platforms respond to this). Includes the platform's own abuse/DMCA submission form URL. For platforms that ignore DMCA, escalates to registrar and hosting provider.
+**Template C: Pornographic Platforms (combined Indian + US bases)**
+Used when the target platform operates a Grievance Officer in India AND a designated agent for international takedown. Cites both bases in a single notice so the platform's respective teams can act on whichever is procedurally cleanest. For Aylo-network sites specifically (Pornhub, RedTube, YouPorn), the reviewer should add reference to the **FTC consent decree of September 2025** — Aylo is under active enforcement and notices citing the decree are reported to land harder.
+
+For `TIER_GOVT_ESCALATION_ONLY` sites (Section 9), no platform-bound template is used. Instead the engine generates: (a) a pre-filled NCRP 1930 complaint form for the victim to submit at cybercrime.gov.in, (b) a Google de-indexing request, and (c) a Cloudflare abuse report if the domain is Cloudflare-fronted. The L3 FIR PDF is still produced after 7 days.
 
 ### Notice Quality Over Volume
 In Phase 1, Asmita must track response rates by platform. If a platform has a 0% response rate to email, the playbook shifts to:
@@ -711,54 +832,94 @@ Build credibility through Phase 1 response data before approaching:
 | Risk | Severity | Mitigation |
 |------|----------|-----------|
 | Abuse of URL submission by bad actors | High | Verification model (Section 8); human review for flagged cases |
-| Legal threat from platforms for "false" notices | Medium | Notice language is factual and legally grounded; no threats beyond what law supports; legal advisor reviews templates |
+| Legal threat from platforms for "false" notices | Medium | Notice language is factual and legally grounded; no threats beyond what law supports; legal advisor reviews templates; `reviewedByLegal` gate refuses dispatch until human sign-off |
 | Minor content submitted through adult pathway | High | Age attestation; minor pathway (Section 13); no content storage |
 | Low platform response rate in Phase 1 | Medium | Track and publish response rates; escalation chain; use as leverage for Phase 2 partnerships |
 | Victim re-traumatization by using the platform | Medium | Trauma-informed UX; no graphic content shown; content warnings; counselor referrals prominent |
-| Data breach exposing victim information | High | Data minimization; no content stored; encrypted PII; India-region hosting; regular security audits |
-| Platform policy changes making current takedown processes obsolete | Low | Platform database maintained continuously; team monitors policy changes |
+| Data breach exposing victim information | High | Data minimization; no content stored; encrypted PII; India-region hosting; regular security audits; hash-chained audit log (added in implementation) |
+| Platform policy changes making current takedown processes obsolete | Low | Platform database maintained continuously; team monitors policy changes; admin GO editor and CSV import script support quick refresh |
+| **Regulatory framework churn (new in v0.3)** | **High** | **MeitY SOP Nov 2025 and IT Rules Amendment 2026 both changed the takedown windows within 6 months. PRD review cadence increased to quarterly; notice templates use hedged citations that the legal reviewer plugs verified rule numbers into.** |
 | DPDP implementation rules create new compliance obligations | Medium | Architecture designed for DPDP principles; legal review once rules notified |
+| **TAKE IT DOWN Act implementation timing (new in v0.3)** | **Low** | **Act deadline is 19 May 2026; templates already cite it. Risk is that some US platforms will not be fully compliant by deadline; mitigation is that Asmita's notice still has DMCA as fallback basis.** |
+| **`TIER_GOVT_ESCALATION_ONLY` mis-classification (new in v0.3)** | **Medium** | **A platform mis-flagged as known-futile gets no platform notice and the victim loses that channel. Mitigation: tier classification gated through admin GO editor + audit log; reviewable per-case.** |
 | Scope creep toward global expansion too early | Low | PRD explicitly limits Phase 1–2 to India; global expansion gated on Phase 3 |
 
 ---
 
 ## 19. Open Questions
 
-These are decisions that must be made before or during development:
+These are decisions that must be made before or during development. Closed decisions are marked with their resolution.
 
-1. **Legal entity**: What legal structure should Asmita operate under — Section 8 company (non-profit), trust, or NGO registration? This affects credibility of takedown notices and funding eligibility.
+### Closed since v0.2
 
-2. **Anonymous vs. registered submissions**: Should victims be required to register (email), or should fully anonymous submissions be allowed? Anonymous reduces barrier to entry but eliminates follow-up and increases abuse risk.
+- ✅ **D-02 — Anonymous vs. registered submissions** → **Registered (email OTP)**. Implemented in the auth flow.
+- ✅ **D-03 — Languages at launch** → **English + Hindi**. Hindi marketing copy scaffolded; awaiting native-speaker translator.
+- ✅ **D-04 — Supporter pathway timing** → **Post-launch**. Supporter pathway is a Phase 2 feature; not built in Phase 1.
 
-3. **Languages at launch**: Hindi + English only, or include one more regional language? (Recommendation: Hindi + English for Phase 1; add Bengali/Tamil in Phase 2.)
+### Still open from v0.2 (carried forward unchanged)
 
-4. **Supporter pathway**: Should third parties (NGO workers, lawyers) be able to submit on behalf of victims from day one, or post-launch feature?
+1. **D-01 — Legal entity**: What legal structure should Asmita operate under — Section 8 company (non-profit), trust, or NGO registration? This affects credibility of takedown notices and funding eligibility.
 
-5. **Funding before launch**: Platform needs at least 3–4 months of funded development. What is the funding plan and timeline?
+2. **D-05 — Funding before launch**: Platform needs at least 3–4 months of funded development. What is the funding plan and timeline?
 
-6. **POCSO reporting protocol**: Legal advisor must clarify whether Asmita as an intermediary has a mandatory POCSO reporting obligation if it receives CSAM-related submissions, and draft the protocol.
+3. **D-06 — POCSO reporting protocol**: Legal advisor must clarify whether Asmita as an intermediary has a mandatory POCSO reporting obligation if it receives CSAM-related submissions, and draft the protocol.
 
-7. **Platform database maintenance**: Who owns the ongoing research to keep platform contacts, takedown processes, and legal team contacts up to date?
+4. **D-07 — Platform database maintenance**: Who owns the ongoing research to keep platform contacts, takedown processes, and legal team contacts up to date? The admin GO editor and CSV importer now exist; the question is staffing.
 
-8. **Handling non-response**: What is Asmita's escalation playbook when a platform does not respond within 72 hours? This must be defined before launch.
+5. **D-08 — Handling non-response**: For TIER_1 / TIER_2 / TIER_3 platforms this is now answered by the L1/L2/L3 engine described in Section 6. For `TIER_GOVT_ESCALATION_ONLY` sites the routing-to-NCRP / Google / Cloudflare path is also defined. The residual open question is **what happens if even the government / search escalation fails after 30 days** — does Asmita help the victim pursue civil action? Does it refer to a specific list of NCII-litigating lawyers?
+
+### Newly open in v0.3
+
+6. **D-09 — Content-category flag UX (Feature 1.2)**: How is the "non-consensual nudity / deepfake / other" question phrased at submission? A trauma-informed translator + UX writer needs to draft language that captures the legal category without re-traumatising the victim. Recommendation: a 3-state "if you can describe it, which best fits?" with an explicit "skip / I'd rather not say" option, defaulting to the 24-hour general path on skip.
+
+7. **D-10 — NCRP 1930 integration depth**: Does Asmita merely generate a pre-filled complaint form for the victim to submit at cybercrime.gov.in, or does it pursue an MoU with I4C to submit programmatically? The latter would make Asmita a feeder for the national hash bank. Significant policy work; Phase 2 or 3.
+
+8. **D-11 — `TIER_GOVT_ESCALATION_ONLY` operational scope**: Which domains qualify? A starter list (Coomer.su, Kemono.su, Thothub, Indian-language piracy sites) is in Section 9. Maintenance of this list is an ongoing policy decision — too aggressive and Asmita is seen as bypassing platform engagement; too narrow and victims of the worst sites get the worst service.
+
+9. **D-12 — 2-hour NCN regime in practice**: Asmita sends the initial notice instantly when the victim submits, but cannot guarantee delivery / acknowledgement within 2 hours given Vercel cron, Resend deliverability, and platform-side processing. Should the dashboard set victim expectations around this, or aim to upgrade to a sub-hourly cron tier (Vercel Pro) for NCN cases specifically?
+
+10. **D-13 — Madras HC / Delhi HC case-law in templates**: Should the notice body reference these specific judicial directives by case name and citation? Doing so makes the notice land harder but also commits Asmita to maintaining accurate case citations as the law evolves. Decision belongs with IFF / SFLC.in during template review.
+
+11. **D-14 — TAKE IT DOWN Act applicability to non-US-incorporated platforms**: The Act applies to "covered platforms" by definition, but how aggressively does the FTC enforce against EU-incorporated operators (WGCZ for xVideos/XNXX, Hammy Media for xHamster/Beeg)? The notice template asserts applicability "via US user base" — the legal reviewer needs to confirm whether that holds.
 
 ---
 
 ## Appendix A: Reference Links
 
+### Victim / public-facing
 - StopNCII.org: https://stopncii.org
 - TakeItDown (NCMEC, for minors): https://takeitdown.ncmec.org
 - National Cyber Crime Reporting Portal: https://cybercrime.gov.in
+- National Cybercrime Helpline: **1930**
 - NCW Sahyog: https://ncwapps.nic.in/onlinecomplaintregistration.aspx
-- IT Rules 2021 (Intermediary Guidelines): https://egazette.nic.in/WriteReadData/2021/225464.pdf
-- Google Explicit Content Removal: https://removals.google.com
+- Google NCII de-indexing form: https://reportcontent.google.com/forms/explicit_content_intimate_imagery
+- Google general removal: https://removals.google.com
 - Meta NCII Help: https://www.facebook.com/help/nonconsensual-intimate-images
 - iCall (TISS Mental Health Support): https://icallhelpline.org
 - Cyber Peace Foundation: https://cyberpeace.org
+
+### Indian regulatory primary sources
+- IT Rules 2021 (Intermediary Guidelines): https://egazette.nic.in/WriteReadData/2021/225464.pdf
+- MeitY 11 November 2025 NCII SOP: covered in [SCC Online](https://www.scconline.com/blog/post/2025/11/12/meity-non-consensual-intimate-imagery-sop-24-hour-takedown-policy-scctimes/) and [The420.in](https://the420.in/meity-24-hour-ncii-takedown-protocol-revenge-porn-deepfake-removal-india/) (gazette link to be added once Asmita verifies)
+- IT Rules Amendment 2026 (gazette text): commentary at [Mondaq](https://www.mondaq.com/india/new-technology/1760554/it-rules-2026-deepfake-regulation-three-hour-takedowns-and-ai-labelling-obligations), [LiveLaw](https://www.livelaw.in/law-firms/law-firm-articles-/deepfakes-due-diligence-indias-2026-it-amendment-rules-resolve-global-platform-liability-debate-530344) (gazette link to be added)
+- Indian Cybercrime Coordination Centre (I4C) on cybercrime.gov.in
+
+### US regulatory primary sources
+- TAKE IT DOWN Act 2025 (15 U.S.C. § 6851): congressional summary at [Congress.gov LSB11314](https://www.congress.gov/crs-product/LSB11314); analysis at [Skadden](https://www.skadden.com/insights/publications/2025/06/take-it-down-act)
+- DMCA Section 512 (17 U.S.C. § 512): https://www.copyright.gov/512/
+- US Copyright Office DMCA Designated Agent Directory: https://dmca.copyright.gov/osp/
+- FTC settlement statement re Aylo (Sept 2025): https://www.ftc.gov/system/files/ftc_gov/pdf/2025.09.03-2123033-pornhub-mindgeek-ferguson-holyoak-meador-statement.pdf
+
+### Asmita internal research
+- `asmita/docs/go-research/go-research-2026-05-17.md` — Tier 1 social media GO research
+- `asmita/docs/go-research/go-research-porn-sites-2026-05-17.md` — porn-platform pass 1
+- `asmita/docs/go-research/go-research-porn-sites-pass2-2026-05-17.md` — porn-platform pass 2 + IT Rules 2026 / TAKE IT DOWN Act analysis
+- `asmita/docs/translation/hindi-marketing-handoff.md` — translator handoff for homepage Hindi strings
+- `asmita/docs/ai-agent-handoff.md` — handoff doc for the next AI agent picking up the project
 
 ---
 
 *This PRD is a living document. Version history should be maintained as the platform evolves. Major decisions made after this draft should be recorded as dated amendments.*
 
-*Document Owner: [Founder/Product Owner name]*
-*Last Updated: 2026-05-11*
+*Document Owner: Saquib Jamil (CSR India)*
+*Last Updated: 2026-05-17 (v0.3)*
