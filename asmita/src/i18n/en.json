@@ -6,16 +6,42 @@
   "submit.declarationTitle": "Declaration",
   "submit.noUpload": "Do not upload intimate images or videos.",
   "support.childline": "CHILDLINE 1098",
-  "minor.noAdultFlow": "Asmita does not collect adult case URLs from minors."
-  ,"nav.howItWorks": "How it works"
-  ,"nav.resources": "Resources"
-  ,"nav.privacy": "Privacy"
-  ,"nav.start": "Start"
-  ,"support.button": "Support"
-  ,"support.title": "Immediate support"
-  ,"support.close": "Close"
-  ,"support.childlineBody": "24 hours, free, for minors and child safety concerns."
-  ,"support.emergency": "Emergency 112"
-  ,"support.emergencyBody": "Call if you are in immediate danger."
-  ,"support.icallBody": "Mental health counselling in India."
+  "minor.noAdultFlow": "Asmita does not collect adult case URLs from minors.",
+  "nav.howItWorks": "How it works",
+  "nav.resources": "Resources",
+  "nav.privacy": "Privacy",
+  "nav.start": "Start",
+  "support.button": "Support",
+  "support.title": "Immediate support",
+  "support.close": "Close",
+  "support.childlineBody": "24 hours, free, for minors and child safety concerns.",
+  "support.emergency": "Emergency 112",
+  "support.emergencyBody": "Call if you are in immediate danger.",
+  "support.icallBody": "Mental health counselling in India.",
+  "home.pill": "Asmita · अस्मिता · for women in India",
+  "home.langNote": "Available in English and",
+  "home.hero.title.1": "You don't have to face this",
+  "home.hero.title.2": "alone",
+  "home.hero.sub": "Free, confidential, and built around your dignity.",
+  "home.hero.cta": "Start a case",
+  "home.hero.minorLink": "Under 18? Find help",
+  "home.hero.noFetch": "We never fetch, view, download, or store the content at any link you share.",
+  "home.validation": "What you're feeling is valid. None of this is your fault.",
+  "home.blockA.title": "Did you know Indian law requires platforms to act in 24 hours?",
+  "home.blockA.body": "Most people don't. Asmita turns that right into one calm flow - paste links, review notices, and watch responses come in.",
+  "home.blockA.link": "How notices route",
+  "home.blockB.title.1": "Privacy is the architecture,",
+  "home.blockB.title.2": "not the marketing.",
+  "home.blockB.item1.bold": "We never fetch your URLs.",
+  "home.blockB.item1.rest": "Servers only parse the domain string.",
+  "home.blockB.item2.bold": "We never store the media.",
+  "home.blockB.item2.rest": "Only the notice metadata is kept.",
+  "home.blockB.item3.bold": "We never share without you.",
+  "home.blockB.item3.rest": "No third party sees your case unless you route it there.",
+  "home.blockB.link": "Read the privacy promise",
+  "home.closing.title": "Begin when you are ready.",
+  "home.closing.body": "There is no clock running. You can start, stop, and come back.",
+  "home.closing.cta1": "Start a case",
+  "home.closing.cta2": "Read the FAQ",
+  "home.closing.partners": "Notice templates reviewed by Internet Freedom Foundation and SFLC.in."
 }
