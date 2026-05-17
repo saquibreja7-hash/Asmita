@@ -78,6 +78,53 @@ export function createEscalationSentEmail(referenceNumber: string, dashboardUrl:
   };
 }
 
+export type Locale = "en" | "hi";
+
+export function createL2VictimNotificationEmail(
+  referenceNumber: string,
+  dashboardUrl: string,
+  locale: Locale = "en",
+) {
+  // Locale is plumbed but Hindi copy is intentionally NOT drafted here.
+  // hi-review-status.json policy: trauma-informed survivor communication
+  // must be authored by a native Hindi speaker, not auto-translated. When
+  // a translated version lands, branch on locale to return it; until then
+  // every recipient gets the English text below.
+  void locale;
+  return {
+    subject: `Update on Asmita case ${referenceNumber}`,
+    text: [
+      "Hello,",
+      "",
+      `For Asmita case ${referenceNumber}, we sent a notice to the platform 48 hours ago and have not yet received a response.`,
+      "",
+      "Our team is now reviewing your case. If the platform still has not acted within five more days, we will help prepare a legal support package you can take to the police.",
+      "",
+      `Open your dashboard: ${dashboardUrl}`,
+      "",
+      "For privacy, this email contains no submitted URLs or personal information.",
+    ].join("\n"),
+  };
+}
+
+export async function sendL2VictimNotification(
+  to: string,
+  referenceNumber: string,
+  dashboardUrl: string,
+  locale: Locale = "en",
+) {
+  const { subject, text } = createL2VictimNotificationEmail(referenceNumber, dashboardUrl, locale);
+  if (!process.env.RESEND_API_KEY) {
+    return { id: `dev-l2-${referenceNumber}` };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text,
+  }));
+}
+
 export function createLegalPackageReadyEmail(referenceNumber: string, dashboardUrl: string) {
   return {
     subject: `Legal package ready for Asmita case ${referenceNumber}`,

@@ -3,8 +3,10 @@ import { processEscalationJob } from "@/jobs/escalation-worker";
 import type { NoticeJob } from "@/jobs/queue";
 import { db } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
+import { decryptField } from "@/lib/encryption";
 import { dispatchEscalationFollowUp } from "@/lib/notice-dispatch";
 import { renderNoticeTemplate, assertNoticeSubjectSafe } from "@/lib/notice-generator";
+import { sendL2VictimNotification, type Locale } from "@/lib/email";
 
 export type EscalationSchedule = {
   level: 1 | 2 | 3;
@@ -72,6 +74,8 @@ export type SkipReason =
   | "blocked_legal_review"
   | "blocked_no_recipient"
   | "blocked_no_template"
+  | "blocked_no_user"
+  | "blocked_decrypt_failed"
   | "blocked_audit_only";
 
 export type DueEscalationSummary = {
@@ -98,7 +102,13 @@ const candidateSelect = {
       status: true,
       domain: true,
       platform: { select: { name: true, grievanceEmail: true, lastContactVerifiedByHuman: true } },
-      case: { select: { referenceNumber: true } },
+      case: {
+        select: {
+          id: true,
+          referenceNumber: true,
+          user: { select: { id: true, emailEncrypted: true, preferredLocale: true } },
+        },
+      },
     },
   },
   template: {
@@ -185,7 +195,10 @@ async function runLevelHandler(input: { notice: CandidateNotice; dueLevel: Escal
   if (dueLevel === 1) {
     return handleL1FollowUp(notice);
   }
-  // L2 and L3 are still audit-only in this commit; later commits replace them.
+  if (dueLevel === 2) {
+    return handleL2VictimNotification(notice);
+  }
+  // L3 is still audit-only in this commit; the next commit replaces it.
   await processEscalationJob(job, dueLevel);
   return { kind: "fired" };
 }
@@ -248,6 +261,51 @@ async function handleL1FollowUp(notice: CandidateNotice): Promise<HandlerResult>
     subject,
     body,
   });
+
+  return { kind: "fired" };
+}
+
+async function handleL2VictimNotification(notice: CandidateNotice): Promise<HandlerResult> {
+  const user = notice.submittedUrl.case.user;
+  if (!user) {
+    await writeAuditLog({
+      eventType: "NOTICE_FAILED",
+      entityType: "Notice",
+      entityId: notice.id,
+      data: { reason: "user_missing", escalationLevel: 2 },
+    });
+    return { kind: "blocked", reason: "blocked_no_user" };
+  }
+
+  let plaintextEmail: string;
+  try {
+    plaintextEmail = decryptField(user.emailEncrypted);
+  } catch {
+    await writeAuditLog({
+      eventType: "NOTICE_FAILED",
+      entityType: "Notice",
+      entityId: notice.id,
+      actorId: user.id,
+      data: { reason: "email_decrypt_failed", escalationLevel: 2 },
+    });
+    return { kind: "blocked", reason: "blocked_decrypt_failed" };
+  }
+
+  const locale: Locale = user.preferredLocale === "hi" ? "hi" : "en";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://asmita.in";
+  const dashboardUrl = `${appUrl.replace(/\/+$/, "")}/case/${notice.submittedUrl.case.id}`;
+
+  await processEscalationJob(
+    { caseId: notice.submittedUrl.caseId, urlId: notice.submittedUrl.id },
+    2,
+  );
+
+  await sendL2VictimNotification(
+    plaintextEmail,
+    notice.submittedUrl.case.referenceNumber,
+    dashboardUrl,
+    locale,
+  );
 
   return { kind: "fired" };
 }

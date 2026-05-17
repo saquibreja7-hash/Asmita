@@ -21,10 +21,20 @@ vi.mock("@/lib/notice-dispatch", () => ({
   dispatchEscalationFollowUp: vi.fn().mockResolvedValue({ dispatched: true, notice: { messageId: "mock" } }),
 }));
 
+vi.mock("@/lib/encryption", () => ({
+  decryptField: vi.fn((payload: string) => `victim@example.com:${payload}`),
+}));
+
+vi.mock("@/lib/email", () => ({
+  sendL2VictimNotification: vi.fn().mockResolvedValue({ id: "msg-l2" }),
+}));
+
 import { db } from "@/lib/db";
 import { processEscalationJob } from "@/jobs/escalation-worker";
 import { writeAuditLog } from "@/lib/audit";
 import { dispatchEscalationFollowUp } from "@/lib/notice-dispatch";
+import { decryptField } from "@/lib/encryption";
+import { sendL2VictimNotification } from "@/lib/email";
 import { runDueEscalationsFromDb } from "@/lib/escalation-engine";
 
 type NoticeRow = {
@@ -43,7 +53,15 @@ type NoticeRow = {
       grievanceEmail: string | null;
       lastContactVerifiedByHuman: boolean;
     } | null;
-    case: { referenceNumber: string };
+    case: {
+      id: string;
+      referenceNumber: string;
+      user: {
+        id: string;
+        emailEncrypted: string;
+        preferredLocale: string | null;
+      } | null;
+    };
   };
   template: {
     bodyTemplate: string;
@@ -69,7 +87,15 @@ function noticeRow(overrides: Partial<NoticeRow> = {}): NoticeRow {
         grievanceEmail: "go@platform.com",
         lastContactVerifiedByHuman: true,
       },
-      case: { referenceNumber: "ASMITA-2026-00042" },
+      case: {
+        id: "case-1",
+        referenceNumber: "ASMITA-2026-00042",
+        user: {
+          id: "user-1",
+          emailEncrypted: "iv:tag:ciphertext",
+          preferredLocale: null,
+        },
+      },
     },
     template: {
       bodyTemplate:
@@ -90,7 +116,7 @@ describe("runDueEscalationsFromDb", () => {
     vi.clearAllMocks();
   });
 
-  it("fires L2 with audit-only worker when the 48h boundary has passed", async () => {
+  it("fires L2 victim notification when the 48h boundary has passed", async () => {
     vi.mocked(db.notice.findMany).mockResolvedValue([noticeRow()] as never);
     const now = new Date("2026-05-12T00:00:00.000Z"); // 48h after sentAt
 
@@ -101,6 +127,7 @@ describe("runDueEscalationsFromDb", () => {
     expect(summary.errors).toHaveLength(0);
     expect(db.$transaction).toHaveBeenCalledOnce();
     expect(processEscalationJob).toHaveBeenCalledWith({ caseId: "case-1", urlId: "url-1" }, 2);
+    expect(sendL2VictimNotification).toHaveBeenCalledOnce();
     // L1 follow-up dispatcher should NOT fire when L2 is the highest due level
     expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
   });
@@ -241,5 +268,100 @@ describe("runDueEscalationsFromDb — L1 follow-up", () => {
 
     expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_no_template", level: 1 }]);
     expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
+  });
+});
+
+describe("runDueEscalationsFromDb — L2 victim notification", () => {
+  beforeEach(() => {
+    vi.mocked(db.$transaction).mockImplementation(async () => []);
+    vi.mocked(decryptField).mockImplementation((payload: string) => `victim@example.com:${payload}`);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("decrypts the user's email and sends a victim notification at 48h", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([noticeRow()] as never);
+    const now = new Date("2026-05-12T00:00:00.000Z"); // 48h after sentAt
+
+    const summary = await runDueEscalationsFromDb(now);
+
+    expect(summary.fired).toEqual([{ noticeId: "notice-1", level: 2, action: "victim_notification" }]);
+    expect(decryptField).toHaveBeenCalledWith("iv:tag:ciphertext");
+    expect(sendL2VictimNotification).toHaveBeenCalledWith(
+      "victim@example.com:iv:tag:ciphertext",
+      "ASMITA-2026-00042",
+      expect.stringContaining("/case/case-1"),
+      "en",
+    );
+  });
+
+  it("respects preferredLocale=hi when present", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([
+      noticeRow({
+        submittedUrl: {
+          ...noticeRow().submittedUrl,
+          case: {
+            ...noticeRow().submittedUrl.case,
+            user: { id: "user-1", emailEncrypted: "iv:tag:ciphertext", preferredLocale: "hi" },
+          },
+        },
+      }),
+    ] as never);
+    const now = new Date("2026-05-12T00:00:00.000Z");
+
+    await runDueEscalationsFromDb(now);
+
+    expect(sendL2VictimNotification).toHaveBeenCalledWith(
+      expect.any(String),
+      "ASMITA-2026-00042",
+      expect.any(String),
+      "hi",
+    );
+  });
+
+  it("blocks L2 send when the user record is missing", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([
+      noticeRow({
+        submittedUrl: {
+          ...noticeRow().submittedUrl,
+          case: { id: "case-1", referenceNumber: "ASMITA-2026-00042", user: null },
+        },
+      }),
+    ] as never);
+    const now = new Date("2026-05-12T00:00:00.000Z");
+
+    const summary = await runDueEscalationsFromDb(now);
+
+    expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_no_user", level: 2 }]);
+    expect(sendL2VictimNotification).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "NOTICE_FAILED",
+        data: expect.objectContaining({ reason: "user_missing", escalationLevel: 2 }),
+      }),
+    );
+  });
+
+  it("blocks L2 send when email decryption throws", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([noticeRow()] as never);
+    vi.mocked(decryptField).mockImplementation(() => {
+      throw new Error("Invalid encrypted payload.");
+    });
+    const now = new Date("2026-05-12T00:00:00.000Z");
+
+    const summary = await runDueEscalationsFromDb(now);
+
+    expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_decrypt_failed", level: 2 }]);
+    expect(sendL2VictimNotification).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "NOTICE_FAILED",
+        data: expect.objectContaining({ reason: "email_decrypt_failed", escalationLevel: 2 }),
+      }),
+    );
   });
 });

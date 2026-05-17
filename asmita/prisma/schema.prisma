@@ -118,6 +118,7 @@ model User {
   digilockerVerified Boolean    @default(false)
   role               UserRole   @default(VICTIM)
   ageOver18          Boolean
+  preferredLocale    String?
   createdAt          DateTime   @default(now())
   lastActiveAt       DateTime?
   deactivatedAt      DateTime?
