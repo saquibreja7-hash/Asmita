@@ -16,6 +16,7 @@
     "security:audit": "npm audit --audit-level=high",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
+    "postinstall": "prisma generate",
     "seed": "prisma db seed"
   },
   "dependencies": {

@@ -22,9 +22,6 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost"],
-  turbopack: {
-    root: process.cwd(),
-  },
   // Bundle the Noto Sans Devanagari woff file into serverless function
   // outputs. Without this, fir-package-generator.ts cannot read the font
   // on Vercel because Next's file-tracing only follows `import` statements,
