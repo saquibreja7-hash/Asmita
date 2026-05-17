@@ -4,9 +4,9 @@ import {
   NoticeBasis,
   PlatformTier,
   PrismaClient,
-  TemplateType,
   UserRole,
 } from "@prisma/client";
+import { templateSeeds } from "./template-seeds";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -72,58 +72,7 @@ const platformSeeds = [
   },
 ] as const;
 
-const templateSeeds = [
-  {
-    templateType: TemplateType.IT_RULES_2021,
-    subjectTemplate: "Urgent NCII takedown request - Case {{caseReference}}",
-    bodyTemplate: [
-      "Dear {{platformName}} Grievance Officer,",
-      "",
-      "Asmita is assisting an adult user who has declared that the submitted URL contains non-consensual intimate imagery involving them.",
-      "",
-      "Case reference: {{caseReference}}",
-      "Submitted URL token: {{url}}",
-      "Declaration reference: {{declarationReference}}",
-      "",
-      "We request urgent review and removal under applicable Indian law, including the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021.",
-      "",
-      "This draft template must be reviewed by legal counsel before production use.",
-    ].join("\n"),
-    legalCitations: ["IT Rules 2021 Rule 3(2)(b)"],
-  },
-  {
-    templateType: TemplateType.DMCA,
-    subjectTemplate: "DMCA / NCII removal request - Case {{caseReference}}",
-    bodyTemplate: [
-      "Dear {{platformName}} Legal / Trust and Safety Team,",
-      "",
-      "Asmita is assisting an adult user with a non-consensual intimate imagery takedown request.",
-      "",
-      "Case reference: {{caseReference}}",
-      "Submitted URL token: {{url}}",
-      "",
-      "Please review this URL through your abuse, privacy, or copyright removal process. This draft template must be reviewed by legal counsel before production use.",
-    ].join("\n"),
-    legalCitations: ["DMCA Section 512", "Indian IT Rules 2021"],
-  },
-  {
-    templateType: TemplateType.IT_RULES_AND_DMCA,
-    subjectTemplate: "NCII removal and escalation request - Case {{caseReference}}",
-    bodyTemplate: [
-      "Dear {{platformName}} Grievance Officer / Legal Team,",
-      "",
-      "Asmita is assisting an adult user with a non-consensual intimate imagery report.",
-      "",
-      "Case reference: {{caseReference}}",
-      "Submitted URL token: {{url}}",
-      "",
-      "Please process this request under the applicable NCII, privacy, abuse, IT Rules, and DMCA channels available for your service.",
-      "",
-      "This draft template must be reviewed by legal counsel before production use.",
-    ].join("\n"),
-    legalCitations: ["IT Rules 2021 Rule 3(2)(b)", "DMCA Section 512"],
-  },
-] as const;
+
 
 async function main() {
   const adminEmail = process.env.ADMIN_OTP_EMAIL;
