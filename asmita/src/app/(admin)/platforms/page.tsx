@@ -1,11 +1,16 @@
 import {
-  listGoChangeHistoryRows,
-  listPlatformEditorRows,
+  listGoChangeHistoryRowsFromDb,
+  listPlatformEditorRowsFromDb,
 } from "@/lib/admin-dashboard";
+import { PlatformEditForm } from "./PlatformEditForm";
 
-export default function PlatformsPage() {
-  const rows = listPlatformEditorRows();
-  const history = listGoChangeHistoryRows();
+export const dynamic = "force-dynamic";
+
+export default async function PlatformsPage() {
+  const [rows, history] = await Promise.all([
+    listPlatformEditorRowsFromDb(),
+    listGoChangeHistoryRowsFromDb(),
+  ]);
   const stale = rows.filter((row) => row.staleFlag).length;
 
   return (
@@ -25,6 +30,8 @@ export default function PlatformsPage() {
       </div>
       <p className="muted mt-4 max-w-xl text-sm leading-[1.7]">
         Contacts stay blocked from live dispatch until a human verifies them.
+        Every edit records the source URL into the change history table below
+        and a tamper-evident audit log entry.
       </p>
 
       <h2 className="font-display mt-12 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[28px]">
@@ -42,6 +49,7 @@ export default function PlatformsPage() {
               <Th>Verified</Th>
               <Th>Stale</Th>
               <Th>Dispatch</Th>
+              <Th>Action</Th>
             </tr>
           </thead>
           <tbody>
@@ -50,10 +58,25 @@ export default function PlatformsPage() {
                 className="border-t border-[var(--hairline)] align-top"
                 key={platform.id}
               >
-                <td className="p-4 font-semibold">{platform.name}</td>
-                <td className="p-4 capitalize">{platform.tier}</td>
+                <td className="p-4 font-semibold">
+                  {platform.name}
+                  <div className="mt-3">
+                    <PlatformEditForm
+                      platformId={platform.id}
+                      platformName={platform.name}
+                      current={{
+                        grievanceEmail: platform.grievanceEmail,
+                        grievanceName: platform.grievanceName,
+                        grievanceAddress: platform.grievanceAddress,
+                        formUrl: platform.formUrl,
+                        apiEndpoint: platform.apiEndpoint,
+                      }}
+                    />
+                  </div>
+                </td>
+                <td className="p-4 capitalize">{platform.tier.toLowerCase()}</td>
                 <td className="font-mono p-4 text-[var(--muted)]">
-                  {platform.grievanceEmail}
+                  {platform.grievanceEmail ?? "(unset)"}
                 </td>
                 <td className="font-mono p-4 text-xs text-[var(--muted)]">
                   {platform.formUrl ||
@@ -84,6 +107,7 @@ export default function PlatformsPage() {
                 <td className="p-4">
                   {platform.canDispatch ? "Allowed" : "Blocked"}
                 </td>
+                <td className="p-4 align-top" />
               </tr>
             ))}
           </tbody>
@@ -113,7 +137,7 @@ export default function PlatformsPage() {
                 key={row.id}
               >
                 <td className="p-4 font-semibold">{row.platformName}</td>
-                <td className="p-4">{row.changedBy}</td>
+                <td className="font-mono p-4 text-xs">{row.changedBy}</td>
                 <td className="p-4">{row.field}</td>
                 <td className="font-mono p-4 text-xs text-[var(--muted)]">
                   {row.previousValue}

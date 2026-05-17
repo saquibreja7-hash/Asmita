@@ -60,6 +60,95 @@ export function verifyAuditChain() {
   });
 }
 
+export type AuditChainValidation = {
+  valid: boolean;
+  total: number;
+  brokenAt?: {
+    sequence: number;
+    reason: "missing_previous" | "previous_hash_mismatch" | "event_hash_mismatch";
+    expected?: string;
+    actual?: string;
+  };
+};
+
+export async function validateAuditChainFromDb(limit = 10_000): Promise<AuditChainValidation> {
+  const rows = await db.auditLog.findMany({
+    orderBy: { sequence: "asc" },
+    take: limit,
+    select: {
+      sequence: true,
+      eventType: true,
+      entityType: true,
+      entityId: true,
+      actorId: true,
+      data: true,
+      ipHash: true,
+      previousHash: true,
+      eventHash: true,
+      createdAt: true,
+    },
+  });
+
+  let previousHash = "GENESIS";
+  let expectedSequence = 1;
+
+  for (const row of rows) {
+    if (row.sequence !== expectedSequence) {
+      return {
+        valid: false,
+        total: rows.length,
+        brokenAt: {
+          sequence: row.sequence,
+          reason: "missing_previous",
+          expected: String(expectedSequence),
+          actual: String(row.sequence),
+        },
+      };
+    }
+    if (row.previousHash !== previousHash) {
+      return {
+        valid: false,
+        total: rows.length,
+        brokenAt: {
+          sequence: row.sequence,
+          reason: "previous_hash_mismatch",
+          expected: previousHash,
+          actual: row.previousHash,
+        },
+      };
+    }
+    const recomputed = sha256(
+      canonicalize({
+        eventType: row.eventType,
+        entityType: row.entityType ?? undefined,
+        entityId: row.entityId ?? undefined,
+        actorId: row.actorId ?? undefined,
+        data: row.data ?? undefined,
+        ipHash: row.ipHash ?? undefined,
+        sequence: row.sequence,
+        createdAt: row.createdAt.toISOString(),
+        previousHash: row.previousHash,
+      }),
+    );
+    if (recomputed !== row.eventHash) {
+      return {
+        valid: false,
+        total: rows.length,
+        brokenAt: {
+          sequence: row.sequence,
+          reason: "event_hash_mismatch",
+          expected: recomputed,
+          actual: row.eventHash,
+        },
+      };
+    }
+    previousHash = row.eventHash;
+    expectedSequence += 1;
+  }
+
+  return { valid: true, total: rows.length };
+}
+
 function createAuditRecord(event: AuditEvent, sequence: number, previousHash: string) {
   return {
     ...event,

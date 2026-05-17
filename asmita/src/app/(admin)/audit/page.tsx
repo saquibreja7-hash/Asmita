@@ -1,4 +1,7 @@
 import { listAuditLogRows } from "@/lib/admin-dashboard";
+import { validateAuditChainFromDb, type AuditChainValidation } from "@/lib/audit";
+
+export const dynamic = "force-dynamic";
 
 export default async function AuditPage({
   searchParams,
@@ -12,6 +15,7 @@ export default async function AuditPage({
     entityId: single(params.entityId),
   };
   const rows = listAuditLogRows(filters);
+  const validation = await safeValidate();
 
   return (
     <section>
@@ -23,6 +27,8 @@ export default async function AuditPage({
           Audit log
         </h1>
       </div>
+
+      <ChainStatusBanner validation={validation} />
 
       <form className="mt-10 grid gap-4 md:grid-cols-4">
         <FilterField label="Event">
@@ -97,6 +103,59 @@ export default async function AuditPage({
         )}
       </div>
     </section>
+  );
+}
+
+async function safeValidate(): Promise<AuditChainValidation | { unavailable: true; error: string }> {
+  try {
+    return await validateAuditChainFromDb();
+  } catch (err) {
+    return { unavailable: true, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function ChainStatusBanner({
+  validation,
+}: {
+  validation: AuditChainValidation | { unavailable: true; error: string };
+}) {
+  if ("unavailable" in validation) {
+    return (
+      <div className="mt-8 rounded-[12px] border border-[var(--hairline)] bg-[var(--background)] p-4 text-sm">
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+          Chain integrity
+        </p>
+        <p className="mt-2">Could not verify chain: {validation.error}</p>
+      </div>
+    );
+  }
+  if (validation.valid) {
+    return (
+      <div className="mt-8 rounded-[12px] border border-[var(--accent)] bg-white p-4 text-sm">
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)]">
+          Chain integrity · OK
+        </p>
+        <p className="mt-2 tabular-nums">
+          Verified {validation.total} sequential record(s). Every entry&apos;s previous-hash and event-hash recomputed cleanly.
+        </p>
+      </div>
+    );
+  }
+  const broken = validation.brokenAt;
+  return (
+    <div className="mt-8 rounded-[12px] border border-[var(--rose)] bg-white p-4 text-sm">
+      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--rose)]">
+        Chain integrity · BROKEN
+      </p>
+      <p className="mt-2 tabular-nums">
+        Validation failed at sequence #{broken?.sequence ?? "?"} ({broken?.reason}). Checked {validation.total} record(s) before the break.
+      </p>
+      {broken?.expected && broken?.actual ? (
+        <p className="font-mono mt-2 text-xs text-[var(--muted)]">
+          expected={broken.expected.slice(0, 20)}… actual={broken.actual.slice(0, 20)}…
+        </p>
+      ) : null}
+    </div>
   );
 }
 

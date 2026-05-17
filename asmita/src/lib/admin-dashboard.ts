@@ -1,5 +1,6 @@
 import { inMemoryAuditLog } from "@/lib/audit";
 import { calculateBetaMetrics, type BetaMetrics } from "@/lib/beta-metrics";
+import { db } from "@/lib/db";
 import { feedbackRecords } from "@/lib/feedback";
 import { calculatePlatformResponseRates, type PlatformResponseSample } from "@/lib/response-rates";
 import { listAllCases, type DisplayCase } from "@/lib/case-ops";
@@ -150,6 +151,71 @@ export function listPlatformEditorRows() {
       canDispatch: canDispatchToPlatform(platform),
     };
   });
+}
+
+export type PlatformEditorRow = ReturnType<typeof listPlatformEditorRows>[number];
+
+export async function listPlatformEditorRowsFromDb(now: Date = new Date()) {
+  const platforms = await db.platform.findMany({
+    where: { isActive: true },
+    orderBy: [{ tier: "asc" }, { name: "asc" }],
+  });
+  const entries: PlatformDirectoryEntry[] = platforms.map((row) => ({
+    id: row.id,
+    name: row.name,
+    domainPatterns: row.domainPatterns,
+    tier: row.tier,
+    noticeBasis: row.noticeBasis,
+    grievanceEmail: row.grievanceEmail ?? HUMAN_VERIFICATION_REQUIRED,
+    formUrl: row.formUrl ?? undefined,
+    apiEndpoint: row.apiEndpoint ?? undefined,
+    lastContactVerifiedByHuman: row.lastContactVerifiedByHuman,
+    lastContactVerifiedAt: row.lastContactVerifiedAt?.toISOString(),
+  }));
+  const reverify = createReverificationQueue(entries, now);
+  return platforms.map((row, index) => {
+    const entry = entries[index];
+    const queueItem = reverify.find((item) => item.platformId === row.id);
+    return {
+      id: row.id,
+      name: row.name,
+      tier: row.tier,
+      noticeBasis: row.noticeBasis,
+      domainPatterns: row.domainPatterns,
+      grievanceEmail: row.grievanceEmail,
+      grievanceName: row.grievanceName,
+      grievanceAddress: row.grievanceAddress,
+      formUrl: row.formUrl,
+      apiEndpoint: row.apiEndpoint,
+      templateType: row.noticeBasis,
+      verificationSource: row.lastContactVerifiedByHuman ? "human_verified_source" : "pending_human_source",
+      lastVerifiedDate: row.lastContactVerifiedAt?.toISOString() ?? "Not verified",
+      lastContactVerifiedAt: row.lastContactVerifiedAt?.toISOString() ?? null,
+      lastContactVerifiedByHuman: row.lastContactVerifiedByHuman,
+      verifiedBy: row.lastContactVerifiedByHuman ? "human_reviewer" : "Pending",
+      staleFlag: Boolean(queueItem),
+      staleReason: queueItem?.reason || "current",
+      canDispatch: canDispatchToPlatform(entry),
+    };
+  });
+}
+
+export async function listGoChangeHistoryRowsFromDb(limit = 50): Promise<GoChangeHistoryRow[]> {
+  const rows = await db.platformGoHistory.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: { platform: { select: { name: true } } },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    platformName: row.platform.name,
+    changedBy: row.verifiedBy || row.changedById || "admin",
+    field: row.fieldName,
+    previousValue: row.oldValue ?? "(unset)",
+    newValue: row.newValue ?? "(unset)",
+    sourceUrl: row.sourceUrl ?? "(no source recorded)",
+    changedAt: row.createdAt.toISOString(),
+  }));
 }
 
 export function listGoChangeHistoryRows(): GoChangeHistoryRow[] {
