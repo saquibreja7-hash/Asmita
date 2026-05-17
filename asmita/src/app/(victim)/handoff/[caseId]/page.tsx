@@ -64,7 +64,7 @@ Request: Please review the reported non-consensual intimate content complaint th
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               Asmita does not guess platform contacts. When a verified email
-              is unavailable, we hand off to the platform&rsquo;s own form —
+              is unavailable, we hand off to the platform&rsquo;s own form -
               with the notice text ready for you to paste.
             </p>
           </div>

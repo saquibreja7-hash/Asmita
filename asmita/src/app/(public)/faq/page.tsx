@@ -65,12 +65,12 @@ export default function FaqPage() {
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               Plain-language answers for survivors, supporters, NGOs, and
-              reviewers — every question answered in both English and Hindi.
+              reviewers - every question answered in both English and Hindi.
             </p>
           </div>
         </section>
 
-        {/* QUESTIONS — each FAQ is its own quiet block, EN then HI */}
+        {/* QUESTIONS - each FAQ is its own quiet block, EN then HI */}
         {faqs.map((faq, i) => (
           <section
             key={faq.question}
@@ -89,7 +89,7 @@ export default function FaqPage() {
                 {faq.answer}
               </p>
 
-              {/* Hindi — same quiet treatment, slightly smaller */}
+              {/* Hindi - same quiet treatment, slightly smaller */}
               <h3
                 lang="hi"
                 className="font-display mx-auto mt-10 max-w-lg text-[22px] font-normal leading-[1.3] tracking-tight md:text-[28px] md:leading-[1.28]"
@@ -106,7 +106,7 @@ export default function FaqPage() {
           </section>
         ))}
 
-        {/* CLOSING — still have questions? */}
+        {/* CLOSING - still have questions? */}
         <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
@@ -114,7 +114,7 @@ export default function FaqPage() {
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
               Reach out before you start a case. We answer in English or Hindi
-              — whichever is easier for you.
+              - whichever is easier for you.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               <Link className="btn btn-primary" href="/contact">

@@ -56,7 +56,7 @@ export default async function ConfirmationPage({
               <em className="not-italic text-gradient">reference</em>.
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              Your case is created. Keep the reference below safe — it is the
+              Your case is created. Keep the reference below safe - it is the
               only thing future emails will mention. We never include
               submitted URLs in email.
             </p>
@@ -74,7 +74,7 @@ export default async function ConfirmationPage({
             </p>
             <p className="muted mx-auto mt-6 max-w-lg text-base leading-[1.75] md:text-lg">
               Your dashboard shows platform status, response windows, and
-              next steps. Bookmark it — you do not need to sign in again
+              next steps. Bookmark it - you do not need to sign in again
               from the dashboard link.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-3">

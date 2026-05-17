@@ -22,7 +22,7 @@ export default function StartPage() {
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               The flow you see next depends on your age. Nothing is stored
-              until you sign in with email — and minors do not sign in at all.
+              until you sign in with email - and minors do not sign in at all.
             </p>
           </div>
         </section>
@@ -43,7 +43,7 @@ export default function StartPage() {
             </p>
             <div className="mt-10 flex justify-center">
               <Link className="btn btn-primary" href="/register">
-                I am 18 or older — continue
+                I am 18 or older - continue
               </Link>
             </div>
             <p className="muted mx-auto mt-6 max-w-md text-[13px] leading-[1.7]">
@@ -71,7 +71,7 @@ export default function StartPage() {
             </p>
             <div className="mt-10 flex justify-center">
               <Link className="btn btn-secondary" href="/start/minor">
-                I am under 18 — find help
+                I am under 18 - find help
               </Link>
             </div>
           </div>

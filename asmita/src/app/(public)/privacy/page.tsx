@@ -48,7 +48,7 @@ export default function PrivacyPage() {
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               This policy explains exactly what Asmita collects, why, how long
               we keep it, who can see it, and what rights you have over your
-              own data — in plain language.
+              own data - in plain language.
             </p>
             <p className="font-mono mt-8 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
               Last updated · 17 May 2026 · Version 0.4 · Draft for legal review
@@ -56,7 +56,7 @@ export default function PrivacyPage() {
           </div>
         </section>
 
-        {/* TL;DR — three quiet promises */}
+        {/* TL;DR - three quiet promises */}
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
@@ -70,7 +70,7 @@ export default function PrivacyPage() {
                 <span className="font-semibold text-[var(--foreground)]">
                   We never fetch your URLs.
                 </span>{" "}
-                Servers parse the domain string only — they never request the
+                Servers parse the domain string only - they never request the
                 page or its contents.
               </li>
               <li>
@@ -91,7 +91,7 @@ export default function PrivacyPage() {
           </div>
         </section>
 
-        {/* TABLE OF CONTENTS — quiet anchor list */}
+        {/* TABLE OF CONTENTS - quiet anchor list */}
         <section className="container py-14 md:py-20">
           <div className="mx-auto max-w-2xl">
             <p className="font-mono text-center text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
@@ -115,10 +115,10 @@ export default function PrivacyPage() {
           </div>
         </section>
 
-        {/* SECTION 01 — Scope */}
+        {/* SECTION 01 - Scope */}
         <Section num="01" id="scope" title="What this policy covers">
           <p>
-            This policy applies to the Asmita platform — the website you are
+            This policy applies to the Asmita platform - the website you are
             reading now, the case dashboard you sign in to with an email
             one-time-code, and any notices, evidence packages, or
             correspondence the platform produces on your behalf.
@@ -132,7 +132,7 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        {/* SECTION 02 — Who we are */}
+        {/* SECTION 02 - Who we are */}
         <Section num="02" id="who-we-are" title="Who Asmita is">
           <p>
             Asmita (अस्मिता) is a free, India-specific platform built to
@@ -150,7 +150,7 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        {/* SECTION 03 — What we collect */}
+        {/* SECTION 03 - What we collect */}
         <Section num="03" id="what-we-collect" title="What we collect">
           <p>
             The data Asmita stores can be divided into five categories.
@@ -187,21 +187,21 @@ export default function PrivacyPage() {
                 Operational logs.
               </span>{" "}
               Limited server logs that record IP address, user-agent,
-              request path, status code, and timestamp — used for abuse
+              request path, status code, and timestamp - used for abuse
               detection and security incident review. These are kept for
               30 days and then automatically purged.
             </li>
           </ul>
         </Section>
 
-        {/* SECTION 04 — What we never collect */}
+        {/* SECTION 04 - What we never collect */}
         <Section
           num="04"
           id="what-we-never-collect"
           title="What we never collect"
         >
           <p>
-            Some things Asmita refuses to collect by design — meaning
+            Some things Asmita refuses to collect by design - meaning
             the architecture would have to be re-built before it could
             ever start collecting them.
           </p>
@@ -241,7 +241,7 @@ export default function PrivacyPage() {
           </ul>
         </Section>
 
-        {/* SECTION 05 — Why we collect */}
+        {/* SECTION 05 - Why we collect */}
         <Section num="05" id="why-we-collect" title="Why we collect it">
           <p>
             Each piece of data exists because a specific feature would
@@ -251,7 +251,7 @@ export default function PrivacyPage() {
           <ul className="mt-6 space-y-3">
             <li>
               <span className="font-semibold text-[var(--foreground)]">
-                Email address —
+                Email address -
               </span>{" "}
               to authenticate you (one-time codes), to send case status
               updates, and to receive replies from platforms on your
@@ -259,7 +259,7 @@ export default function PrivacyPage() {
             </li>
             <li>
               <span className="font-semibold text-[var(--foreground)]">
-                URL strings —
+                URL strings -
               </span>{" "}
               to identify which platform each notice is addressed to,
               to compose the notice, and to record what was sent for
@@ -267,7 +267,7 @@ export default function PrivacyPage() {
             </li>
             <li>
               <span className="font-semibold text-[var(--foreground)]">
-                Declaration text —
+                Declaration text -
               </span>{" "}
               to satisfy the legal requirement that the person filing
               the notice declares ownership of the rights, under
@@ -275,7 +275,7 @@ export default function PrivacyPage() {
             </li>
             <li>
               <span className="font-semibold text-[var(--foreground)]">
-                Operational logs —
+                Operational logs -
               </span>{" "}
               to detect abuse of the platform, to investigate security
               incidents, and to meet auditability requirements.
@@ -283,14 +283,14 @@ export default function PrivacyPage() {
           </ul>
         </Section>
 
-        {/* SECTION 06 — Legal basis */}
+        {/* SECTION 06 - Legal basis */}
         <Section num="06" id="legal-basis" title="The legal basis we rely on">
           <p>
             Under the Digital Personal Data Protection Act, 2023
             (&ldquo;DPDP Act&rdquo;), Asmita processes your data on the basis
             of your <span className="font-semibold text-[var(--foreground)]">explicit consent</span>,
             which you give at registration and again at the point of each
-            case creation. The consent is purpose-specific — agreeing to
+            case creation. The consent is purpose-specific - agreeing to
             create a case does not consent to anything outside of preparing
             and routing the takedown notice you ask for.
           </p>
@@ -305,7 +305,7 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        {/* SECTION 07 — Retention */}
+        {/* SECTION 07 - Retention */}
         <Section num="07" id="how-long" title="How long we keep it">
           <p>
             The retention schedule below is enforced by automated jobs.
@@ -352,7 +352,7 @@ export default function PrivacyPage() {
           </ul>
         </Section>
 
-        {/* SECTION 08 — Sharing */}
+        {/* SECTION 08 - Sharing */}
         <Section num="08" id="who-we-share-with" title="Who we share it with">
           <p>
             Asmita shares your data only in the narrow circumstances
@@ -400,7 +400,7 @@ export default function PrivacyPage() {
           </ul>
         </Section>
 
-        {/* SECTION 09 — Security */}
+        {/* SECTION 09 - Security */}
         <Section num="09" id="how-we-protect" title="How we protect it">
           <p>
             Security is a stack of overlapping controls. None of them
@@ -412,7 +412,7 @@ export default function PrivacyPage() {
                 Encryption.
               </span>{" "}
               All data at rest is encrypted at the disk layer. Sensitive
-              fields — submitted URLs, declaration text, KYC bundles —
+              fields - submitted URLs, declaration text, KYC bundles -
               are also encrypted at the application layer with per-case
               keys before storage.
             </li>
@@ -449,7 +449,7 @@ export default function PrivacyPage() {
               <span className="font-semibold text-[var(--foreground)]">
                 No-fetch monitor.
               </span>{" "}
-              A live integrity check verifies the no-fetch invariant —
+              A live integrity check verifies the no-fetch invariant -
               that the application does not make outbound HTTP requests
               to user-submitted URLs. If it ever did, alerting fires
               immediately.
@@ -457,7 +457,7 @@ export default function PrivacyPage() {
           </ul>
         </Section>
 
-        {/* SECTION 10 — Your rights */}
+        {/* SECTION 10 - Your rights */}
         <Section num="10" id="your-rights" title="Your rights under the DPDP Act">
           <p>
             The Digital Personal Data Protection Act, 2023 gives you a
@@ -485,7 +485,7 @@ export default function PrivacyPage() {
                 Right to erasure.
               </span>{" "}
               You can delete your account at any time. After a 30-day
-              soft-delete window — during which you can restore — the
+              soft-delete window - during which you can restore - the
               data is permanently erased.
             </li>
             <li>
@@ -508,7 +508,7 @@ export default function PrivacyPage() {
           </ul>
         </Section>
 
-        {/* SECTION 11 — Children */}
+        {/* SECTION 11 - Children */}
         <Section num="11" id="children" title="Children and minors">
           <p>
             Asmita does not knowingly collect any personal data from a
@@ -526,7 +526,7 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        {/* SECTION 12 — Cookies */}
+        {/* SECTION 12 - Cookies */}
         <Section num="12" id="cookies" title="Cookies and analytics">
           <p>
             Asmita uses two cookies, both strictly functional: a session
@@ -543,7 +543,7 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        {/* SECTION 13 — Transfers */}
+        {/* SECTION 13 - Transfers */}
         <Section num="13" id="transfers" title="Where your data lives">
           <p>
             Asmita is built for India. All personal data is stored on
@@ -555,12 +555,12 @@ export default function PrivacyPage() {
           <p>
             We do not transfer your data outside India, except where a
             specific platform you have asked us to send a notice to is
-            located outside India — in which case the notice itself
+            located outside India - in which case the notice itself
             (and only the notice) crosses the border.
           </p>
         </Section>
 
-        {/* SECTION 14 — Breach */}
+        {/* SECTION 14 - Breach */}
         <Section num="14" id="breach" title="If we ever have a breach">
           <p>
             If a personal-data breach occurs that is likely to result in
@@ -577,19 +577,19 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        {/* SECTION 15 — Changes */}
+        {/* SECTION 15 - Changes */}
         <Section num="15" id="changes" title="Changes to this policy">
           <p>
             We will post any change to this policy at this URL, with a
             new &ldquo;Last updated&rdquo; date at the top. For material
-            changes — anything that expands what we collect, broadens
-            with whom we share, or lengthens retention — we will give
+            changes - anything that expands what we collect, broadens
+            with whom we share, or lengthens retention - we will give
             you at least 30 days&rsquo; advance notice by email before
             the change takes effect.
           </p>
         </Section>
 
-        {/* SECTION 16 — Contact */}
+        {/* SECTION 16 - Contact */}
         <Section
           num="16"
           id="contact"
@@ -635,7 +635,7 @@ export default function PrivacyPage() {
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
               If anything on this page is unclear, write to us. We will
-              answer in English or Hindi — whichever is easier for you.
+              answer in English or Hindi - whichever is easier for you.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               <Link className="btn btn-primary" href="/contact">

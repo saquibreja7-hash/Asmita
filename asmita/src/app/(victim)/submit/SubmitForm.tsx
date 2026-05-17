@@ -29,7 +29,7 @@ export function SubmitForm() {
       `/api/platforms/detect?url=${encodeURIComponent(first)}`
     );
     const data = (await response.json()) as { platformName?: string };
-    setDetection(data.platformName || "Unknown — will be reviewed");
+    setDetection(data.platformName || "Unknown - will be reviewed");
   }
 
   async function submit() {

@@ -14,7 +14,7 @@ const DEVANAGARI_FONT_PATH = path.join(
 );
 
 // One physical page can show ~25 URLs at 22px line height starting from y=666.
-// If we ever pass more, truncate and note the count — PDFs that overflow off
+// If we ever pass more, truncate and note the count - PDFs that overflow off
 // the page silently lose evidence, which is worse than truncating loudly.
 const MAX_URLS_PER_PAGE = 25;
 
@@ -78,8 +78,8 @@ export async function generateFirPackagePdf(input: {
   if (remaining > 0) {
     page.drawText(
       isHindi
-        ? `+ ${remaining} और URL — अनुलग्नक देखें।`
-        : `+ ${remaining} more URLs — see attached audit trail.`,
+        ? `+ ${remaining} और URL - अनुलग्नक देखें।`
+        : `+ ${remaining} more URLs - see attached audit trail.`,
       { x: 56, y: 666 - visibleUrls.length * 22, size: 10, font }
     );
   }

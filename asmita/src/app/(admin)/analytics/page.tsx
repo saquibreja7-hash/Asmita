@@ -181,5 +181,5 @@ function formatPercent(value: number) {
 }
 
 function formatHours(value: number | null) {
-  return value === null ? "—" : `${value}h`;
+  return value === null ? "-" : `${value}h`;
 }

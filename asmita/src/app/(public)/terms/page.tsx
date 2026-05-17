@@ -118,7 +118,7 @@ export default function TermsPage() {
         <Section num="01" id="scope" title="What these Terms cover">
           <p>
             These Terms of Use form a contract between you and Asmita that
-            governs your use of the Asmita platform — the website, the
+            governs your use of the Asmita platform - the website, the
             case dashboard, the notice-dispatch system, the audit trail, and
             any tool or document the platform produces on your behalf.
           </p>
@@ -176,7 +176,7 @@ export default function TermsPage() {
         <Section num="03" id="account" title="Your account and authentication">
           <p>
             Accounts are created with an email address. There are no
-            passwords — Asmita sends a one-time code to your email each
+            passwords - Asmita sends a one-time code to your email each
             time you sign in. You are responsible for keeping your email
             account secure, because anyone with access to your inbox can
             sign in to your Asmita case.
@@ -345,8 +345,8 @@ export default function TermsPage() {
 
         <Section num="10" id="ip" title="Intellectual property">
           <p>
-            All material Asmita produces — code, design, notice
-            templates, evidence formats — is the property of Asmita and
+            All material Asmita produces - code, design, notice
+            templates, evidence formats - is the property of Asmita and
             its licensors. The audit trail, FIR package, and case data
             that pertain to your case are yours, and you may download or
             forward them at any time.
@@ -437,8 +437,8 @@ export default function TermsPage() {
           <p>
             We will post any change to these Terms at this URL, with a
             new &ldquo;Last updated&rdquo; date at the top. For material
-            changes — anything that meaningfully reduces your rights or
-            expands your obligations — we will give you at least 30
+            changes - anything that meaningfully reduces your rights or
+            expands your obligations - we will give you at least 30
             days&rsquo; advance notice by email before the change takes
             effect. Continued use of the service after the effective date
             constitutes acceptance.
@@ -474,7 +474,7 @@ export default function TermsPage() {
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
               If anything in these Terms is unclear, write to us. We will
-              answer in English or Hindi — whichever is easier for you.
+              answer in English or Hindi - whichever is easier for you.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               <Link className="btn btn-primary" href="/contact">

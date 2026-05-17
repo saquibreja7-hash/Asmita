@@ -69,7 +69,7 @@ export function CaseDashboardActions({
           Add another URL
         </label>
         <p className="muted mt-1 text-sm leading-[1.6]">
-          Paste one URL per line. Same rules apply — Asmita reads only the
+          Paste one URL per line. Same rules apply - Asmita reads only the
           domain.
         </p>
         <textarea

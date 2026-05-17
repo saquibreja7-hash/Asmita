@@ -41,13 +41,13 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   }
   const { caseId } = await context.params;
 
-  // Verify case ownership — no auto-creation, prevents the IDOR bug from the old ensureCaseForUser pattern
+  // Verify case ownership - no auto-creation, prevents the IDOR bug from the old ensureCaseForUser pattern
   const record = await getCaseForUser(caseId, auth.session.sub);
   if (!record) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  // Idempotency replay — scoped to (user, caseId, key) so two cases can use
+  // Idempotency replay - scoped to (user, caseId, key) so two cases can use
   // the same client key without collision.
   const idemKey = readIdempotencyKey(request);
   const idemActor = `${auth.session.sub}:${caseId}`;

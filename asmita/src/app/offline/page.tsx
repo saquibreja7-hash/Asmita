@@ -20,7 +20,7 @@ export default function OfflinePage() {
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               Please check your connection and try again. Any draft form data
-              should still be in this tab — avoid refreshing while you are
+              should still be in this tab - avoid refreshing while you are
               offline.
             </p>
             <p className="font-mono mt-10 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">

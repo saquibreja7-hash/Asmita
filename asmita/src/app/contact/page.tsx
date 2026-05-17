@@ -18,7 +18,7 @@ const channels: Channel[] = [
   {
     num: "02",
     title: "Privacy grievance",
-    body: "For anything covered by the privacy policy — access, correction, deletion, or a complaint about how we have handled your data. The named Grievance Officer reads every message at this address.",
+    body: "For anything covered by the privacy policy - access, correction, deletion, or a complaint about how we have handled your data. The named Grievance Officer reads every message at this address.",
     email: "grievance@asmita.in",
   },
   {
@@ -36,7 +36,7 @@ const channels: Channel[] = [
   {
     num: "05",
     title: "Press and research",
-    body: "For journalists, academic researchers, and policy organisations. We share aggregate, anonymised data only — never identifying details of any survivor or case.",
+    body: "For journalists, academic researchers, and policy organisations. We share aggregate, anonymised data only - never identifying details of any survivor or case.",
     email: "press@asmita.in",
   },
 ];
@@ -62,7 +62,7 @@ export default function ContactPage() {
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               There are five ways to write to us. Pick the one that matches
-              what you need — or use the first one if you are not sure.
+              what you need - or use the first one if you are not sure.
             </p>
             <p className="font-mono mt-8 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
               Pre-launch · email addresses provisional · will be confirmed
@@ -71,17 +71,17 @@ export default function ContactPage() {
           </div>
         </section>
 
-        {/* WHAT TO NOT SEND — short trauma-informed warning */}
+        {/* WHAT TO NOT SEND - short trauma-informed warning */}
         <section className="container py-12 text-center md:py-16">
           <div className="mx-auto max-w-2xl">
             <p className="font-display text-[20px] leading-[1.5] tracking-tight text-[var(--foreground)] md:text-[24px] md:leading-[1.45]">
               Please do not email intimate images or videos. Asmita only ever
-              needs links as text — never the content itself.
+              needs links as text - never the content itself.
             </p>
           </div>
         </section>
 
-        {/* CHANNELS — five quiet contact blocks */}
+        {/* CHANNELS - five quiet contact blocks */}
         {channels.map((c) => (
           <section
             key={c.num}
@@ -161,7 +161,7 @@ export default function ContactPage() {
               We will write back.
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-              Every message reaches a person. We answer in English or Hindi —
+              Every message reaches a person. We answer in English or Hindi -
               whichever is easier for you.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-3">

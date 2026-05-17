@@ -5,7 +5,7 @@ export default function HomePage() {
   return (
     <AppShell>
       <div className="page-canvas">
-        {/* HERO — centered, super-minimal, OpenAI-style restraint */}
+        {/* HERO - centered, super-minimal, OpenAI-style restraint */}
         <section className="container pb-20 pt-20 text-center md:pb-28 md:pt-32">
           <div className="mx-auto max-w-2xl">
             <span className="pill">
@@ -45,14 +45,14 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* VALIDATION — short trauma-informed line before the content blocks */}
+        {/* VALIDATION - short trauma-informed line before the content blocks */}
         <section className="container pb-8 pt-10 text-center md:pb-12 md:pt-16">
           <p className="font-display mx-auto max-w-2xl text-xl leading-[1.55] tracking-tight text-[var(--foreground)] md:text-2xl md:leading-[1.5]">
             What you&rsquo;re feeling is valid. None of this is your fault.
           </p>
         </section>
 
-        {/* BLOCK A — the right (question framing) */}
+        {/* BLOCK A - the right (question framing) */}
         <section className="container py-20 text-center md:py-32">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
@@ -60,7 +60,7 @@ export default function HomePage() {
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
               Most people don&rsquo;t. Asmita turns that right into one calm
-              flow — paste links, review notices, and watch responses come in.
+              flow - paste links, review notices, and watch responses come in.
             </p>
             <p className="mt-8">
               <Link href="/how-it-works" className="link-underline text-sm">
@@ -73,7 +73,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* BLOCK B — privacy (three concrete commitments) */}
+        {/* BLOCK B - privacy (three concrete commitments) */}
         <section className="container py-20 text-center md:py-32">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
@@ -112,7 +112,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* CLOSING — invitation, not a sales pitch */}
+        {/* CLOSING - invitation, not a sales pitch */}
         <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">

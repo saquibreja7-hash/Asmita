@@ -5,7 +5,7 @@ const steps = [
   {
     label: "Step 01",
     title: "Confirm safety.",
-    body: "Age attestation comes first. Adults continue privately. If you are under 18, Asmita does not collect URLs — it routes you to CHILDLINE 1098, TakeItDown, and cybercrime.gov.in with guided instructions.",
+    body: "Age attestation comes first. Adults continue privately. If you are under 18, Asmita does not collect URLs - it routes you to CHILDLINE 1098, TakeItDown, and cybercrime.gov.in with guided instructions.",
   },
   {
     label: "Step 02",
@@ -86,7 +86,7 @@ export default function HowItWorksPage() {
           </div>
         </section>
 
-        {/* THE FLOW — four sequential quiet blocks */}
+        {/* THE FLOW - four sequential quiet blocks */}
         {steps.map((step) => (
           <section
             key={step.label}
@@ -106,7 +106,7 @@ export default function HowItWorksPage() {
           </section>
         ))}
 
-        {/* ROUTING — three ways a notice reaches the platform */}
+        {/* ROUTING - three ways a notice reaches the platform */}
         <section className="container pb-8 pt-20 text-center md:pb-12 md:pt-32">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
@@ -116,7 +116,7 @@ export default function HowItWorksPage() {
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
               Different platforms accept notices differently. Asmita uses the
-              most reliable channel that exists — and never guesses when one
+              most reliable channel that exists - and never guesses when one
               doesn&rsquo;t.
             </p>
           </div>
@@ -141,7 +141,7 @@ export default function HowItWorksPage() {
           </section>
         ))}
 
-        {/* ESCALATION TIMELINE — 24h → 48h → 7 days */}
+        {/* ESCALATION TIMELINE - 24h → 48h → 7 days */}
         <section className="container pb-8 pt-20 text-center md:pb-12 md:pt-32">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
@@ -151,7 +151,7 @@ export default function HowItWorksPage() {
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
               The escalation timeline is automatic. You never have to chase a
-              platform manually — but you can stop the clock at any time.
+              platform manually - but you can stop the clock at any time.
             </p>
           </div>
         </section>
@@ -175,7 +175,7 @@ export default function HowItWorksPage() {
           </section>
         ))}
 
-        {/* CLOSING — invitation */}
+        {/* CLOSING - invitation */}
         <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">

@@ -23,13 +23,13 @@ export default function FeedbackPage() {
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               Every response is read by a person. We do not ask for your
-              name, your case URLs, or any intimate content — only what
+              name, your case URLs, or any intimate content - only what
               you want us to know about the experience.
             </p>
           </div>
         </section>
 
-        {/* WHAT NOT TO SEND — quiet trauma-informed line */}
+        {/* WHAT NOT TO SEND - quiet trauma-informed line */}
         <section className="container py-10 text-center md:py-14">
           <div className="mx-auto max-w-2xl">
             <p className="font-display text-[20px] leading-[1.5] tracking-tight text-[var(--foreground)] md:text-[24px] md:leading-[1.45]">

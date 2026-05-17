@@ -42,7 +42,7 @@ const groups: Group[] = [
     label: "Group 02",
     title: "If you need to talk to someone.",
     subtitle:
-      "Free, confidential counselling — not legal advice, not law enforcement.",
+      "Free, confidential counselling - not legal advice, not law enforcement.",
     items: [
       {
         name: "iCALL · TISS",
@@ -72,7 +72,7 @@ const groups: Group[] = [
     label: "Group 04",
     title: "If you want to file a cybercrime complaint.",
     subtitle:
-      "The government portal for cybercrime reporting in India — and a short guide for using it well.",
+      "The government portal for cybercrime reporting in India - and a short guide for using it well.",
     items: [
       {
         name: "National Cybercrime Reporting Portal",
@@ -143,7 +143,7 @@ export default function ResourcesPage() {
           </div>
         </section>
 
-        {/* GROUPS — each category gets its own section header + stacked resource items */}
+        {/* GROUPS - each category gets its own section header + stacked resource items */}
         {groups.map((group) => (
           <div key={group.label}>
             <section className="container pb-6 pt-16 text-center md:pb-8 md:pt-24">
@@ -182,8 +182,8 @@ export default function ResourcesPage() {
                       }
                       aria-label={
                         item.href.startsWith("tel:")
-                          ? `${item.name} — call ${item.contact}`
-                          : `${item.name} — ${item.contact} (opens in new tab)`
+                          ? `${item.name} - call ${item.contact}`
+                          : `${item.name} - ${item.contact} (opens in new tab)`
                       }
                       className="font-mono text-[28px] tracking-tight text-[var(--teal-dark)] underline decoration-transparent underline-offset-[6px] transition-colors hover:decoration-[var(--teal-dark)] md:text-[40px]"
                     >
@@ -199,7 +199,7 @@ export default function ResourcesPage() {
           </div>
         ))}
 
-        {/* FILING GUIDE — numbered, quiet, like how-it-works steps */}
+        {/* FILING GUIDE - numbered, quiet, like how-it-works steps */}
         <section className="container pb-6 pt-20 text-center md:pb-8 md:pt-32">
           <div className="mx-auto max-w-2xl">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
@@ -231,7 +231,7 @@ export default function ResourcesPage() {
           </section>
         ))}
 
-        {/* CLOSING — invitation back into the case flow */}
+        {/* CLOSING - invitation back into the case flow */}
         <section className="container pb-24 pt-24 text-center md:pb-32 md:pt-32">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">

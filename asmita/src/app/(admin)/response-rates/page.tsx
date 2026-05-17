@@ -48,7 +48,7 @@ export default function ResponseRatesPage() {
                 <td className="font-mono p-4 tabular-nums">
                   {row.medianResponseHours
                     ? `${row.medianResponseHours}h`
-                    : "—"}
+                    : "-"}
                 </td>
                 <td className="font-mono p-4 tabular-nums">
                   {Math.round(row.responseRate * 100)}%

@@ -27,7 +27,7 @@ const emergency: Resource[] = [
     href: "tel:1098",
     external: false,
     description:
-      "Free 24-hour helpline for anyone under 18 in India. You can call about any situation that scares you — not only the one that brought you here.",
+      "Free 24-hour helpline for anyone under 18 in India. You can call about any situation that scares you - not only the one that brought you here.",
   },
 ];
 
@@ -39,7 +39,7 @@ const removal: Resource[] = [
     href: "https://takeitdown.ncmec.org/",
     external: true,
     description:
-      "Free, designed specifically for people under 18. It uses your phone or computer to create a private hash of the image and helps remove it from participating platforms — your image never leaves your device.",
+      "Free, designed specifically for people under 18. It uses your phone or computer to create a private hash of the image and helps remove it from participating platforms - your image never leaves your device.",
   },
   {
     num: "04",
@@ -90,12 +90,12 @@ export default function MinorSupportPage() {
             <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
               You deserve real
               <br />
-              help — <em className="not-italic text-gradient">right now</em>.
+              help - <em className="not-italic text-gradient">right now</em>.
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               Asmita does not collect URLs from anyone under 18. Nothing is
               recorded on this page. Below are services built specifically
-              for people your age — please use them.
+              for people your age - please use them.
             </p>
           </div>
         </section>
@@ -105,8 +105,8 @@ export default function MinorSupportPage() {
           <div className="mx-auto max-w-2xl">
             <p className="font-display text-[20px] leading-[1.55] tracking-tight text-[var(--foreground)] md:text-[24px] md:leading-[1.5]">
               What you&rsquo;re feeling is valid. None of this is your fault.
-              Telling a trusted adult — a parent, a teacher, a CHILDLINE
-              counsellor — is the right next step.
+              Telling a trusted adult - a parent, a teacher, a CHILDLINE
+              counsellor - is the right next step.
             </p>
           </div>
         </section>
@@ -172,7 +172,7 @@ export default function MinorSupportPage() {
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               <a className="btn btn-primary" href="tel:1098">
-                Call CHILDLINE — 1098
+                Call CHILDLINE - 1098
               </a>
               <Link className="btn btn-secondary" href="/">
                 Back to home
@@ -231,8 +231,8 @@ function ResourceBlock({
             rel={external ? "noopener noreferrer" : undefined}
             aria-label={
               external
-                ? `${name} — ${contact} (opens in new tab)`
-                : `${name} — call ${contact}`
+                ? `${name} - ${contact} (opens in new tab)`
+                : `${name} - call ${contact}`
             }
             className="font-mono text-[28px] tracking-tight text-[var(--teal-dark)] underline decoration-transparent underline-offset-[6px] transition-colors hover:decoration-[var(--teal-dark)] md:text-[40px]"
           >

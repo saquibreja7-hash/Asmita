@@ -46,7 +46,7 @@ export function FeedbackForm() {
         </p>
         <p className="muted mt-4 text-base leading-[1.75]">
           We read every response by hand. We will not reach back unless
-          you ask us to — and this form does not collect any contact
+          you ask us to - and this form does not collect any contact
           details.
         </p>
       </div>

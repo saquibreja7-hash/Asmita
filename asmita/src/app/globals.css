@@ -174,7 +174,7 @@ select {
   background: var(--hairline);
 }
 
-/* Pill-shaped eyebrow badge — Notion/Vercel style */
+/* Pill-shaped eyebrow badge - Notion/Vercel style */
 .pill {
   display: inline-flex;
   align-items: center;
@@ -207,7 +207,7 @@ select {
   vertical-align: middle;
 }
 
-/* Continuous canvas — every public page section shares one warm background.
+/* Continuous canvas - every public page section shares one warm background.
    A very faint mesh gradient sits behind everything; no per-section bg switches. */
 .page-canvas {
   position: relative;
@@ -232,7 +232,7 @@ select {
   z-index: 1;
 }
 
-/* Gradient text — used sparingly for a single keyword */
+/* Gradient text - used sparingly for a single keyword */
 .text-gradient {
   background: linear-gradient(120deg, var(--teal) 0%, #2a8f87 50%, var(--saffron) 100%);
   -webkit-background-clip: text;
@@ -240,7 +240,7 @@ select {
   color: transparent;
 }
 
-/* Arrow CTA — minimal trailing chevron that slides on hover */
+/* Arrow CTA - minimal trailing chevron that slides on hover */
 .cta-arrow {
   display: inline-block;
   margin-left: 6px;
