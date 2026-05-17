@@ -1,0 +1,17 @@
+name,domain_patterns,tier,notice_basis,grievance_email,grievance_name,grievance_address,form_url,api_endpoint,source_url,mark_verified
+Meta (Facebook / Instagram),"facebook.com;fb.com;instagram.com;threads.net",TIER_1,IT_RULES_2021,,,,,,,false
+YouTube / Google India,"youtube.com;youtu.be",TIER_1,IT_RULES_2021,,,,https://support.google.com/legal/troubleshooter/1114905,,,false
+X / Twitter,"x.com;twitter.com",TIER_1,IT_RULES_2021,,,,https://help.x.com/forms/privacy,,,false
+WhatsApp,whatsapp.com,TIER_1,IT_RULES_2021,,,,,,,false
+ShareChat,"sharechat.com;in.sharechat.com",TIER_1,IT_RULES_2021,,,,,,,false
+Josh,"myjosh.in;josh.in",TIER_1,IT_RULES_2021,,,,,,,false
+Moj,"mojapp.in;mojx.io",TIER_1,IT_RULES_2021,,,,,,,false
+MX TakaTak,mxtakatak.com,TIER_1,IT_RULES_2021,,,,,,,false
+Snapchat,"snapchat.com;snap.com",TIER_1,IT_RULES_2021,,,,https://support.snapchat.com/i-need-help,,,false
+Telegram,"t.me;telegram.me;telegram.org",TIER_3,FORM_ONLY,,,,https://telegram.org/support,,,false
+Pornhub (Aylo),pornhub.com,TIER_3,DMCA,,,,https://www.pornhub.com/content-removal,,,false
+xVideos,xvideos.com,TIER_3,DMCA,,,,,,,false
+xHamster,xhamster.com,TIER_3,DMCA,,,,,,,false
+XNXX,xnxx.com,TIER_3,DMCA,,,,,,,false
+Google Search Removals,google.com,TIER_1,IT_RULES_2021,,,,https://reportcontent.google.com/forms/explicit_content_intimate_imagery,,,false
+Bing,bing.com,TIER_3,DMCA,,,,https://www.microsoft.com/concern/bing,,,false

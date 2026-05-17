@@ -17,7 +17,8 @@
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "postinstall": "prisma generate",
-    "seed": "prisma db seed"
+    "seed": "prisma db seed",
+    "import:platforms": "tsx scripts/import-platforms-csv.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans-devanagari": "^5.2.8",
