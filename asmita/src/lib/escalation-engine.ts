@@ -1,6 +1,10 @@
+import type { Prisma } from "@prisma/client";
 import { processEscalationJob } from "@/jobs/escalation-worker";
 import type { NoticeJob } from "@/jobs/queue";
 import { db } from "@/lib/db";
+import { writeAuditLog } from "@/lib/audit";
+import { dispatchEscalationFollowUp } from "@/lib/notice-dispatch";
+import { renderNoticeTemplate, assertNoticeSubjectSafe } from "@/lib/notice-generator";
 
 export type EscalationSchedule = {
   level: 1 | 2 | 3;
@@ -62,12 +66,47 @@ export function shouldStopFutureEscalation(input: {
     ["ACKNOWLEDGED", "REMOVED", "REJECTED"].includes(input.responseType || "");
 }
 
+export type SkipReason =
+  | "stopped"
+  | "no_due_level"
+  | "blocked_legal_review"
+  | "blocked_no_recipient"
+  | "blocked_no_template"
+  | "blocked_audit_only";
+
 export type DueEscalationSummary = {
   swept: number;
   fired: Array<{ noticeId: string; level: EscalationLevel; action: EscalationAction }>;
-  skipped: Array<{ noticeId: string; reason: "stopped" | "no_due_level" }>;
+  skipped: Array<{ noticeId: string; reason: SkipReason; level?: EscalationLevel }>;
   errors: Array<{ noticeId: string; error: string }>;
 };
+
+type HandlerResult =
+  | { kind: "fired" }
+  | { kind: "blocked"; reason: Extract<SkipReason, `blocked_${string}`> };
+
+const candidateSelect = {
+  id: true,
+  sentAt: true,
+  escalationLevel: true,
+  responseType: true,
+  templateId: true,
+  submittedUrl: {
+    select: {
+      id: true,
+      caseId: true,
+      status: true,
+      domain: true,
+      platform: { select: { name: true, grievanceEmail: true, lastContactVerifiedByHuman: true } },
+      case: { select: { referenceNumber: true } },
+    },
+  },
+  template: {
+    select: { bodyTemplate: true, subjectTemplate: true, reviewedByLegal: true },
+  },
+} as const satisfies Prisma.NoticeSelect;
+
+type CandidateNotice = Prisma.NoticeGetPayload<{ select: typeof candidateSelect }>;
 
 export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<DueEscalationSummary> {
   const summary: DueEscalationSummary = { swept: 0, fired: [], skipped: [], errors: [] };
@@ -79,15 +118,7 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
       escalationLevel: { lt: 3 },
       removedAt: null,
     },
-    select: {
-      id: true,
-      sentAt: true,
-      escalationLevel: true,
-      responseType: true,
-      submittedUrl: {
-        select: { id: true, caseId: true, status: true },
-      },
-    },
+    select: candidateSelect,
   });
 
   summary.swept = candidates.length;
@@ -116,7 +147,18 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
       }
 
       const action = ESCALATION_ACTION[dueLevel];
+      const handlerResult = await runLevelHandler({ notice, dueLevel });
 
+      if (handlerResult.kind === "blocked") {
+        summary.skipped.push({ noticeId: notice.id, reason: handlerResult.reason, level: dueLevel });
+        continue;
+      }
+
+      // Handler succeeded — commit the level bump. If this transaction fails
+      // we keep the email sent (handler already ran) but escalationLevel
+      // stays at the prior tier; next sweep will see the Escalation row
+      // missing for this level and re-attempt, which dispatchEscalationFollowUp
+      // dedupes on at the in-memory map.
       await db.$transaction([
         db.escalation.create({
           data: { noticeId: notice.id, level: dueLevel, actionType: action, completedAt: now },
@@ -127,11 +169,6 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
         }),
       ]);
 
-      await processEscalationJob(
-        { caseId: notice.submittedUrl.caseId, urlId: notice.submittedUrl.id },
-        dueLevel,
-      );
-
       summary.fired.push({ noticeId: notice.id, level: dueLevel, action });
     } catch (err) {
       summary.errors.push({ noticeId: notice.id, error: err instanceof Error ? err.message : String(err) });
@@ -139,6 +176,80 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
   }
 
   return summary;
+}
+
+async function runLevelHandler(input: { notice: CandidateNotice; dueLevel: EscalationLevel }): Promise<HandlerResult> {
+  const { notice, dueLevel } = input;
+  const job: NoticeJob = { caseId: notice.submittedUrl.caseId, urlId: notice.submittedUrl.id };
+
+  if (dueLevel === 1) {
+    return handleL1FollowUp(notice);
+  }
+  // L2 and L3 are still audit-only in this commit; later commits replace them.
+  await processEscalationJob(job, dueLevel);
+  return { kind: "fired" };
+}
+
+async function handleL1FollowUp(notice: CandidateNotice): Promise<HandlerResult> {
+  if (!notice.template) {
+    await writeAuditLog({
+      eventType: "NOTICE_FAILED",
+      entityType: "Notice",
+      entityId: notice.id,
+      data: { reason: "no_template", escalationLevel: 1 },
+    });
+    return { kind: "blocked", reason: "blocked_no_template" };
+  }
+  if (!notice.template.reviewedByLegal) {
+    await writeAuditLog({
+      eventType: "NOTICE_FAILED",
+      entityType: "Notice",
+      entityId: notice.id,
+      data: { reason: "template_not_legal_reviewed", escalationLevel: 1 },
+    });
+    return { kind: "blocked", reason: "blocked_legal_review" };
+  }
+  const platform = notice.submittedUrl.platform;
+  if (!platform?.grievanceEmail || !platform.lastContactVerifiedByHuman) {
+    await writeAuditLog({
+      eventType: "NOTICE_FAILED",
+      entityType: "Notice",
+      entityId: notice.id,
+      data: { reason: "no_verified_recipient", escalationLevel: 1 },
+    });
+    return { kind: "blocked", reason: "blocked_no_recipient" };
+  }
+
+  const variables = {
+    platformName: platform.name,
+    caseReference: notice.submittedUrl.case.referenceNumber,
+    url: notice.submittedUrl.domain,
+    declarationReference: notice.submittedUrl.case.referenceNumber,
+  };
+
+  // Body sent VERBATIM from the legally-reviewed template. Subject gets a
+  // bracket prefix only so the recipient can group it with the prior thread
+  // without changing any reviewed copy.
+  const body = renderNoticeTemplate(notice.template.bodyTemplate, variables);
+  const renderedSubject = renderNoticeTemplate(notice.template.subjectTemplate, variables);
+  const subject = `[Follow-up #1] ${renderedSubject}`;
+  assertNoticeSubjectSafe(subject);
+
+  await processEscalationJob(
+    { caseId: notice.submittedUrl.caseId, urlId: notice.submittedUrl.id },
+    1,
+  );
+
+  await dispatchEscalationFollowUp({
+    caseId: notice.submittedUrl.caseId,
+    urlId: notice.submittedUrl.id,
+    level: 1,
+    recipientEmail: platform.grievanceEmail,
+    subject,
+    body,
+  });
+
+  return { kind: "fired" };
 }
 
 function highestDueLevel(input: {
