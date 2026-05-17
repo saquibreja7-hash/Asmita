@@ -4,6 +4,7 @@ vi.mock("@/lib/db", () => ({
   db: {
     notice: { findMany: vi.fn(), update: vi.fn() },
     escalation: { create: vi.fn() },
+    case: { update: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -27,6 +28,7 @@ vi.mock("@/lib/encryption", () => ({
 
 vi.mock("@/lib/email", () => ({
   sendL2VictimNotification: vi.fn().mockResolvedValue({ id: "msg-l2" }),
+  sendL3FirReadyNotification: vi.fn().mockResolvedValue({ id: "msg-l3" }),
 }));
 
 import { db } from "@/lib/db";
@@ -34,7 +36,7 @@ import { processEscalationJob } from "@/jobs/escalation-worker";
 import { writeAuditLog } from "@/lib/audit";
 import { dispatchEscalationFollowUp } from "@/lib/notice-dispatch";
 import { decryptField } from "@/lib/encryption";
-import { sendL2VictimNotification } from "@/lib/email";
+import { sendL2VictimNotification, sendL3FirReadyNotification } from "@/lib/email";
 import { runDueEscalationsFromDb } from "@/lib/escalation-engine";
 
 type NoticeRow = {
@@ -361,6 +363,72 @@ describe("runDueEscalationsFromDb — L2 victim notification", () => {
       expect.objectContaining({
         eventType: "NOTICE_FAILED",
         data: expect.objectContaining({ reason: "email_decrypt_failed", escalationLevel: 2 }),
+      }),
+    );
+  });
+});
+
+describe("runDueEscalationsFromDb — L3 FIR ready", () => {
+  beforeEach(() => {
+    vi.mocked(db.$transaction).mockImplementation(async () => []);
+    vi.mocked(decryptField).mockImplementation((payload: string) => `victim@example.com:${payload}`);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("sends the FIR-ready email and includes the case update in the transaction at the 7-day boundary", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([noticeRow({ escalationLevel: 2 })] as never);
+    const now = new Date("2026-05-17T00:00:00.000Z"); // 7d after sentAt
+
+    const summary = await runDueEscalationsFromDb(now);
+
+    expect(summary.fired).toEqual([{ noticeId: "notice-1", level: 3, action: "fir_package" }]);
+    expect(sendL3FirReadyNotification).toHaveBeenCalledWith(
+      "victim@example.com:iv:tag:ciphertext",
+      "ASMITA-2026-00042",
+      expect.stringContaining("/case/case-1"),
+      expect.stringContaining("/api/cases/case-1/export"),
+      "en",
+    );
+    // Transaction must include the case.firPackageGeneratedAt update
+    const txArg = vi.mocked(db.$transaction).mock.calls[0][0] as unknown as unknown[];
+    expect(txArg).toHaveLength(3);
+  });
+
+  it("does NOT include the case update in the transaction for L1 or L2 fires", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([noticeRow()] as never);
+    const now = new Date("2026-05-12T00:00:00.000Z"); // 48h - L2
+
+    await runDueEscalationsFromDb(now);
+
+    const txArg = vi.mocked(db.$transaction).mock.calls[0][0] as unknown as unknown[];
+    expect(txArg).toHaveLength(2);
+    expect(db.case.update).not.toHaveBeenCalled();
+  });
+
+  it("blocks L3 send when the user record is missing", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([
+      noticeRow({
+        escalationLevel: 2,
+        submittedUrl: {
+          ...noticeRow().submittedUrl,
+          case: { id: "case-1", referenceNumber: "ASMITA-2026-00042", user: null },
+        },
+      }),
+    ] as never);
+    const now = new Date("2026-05-17T00:00:00.000Z");
+
+    const summary = await runDueEscalationsFromDb(now);
+
+    expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_no_user", level: 3 }]);
+    expect(sendL3FirReadyNotification).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "NOTICE_FAILED",
+        data: expect.objectContaining({ reason: "user_missing", escalationLevel: 3 }),
       }),
     );
   });

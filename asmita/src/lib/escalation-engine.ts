@@ -6,7 +6,11 @@ import { writeAuditLog } from "@/lib/audit";
 import { decryptField } from "@/lib/encryption";
 import { dispatchEscalationFollowUp } from "@/lib/notice-dispatch";
 import { renderNoticeTemplate, assertNoticeSubjectSafe } from "@/lib/notice-generator";
-import { sendL2VictimNotification, type Locale } from "@/lib/email";
+import {
+  sendL2VictimNotification,
+  sendL3FirReadyNotification,
+  type Locale,
+} from "@/lib/email";
 
 export type EscalationSchedule = {
   level: 1 | 2 | 3;
@@ -169,7 +173,7 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
       // stays at the prior tier; next sweep will see the Escalation row
       // missing for this level and re-attempt, which dispatchEscalationFollowUp
       // dedupes on at the in-memory map.
-      await db.$transaction([
+      const txOps: Prisma.PrismaPromise<unknown>[] = [
         db.escalation.create({
           data: { noticeId: notice.id, level: dueLevel, actionType: action, completedAt: now },
         }),
@@ -177,7 +181,16 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
           where: { id: notice.id },
           data: { escalationLevel: dueLevel },
         }),
-      ]);
+      ];
+      if (dueLevel === 3) {
+        txOps.push(
+          db.case.update({
+            where: { id: notice.submittedUrl.case.id },
+            data: { firPackageGeneratedAt: now },
+          }),
+        );
+      }
+      await db.$transaction(txOps);
 
       summary.fired.push({ noticeId: notice.id, level: dueLevel, action });
     } catch (err) {
@@ -190,17 +203,9 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
 
 async function runLevelHandler(input: { notice: CandidateNotice; dueLevel: EscalationLevel }): Promise<HandlerResult> {
   const { notice, dueLevel } = input;
-  const job: NoticeJob = { caseId: notice.submittedUrl.caseId, urlId: notice.submittedUrl.id };
-
-  if (dueLevel === 1) {
-    return handleL1FollowUp(notice);
-  }
-  if (dueLevel === 2) {
-    return handleL2VictimNotification(notice);
-  }
-  // L3 is still audit-only in this commit; the next commit replaces it.
-  await processEscalationJob(job, dueLevel);
-  return { kind: "fired" };
+  if (dueLevel === 1) return handleL1FollowUp(notice);
+  if (dueLevel === 2) return handleL2VictimNotification(notice);
+  return handleL3FirReady(notice);
 }
 
 async function handleL1FollowUp(notice: CandidateNotice): Promise<HandlerResult> {
@@ -304,6 +309,55 @@ async function handleL2VictimNotification(notice: CandidateNotice): Promise<Hand
     plaintextEmail,
     notice.submittedUrl.case.referenceNumber,
     dashboardUrl,
+    locale,
+  );
+
+  return { kind: "fired" };
+}
+
+async function handleL3FirReady(notice: CandidateNotice): Promise<HandlerResult> {
+  const user = notice.submittedUrl.case.user;
+  if (!user) {
+    await writeAuditLog({
+      eventType: "NOTICE_FAILED",
+      entityType: "Notice",
+      entityId: notice.id,
+      data: { reason: "user_missing", escalationLevel: 3 },
+    });
+    return { kind: "blocked", reason: "blocked_no_user" };
+  }
+
+  let plaintextEmail: string;
+  try {
+    plaintextEmail = decryptField(user.emailEncrypted);
+  } catch {
+    await writeAuditLog({
+      eventType: "NOTICE_FAILED",
+      entityType: "Notice",
+      entityId: notice.id,
+      actorId: user.id,
+      data: { reason: "email_decrypt_failed", escalationLevel: 3 },
+    });
+    return { kind: "blocked", reason: "blocked_decrypt_failed" };
+  }
+
+  const locale: Locale = user.preferredLocale === "hi" ? "hi" : "en";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://asmita.in";
+  const cleanUrl = appUrl.replace(/\/+$/, "");
+  const caseId = notice.submittedUrl.case.id;
+  const dashboardUrl = `${cleanUrl}/case/${caseId}`;
+  const pdfUrl = `${cleanUrl}/api/cases/${caseId}/export`;
+
+  await processEscalationJob(
+    { caseId: notice.submittedUrl.caseId, urlId: notice.submittedUrl.id },
+    3,
+  );
+
+  await sendL3FirReadyNotification(
+    plaintextEmail,
+    notice.submittedUrl.case.referenceNumber,
+    dashboardUrl,
+    pdfUrl,
     locale,
   );
 

@@ -125,6 +125,50 @@ export async function sendL2VictimNotification(
   }));
 }
 
+export function createL3FirReadyEmail(
+  referenceNumber: string,
+  dashboardUrl: string,
+  pdfDownloadUrl: string,
+  locale: Locale = "en",
+) {
+  // Hindi copy intentionally not drafted here. See createL2VictimNotificationEmail.
+  void locale;
+  return {
+    subject: `Legal support package ready for Asmita case ${referenceNumber}`,
+    text: [
+      "Hello,",
+      "",
+      `Seven days have passed since we sent the takedown notice for Asmita case ${referenceNumber} without resolution.`,
+      "",
+      "Your legal support package is now ready. You can take this PDF to the police when filing a First Information Report (FIR), or to a lawyer.",
+      "",
+      `Download the PDF: ${pdfDownloadUrl}`,
+      `View your case dashboard: ${dashboardUrl}`,
+      "",
+      "The package summarizes case activity and does not include any intimate images or videos. For privacy, this email contains no submitted URLs.",
+    ].join("\n"),
+  };
+}
+
+export async function sendL3FirReadyNotification(
+  to: string,
+  referenceNumber: string,
+  dashboardUrl: string,
+  pdfDownloadUrl: string,
+  locale: Locale = "en",
+) {
+  const { subject, text } = createL3FirReadyEmail(referenceNumber, dashboardUrl, pdfDownloadUrl, locale);
+  if (!process.env.RESEND_API_KEY) {
+    return { id: `dev-l3-${referenceNumber}` };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text,
+  }));
+}
+
 export function createLegalPackageReadyEmail(referenceNumber: string, dashboardUrl: string) {
   return {
     subject: `Legal package ready for Asmita case ${referenceNumber}`,

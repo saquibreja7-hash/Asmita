@@ -132,18 +132,19 @@ model User {
 }
 
 model Case {
-  id                  String     @id @default(uuid())
-  referenceNumber     String     @unique
-  userId              String
-  status              CaseStatus @default(OPEN)
-  state               String?
-  city                String?
-  ngoVerified         Boolean    @default(false)
-  ngoVerifierId       String?
-  declarationSignedAt DateTime?
-  declarationIpHash   String?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  id                    String     @id @default(uuid())
+  referenceNumber       String     @unique
+  userId                String
+  status                CaseStatus @default(OPEN)
+  state                 String?
+  city                  String?
+  ngoVerified           Boolean    @default(false)
+  ngoVerifierId         String?
+  declarationSignedAt   DateTime?
+  declarationIpHash     String?
+  firPackageGeneratedAt DateTime?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 
   user          User           @relation("VictimCases", fields: [userId], references: [id])
   ngoVerifier   User?          @relation("NgoVerifiedCases", fields: [ngoVerifierId], references: [id])
