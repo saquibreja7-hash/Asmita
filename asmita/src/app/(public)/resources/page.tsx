@@ -138,7 +138,7 @@ export default function ResourcesPage() {
               run by an Indian organisation or the Government of India.
             </p>
             <p className="font-mono mt-8 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              Verified against public source pages · 12 May 2026
+              Last verified against public source pages: 12 May 2026.
             </p>
           </div>
         </section>

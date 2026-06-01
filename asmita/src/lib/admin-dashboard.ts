@@ -3,7 +3,7 @@ import { calculateBetaMetrics, type BetaMetrics } from "@/lib/beta-metrics";
 import { db } from "@/lib/db";
 import { feedbackRecords } from "@/lib/feedback";
 import { calculatePlatformResponseRates, type PlatformResponseSample } from "@/lib/response-rates";
-import { listAllCases, type DisplayCase } from "@/lib/case-ops";
+import { listAllCases } from "@/lib/case-ops";
 import { createReverificationQueue } from "@/lib/go-reverification";
 import { platformDirectory, HUMAN_VERIFICATION_REQUIRED, type PlatformDirectoryEntry } from "@/lib/platforms";
 import { deliveryEvents } from "@/lib/webhook-events";

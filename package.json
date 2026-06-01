@@ -1,14 +1,27 @@
 {
   "name": "asmita",
   "version": "1.0.0",
-  "description": "",
+  "description": "Privacy-preserving NCII support and URL takedown notice-routing system.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "npm --prefix asmita run dev",
+    "build": "npm --prefix asmita run build",
+    "lint": "npm --prefix asmita run lint",
+    "type-check": "npm --prefix asmita run type-check",
+    "test": "npm --prefix asmita run test",
+    "test:e2e": "npm --prefix asmita run test:e2e",
+    "prisma:validate": "npm --prefix asmita run prisma:validate"
   },
-  "keywords": [],
+  "keywords": [
+    "ncii",
+    "privacy",
+    "safety-tech",
+    "takedown",
+    "nextjs",
+    "typescript"
+  ],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "type": "commonjs",
   "dependencies": {
     "marked": "^18.0.3",
