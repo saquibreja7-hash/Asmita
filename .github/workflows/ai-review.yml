@@ -59,23 +59,20 @@ jobs:
             corrupts data) or "WARNING:" (informational, author's call).
 
             Finally post ONE summary comment on the PR
-            (gh pr comment ${{ github.event.pull_request.number }} --body "...")
-            with a verdict line, and write the verdict to a file:
-              echo "PASS" > /tmp/review-verdict   (no critical issues)
-              echo "BLOCK" > /tmp/review-verdict  (one or more CRITICAL issues)
+            (gh pr comment ${{ github.event.pull_request.number }} --body "...").
+            Your very last output line must be exactly one of:
+              Verdict: **PASS**   (no critical issues)
+              Verdict: **BLOCK**  (one or more CRITICAL issues)
           claude_args: '--allowed-tools "Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Bash(echo:*),Bash(cat:*),Read,Grep,Glob"'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Debug Claude execution output
-        if: failure()
-        run: cat /home/runner/work/_temp/claude-execution-output.json || true
-
       - name: Enforce severity threshold
         run: |
-          verdict=$(cat /tmp/review-verdict 2>/dev/null || echo "MISSING")
-          echo "AI review verdict: $verdict"
-          if [ "$verdict" != "PASS" ]; then
-            echo "::error::AI review found CRITICAL issues (or produced no verdict). Merge blocked."
+          out=/home/runner/work/_temp/claude-execution-output.json
+          if jq -r '.[] | select(.type=="result") | .result' "$out" 2>/dev/null | grep -q 'Verdict: \*\*PASS\*\*'; then
+            echo "AI review verdict: PASS"
+          else
+            echo "::error::AI review verdict is BLOCK or missing. Merge blocked."
             exit 1
           fi
