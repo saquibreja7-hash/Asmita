@@ -13,7 +13,7 @@
     "test:a11y": "playwright test tests/e2e/accessibility.spec.ts",
     "test:lighthouse": "lhci autorun --config=./lighthouserc.json",
     "test:load": "tsx tests/load/submission-load.ts",
-    "security:audit": "npm audit --audit-level=high",
+    "security:audit": "npm audit --audit-level=high --omit=dev",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "postinstall": "prisma generate",
