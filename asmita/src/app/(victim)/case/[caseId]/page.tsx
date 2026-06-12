@@ -2,7 +2,16 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser, isUserDeactivated } from "@/lib/case-ops";
+import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
+import HashGenerator from "@/components/HashGenerator";
 import { CaseDashboardActions } from "./CaseDashboardActions";
+
+const HASH_STATUS_LABELS: Record<string, string> = {
+  PENDING_REVIEW: "Awaiting review",
+  APPROVED: "Approved – dispatch pending",
+  DISPATCHED: "Sent to platforms",
+  REJECTED: "Rejected",
+};
 
 export default async function CasePage({
   params,
@@ -14,6 +23,11 @@ export default async function CasePage({
   const record = auth.ok ? await getCaseForUser(caseId, auth.session.sub) : null;
   const deactivated =
     record && auth.ok ? await isUserDeactivated(auth.session.sub) : false;
+  const hashUploadEnabled = process.env.ENABLE_HASH_UPLOAD === "true";
+  let hashSubmissions: DisplayHashSubmission[] = [];
+  if (record && hashUploadEnabled) {
+    hashSubmissions = await listHashesForCase(record.id);
+  }
 
   return (
     <AppShell>
@@ -148,6 +162,69 @@ export default async function CasePage({
                 )}
               </div>
             </section>
+
+            {/* DIGITAL FINGERPRINTS (Phase 2, feature-gated) */}
+            {hashUploadEnabled && (
+              <section id="fingerprints" className="container py-10 md:py-14">
+                <div className="mx-auto max-w-3xl">
+                  <p className="font-mono text-center text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                    Digital fingerprints · {hashSubmissions.length}
+                  </p>
+                  <h2 className="font-display mt-4 text-center text-[28px] font-normal leading-[1.18] tracking-tight md:text-[40px] md:leading-[1.14]">
+                    Block the content before it spreads.
+                  </h2>
+                  <p className="muted mx-auto mt-6 max-w-lg text-center text-base leading-[1.75]">
+                    If you have the photos on this device — even if they have
+                    not been posted anywhere yet — create a fingerprint here.
+                    Platforms use it to block matching uploads. The photos
+                    never leave your device.
+                  </p>
+
+                  {hashSubmissions.length > 0 && (
+                    <div className="mt-8 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+                      <table className="w-full min-w-[480px] border-collapse text-left text-sm">
+                        <thead>
+                          <tr className="border-b border-[var(--hairline)]">
+                            <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                              Fingerprint
+                            </th>
+                            <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                              Quality
+                            </th>
+                            <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                              Status
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {hashSubmissions.map((submission) => (
+                            <tr
+                              className="border-t border-[var(--hairline)]"
+                              key={submission.id}
+                            >
+                              <td className="font-mono p-4 text-[var(--muted)]">
+                                {submission.hashDigest.slice(0, 12)}…
+                              </td>
+                              <td className="p-4 tabular-nums">
+                                {submission.quality}/100
+                              </td>
+                              <td className="p-4">
+                                {HASH_STATUS_LABELS[submission.status] ??
+                                  submission.status}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="mt-8">
+                    <HashGenerator caseId={record.id} />
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* ACTIONS */}
             <section id="actions" className="container py-10 md:py-14">

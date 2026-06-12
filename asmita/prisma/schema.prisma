@@ -356,12 +356,13 @@ model AuditLog {
 }
 
 model OtpToken {
-  id        String   @id @default(uuid())
-  emailHash String
-  tokenHash String
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  emailHash      String
+  tokenHash      String
+  expiresAt      DateTime
+  used           Boolean  @default(false)
+  failedAttempts Int      @default(0)
+  createdAt      DateTime @default(now())
 
   @@index([emailHash])
 }

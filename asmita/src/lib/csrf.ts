@@ -5,7 +5,14 @@ import { sha256 } from "@/lib/hash";
 const CSRF_COOKIE = "asmita_csrf";
 
 function secret() {
-  return process.env.CSRF_SECRET || process.env.JWT_SECRET || "dev-secret-change-before-prod-32chars";
+  const configured = process.env.CSRF_SECRET || process.env.JWT_SECRET;
+  if (!configured) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("CSRF_SECRET (or JWT_SECRET) is required in production.");
+    }
+    return "dev-secret-change-before-prod-32chars";
+  }
+  return configured;
 }
 
 export function createCsrfPair() {

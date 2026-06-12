@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
+import type { AdminRole } from "@/lib/auth/admin-permissions";
 
 export type SessionClaims = {
   sub: string;
@@ -6,10 +7,18 @@ export type SessionClaims = {
   ageOver18: boolean;
   emailHash: string;
   namespace?: "victim" | "admin";
+  adminRole?: AdminRole;
 };
 
 function getSecret() {
-  return new TextEncoder().encode(process.env.JWT_SECRET || "dev-secret-change-before-prod-32chars");
+  const configured = process.env.JWT_SECRET;
+  if (!configured) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("JWT_SECRET is required in production.");
+    }
+    return new TextEncoder().encode("dev-secret-change-before-prod-32chars");
+  }
+  return new TextEncoder().encode(configured);
 }
 
 export async function signSession(claims: SessionClaims) {
@@ -26,12 +35,15 @@ export async function signSession(claims: SessionClaims) {
     .sign(getSecret());
 }
 
-export async function signAdminSession(claims: Omit<SessionClaims, "role" | "ageOver18" | "namespace">) {
+export async function signAdminSession(
+  claims: Omit<SessionClaims, "role" | "ageOver18" | "namespace"> & { adminRole?: AdminRole },
+) {
   return new SignJWT({
     role: "ADMIN",
     ageOver18: true,
     emailHash: claims.emailHash,
     namespace: "admin",
+    adminRole: claims.adminRole ?? "SUPER_ADMIN",
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(claims.sub)
@@ -50,6 +62,7 @@ export async function verifySession(token: string | undefined | null) {
       ageOver18: Boolean(payload.ageOver18),
       emailHash: String(payload.emailHash || ""),
       namespace: (payload.namespace as SessionClaims["namespace"]) || "victim",
+      adminRole: payload.adminRole as SessionClaims["adminRole"],
     };
   } catch {
     return null;

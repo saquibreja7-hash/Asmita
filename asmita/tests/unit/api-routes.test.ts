@@ -59,6 +59,7 @@ const authed = {
     ageOver18: true,
     emailHash: "hash-1",
     namespace: "victim" as const,
+    adminRole: undefined,
   },
 };
 const unauthed = { ok: false as const, status: 401 as const, error: "unauthorized" };

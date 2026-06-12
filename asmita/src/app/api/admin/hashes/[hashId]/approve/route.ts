@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { reviewHashSubmission } from "@/lib/hash-submission";
 
@@ -13,7 +13,7 @@ export async function POST(
   if (!verifyCsrfRequest(request)) {
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
-  const auth = await requireAdmin();
+  const auth = await requireAdminPermission("cases:review");
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }

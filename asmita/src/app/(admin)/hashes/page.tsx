@@ -1,5 +1,10 @@
-import { listHashReviewQueue } from "@/lib/hash-submission";
+import {
+  listDispatchableHashCases,
+  listHashReviewQueue,
+  listVerifiedDispatchPlatforms,
+} from "@/lib/hash-submission";
 import HashReviewActions from "./HashReviewActions";
+import HashDispatchForm from "./HashDispatchForm";
 
 export default async function HashQueuePage() {
   if (process.env.ENABLE_HASH_UPLOAD !== "true") {
@@ -21,7 +26,11 @@ export default async function HashQueuePage() {
     );
   }
 
-  const rows = await listHashReviewQueue();
+  const [rows, dispatchableCases, verifiedPlatforms] = await Promise.all([
+    listHashReviewQueue(),
+    listDispatchableHashCases(),
+    listVerifiedDispatchPlatforms(),
+  ]);
 
   return (
     <section>
@@ -76,6 +85,24 @@ export default async function HashQueuePage() {
             No hash submissions awaiting review.
           </p>
         )}
+      </div>
+
+      <div className="mt-14">
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+          Advisory dispatch
+        </p>
+        <h2 className="font-display mt-3 text-[24px] font-normal leading-[1.2] tracking-tight md:text-[32px]">
+          Send hash advisories to platforms
+        </h2>
+        <p className="muted mt-4 max-w-2xl text-sm leading-[1.7]">
+          One email per platform: the legally reviewed HASH_ADVISORY notice plus the
+          hash annex for all approved hashes on the case. Dispatch refuses to run
+          unless the template has legal sign-off and the contact is human-verified.
+          Re-running never double-sends.
+        </p>
+        <div className="mt-6">
+          <HashDispatchForm cases={dispatchableCases} platforms={verifiedPlatforms} />
+        </div>
       </div>
     </section>
   );

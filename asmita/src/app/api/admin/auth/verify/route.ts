@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminIdentity, isAdminEmail } from "@/lib/auth/admin-allowlist";
+import { createAdminIdentity, getAdminRole, isAdminEmail } from "@/lib/auth/admin-allowlist";
 import { verifyAdminTotp } from "@/lib/auth/admin-mfa";
 import { verifyOtp } from "@/lib/auth/otp";
 import { signAdminSession } from "@/lib/auth/jwt";
@@ -39,7 +39,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }
 
-  const session = await signAdminSession({ sub: admin.id, emailHash: admin.emailHash });
+  const session = await signAdminSession({
+    sub: admin.id,
+    emailHash: admin.emailHash,
+    adminRole: getAdminRole(parsed.data.email),
+  });
   await writeAuditLog({
     eventType: "ADMIN_ACTION",
     entityType: "Admin",

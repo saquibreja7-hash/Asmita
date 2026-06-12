@@ -2,15 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { writeAuditLog } from "@/lib/audit";
-
-// v1 sub-role gap: the JWT carries role:"ADMIN" only; AdminRole sub-roles
-// (GO_EDITOR, LEGAL_ADVISOR, etc.) defined in admin-permissions.ts are not yet
-// surfaced via the session. Any ADMIN can edit platforms. TODO: extend
-// SessionClaims with adminRole and gate this route on hasAdminPermission(role,
-// "platforms:edit") before opening admin signups beyond founders.
 
 const fieldSchema = z
   .object({
@@ -46,7 +40,7 @@ export async function POST(
   if (!verifyCsrfRequest(request)) {
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
-  const auth = await requireAdmin();
+  const auth = await requireAdminPermission("platforms:edit");
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }

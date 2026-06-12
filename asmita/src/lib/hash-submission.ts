@@ -173,6 +173,55 @@ export async function listHashReviewQueue(): Promise<HashReviewQueueRow[]> {
   }));
 }
 
+export type DispatchableCase = {
+  caseId: string;
+  referenceNumber: string;
+  approvedCount: number;
+  dispatchedCount: number;
+};
+
+export type VerifiedPlatformOption = {
+  id: string;
+  name: string;
+};
+
+// Cases with at least one admin-approved hash, ready for advisory dispatch.
+export async function listDispatchableHashCases(): Promise<DispatchableCase[]> {
+  const records = await db.hashSubmission.findMany({
+    where: { status: { in: ["APPROVED", "DISPATCHED"] } },
+    include: { case: { select: { referenceNumber: true } } },
+  });
+  const byCase = new Map<string, DispatchableCase>();
+  for (const record of records) {
+    const entry = byCase.get(record.caseId) ?? {
+      caseId: record.caseId,
+      referenceNumber: record.case.referenceNumber,
+      approvedCount: 0,
+      dispatchedCount: 0,
+    };
+    if (record.status === "APPROVED") entry.approvedCount++;
+    else entry.dispatchedCount++;
+    byCase.set(record.caseId, entry);
+  }
+  return Array.from(byCase.values()).sort((a, b) =>
+    a.referenceNumber.localeCompare(b.referenceNumber),
+  );
+}
+
+// Only human-verified contacts are ever offered as dispatch targets.
+export async function listVerifiedDispatchPlatforms(): Promise<VerifiedPlatformOption[]> {
+  const platforms = await db.platform.findMany({
+    where: {
+      isActive: true,
+      lastContactVerifiedByHuman: true,
+      grievanceEmail: { not: null },
+    },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  return platforms;
+}
+
 export async function reviewHashSubmission(input: {
   hashSubmissionId: string;
   decision: "approve" | "reject";

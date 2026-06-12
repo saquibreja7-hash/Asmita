@@ -1,7 +1,51 @@
-import { sendNoticeDraft } from "@/lib/email";
+﻿import { sendNoticeDraft } from "@/lib/email";
 import { writeAuditLog } from "@/lib/audit";
 import { sha256 } from "@/lib/hash";
 import { HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
+import { db } from "@/lib/db";
+
+// Vercel serverless functions are stateless: the in-memory idempotency maps
+// below reset on every cold start, which would allow the same notice to be
+// dispatched twice. Set NOTICE_DISPATCH_PERSISTENCE=database in production so
+// dedup is enforced against the Notice table instead.
+function databasePersistenceEnabled() {
+  return process.env.NOTICE_DISPATCH_PERSISTENCE === "database";
+}
+
+async function findPersistedNotice(
+  urlId: string,
+  recipientEmail: string,
+  escalationLevel: number,
+): Promise<DispatchedNotice | null> {
+  const existing = await db.notice.findFirst({
+    where: { urlId, recipientEmail, escalationLevel, sentAt: { not: null } },
+  });
+  if (!existing) return null;
+  return {
+    idempotencyKey: "",
+    caseId: "",
+    urlId: existing.urlId,
+    recipientEmail: existing.recipientEmail ?? recipientEmail,
+    messageId: existing.messageId ?? "",
+    sentAt: existing.sentAt?.toISOString() ?? "",
+    payloadHash: existing.payloadHash ?? "",
+  };
+}
+
+async function persistNotice(notice: DispatchedNotice, escalationLevel: number) {
+  await db.notice.create({
+    data: {
+      urlId: notice.urlId,
+      routingTier: 2,
+      method: "EMAIL",
+      sentAt: new Date(notice.sentAt),
+      recipientEmail: notice.recipientEmail,
+      messageId: notice.messageId,
+      payloadHash: notice.payloadHash,
+      escalationLevel,
+    },
+  });
+}
 
 export type DispatchedNotice = {
   idempotencyKey: string;
@@ -34,6 +78,12 @@ export async function dispatchTier2Notice(input: {
   if (existing) {
     return { dispatched: false, notice: existing };
   }
+  if (databasePersistenceEnabled()) {
+    const persisted = await findPersistedNotice(input.urlId, input.recipientEmail, 0);
+    if (persisted) {
+      return { dispatched: false, notice: persisted };
+    }
+  }
 
   const sent = await sendNoticeDraft(input.recipientEmail, input.subject, input.body);
   const messageId =
@@ -53,6 +103,9 @@ export async function dispatchTier2Notice(input: {
     payloadHash: sha256(input.body),
   };
   dispatchedNotices.set(idempotencyKey, notice);
+  if (databasePersistenceEnabled()) {
+    await persistNotice(notice, 0);
+  }
   await writeAuditLog({
     eventType: "NOTICE_SENT",
     entityType: "SubmittedUrl",
@@ -82,6 +135,12 @@ export async function dispatchEscalationFollowUp(input: {
   if (existing) {
     return { dispatched: false, notice: existing };
   }
+  if (databasePersistenceEnabled()) {
+    const persisted = await findPersistedNotice(input.urlId, input.recipientEmail, input.level);
+    if (persisted) {
+      return { dispatched: false, notice: persisted };
+    }
+  }
 
   const sent = await sendNoticeDraft(input.recipientEmail, input.subject, input.body);
   const messageId =
@@ -101,6 +160,9 @@ export async function dispatchEscalationFollowUp(input: {
     payloadHash: sha256(input.body),
   };
   dispatchedFollowUps.set(idempotencyKey, notice);
+  if (databasePersistenceEnabled()) {
+    await persistNotice(notice, input.level);
+  }
   await writeAuditLog({
     eventType: "NOTICE_SENT",
     entityType: "SubmittedUrl",

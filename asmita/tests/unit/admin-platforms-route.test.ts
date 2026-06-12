@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -9,7 +9,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 vi.mock("@/lib/auth/require-admin", () => ({
-  requireAdmin: vi.fn(),
+  requireAdminPermission: vi.fn(),
 }));
 
 vi.mock("@/lib/audit", () => ({
@@ -23,7 +23,7 @@ vi.mock("@/lib/csrf", async (orig) => {
 });
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { writeAuditLog } from "@/lib/audit";
 import { createCsrfPair } from "@/lib/csrf";
 import { POST } from "@/app/api/admin/platforms/[platformId]/route";
@@ -57,6 +57,7 @@ const okAdmin = {
     ageOver18: true,
     emailHash: "hash-admin",
     namespace: "admin" as const,
+    adminRole: "SUPER_ADMIN" as const,
   },
 };
 
@@ -82,7 +83,7 @@ describe("POST /api/admin/platforms/[platformId]", () => {
   });
 
   it("rejects unauthenticated admin", async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({ ok: false, status: 403, error: "admin_required" } as never);
+    vi.mocked(requireAdminPermission).mockResolvedValue({ ok: false, status: 403, error: "admin_required" } as never);
     const res = await POST(
       csrfPost("p-1", { sourceUrl: "https://x.test/", markVerified: true, fields: {} }),
       makeParams("p-1"),
@@ -91,7 +92,7 @@ describe("POST /api/admin/platforms/[platformId]", () => {
   });
 
   it("rejects malformed payload", async () => {
-    vi.mocked(requireAdmin).mockResolvedValue(okAdmin);
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
     const res = await POST(
       csrfPost("p-1", { markVerified: true, fields: {} }),
       makeParams("p-1"),
@@ -100,7 +101,7 @@ describe("POST /api/admin/platforms/[platformId]", () => {
   });
 
   it("returns 404 when platform not found", async () => {
-    vi.mocked(requireAdmin).mockResolvedValue(okAdmin);
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
     vi.mocked(db.platform.findUnique).mockResolvedValue(null);
     const res = await POST(
       csrfPost("missing", { sourceUrl: "https://x.test/", markVerified: true, fields: {} }),
@@ -110,7 +111,7 @@ describe("POST /api/admin/platforms/[platformId]", () => {
   });
 
   it("records only changed fields and writes audit + history", async () => {
-    vi.mocked(requireAdmin).mockResolvedValue(okAdmin);
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
     vi.mocked(db.platform.findUnique).mockResolvedValue({
       id: "p-1",
       name: "Example",
@@ -161,7 +162,7 @@ describe("POST /api/admin/platforms/[platformId]", () => {
   });
 
   it("returns no_changes when nothing differs and markVerified is false", async () => {
-    vi.mocked(requireAdmin).mockResolvedValue(okAdmin);
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
     vi.mocked(db.platform.findUnique).mockResolvedValue({
       id: "p-1",
       name: "Example",
@@ -187,7 +188,7 @@ describe("POST /api/admin/platforms/[platformId]", () => {
   });
 
   it("updates verification timestamp even when only re-verifying (no field changes)", async () => {
-    vi.mocked(requireAdmin).mockResolvedValue(okAdmin);
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
     vi.mocked(db.platform.findUnique).mockResolvedValue({
       id: "p-1",
       name: "Example",
