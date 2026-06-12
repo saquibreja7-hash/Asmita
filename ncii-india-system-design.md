@@ -268,7 +268,10 @@ tool for that scenario. These land incrementally; Hindi+English first (existing 
 
 ## 10. Rollout Gates (Phase 2 cannot go live until all pass)
 
-1. PDQ TS implementation validated bit-exact (≤2 hamming) against Meta reference vectors.
+1. PDQ TS implementation validated (≤2 hamming) against Meta reference vectors.
+   **STATUS: PASSED 2026-06-12** — hamming distance 1/256 on all 8 images of the
+   ThreatExchange dih regression corpus, quality scores exact
+   (`tests/unit/pdq-reference-vectors.test.ts`, runs in CI).
 2. `HASH_ADVISORY` template legally reviewed (`reviewedByLegal=true`).
 3. Platform directory: compliance contacts human-verified for every dispatch target
    (social media + porn-site abuse desks), with bounce monitoring live.

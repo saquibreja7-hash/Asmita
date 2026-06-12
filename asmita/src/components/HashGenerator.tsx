@@ -4,9 +4,6 @@ import { useRef, useState } from "react";
 import { computePdqHash, PDQ_CLIENT_VERSION } from "@/lib/pdq/pdq";
 import { csrfFetch } from "@/lib/client-csrf";
 
-// Largest edge fed into PDQ. Downscaling on-canvas keeps hashing under the
-// 3s budget on low-end devices without materially changing the hash.
-const MAX_DIMENSION = 512;
 const MAX_FILES = 10;
 
 type FileHashState = {
@@ -22,15 +19,18 @@ type SubmitState = "idle" | "submitting" | "submitted" | "error";
 async function hashImageFile(file: File): Promise<{ hash: string; quality: number }> {
   const bitmap = await createImageBitmap(file);
   try {
-    const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
-    const width = Math.max(2, Math.round(bitmap.width * scale));
-    const height = Math.max(2, Math.round(bitmap.height * scale));
+    // Draw at natural size with no canvas smoothing: pdq.ts applies the same
+    // nearest-neighbor 512x512 pre-resize as Meta's reference tool, so any
+    // canvas-side rescaling here would silently change hashes.
+    const width = bitmap.width;
+    const height = bitmap.height;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) throw new Error("canvas_unavailable");
-    ctx.drawImage(bitmap, 0, 0, width, height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(bitmap, 0, 0);
     const imageData = ctx.getImageData(0, 0, width, height);
     const result = computePdqHash(imageData);
     // Release pixel data eagerly; the image itself is never transmitted.
