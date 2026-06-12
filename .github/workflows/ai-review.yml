@@ -66,6 +66,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Debug Claude execution output
+        if: failure()
+        run: cat /home/runner/work/_temp/claude-execution-output.json || true
+
       - name: Enforce severity threshold
         run: |
           verdict=$(cat /tmp/review-verdict 2>/dev/null || echo "MISSING")
