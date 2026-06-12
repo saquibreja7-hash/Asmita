@@ -1,4 +1,4 @@
-# Email DNS Setup — meriasmita.org
+# Email DNS Setup â€” meriasmita.org
 
 Status: domain purchased (meriasmita.org), Google Workspace active for human
 mailboxes, Resend selected for application sending. DNS records below are
@@ -10,15 +10,15 @@ as Verified AND legal templates are approved.
 | Concern | Provider | Addresses |
 |---|---|---|
 | Human inboxes (receiving + replying) | Google Workspace | hello@, grievance@, partners@, security@, press@, dmarc@ |
-| Application sending (notices, OTPs, advisories) | Resend | notices@meriasmita.org, updates@meriasmita.org |
+| Application sending (notices, OTPs, advisories) | Resend | notice@meriasmita.org, update@meriasmita.org |
 
-Replies from platforms to `notices@meriasmita.org` are received by Google
+Replies from platforms to `notice@meriasmita.org` are received by Google
 Workspace (MX stays with Google), so create `notices@` and `updates@` as
-Workspace users or aliases — otherwise platform acknowledgements bounce.
+Workspace users or aliases â€” otherwise platform acknowledgements bounce.
 
 ## DNS records to add (at the domain registrar / DNS host)
 
-### 1. MX — receiving (Google Workspace)
+### 1. MX â€” receiving (Google Workspace)
 
 Set during Workspace signup; verify it is the current single-record form:
 
@@ -26,7 +26,7 @@ Set during Workspace signup; verify it is the current single-record form:
 @   MX   1   smtp.google.com.
 ```
 
-### 2. SPF — ONE record combining both senders
+### 2. SPF â€” ONE record combining both senders
 
 A domain must have exactly ONE SPF TXT record. Merge Google + Resend:
 
@@ -36,17 +36,17 @@ A domain must have exactly ONE SPF TXT record. Merge Google + Resend:
 
 Note: Resend sends via Amazon SES infrastructure; confirm the exact include
 Resend's dashboard shows for the domain (it may instead provide an SPF value
-on a subdomain like `send.meriasmita.org` — if so, add THAT record verbatim
+on a subdomain like `send.meriasmita.org` â€” if so, add THAT record verbatim
 and keep the root SPF as Google-only).
 
-### 3. DKIM — two signatures, different selectors (no conflict)
+### 3. DKIM â€” two signatures, different selectors (no conflict)
 
-- Google: Admin console → Apps → Gmail → Authenticate email → generate →
-  add the `google._domainkey` TXT record → click "Start authentication".
-- Resend: Dashboard → Domains → Add `meriasmita.org` → add the
+- Google: Admin console â†’ Apps â†’ Gmail â†’ Authenticate email â†’ generate â†’
+  add the `google._domainkey` TXT record â†’ click "Start authentication".
+- Resend: Dashboard â†’ Domains â†’ Add `meriasmita.org` â†’ add the
   `resend._domainkey` (or similar) TXT/CNAME records it lists.
 
-### 4. DMARC — one policy for the domain
+### 4. DMARC â€” one policy for the domain
 
 Start at quarantine, move to reject after 2 weeks of clean reports:
 
@@ -54,7 +54,7 @@ Start at quarantine, move to reject after 2 weeks of clean reports:
 _dmarc   TXT   "v=DMARC1; p=quarantine; rua=mailto:dmarc@meriasmita.org; fo=1"
 ```
 
-After 2 clean weeks: change `p=quarantine` → `p=reject`.
+After 2 clean weeks: change `p=quarantine` â†’ `p=reject`.
 
 ### 5. Resend webhook (delivery proof)
 
@@ -66,7 +66,7 @@ populate.
 
 - [ ] Resend dashboard shows meriasmita.org **Verified**
 - [ ] `notices@` and `updates@` exist in Google Workspace (user or alias)
-- [ ] Send a test from Resend to a Gmail account; check "show original" →
+- [ ] Send a test from Resend to a Gmail account; check "show original" â†’
       SPF=pass, DKIM=pass, DMARC=pass
 - [ ] Reply to that test email; confirm the reply lands in the Workspace inbox
 - [ ] DMARC reports arriving at dmarc@meriasmita.org

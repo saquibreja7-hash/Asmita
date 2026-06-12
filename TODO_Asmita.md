@@ -1,4 +1,4 @@
-﻿# Asmita — Project To-Do List
+# Asmita — Project To-Do List
 **Last Updated:** 2026-05-12
 **Current Phase:** Pre-Development
 
@@ -635,7 +635,7 @@ Implementation note: The master checklist now includes the Phase 1 product featu
 - [ ] `[HUMAN]` **0.A.2** Alternatively/additionally, contact SFLC.in at `contact@sflcindia.org` for the same. At least one of IFF or SFLC.in must commit to reviewing templates before launch.
 - [ ] `[HUMAN]` **0.A.3** Get a legal opinion on whether Asmita, as an independent platform/NGO, has a mandatory reporting obligation under POCSO Act 2012 when it receives a minor-related submission. Document the opinion in `docs/legal/pocso-reporting-obligation.md`.
 - [ ] `[HUMAN]` **0.A.4** Decide the legal entity type for Asmita: Section 8 Company, Trust, or Society. File the registration. The legal entity name must appear on all takedown notices.
-- [ ] `[HUMAN]` **0.A.5** Register a domain for Asmita, for example `meriasmita.org`. Set up `notices@meriasmita.org` email with DKIM, SPF, and DMARC records. Document the DNS setup in `docs/infra/email-dns.md`.
+- [ ] `[HUMAN]` **0.A.5** Register a domain for Asmita, for example `meriasmita.org`. Set up `notice@meriasmita.org` email with DKIM, SPF, and DMARC records. Document the DNS setup in `docs/infra/email-dns.md`.
 - [ ] `[HUMAN]` **0.A.6** Confirm DPDP Act 2023 implementation rules have been notified by the Government of India as of launch date. If notified, engage a lawyer to review data handling practices against the rules. Document in `docs/legal/dpdp-compliance.md`.
 - [ ] `[HUMAN]` **0.B.1** Research and verify the Grievance Officer contact for each Tier 1 platform. Source from the platform's own website. Record in `data/platforms-verified.csv` with `platform_name`, `domain_patterns`, `tier`, `grievance_email`, `grievance_officer_name`, `grievance_address`, `form_url`, `api_endpoint`, `notice_basis`, `last_verified_date`, `verified_by`, and `source_url`.
 - [ ] `[HUMAN]` **0.B.2** Research and verify Tier 2 platform contacts: Pornhub/Aylo, xVideos, xHamster, XNXX, RedTube, and SpankBang. Record them in the verified platforms CSV.

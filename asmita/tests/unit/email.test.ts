@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   createDeletionCompletedEmail,
   createDeletionRequestedEmail,
@@ -40,11 +40,11 @@ describe("createVictimConfirmationEmail", () => {
   it("separates notice sender and transactional sender configuration", () => {
     const originalNotice = process.env.NOTICE_EMAIL_FROM;
     const originalTransactional = process.env.TRANSACTIONAL_EMAIL_FROM;
-    process.env.NOTICE_EMAIL_FROM = "notices@meriasmita.org";
-    process.env.TRANSACTIONAL_EMAIL_FROM = "updates@meriasmita.org";
+    process.env.NOTICE_EMAIL_FROM = "notice@meriasmita.org";
+    process.env.TRANSACTIONAL_EMAIL_FROM = "update@meriasmita.org";
 
-    expect(getNoticeEmailFrom()).toBe("notices@meriasmita.org");
-    expect(getTransactionalEmailFrom()).toBe("updates@meriasmita.org");
+    expect(getNoticeEmailFrom()).toBe("notice@meriasmita.org");
+    expect(getTransactionalEmailFrom()).toBe("update@meriasmita.org");
 
     process.env.NOTICE_EMAIL_FROM = originalNotice;
     process.env.TRANSACTIONAL_EMAIL_FROM = originalTransactional;

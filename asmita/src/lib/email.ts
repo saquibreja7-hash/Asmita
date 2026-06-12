@@ -1,4 +1,4 @@
-﻿import { Resend } from "resend";
+import { Resend } from "resend";
 import { renderEmailHtml } from "@/lib/email-html";
 
 const PRIVACY_NOTE = "For your privacy, this email contains no submitted URLs or personal information.";
@@ -18,11 +18,11 @@ function getResend() {
 }
 
 export function getTransactionalEmailFrom() {
-  return process.env.TRANSACTIONAL_EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "updates@meriasmita.org";
+  return process.env.TRANSACTIONAL_EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "update@meriasmita.org";
 }
 
 export function getNoticeEmailFrom() {
-  return process.env.NOTICE_EMAIL_FROM || process.env.EMAIL_FROM || "notices@meriasmita.org";
+  return process.env.NOTICE_EMAIL_FROM || process.env.EMAIL_FROM || "notice@meriasmita.org";
 }
 
 export async function sendOtp(to: string, otp: string) {
