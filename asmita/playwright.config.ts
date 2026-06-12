@@ -3,8 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/e2e",
   webServer: {
-    command:
-      "powershell -NoProfile -Command \"$env:E2E_TEST_BYPASS_RATE_LIMIT='1'; npm run dev -- -p 3001\"",
+    command: "npm run dev -- -p 3001",
+    env: { E2E_TEST_BYPASS_RATE_LIMIT: "1" },
     url: "http://127.0.0.1:3001",
     reuseExistingServer: false,
     timeout: 120_000,

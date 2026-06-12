@@ -38,8 +38,15 @@ export function checkMemoryRateLimit(key: string, limit: number, windowMs: numbe
   return { allowed: true, remaining: limit - current.count };
 }
 
+function testBypassEnabled() {
+  return (
+    process.env.E2E_TEST_BYPASS_RATE_LIMIT === "1" &&
+    process.env.NODE_ENV !== "production"
+  );
+}
+
 export function checkRateLimit(key: string, limit: number, windowMs: number) {
-  if (process.env.E2E_TEST_BYPASS_RATE_LIMIT === "1") {
+  if (testBypassEnabled()) {
     return { allowed: true, remaining: limit };
   }
   if (shouldUseRedis()) {
@@ -49,7 +56,7 @@ export function checkRateLimit(key: string, limit: number, windowMs: number) {
 }
 
 export async function checkRateLimitAsync(key: string, limit: number, windowMs: number) {
-  if (process.env.E2E_TEST_BYPASS_RATE_LIMIT === "1") {
+  if (testBypassEnabled()) {
     return { allowed: true, remaining: limit };
   }
   if (shouldUseRedis()) {

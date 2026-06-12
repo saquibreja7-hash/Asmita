@@ -121,7 +121,7 @@ test("adult dashboard supports add URL, manual resolve, PDF export, and deletion
   const deletionResponse = page.waitForResponse((response) => response.url().endsWith("/api/account/delete"));
   await page.getByRole("button", { name: "Schedule deletion" }).click();
   expect((await deletionResponse).ok()).toBe(true);
-  await expect(page.getByText(/Deletion scheduled/)).toBeVisible();
+  await expect(page.getByText(/Deletion scheduled/).first()).toBeVisible();
 });
 
 test("direct visits to protected victim flow redirect to start without session", async ({ page }) => {
