@@ -73,6 +73,18 @@ enum TemplateType {
   ESCALATION_L1
   ESCALATION_L2
   FIR_PACKAGE
+  HASH_ADVISORY
+}
+
+enum HashAlgorithm {
+  PDQ
+}
+
+enum HashSubmissionStatus {
+  PENDING_REVIEW
+  APPROVED
+  DISPATCHED
+  REJECTED
 }
 
 enum AuditEventType {
@@ -100,6 +112,10 @@ enum AuditEventType {
   CASE_HARD_DELETED
   GO_DATABASE_CHANGED
   TEMPLATE_ACTIVATED
+  HASH_SUBMITTED
+  HASH_APPROVED
+  HASH_REJECTED
+  HASH_DISPATCHED
 }
 
 enum DeletionJobStatus {
@@ -146,11 +162,53 @@ model Case {
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
 
-  user          User           @relation("VictimCases", fields: [userId], references: [id])
-  ngoVerifier   User?          @relation("NgoVerifiedCases", fields: [ngoVerifierId], references: [id])
-  submittedUrls SubmittedUrl[]
-  feedback      Feedback[]
-  deletionJobs  DeletionJob[]
+  user            User             @relation("VictimCases", fields: [userId], references: [id])
+  ngoVerifier     User?            @relation("NgoVerifiedCases", fields: [ngoVerifierId], references: [id])
+  submittedUrls   SubmittedUrl[]
+  feedback        Feedback[]
+  deletionJobs    DeletionJob[]
+  hashSubmissions HashSubmission[]
+}
+
+// Phase 2: client-generated perceptual hashes. The hash is the ONLY artifact
+// the server ever receives — never image bytes. Encrypted at rest; digest
+// column exists solely for dedup/lookup.
+model HashSubmission {
+  id               String               @id @default(uuid())
+  caseId           String
+  algorithm        HashAlgorithm        @default(PDQ)
+  hashEncrypted    String
+  hashDigest       String
+  quality          Int
+  clientVersion    String?
+  status           HashSubmissionStatus @default(PENDING_REVIEW)
+  flaggedForReview Boolean              @default(false)
+  flagReason       String?
+  submittedAt      DateTime             @default(now())
+  reviewedAt       DateTime?
+  reviewedById     String?
+
+  case       Case           @relation(fields: [caseId], references: [id])
+  dispatches HashDispatch[]
+
+  @@unique([caseId, hashDigest])
+  @@index([status])
+  @@index([caseId])
+}
+
+model HashDispatch {
+  id               String   @id @default(uuid())
+  hashSubmissionId String
+  platformId       String
+  noticeId         String?
+  dispatchedAt     DateTime @default(now())
+
+  hashSubmission HashSubmission @relation(fields: [hashSubmissionId], references: [id])
+  platform       Platform       @relation(fields: [platformId], references: [id])
+  notice         Notice?        @relation(fields: [noticeId], references: [id])
+
+  @@unique([hashSubmissionId, platformId])
+  @@index([platformId])
 }
 
 model Platform {
@@ -174,6 +232,7 @@ model Platform {
   submittedUrls   SubmittedUrl[]
   noticeTemplates NoticeTemplate[]
   goHistory       PlatformGoHistory[]
+  hashDispatches  HashDispatch[]
 }
 
 model PlatformGoHistory {
@@ -244,9 +303,10 @@ model Notice {
   escalationLevel    Int           @default(0)
   createdAt          DateTime      @default(now())
 
-  submittedUrl SubmittedUrl    @relation(fields: [urlId], references: [id])
-  template     NoticeTemplate? @relation(fields: [templateId], references: [id])
-  escalations  Escalation[]
+  submittedUrl   SubmittedUrl    @relation(fields: [urlId], references: [id])
+  template       NoticeTemplate? @relation(fields: [templateId], references: [id])
+  escalations    Escalation[]
+  hashDispatches HashDispatch[]
 }
 
 model EmailDeliveryProof {

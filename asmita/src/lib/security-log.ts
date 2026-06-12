@@ -8,7 +8,8 @@ export type SecurityEvent = {
     | "admin_denied"
     | "email_failed"
     | "minor_route_blocked"
-    | "flagged_submission";
+    | "flagged_submission"
+    | "media_payload_rejected";
   actorHash?: string;
   route?: string;
   reason?: string;

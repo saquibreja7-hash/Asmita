@@ -21,11 +21,12 @@ const sampleVariables = {
 };
 
 describe("notice template seeds", () => {
-  it("ships exactly three templates (IT_RULES_2021, DMCA, IT_RULES_AND_DMCA)", () => {
+  it("ships exactly four templates (IT_RULES_2021, DMCA, IT_RULES_AND_DMCA, HASH_ADVISORY)", () => {
     expect(templateSeeds.map((t) => t.templateType)).toEqual([
       "IT_RULES_2021",
       "DMCA",
       "IT_RULES_AND_DMCA",
+      "HASH_ADVISORY",
     ]);
   });
 
@@ -44,7 +45,9 @@ describe("notice template seeds", () => {
         expect(() => assertNoticeBodySafe(rendered)).not.toThrow();
         expect(rendered).toContain(sampleVariables.caseReference);
         expect(rendered).toContain(sampleVariables.platformName);
-        expect(rendered).toContain(sampleVariables.url);
+        if (template.bodyTemplate.includes("{{url}}")) {
+          expect(rendered).toContain(sampleVariables.url);
+        }
       });
 
       it("ships a non-empty legalCitations array", () => {
@@ -87,6 +90,18 @@ describe("notice template seeds", () => {
     expect(rendered).toContain("2021");
     expect(rendered).toContain("2026");
     expect(it!.legalCitations.some((c) => c.includes("Amendment Rules, 2026"))).toBe(true);
+  });
+
+  it("HASH_ADVISORY template explains hashes, requests blocking, and never references a URL", () => {
+    const advisory = templateSeeds.find((t) => t.templateType === "HASH_ADVISORY");
+    expect(advisory).toBeDefined();
+    const rendered = renderNoticeTemplate(advisory!.bodyTemplate, sampleVariables);
+    expect(rendered).toContain("PDQ");
+    expect(rendered.toLowerCase()).toContain("perceptual hash");
+    expect(rendered.toLowerCase()).toContain("cannot be reversed");
+    expect(rendered.toLowerCase()).toContain("annex");
+    expect(advisory!.bodyTemplate).not.toContain("{{url}}");
+    expect(advisory!.legalCitations.some((c) => c.includes("Rule 3(1)(b)"))).toBe(true);
   });
 
   it("DMCA template cites both DMCA and the TAKE IT DOWN Act", () => {

@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 const adminLinks: Array<[string, string]> = [
   ["/admin/cases", "Cases"],
   ["/admin/queue", "Flagged"],
+  ["/admin/hashes", "Hash queue"],
   ["/admin/platforms", "Platforms"],
   ["/admin/templates", "Templates"],
   ["/admin/metrics", "Response rates"],

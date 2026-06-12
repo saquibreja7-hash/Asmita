@@ -122,3 +122,54 @@ export function generateNoticeDraft(input: NoticeDraftInput) {
 export function verifyNoticePayload(body: string, expectedHash: string) {
   return sha256(body) === expectedHash;
 }
+
+export type HashAnnexInput = {
+  algorithm: "PDQ";
+  hashes: Array<{ value: string; quality: number }>;
+  clientVersion?: string | null;
+};
+
+const HASH_HEX_PATTERN = /^[0-9a-f]{64}$/i;
+
+/**
+ * Renders the perceptual-hash annex appended to hash advisories and to URL
+ * notices on cases with approved hashes. Contains only hashes and matching
+ * guidance — never victim PII, never media. Callers must only pass
+ * APPROVED hash submissions.
+ */
+export function buildHashAnnex(input: HashAnnexInput) {
+  if (input.hashes.length === 0) {
+    throw new Error("hash_annex_empty");
+  }
+  const lines = input.hashes.map((entry, index) => {
+    if (!HASH_HEX_PATTERN.test(entry.value)) {
+      throw new Error("hash_annex_invalid_hash");
+    }
+    return `  ${index + 1}. ${entry.value.toLowerCase()} (quality: ${entry.quality}/100)`;
+  });
+  const annex = [
+    "--- PERCEPTUAL HASH ANNEX ---",
+    "",
+    `Algorithm: ${input.algorithm} (Meta ThreatExchange open-source perceptual hash)`,
+    input.clientVersion ? `Generator version: ${input.clientVersion}` : null,
+    "",
+    "The following perceptual hashes identify the reported non-consensual",
+    "intimate content. The hashes were generated on the complainant's own",
+    "device; the underlying media was never transmitted to or stored by us.",
+    "",
+    `Hash values (${input.algorithm}, 256-bit hex):`,
+    ...lines,
+    "",
+    "Matching guidance: compare against uploaded media using PDQ with a",
+    "Hamming distance threshold of 31 or lower for a recommended match.",
+    "We request that matching content be blocked from upload and removed",
+    "where already published, per intermediary due-diligence obligations.",
+    "",
+    "--- END HASH ANNEX ---",
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+
+  assertNoticeBodySafe(annex);
+  return annex;
+}
