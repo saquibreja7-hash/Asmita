@@ -1,4 +1,6 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { generateCaseReference } from "@/lib/case-reference";
 import { encryptField, decryptField } from "@/lib/encryption";
 import { hashEmail } from "@/lib/hash";
 import { parseSubmittedUrl } from "@/lib/url-parser";
@@ -94,13 +96,24 @@ export async function isUserDeactivated(userId: string): Promise<boolean> {
 }
 
 export async function createCase(userId: string): Promise<{ id: string; referenceNumber: string }> {
-  const year = new Date().getFullYear();
-  const count = await db.case.count();
-  const referenceNumber = `ASMITA-${year}-${String(count + 1).padStart(5, "0")}`;
-  const dbCase = await db.case.create({
-    data: { referenceNumber, userId, status: "OPEN" },
-    select: { id: true, referenceNumber: true },
-  });
+  let dbCase: { id: string; referenceNumber: string } | null = null;
+  for (let attempt = 0; attempt < 5 && !dbCase; attempt += 1) {
+    const referenceNumber = generateCaseReference();
+    try {
+      dbCase = await db.case.create({
+        data: { referenceNumber, userId, status: "OPEN" },
+        select: { id: true, referenceNumber: true },
+      });
+    } catch (error) {
+      // Unique-constraint collision on referenceNumber: regenerate.
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) {
+        throw error;
+      }
+    }
+  }
+  if (!dbCase) {
+    throw new Error("case_reference_collision_exhausted");
+  }
   await writeAuditLog({ eventType: "CASE_CREATED", entityType: "Case", entityId: dbCase.id, actorId: userId });
   return dbCase;
 }

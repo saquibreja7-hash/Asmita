@@ -1,4 +1,7 @@
 ﻿import { Resend } from "resend";
+import { renderEmailHtml } from "@/lib/email-html";
+
+const PRIVACY_NOTE = "For your privacy, this email contains no submitted URLs or personal information.";
 
 let resend: Resend | null = null;
 
@@ -31,6 +34,13 @@ export async function sendOtp(to: string, otp: string) {
     to,
     subject: "Your Asmita verification code",
     text: `Your Asmita verification code is ${otp}. It expires in 10 minutes.`,
+    html: renderEmailHtml({
+      title: "Your verification code",
+      paragraphs: ["Enter this code to continue. It expires in 10 minutes."],
+      highlight: otp,
+      highlightLabel: "Verification code",
+      footerNotes: ["If you did not request this code, you can safely ignore this email."],
+    }),
   }));
 }
 
@@ -53,7 +63,18 @@ export function createVictimConfirmationEmail(referenceNumber: string, dashboard
     `You can track progress here: ${dashboardUrl}`,
     "For privacy, this email does not include any submitted URLs.",
   ].join("\n");
-  return { subject, text };
+  const html = renderEmailHtml({
+    title: "Your case has been created.",
+    paragraphs: [
+      "We have received your submission and your case is now active. You can check its progress at any time from your dashboard.",
+      "Keep your case reference safe — you may need it if you speak to a helpline or the police.",
+    ],
+    highlight: referenceNumber,
+    highlightLabel: "Case reference",
+    cta: { label: "Open your dashboard", url: dashboardUrl },
+    footerNotes: [PRIVACY_NOTE],
+  });
+  return { subject, text, html };
 }
 
 export function createNoticeSentEmail(referenceNumber: string, dashboardUrl: string) {
@@ -104,6 +125,17 @@ export function createL2VictimNotificationEmail(
       "",
       "For privacy, this email contains no submitted URLs or personal information.",
     ].join("\n"),
+    html: renderEmailHtml({
+      title: "An update on your case.",
+      paragraphs: [
+        "We sent a notice to the platform 48 hours ago and have not yet received a response.",
+        "Our team is now reviewing your case. If the platform still has not acted within five more days, we will help prepare a legal support package you can take to the police.",
+      ],
+      highlight: referenceNumber,
+      highlightLabel: "Case reference",
+      cta: { label: "Open your dashboard", url: dashboardUrl },
+      footerNotes: [PRIVACY_NOTE],
+    }),
   };
 }
 
@@ -113,7 +145,7 @@ export async function sendL2VictimNotification(
   dashboardUrl: string,
   locale: Locale = "en",
 ) {
-  const { subject, text } = createL2VictimNotificationEmail(referenceNumber, dashboardUrl, locale);
+  const { subject, text, html } = createL2VictimNotificationEmail(referenceNumber, dashboardUrl, locale);
   if (!process.env.RESEND_API_KEY) {
     return { id: `dev-l2-${referenceNumber}` };
   }
@@ -122,6 +154,7 @@ export async function sendL2VictimNotification(
     to,
     subject,
     text,
+    html,
   }));
 }
 
@@ -147,6 +180,18 @@ export function createL3FirReadyEmail(
       "",
       "The package summarizes case activity and does not include any intimate images or videos. For privacy, this email contains no submitted URLs.",
     ].join("\n"),
+    html: renderEmailHtml({
+      title: "Your legal support package is ready.",
+      paragraphs: [
+        "Seven days have passed since we sent the takedown notice without resolution.",
+        "Your legal support package is now ready. You can take this PDF to the police when filing a First Information Report (FIR), or to a lawyer.",
+        "The package summarizes case activity and does not include any intimate images or videos.",
+      ],
+      highlight: referenceNumber,
+      highlightLabel: "Case reference",
+      cta: { label: "Download the PDF", url: pdfDownloadUrl },
+      footerNotes: [`Dashboard: ${dashboardUrl}`, PRIVACY_NOTE],
+    }),
   };
 }
 
@@ -157,7 +202,7 @@ export async function sendL3FirReadyNotification(
   pdfDownloadUrl: string,
   locale: Locale = "en",
 ) {
-  const { subject, text } = createL3FirReadyEmail(referenceNumber, dashboardUrl, pdfDownloadUrl, locale);
+  const { subject, text, html } = createL3FirReadyEmail(referenceNumber, dashboardUrl, pdfDownloadUrl, locale);
   if (!process.env.RESEND_API_KEY) {
     return { id: `dev-l3-${referenceNumber}` };
   }
@@ -166,6 +211,7 @@ export async function sendL3FirReadyNotification(
     to,
     subject,
     text,
+    html,
   }));
 }
 
@@ -202,7 +248,7 @@ export function createDeletionCompletedEmail(referenceNumber: string) {
 }
 
 export async function sendVictimConfirmation(to: string, referenceNumber: string, dashboardUrl: string) {
-  const { subject, text } = createVictimConfirmationEmail(referenceNumber, dashboardUrl);
+  const { subject, text, html } = createVictimConfirmationEmail(referenceNumber, dashboardUrl);
   if (!process.env.RESEND_API_KEY) {
     return { id: `dev-confirmation-${referenceNumber}` };
   }
@@ -211,6 +257,7 @@ export async function sendVictimConfirmation(to: string, referenceNumber: string
     to,
     subject,
     text,
+    html,
   }));
 }
 

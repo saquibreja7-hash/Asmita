@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { generateCaseReference } from "@/lib/case-reference";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { hashEmail, sha256 } from "@/lib/hash";
 import { parseSubmittedUrl } from "@/lib/url-parser";
@@ -51,9 +52,7 @@ export const users = (storeGlobals.__asmitaStore.users ??= new Map<
 >());
 
 export function createReferenceNumber() {
-  const year = new Date().getFullYear();
-  const count = String(cases.size + 1).padStart(5, "0");
-  return `ASMITA-${year}-${count}`;
+  return generateCaseReference();
 }
 
 export async function createCase(userId: string) {
