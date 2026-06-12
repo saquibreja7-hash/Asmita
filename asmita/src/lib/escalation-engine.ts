@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+﻿import type { Prisma } from "@prisma/client";
 import { processEscalationJob } from "@/jobs/escalation-worker";
 import type { NoticeJob } from "@/jobs/queue";
 import { db } from "@/lib/db";
@@ -297,7 +297,7 @@ async function handleL2VictimNotification(notice: CandidateNotice): Promise<Hand
   }
 
   const locale: Locale = user.preferredLocale === "hi" ? "hi" : "en";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://asmita.in";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://meriasmita.org";
   const dashboardUrl = `${appUrl.replace(/\/+$/, "")}/case/${notice.submittedUrl.case.id}`;
 
   await processEscalationJob(
@@ -342,7 +342,7 @@ async function handleL3FirReady(notice: CandidateNotice): Promise<HandlerResult>
   }
 
   const locale: Locale = user.preferredLocale === "hi" ? "hi" : "en";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://asmita.in";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://meriasmita.org";
   const cleanUrl = appUrl.replace(/\/+$/, "");
   const caseId = notice.submittedUrl.case.id;
   const dashboardUrl = `${cleanUrl}/case/${caseId}`;

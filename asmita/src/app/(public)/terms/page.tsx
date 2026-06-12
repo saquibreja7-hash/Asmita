@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 
 type Tocitem = { num: string; id: string; title: string };
@@ -450,10 +450,10 @@ export default function TermsPage() {
             For questions about these Terms, write to the Grievance
             Officer at{" "}
             <a
-              href="mailto:grievance@asmita.in"
+              href="mailto:grievance@meriasmita.org"
               className="link-underline text-[var(--foreground)]"
             >
-              grievance@asmita.in
+              grievance@meriasmita.org
             </a>{" "}
             or use the{" "}
             <Link

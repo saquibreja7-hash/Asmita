@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 
 type Section = {
@@ -604,10 +604,10 @@ export default function PrivacyPage() {
           <p>
             For now, please write to{" "}
             <a
-              href="mailto:grievance@asmita.in"
+              href="mailto:grievance@meriasmita.org"
               className="link-underline text-[var(--foreground)]"
             >
-              grievance@asmita.in
+              grievance@meriasmita.org
             </a>{" "}
             with the subject line &ldquo;Privacy grievance&rdquo;, or
             use the{" "}

@@ -1,4 +1,4 @@
-# Asmita Phase 2: Client-Side Hash Generation and Encrypted Hash Dispatch
+﻿# Asmita Phase 2: Client-Side Hash Generation and Encrypted Hash Dispatch
 ## System Design Document v2.0 (supersedes v1.0 "Surakshit")
 
 > **What changed from v1.0:** v1.0 was written as a standalone greenfield app with anonymous
@@ -115,7 +115,7 @@ the tool never touches content.
 |  Hash values AES-256-GCM encrypted at rest.                           |
 +----------------------------------------------------------------------+
 
-Outbound: Resend transactional email (DKIM/SPF/DMARC on asmita.in, TLS)
+Outbound: Resend transactional email (DKIM/SPF/DMARC on meriasmita.org, TLS)
           -> verified Platform directory contacts (grievance/compliance
              officers at social media platforms, porn sites, hosts)
 ```

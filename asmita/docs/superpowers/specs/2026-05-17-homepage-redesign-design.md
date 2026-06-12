@@ -1,4 +1,4 @@
-# Homepage Redesign — Design Spec
+﻿# Homepage Redesign — Design Spec
 
 **Date:** 2026-05-17
 **Author:** Drafted via Claude Code, using the `brainstorming` skill (`superpowers@claude-plugins-official`) workflow.
@@ -241,7 +241,7 @@ Beyond what section 5 listed for the homepage, no further `globals.css` changes 
 ### 14.5 Outstanding (post-spec)
 
 - Hindi marketing-copy variants on the redesigned pages.
-- Production legal-entity name + Grievance Officer email replacing the `grievance@asmita.in` placeholder used in Privacy and Contact.
+- Production legal-entity name + Grievance Officer email replacing the `grievance@meriasmita.org` placeholder used in Privacy and Contact.
 - Design-system pass on the signed-in surface (`(auth)`, `(victim)`, `(admin)`).
 - WCAG 2.2 AA accessibility audit on the redesigned public surface.
 
@@ -251,7 +251,7 @@ Beyond what section 5 listed for the homepage, no further `globals.css` changes 
 |---|---|---|
 | App hosting | **Vercel**, Mumbai region (`bom1`) | `vercel.json` already pins region. Long-lived workers (BullMQ) need to migrate to Vercel Cron + DB-backed schedule before launch — see `docs/infra/vercel-azure-deploy.md` §5. |
 | Database | **Azure Database for PostgreSQL Flexible Server**, free tier, Central India | Connection string requires `?sslmode=require`. `.env.example` updated with Azure shape. Firewall must be narrowed from "all Azure services" to Vercel egress IP ranges before launch. |
-| Email | **Resend** (kept) | No code change. Production needs verified `asmita.in` domain + SPF/DKIM/DMARC. DMARC ramp `p=quarantine` → `p=reject` after 2 weeks of clean send. |
+| Email | **Resend** (kept) | No code change. Production needs verified `meriasmita.org` domain + SPF/DKIM/DMARC. DMARC ramp `p=quarantine` → `p=reject` after 2 weeks of clean send. |
 | Identity verification | **Email OTP only**. No Aadhaar, no PAN, no KYC documents | UI rewritten: `/identity` page now explains email is the sole identity. Privacy section 03 drops the "Identity data (optional)" entry. Section 04 reframes "Aadhaar, PAN, or any government ID" as a positive non-collection commitment. Section 05 drops the Aadhaar purpose row. `/delete-account` deletion list drops the Aadhaar bundle row. `notice-generator.ts` keeps `aadhaar` in its `forbiddenNoticeVariables` set as defence in depth. |
 | Hindi UI strings | **AI-drafted**, flagged for native review | `src/i18n/hi.json` has 100% key parity with `en.json`. `hi-review-status.json` records the audit date and a scope note: the redesigned marketing pages render English-primary copy directly in JSX and do not currently pull from this dictionary. Native-speaker review and marketing-copy translation are tracked as separate items. |
 | Devanagari font on Vercel | `outputFileTracingIncludes` added to `next.config.ts` for the case-export routes | Otherwise Next's static file tracing would not bundle the woff into the serverless function output, and the FIR PDF generator would fail at runtime on Vercel. |

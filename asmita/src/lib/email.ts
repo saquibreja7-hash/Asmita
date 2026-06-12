@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+﻿import { Resend } from "resend";
 
 let resend: Resend | null = null;
 
@@ -15,11 +15,11 @@ function getResend() {
 }
 
 export function getTransactionalEmailFrom() {
-  return process.env.TRANSACTIONAL_EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "updates@asmita.in";
+  return process.env.TRANSACTIONAL_EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "updates@meriasmita.org";
 }
 
 export function getNoticeEmailFrom() {
-  return process.env.NOTICE_EMAIL_FROM || process.env.EMAIL_FROM || "notices@asmita.in";
+  return process.env.NOTICE_EMAIL_FROM || process.env.EMAIL_FROM || "notices@meriasmita.org";
 }
 
 export async function sendOtp(to: string, otp: string) {

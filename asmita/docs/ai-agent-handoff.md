@@ -1,4 +1,4 @@
-# Asmita — Handoff for the next AI agent
+﻿# Asmita — Handoff for the next AI agent
 
 **Last refreshed:** 2026-05-17
 **Repo HEAD when written:** `b913414`
@@ -99,7 +99,7 @@ Verify these in `package.json` before assuming. Do NOT upgrade major versions wi
 | Language | TypeScript 5.x | `strict: true`. Zero `any` tolerated. |
 | Database | PostgreSQL on Supabase | Schema lives in `prisma/schema.prisma`. Direct connection (port 5432) — pooled connection (port 6543 / pgbouncer) is a future hardening. |
 | ORM | Prisma **7.8.0** with `@prisma/adapter-pg` | The adapter pattern means `db.ts` injects the pg adapter into `PrismaClient`. |
-| Email | Resend (`resend` npm) | Domain `asmita.in` is NOT yet verified — sends fail-soft in dev (return `dev-*` ids) and will fail-loud in production until DNS is set up. |
+| Email | Resend (`resend` npm) | Domain `meriasmita.org` is NOT yet verified — sends fail-soft in dev (return `dev-*` ids) and will fail-loud in production until DNS is set up. |
 | Job queue | BullMQ + ioredis | **Not actually used on Vercel.** Code is wired but `QUEUE_DRIVER=memory` in dev and the real production path is the daily Vercel Cron sweeping the DB. |
 | Validation | Zod | Every API input schema is Zod. |
 | Auth | Custom OTP via email + JWT (`jose`) | No passwords. Sessions are HS256 JWTs with 4h (victim) / 8h (admin) expiry. |
@@ -131,7 +131,7 @@ Verify these in `package.json` before assuming. Do NOT upgrade major versions wi
 | Item | Status | Owner |
 |---|---|---|
 | Vercel env vars (`CRON_SECRET`, `DATABASE_URL`, `ENCRYPTION_KEY`, `JWT_SECRET`, `CSRF_SECRET`) | Not set in Vercel dashboard — but values exist in local `.env.local`. Without these, the deployed app returns 503 on every authenticated route. | User (manual). I have walked them through it; not yet done. |
-| Domain `asmita.in` | Not purchased. | User. |
+| Domain `meriasmita.org` | Not purchased. | User. |
 | Resend DNS verification (SPF, DKIM, DMARC) | Blocked on domain purchase. | User. |
 | Legal sign-off on templates A/B/C | All three seeded with `reviewedByLegal=false`. The escalation engine refuses to send until this flips. | IFF or SFLC.in (external). |
 | Real GO contact verification | All Tier 1 platforms have `grievanceEmail=null`. Notice routing falls back to Tier 3 form handoff for everything. | A human researcher. |

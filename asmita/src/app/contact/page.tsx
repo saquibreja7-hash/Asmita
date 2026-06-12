@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 
 type Channel = {
@@ -13,31 +13,31 @@ const channels: Channel[] = [
     num: "01",
     title: "General questions",
     body: "If you are unsure where to write, write here. We read every message and route it to the right teammate. Reply usually within 48 hours, in English or Hindi.",
-    email: "hello@asmita.in",
+    email: "hello@meriasmita.org",
   },
   {
     num: "02",
     title: "Privacy grievance",
     body: "For anything covered by the privacy policy - access, correction, deletion, or a complaint about how we have handled your data. The named Grievance Officer reads every message at this address.",
-    email: "grievance@asmita.in",
+    email: "grievance@meriasmita.org",
   },
   {
     num: "03",
     title: "NGO partnership and vouching",
     body: "For survivor-support organisations that want to vouch for a survivor under the NGO vouching path, or to coordinate template review and case escalations.",
-    email: "partners@asmita.in",
+    email: "partners@meriasmita.org",
   },
   {
     num: "04",
     title: "Security disclosure",
     body: "For vulnerability reports, abuse signals, or anything that needs to reach the engineering and security team quickly. We acknowledge within 72 hours. PGP key is published on request.",
-    email: "security@asmita.in",
+    email: "security@meriasmita.org",
   },
   {
     num: "05",
     title: "Press and research",
     body: "For journalists, academic researchers, and policy organisations. We share aggregate, anonymised data only - never identifying details of any survivor or case.",
-    email: "press@asmita.in",
+    email: "press@meriasmita.org",
   },
 ];
 

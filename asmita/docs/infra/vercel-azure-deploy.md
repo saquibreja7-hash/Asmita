@@ -1,4 +1,4 @@
-# Vercel + Azure Deployment Guide
+﻿# Vercel + Azure Deployment Guide
 
 **Status:** Pre-launch checklist. Each step needs human action — none of this can be done from inside the codebase.
 
@@ -46,7 +46,7 @@ postgresql://<admin>@<server-name>:<password>@<server-name>.postgres.database.az
    - `RESEND_FROM_EMAIL`, `EMAIL_FROM`, `NOTICE_EMAIL_FROM`, `TRANSACTIONAL_EMAIL_FROM` — final addresses on the verified domain.
    - `REDIS_URL` — see step 4.
    - `QUEUE_DRIVER`, `RATE_LIMIT_DRIVER`, `EMAIL_PROOF_PERSISTENCE`, `AUDIT_LOG_PERSISTENCE`, `SECURITY_LOG_PERSISTENCE` — set each to `redis` (or your chosen persistence backend) in production. Leave at `memory` only in preview.
-   - `NEXT_PUBLIC_APP_URL=https://asmita.in` (or the final domain).
+   - `NEXT_PUBLIC_APP_URL=https://meriasmita.org` (or the final domain).
    - `ADMIN_EMAILS`, `ADMIN_OTP_EMAIL` — actual admin addresses.
    - `ADMIN_TOTP_SECRET` — base32 string, paired with the authenticator app for each admin.
    - `CRON_SECRET` — `openssl rand -hex 32`. Used by `/api/cron/*` routes to authenticate Vercel Cron.
@@ -56,10 +56,10 @@ postgresql://<admin>@<server-name>:<password>@<server-name>.postgres.database.az
 ## 3. Resend: domain + API key
 
 1. Sign in to Resend.
-2. **Add Domain** → `asmita.in` (or the final domain).
+2. **Add Domain** → `meriasmita.org` (or the final domain).
 3. Resend issues four DNS records: SPF, DKIM, DKIM, MX-or-Return-Path. Add all four to the domain registrar.
 4. After the domain shows **Verified**, also add a DMARC record manually:
-   - Initial: `v=DMARC1; p=quarantine; rua=mailto:dmarc@asmita.in`
+   - Initial: `v=DMARC1; p=quarantine; rua=mailto:dmarc@meriasmita.org`
    - After 2 weeks of clean sending, upgrade to `p=reject`.
 5. **API Keys** → create a key with `Sending Access`. Paste into Vercel as `RESEND_API_KEY`.
 6. IP warm-up: send <50 mails/day for the first week, doubling per week until normal volume. Resend does some of this automatically; monitor `Reputation` in the dashboard.

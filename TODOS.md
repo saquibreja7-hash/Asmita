@@ -1,4 +1,4 @@
-# Asmita — Master Implementation TODO List
+﻿# Asmita — Master Implementation TODO List
 **For AI Agents & Human Collaborators**
 **Version:** 1.0 | **Date:** 2026-05-12 | **Linked PRD:** `PRD_Asmita.md`
 
@@ -44,7 +44,7 @@ Implementer must verify these are current stable releases at the time they begin
 | Language | TypeScript 5.x | `strict: true` in tsconfig |
 | Database | PostgreSQL 16+ | |
 | ORM | Prisma (latest stable) | |
-| Email | Resend | DKIM/SPF configured on notices@asmita.in |
+| Email | Resend | DKIM/SPF configured on notices@meriasmita.org |
 | Job Queue | BullMQ + Redis 7+ | For escalation scheduler |
 | Validation | Zod | All API inputs validated with Zod schemas |
 | Auth | Custom OTP via email | No passwords; JWT via `jose` |
@@ -113,7 +113,7 @@ asmita/
 - [ ] `[HUMAN]` **0.A.2** Alternatively/additionally, contact SFLC.in at `contact@sflcindia.org` for the same. At least one of IFF or SFLC.in must commit to reviewing templates before launch.
 - [ ] `[HUMAN]` **0.A.3** Get a legal opinion on whether Asmita, as an independent platform/NGO, has a mandatory reporting obligation under POCSO Act 2012 when it receives a minor-related submission. Document the opinion in `docs/legal/pocso-reporting-obligation.md`.
 - [ ] `[HUMAN]` **0.A.4** Decide the legal entity type for Asmita: Section 8 Company, Trust, or Society. File the registration. The legal entity name must appear on all takedown notices.
-- [ ] `[HUMAN]` **0.A.5** Register a domain for Asmita (e.g., `asmita.in`). Set up `notices@asmita.in` email with DKIM, SPF, and DMARC records. Document the DNS setup in `docs/infra/email-dns.md`.
+- [ ] `[HUMAN]` **0.A.5** Register a domain for Asmita (e.g., `meriasmita.org`). Set up `notices@meriasmita.org` email with DKIM, SPF, and DMARC records. Document the DNS setup in `docs/infra/email-dns.md`.
 - [ ] `[HUMAN]` **0.A.6** Confirm DPDP Act 2023 implementation rules have been notified by the Government of India as of launch date. If notified, engage a lawyer to review data handling practices against the rules. Document in `docs/legal/dpdp-compliance.md`.
 
 ### 0.B Platform Database Research
@@ -166,9 +166,9 @@ asmita/
   ENCRYPTION_KEY=                        # 32-byte AES key, hex-encoded
   JWT_SECRET=                            # 32+ char random string
   RESEND_API_KEY=
-  RESEND_FROM_EMAIL=notices@asmita.in
+  RESEND_FROM_EMAIL=notices@meriasmita.org
   REDIS_URL=redis://...
-  NEXT_PUBLIC_APP_URL=https://asmita.in
+  NEXT_PUBLIC_APP_URL=https://meriasmita.org
   ADMIN_OTP_EMAIL=                       # admin login email
   ```
   Done when: `.env.example` exists; `.gitignore` includes `.env`, `.env.local`, `.env.production`.
@@ -814,13 +814,13 @@ asmita/
 
   A signed digital declaration of non-consent is on record (Case Reference: {{caseReference}}).
 
-  Please confirm removal and write to: notices@asmita.in
+  Please confirm removal and write to: notices@meriasmita.org
 
   This notice was sent on: {{sentAt}}
   Case Reference: {{caseReference}}
 
   Asmita — Digital Dignity Platform ({{legalEntityName}})
-  notices@asmita.in | https://asmita.in
+  notices@meriasmita.org | https://meriasmita.org
   ```
 
   **Template 2 — DMCA** (for international/US-hosted platforms):
@@ -847,7 +847,7 @@ asmita/
   Date: {{sentAt}}
 
   Asmita — Digital Dignity Platform ({{legalEntityName}})
-  notices@asmita.in | https://asmita.in
+  notices@meriasmita.org | https://meriasmita.org
   ```
 
   **Template 3 — ESCALATION_L1** (24-hour follow-up):
@@ -863,7 +863,7 @@ asmita/
   This is our first escalation notice. Please act immediately.
 
   Asmita — Digital Dignity Platform
-  notices@asmita.in
+  notices@meriasmita.org
   ```
 
   **Template 4 — ESCALATION_L2** (48-hour):
@@ -1019,7 +1019,7 @@ asmita/
   //   Section 4: Escalation history — level, date, action
   //   Section 5: Applicable laws (verbatim from PRD Section 4)
   //   Section 6: Guidance text — "Take this document to your nearest police station and request an FIR under [sections]"
-  //   Section 7: Contact for police verification — notices@asmita.in
+  //   Section 7: Contact for police verification — notices@meriasmita.org
   ```
   Done when: Integration test generates a PDF for a mock case with 2 URLs and 3 notices; PDF buffer is non-empty; PDF can be opened.
 
@@ -1277,7 +1277,7 @@ asmita/
   - Section: Your privacy (no images stored, no content viewed, hash of your dignity not a copy)
   - Section: Supported by / partner NGOs
   - Section: FAQ
-  - Footer: Legal entity name, `notices@asmita.in`, links to Privacy Policy, Terms, Resources
+  - Footer: Legal entity name, `notices@meriasmita.org`, links to Privacy Policy, Terms, Resources
   Tone: Calm, empowering, not clinical. Hindi + English toggle.
 
 - [ ] `[AI]` **1.N.2** Create `src/app/(public)/privacy/page.tsx` — privacy policy:
@@ -1300,13 +1300,13 @@ asmita/
 - [ ] `[HUMAN]` **1.O.2** Set up Supabase (or Railway) PostgreSQL instance in India region. Run `npx prisma db push` on production database. Confirm connection from Vercel.
 
 - [ ] `[HUMAN]` **1.O.3** Configure Resend:
-  - Add `asmita.in` domain to Resend
+  - Add `meriasmita.org` domain to Resend
   - Set up DKIM, SPF, DMARC DNS records
   - Test DKIM signature on a sent email using `mail-tester.com`
   - Target: mail-tester score ≥ 9/10 before launch (high score = notices don't land in spam)
 
 - [ ] `[HUMAN]` **1.O.4** Set up uptime monitoring (BetterUptime, UptimeRobot, or Freshping):
-  - Monitor `https://asmita.in/api/health` endpoint
+  - Monitor `https://meriasmita.org/api/health` endpoint
   - Alert to admin email if downtime > 5 minutes
 
 - [ ] `[AI]` **1.O.5** Create `GET /api/health` endpoint:
@@ -1411,18 +1411,18 @@ JWT_SECRET=<random-64-char-string>
 
 # Email (Resend)
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=notices@asmita.in
-RESEND_VICTIM_FROM_EMAIL=support@asmita.in
+RESEND_FROM_EMAIL=notices@meriasmita.org
+RESEND_VICTIM_FROM_EMAIL=support@meriasmita.org
 
 # Redis (BullMQ)
 REDIS_URL=redis://localhost:6379
 
 # App
-NEXT_PUBLIC_APP_URL=https://asmita.in
+NEXT_PUBLIC_APP_URL=https://meriasmita.org
 LEGAL_ENTITY_NAME=<registered name of Asmita legal entity>
 
 # Admin
-ADMIN_OTP_EMAIL=admin@asmita.in
+ADMIN_OTP_EMAIL=admin@meriasmita.org
 
 # Feature flags (Phase 2)
 FEATURE_HASH_UPLOAD=false           # Set true when Phase 2 hash upload is ready
