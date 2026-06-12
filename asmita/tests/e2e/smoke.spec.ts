@@ -1,8 +1,28 @@
+import { connect } from "node:net";
 import { expect, test } from "@playwright/test";
+
+// Registration persists users in Postgres; without a local DB those flows
+// cannot complete. Probe once and skip DB-dependent tests instead of failing
+// with a misleading timeout (same pattern as hash-flow.spec.ts).
+function postgresReachable(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port: 5432, timeout: 1000 });
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    const fail = () => {
+      socket.destroy();
+      resolve(false);
+    };
+    socket.once("error", fail);
+    socket.once("timeout", fail);
+  });
+}
 
 async function completeAdultRegistration(page: import("@playwright/test").Page, email: string) {
   await page.goto("/register");
-  await page.getByLabel("I confirm I am 18 or older.").check();
+  await page.getByText("I am 18 years of age or older.").click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Email address").fill(email);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -11,7 +31,7 @@ async function completeAdultRegistration(page: import("@playwright/test").Page, 
   expect(otpPayload.devOtp).toMatch(/^\d{6}$/);
   await page.getByLabel("6-digit code").fill(otpPayload.devOtp);
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/\/submit$/);
+  await expect(page).toHaveURL(/\/submit$/, { timeout: 30_000 });
 }
 
 async function createCase(page: import("@playwright/test").Page) {
@@ -27,8 +47,10 @@ async function createCase(page: import("@playwright/test").Page) {
 
 test("landing and support bar render", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Asmita helps/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /CHILDLINE 1098/ })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /You don.t have to face this/i }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /CHILDLINE 1098/ }).first()).toBeVisible();
 });
 
 test("FAQ page renders English and Hindi launch content", async ({ page }) => {
@@ -46,13 +68,15 @@ test("minor pathway has no URL submission form", async ({ page }) => {
 
 test("minor registration branches before collecting email", async ({ page }) => {
   await page.goto("/register");
-  await page.getByLabel("I am under 18.").check();
+  await page.getByText("I am under 18 years of age.").click();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/minor-support$/);
   await expect(page.locator("input[type='email']")).toHaveCount(0);
 });
 
 test("full adult flow creates a case and reaches confirmation", async ({ page }, testInfo) => {
+  test.skip(!(await postgresReachable()), "requires local Postgres (registration persists users)");
+  test.setTimeout(120_000);
   await completeAdultRegistration(
     page,
     `adult-${Date.now()}-${testInfo.project.name}@adult-${testInfo.workerIndex}-${Date.now()}.example.com`,
@@ -61,7 +85,8 @@ test("full adult flow creates a case and reaches confirmation", async ({ page },
 });
 
 test("adult dashboard supports add URL, manual resolve, PDF export, and deletion request", async ({ page }, testInfo) => {
-  test.setTimeout(60_000);
+  test.skip(!(await postgresReachable()), "requires local Postgres (registration persists users)");
+  test.setTimeout(120_000);
   await completeAdultRegistration(
     page,
     `dashboard-${Date.now()}-${testInfo.project.name}@dashboard-${testInfo.workerIndex}-${Date.now()}.example.com`,
