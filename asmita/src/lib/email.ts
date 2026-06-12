@@ -18,11 +18,11 @@ function getResend() {
 }
 
 export function getTransactionalEmailFrom() {
-  return process.env.TRANSACTIONAL_EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "update@meriasmita.org";
+  return process.env.TRANSACTIONAL_EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "Asmita <Update@meriasmita.org>";
 }
 
 export function getNoticeEmailFrom() {
-  return process.env.NOTICE_EMAIL_FROM || process.env.EMAIL_FROM || "notice@meriasmita.org";
+  return process.env.NOTICE_EMAIL_FROM || process.env.EMAIL_FROM || "Asmita <Notice@meriasmita.org>";
 }
 
 export async function sendOtp(to: string, otp: string) {
@@ -67,7 +67,7 @@ export function createVictimConfirmationEmail(referenceNumber: string, dashboard
     title: "Your case has been created.",
     paragraphs: [
       "We have received your submission and your case is now active. You can check its progress at any time from your dashboard.",
-      "Keep your case reference safe — you may need it if you speak to a helpline or the police.",
+      "Keep your case reference safe â€” you may need it if you speak to a helpline or the police.",
     ],
     highlight: referenceNumber,
     highlightLabel: "Case reference",
