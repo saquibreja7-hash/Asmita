@@ -10,7 +10,13 @@ type StoredOtp = {
   failedAttempts: number;
 };
 
-const otpStore = new Map<string, StoredOtp>();
+// globalThis-backed: in dev, the bundler gives each API route its own module
+// instance, so a plain module-level Map would split into per-route stores
+// (request-otp writes to one, verify-otp reads another). Same pattern as store.ts.
+const otpGlobals = globalThis as typeof globalThis & {
+  __asmitaOtpStore?: Map<string, StoredOtp>;
+};
+const otpStore = (otpGlobals.__asmitaOtpStore ??= new Map<string, StoredOtp>());
 const MAX_FAILED_ATTEMPTS = 5;
 
 // Vercel serverless functions are stateless: the in-memory store only works
