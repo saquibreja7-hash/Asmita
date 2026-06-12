@@ -1,0 +1,77 @@
+name: AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  claude-review:
+    name: Claude security & logic review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are reviewing a pull request for Asmita, a safety-critical
+            NCII (non-consensual intimate imagery) takedown platform. Review
+            the PR diff (use `gh pr diff ${{ github.event.pull_request.number }}`)
+            and the surrounding code as needed.
+
+            FOCUS ON (in priority order):
+            1. Safety invariants of this codebase: any code path that could
+               fetch, store, render, or log submitted URLs/media; Aadhaar
+               storage; bypass of ENABLE_HASH_UPLOAD / ENABLE_PLATFORM_API
+               gates; unverified notice recipients; PII in notice bodies,
+               logs, or tests.
+            2. Security: SQL injection, authz bypass (IDOR, missing
+               requireAdminPermission), CSRF gaps, secrets in code, broken
+               encryption usage, rate-limit bypass.
+            3. Business-logic correctness: case lifecycle state errors,
+               idempotency breaks in notice/hash dispatch, escalation timer
+               bugs, unhandled edge cases.
+            4. Data integrity: audit-chain breaks, N+1 queries, missing
+               transactions where multi-row writes must be atomic, anything
+               touching auth, account deletion, or outbound email dispatch.
+
+            IGNORE: style preferences, formatting, naming, comment density,
+            test coverage gaps in untouched code. Do not comment on anything
+            a linter would catch.
+
+            For each finding, post an inline comment on the PR at the
+            relevant line using:
+              gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
+                -f body="..." -f commit_id="${{ github.event.pull_request.head.sha }}" \
+                -f path="..." -F line=N -f side=RIGHT
+            Prefix each comment with its severity: "CRITICAL:" (must fix
+            before merge — exploitable, breaks a safety invariant, or
+            corrupts data) or "WARNING:" (informational, author's call).
+
+            Finally post ONE summary comment on the PR
+            (gh pr comment ${{ github.event.pull_request.number }} --body "...")
+            with a verdict line, and write the verdict to a file:
+              echo "PASS" > /tmp/review-verdict   (no critical issues)
+              echo "BLOCK" > /tmp/review-verdict  (one or more CRITICAL issues)
+          claude_args: |
+            --allowedTools "Bash(gh:*),Read,Grep,Glob"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enforce severity threshold
+        run: |
+          verdict=$(cat /tmp/review-verdict 2>/dev/null || echo "MISSING")
+          echo "AI review verdict: $verdict"
+          if [ "$verdict" != "PASS" ]; then
+            echo "::error::AI review found CRITICAL issues (or produced no verdict). Merge blocked."
+            exit 1
+          fi
