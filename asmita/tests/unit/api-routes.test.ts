@@ -264,7 +264,7 @@ describe("POST /api/cases/[caseId]/urls", () => {
       {
         ok: true,
         duplicate: false,
-        url: { id: "url-1", domain: "example.com", platformName: "Unknown", status: "NOTICE_QUEUED", urlHash: "abc" },
+        url: { id: "url-1", domain: "example.com", platformName: "Unknown", status: "NOTICE_QUEUED", urlHash: "abc", platformId: null },
       },
     ]);
   });

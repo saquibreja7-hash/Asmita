@@ -20,6 +20,7 @@ export type UrlRecord = {
   platformName: string;
   status: "PENDING_REVIEW" | "NOTICE_QUEUED" | "REMOVED" | "REJECTED";
   urlHash: string;
+  platformId: string | null;
   flaggedForReview?: boolean;
   flagReason?: string;
 };
@@ -111,6 +112,7 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
       platformName: parsed.platform?.name || "Unknown - will be reviewed",
       status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
       urlHash: parsed.urlHash,
+      platformId: null,
       flaggedForReview,
       flagReason: options?.flagReasons?.join(","),
     };
@@ -144,6 +146,7 @@ export function ensureDemoCase(userId = "demo-user") {
         platformName: "Instagram / Meta",
         status: "NOTICE_QUEUED",
         urlHash: sha256("https://instagram.com/p/example"),
+        platformId: null,
       },
       {
         id: "demo-url-2",
@@ -151,6 +154,7 @@ export function ensureDemoCase(userId = "demo-user") {
         platformName: "Pornhub",
         status: "PENDING_REVIEW",
         urlHash: sha256("https://pornhub.com/view_video.php?viewkey=example"),
+        platformId: null,
       },
     ],
   };

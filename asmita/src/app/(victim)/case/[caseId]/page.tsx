@@ -28,6 +28,11 @@ export default async function CasePage({
   if (record && hashUploadEnabled) {
     hashSubmissions = await listHashesForCase(record.id);
   }
+  const skipLegalGate = process.env.NODE_ENV !== "production" && process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const hasQueuedUrl = record?.urls.some(
+    (u) => u.status === "NOTICE_QUEUED" || (skipLegalGate && u.status === "PENDING_REVIEW" && u.platformId),
+  ) ?? false;
+  const alreadySigned = record?.urls.some((u) => u.status === "NOTICE_SENT") ?? false;
 
   return (
     <AppShell>
@@ -163,6 +168,28 @@ export default async function CasePage({
                 )}
               </div>
             </section>
+
+            {/* SIGN NOTICE — shown when admin has approved a URL for dispatch */}
+            {hasQueuedUrl && !alreadySigned && (
+              <section className="container py-10 md:py-14">
+                <div className="mx-auto max-w-3xl rounded-[16px] border border-[var(--teal)] bg-[color-mix(in_srgb,var(--teal)_6%,white)] p-8 text-center">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--teal)]">
+                    Action required
+                  </p>
+                  <h2 className="font-display mt-3 text-[24px] font-normal leading-[1.2] tracking-tight md:text-[32px]">
+                    Your notice is ready to sign.
+                  </h2>
+                  <p className="muted mx-auto mt-4 max-w-md text-sm leading-[1.75]">
+                    Asmita has reviewed your submission and prepared a legal
+                    takedown notice. Review it, add your details, and sign to
+                    authorise dispatch.
+                  </p>
+                  <Link className="btn btn-primary mt-6" href={`/case/${caseId}/sign`}>
+                    Review &amp; sign notice
+                  </Link>
+                </div>
+              </section>
+            )}
 
             {/* DIGITAL FINGERPRINTS (Phase 2, feature-gated) */}
             {hashUploadEnabled && (

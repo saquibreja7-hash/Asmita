@@ -8,11 +8,11 @@ interface Props {
   caseId: string;
   urlId: string;
   platformName: string;
-  previewPdfBase64: string;
+  previewPdfUrl: string;
   confirmationUrl: string;
 }
 
-export function SignNoticeForm({ caseId, urlId, platformName, previewPdfBase64, confirmationUrl }: Props) {
+export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, confirmationUrl }: Props) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
@@ -57,7 +57,7 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfBase64, 
           </p>
         </div>
         <iframe
-          src={`data:application/pdf;base64,${previewPdfBase64}`}
+          src={previewPdfUrl}
           className="w-full"
           style={{ height: "520px", border: "none" }}
           title="Notice preview"

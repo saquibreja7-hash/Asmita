@@ -121,16 +121,18 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   }
 
   // Stamp declarationSignedAt so dispatchHashAdvisories (called at admin approval)
-  // doesn't fail with declaration_required.
-  const caseRecord = await db.case.findUnique({
-    where: { id: caseId },
-    select: { declarationSignedAt: true },
-  });
-  if (!caseRecord?.declarationSignedAt) {
-    await db.case.update({
+  // doesn't fail with declaration_required. Skip in dev (no DB).
+  if (process.env.DATABASE_URL) {
+    const caseRecord = await db.case.findUnique({
       where: { id: caseId },
-      data: { declarationSignedAt: new Date() },
+      select: { declarationSignedAt: true },
     });
+    if (!caseRecord?.declarationSignedAt) {
+      await db.case.update({
+        where: { id: caseId },
+        data: { declarationSignedAt: new Date() },
+      });
+    }
   }
 
   const body = { results };

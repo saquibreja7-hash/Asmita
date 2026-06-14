@@ -155,7 +155,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
         if (platform && !platform.hasEmail && platform.formUrl) {
           // FORM_ONLY platform: guide survivor to fill the platform's own form.
           router.push(
-            `/case/${created.caseId}/handoff?formUrl=${encodeURIComponent(platform.formUrl)}&platformName=${encodeURIComponent(platform.name)}`,
+            `/handoff/${created.caseId}?formUrl=${encodeURIComponent(platform.formUrl)}&platformName=${encodeURIComponent(platform.name)}`,
           );
           return;
         }
@@ -164,7 +164,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
       }
     }
 
-    router.push(`/case/${created.caseId}/sign`);
+    router.push(`/case/${created.caseId}`);
   }
 
   const lineCount = parsedUrls.length;

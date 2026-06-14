@@ -24,23 +24,26 @@ export async function POST(request: Request) {
   }
 
   const emailHash = hashEmail(parsed.data.email);
-  let emailLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
-  let ipLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
-  try {
-    emailLimit = await checkRateLimitAsync(`admin-otp:${emailHash}`, 5, 60 * 60_000);
-    ipLimit = await checkRateLimitAsync(`admin-login-ip:${getClientIp(request)}`, 10, 60 * 60_000);
-  } catch (error) {
-    logSecurityEvent({
-      event: "rate_limit_unavailable",
-      actorHash: emailHash,
-      route: "/api/admin/auth/request-otp",
-      reason: error instanceof Error ? error.message : "unknown_rate_limit_error",
-    });
-    return NextResponse.json({ error: "service_unavailable" }, { status: 503 });
-  }
-  if (!emailLimit.allowed || !ipLimit.allowed) {
-    logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/admin/auth/request-otp" });
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  const devBypass = process.env.NODE_ENV !== "production" && Boolean(process.env.DEV_OTP_CODE);
+  if (!devBypass) {
+    let emailLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
+    let ipLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
+    try {
+      emailLimit = await checkRateLimitAsync(`admin-otp:${emailHash}`, 5, 60 * 60_000);
+      ipLimit = await checkRateLimitAsync(`admin-login-ip:${getClientIp(request)}`, 10, 60 * 60_000);
+    } catch (error) {
+      logSecurityEvent({
+        event: "rate_limit_unavailable",
+        actorHash: emailHash,
+        route: "/api/admin/auth/request-otp",
+        reason: error instanceof Error ? error.message : "unknown_rate_limit_error",
+      });
+      return NextResponse.json({ error: "service_unavailable" }, { status: 503 });
+    }
+    if (!emailLimit.allowed || !ipLimit.allowed) {
+      logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/admin/auth/request-otp" });
+      return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+    }
   }
 
   let otp: Awaited<ReturnType<typeof createOtpForEmail>>;

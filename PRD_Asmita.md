@@ -1,12 +1,25 @@
 # Asmita — Product Requirements Document
 **Asmita (अस्मिता) — Dignity Restoration Platform for Non-Consensual Intimate Images**
-**Version:** 0.3 (Draft)
-**Date:** 2026-05-17
-**Status:** Pre-development; engine substantially built and gated pending legal sign-off
+**Version:** 0.4 (Draft)
+**Date:** 2026-06-14
+**Status:** URL takedown engine and image fingerprinting (Phase 2 hash) both built and deployed to Vercel. Production launch gated on legal template review, NGO partnership, POCSO protocol, and GO contact verification.
 
 ---
 
 ## Changelog
+
+### v0.4 (2026-06-14) — Phase 2 hash workflow shipped; guardrail update
+
+**Engineering status update:**
+- Image fingerprinting (PDQ hashing) is now built and deployed — it is no longer a Phase 2 future item.
+- Three survivor paths are live: URL-only, URL+hash combined notice, and hash-only (immediate advisory dispatch to platform).
+- Hash-only advisory dispatch fires immediately on submission; the hash annex is appended to URL notices at admin dispatch time.
+- FORM_ONLY platforms (Meta, X, LinkedIn) receive a guided handoff to their own form, with copy-paste notice text that includes the PDQ fingerprints.
+- Hash approval gate is dev-bypassed via `DEV_SKIP_LEGAL_REVIEW`; production retains `PENDING_REVIEW` status pending the HASH_ADVISORY template receiving `reviewedByLegal=true`.
+- Platform API (Feature 2.2/2.3 below) is the remaining Phase 2 item.
+
+**Decisions closed:**
+- D-01: Hash approval gate — dev-bypassed; production gate intact until legal review.
 
 ### v0.3 (2026-05-17) — Regulatory refresh + verified GO contacts
 
@@ -41,8 +54,8 @@ Between v0.2 (2026-05-12) and v0.3, the regulatory landscape around NCII shifted
 **Decisions still open:**
 - D-01 (legal entity), D-05 (funding), D-06 (POCSO protocol), D-07 (platform DB maintenance owner), D-08 (non-response playbook) — these carry over from v0.2 with no change.
 
-**Engineering progress note (informational, not contractual):**
-The engine described in this PRD has been substantively implemented in the `asmita/` Next.js application as of 2026-05-17. Daily Vercel Cron, L1/L2/L3 escalation handlers, audit hash-chain validation, DB-backed admin GO editor, CSV import script, and procedural notice template drafts are all merged on `master`. Production launch remains gated on the human items (legal review, GO verification, DNS, NGO partnership, POCSO protocol).
+**Engineering progress note (as of 2026-06-14):**
+URL takedown engine, image fingerprinting (PDQ hash submission + dispatch), three-path survivor flow, admin panel, escalation engine, audit hash-chain, FIR PDF export, Resend email delivery, and maintenance mode are all merged on `master` and deployed to Vercel (Mumbai, `bom1`). Production launch remains gated on: legal review of notice templates (`reviewedByLegal=true`), GO contact verification (`lastContactVerifiedByHuman=true`), meriasmita.org DNS + Google Workspace inboxes live, NGO partnership, POCSO protocol sign-off.
 
 ---
 
@@ -73,7 +86,7 @@ The engine described in this PRD has been substantively implemented in the `asmi
 ## 1. Vision & Mission
 
 ### Mission
-Asmita is a free, victim-controlled digital platform that helps Indian women and survivors of non-consensual intimate image (NCII) abuse — including MMS leaks — rapidly request removal of their content from social media platforms, pornographic websites, and messaging apps. The v1 system operates on URLs: a victim pastes a link, and Asmita generates and routes legally-grounded takedown notices to the right platform contact, automatically. Hash-based proactive blocking is a future phase once URL-based removal infrastructure is proven.
+Asmita is a free, victim-controlled digital platform that helps Indian women and survivors of non-consensual intimate image (NCII) abuse — including MMS leaks — rapidly request removal of their content from social media platforms, pornographic websites, and messaging apps. Survivors can submit URLs for legally-grounded takedown notices, upload photos to generate a perceptual fingerprint (PDQ hash) for platform detection, or both. No intimate image content ever leaves the survivor's device — only a 64-character hash string is transmitted.
 
 ### Vision
 A future where no Indian woman has to navigate platform bureaucracy alone, understands her legal rights, and has a single trusted system working on her behalf to restore her dignity.
@@ -83,6 +96,7 @@ A future where no Indian woman has to navigate platform bureaucracy alone, under
 
 ### What Asmita Is
 - A URL-based takedown notice engine that operationalizes IT Rules 2021 Rule 3(2)(b) at scale
+- A perceptual hash (PDQ) submission system — image fingerprinted client-side, advisory dispatched immediately to the platform
 - A Grievance Officer contact directory — one of the most practically valuable assets the platform will build
 - An automated multi-platform notice routing system (API → Grievance Officer email → web form guided handoff)
 - A case tracking and escalation dashboard (24-hour, 48-hour, 7-day auto-escalation)
@@ -251,8 +265,7 @@ Asmita is NOT a replacement for the above — it is an accelerator:
 
 ## 6. Core Features & Scope
 
-### Phase 1: URL-Based Notice System (Months 1–6)
-This is the entire scope of Phase 1. Everything in this section must be functional before Phase 2 begins. Hash-based proactive blocking is explicitly Phase 2.
+### Phase 1: URL-Based Notice System — **BUILT**
 
 **Why URLs are the right v1 primitive:**
 - Most platforms (Twitter/X, Reddit, Telegram channels, Indian piracy sites, small forums) only accept URL-based notices — they have no hash submission infrastructure
@@ -337,25 +350,23 @@ The previous v0.2 timeline (24h / 48h / 7d) is preserved as the default for "gen
 
 ---
 
-### Phase 2: Hash Network (Months 7–18)
-*Gated on Phase 1 being operational and building documented platform relationships from Phase 1 response data.*
+### Phase 2: Hash Network — **PARTIALLY BUILT**
 
-**Why this is Phase 2, not Phase 1:**
-Hash-matching requires the platform to have hash-comparison infrastructure and a formal agreement to check incoming uploads against your database. Twitter/X, Reddit, Telegram, and most Indian platforms have neither. Pursuing hash agreements before proving URL-based removal works is the wrong sequence.
+**Feature 2.1 — Client-Side Perceptual Hashing — BUILT**
+- Survivor uploads images in browser → PDQ hash computed client-side via canvas → 64-hex string sent to server → image discarded
+- Server validates hash format strictly (rejects data URLs, base64 blobs, anything >64 hex chars)
+- Immediate advisory dispatch to platform on submission (email-capable platforms); guided form handoff for FORM_ONLY platforms
+- Hash annex appended to URL notice emails when both URLs and hashes exist for a case
+- Three survivor paths: URL-only, URL+hash combined, hash-only
 
-**Feature 2.1 — Client-Side Perceptual Hashing**
-- Victim uploads content in browser → perceptual hash computed via Web Worker in JavaScript → hash sent to server → file discarded
-- Hash algorithm: PDQ (Meta's open-source, compatible with their hash-matching infrastructure) for images; TMK-PDQF for video
-- Asmita servers never receive image bytes at any point
+**Feature 2.2 — Hash Network Partnerships — NOT YET BUILT**
+- Formal platform API integrations (Meta StopNCII, I4C national hash bank) require partner agreements
+- Gated on `ENABLE_PLATFORM_API=true`; infrastructure not yet built
+- Use Phase 1 + email advisory response-rate data as basis for partnership conversations
 
-**Feature 2.2 — Hash Network Partnerships**
-- Use Phase 1 response-rate data as the basis for platform partnership conversations
-- Start with Meta (already a StopNCII hash partner; most receptive)
-- Proactive blocking: perpetrator upload rejected by platform before it goes live
-
-**Feature 2.3 — Indian Platform Hash Integrations**
+**Feature 2.3 — Indian Platform Hash Integrations — NOT YET BUILT**
 - ShareChat, Josh, MX TakaTak, Moj — require direct engagement; not StopNCII partners
-- These are Phase 2 because partnership negotiations take 6–12 months minimum
+- Partnership negotiations take 6–12 months minimum
 
 ---
 
@@ -381,18 +392,22 @@ VICTIM ARRIVES AT ASMITA
         [DIGITAL DECLARATION — signed under penalty of law]
                      |
                      v
-        [SUBMIT URLs — one or more, any platform]
-        [URLs treated as string tokens; content never fetched]
+        [SUBMIT — three options, any combination]
+        Option A: Paste URLs (string tokens; content never fetched)
+        Option B: Upload images → PDQ hash computed in browser → image discarded
+        Option C: Both
                      |
                      v
-        [PLATFORM DETECTION — domain → platform lookup]
-        [Notice template selected per platform]
+        [PATH BRANCHES]
+        URLs only → PLATFORM DETECTION → NOTICE ROUTING (below) → sign PDF → admin dispatch
+        URLs + hash → same as URL-only; hash annex appended to outbound email
+        Hash only → platform picker → immediate advisory dispatch (or form handoff)
                      |
                      v
-        [NOTICE ROUTING]
-        Tier 1: Direct API (Meta, Google)
+        [NOTICE ROUTING — for URL paths]
+        Tier 1: Direct API (Meta, Google) — ENABLE_PLATFORM_API, not yet built
         Tier 2: Grievance Officer email (IT Rules 2021)
-        Tier 3: Web form guided handoff (no API/email)
+        Tier 3: Web form guided handoff (FORM_ONLY platforms — Meta, X, LinkedIn)
                      |
                      v
         [CASE REFERENCE NUMBER ISSUED]

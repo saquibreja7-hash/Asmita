@@ -18,6 +18,7 @@ export type DisplayUrl = {
   platformName: string;
   status: string;
   urlHash: string;
+  platformId: string | null;
   flaggedForReview?: boolean;
   flagReason?: string | null;
 };
@@ -36,6 +37,7 @@ function toDisplayUrl(url: {
   domain: string;
   urlHash: string;
   status: string;
+  platformId: string | null;
   flaggedForReview: boolean;
   flagReason: string | null;
 }): DisplayUrl {
@@ -45,6 +47,7 @@ function toDisplayUrl(url: {
     platformName: findPlatformByDomain(url.domain)?.name ?? "Unknown – under review",
     status: url.status,
     urlHash: url.urlHash,
+    platformId: url.platformId,
     flaggedForReview: url.flaggedForReview,
     flagReason: url.flagReason,
   };
@@ -61,6 +64,7 @@ function toDisplayCase(dbCase: {
     domain: string;
     urlHash: string;
     status: string;
+    platformId: string | null;
     flaggedForReview: boolean;
     flagReason: string | null;
   }>;

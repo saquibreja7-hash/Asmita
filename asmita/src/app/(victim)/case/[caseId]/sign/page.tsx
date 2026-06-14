@@ -7,9 +7,6 @@ import { db } from "@/lib/db";
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
 }
-import { decryptField } from "@/lib/encryption";
-import { renderNoticeTemplate } from "@/lib/notice-generator";
-import { generateNoticePdf } from "@/lib/notice-pdf";
 import { SignNoticeForm } from "./SignNoticeForm";
 
 function templateTypeForNoticeBasis(noticeBasis: string) {
@@ -40,14 +37,18 @@ export default async function SignNoticePage({
   });
   if (alreadySigned) redirect(`/case/${caseId}/confirmation`);
 
-  // Find the first NOTICE_QUEUED URL that has a verified platform + reviewed template
+  const skipLegalGate = process.env.NODE_ENV !== "production" && process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+
+  // Find the first NOTICE_QUEUED URL that has a verified platform + reviewed template.
+  // In dev with DEV_SKIP_LEGAL_REVIEW, also accept PENDING_REVIEW and skip contact verification.
   const url = await db.submittedUrl.findFirst({
     where: {
       caseId,
-      status: "NOTICE_QUEUED",
+      status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
+      platformId: { not: null },
       platform: {
         isActive: true,
-        lastContactVerifiedByHuman: true,
+        ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
       },
     },
     include: {
@@ -58,13 +59,12 @@ export default async function SignNoticePage({
     orderBy: { submittedAt: "asc" },
   });
 
-  if (!url?.platform) redirect(`/case/${caseId}/handoff`);
+  if (!url?.platform) redirect(`/handoff/${caseId}`);
 
   const templateType = templateTypeForNoticeBasis(url.platform.noticeBasis);
   // FORM_ONLY platforms: no email notice — route to guided handoff instead
-  if (!templateType) redirect(`/case/${caseId}/handoff`);
+  if (!templateType) redirect(`/handoff/${caseId}`);
 
-  const skipLegalGate = process.env.NODE_ENV !== "production" && process.env.DEV_SKIP_LEGAL_REVIEW === "true";
   const template = await db.noticeTemplate.findFirst({
     where: {
       templateType,
@@ -74,27 +74,7 @@ export default async function SignNoticePage({
     },
     orderBy: [{ platformId: "desc" }, { version: "desc" }],
   });
-  if (!template) redirect(`/case/${caseId}/handoff`);
-
-  const decryptedUrl = decryptField(url.urlEncrypted);
-  const variables = {
-    caseReference: record.referenceNumber,
-    platformName: url.platform.name,
-    url: decryptedUrl,
-    declarationReference: record.referenceNumber,
-  };
-
-  const subject = renderNoticeTemplate(template.subjectTemplate, variables);
-  const body = renderNoticeTemplate(template.bodyTemplate, variables);
-
-  const previewPdfBytes = await generateNoticePdf({
-    platformName: url.platform.name,
-    caseReference: record.referenceNumber,
-    noticeSubject: subject,
-    noticeBody: body,
-    date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
-  });
-  const previewPdfBase64 = previewPdfBytes.toString("base64");
+  if (!template) redirect(`/handoff/${caseId}`);
 
   return (
     <AppShell>
@@ -123,7 +103,7 @@ export default async function SignNoticePage({
               caseId={caseId}
               urlId={url.id}
               platformName={url.platform.name}
-              previewPdfBase64={previewPdfBase64}
+              previewPdfUrl={`/api/cases/${caseId}/preview-notice`}
               confirmationUrl={`/case/${caseId}/confirmation`}
             />
           </div>

@@ -31,7 +31,8 @@ export function RegisterForm() {
         body: JSON.stringify({ email }),
       });
       if (!response.ok) {
-        setError("Please wait before requesting another code.");
+        const body = await response.json().catch(() => ({}));
+        setError(`Error ${response.status}: ${body.error ?? "unknown"}`);
         return;
       }
       setStep("otp");
