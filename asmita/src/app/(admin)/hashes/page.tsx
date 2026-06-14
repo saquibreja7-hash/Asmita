@@ -56,6 +56,7 @@ export default async function HashQueuePage() {
               <Th>Case</Th>
               <Th>Hash digest</Th>
               <Th>Quality</Th>
+              <Th>Platform</Th>
               <Th>Flags</Th>
               <Th>Age</Th>
               <Th>Actions</Th>
@@ -69,6 +70,7 @@ export default async function HashQueuePage() {
                   {row.hashDigest.slice(0, 16)}…
                 </td>
                 <td className="p-4 tabular-nums">{row.quality}/100</td>
+                <td className="p-4">{row.requestedPlatformName ?? <span className="text-[var(--muted)]">—</span>}</td>
                 <td className="p-4">{row.flagReason ?? "—"}</td>
                 <td className="font-mono p-4 tabular-nums">
                   {Math.floor(row.ageMinutes / 60)}h {row.ageMinutes % 60}m

@@ -7,6 +7,8 @@ export type SecurityEvent = {
     | "auth_failed"
     | "admin_denied"
     | "email_failed"
+    | "otp_persistence_failed"
+    | "rate_limit_unavailable"
     | "minor_route_blocked"
     | "flagged_submission"
     | "media_payload_rejected";

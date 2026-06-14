@@ -24,14 +24,37 @@ export async function POST(request: Request) {
   }
 
   const emailHash = hashEmail(parsed.data.email);
-  const emailLimit = await checkRateLimitAsync(`admin-otp:${emailHash}`, 5, 60 * 60_000);
-  const ipLimit = await checkRateLimitAsync(`admin-login-ip:${getClientIp(request)}`, 10, 60 * 60_000);
+  let emailLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
+  let ipLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
+  try {
+    emailLimit = await checkRateLimitAsync(`admin-otp:${emailHash}`, 5, 60 * 60_000);
+    ipLimit = await checkRateLimitAsync(`admin-login-ip:${getClientIp(request)}`, 10, 60 * 60_000);
+  } catch (error) {
+    logSecurityEvent({
+      event: "rate_limit_unavailable",
+      actorHash: emailHash,
+      route: "/api/admin/auth/request-otp",
+      reason: error instanceof Error ? error.message : "unknown_rate_limit_error",
+    });
+    return NextResponse.json({ error: "service_unavailable" }, { status: 503 });
+  }
   if (!emailLimit.allowed || !ipLimit.allowed) {
     logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/admin/auth/request-otp" });
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
-  const otp = await createOtpForEmail(parsed.data.email);
+  let otp: Awaited<ReturnType<typeof createOtpForEmail>>;
+  try {
+    otp = await createOtpForEmail(parsed.data.email);
+  } catch (error) {
+    logSecurityEvent({
+      event: "otp_persistence_failed",
+      actorHash: emailHash,
+      route: "/api/admin/auth/request-otp",
+      reason: error instanceof Error ? error.message : "unknown_otp_error",
+    });
+    return NextResponse.json({ error: "service_unavailable" }, { status: 503 });
+  }
   try {
     await sendOtp(parsed.data.email, otp.token);
   } catch (error) {

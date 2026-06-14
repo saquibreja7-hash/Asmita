@@ -21,15 +21,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_email" }, { status: 400 });
   }
   const emailHash = hashEmail(parsed.data.email);
-  const emailLimit = await checkRateLimitAsync(`otp:${emailHash}`, 10, 60 * 60_000);
-  const domain = parsed.data.email.split("@")[1]?.toLowerCase() || "unknown";
-  const domainLimit = await checkRateLimitAsync(`registration-domain:${domain}`, 3, 24 * 60 * 60_000);
-  const ipLimit = await checkRateLimitAsync(`registration-ip:${getClientIp(request)}`, 3, 60 * 60_000);
+  let emailLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
+  let domainLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
+  let ipLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
+  try {
+    emailLimit = await checkRateLimitAsync(`otp:${emailHash}`, 10, 60 * 60_000);
+    const domain = parsed.data.email.split("@")[1]?.toLowerCase() || "unknown";
+    domainLimit = await checkRateLimitAsync(`registration-domain:${domain}`, 3, 24 * 60 * 60_000);
+    ipLimit = await checkRateLimitAsync(`registration-ip:${getClientIp(request)}`, 3, 60 * 60_000);
+  } catch (error) {
+    logSecurityEvent({
+      event: "rate_limit_unavailable",
+      actorHash: emailHash,
+      route: "/api/auth/request-otp",
+      reason: error instanceof Error ? error.message : "unknown_rate_limit_error",
+    });
+    return NextResponse.json({ error: "service_unavailable" }, { status: 503 });
+  }
   if (!emailLimit.allowed || !domainLimit.allowed || !ipLimit.allowed) {
     logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/auth/request-otp" });
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
-  const otp = await createOtpForEmail(parsed.data.email);
+  let otp: Awaited<ReturnType<typeof createOtpForEmail>>;
+  try {
+    otp = await createOtpForEmail(parsed.data.email);
+  } catch (error) {
+    logSecurityEvent({
+      event: "otp_persistence_failed",
+      actorHash: emailHash,
+      route: "/api/auth/request-otp",
+      reason: error instanceof Error ? error.message : "unknown_otp_error",
+    });
+    return NextResponse.json({ error: "service_unavailable" }, { status: 503 });
+  }
   try {
     await sendOtp(parsed.data.email, otp.token);
   } catch (error) {

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { reviewHashSubmission } from "@/lib/hash-submission";
+import { dispatchHashAdvisories } from "@/lib/hash-dispatch";
+import { db } from "@/lib/db";
 
 export async function POST(
   request: Request,
@@ -18,15 +20,43 @@ export async function POST(
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
   const { hashId } = await context.params;
+
+  // Read requestedPlatformId before approving (approval changes status).
+  const record = await db.hashSubmission.findUnique({
+    where: { id: hashId },
+    select: { caseId: true, requestedPlatformId: true },
+  });
+  if (!record) {
+    return NextResponse.json({ error: "hash_submission_not_found" }, { status: 404 });
+  }
+
+  let submission;
   try {
-    const submission = await reviewHashSubmission({
+    submission = await reviewHashSubmission({
       hashSubmissionId: hashId,
       decision: "approve",
       reviewerId: auth.session.sub,
     });
-    return NextResponse.json({ success: true, submission });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "error";
     return NextResponse.json({ error: msg }, { status: 404 });
   }
+
+  // If the survivor nominated a platform, dispatch the advisory immediately.
+  let dispatchResult = null;
+  if (record.requestedPlatformId) {
+    try {
+      const results = await dispatchHashAdvisories({
+        caseId: record.caseId,
+        platformIds: [record.requestedPlatformId],
+        actorId: auth.session.sub,
+      });
+      dispatchResult = results[0] ?? null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "dispatch_error";
+      dispatchResult = { dispatched: false, reason: msg };
+    }
+  }
+
+  return NextResponse.json({ success: true, submission, dispatchResult });
 }

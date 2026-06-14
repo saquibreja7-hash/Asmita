@@ -116,6 +116,8 @@ enum AuditEventType {
   HASH_APPROVED
   HASH_REJECTED
   HASH_DISPATCHED
+  NOTICE_SIGNED
+  URL_PORTAL_ACCESSED
 }
 
 enum DeletionJobStatus {
@@ -174,22 +176,24 @@ model Case {
 // the server ever receives — never image bytes. Encrypted at rest; digest
 // column exists solely for dedup/lookup.
 model HashSubmission {
-  id               String               @id @default(uuid())
-  caseId           String
-  algorithm        HashAlgorithm        @default(PDQ)
-  hashEncrypted    String
-  hashDigest       String
-  quality          Int
-  clientVersion    String?
-  status           HashSubmissionStatus @default(PENDING_REVIEW)
-  flaggedForReview Boolean              @default(false)
-  flagReason       String?
-  submittedAt      DateTime             @default(now())
-  reviewedAt       DateTime?
-  reviewedById     String?
+  id                  String               @id @default(uuid())
+  caseId              String
+  algorithm           HashAlgorithm        @default(PDQ)
+  hashEncrypted       String
+  hashDigest          String
+  quality             Int
+  clientVersion       String?
+  status              HashSubmissionStatus @default(PENDING_REVIEW)
+  flaggedForReview    Boolean              @default(false)
+  flagReason          String?
+  submittedAt         DateTime             @default(now())
+  reviewedAt          DateTime?
+  reviewedById        String?
+  requestedPlatformId String?
 
-  case       Case           @relation(fields: [caseId], references: [id])
-  dispatches HashDispatch[]
+  case              Case           @relation(fields: [caseId], references: [id])
+  requestedPlatform Platform?      @relation("HashSubmissionPlatform", fields: [requestedPlatformId], references: [id])
+  dispatches        HashDispatch[]
 
   @@unique([caseId, hashDigest])
   @@index([status])
@@ -229,10 +233,11 @@ model Platform {
   createdAt                  DateTime     @default(now())
   updatedAt                  DateTime     @updatedAt
 
-  submittedUrls   SubmittedUrl[]
-  noticeTemplates NoticeTemplate[]
-  goHistory       PlatformGoHistory[]
-  hashDispatches  HashDispatch[]
+  submittedUrls     SubmittedUrl[]
+  noticeTemplates   NoticeTemplate[]
+  goHistory         PlatformGoHistory[]
+  hashDispatches    HashDispatch[]
+  hashSubmissions   HashSubmission[]    @relation("HashSubmissionPlatform")
 }
 
 model PlatformGoHistory {
@@ -263,10 +268,29 @@ model SubmittedUrl {
   submittedAt      DateTime  @default(now())
   flaggedForReview Boolean   @default(false)
   flagReason       String?
+  signedNoticePdf  String?
 
-  case     Case      @relation(fields: [caseId], references: [id])
-  platform Platform? @relation(fields: [platformId], references: [id])
-  notices  Notice[]
+  case         Case             @relation(fields: [caseId], references: [id])
+  platform     Platform?        @relation(fields: [platformId], references: [id])
+  notices      Notice[]
+  portalTokens UrlPortalToken[]
+}
+
+// One-time access tokens for URLs sent in notice emails. The raw URL never
+// appears in email — only the portal link. The platform officer enters an
+// access code to view the URL once; the token is then permanently consumed.
+model UrlPortalToken {
+  id             String    @id @default(uuid())
+  urlId          String
+  token          String    @unique
+  accessCodeHash String
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  submittedUrl SubmittedUrl @relation(fields: [urlId], references: [id])
+
+  @@index([token])
+  @@index([urlId])
 }
 
 model NoticeTemplate {

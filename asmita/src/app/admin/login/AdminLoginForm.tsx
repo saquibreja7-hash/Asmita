@@ -16,31 +16,41 @@ export function AdminLoginForm() {
   async function requestOtp() {
     setLoading(true);
     setError("");
-    const response = await csrfFetch("/api/admin/auth/request-otp", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    });
-    setLoading(false);
-    if (!response.ok) {
-      setError("This admin email cannot receive a code right now.");
-      return;
+    try {
+      const response = await csrfFetch("/api/admin/auth/request-otp", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      if (!response.ok) {
+        setError("This admin email cannot receive a code right now.");
+        return;
+      }
+      setStep("verify");
+    } catch {
+      setError("The request timed out. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setStep("verify");
   }
 
   async function verify() {
     setLoading(true);
     setError("");
-    const response = await csrfFetch("/api/admin/auth/verify", {
-      method: "POST",
-      body: JSON.stringify({ email, otp, totp }),
-    });
-    setLoading(false);
-    if (!response.ok) {
-      setError("The email code or authenticator code did not match.");
-      return;
+    try {
+      const response = await csrfFetch("/api/admin/auth/verify", {
+        method: "POST",
+        body: JSON.stringify({ email, otp, totp }),
+      });
+      if (!response.ok) {
+        setError("The email code or authenticator code did not match.");
+        return;
+      }
+      router.push("/admin/cases");
+    } catch {
+      setError("The request timed out. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    router.push("/admin/cases");
   }
 
   return (

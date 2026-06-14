@@ -71,6 +71,7 @@ export async function dispatchTier2Notice(input: {
   recipientEmail: string;
   subject: string;
   body: string;
+  signedNoticePdf?: Buffer | null;
 }) {
   assertVerifiedNoticeRecipient(input.recipientEmail);
   const idempotencyKey = sha256(`${input.caseId}:${input.urlId}:${input.recipientEmail}`);
@@ -85,7 +86,10 @@ export async function dispatchTier2Notice(input: {
     }
   }
 
-  const sent = await sendNoticeDraft(input.recipientEmail, input.subject, input.body);
+  const attachments = input.signedNoticePdf
+    ? [{ filename: "notice.pdf", content: input.signedNoticePdf }]
+    : undefined;
+  const sent = await sendNoticeDraft(input.recipientEmail, input.subject, input.body, attachments);
   const messageId =
     "id" in sent && typeof sent.id === "string"
       ? sent.id
@@ -111,6 +115,51 @@ export async function dispatchTier2Notice(input: {
     entityType: "SubmittedUrl",
     entityId: input.urlId,
     data: { caseId: input.caseId, messageId: notice.messageId, idempotencyKey },
+  });
+  return { dispatched: true, notice };
+}
+
+// Re-issue a portal token for an already-sent notice. Bypasses idempotency by
+// design — re-issues are deliberate second sends to replace consumed/lost tokens.
+export async function dispatchPortalReissue(input: {
+  caseId: string;
+  urlId: string;
+  recipientEmail: string;
+  subject: string;
+  body: string;
+  signedNoticePdf?: Buffer | null;
+}): Promise<{ dispatched: true; notice: DispatchedNotice }> {
+  assertVerifiedNoticeRecipient(input.recipientEmail);
+
+  const attachments = input.signedNoticePdf
+    ? [{ filename: "notice.pdf", content: input.signedNoticePdf }]
+    : undefined;
+  const sent = await sendNoticeDraft(input.recipientEmail, input.subject, input.body, attachments);
+  const idempotencyKey = sha256(`reissue:${input.urlId}:${Date.now()}`);
+  const messageId =
+    "id" in sent && typeof sent.id === "string"
+      ? sent.id
+      : "data" in sent && sent.data?.id
+        ? sent.data.id
+        : `message-${idempotencyKey.slice(0, 12)}`;
+
+  const notice: DispatchedNotice = {
+    idempotencyKey,
+    caseId: input.caseId,
+    urlId: input.urlId,
+    recipientEmail: input.recipientEmail,
+    messageId,
+    sentAt: new Date().toISOString(),
+    payloadHash: sha256(input.body),
+  };
+  if (databasePersistenceEnabled()) {
+    await persistNotice(notice, 0);
+  }
+  await writeAuditLog({
+    eventType: "NOTICE_SENT",
+    entityType: "SubmittedUrl",
+    entityId: input.urlId,
+    data: { caseId: input.caseId, messageId: notice.messageId, reissue: true },
   });
   return { dispatched: true, notice };
 }

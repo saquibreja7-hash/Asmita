@@ -22,7 +22,7 @@ import {
 
 export type HashDispatchResult =
   | { platformId: string; dispatched: true; messageId: string; hashCount: number }
-  | { platformId: string; dispatched: false; reason: string };
+  | { platformId: string; dispatched: false; reason: string; formUrl?: string };
 
 export async function dispatchHashAdvisories(input: {
   caseId: string;
@@ -42,12 +42,16 @@ export async function dispatchHashAdvisories(input: {
   });
   if (submissions.length === 0) throw new Error("no_approved_hashes");
 
+  const skipLegalGate = process.env.NODE_ENV !== "production" && process.env.DEV_SKIP_LEGAL_REVIEW === "true";
   const template = await db.noticeTemplate.findFirst({
-    where: { templateType: "HASH_ADVISORY", isActive: true },
+    where: {
+      templateType: "HASH_ADVISORY",
+      isActive: true,
+      ...(skipLegalGate ? {} : { reviewedByLegal: true }),
+    },
     orderBy: { version: "desc" },
   });
   if (!template) throw new Error("hash_advisory_template_missing");
-  if (!template.reviewedByLegal) throw new Error("template_not_reviewed_by_legal");
 
   const annex = buildHashAnnex({
     algorithm: "PDQ",
@@ -66,8 +70,14 @@ export async function dispatchHashAdvisories(input: {
       results.push({ platformId, dispatched: false, reason: "platform_not_found" });
       continue;
     }
-    if (!platform.grievanceEmail || !platform.lastContactVerifiedByHuman) {
+    if (!platform.lastContactVerifiedByHuman) {
       results.push({ platformId, dispatched: false, reason: "contact_not_human_verified" });
+      continue;
+    }
+    if (!platform.grievanceEmail) {
+      // Form-only platform: we can't email — return the form URL so the caller
+      // can direct the survivor to paste the hash advisory manually.
+      results.push({ platformId, dispatched: false, reason: "form_only", formUrl: platform.formUrl ?? undefined });
       continue;
     }
     try {

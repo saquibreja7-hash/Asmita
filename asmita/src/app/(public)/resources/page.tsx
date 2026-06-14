@@ -107,6 +107,179 @@ const groups: Group[] = [
   },
 ];
 
+type PlatformGuide = {
+  name: string;
+  notes: string;
+  links: { label: string; href: string }[];
+};
+
+const platforms: PlatformGuide[] = [
+  {
+    name: "Instagram",
+    notes:
+      "Use the in-app report on the specific post or profile. Instagram's Safety Center also has a dedicated NCII removal path.",
+    links: [
+      {
+        label: "Report on Instagram",
+        href: "https://help.instagram.com/165828726894770",
+      },
+      {
+        label: "Instagram Safety Center",
+        href: "https://about.instagram.com/safety",
+      },
+    ],
+  },
+  {
+    name: "Facebook",
+    notes:
+      "Facebook has a dedicated \"Not Without My Consent\" tool specifically for intimate images. Use it for the fastest removal path.",
+    links: [
+      {
+        label: "Not Without My Consent",
+        href: "https://www.facebook.com/safety/notwithoutmyconsent",
+      },
+      {
+        label: "Report Harmful Content",
+        href: "https://www.facebook.com/help/1380418588640631",
+      },
+    ],
+  },
+  {
+    name: "Google (Search)",
+    notes:
+      "You can request Google remove links to intimate images from search results — even if you cannot get the content taken down at the source. This is often the fastest relief.",
+    links: [
+      {
+        label: "Submit an NCII removal request",
+        href: "https://support.google.com/websearch/answer/6302812",
+      },
+    ],
+  },
+  {
+    name: "YouTube",
+    notes:
+      "YouTube staff review reported content 24 hours a day. You can report videos, thumbnails, comments, and entire channels.",
+    links: [
+      {
+        label: "Report inappropriate content",
+        href: "https://support.google.com/youtube/answer/2802027",
+      },
+      {
+        label: "YouTube Help Center",
+        href: "https://support.google.com/youtube",
+      },
+    ],
+  },
+  {
+    name: "X (Twitter)",
+    notes:
+      "Use the in-app report on the specific post, or submit via X's Safety Center. Intimate images policy violations are reviewed separately from general abuse.",
+    links: [
+      {
+        label: "Report abusive behaviour",
+        href: "https://help.twitter.com/en/safety-and-security/report-abusive-behavior",
+      },
+      {
+        label: "X Safety Center",
+        href: "https://help.twitter.com/en/safety-and-security",
+      },
+    ],
+  },
+  {
+    name: "Snapchat",
+    notes:
+      "Snapchat allows in-app anonymous reporting. When you report, both you and the person reported receive wellbeing resources.",
+    links: [
+      {
+        label: "Report abuse in-app",
+        href: "https://support.snapchat.com/en-US/article/report-abuse-in-app",
+      },
+      {
+        label: "Snapchat Safety Resources",
+        href: "https://support.snapchat.com/en-US/a/Snapchat-Safety",
+      },
+    ],
+  },
+  {
+    name: "TikTok",
+    notes:
+      "Use TikTok's Report a Problem tool for content violations. The Safety Center has a dedicated path for privacy and intimate image reports.",
+    links: [
+      {
+        label: "Report a Problem",
+        href: "https://support.tiktok.com/en/safety-hc/report-a-problem",
+      },
+      {
+        label: "TikTok Safety Center",
+        href: "https://www.tiktok.com/safety/en-us/",
+      },
+    ],
+  },
+  {
+    name: "WhatsApp",
+    notes:
+      "WhatsApp can block and remove a contact. Reporting sends WhatsApp your most recent messages with that person — they review for policy violations.",
+    links: [
+      {
+        label: "Block and report a contact",
+        href: "https://faq.whatsapp.com/iphone/security-and-privacy/how-to-block-and-unblock-contacts",
+      },
+    ],
+  },
+  {
+    name: "Telegram",
+    notes:
+      "Telegram has no centralised reporting form. Use @notoscam on Telegram to report, or email abuse@telegram.org with channel/group links.",
+    links: [
+      {
+        label: "Telegram support",
+        href: "https://telegram.org/support",
+      },
+    ],
+  },
+  {
+    name: "Discord",
+    notes:
+      "Submit an abuse report form to Discord's Trust and Safety team. Include message IDs and channel IDs where possible.",
+    links: [
+      {
+        label: "Submit an Abuse Report",
+        href: "https://support.discord.com/hc/en-us/requests/new?ticket_form_id=360000029731",
+      },
+      {
+        label: "Discord Safety Center",
+        href: "https://discord.com/safety",
+      },
+    ],
+  },
+  {
+    name: "LinkedIn",
+    notes:
+      "Use LinkedIn's in-product reporting for inappropriate content, or contact LinkedIn Safety directly.",
+    links: [
+      {
+        label: "Report inappropriate content",
+        href: "https://www.linkedin.com/help/linkedin/answer/146",
+      },
+      {
+        label: "LinkedIn Safety Center",
+        href: "https://safety.linkedin.com/",
+      },
+    ],
+  },
+  {
+    name: "Pinterest",
+    notes:
+      "Pinterest allows reporting specific pins, boards, or accounts. Intimate content violating consent is handled by the Trust and Safety team.",
+    links: [
+      {
+        label: "Report something on Pinterest",
+        href: "https://help.pinterest.com/en/article/report-something-on-pinterest",
+      },
+    ],
+  },
+];
+
 const filingSteps = [
   "Open the National Cybercrime Reporting Portal and choose the women-and-child path if it applies to your situation.",
   "Use your Asmita case reference and FIR package once your case has reached the seven-day mark.",
@@ -198,6 +371,53 @@ export default function ResourcesPage() {
             ))}
           </div>
         ))}
+
+        {/* PLATFORM REPORTING GUIDES */}
+        <section className="container pb-6 pt-20 text-center md:pb-8 md:pt-32">
+          <div className="mx-auto max-w-2xl">
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+              Group 06
+            </p>
+            <h2 className="font-display mt-4 text-[28px] font-normal leading-[1.18] tracking-tight md:text-[44px] md:leading-[1.14]">
+              If the content is already posted somewhere.
+            </h2>
+            <p className="muted mx-auto mt-5 max-w-lg text-base leading-[1.75] md:text-lg">
+              Every major platform has a dedicated reporting path for
+              non-consensual intimate imagery. Going direct is often the
+              fastest way to get content removed. Links below go straight
+              to each platform&rsquo;s reporting or safety tool.
+            </p>
+          </div>
+        </section>
+
+        <section className="container pb-16 pt-8 md:pb-24">
+          <div className="mx-auto max-w-2xl space-y-4">
+            {platforms.map((p) => (
+              <div
+                key={p.name}
+                className="rounded-[14px] border border-[var(--hairline)] bg-white p-5"
+              >
+                <h3 className="font-display text-[18px] font-normal leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[20px]">
+                  {p.name}
+                </h3>
+                <p className="muted mt-2 text-sm leading-[1.65]">{p.notes}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {p.links.map((l) => (
+                    <a
+                      key={l.href}
+                      href={l.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block rounded-full border border-[var(--hairline)] px-3 py-1 font-mono text-[12px] text-[var(--teal-dark)] transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
+                    >
+                      {l.label} ↗
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {/* FILING GUIDE - numbered, quiet, like how-it-works steps */}
         <section className="container pb-6 pt-20 text-center md:pb-8 md:pt-32">

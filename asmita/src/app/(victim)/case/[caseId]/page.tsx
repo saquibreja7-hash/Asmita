@@ -105,18 +105,19 @@ export default async function CasePage({
             <section id="urls" className="container py-10 md:py-14">
               <div className="mx-auto max-w-3xl">
                 <p className="font-mono text-center text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                  URLs in this case · {record.urls.length}
+                  Links in this case · {record.urls.length}
                 </p>
                 <h2 className="font-display mt-4 text-center text-[28px] font-normal leading-[1.18] tracking-tight md:text-[40px] md:leading-[1.14]">
                   {record.urls.length === 0
-                    ? "No URLs added yet."
-                    : "Status by URL."}
+                    ? "No links added yet."
+                    : "Status by link."}
                 </h2>
 
                 {record.urls.length === 0 ? (
                   <p className="muted mx-auto mt-6 max-w-lg text-center text-base leading-[1.75]">
-                    Add links as text when you are ready. Asmita will not open
-                    them.
+                    If the content has been posted somewhere, paste the link
+                    here. Asmita will send a legal notice to the platform.
+                    It will never open or view the URL.
                   </p>
                 ) : (
                   <div className="mt-8 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
@@ -171,13 +172,13 @@ export default async function CasePage({
                     Digital fingerprints · {hashSubmissions.length}
                   </p>
                   <h2 className="font-display mt-4 text-center text-[28px] font-normal leading-[1.18] tracking-tight md:text-[40px] md:leading-[1.14]">
-                    Block the content before it spreads.
+                    Create a digital fingerprint.
                   </h2>
                   <p className="muted mx-auto mt-6 max-w-lg text-center text-base leading-[1.75]">
-                    If you have the photos on this device — even if they have
-                    not been posted anywhere yet — create a fingerprint here.
-                    Platforms use it to block matching uploads. The photos
-                    never leave your device.
+                    Select photos or videos from this device. A fingerprint is
+                    generated here — the images never leave your device.
+                    Platforms receive the fingerprint as part of a legal notice
+                    and use it to block matching uploads automatically.
                   </p>
 
                   {hashSubmissions.length > 0 && (

@@ -24,33 +24,43 @@ export function RegisterForm() {
   async function requestOtp() {
     setLoading(true);
     setError("");
-    const response = await csrfFetch("/api/auth/request-otp", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    setLoading(false);
-    if (!response.ok) {
-      setError("Please wait before requesting another code.");
-      return;
+    try {
+      const response = await csrfFetch("/api/auth/request-otp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!response.ok) {
+        setError("Please wait before requesting another code.");
+        return;
+      }
+      setStep("otp");
+    } catch {
+      setError("The request timed out. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setStep("otp");
   }
 
   async function verify() {
     setLoading(true);
     setError("");
-    const response = await csrfFetch("/api/auth/verify-otp", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, otp, ageOver18: age === "adult" }),
-    });
-    setLoading(false);
-    if (!response.ok) {
-      setError("The code did not match. Please try again.");
-      return;
+    try {
+      const response = await csrfFetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, otp, ageOver18: age === "adult" }),
+      });
+      if (!response.ok) {
+        setError("The code did not match. Please try again.");
+        return;
+      }
+      router.push(age === "minor" ? "/minor-support" : "/submit");
+    } catch {
+      setError("The request timed out. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    router.push(age === "minor" ? "/minor-support" : "/submit");
   }
 
   return (

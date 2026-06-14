@@ -9,7 +9,12 @@ function shouldUseRedis() {
 
 function getRedis() {
   if (!redis) {
-    redis = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
+    redis = new IORedis(process.env.REDIS_URL!, {
+      commandTimeout: 5_000,
+      connectTimeout: 5_000,
+      maxRetriesPerRequest: 1,
+      retryStrategy: (times) => (times > 1 ? null : 500),
+    });
   }
   return redis;
 }

@@ -44,7 +44,12 @@ export async function sendOtp(to: string, otp: string) {
   }));
 }
 
-export async function sendNoticeDraft(to: string, subject: string, text: string) {
+export async function sendNoticeDraft(
+  to: string,
+  subject: string,
+  text: string,
+  attachments?: { filename: string; content: Buffer }[],
+) {
   if (!process.env.RESEND_API_KEY) {
     return { id: "dev-notice-message" };
   }
@@ -53,6 +58,7 @@ export async function sendNoticeDraft(to: string, subject: string, text: string)
     to,
     subject,
     text,
+    ...(attachments?.length ? { attachments } : {}),
   }));
 }
 

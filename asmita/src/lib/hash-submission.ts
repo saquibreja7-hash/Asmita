@@ -1,7 +1,22 @@
+import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { writeAuditLog } from "@/lib/audit";
+
+function isDevNoDb() {
+  return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
+}
+
+// In-memory hash store for dev/test.
+declare global {
+   
+  var __asmitaHashStore: Map<string, DisplayHashSubmission[]> | undefined;
+}
+function devHashStore(): Map<string, DisplayHashSubmission[]> {
+  globalThis.__asmitaHashStore ??= new Map();
+  return globalThis.__asmitaHashStore;
+}
 
 // Server-side handling of Phase 2 client-generated PDQ hashes.
 // The server accepts ONLY 64-hex-char hashes — never image bytes. Anything
@@ -92,9 +107,34 @@ function toDisplay(record: {
 export async function addHashesToCase(
   caseId: string,
   items: HashPayloadItem[],
-  options?: { flagReasons?: string[] },
+  options?: { flagReasons?: string[]; requestedPlatformId?: string },
 ): Promise<AddHashResult[]> {
-  const externallyFlagged = Boolean(options?.flagReasons?.length);
+  if (isDevNoDb()) {
+    const devStore = devHashStore();
+    const existing = devStore.get(caseId) ?? [];
+    const results: AddHashResult[] = [];
+    for (const item of items.slice(0, MAX_HASHES_PER_SUBMISSION)) {
+      const validated = validateHashItem(item);
+      if (!validated.ok) { results.push({ ok: false, error: validated.error }); continue; }
+      const hashDigest = sha256(validated.hash);
+      const dup = existing.find((s) => s.hashDigest === hashDigest);
+      if (dup) { results.push({ ok: true, duplicate: true, submission: dup }); continue; }
+      const sub: DisplayHashSubmission = {
+        id: randomUUID(), algorithm: "PDQ", hashDigest,
+        quality: validated.quality,
+        status: "PENDING_REVIEW",
+        flaggedForReview: validated.lowQuality,
+        flagReason: validated.lowQuality ? "low_pdq_quality" : null,
+        submittedAt: new Date().toISOString(),
+      };
+      existing.push(sub);
+      results.push({ ok: true, duplicate: false, submission: sub });
+    }
+    devStore.set(caseId, existing);
+    await writeAuditLog({ eventType: "HASH_SUBMITTED", entityType: "Case", entityId: caseId, data: { accepted: results.filter((r) => r.ok).length } });
+    return results;
+  }
+
   const results: AddHashResult[] = [];
 
   for (const item of items.slice(0, MAX_HASHES_PER_SUBMISSION)) {
@@ -123,12 +163,10 @@ export async function addHashesToCase(
         hashDigest,
         quality: validated.quality,
         clientVersion: validated.clientVersion,
-        // Every hash submission is human-reviewed before any dispatch.
-        // Without a StopNCII-style moderation backstop, this gate is the
-        // abuse-prevention layer.
         status: "PENDING_REVIEW",
-        flaggedForReview: externallyFlagged || validated.lowQuality,
+        flaggedForReview: validated.lowQuality,
         flagReason: flagReasons.length ? flagReasons.join(",") : null,
+        requestedPlatformId: options?.requestedPlatformId ?? null,
       },
     });
     results.push({ ok: true, duplicate: false, submission: toDisplay(created) });
@@ -145,6 +183,7 @@ export async function addHashesToCase(
 }
 
 export async function listHashesForCase(caseId: string): Promise<DisplayHashSubmission[]> {
+  if (isDevNoDb()) return devHashStore().get(caseId) ?? [];
   const records = await db.hashSubmission.findMany({
     where: { caseId },
     orderBy: { submittedAt: "asc" },
@@ -156,12 +195,17 @@ export type HashReviewQueueRow = DisplayHashSubmission & {
   caseId: string;
   referenceNumber: string;
   ageMinutes: number;
+  requestedPlatformId: string | null;
+  requestedPlatformName: string | null;
 };
 
 export async function listHashReviewQueue(): Promise<HashReviewQueueRow[]> {
   const records = await db.hashSubmission.findMany({
     where: { status: "PENDING_REVIEW" },
-    include: { case: { select: { referenceNumber: true } } },
+    include: {
+      case: { select: { referenceNumber: true } },
+      requestedPlatform: { select: { name: true } },
+    },
     orderBy: { submittedAt: "asc" },
   });
   const now = Date.now();
@@ -170,6 +214,8 @@ export async function listHashReviewQueue(): Promise<HashReviewQueueRow[]> {
     caseId: record.caseId,
     referenceNumber: record.case.referenceNumber,
     ageMinutes: Math.max(0, Math.floor((now - record.submittedAt.getTime()) / 60_000)),
+    requestedPlatformId: record.requestedPlatformId ?? null,
+    requestedPlatformName: record.requestedPlatform?.name ?? null,
   }));
 }
 
@@ -208,7 +254,35 @@ export async function listDispatchableHashCases(): Promise<DispatchableCase[]> {
   );
 }
 
-// Only human-verified contacts are ever offered as dispatch targets.
+export type HashPickerPlatform = {
+  id: string;
+  name: string;
+  hasEmail: boolean;
+  formUrl: string | null;
+};
+
+// Platforms shown in the hash-only picker. Includes email-capable and form-only
+// platforms so survivors can always direct their advisory somewhere. Filtered to
+// human-verified contacts only.
+export async function listHashPickerPlatforms(): Promise<HashPickerPlatform[]> {
+  const platforms = await db.platform.findMany({
+    where: {
+      isActive: true,
+      lastContactVerifiedByHuman: true,
+      OR: [{ grievanceEmail: { not: null } }, { formUrl: { not: null } }],
+    },
+    select: { id: true, name: true, grievanceEmail: true, formUrl: true },
+    orderBy: { name: "asc" },
+  });
+  return platforms.map((p) => ({
+    id: p.id,
+    name: p.name,
+    hasEmail: p.grievanceEmail !== null,
+    formUrl: p.formUrl,
+  }));
+}
+
+// Keep old export for any existing admin callers.
 export async function listVerifiedDispatchPlatforms(): Promise<VerifiedPlatformOption[]> {
   const platforms = await db.platform.findMany({
     where: {

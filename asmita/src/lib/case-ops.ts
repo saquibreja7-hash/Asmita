@@ -6,6 +6,11 @@ import { hashEmail } from "@/lib/hash";
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { findPlatformByDomain } from "@/lib/platforms";
 import { writeAuditLog } from "@/lib/audit";
+import * as store from "@/lib/store";
+
+function isDevNoDb() {
+  return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
+}
 
 export type DisplayUrl = {
   id: string;
@@ -70,11 +75,34 @@ function toDisplayCase(dbCase: {
   };
 }
 
+// In-memory user store for dev/test without a real DB.
+// Keyed by emailHash → { id, emailHash }
+declare global {
+   
+  var __asmitaUserStore: Map<string, { id: string; emailHash: string }> | undefined;
+}
+function devUserStore() {
+  globalThis.__asmitaUserStore ??= new Map();
+  return globalThis.__asmitaUserStore;
+}
+
 export async function upsertVerifiedUser(
   email: string,
   ageOver18: boolean,
 ): Promise<{ id: string; emailHash: string }> {
   const emailHash = hashEmail(email);
+
+  if (isDevNoDb()) {
+    const memStore = devUserStore();
+    if (!memStore.has(emailHash)) {
+      const id = `dev-user-${emailHash.slice(0, 8)}`;
+      memStore.set(emailHash, { id, emailHash });
+      // Also register in store.ts so getVerifiedUserEmail can decrypt it.
+      store.rememberVerifiedUser({ id, emailHash, emailEncrypted: encryptField(email) });
+    }
+    return memStore.get(emailHash)!;
+  }
+
   const emailEncrypted = encryptField(email);
   const user = await db.user.upsert({
     where: { emailHash },
@@ -86,16 +114,19 @@ export async function upsertVerifiedUser(
 }
 
 export async function getVerifiedUserEmail(userId: string): Promise<string | null> {
+  if (isDevNoDb()) return store.getVerifiedUserEmail(userId);
   const user = await db.user.findUnique({ where: { id: userId }, select: { emailEncrypted: true } });
   return user ? decryptField(user.emailEncrypted) : null;
 }
 
 export async function isUserDeactivated(userId: string): Promise<boolean> {
+  if (isDevNoDb()) return false;
   const user = await db.user.findUnique({ where: { id: userId }, select: { deactivatedAt: true } });
   return Boolean(user?.deactivatedAt);
 }
 
 export async function createCase(userId: string): Promise<{ id: string; referenceNumber: string }> {
+  if (isDevNoDb()) return store.createCase(userId);
   let dbCase: { id: string; referenceNumber: string } | null = null;
   for (let attempt = 0; attempt < 5 && !dbCase; attempt += 1) {
     const referenceNumber = generateCaseReference();
@@ -119,6 +150,11 @@ export async function createCase(userId: string): Promise<{ id: string; referenc
 }
 
 export async function getCaseForUser(caseId: string, userId: string): Promise<DisplayCase | null> {
+  if (isDevNoDb()) {
+    const rec = store.cases.get(caseId);
+    if (!rec || rec.userId !== userId) return null;
+    return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls };
+  }
   const dbCase = await db.case.findFirst({
     where: { id: caseId, userId },
     include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
@@ -127,6 +163,11 @@ export async function getCaseForUser(caseId: string, userId: string): Promise<Di
 }
 
 export async function listCasesForUser(userId: string): Promise<DisplayCase[]> {
+  if (isDevNoDb()) {
+    return Array.from(store.cases.values())
+      .filter((rec) => rec.userId === userId)
+      .map((rec) => ({ id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls }));
+  }
   const dbCases = await db.case.findMany({
     where: { userId },
     include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
@@ -145,6 +186,7 @@ export async function addUrlsToCase(
   rawUrls: string[],
   options?: { flagReasons?: string[] },
 ): Promise<AddUrlResult[]> {
+  if (isDevNoDb()) return store.addUrlsToCase(caseId, rawUrls, options);
   const flaggedForReview = Boolean(options?.flagReasons?.length);
   const results: AddUrlResult[] = [];
 
@@ -161,13 +203,25 @@ export async function addUrlsToCase(
       continue;
     }
 
+    const dbPlatform = parsed.platform
+      ? await db.platform.findFirst({
+          where: {
+            OR: [
+              { domainPatterns: { has: parsed.domain } },
+              { domainPatterns: { has: `www.${parsed.domain}` } },
+            ],
+          },
+          select: { id: true },
+        })
+      : null;
+
     const created = await db.submittedUrl.create({
       data: {
         caseId,
         urlEncrypted: encryptField(parsed.normalizedUrl),
         urlHash: parsed.urlHash,
         domain: parsed.domain,
-        platformId: null,
+        platformId: dbPlatform?.id ?? null,
         status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
         flaggedForReview,
         flagReason: options?.flagReasons?.join(",") ?? null,

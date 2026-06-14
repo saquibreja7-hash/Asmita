@@ -42,7 +42,7 @@ export default function StartPage() {
               ten minutes and you can pause and resume at any point.
             </p>
             <div className="mt-10 flex justify-center">
-              <Link className="btn btn-primary" href="/register">
+              <Link className="btn btn-primary" href="/eligibility">
                 I am 18 or older - continue
               </Link>
             </div>

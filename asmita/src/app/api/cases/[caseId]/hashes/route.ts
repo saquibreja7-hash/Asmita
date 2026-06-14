@@ -7,6 +7,7 @@ import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { logSecurityEvent } from "@/lib/security-log";
 import { getClientIp } from "@/lib/request-ip";
+import { db } from "@/lib/db";
 import {
   getCachedResponse,
   readIdempotencyKey,
@@ -36,6 +37,7 @@ const schema = z.object({
     .min(1)
     .max(MAX_HASHES_PER_SUBMISSION),
   declaration: z.boolean().refine(Boolean),
+  platformId: z.string().optional(),
 });
 
 const MAX_BODY_BYTES = 16_384;
@@ -106,7 +108,8 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
-  const results = await addHashesToCase(caseId, parsed.data.hashes);
+  const { platformId } = parsed.data;
+  const results = await addHashesToCase(caseId, parsed.data.hashes, { requestedPlatformId: platformId });
   const rejectedAsMedia = results.some((r) => !r.ok && r.error === "media_payload_rejected");
   if (rejectedAsMedia) {
     logSecurityEvent({
@@ -116,6 +119,20 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
       reason: caseId,
     });
   }
+
+  // Stamp declarationSignedAt so dispatchHashAdvisories (called at admin approval)
+  // doesn't fail with declaration_required.
+  const caseRecord = await db.case.findUnique({
+    where: { id: caseId },
+    select: { declarationSignedAt: true },
+  });
+  if (!caseRecord?.declarationSignedAt) {
+    await db.case.update({
+      where: { id: caseId },
+      data: { declarationSignedAt: new Date() },
+    });
+  }
+
   const body = { results };
   if (idemKey) {
     rememberResponse(SCOPE, idemActor, idemKey, 200, body);
