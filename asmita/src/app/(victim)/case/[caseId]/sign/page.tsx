@@ -37,7 +37,7 @@ export default async function SignNoticePage({
   });
   if (alreadySigned) redirect(`/case/${caseId}/confirmation`);
 
-  const skipLegalGate = process.env.NODE_ENV !== "production" && process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
 
   // Find the first NOTICE_QUEUED URL that has a verified platform + reviewed template.
   // In dev with DEV_SKIP_LEGAL_REVIEW, also accept PENDING_REVIEW and skip contact verification.

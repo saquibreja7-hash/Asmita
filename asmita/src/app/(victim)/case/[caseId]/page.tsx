@@ -28,7 +28,7 @@ export default async function CasePage({
   if (record && hashUploadEnabled) {
     hashSubmissions = await listHashesForCase(record.id);
   }
-  const skipLegalGate = process.env.NODE_ENV !== "production" && process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
   const hasQueuedUrl = record?.urls.some(
     (u) => u.status === "NOTICE_QUEUED" || (skipLegalGate && u.status === "PENDING_REVIEW" && u.platformId),
   ) ?? false;

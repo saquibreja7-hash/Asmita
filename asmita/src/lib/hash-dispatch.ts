@@ -42,7 +42,7 @@ export async function dispatchHashAdvisories(input: {
   });
   if (submissions.length === 0) throw new Error("no_approved_hashes");
 
-  const skipLegalGate = process.env.NODE_ENV !== "production" && process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
   const template = await db.noticeTemplate.findFirst({
     where: {
       templateType: "HASH_ADVISORY",

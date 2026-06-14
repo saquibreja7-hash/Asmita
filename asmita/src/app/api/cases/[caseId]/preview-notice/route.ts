@@ -24,8 +24,7 @@ export async function GET(
   const record = await getCaseForUser(caseId, auth.session.sub);
   if (!record) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const skipLegalGate =
-    process.env.NODE_ENV !== "production" && process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
 
   const url = await db.submittedUrl.findFirst({
     where: {

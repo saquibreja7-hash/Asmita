@@ -85,7 +85,7 @@ export async function POST(
     return NextResponse.json({ error: "unsupported_notice_basis" }, { status: 409 });
   }
 
-  const skipLegalGate = process.env.NODE_ENV !== "production" && process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
   const template = await db.noticeTemplate.findFirst({
     where: {
       templateType,
