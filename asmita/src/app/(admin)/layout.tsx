@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { AdminLogoutButton } from "./AdminLogoutButton";
 
 const adminLinks: Array<[string, string]> = [
   ["/admin/cases", "Cases"],
@@ -49,8 +50,11 @@ export default async function AdminLayout({
                 </Link>
               ))}
             </nav>
+            <div className="mt-8 border-t border-[var(--hairline)] pt-6">
+              <AdminLogoutButton />
+            </div>
           </aside>
-          <div>{children}</div>
+          <div className="min-w-0 overflow-x-auto">{children}</div>
         </div>
       </div>
     </AppShell>

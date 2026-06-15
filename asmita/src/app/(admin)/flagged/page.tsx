@@ -1,4 +1,5 @@
 import { listReviewQueueRows } from "@/lib/admin-dashboard";
+import { ReviewActions } from "./ReviewActions";
 
 export default async function FlaggedPage({
   searchParams,
@@ -119,8 +120,8 @@ export default async function FlaggedPage({
         />
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
-        <table className="w-full min-w-[760px] text-left text-sm">
+      <div className="mt-10 overflow-x-auto rounded-[14px] border border-[var(--hairline)] bg-white">
+        <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--hairline)]">
               <Th>Case</Th>
@@ -129,6 +130,7 @@ export default async function FlaggedPage({
               <Th>Reason</Th>
               <Th>Age</Th>
               <Th>Status</Th>
+              <Th>Actions</Th>
             </tr>
           </thead>
           <tbody>
@@ -148,6 +150,11 @@ export default async function FlaggedPage({
                 </td>
                 <td className="p-4 capitalize">
                   {row.slaState.replaceAll("_", " ")}
+                </td>
+                <td className="p-4">
+                  {row.status === "PENDING_REVIEW" && (
+                    <ReviewActions caseId={row.caseId} urlId={row.urlId} />
+                  )}
                 </td>
               </tr>
             ))}
