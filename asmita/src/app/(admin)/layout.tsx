@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireAdmin } from "@/lib/auth/require-admin";
 
@@ -23,7 +22,9 @@ export default async function AdminLayout({
   const auth = await requireAdmin();
 
   if (!auth.ok) {
-    redirect("/admin/login");
+    // Pass through without sidebar — login page is inside this layout tree
+    // and handles its own AppShell. Redirecting to /admin/login would loop.
+    return <>{children}</>;
   }
 
   return (
