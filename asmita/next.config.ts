@@ -42,7 +42,30 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      // PDF preview is served into an iframe on the sign page — relax framing
+      // headers for this one route only. All other security headers still apply.
+      {
+        source: "/api/cases/:caseId/preview-notice",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data:",
+              "connect-src 'self'",
+              "frame-ancestors 'self'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join("; "),
+          },
+        ],
+      },
+    ];
   },
 };
 
