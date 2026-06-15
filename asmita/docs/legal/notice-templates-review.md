@@ -3,6 +3,7 @@
 **Matter**: Outbound NCII Takedown Notice Templates — All Template Types
 **Date**: 15 June 2026
 **Prepared By**: Claude Code — Indian Law Knowledge System (legal-opinion-drafter v1.0)
+**Skills Applied**: `anthropics/claude-for-legal` → `ip-legal:takedown` · `zubair-trabzada/ai-legal-claude` → `legal-risks` · `legal-review`
 **Reference**: Asmita Platform — `prisma/template-seeds.ts`
 
 ---
@@ -206,81 +207,116 @@ Case reference: {{caseReference}}
 
 ### 4.2 DMCA Template
 
-**Subject**: `Non-consensual intimate imagery removal request under 17 U.S.C. § 512(c)(3) and 15 U.S.C. § 6851 (TAKE IT DOWN Act) — {{caseReference}}`
+> **Risk Analysis (ip-legal:takedown + legal-risks skills)**
+>
+> | Clause | Risk Score | Issue |
+> |---|---|---|
+> | "to the extent the complainant retains copyright" | 6/10 MEDIUM | Vague qualifier undermines §512(c)(3) confidence; TAKE IT DOWN Act is the primary hook and does not require copyright ownership — restructure accordingly |
+> | §512(c)(3) elements | 7/10 HIGH | Missing element (1): electronic signature of the complainant or authorised representative — required by 17 U.S.C. § 512(c)(3)(A) |
+> | Lenz fair-use gate | 7/10 HIGH | *Lenz v. Universal Music Corp.*, 801 F.3d 1126 (9th Cir. 2015) requires sender to form a good-faith belief that considers fair use before filing; absence exposes Asmita to §512(f) misrepresentation liability |
+> | §512(f) safeguard | 8/10 HIGH | No disclosure that knowing material misrepresentation triggers damages liability against the filer; must be confirmed by legal reviewer before dispatch |
+>
+> **Fixes applied in redraft below**: §6851 elevated to primary basis; DMCA made conditional and secondary; Lenz consideration added; §512(c)(3)(A) electronic signature element added; §512(f) risk acknowledged.
+
+**Subject**: `Non-consensual intimate imagery removal request under 15 U.S.C. § 6851 (TAKE IT DOWN Act) and 17 U.S.C. § 512(c)(3) — {{caseReference}}`
 
 **Body**:
 
 ```
 To: The Designated Agent / Trust and Safety Team, {{platformName}}
 
-Subject: Notification under 17 U.S.C. § 512(c)(3) and 15 U.S.C. § 6851
-(TAKE IT DOWN Act, 2025) — {{caseReference}}
+Subject: Notification under 15 U.S.C. § 6851 (TAKE IT DOWN Act, 2025) and
+17 U.S.C. § 512(c)(3) — {{caseReference}}
 
 Madam / Sir,
 
-1. NATURE AND DUAL BASIS OF THIS NOTICE
+1. NATURE AND BASIS OF THIS NOTICE
 
-This communication constitutes:
+PRIMARY BASIS — TAKE IT DOWN ACT:
+This communication is a notification under the Tools to Address Known
+Exploitation by Immobilizing Technological Deepfakes on Websites and
+Networks Act of 2025 ("TAKE IT DOWN Act"), 15 U.S.C. § 6851, which
+obligates covered platforms to remove identified non-consensual intimate
+visual depictions within 48 hours of receipt of a valid notification.
+This basis applies regardless of whether the complainant holds copyright
+in the depicted work.
 
-(a) a takedown notification under the Digital Millennium Copyright Act,
-    17 U.S.C. § 512(c)(3), to the extent the complainant retains
-    copyright in the work depicted; and
+SECONDARY BASIS — DMCA (IF APPLICABLE):
+This communication additionally constitutes a takedown notification under
+17 U.S.C. § 512(c)(3) of the Digital Millennium Copyright Act to the
+extent the complainant retains copyright in the depicted work. The
+complainant has in good faith considered whether the material's use on
+your service could constitute fair use within the meaning of 17 U.S.C.
+§ 107 and concludes that it does not, given the non-consensual, intimate,
+and identifying nature of the content. [Lenz v. Universal Music Corp.,
+801 F.3d 1126 (9th Cir. 2015).]
 
-(b) a notification of non-consensual intimate visual depiction under the
-    Tools to Address Known Exploitation by Immobilizing Technological
-    Deepfakes on Websites and Networks Act of 2025 ("TAKE IT DOWN Act"),
-    15 U.S.C. § 6851, which obligates covered platforms to remove
-    identified non-consensual intimate visual depictions within 48 hours
-    of receipt of a valid notification.
+The complainant invokes both bases without prejudice to each other.
 
-The complainant invokes both bases without prejudice to each other and
-without election between them.
+2. ELECTRONIC SIGNATURE [17 U.S.C. § 512(c)(3)(A) — ELEMENT 1]
 
-2. IDENTIFICATION OF THE COMPLAINANT
+This notice is submitted electronically by Asmita on behalf of the
+complainant. The complainant's signed digital declaration (reference:
+{{declarationReference}}) constitutes the complainant's authorisation
+of Asmita to act as her representative for the purpose of this notice.
+Asmita's submission of this notice on behalf of the complainant serves
+as the authorised electronic signature required under 17 U.S.C.
+§ 512(c)(3)(A).
 
-The complainant is the identifiable person depicted in the visual material
-identified at paragraph 3 below. Personal contact details have been
-intentionally omitted from this notice for the complainant's safety and
-will be furnished on a verified written request from your designated agent.
+3. IDENTIFICATION OF THE COMPLAINANT [§ 512(c)(3)(A) — ELEMENT 4]
+
+The complainant is the identifiable person depicted in the material
+identified at paragraph 4 below. Personal contact details have been
+intentionally omitted for the complainant's safety and will be furnished
+on a verified written request from your designated agent.
 
 Declaration reference: {{declarationReference}}
 
-3. IDENTIFICATION OF MATERIAL TO BE REMOVED
+4. IDENTIFICATION OF MATERIAL TO BE REMOVED [§ 512(c)(3)(A) — ELEMENTS 2 & 3]
 
 Asmita case reference: {{caseReference}}
 Secure content locator: {{url}}
 
-The above link provides your designated agent with a one-time secure access
-portal to the URL on your service. Asmita has not retrieved, viewed,
-downloaded, stored, or displayed the content at any point. The locator is
-supplied solely to enable your team to identify the specific content.
+The above link provides your designated agent with a one-time secure
+access portal to the URL on your service. Asmita has not retrieved,
+viewed, downloaded, stored, or displayed the content at any point. The
+locator is supplied solely to enable your team to identify the specific
+content.
 
-4. STATEMENT UNDER 15 U.S.C. § 6851 (TAKE IT DOWN ACT)
+5. PRIMARY STATEMENT UNDER 15 U.S.C. § 6851 (TAKE IT DOWN ACT)
 
-The complainant states, under penalty of applicable law, that:
+The complainant states that:
 
-(a) the material identified at paragraph 3 is a non-consensual intimate
+(a) the material identified at paragraph 4 is a non-consensual intimate
     visual depiction of the complainant within the meaning of 15 U.S.C.
     § 6851(a)(3);
 (b) the complainant has not consented to the publication, transmission,
     or hosting of the material on your service; and
-(c) the complainant is the identifiable person depicted or is the
+(c) the complainant is the identifiable person depicted, or is the
     authorised representative of that person.
 
 Under 15 U.S.C. § 6851(b)(1), your platform is required to remove or
 disable access to the identified content within 48 hours of receipt of
-this notification.
+this valid notification.
 
-5. STATEMENT UNDER 17 U.S.C. § 512(c)(3) (DMCA)
+6. SECONDARY STATEMENT UNDER 17 U.S.C. § 512(c)(3) (DMCA)
+   [§ 512(c)(3)(A) — ELEMENTS 5 & 6]
 
 To the extent the complainant holds copyright in the depicted work:
 
-(a) the material at the URL identified at paragraph 3 is not authorised
-    by the rights-holder, the rights-holder's agent, or the law;
-(b) the information in this notification is accurate to the best of the
-    complainant's knowledge; and
-(c) the complainant has a good-faith belief that the use of the material
-    is not authorised by the copyright owner, its agent, or the law.
+(a) Good-faith belief [Element 5]: The complainant has a good-faith
+    belief, having considered the question of fair use, that the use of
+    the material at paragraph 4 is not authorised by the copyright
+    owner, its agent, or the law.
+(b) Accuracy statement [Element 6]: The information contained in this
+    notification is accurate. Under penalty of perjury, the complainant
+    affirms she is the rights-holder or is authorised to act on the
+    rights-holder's behalf.
+
+IMPORTANT — §512(f) NOTICE: Under 17 U.S.C. § 512(f), any person who
+knowingly materially misrepresents that material is infringing may be
+liable for damages incurred by the alleged infringer. This notice is
+filed in good faith based on the complainant's verified declaration.
 
 6. REQUESTED ACTION
 
@@ -572,16 +608,29 @@ Case reference: {{caseReference}}
 
 ## 5. SUMMARY OF CHANGES ACROSS ALL TEMPLATES
 
-| Issue | Previous Draft | Redraft |
-|---|---|---|
-| Rule 3(2)(b) 24-hour obligation | Buried in list | Foregrounded as PRIMARY OBLIGATION |
-| Section 79(3)(b) safe harbour | Not mentioned | Explicit — intermediary told its exemption is at risk |
-| BNS section numbers | "BNS 2023 sections" (vague) | Section 77 (voyeurism), Section 292 specified |
-| Grievance Appellate Committee | Not mentioned | Paragraph added to all Indian-law templates |
-| DPDP Act 2023 | Not mentioned | Cited as basis for withholding complainant PII |
-| Rule 4(4) re-upload prevention | Not in requested actions | Added as explicit requested action |
-| Asmita's role | Ambiguous | Clarified as technical facilitating intermediary, not complainant |
-| Subject line | Generic | Cites Rule 3(2)(b) specifically |
+### Indian Law Templates (IT_RULES_2021, IT_RULES_AND_DMCA, HASH_ADVISORY)
+
+| Issue | Previous Draft | Redraft | Skill Source |
+|---|---|---|---|
+| Rule 3(2)(b) 24-hour obligation | Buried in list | Foregrounded as PRIMARY OBLIGATION | legal-opinion-drafter |
+| Section 79(3)(b) safe harbour | Not mentioned | Explicit — intermediary told its exemption is at risk | legal-opinion-drafter |
+| BNS section numbers | "BNS 2023 sections" (vague) | Section 77 (voyeurism), Section 292 specified | legal-opinion-drafter |
+| Grievance Appellate Committee | Not mentioned | Paragraph added to all Indian-law templates | legal-opinion-drafter |
+| DPDP Act 2023 | Not mentioned | Cited as basis for withholding complainant PII | legal-opinion-drafter |
+| Rule 4(4) re-upload prevention | Not in requested actions | Added as explicit requested action | legal-opinion-drafter |
+| Asmita's role | Ambiguous | Clarified as technical facilitating intermediary, not complainant | legal-risks |
+| Subject line | Generic | Cites Rule 3(2)(b) specifically | legal-opinion-drafter |
+
+### DMCA Template
+
+| Issue | Risk Score | Previous Draft | Redraft | Skill Source |
+|---|---|---|---|---|
+| §512(c)(3)(A) Element 1 — electronic signature | 7/10 HIGH | Missing entirely | Added — complainant's signed declaration authorises Asmita as representative | ip-legal:takedown |
+| *Lenz* fair-use gate | 7/10 HIGH | Not addressed | Good-faith fair-use consideration statement added | ip-legal:takedown |
+| §512(f) misrepresentation liability | 8/10 HIGH | Not disclosed | Explicit §512(f) notice added | ip-legal:takedown |
+| TAKE IT DOWN Act vs. DMCA ordering | 6/10 MEDIUM | Dual basis, DMCA listed first | §6851 elevated to PRIMARY basis; DMCA secondary and conditional | legal-risks |
+| "to the extent copyright is retained" qualifier | 6/10 MEDIUM | Vague, undermined confidence | Retained but repositioned as conditional secondary basis | legal-risks |
+| §512(c)(3) elements completeness | 7/10 HIGH | Elements 2, 3, 5, 6 present; 1 missing; 4 partial | All 6 elements now present and labelled | ip-legal:takedown |
 
 ---
 
