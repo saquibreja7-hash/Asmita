@@ -117,19 +117,21 @@ export async function validateAuditChainFromDb(limit = 10_000): Promise<AuditCha
         },
       };
     }
-    const recomputed = sha256(
-      canonicalize({
-        eventType: row.eventType,
-        entityType: row.entityType ?? undefined,
-        entityId: row.entityId ?? undefined,
-        actorId: row.actorId ?? undefined,
-        data: row.data ?? undefined,
-        ipHash: row.ipHash ?? undefined,
-        sequence: row.sequence,
-        createdAt: row.createdAt.toISOString(),
-        previousHash: row.previousHash,
-      }),
-    );
+    // Reconstruct exactly as the writer does: spread only the fields that were
+    // present in the original AuditEvent (optional fields are omitted when absent,
+    // not set to undefined — undefined keys serialize differently in canonicalize).
+    const hashInput: Record<string, unknown> = {
+      eventType: row.eventType,
+      sequence: row.sequence,
+      createdAt: row.createdAt.toISOString(),
+      previousHash: row.previousHash,
+    };
+    if (row.entityType != null) hashInput.entityType = row.entityType;
+    if (row.entityId != null) hashInput.entityId = row.entityId;
+    if (row.actorId != null) hashInput.actorId = row.actorId;
+    if (row.data != null) hashInput.data = row.data;
+    if (row.ipHash != null) hashInput.ipHash = row.ipHash;
+    const recomputed = sha256(canonicalize(hashInput));
     if (recomputed !== row.eventHash) {
       return {
         valid: false,
