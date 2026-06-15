@@ -6,10 +6,13 @@ import { csrfFetch } from "@/lib/client-csrf";
 interface Props {
   caseId: string;
   urlId: string;
+  status: string;
 }
 
-export function ReviewActions({ caseId, urlId }: Props) {
-  const [status, setStatus] = useState<"idle" | "loading" | "approved" | "rejected" | "error">("idle");
+export function ReviewActions({ caseId, urlId, status: rowStatus }: Props) {
+  const [status, setStatus] = useState<"idle" | "loading" | "approved" | "rejected" | "error">(
+    rowStatus === "NOTICE_QUEUED" ? "approved" : rowStatus === "REJECTED" ? "rejected" : "idle",
+  );
 
   async function act(decision: "approve" | "reject") {
     setStatus("loading");

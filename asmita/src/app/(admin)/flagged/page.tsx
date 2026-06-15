@@ -152,9 +152,7 @@ export default async function FlaggedPage({
                   {row.slaState.replaceAll("_", " ")}
                 </td>
                 <td className="p-4">
-                  {row.status === "PENDING_REVIEW" && (
-                    <ReviewActions caseId={row.caseId} urlId={row.urlId} />
-                  )}
+                  <ReviewActions caseId={row.caseId} urlId={row.urlId} status={row.status} />
                 </td>
               </tr>
             ))}
