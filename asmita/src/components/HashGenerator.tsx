@@ -95,15 +95,6 @@ export default function HashGenerator({ caseId }: { caseId: string }) {
 
   return (
     <section aria-label="Generate digital fingerprints" className="space-y-4">
-      <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
-        <p className="font-semibold">Your photo never leaves this device.</p>
-        <p>
-          We create a digital fingerprint (a &ldquo;hash&rdquo;) of your photo right here in
-          your browser. Only the fingerprint is sent to us &mdash; never the photo itself.
-          Platforms use the fingerprint to find and block the content.
-        </p>
-      </div>
-
       <input
         ref={inputRef}
         type="file"
