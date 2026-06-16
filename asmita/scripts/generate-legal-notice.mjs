@@ -15,7 +15,6 @@ import {
   Header,
   Footer,
   PageNumber,
-  NumberFormat,
   convertInchesToTwip,
 } from "docx";
 import { writeFileSync } from "fs";
@@ -124,16 +123,6 @@ function divider() {
       bottom: { style: BorderStyle.SINGLE, size: 4, color: HAIRLINE },
     },
     children: [new TextRun({ text: "" })],
-  });
-}
-
-function labelValue(label, value) {
-  return new Paragraph({
-    spacing: { before: pt(2), after: pt(2) },
-    children: [
-      new TextRun({ text: `${label}: `, bold: true, size: pt(11), color: DARK, font: "Calibri" }),
-      new TextRun({ text: value, size: pt(11), color: DARK, font: "Calibri" }),
-    ],
   });
 }
 

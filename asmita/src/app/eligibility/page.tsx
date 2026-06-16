@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { EligibilityWizard } from "./EligibilityWizard";
 import { getLocale } from "@/lib/get-locale";
-import { t, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
 
 export default async function EligibilityPage() {
   const locale = await getLocale();

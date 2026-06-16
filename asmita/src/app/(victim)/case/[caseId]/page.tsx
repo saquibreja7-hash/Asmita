@@ -8,13 +8,6 @@ import { CaseDashboardActions } from "./CaseDashboardActions";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 
-const HASH_STATUS_LABELS_KEYS: Record<string, string> = {
-  PENDING_REVIEW: "Awaiting review",
-  APPROVED: "Approved – dispatch pending",
-  DISPATCHED: "Sent to platforms",
-  REJECTED: "Rejected",
-};
-
 const URL_STATUS_LABELS_KEYS: Record<string, string> = {
   PENDING_REVIEW: "Pending review",
   NOTICE_QUEUED: "Notice queued",

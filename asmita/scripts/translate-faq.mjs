@@ -141,7 +141,7 @@ const remainingKeys = {
   "res.closing.cta2": "Read the FAQ",
 };
 
-const hiwKeys = {
+const _hiwKeys = {
   "hiw.pill": "How it works",
   "hiw.hero.title.1": "Four steps.",
   "hiw.hero.title.2": "One",
@@ -180,7 +180,7 @@ const hiwKeys = {
   "hiw.closing.cta2": "Read the FAQ",
 };
 
-const homeKeys = {
+const _homeKeys = {
   "home.pill": "Asmita · अस्मिता · for women in India",
   "home.langNote": "Available in English and",
   "home.hero.title.1": "You don't have to face this",
@@ -213,7 +213,7 @@ const homeKeys = {
   "home.closing.partners": "Notice templates reviewed by Internet Freedom Foundation and SFLC.in.",
 };
 
-const faqKeys = {
+const _faqKeys = {
   // Section eyebrows & titles
   "faq.s1.eyebrow": "About Asmita",
   "faq.s1.title": "The basics",

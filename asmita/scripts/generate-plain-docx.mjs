@@ -1,7 +1,7 @@
 import {
   Document, Packer, Paragraph, TextRun, AlignmentType,
-  HeadingLevel, BorderStyle, UnderlineType, PageBreak,
-  WidthType, Table, TableRow, TableCell, ShadingType,
+  BorderStyle, UnderlineType,
+  WidthType, Table, TableRow, TableCell,
 } from "docx";
 import { writeFileSync } from "fs";
 

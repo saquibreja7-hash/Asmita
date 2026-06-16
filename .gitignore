@@ -7,3 +7,4 @@ node_modules/
 # Temporary throwaway research crawler — never commit
 research/
 
+hash-advisory-preview-*.pdf

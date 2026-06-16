@@ -11,7 +11,6 @@ const MUTED  = "#757575";
 const HAIR   = "#E0E0E0";
 const ROSE   = "#C62828";
 const AMBER  = "#E65100";
-const CREAM  = "#FAFAFA";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const esc = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
