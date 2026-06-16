@@ -44,6 +44,39 @@ async function translate(text) {
   return data.translated_text;
 }
 
+const homeKeys = {
+  "home.pill": "Asmita · अस्मिता · for women in India",
+  "home.langNote": "Available in English and",
+  "home.hero.title.1": "You don't have to face this",
+  "home.hero.title.2": "alone",
+  "home.hero.sub": "Free, confidential, and built around your dignity.",
+  "home.hero.cta": "Start a case",
+  "home.hero.minorLink": "Under 18? Find help",
+  "home.hero.noFetch": "We never fetch, view, download, or store the content at any link you share.",
+  "home.validation": "What you're feeling is valid. None of this is your fault.",
+  "home.blockA.eyebrow": "Your rights",
+  "home.blockA.title": "Indian law requires platforms to act within 24 hours.",
+  "home.blockA.body": "Most people don't know this right exists. Asmita turns it into one calm flow - paste links, review notices, and watch responses come in.",
+  "home.blockA.link": "How notices route",
+  "home.blockA.stat": "24h",
+  "home.blockA.statLabel": "mandatory platform response window",
+  "home.blockB.eyebrow": "Privacy",
+  "home.blockB.title.1": "Privacy is the architecture,",
+  "home.blockB.title.2": "not the marketing.",
+  "home.blockB.item1.bold": "We never fetch your URLs.",
+  "home.blockB.item1.rest": "Servers only parse the domain string.",
+  "home.blockB.item2.bold": "We never store the media.",
+  "home.blockB.item2.rest": "Only notice metadata is kept.",
+  "home.blockB.item3.bold": "We never share without you.",
+  "home.blockB.item3.rest": "No third party sees your case unless you route it there.",
+  "home.blockB.link": "Read the privacy promise",
+  "home.closing.title": "Begin when you are ready.",
+  "home.closing.body": "There is no clock running. You can start, stop, and come back.",
+  "home.closing.cta1": "Start a case",
+  "home.closing.cta2": "Read the FAQ",
+  "home.closing.partners": "Notice templates reviewed by Internet Freedom Foundation and SFLC.in.",
+};
+
 const faqKeys = {
   // Section eyebrows & titles
   "faq.s1.eyebrow": "About Asmita",
@@ -132,7 +165,7 @@ const faqKeys = {
 
 async function main() {
   const hi = JSON.parse(readFileSync(HI_JSON, "utf8"));
-  const entries = Object.entries(faqKeys);
+  const entries = Object.entries(homeKeys);
   let done = 0;
 
   for (const [key, english] of entries) {
