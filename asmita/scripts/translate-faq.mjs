@@ -44,6 +44,103 @@ async function translate(text) {
   return data.translated_text;
 }
 
+const remainingKeys = {
+  // Nav
+  "nav.howItWorks": "How it works",
+  "nav.resources": "Resources",
+  "nav.privacy": "Privacy",
+  "nav.start": "Start",
+
+  // Support panel
+  "support.button": "Support",
+  "support.title": "Immediate support",
+  "support.close": "Close",
+  "support.childline": "CHILDLINE 1098",
+  "support.childlineBody": "24 hours, free, for minors and child safety concerns.",
+  "support.emergency": "Emergency",
+  "support.emergencyBody": "Call if you are in immediate danger.",
+  "support.icallBody": "Mental health counselling in India.",
+
+  // Auth & misc
+  "auth.enterEmail": "Enter your email address",
+  "auth.otpInstructions": "We sent a six digit code to your email.",
+  "auth.ageAdult": "I confirm I am 18 or older.",
+  "auth.ageMinor": "I am under 18.",
+  "submit.declarationTitle": "Declaration",
+  "submit.noUpload": "Do not upload intimate images or videos.",
+  "minor.noAdultFlow": "Asmita does not collect adult case URLs from minors.",
+
+  // Registration
+  "reg.pill": "Sign in",
+  "reg.aside.sub": "Asmita uses email one-time codes instead of passwords. Enter your email and we will send a 6-digit code to verify it is you.",
+  "reg.aside.item1.heading": "No password stored",
+  "reg.aside.item1.detail": "Authentication is by one-time code only. Nothing else is saved.",
+  "reg.aside.item2.heading": "Email used only for this",
+  "reg.aside.item2.detail": "We send case updates and platform replies to this address. Nothing else.",
+  "reg.aside.item3.heading": "You confirmed eligibility",
+  "reg.aside.item3.detail": "Your age attestation from the previous step applies here.",
+  "reg.email.title": "Your email address.",
+  "reg.email.sub": "We will send a 6-digit code to verify it is yours. No password needed - the code is your sign-in.",
+  "reg.email.label": "Email address",
+  "reg.email.sendBtn": "Send verification code",
+  "reg.email.sending": "Sending...",
+  "reg.otp.title": "Enter the code we sent.",
+  "reg.otp.sub": "We sent a 6-digit code to your email. Check your inbox and spam folder. Codes expire in 10 minutes.",
+  "reg.otp.label": "6-digit code",
+  "reg.otp.verifyBtn": "Continue",
+  "reg.otp.verifying": "Verifying...",
+  "reg.otp.wrongEmail": "Wrong email?",
+  "reg.otp.changeEmail": "Use a different address",
+  "reg.error.timeout": "The request timed out. Please try again.",
+  "reg.error.codeNoMatch": "The code did not match. Please try again.",
+  "reg.progress.email": "Email address",
+  "reg.progress.otp": "Verify code",
+
+  // Resources
+  "res.pill": "Support resources",
+  "res.hero.title.1": "Help you can reach",
+  "res.hero.title.2": "without",
+  "res.hero.title.3": "an account.",
+  "res.hero.sub": "Every line below is free to use, requires no Asmita case, and is run by an Indian organisation or the Government of India.",
+  "res.emergency.eyebrow": "If you are in immediate danger",
+  "res.emergency.sub": "Call first. Both lines are 24-hour, free, and answer in multiple Indian languages.",
+  "res.emergency1.name": "Emergency Response",
+  "res.emergency1.desc": "Police, fire, ambulance across India. Call if you are in immediate danger.",
+  "res.emergency2.name": "CHILDLINE",
+  "res.emergency2.desc": "For minors and child safety concerns. Adults worried about a child can also call.",
+  "res.counselling.eyebrow": "Counselling",
+  "res.counselling.title": "If you need to talk to someone.",
+  "res.counselling.sub": "Free, confidential - not legal advice, not law enforcement.",
+  "res.icall.desc": "Psychosocial counselling by telephone and email, run by the Tata Institute of Social Sciences.",
+  "res.legalaid.eyebrow": "Legal aid",
+  "res.legalaid.title": "If you need legal aid.",
+  "res.legalaid.sub": "Free legal services through India's statutory legal-aid authorities.",
+  "res.nalsa.desc": "Official directory of National, State, and District Legal Services Authorities. Use the state link to find your district office.",
+  "res.cybercrime.eyebrow": "Cybercrime",
+  "res.cybercrime.title": "If you want to file a cybercrime complaint.",
+  "res.cybercrime.sub": "The government portal for cybercrime reporting in India.",
+  "res.ncrp.desc": "Plain-language path for filing cybercrime complaints. The women-and-child path applies for non-consensual intimate content.",
+  "res.community.eyebrow": "Community",
+  "res.community.title": "Awareness and community.",
+  "res.community.sub": "Indian organisations working alongside survivors on digital safety and gender-based violence.",
+  "res.cyberpeace.desc": "Cyber-safety guidance and public-awareness resources for individuals and organisations.",
+  "res.reddot.desc": "Support and reporting ecosystem for gender-based violence and public safety.",
+  "res.platforms.eyebrow": "Platform reporting",
+  "res.platforms.title": "If the content is already posted somewhere.",
+  "res.platforms.sub": "Every major platform has a reporting path for non-consensual intimate imagery. Going direct is often the fastest way to get content removed.",
+  "res.filing.eyebrow": "Filing guide",
+  "res.filing.title": "How to use the cybercrime portal well.",
+  "res.filing.sub": "Four short notes from people who have helped survivors file before.",
+  "res.filing.step1": "Open the National Cybercrime Reporting Portal and choose the women-and-child path if it applies to your situation.",
+  "res.filing.step2": "Use your Asmita case reference and FIR package once your case has reached the seven-day mark.",
+  "res.filing.step3": "Do not upload intimate images to Asmita. Only attach material where the official portal explicitly asks for it.",
+  "res.filing.step4": "Call 112 first if there is immediate danger, or 1098 for child-safety concerns.",
+  "res.closing.title": "When you are ready, Asmita is here.",
+  "res.closing.body": "You can use any of the resources above without ever creating an Asmita case. None of them require it.",
+  "res.closing.cta1": "Start a case",
+  "res.closing.cta2": "Read the FAQ",
+};
+
 const hiwKeys = {
   "hiw.pill": "How it works",
   "hiw.hero.title.1": "Four steps.",
@@ -204,7 +301,7 @@ const faqKeys = {
 
 async function main() {
   const hi = JSON.parse(readFileSync(HI_JSON, "utf8"));
-  const entries = Object.entries(hiwKeys);
+  const entries = Object.entries(remainingKeys);
   let done = 0;
 
   for (const [key, english] of entries) {
