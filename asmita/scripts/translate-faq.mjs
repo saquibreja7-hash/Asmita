@@ -28,10 +28,11 @@ async function translate(text) {
       input: text,
       source_language_code: "en-IN",
       target_language_code: "hi-IN",
-      speaker_gender: "Female",
-      mode: "formal",
+      speaker_gender: "Male",
+      mode: "classic-colloquial",
       model: "mayura:v1",
-      enable_preprocessing: true,
+      enable_preprocessing: false,
+      numerals_format: "international",
     }),
   });
 
