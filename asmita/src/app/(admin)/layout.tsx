@@ -23,7 +23,7 @@ export default async function AdminLayout({
   const auth = await requireAdmin();
 
   if (!auth.ok) {
-    // Pass through without sidebar — login page is inside this layout tree
+    // Pass through without sidebar - login page is inside this layout tree
     // and handles its own AppShell. Redirecting to /admin/login would loop.
     return <>{children}</>;
   }

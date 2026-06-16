@@ -12,6 +12,7 @@ export function CaseDashboardActions({
 }) {
   const [urlText, setUrlText] = useState("");
   const [message, setMessage] = useState("");
+  const [messageOk, setMessageOk] = useState(true);
   const [loading, setLoading] = useState(false);
 
   async function addUrl() {
@@ -20,18 +21,16 @@ export function CaseDashboardActions({
     const response = await csrfFetch(`/api/cases/${caseId}/urls`, {
       method: "POST",
       body: JSON.stringify({
-        urls: urlText
-          .split(/\n+/)
-          .map((item) => item.trim())
-          .filter(Boolean),
+        urls: urlText.split(/\n+/).map((u) => u.trim()).filter(Boolean),
         declaration: true,
       }),
     });
     setLoading(false);
+    setMessageOk(response.ok);
     setMessage(
       response.ok
-        ? "URL added. Refresh to see the updated status list."
-        : "Could not add this URL."
+        ? "Link added. Refresh to see the updated status."
+        : "Could not add this link. Check that it is a valid public URL."
     );
     if (response.ok) setUrlText("");
   }
@@ -45,84 +44,69 @@ export function CaseDashboardActions({
       body: JSON.stringify({ urlId: firstUrlId }),
     });
     setLoading(false);
+    setMessageOk(response.ok);
     setMessage(
       response.ok
-        ? "URL marked manually resolved."
-        : "Could not mark this URL resolved."
+        ? "Link marked as resolved."
+        : "Could not mark this link resolved."
     );
   }
 
   return (
-    <section className="space-y-10" aria-label="Case actions">
-      <p className="font-mono text-center text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-        Actions
-      </p>
-      <h2 className="font-display -mt-6 text-center text-[28px] font-normal leading-[1.18] tracking-tight md:text-[40px] md:leading-[1.14]">
-        Add a URL, or close one.
+    <div className="space-y-8">
+      <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[26px]">
+        Add a link
       </h2>
 
-      <div className="mx-auto max-w-xl">
+      <div>
         <label
           htmlFor="additional-urls"
-          className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--foreground)]"
+          className="block text-sm font-semibold text-[var(--foreground)]"
         >
-          Add another URL
+          Paste one URL per line
         </label>
         <p className="muted mt-1 text-sm leading-[1.6]">
-          Paste one URL per line. Same rules apply - Asmita reads only the
-          domain.
+          Same rules apply - Asmita reads only the domain. The content at the link is never opened.
         </p>
         <textarea
-          className="field mt-3 min-h-28 font-mono text-[14px] leading-[1.7]"
+          className="field mt-3 min-h-28 font-mono text-[13px] leading-[1.7]"
           id="additional-urls"
-          onChange={(event) => setUrlText(event.target.value)}
+          onChange={(e) => setUrlText(e.target.value)}
           placeholder="https://example.com/post/1234"
           spellCheck={false}
           value={urlText}
         />
-        <div className="mt-4 text-center">
+        <div className="mt-4 flex flex-wrap items-center gap-4">
           <button
             className="btn btn-primary"
             disabled={loading || !urlText.trim()}
             onClick={addUrl}
             type="button"
           >
-            {loading ? "Working…" : "Add URL to case"}
+            {loading ? "Working..." : "Add to case"}
           </button>
-        </div>
-      </div>
 
-      <div className="mx-auto max-w-xl text-center">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-          Manual resolution
-        </p>
-        <h3 className="font-display mt-3 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[28px]">
-          If the first URL is already gone.
-        </h3>
-        <p className="muted mx-auto mt-4 max-w-md text-base leading-[1.75]">
-          Use this if the first listed URL has already been removed or
-          resolved outside the platform response flow.
-        </p>
-        <div className="mt-6">
-          <button
-            className="btn btn-secondary"
-            disabled={loading || !firstUrlId}
-            onClick={markResolved}
-            type="button"
-          >
-            Mark first URL resolved
-          </button>
+          {firstUrlId && (
+            <button
+              className="text-sm text-[var(--muted)] underline decoration-transparent underline-offset-4 transition-colors hover:text-[var(--foreground)] hover:decoration-current"
+              disabled={loading}
+              onClick={markResolved}
+              type="button"
+            >
+              Mark first link resolved
+            </button>
+          )}
         </div>
       </div>
 
       {message && (
         <p
           aria-live="polite"
-          className="text-center text-sm font-semibold text-[var(--teal)]"
+          className={`text-sm font-semibold ${messageOk ? "text-[var(--teal)]" : "text-[var(--rose)]"}`}
         >
           {message}
         </p>
       )}
-    </section>
+    </div>
   );
 }

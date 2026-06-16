@@ -168,7 +168,7 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
         continue;
       }
 
-      // Handler succeeded — commit the level bump. If this transaction fails
+      // Handler succeeded - commit the level bump. If this transaction fails
       // we keep the email sent (handler already ran) but escalationLevel
       // stays at the prior tier; next sweep will see the Escalation row
       // missing for this level and re-attempt, which dispatchEscalationFollowUp

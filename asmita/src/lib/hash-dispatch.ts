@@ -10,15 +10,20 @@ import {
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
 
-// Phase 2 fan-out: turns APPROVED hash submissions into HASH_ADVISORY emails,
-// one per target platform, each carrying the legal notice plus the perceptual
-// hash annex. Hard gates, in order:
+// Dispatches the signed hash advisory to each target email platform.
+// Hard gates, in order:
 //   1. ENABLE_HASH_UPLOAD must be on (checked by callers' routes).
-//   2. The HASH_ADVISORY template must be human-legally reviewed.
-//   3. Only APPROVED (admin-reviewed) submissions are ever dispatched.
-//   4. Recipients must be human-verified platform contacts.
-//   5. Idempotent per (hashSubmission, platform) via the HashDispatch unique
-//      constraint — re-runs never double-send.
+//   2. Case must have a signedHashAdvisoryPdf - survivor must have reviewed and signed.
+//   3. The HASH_ADVISORY template must be human-legally reviewed (or DEV bypass).
+//   4. Only APPROVED (admin-reviewed) submissions are ever dispatched.
+//   5. Recipients must be human-verified platform contacts.
+//   6. Idempotent per (hashSubmission, platform) via the HashDispatch unique
+//      constraint - re-runs never double-send.
+//
+// Integrity: the notice body is rendered ONCE from the platform-agnostic
+// HASH_ADVISORY template and is identical for every email platform. The signed
+// PDF (stored on Case, encrypted) is attached to every outgoing email so
+// recipients receive the survivor-signed operative document.
 
 export type HashDispatchResult =
   | { platformId: string; dispatched: true; messageId: string; hashCount: number }
@@ -31,10 +36,17 @@ export async function dispatchHashAdvisories(input: {
 }): Promise<HashDispatchResult[]> {
   const dbCase = await db.case.findUnique({
     where: { id: input.caseId },
-    select: { id: true, referenceNumber: true, declarationSignedAt: true },
+    select: {
+      id: true,
+      referenceNumber: true,
+      signedHashAdvisoryPdf: true,
+    },
   });
   if (!dbCase) throw new Error("case_not_found");
-  if (!dbCase.declarationSignedAt) throw new Error("declaration_required");
+  if (!dbCase.signedHashAdvisoryPdf) throw new Error("hash_advisory_not_signed");
+
+  const pdfBase64 = decryptField(dbCase.signedHashAdvisoryPdf);
+  const pdfBuffer = Buffer.from(pdfBase64, "base64");
 
   const submissions = await db.hashSubmission.findMany({
     where: { caseId: input.caseId, status: { in: ["APPROVED", "DISPATCHED"] } },
@@ -55,12 +67,26 @@ export async function dispatchHashAdvisories(input: {
 
   const annex = buildHashAnnex({
     algorithm: "PDQ",
-    hashes: submissions.map((submission) => ({
-      value: decryptField(submission.hashEncrypted),
-      quality: submission.quality,
+    hashes: submissions.map((s) => ({
+      value: decryptField(s.hashEncrypted),
+      quality: s.quality,
     })),
     clientVersion: submissions[0].clientVersion,
   });
+
+  // Render the notice body ONCE. The HASH_ADVISORY template is platform-agnostic;
+  // passing platformName: "your service" handles any remaining {{platformName}}
+  // references in the v1 template while v2+ templates omit the variable entirely.
+  const variables = {
+    caseReference: dbCase.referenceNumber,
+    declarationReference: dbCase.referenceNumber,
+    platformName: "your service",
+  };
+  const subject = renderNoticeTemplate(template.subjectTemplate, variables);
+  const noticeBody = renderNoticeTemplate(template.bodyTemplate, variables);
+  const emailBody = `${noticeBody}\n\n${annex}`;
+  assertNoticeSubjectSafe(subject);
+  assertNoticeBodySafe(emailBody);
 
   const results: HashDispatchResult[] = [];
 
@@ -75,8 +101,6 @@ export async function dispatchHashAdvisories(input: {
       continue;
     }
     if (!platform.grievanceEmail) {
-      // Form-only platform: we can't email — return the form URL so the caller
-      // can direct the survivor to paste the hash advisory manually.
       results.push({ platformId, dispatched: false, reason: "form_only", formUrl: platform.formUrl ?? undefined });
       continue;
     }
@@ -90,9 +114,7 @@ export async function dispatchHashAdvisories(input: {
     const pendingSubmissions = [];
     for (const submission of submissions) {
       const existing = await db.hashDispatch.findUnique({
-        where: {
-          hashSubmissionId_platformId: { hashSubmissionId: submission.id, platformId },
-        },
+        where: { hashSubmissionId_platformId: { hashSubmissionId: submission.id, platformId } },
       });
       if (!existing) pendingSubmissions.push(submission);
     }
@@ -101,18 +123,12 @@ export async function dispatchHashAdvisories(input: {
       continue;
     }
 
-    const variables = {
-      caseReference: dbCase.referenceNumber,
-      platformName: platform.name,
-      declarationReference: `${dbCase.referenceNumber}-DECL`,
-    };
-    const subject = renderNoticeTemplate(template.subjectTemplate, variables);
-    const noticeBody = renderNoticeTemplate(template.bodyTemplate, variables);
-    const body = `${noticeBody}\n\n${annex}`;
-    assertNoticeSubjectSafe(subject);
-    assertNoticeBodySafe(body);
-
-    const sent = await sendNoticeDraft(platform.grievanceEmail, subject, body);
+    const sent = await sendNoticeDraft(platform.grievanceEmail, subject, emailBody, [
+      {
+        filename: `notice-${dbCase.referenceNumber}.pdf`,
+        content: pdfBuffer,
+      },
+    ]);
     const messageId =
       "id" in sent && typeof sent.id === "string"
         ? sent.id
@@ -121,10 +137,7 @@ export async function dispatchHashAdvisories(input: {
           : `hash-advisory-${input.caseId.slice(0, 8)}-${platformId.slice(0, 8)}`;
 
     await db.hashDispatch.createMany({
-      data: pendingSubmissions.map((submission) => ({
-        hashSubmissionId: submission.id,
-        platformId,
-      })),
+      data: pendingSubmissions.map((s) => ({ hashSubmissionId: s.id, platformId })),
       skipDuplicates: true,
     });
     await db.hashSubmission.updateMany({
@@ -144,12 +157,7 @@ export async function dispatchHashAdvisories(input: {
         templateVersion: template.version,
       },
     });
-    results.push({
-      platformId,
-      dispatched: true,
-      messageId,
-      hashCount: pendingSubmissions.length,
-    });
+    results.push({ platformId, dispatched: true, messageId, hashCount: pendingSubmissions.length });
   }
 
   return results;

@@ -94,7 +94,7 @@ export default function HashDispatchForm({
           >
             {cases.map((entry) => (
               <option key={entry.caseId} value={entry.caseId}>
-                {entry.referenceNumber} — {entry.approvedCount} approved
+                {entry.referenceNumber} - {entry.approvedCount} approved
                 {entry.dispatchedCount > 0 ? `, ${entry.dispatchedCount} dispatched` : ""}
               </option>
             ))}

@@ -19,7 +19,7 @@ function devHashStore(): Map<string, DisplayHashSubmission[]> {
 }
 
 // Server-side handling of Phase 2 client-generated PDQ hashes.
-// The server accepts ONLY 64-hex-char hashes — never image bytes. Anything
+// The server accepts ONLY 64-hex-char hashes - never image bytes. Anything
 // that looks like media content is rejected before it reaches storage.
 
 export const PDQ_HASH_PATTERN = /^[0-9a-f]{64}$/i;

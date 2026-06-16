@@ -3,7 +3,7 @@
  *
  * Runs entirely in the browser. Input is raw RGBA pixel data (e.g. from a
  * canvas ImageData); output is a 256-bit hash as 64 hex chars plus a quality
- * score. No image bytes ever leave this module — callers must release their
+ * score. No image bytes ever leave this module - callers must release their
  * buffers after hashing.
  *
  * This is a line-faithful port of the reference C++ implementation:
@@ -40,7 +40,7 @@ export type PdqResult = {
 
 const fround = Math.fround;
 
-// Reference: pdqio.cpp — images larger than 512 on either side are first
+// Reference: pdqio.cpp - images larger than 512 on either side are first
 // resized to exactly 512x512 (aspect ratio intentionally not preserved,
 // nearest-neighbor, matching CImg::resize's default interpolation) because
 // the two-pass Jarosz filter is prohibitively expensive on large images.
@@ -81,7 +81,7 @@ function jaroszWindowSize(oldDimension: number, newDimension: number): number {
   return Math.floor((oldDimension + 2 * newDimension - 1) / (2 * newDimension));
 }
 
-// Reference: box1DFloat — exact four-phase sliding box filter.
+// Reference: box1DFloat - exact four-phase sliding box filter.
 function box1DFloat(
   invec: Float32Array,
   inBase: number,
@@ -165,7 +165,7 @@ function boxAlongColsFloat(
   }
 }
 
-// Reference: jaroszFilterFloat — two ping-pong passes ending in buffer1.
+// Reference: jaroszFilterFloat - two ping-pong passes ending in buffer1.
 function jaroszFilterFloat(
   buffer1: Float32Array,
   buffer2: Float32Array,
@@ -181,7 +181,7 @@ function jaroszFilterFloat(
   }
 }
 
-// Reference: decimateFloat — target centers, not corners.
+// Reference: decimateFloat - target centers, not corners.
 function decimateFloat(
   inBuf: Float32Array,
   inNumRows: number,
@@ -199,7 +199,7 @@ function decimateFloat(
   }
 }
 
-// Reference: pdqImageDomainQualityMetric — quantized gradient count.
+// Reference: pdqImageDomainQualityMetric - quantized gradient count.
 function pdqImageDomainQualityMetric(buffer64x64: Float32Array): number {
   let gradientSum = 0;
   for (let i = 0; i < OUT_DIM - 1; i++) {
@@ -223,7 +223,7 @@ function pdqImageDomainQualityMetric(buffer64x64: Float32Array): number {
 
 let dctMatrix: Float32Array | null = null;
 
-// Reference: dct_matrix_64 — 16x64 DCT-II basis skipping the DC term:
+// Reference: dct_matrix_64 - 16x64 DCT-II basis skipping the DC term:
 // d[i][j] = sqrt(2/64) * cos((pi/2/64) * (i+1) * (2j+1)).
 function getDctMatrix(): Float32Array {
   if (!dctMatrix) {
@@ -240,7 +240,7 @@ function getDctMatrix(): Float32Array {
   return dctMatrix;
 }
 
-// Reference: dct64To16 — B = D A Dt with float32 accumulation.
+// Reference: dct64To16 - B = D A Dt with float32 accumulation.
 function dct64To16(a: Float32Array): Float32Array {
   const d = getDctMatrix();
   const t = new Float32Array(DCT_DIM * OUT_DIM); // T = D A
@@ -266,7 +266,7 @@ function dct64To16(a: Float32Array): Float32Array {
   return b;
 }
 
-// Reference: torben — median selection without sorting; returns an actual
+// Reference: torben - median selection without sorting; returns an actual
 // element of the array (the lower median for even counts).
 function torben(m: Float32Array, n: number): number {
   let min = m[0];

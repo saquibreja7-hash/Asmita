@@ -1,40 +1,69 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { RegisterForm } from "./RegisterForm";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  const locale = await getLocale();
+
+  const asideItems = [
+    { heading: t(locale, "reg.aside.item1.heading"), detail: t(locale, "reg.aside.item1.detail") },
+    { heading: t(locale, "reg.aside.item2.heading"), detail: t(locale, "reg.aside.item2.detail") },
+    { heading: t(locale, "reg.aside.item3.heading"), detail: t(locale, "reg.aside.item3.detail") },
+  ];
+
   return (
     <AppShell>
       <div className="page-canvas">
-        {/* HERO */}
-        <section className="container pb-10 pt-20 text-center md:pb-12 md:pt-32">
-          <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              Create your case
-            </span>
-            <p className="muted mt-3 text-xs tracking-wide">
-              Available in English and <span lang="hi">हिंदी</span>
-            </p>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[64px] md:leading-[1.06]">
-              No passwords.
-              <br />
-              Just <em className="not-italic text-gradient">you</em>, an email,
-              and a code.
-            </h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              Asmita signs you in with a one-time code sent to your email. If
-              you are under 18, you will be routed to support resources
-              instead of being asked for any case data.
-            </p>
-          </div>
-        </section>
+        <div className="container py-16 md:py-24">
+          <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
 
-        {/* FORM */}
-        <section className="container pb-24 md:pb-32">
-          <div className="mx-auto max-w-xl">
-            <RegisterForm />
+            {/* LEFT - sticky context panel */}
+            <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
+              <div className="md:sticky md:top-28">
+                <span className="pill">
+                  <span className="dot" />
+                  {t(locale, "reg.pill")}
+                </span>
+
+                <p className="muted mt-6 text-sm leading-[1.75]">
+                  {t(locale, "reg.aside.sub")}
+                </p>
+
+                <div className="mt-8 space-y-4">
+                  {asideItems.map(({ heading, detail }) => (
+                    <div key={heading} className="flex items-start gap-3">
+                      <span
+                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
+                        aria-hidden
+                      >
+                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                          <path
+                            d="M1 4l2.5 2.5L9 1"
+                            stroke="var(--teal)"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--foreground)]">{heading}</p>
+                        <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </aside>
+
+            {/* RIGHT - form */}
+            <div className="min-w-0 flex-1">
+              <RegisterForm locale={locale} />
+            </div>
+
           </div>
-        </section>
+        </div>
       </div>
     </AppShell>
   );

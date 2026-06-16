@@ -12,6 +12,8 @@ export type CaseRecord = {
   createdAt: string;
   status: "OPEN" | "RESOLVED";
   urls: UrlRecord[];
+  signedHashAdvisoryPdf?: string | null;
+  hashAdvisoryPlatformIds?: string[];
 };
 
 export type UrlRecord = {
@@ -222,6 +224,17 @@ export async function hardDeleteDueUsers(now = new Date()) {
     });
   }
   return deletedUserIds;
+}
+
+export function updateCaseHashAdvisory(
+  caseId: string,
+  data: { signedHashAdvisoryPdf: string; hashAdvisoryPlatformIds: string[] },
+) {
+  assertDevOrTest();
+  const record = cases.get(caseId);
+  if (!record) throw new Error("case_not_found");
+  record.signedHashAdvisoryPdf = data.signedHashAdvisoryPdf;
+  record.hashAdvisoryPlatformIds = data.hashAdvisoryPlatformIds;
 }
 
 export async function reviewSubmittedUrl(input: {

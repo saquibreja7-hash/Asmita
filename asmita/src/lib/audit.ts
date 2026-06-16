@@ -119,7 +119,7 @@ export async function validateAuditChainFromDb(limit = 10_000): Promise<AuditCha
     }
     // Reconstruct exactly as the writer does: spread only the fields that were
     // present in the original AuditEvent (optional fields are omitted when absent,
-    // not set to undefined — undefined keys serialize differently in canonicalize).
+    // not set to undefined - undefined keys serialize differently in canonicalize).
     const hashInput: Record<string, unknown> = {
       eventType: row.eventType,
       sequence: row.sequence,

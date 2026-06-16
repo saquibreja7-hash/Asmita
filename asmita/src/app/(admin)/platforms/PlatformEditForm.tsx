@@ -58,7 +58,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
     }
 
     if (Object.keys(fields).length === 0 && !markVerified) {
-      setError("No changes detected and 'mark verified' not selected — nothing to save.");
+      setError("No changes detected and 'mark verified' not selected - nothing to save.");
       return;
     }
 

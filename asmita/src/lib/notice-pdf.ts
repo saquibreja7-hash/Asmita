@@ -93,7 +93,7 @@ export async function generateNoticePdf(input: NoticePdfInput): Promise<Buffer> 
   });
   y -= 18;
 
-  // Body — paginate if content overflows
+  // Body - paginate if content overflows
   const bodyLines = wrapText(input.noticeBody, font, BODY_SIZE, CONTENT_WIDTH);
   for (const line of bodyLines) {
     if (y < MARGIN + 40) {
@@ -120,7 +120,7 @@ export async function generateNoticePdf(input: NoticePdfInput): Promise<Buffer> 
     dy -= 24;
 
     const declarationText =
-      `I, ${input.survivorName ?? "—"}, declare that I am the person depicted in the ` +
+      `I, ${input.survivorName ?? "-"}, declare that I am the person depicted in the ` +
       `non-consensual intimate content referenced in this notice (case ${input.caseReference}). ` +
       `I have not consented to the creation, possession, or distribution of this content. ` +
       `I authorise Asmita / CSR India to transmit this takedown notice to ${input.platformName} ` +
@@ -130,7 +130,7 @@ export async function generateNoticePdf(input: NoticePdfInput): Promise<Buffer> 
     dy -= 20;
 
     for (const [label, value] of [
-      ["Contact", input.survivorContact ?? "—"],
+      ["Contact", input.survivorContact ?? "-"],
       ["Platform", input.platformName],
       ["Date", input.date],
     ]) {
@@ -143,7 +143,7 @@ export async function generateNoticePdf(input: NoticePdfInput): Promise<Buffer> 
     // Signature line
     declPage.drawText("Signature:", { x: MARGIN, y: dy, size: 9, font: bold, color: GREY });
     dy -= 18;
-    declPage.drawText(input.signature ?? "—", {
+    declPage.drawText(input.signature ?? "-", {
       x: MARGIN,
       y: dy,
       size: 13,

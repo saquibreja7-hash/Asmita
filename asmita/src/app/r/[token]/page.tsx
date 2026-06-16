@@ -32,7 +32,7 @@ export default async function PortalPage({
       }
       return <RevealedPage url={url} />;
     }
-    // Cookie missing — access code was valid but session expired or cookie was cleared.
+    // Cookie missing - access code was valid but session expired or cookie was cleared.
     return <ErrorPage message="Session expired. Please close this tab." />;
   }
 
@@ -50,7 +50,7 @@ export default async function PortalPage({
     "use server";
     const reqHeaders = await headers();
     const ip = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-    // 5 attempts per token per IP per 15 minutes — prevents access code brute-force.
+    // 5 attempts per token per IP per 15 minutes - prevents access code brute-force.
     const rl = await checkRateLimitAsync(`portal:${token.slice(0, 16)}:${ip}`, 5, 15 * 60 * 1000);
     if (!rl.allowed) redirect(`/r/${token}?error=rate_limited`);
 
@@ -158,7 +158,7 @@ function RevealedPage({ url }: { url: string }) {
       </h1>
       <p className="mt-4 text-sm leading-[1.7] text-[var(--muted)]">
         The URL below identifies the content reported in the takedown notice.
-        This link has now been deactivated — it cannot be accessed again.
+        This link has now been deactivated - it cannot be accessed again.
       </p>
       <div className="mt-6 rounded-[12px] border border-[var(--hairline)] bg-[var(--surface)] p-4">
         <p className="font-mono break-all text-sm leading-[1.7]">{url}</p>

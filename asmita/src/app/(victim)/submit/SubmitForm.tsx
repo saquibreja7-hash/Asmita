@@ -50,9 +50,8 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
   const [submitting, setSubmitting] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  // Hash section state
   const [hashFiles, setHashFiles] = useState<FileHashState[]>([]);
-  const [selectedPlatformId, setSelectedPlatformId] = useState("");
+  const [selectedPlatformIds, setSelectedPlatformIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -92,124 +91,98 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
   const parsedUrls = urls.split(/\n+/).map((u) => u.trim()).filter(Boolean);
   const hashOnly = hashedFiles.length > 0 && parsedUrls.length === 0;
   const hasAnyContent = parsedUrls.length > 0 || hashedFiles.length > 0;
-  const canSubmit = declaration && hasAnyContent && (!hashOnly || selectedPlatformId !== "");
+  const canSubmit = declaration && hasAnyContent && (!hashOnly || selectedPlatformIds.length > 0);
+
+  function togglePlatform(id: string) {
+    setSelectedPlatformIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
 
   async function submit() {
     setError("");
     setSubmitting(true);
-
-    const createResponse = await csrfFetch("/api/cases/create", { method: "POST" });
-    if (!createResponse.ok) {
-      setError("Please sign in again before creating a case.");
-      setSubmitting(false);
-      return;
-    }
-    const created = (await createResponse.json()) as { caseId: string };
-
-    const declarationResponse = await csrfFetch("/api/profile/declaration", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ acknowledged: true, version: "draft-2026-05-12", language: "en" }),
-    });
-    if (!declarationResponse.ok) {
-      setError("Please confirm the declaration before submitting.");
-      setSubmitting(false);
-      return;
-    }
-
-    if (parsedUrls.length > 0) {
-      const urlResponse = await csrfFetch(`/api/cases/${created.caseId}/urls`, {
+    try {
+      const declarationResponse = await csrfFetch("/api/profile/declaration", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ urls: parsedUrls, declaration }),
+        body: JSON.stringify({ acknowledged: true, version: "draft-2026-05-12", language: "en" }),
       });
-      if (!urlResponse.ok) {
-        setError("Some links could not be accepted. Check for private or invalid URLs.");
-        setSubmitting(false);
+      if (!declarationResponse.ok) {
+        setError("Please confirm the declaration before submitting.");
         return;
       }
+      const selectedPlatforms = hashOnly ? platforms.filter((p) => selectedPlatformIds.includes(p.id)) : [];
+      const emailPlatformIds = selectedPlatforms.filter((p) => p.hasEmail).map((p) => p.id);
+      const formOnlyPlatforms = selectedPlatforms
+        .filter((p) => !p.hasEmail && p.formUrl)
+        .map((p) => ({ id: p.id, name: p.name, formUrl: p.formUrl! }));
+      sessionStorage.setItem("asmita_submit_draft", JSON.stringify({
+        urls: parsedUrls,
+        hashes: hashedFiles.map((f) => ({
+          hash: f.hash!,
+          quality: f.quality ?? 0,
+          clientVersion: PDQ_CLIENT_VERSION,
+        })),
+        platformIds: hashOnly ? selectedPlatformIds : [],
+        emailPlatformIds,
+        formOnlyPlatforms,
+        declaration: true,
+      }));
+      router.push("/review-sign");
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
-
-    if (hashedFiles.length > 0) {
-      const hashResponse = await csrfFetch(`/api/cases/${created.caseId}/hashes`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          hashes: hashedFiles.map((f) => ({
-            hash: f.hash,
-            quality: f.quality ?? 0,
-            clientVersion: PDQ_CLIENT_VERSION,
-          })),
-          declaration: true,
-          platformId: hashOnly ? selectedPlatformId : undefined,
-        }),
-      });
-      if (!hashResponse.ok) {
-        setError("Image fingerprints could not be submitted. Please try again.");
-        setSubmitting(false);
-        return;
-      }
-
-      if (hashOnly) {
-        const platform = platforms.find((p) => p.id === selectedPlatformId);
-        if (platform && !platform.hasEmail && platform.formUrl) {
-          // FORM_ONLY platform: guide survivor to fill the platform's own form.
-          router.push(
-            `/handoff/${created.caseId}?formUrl=${encodeURIComponent(platform.formUrl)}&platformName=${encodeURIComponent(platform.name)}`,
-          );
-          return;
-        }
-        router.push(`/case/${created.caseId}/confirmation`);
-        return;
-      }
-    }
-
-    router.push(`/case/${created.caseId}`);
   }
 
   const lineCount = parsedUrls.length;
   const lowQuality = hashFiles.some((f) => f.status === "hashed" && (f.quality ?? 100) < 50);
-  const selectedPlatform = platforms.find((p) => p.id === selectedPlatformId);
 
   return (
     <div className="space-y-8">
+
       {/* URL section */}
       <div>
         <label
           htmlFor="urls"
-          className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--foreground)]"
+          className="block text-sm font-semibold text-[var(--foreground)]"
         >
-          Paste links where the content appears
+          Links where the content appears
         </label>
         <p className="muted mt-1 text-sm leading-[1.6]">
-          One URL per line. Leave empty if you don&apos;t have links yet.
+          One URL per line. Leave empty if you only want to use digital fingerprinting below.
         </p>
-        <div className="mt-3">
-          <textarea
-            className="field min-h-44 font-mono text-[14px] leading-[1.7]"
-            id="urls"
-            onChange={(e) => { setUrls(e.target.value); void detect(e.target.value); }}
-            value={urls}
-            placeholder={"https://example.com/post/1234\nhttps://example.com/post/5678"}
-            spellCheck={false}
-          />
-          <div className="muted mt-2 flex items-center justify-between text-xs">
-            <span>{lineCount} {lineCount === 1 ? "link" : "links"}</span>
-            {detection && <span className="text-[var(--teal)]">Detected: {detection}</span>}
-          </div>
+        <textarea
+          className="field mt-3 min-h-40 font-mono text-[13px] leading-[1.7]"
+          id="urls"
+          onChange={(e) => { setUrls(e.target.value); void detect(e.target.value); }}
+          value={urls}
+          placeholder={"https://example.com/post/1234\nhttps://example.com/post/5678"}
+          spellCheck={false}
+        />
+        <div className="muted mt-2 flex items-center justify-between text-xs">
+          <span>{lineCount} {lineCount === 1 ? "link" : "links"}</span>
+          {detection && (
+            <span className="font-medium text-[var(--teal)]">Detected: {detection}</span>
+          )}
         </div>
       </div>
 
       {/* Hash section */}
       {enableHashUpload && (
-        <div className="rounded-[14px] border border-[var(--hairline)] bg-[var(--surface)] p-5 space-y-4">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-5"
+          style={{ boxShadow: "var(--shadow-soft)" }}
+        >
           <div>
-            <p className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--foreground)]">
-              Generate a digital fingerprint (optional)
+            <p className="text-sm font-semibold text-[var(--foreground)]">
+              Digital fingerprint{" "}
+              <span className="font-normal text-[var(--muted)]">- optional</span>
             </p>
             <p className="muted mt-1 text-sm leading-[1.6]">
-              Your photo never leaves this device — only the fingerprint is sent.
-              Platforms use it to find and remove matching content.
+              Your photo never leaves this device. Only the fingerprint is sent.
+              Platforms use it to find and remove matching content proactively.
             </p>
           </div>
 
@@ -220,16 +193,23 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
             multiple
             onChange={onSelectFiles}
             aria-label="Select images to fingerprint"
-            className="block w-full text-sm"
+            className="block w-full text-sm text-[var(--muted)] file:mr-3 file:rounded-lg file:border file:border-[var(--border)] file:bg-[var(--background)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--foreground)] hover:file:border-[var(--teal)]"
           />
 
           {hashFiles.length > 0 && (
-            <ul className="space-y-1 text-sm" aria-live="polite">
+            <ul className="space-y-1.5 text-sm" aria-live="polite">
               {hashFiles.map((file, i) => (
-                <li key={`${file.name}-${i}`} className="flex items-center justify-between rounded border border-[var(--hairline)] px-3 py-2">
-                  <span className="truncate">{file.name}</span>
-                  <span className="muted ml-2 shrink-0 text-xs">
-                    {file.status === "hashing" && "Processing…"}
+                <li
+                  key={`${file.name}-${i}`}
+                  className="flex items-center justify-between rounded-lg border border-[var(--hairline)] px-3 py-2"
+                >
+                  <span className="truncate text-[var(--foreground)]">{file.name}</span>
+                  <span className={`ml-2 shrink-0 text-xs font-mono ${
+                    file.status === "hashed" ? "text-[var(--teal)]"
+                    : file.status === "error" ? "text-[var(--rose)]"
+                    : "text-[var(--muted)]"
+                  }`}>
+                    {file.status === "hashing" && "Processing..."}
                     {file.status === "hashed" && `Ready (quality ${file.quality}/100)`}
                     {file.status === "error" && "Could not process"}
                   </span>
@@ -244,34 +224,38 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
             </p>
           )}
 
-          {/* Platform picker — only needed for hash-only submissions */}
           {hashedFiles.length > 0 && parsedUrls.length === 0 && platforms.length > 0 && (
             <div>
-              <label
-                htmlFor="platform-picker"
-                className="font-display text-[15px] leading-[1.4] tracking-tight text-[var(--foreground)]"
-              >
-                Which platform is the content on?
-              </label>
-              <p className="muted mt-1 text-sm leading-[1.6]">
-                We&apos;ll send the fingerprint advisory to their team.
+              <p className="block text-sm font-semibold text-[var(--foreground)]">
+                Which platforms is the content on?
               </p>
-              <select
-                id="platform-picker"
-                className="field mt-2"
-                value={selectedPlatformId}
-                onChange={(e) => setSelectedPlatformId(e.target.value)}
-              >
-                <option value="">Select a platform…</option>
+              <p className="muted mt-1 text-sm leading-[1.6]">
+                Select all that apply. We will send the signed fingerprint advisory to their teams. You can select more than one.
+              </p>
+              <ul className="mt-3 space-y-2">
                 {platforms.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}{!p.hasEmail ? " (form submission)" : ""}
-                  </option>
+                  <li key={p.id}>
+                    <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-3 hover:border-[var(--teal)] transition-colors">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 accent-[var(--teal)]"
+                        checked={selectedPlatformIds.includes(p.id)}
+                        onChange={() => togglePlatform(p.id)}
+                      />
+                      <span className="flex-1 text-sm text-[var(--foreground)]">{p.name}</span>
+                      {!p.hasEmail && (
+                        <span className="shrink-0 font-mono text-[11px] text-[var(--muted)]">form</span>
+                      )}
+                    </label>
+                  </li>
                 ))}
-              </select>
-              {selectedPlatform && !selectedPlatform.hasEmail && selectedPlatform.formUrl && (
+              </ul>
+              {selectedPlatformIds.some((id) => {
+                const p = platforms.find((pl) => pl.id === id);
+                return p && !p.hasEmail;
+              }) && (
                 <p className="muted mt-2 text-xs leading-[1.6]">
-                  This platform requires a form submission. We&apos;ll guide you to fill it out after creating the case.
+                  Platforms marked "form" do not accept direct email. We will guide you to their form after signing.
                 </p>
               )}
             </div>
@@ -280,36 +264,38 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
       )}
 
       {/* Declaration */}
-      <label className="flex cursor-pointer items-start gap-3 rounded-[14px] border border-[var(--hairline)] bg-white p-4 transition-colors hover:border-[var(--border)]">
+      <div className="hairline" />
+      <label className="flex cursor-pointer items-start gap-3">
         <input
           checked={declaration}
           onChange={(e) => setDeclaration(e.target.checked)}
           type="checkbox"
-          className="mt-[3px] h-4 w-4 accent-[var(--teal)]"
+          className="mt-1 h-4 w-4 shrink-0 accent-[var(--teal)]"
         />
-        <span className="font-display text-[15px] leading-[1.55] tracking-tight text-[var(--foreground)] md:text-[16px]">
-          I declare that I am the person depicted in this intimate content and
-          that it has been or may be shared without my consent.
+        <span className="text-sm leading-[1.65] text-[var(--foreground)]">
+          I declare that I am the person depicted in this content and that it
+          has been or may be shared without my consent.
         </span>
       </label>
 
       {error && (
-        <p className="text-center text-sm font-semibold text-[var(--rose)]">{error}</p>
+        <p className="text-sm font-semibold text-[var(--rose)]">{error}</p>
       )}
 
-      <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           className="btn btn-primary"
           disabled={!hydrated || !canSubmit || submitting}
           onClick={submit}
           type="button"
         >
-          {submitting ? "Creating case…" : "Create case"}
+          {submitting ? "Saving..." : "Review and sign"}
         </button>
         <Link className="btn btn-secondary" href="/resources">
           Support resources
         </Link>
       </div>
+
     </div>
   );
 }

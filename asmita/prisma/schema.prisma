@@ -160,9 +160,11 @@ model Case {
   ngoVerifierId         String?
   declarationSignedAt   DateTime?
   declarationIpHash     String?
-  firPackageGeneratedAt DateTime?
-  createdAt             DateTime   @default(now())
-  updatedAt             DateTime   @updatedAt
+  firPackageGeneratedAt   DateTime?
+  signedHashAdvisoryPdf   String?
+  hashAdvisoryPlatformIds String[]  @default([])
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
 
   user            User             @relation("VictimCases", fields: [userId], references: [id])
   ngoVerifier     User?            @relation("NgoVerifiedCases", fields: [ngoVerifierId], references: [id])

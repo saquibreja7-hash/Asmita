@@ -19,7 +19,7 @@ export async function requireAdmin() {
 /**
  * Like requireAdmin, but also gates on a sub-role permission. Sessions minted
  * before the adminRole claim existed carry no sub-role; they are treated as
- * SUPER_ADMIN because every admin today is an allowlisted founder — revisit
+ * SUPER_ADMIN because every admin today is an allowlisted founder - revisit
  * before opening admin access beyond founders.
  */
 export async function requireAdminPermission(permission: AdminPermission) {

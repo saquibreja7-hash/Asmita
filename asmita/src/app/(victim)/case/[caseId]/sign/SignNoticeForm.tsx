@@ -49,11 +49,12 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
 
   return (
     <div className="space-y-8">
+
       {/* PDF Preview */}
-      <div className="rounded-[14px] border border-[var(--hairline)] overflow-hidden">
-        <div className="bg-[var(--surface)] px-4 py-3 border-b border-[var(--hairline)]">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-            Notice preview — {platformName}
+      <div className="overflow-hidden rounded-xl border border-[var(--border)]" style={{ boxShadow: "var(--shadow-soft)" }}>
+        <div className="border-b border-[var(--hairline)] bg-[var(--surface)] px-5 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            Notice preview - {platformName}
           </p>
         </div>
         <iframe
@@ -65,19 +66,18 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       </div>
 
       {/* Survivor details */}
-      <div className="rounded-[14px] border border-[var(--hairline)] bg-white p-6 space-y-5">
-        <p className="font-display text-[15px] font-medium tracking-tight text-[var(--foreground)]">
-          Your details
-        </p>
+      <div className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
+        <p className="text-sm font-semibold text-[var(--foreground)]">Your details</p>
 
         <div>
-          <label htmlFor="sign-name" className="block text-sm font-medium text-[var(--foreground)] mb-1.5">
+          <label htmlFor="sign-name" className="block text-sm font-semibold text-[var(--foreground)]">
             Full name
           </label>
+          <p className="muted mt-1 text-sm">This will appear in the notice as the complainant.</p>
           <input
             id="sign-name"
             type="text"
-            className="field"
+            className="field mt-2"
             placeholder="Your full legal name"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -87,33 +87,28 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
         </div>
 
         <div>
-          <label htmlFor="sign-contact" className="block text-sm font-medium text-[var(--foreground)] mb-1.5">
+          <label htmlFor="sign-contact" className="block text-sm font-semibold text-[var(--foreground)]">
             Contact (email or phone)
           </label>
+          <p className="muted mt-1 text-sm">Included so the platform can contact you if needed.</p>
           <input
             id="sign-contact"
             type="text"
-            className="field"
+            className="field mt-2"
             placeholder="email@example.com or +91 98765 43210"
             value={contact}
             onChange={(e) => setContact(e.target.value)}
             maxLength={200}
             autoComplete="email"
           />
-          <p className="mt-1.5 text-xs text-[var(--muted)]">
-            This is included in the notice so the platform can contact you if needed.
-          </p>
         </div>
       </div>
 
       {/* Signature */}
-      <div className="rounded-[14px] border border-[var(--hairline)] bg-white p-6 space-y-4">
-        <p className="font-display text-[15px] font-medium tracking-tight text-[var(--foreground)]">
-          Signature
-        </p>
-        <p className="text-sm text-[var(--muted)] leading-[1.6]">
-          Type your name below as your digital signature. By signing, you confirm the
-          declaration in the notice is accurate.
+      <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
+        <p className="text-sm font-semibold text-[var(--foreground)]">Signature</p>
+        <p className="muted text-sm leading-[1.6]">
+          Type your name as your digital signature. By signing, you confirm the declaration in the notice is accurate.
         </p>
         <input
           id="sign-signature"
@@ -127,32 +122,33 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
         />
       </div>
 
-      {/* Declaration checkbox */}
-      <label className="flex cursor-pointer items-start gap-3 rounded-[14px] border border-[var(--hairline)] bg-white p-4 transition-colors hover:border-[var(--border)]">
+      {/* Declaration */}
+      <div className="hairline" />
+      <label className="flex cursor-pointer items-start gap-3">
         <input
           type="checkbox"
-          className="mt-[3px] h-4 w-4 accent-[var(--teal)]"
+          className="mt-1 h-4 w-4 shrink-0 accent-[var(--teal)]"
           checked={agreed}
           onChange={(e) => setAgreed(e.target.checked)}
         />
-        <span className="font-display text-[15px] leading-[1.55] tracking-tight text-[var(--foreground)] md:text-[16px]">
+        <span className="text-sm leading-[1.65] text-[var(--foreground)]">
           I confirm that the information above is accurate and I authorise Asmita to
           send this takedown notice to {platformName} on my behalf.
         </span>
       </label>
 
       {error && (
-        <p className="text-center text-sm font-semibold text-[var(--rose)]">{error}</p>
+        <p className="text-sm font-semibold text-[var(--rose)]">{error}</p>
       )}
 
-      <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           className="btn btn-primary"
           disabled={!canSubmit}
           onClick={handleSubmit}
         >
-          {submitting ? "Signing…" : "Sign and submit"}
+          {submitting ? "Signing..." : "Sign and submit"}
         </button>
         <a className="btn btn-secondary" href={confirmationUrl}>
           Skip for now

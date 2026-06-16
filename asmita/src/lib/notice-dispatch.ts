@@ -120,7 +120,7 @@ export async function dispatchTier2Notice(input: {
 }
 
 // Re-issue a portal token for an already-sent notice. Bypasses idempotency by
-// design — re-issues are deliberate second sends to replace consumed/lost tokens.
+// design - re-issues are deliberate second sends to replace consumed/lost tokens.
 export async function dispatchPortalReissue(input: {
   caseId: string;
   urlId: string;

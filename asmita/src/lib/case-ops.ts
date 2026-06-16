@@ -19,6 +19,7 @@ export type DisplayUrl = {
   status: string;
   urlHash: string;
   platformId: string | null;
+  signedNoticePdf?: string | null;
   flaggedForReview?: boolean;
   flagReason?: string | null;
 };
@@ -38,6 +39,7 @@ function toDisplayUrl(url: {
   urlHash: string;
   status: string;
   platformId: string | null;
+  signedNoticePdf?: string | null;
   flaggedForReview: boolean;
   flagReason: string | null;
 }): DisplayUrl {
@@ -48,6 +50,7 @@ function toDisplayUrl(url: {
     status: url.status,
     urlHash: url.urlHash,
     platformId: url.platformId,
+    signedNoticePdf: url.signedNoticePdf,
     flaggedForReview: url.flaggedForReview,
     flagReason: url.flagReason,
   };
@@ -65,6 +68,7 @@ function toDisplayCase(dbCase: {
     urlHash: string;
     status: string;
     platformId: string | null;
+    signedNoticePdf?: string | null;
     flaggedForReview: boolean;
     flagReason: string | null;
   }>;

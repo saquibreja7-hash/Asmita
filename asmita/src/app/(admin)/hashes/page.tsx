@@ -43,7 +43,7 @@ export default async function HashQueuePage() {
         </h1>
         <p className="muted mt-6 max-w-2xl text-sm leading-[1.7]">
           Every client-generated perceptual hash waits here for human review before any
-          advisory is dispatched. You are reviewing metadata only — the image never
+          advisory is dispatched. You are reviewing metadata only - the image never
           existed on our systems. Check account reputation, submission volume, quality
           scores, and declaration integrity.
         </p>
@@ -70,8 +70,8 @@ export default async function HashQueuePage() {
                   {row.hashDigest.slice(0, 16)}…
                 </td>
                 <td className="p-4 tabular-nums">{row.quality}/100</td>
-                <td className="p-4">{row.requestedPlatformName ?? <span className="text-[var(--muted)]">—</span>}</td>
-                <td className="p-4">{row.flagReason ?? "—"}</td>
+                <td className="p-4">{row.requestedPlatformName ?? <span className="text-[var(--muted)]">-</span>}</td>
+                <td className="p-4">{row.flagReason ?? "-"}</td>
                 <td className="font-mono p-4 tabular-nums">
                   {Math.floor(row.ageMinutes / 60)}h {row.ageMinutes % 60}m
                 </td>

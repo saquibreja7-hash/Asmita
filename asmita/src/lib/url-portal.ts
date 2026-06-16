@@ -40,7 +40,7 @@ export async function createPortalToken(
   urlId: string,
   urlEncrypted: string,
 ): Promise<{ token: string; accessCode: string }> {
-  // 256-bit random token — never sequential or guessable. The resolver exposes
+  // 256-bit random token - never sequential or guessable. The resolver exposes
   // a live NCII URL; an enumerable token would be a critical privacy failure.
   const token = randomBytes(32).toString("hex");
   const accessCode = generateAccessCode();

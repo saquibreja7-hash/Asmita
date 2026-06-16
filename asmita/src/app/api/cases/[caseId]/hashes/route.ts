@@ -37,7 +37,7 @@ const schema = z.object({
     .min(1)
     .max(MAX_HASHES_PER_SUBMISSION),
   declaration: z.boolean().refine(Boolean),
-  platformId: z.string().optional(),
+  platformIds: z.array(z.string()).max(20).optional(),
 });
 
 const MAX_BODY_BYTES = 16_384;
@@ -108,8 +108,10 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
-  const { platformId } = parsed.data;
-  const results = await addHashesToCase(caseId, parsed.data.hashes, { requestedPlatformId: platformId });
+  const { platformIds } = parsed.data;
+  const results = await addHashesToCase(caseId, parsed.data.hashes, {
+    requestedPlatformId: platformIds?.[0],
+  });
   const rejectedAsMedia = results.some((r) => !r.ok && r.error === "media_payload_rejected");
   if (rejectedAsMedia) {
     logSecurityEvent({

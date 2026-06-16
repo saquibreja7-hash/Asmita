@@ -1,66 +1,30 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
-const steps = [
-  {
-    label: "Step 01",
-    title: "Confirm safety.",
-    body: "Age attestation comes first. Adults continue privately. If you are under 18, Asmita does not collect URLs - it routes you to CHILDLINE 1098, TakeItDown, and cybercrime.gov.in with guided instructions.",
-  },
-  {
-    label: "Step 02",
-    title: "Paste links as text.",
-    body: "Asmita reads only the domain string from each URL. It never opens, fetches, renders, or previews the content the link points to. Up to ten URLs every twenty-four hours.",
-  },
-  {
-    label: "Step 03",
-    title: "Reviewed notices go out.",
-    body: "Notice templates are reviewed by Internet Freedom Foundation and SFLC.in. Platform contacts are human-verified before they enter the routing table. You approve every notice before it is sent.",
-  },
-  {
-    label: "Step 04",
-    title: "Track and escalate.",
-    body: "A private dashboard shows each platform, the response window, and an audit trail. If a platform doesn’t respond within the legal window, escalation is automatic.",
-  },
-];
+export default async function HowItWorksPage() {
+  const locale = await getLocale();
 
-const tiers = [
-  {
-    label: "Tier 01",
-    title: "Direct API",
-    body: "For the small set of platforms that publish a verified takedown endpoint, Asmita submits the notice through the API and waits on the structured response.",
-  },
-  {
-    label: "Tier 02",
-    title: "Grievance Officer email",
-    body: "For Indian intermediaries covered by IT Rules 2021, Asmita sends a templated email to the platform’s designated Grievance Officer. This is the path most notices take.",
-  },
-  {
-    label: "Tier 03",
-    title: "Guided form handoff",
-    body: "When a platform has no published contact, Asmita does not guess. It prepares a step-by-step handoff so you can submit through their web form yourself, with the notice text ready to paste.",
-  },
-];
+  const steps = [
+    { num: "01", title: t(locale, "hiw.step1.title"), body: t(locale, "hiw.step1.body") },
+    { num: "02", title: t(locale, "hiw.step2.title"), body: t(locale, "hiw.step2.body") },
+    { num: "03", title: t(locale, "hiw.step3.title"), body: t(locale, "hiw.step3.body") },
+    { num: "04", title: t(locale, "hiw.step4.title"), body: t(locale, "hiw.step4.body") },
+  ];
 
-const timeline = [
-  {
-    label: "Day 01",
-    title: "Notice sent.",
-    body: "First notice goes out the moment you approve it. The 24-hour clock under IT Rules begins.",
-  },
-  {
-    label: "Day 02",
-    title: "First escalation.",
-    body: "If there is no response within 24 hours, Asmita escalates to the next contact tier and re-sends.",
-  },
-  {
-    label: "Day 07",
-    title: "FIR package ready.",
-    body: "If 7 days pass without resolution, Asmita prepares a police-ready FIR package for cybercrime.gov.in built from the same evidence trail.",
-  },
-];
+  const tiers = [
+    { label: "Tier 01", icon: "⚡", title: t(locale, "hiw.tier1.title"), body: t(locale, "hiw.tier1.body") },
+    { label: "Tier 02", icon: "✉", title: t(locale, "hiw.tier2.title"), body: t(locale, "hiw.tier2.body") },
+    { label: "Tier 03", icon: "↗", title: t(locale, "hiw.tier3.title"), body: t(locale, "hiw.tier3.body") },
+  ];
 
-export default function HowItWorksPage() {
+  const timeline = [
+    { day: "24h", title: t(locale, "hiw.tl1.title"), body: t(locale, "hiw.tl1.body") },
+    { day: "48h", title: t(locale, "hiw.tl2.title"), body: t(locale, "hiw.tl2.body") },
+    { day: "7 days", title: t(locale, "hiw.tl3.title"), body: t(locale, "hiw.tl3.body") },
+  ];
+
   return (
     <AppShell>
       <div className="page-canvas">
@@ -69,127 +33,157 @@ export default function HowItWorksPage() {
           <div className="mx-auto max-w-2xl">
             <span className="pill">
               <span className="dot" />
-              How it works
+              {t(locale, "hiw.pill")}
             </span>
-            <p className="muted mt-3 text-xs tracking-wide">
-              Available in English and <span lang="hi">हिंदी</span>
-            </p>
             <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
-              Four steps.
-              <br />
-              <em className="not-italic text-gradient">One</em> screen at a time.
+              {t(locale, "hiw.hero.title.1")}{" "}
+              <em className="not-italic text-gradient">{t(locale, "hiw.hero.title.2")}</em>{" "}
+              {t(locale, "hiw.hero.title.3")}
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              Each step happens on its own page. Nothing demands more than one
-              decision from you at a time.
+              {t(locale, "hiw.hero.sub")}
             </p>
           </div>
         </section>
 
-        {/* THE FLOW - four sequential quiet blocks */}
-        {steps.map((step) => (
-          <section
-            key={step.label}
-            className="container py-14 text-center md:py-20"
-          >
-            <div className="mx-auto max-w-2xl">
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                {step.label}
-              </p>
-              <h2 className="font-display mt-4 text-[28px] font-normal leading-[1.18] tracking-tight md:text-[44px] md:leading-[1.14]">
-                {step.title}
-              </h2>
-              <p className="muted mx-auto mt-6 max-w-lg text-base leading-[1.75] md:text-lg">
-                {step.body}
-              </p>
-            </div>
-          </section>
-        ))}
+        <div className="container">
+          <div className="hairline" />
+        </div>
 
-        {/* ROUTING - three ways a notice reaches the platform */}
-        <section className="container pb-8 pt-20 text-center md:pb-12 md:pt-32">
-          <div className="mx-auto max-w-2xl">
-            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
-              Three ways a notice
-              <br />
-              reaches the platform.
-            </h2>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-              Different platforms accept notices differently. Asmita uses the
-              most reliable channel that exists - and never guesses when one
-              doesn&rsquo;t.
-            </p>
+        {/* THE FLOW - numbered vertical steps */}
+        <section className="container py-20 md:py-28">
+          <div className="mx-auto max-w-3xl">
+            <span className="eyebrow mb-10 block">{t(locale, "hiw.flow.eyebrow")}</span>
+            <ol className="relative space-y-0">
+              {steps.map((step, i) => (
+                <li key={step.num} className="relative flex gap-8 pb-12 last:pb-0">
+                  {i < steps.length - 1 && (
+                    <div
+                      className="absolute left-[19px] top-10 bottom-0 w-px"
+                      style={{ background: "var(--hairline)" }}
+                      aria-hidden
+                    />
+                  )}
+                  <div
+                    className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] font-mono text-[11px] font-semibold tracking-widest text-[var(--teal)]"
+                    style={{ boxShadow: "var(--shadow-soft)" }}
+                  >
+                    {step.num}
+                  </div>
+                  <div className="pt-1">
+                    <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[30px] md:leading-[1.18]">
+                      {step.title}
+                    </h2>
+                    <p className="muted mt-3 max-w-lg text-base leading-[1.75] md:text-[17px]">
+                      {step.body}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
           </div>
         </section>
 
-        {tiers.map((tier) => (
-          <section
-            key={tier.label}
-            className="container py-12 text-center md:py-16"
-          >
-            <div className="mx-auto max-w-2xl">
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                {tier.label}
-              </p>
-              <h3 className="font-display mt-4 text-[24px] font-normal leading-[1.2] tracking-tight md:text-[36px] md:leading-[1.18]">
-                {tier.title}
-              </h3>
-              <p className="muted mx-auto mt-5 max-w-lg text-base leading-[1.75] md:text-lg">
-                {tier.body}
-              </p>
-            </div>
-          </section>
-        ))}
+        <div className="container">
+          <div className="hairline" />
+        </div>
 
-        {/* ESCALATION TIMELINE - 24h → 48h → 7 days */}
-        <section className="container pb-8 pt-20 text-center md:pb-12 md:pt-32">
-          <div className="mx-auto max-w-2xl">
-            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
-              When platforms
-              <br />
-              don&rsquo;t respond.
+        {/* ROUTING - three-tier card grid */}
+        <section className="container py-20 md:py-28">
+          <div className="mx-auto max-w-3xl">
+            <span className="eyebrow mb-4 block">{t(locale, "hiw.routing.eyebrow")}</span>
+            <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
+              {t(locale, "hiw.routing.title")}
             </h2>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-              The escalation timeline is automatic. You never have to chase a
-              platform manually - but you can stop the clock at any time.
+            <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
+              {t(locale, "hiw.routing.sub")}
             </p>
+            <div className="mt-10 grid gap-4 md:grid-cols-3">
+              {tiers.map((tier) => (
+                <div
+                  key={tier.label}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
+                  style={{ boxShadow: "var(--shadow-soft)" }}
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+                    {tier.label}
+                  </p>
+                  <p className="mt-3 text-2xl" aria-hidden>
+                    {tier.icon}
+                  </p>
+                  <h3 className="font-display mt-2 text-[18px] font-normal leading-[1.25] tracking-tight md:text-[20px]">
+                    {tier.title}
+                  </h3>
+                  <p className="muted mt-3 text-sm leading-[1.75]">{tier.body}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
-        {timeline.map((item) => (
-          <section
-            key={item.label}
-            className="container py-12 text-center md:py-16"
-          >
-            <div className="mx-auto max-w-2xl">
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                {item.label}
-              </p>
-              <h3 className="font-display mt-4 text-[24px] font-normal leading-[1.2] tracking-tight md:text-[36px] md:leading-[1.18]">
-                {item.title}
-              </h3>
-              <p className="muted mx-auto mt-5 max-w-lg text-base leading-[1.75] md:text-lg">
-                {item.body}
-              </p>
-            </div>
-          </section>
-        ))}
+        <div className="container">
+          <div className="hairline" />
+        </div>
 
-        {/* CLOSING - invitation */}
-        <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
+        {/* ESCALATION - horizontal timeline */}
+        <section className="container py-20 md:py-28">
+          <div className="mx-auto max-w-3xl">
+            <span className="eyebrow mb-4 block">{t(locale, "hiw.escalation.eyebrow")}</span>
+            <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
+              {t(locale, "hiw.escalation.title")}
+            </h2>
+            <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
+              {t(locale, "hiw.escalation.sub")}
+            </p>
+            <div className="mt-10 grid gap-4 md:grid-cols-3">
+              {timeline.map((item, i) => (
+                <div
+                  key={item.day}
+                  className="relative rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
+                  style={{ boxShadow: "var(--shadow-soft)" }}
+                >
+                  <div className="mb-4 flex items-center gap-3">
+                    <div
+                      className="h-2 w-2 rounded-full"
+                      style={{ background: i === 0 ? "var(--teal)" : i === 1 ? "var(--saffron)" : "var(--rose)" }}
+                      aria-hidden
+                    />
+                    <p
+                      className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em]"
+                      style={{ color: i === 0 ? "var(--teal)" : i === 1 ? "var(--saffron)" : "var(--rose)" }}
+                    >
+                      {item.day}
+                    </p>
+                  </div>
+                  <h3 className="font-display text-[18px] font-normal leading-[1.25] tracking-tight md:text-[20px]">
+                    {item.title}
+                  </h3>
+                  <p className="muted mt-3 text-sm leading-[1.75]">{item.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
+        {/* CLOSING */}
+        <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-28">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
-              Ready to begin?
+              {t(locale, "hiw.closing.title")}
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-              There is no clock running. You can start, stop, and come back.
+              {t(locale, "hiw.closing.body")}
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               <Link className="btn btn-primary" href="/start">
-                Start a case
+                {t(locale, "hiw.closing.cta1")}
               </Link>
               <Link className="btn btn-secondary" href="/faq">
-                Read the FAQ
+                {t(locale, "hiw.closing.cta2")}
               </Link>
             </div>
           </div>

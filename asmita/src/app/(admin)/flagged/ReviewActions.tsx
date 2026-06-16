@@ -29,7 +29,7 @@ export function ReviewActions({ caseId, urlId, status: rowStatus }: Props) {
 
   if (status === "approved") return <span className="text-xs font-semibold text-[var(--teal)]">Approved</span>;
   if (status === "rejected") return <span className="text-xs font-semibold text-[var(--rose)]">Rejected</span>;
-  if (status === "error") return <span className="text-xs text-[var(--rose)]">Error — reload</span>;
+  if (status === "error") return <span className="text-xs text-[var(--rose)]">Error - reload</span>;
 
   return (
     <div className="flex gap-2">

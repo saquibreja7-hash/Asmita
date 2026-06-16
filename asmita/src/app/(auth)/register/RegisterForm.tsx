@@ -3,15 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
+import { t, type Locale } from "@/lib/i18n";
 
-type Step = "age" | "email" | "otp";
+type Step = "email" | "otp";
 
-export function RegisterForm() {
+export function RegisterForm({ locale }: { locale: Locale }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("age");
+  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
-  const [age, setAge] = useState<"adult" | "minor" | "">("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -37,7 +37,7 @@ export function RegisterForm() {
       }
       setStep("otp");
     } catch {
-      setError("The request timed out. Please try again.");
+      setError(t(locale, "reg.error.timeout"));
     } finally {
       setLoading(false);
     }
@@ -50,15 +50,15 @@ export function RegisterForm() {
       const response = await csrfFetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, otp, ageOver18: age === "adult" }),
+        body: JSON.stringify({ email, otp, ageOver18: true }),
       });
       if (!response.ok) {
-        setError("The code did not match. Please try again.");
+        setError(t(locale, "reg.error.codeNoMatch"));
         return;
       }
-      router.push(age === "minor" ? "/minor-support" : "/submit");
+      router.push("/submit");
     } catch {
-      setError("The request timed out. Please try again.");
+      setError(t(locale, "reg.error.timeout"));
     } finally {
       setLoading(false);
     }
@@ -66,213 +66,152 @@ export function RegisterForm() {
 
   return (
     <div>
-      <StepHeader step={step} />
-
-      {step === "age" && (
-        <fieldset className="mt-10 space-y-3">
-          <legend className="sr-only">Age attestation</legend>
-          <AgeOption
-            label="I am 18 years of age or older."
-            checked={age === "adult"}
-            onSelect={() => setAge("adult")}
-          />
-          <AgeOption
-            label="I am under 18 years of age."
-            checked={age === "minor"}
-            onSelect={() => setAge("minor")}
-          />
-          <div className="pt-6 text-center">
-            <button
-              className="btn btn-primary"
-              disabled={!hydrated || !age}
-              onClick={() => {
-                if (age === "minor") {
-                  router.push("/minor-support");
-                  return;
-                }
-                setStep("email");
-              }}
-              type="button"
-            >
-              Continue
-            </button>
-          </div>
-        </fieldset>
-      )}
+      <ProgressBar step={step} locale={locale} />
 
       {step === "email" && (
-        <form
-          className="mt-10 space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            requestOtp();
-          }}
-        >
-          <Row
-            label="Email address"
-            hint="We will send a 6-digit code to this address."
-            htmlFor="email"
+        <div className="mt-8">
+          <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+            {t(locale, "reg.email.title")}
+          </h2>
+          <p className="muted mt-2 text-sm leading-[1.75]">
+            {t(locale, "reg.email.sub")}
+          </p>
+          <form
+            className="mt-8 space-y-4"
+            onSubmit={(e) => { e.preventDefault(); requestOtp(); }}
           >
-            <input
-              className="field"
-              id="email"
-              name="email"
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              type="email"
-              autoComplete="email"
-              inputMode="email"
-              value={email}
-            />
-          </Row>
-          {error && <FormError message={error} />}
-          <div className="pt-4 text-center">
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-semibold text-[var(--foreground)]"
+              >
+                {t(locale, "reg.email.label")}
+              </label>
+              <input
+                className="field mt-2"
+                id="email"
+                name="email"
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                value={email}
+                placeholder="you@example.com"
+              />
+            </div>
+            {error && <FormError message={error} />}
             <button
               className="btn btn-primary"
               disabled={loading || !hydrated || !email}
               type="submit"
             >
-              {loading ? "Sending…" : "Send verification code"}
+              {loading ? t(locale, "reg.email.sending") : t(locale, "reg.email.sendBtn")}
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
       )}
 
       {step === "otp" && (
-        <form
-          className="mt-10 space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            verify();
-          }}
-        >
-          <p className="muted text-center text-sm leading-[1.7]">
-            We sent a 6-digit code to{" "}
+        <div className="mt-8">
+          <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+            {t(locale, "reg.otp.title")}
+          </h2>
+          <p className="muted mt-2 text-sm leading-[1.75]">
+            {t(locale, "reg.otp.sub")}{" "}
             <span className="font-mono text-[var(--foreground)]">{email}</span>.
           </p>
-          <Row
-            label="6-digit code"
-            hint="Check your inbox and spam folder. Codes expire in 10 minutes."
-            htmlFor="otp"
+          <form
+            className="mt-8 space-y-4"
+            onSubmit={(e) => { e.preventDefault(); verify(); }}
           >
-            <input
-              className="field font-mono text-center text-2xl tracking-[0.4em]"
-              id="otp"
-              inputMode="numeric"
-              maxLength={6}
-              onChange={(event) =>
-                setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
-              }
-              required
-              value={otp}
-              autoComplete="one-time-code"
-            />
-          </Row>
-          {error && <FormError message={error} />}
-          <div className="pt-4 text-center">
+            <div>
+              <label
+                htmlFor="otp"
+                className="block text-sm font-semibold text-[var(--foreground)]"
+              >
+                {t(locale, "reg.otp.label")}
+              </label>
+              <input
+                className="field mt-2 font-mono text-center text-2xl tracking-[0.4em]"
+                id="otp"
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(e) =>
+                  setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                required
+                value={otp}
+                autoComplete="one-time-code"
+                placeholder="000000"
+              />
+            </div>
+            {error && <FormError message={error} />}
             <button
               className="btn btn-primary"
               disabled={loading || !hydrated || otp.length !== 6}
               type="submit"
             >
-              {loading ? "Verifying…" : "Continue"}
+              {loading ? t(locale, "reg.otp.verifying") : t(locale, "reg.otp.verifyBtn")}
             </button>
-          </div>
-          <p className="muted pt-4 text-center text-sm leading-[1.7]">
-            Didn&rsquo;t get the code?{" "}
-            <button
-              type="button"
-              onClick={() => setStep("email")}
-              className="link-underline text-[var(--foreground)]"
-            >
-              Use a different email
-            </button>
-            .
-          </p>
-        </form>
+            <p className="muted text-sm leading-[1.7]">
+              {t(locale, "reg.otp.wrongEmail")}{" "}
+              <button
+                type="button"
+                onClick={() => { setStep("email"); setOtp(""); setError(""); }}
+                className="link-underline text-[var(--foreground)]"
+              >
+                {t(locale, "reg.otp.changeEmail")}
+              </button>
+              .
+            </p>
+          </form>
+        </div>
       )}
     </div>
   );
 }
 
-function StepHeader({ step }: { step: Step }) {
-  const labels: Record<Step, { label: string; title: string }> = {
-    age: { label: "Step 01 of 03", title: "First, confirm your age." },
-    email: { label: "Step 02 of 03", title: "Your email address." },
-    otp: { label: "Step 03 of 03", title: "Enter the code we sent." },
-  };
-  const { label, title } = labels[step];
+function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
+  const steps = [t(locale, "reg.progress.email"), t(locale, "reg.progress.otp")];
+  const current = step === "email" ? 0 : 1;
   return (
-    <div className="text-center">
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-        {label}
-      </p>
-      <h2 className="font-display mt-3 text-[24px] font-normal leading-[1.22] tracking-tight md:text-[32px] md:leading-[1.18]">
-        {title}
-      </h2>
-    </div>
-  );
-}
-
-function AgeOption({
-  label,
-  checked,
-  onSelect,
-}: {
-  label: string;
-  checked: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <label
-      className={`flex cursor-pointer items-start gap-3 rounded-[14px] border p-4 transition-colors ${
-        checked
-          ? "border-[var(--teal)] bg-[var(--teal-soft)]"
-          : "border-[var(--hairline)] bg-white hover:border-[var(--border)]"
-      }`}
-    >
-      <input
-        type="radio"
-        checked={checked}
-        onChange={onSelect}
-        className="mt-[3px] h-4 w-4 accent-[var(--teal)]"
-      />
-      <span className="font-display text-[16px] leading-[1.4] tracking-tight text-[var(--foreground)] md:text-[18px]">
-        {label}
-      </span>
-    </label>
-  );
-}
-
-function Row({
-  label,
-  hint,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  hint: string;
-  htmlFor: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label
-        htmlFor={htmlFor}
-        className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--foreground)]"
-      >
-        {label}
-      </label>
-      <p className="muted mt-1 text-sm leading-[1.6]">{hint}</p>
-      <div className="mt-3">{children}</div>
+    <div className="flex items-center gap-2">
+      {steps.map((label, i) => (
+        <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
+          <div className="flex items-center gap-2">
+            <div
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold transition-colors ${
+                i < current
+                  ? "bg-[var(--teal)] text-white"
+                  : i === current
+                  ? "border-2 border-[var(--teal)] text-[var(--teal)]"
+                  : "border border-[var(--border)] text-[var(--muted)]"
+              }`}
+            >
+              {i < current ? (
+                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                  <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                i + 1
+              )}
+            </div>
+            <span className={`hidden text-[11px] sm:block ${i === current ? "font-semibold text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
+              {label}
+            </span>
+          </div>
+          {i < steps.length - 1 && (
+            <div className="flex-1 h-px mx-1" style={{ background: i < current ? "var(--teal)" : "var(--hairline)" }} />
+          )}
+        </div>
+      ))}
     </div>
   );
 }
 
 function FormError({ message }: { message: string }) {
   return (
-    <p className="text-center text-sm font-semibold text-[var(--rose)]">
-      {message}
-    </p>
+    <p className="text-sm font-semibold text-[var(--rose)]">{message}</p>
   );
 }

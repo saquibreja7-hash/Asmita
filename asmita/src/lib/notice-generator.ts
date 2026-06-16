@@ -134,7 +134,7 @@ const HASH_HEX_PATTERN = /^[0-9a-f]{64}$/i;
 /**
  * Renders the perceptual-hash annex appended to hash advisories and to URL
  * notices on cases with approved hashes. Contains only hashes and matching
- * guidance — never victim PII, never media. Callers must only pass
+ * guidance - never victim PII, never media. Callers must only pass
  * APPROVED hash submissions.
  */
 export function buildHashAnnex(input: HashAnnexInput) {

@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "reviewed_template_required" }, { status: 409 });
   }
 
-  // Generate a one-time portal token. The raw URL never appears in the email —
+  // Generate a one-time portal token. The raw URL never appears in the email -
   // only the portal link. The platform officer enters an access code to view it
   // once; if they reply quoting the email, Asmita sees a spent token, not the URL.
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://meriasmita.org";
