@@ -1,199 +1,246 @@
+import Image from "next/image";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
-import { t } from "@/lib/i18n";
+
+const sections = [
+  {
+    eyebrow: "Private intake",
+    title: "Paste links. Keep the content out.",
+    body: "Asmita helps you start a takedown request with URLs only. No previews, no scraping, no uploads.",
+    image: "/landing/section-1.png",
+    alt: "Abstract teal privacy shield over anonymous URL chips",
+    tone: "hero",
+  },
+  {
+    eyebrow: "Three steps",
+    title: "A calm route from report to notice.",
+    body: "Submit the links, review the prepared notice, then track the response without re-exposure.",
+    image: "/landing/section-2.png",
+    alt: "Minimal workflow panels for URL submission, notice generation, and routing",
+    tone: "split",
+  },
+  {
+    eyebrow: "Privacy promise",
+    title: "Evidence is handled as metadata, not media.",
+    body: "The system records what is needed for a notice while avoiding content fetches or thumbnails.",
+    image: "/landing/section-3.png",
+    alt: "Translucent vault containing abstract link and hash symbols",
+    tone: "center",
+  },
+  {
+    eyebrow: "Verified routing",
+    title: "Notices go to checked contact paths.",
+    body: "Human review protects templates, sender details, and platform contact records before dispatch.",
+    image: "/landing/section-4.png",
+    alt: "Abstract platform routing network with verified contact checkpoints",
+    tone: "reverse",
+  },
+  {
+    eyebrow: "Case timeline",
+    title: "Every step has a trace without exposing you.",
+    body: "Milestones, audit events, and notice status are organized in one survivor-led workspace.",
+    image: "/landing/section-5.png",
+    alt: "Floating case timeline folders with redacted metadata markers",
+    tone: "band",
+  },
+  {
+    eyebrow: "Support network",
+    title: "Bring in help when you want it.",
+    body: "NGO and support handoffs can be prepared without sharing more than the case requires.",
+    image: "/landing/section-6.png",
+    alt: "Abstract secure support handoff with lock icons and soft teal forms",
+    tone: "split-dark",
+  },
+  {
+    eyebrow: "Transparency",
+    title: "See movement, not noise.",
+    body: "Track routes, responses, and resolution signals in a clean status view.",
+    image: "/landing/section-7.png",
+    alt: "Minimal teal metrics dashboard with anonymous progress indicators",
+    tone: "metrics",
+  },
+  {
+    eyebrow: "Start safely",
+    title: "A confidential first step is enough.",
+    body: "You can begin with one URL and decide what to do next after seeing the workflow.",
+    image: "/landing/section-8.png",
+    alt: "Cinematic teal closing scene with anonymous URL chips dissolving into light",
+    tone: "closing",
+  },
+];
 
 export default async function HomePage() {
   const locale = await getLocale();
 
-  const privacyItems = [
-    { bold: t(locale, "home.blockB.item1.bold"), detail: t(locale, "home.blockB.item1.rest") },
-    { bold: t(locale, "home.blockB.item2.bold"), detail: t(locale, "home.blockB.item2.rest") },
-    { bold: t(locale, "home.blockB.item3.bold"), detail: t(locale, "home.blockB.item3.rest") },
-  ];
-
   return (
     <AppShell>
-      <div className="page-canvas">
-        {/* HERO - centered */}
-        <section className="container pb-20 pt-20 text-center md:pb-28 md:pt-32">
-          <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {t(locale, "home.pill")}
-            </span>
-            <p className="muted mt-3 text-xs tracking-wide">
-              {t(locale, "home.langNote")}{" "}
-              <span lang={locale === "hi" ? "en" : "hi"}>
-                {locale === "hi" ? "English" : "हिंदी"}
+      <div className="bg-[#fbfaf7] text-[#10201f]">
+        <section className="relative min-h-[calc(100vh-72px)] overflow-hidden px-4 pb-10 pt-6 sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-7xl flex-col gap-8">
+            <div className="flex items-center justify-between gap-4">
+              <span className="rounded-full border border-[#0a5e5a]/15 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#0a5e5a]">
+                URL-only support
               </span>
-            </p>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
-              {t(locale, "home.hero.title.1")}{" "}
-              <em className="not-italic text-gradient">{t(locale, "home.hero.title.2")}</em>
-            </h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "home.hero.sub")}
-            </p>
-            <div className="mt-10 flex justify-center">
-              <Link className="btn btn-primary" href="/start">
-                {t(locale, "home.hero.cta")}
+              <Link
+                href="/privacy"
+                className="hidden text-sm font-semibold text-[#0a5e5a] sm:inline-flex"
+              >
+                Privacy model
               </Link>
             </div>
-            <p className="mt-6">
-              <Link
-                href="/minor-support"
-                className="text-sm font-medium text-[var(--muted)] link-underline"
-              >
-                {t(locale, "home.hero.minorLink")}{" "}
-                <span className="cta-arrow" aria-hidden>
-                  →
-                </span>
-              </Link>
-            </p>
-            <p className="muted mx-auto mt-12 max-w-md text-[13px] leading-[1.7]">
-              {t(locale, "home.hero.noFetch")}
-            </p>
+
+            <div className="grid min-h-[72vh] items-end gap-8 lg:grid-cols-[0.86fr_1.14fr] lg:items-center">
+              <div className="relative z-10 max-w-2xl pb-2 lg:pb-10">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#0a5e5a]">
+                  {sections[0].eyebrow}
+                </p>
+                <h1 className="font-display mt-5 text-[clamp(3.1rem,8vw,8.2rem)] font-normal leading-[0.9] tracking-tight text-[#10201f]">
+                  Paste links.
+                  <span className="block text-[#0a5e5a]">Keep dignity.</span>
+                </h1>
+                <p className="mt-7 max-w-xl text-base leading-7 text-[#52615f] sm:text-lg">
+                  {sections[0].body}
+                </p>
+                <div className="mt-9 flex flex-wrap gap-3">
+                  <Link className="btn btn-primary" href="/start">
+                    Start a request
+                  </Link>
+                  <Link className="btn btn-secondary" href="/how-it-works">
+                    How it works
+                  </Link>
+                </div>
+                <p className="mt-6 text-sm text-[#65716f]">
+                  {locale === "hi" ? "Hindi support available." : "Hindi and English support available."}
+                </p>
+              </div>
+
+              <div className="relative aspect-[16/10] overflow-hidden rounded-[8px] border border-[#d9e5e2] bg-white shadow-[0_28px_90px_rgba(10,94,90,0.18)]">
+                <Image
+                  src={sections[0].image}
+                  alt={sections[0].alt}
+                  fill
+                  preload
+                  sizes="(min-width: 1024px) 56vw, 100vw"
+                  className="object-cover"
+                />
+              </div>
+            </div>
           </div>
         </section>
 
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* VALIDATION - trauma-informed affirmation */}
-        <section className="container py-12 text-center md:py-16">
-          <p className="font-display mx-auto max-w-2xl text-xl leading-[1.55] tracking-tight text-[var(--foreground)] md:text-2xl md:leading-[1.5]">
-            {t(locale, "home.validation")}
+        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+          <p className="max-w-4xl font-display text-3xl leading-tight text-[#10201f] sm:text-5xl">
+            Minimal by design. The portal stays focused on the next safe action, not on making you relive the harm.
           </p>
         </section>
 
-        <div className="container">
-          <div className="hairline" />
-        </div>
+        {sections.slice(1, 7).map((section, index) => {
+          const reverse = section.tone === "reverse" || index % 2 === 1;
+          const dark = section.tone === "split-dark";
 
-        {/* BLOCK A - your legal rights */}
-        <section className="container py-20 md:py-28">
-          <div className="mx-auto max-w-3xl">
-            <span className="eyebrow mb-6 block">{t(locale, "home.blockA.eyebrow")}</span>
-            <div className="grid gap-10 md:grid-cols-[1fr_auto] md:items-start md:gap-16">
-              <div>
-                <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
-                  {t(locale, "home.blockA.title")}
-                </h2>
-                <p className="muted mt-6 max-w-lg text-base leading-[1.75] md:text-lg">
-                  {t(locale, "home.blockA.body")}
-                </p>
-                <p className="mt-8">
-                  <Link href="/how-it-works" className="link-underline text-sm">
-                    {t(locale, "home.blockA.link")}{" "}
-                    <span className="cta-arrow" aria-hidden>
-                      →
+          return (
+            <section
+              key={section.title}
+              className={[
+                "px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20",
+                dark ? "bg-[#0a5e5a] text-white" : "",
+              ].join(" ")}
+            >
+              <div
+                className={[
+                  "mx-auto grid max-w-7xl gap-8 lg:grid-cols-2 lg:items-center",
+                  reverse ? "lg:[&>div:first-child]:order-2" : "",
+                ].join(" ")}
+              >
+                <div className={section.tone === "center" ? "lg:mx-auto lg:max-w-lg" : ""}>
+                  <p
+                    className={[
+                      "text-sm font-semibold uppercase tracking-[0.18em]",
+                      dark ? "text-[#b9e7e0]" : "text-[#0a5e5a]",
+                    ].join(" ")}
+                  >
+                    {section.eyebrow}
+                  </p>
+                  <h2 className="font-display mt-5 text-[clamp(2.4rem,5vw,5.8rem)] font-normal leading-[0.92] tracking-tight">
+                    {section.title}
+                  </h2>
+                  <p
+                    className={[
+                      "mt-6 max-w-xl text-base leading-7 sm:text-lg",
+                      dark ? "text-white/74" : "text-[#52615f]",
+                    ].join(" ")}
+                  >
+                    {section.body}
+                  </p>
+                  <div className="mt-8 flex items-center gap-3">
+                    <span
+                      className={[
+                        "h-px w-14",
+                        dark ? "bg-white/40" : "bg-[#0a5e5a]/30",
+                      ].join(" ")}
+                    />
+                    <span
+                      className={[
+                        "font-mono text-xs uppercase tracking-[0.22em]",
+                        dark ? "text-white/58" : "text-[#65716f]",
+                      ].join(" ")}
+                    >
+                      0{index + 2} / 08
                     </span>
-                  </Link>
-                </p>
-              </div>
-              <div className="hidden md:block">
+                  </div>
+                </div>
+
                 <div
-                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-8 py-6 text-center"
-                  style={{ boxShadow: "var(--shadow-soft)" }}
+                  className={[
+                    "relative aspect-[16/9] overflow-hidden rounded-[8px] border shadow-[0_22px_70px_rgba(16,32,31,0.11)]",
+                    dark ? "border-white/15 bg-white/8" : "border-[#d9e5e2] bg-white",
+                    section.tone === "metrics" ? "lg:scale-105" : "",
+                  ].join(" ")}
                 >
-                  <p className="font-display text-[48px] font-normal leading-none text-[var(--teal)]">
-                    {t(locale, "home.blockA.stat")}
-                  </p>
-                  <p className="muted mt-2 text-sm leading-[1.6]">
-                    {t(locale, "home.blockA.statLabel")}
-                  </p>
+                  <Image
+                    src={section.image}
+                    alt={section.alt}
+                    fill
+                    sizes="(min-width: 1024px) 50vw, 100vw"
+                    className="object-cover"
+                  />
                 </div>
               </div>
+            </section>
+          );
+        })}
+
+        <section className="px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
+          <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div className="relative aspect-[16/9] overflow-hidden rounded-[8px] border border-[#d9e5e2] bg-white shadow-[0_28px_90px_rgba(10,94,90,0.16)]">
+              <Image
+                src={sections[7].image}
+                alt={sections[7].alt}
+                fill
+                sizes="(min-width: 1024px) 58vw, 100vw"
+                className="object-cover"
+              />
             </div>
-          </div>
-        </section>
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* BLOCK B - privacy commitments */}
-        <section className="container py-20 md:py-28">
-          <div className="mx-auto max-w-3xl">
-            <span className="eyebrow mb-6 block">{t(locale, "home.blockB.eyebrow")}</span>
-            <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
-              {t(locale, "home.blockB.title.1")}
-              <br />
-              {t(locale, "home.blockB.title.2")}
-            </h2>
-            <ul className="mt-10 space-y-4">
-              {privacyItems.map(({ bold, detail }) => (
-                <li
-                  key={bold}
-                  className="flex items-start gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-5"
-                  style={{ boxShadow: "var(--shadow-soft)" }}
-                >
-                  <span
-                    className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
-                    aria-hidden
-                  >
-                    <svg
-                      width="10"
-                      height="8"
-                      viewBox="0 0 10 8"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M1 4l2.5 2.5L9 1"
-                        stroke="var(--teal)"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <p className="text-base leading-[1.7] md:text-[17px]">
-                    <span className="font-semibold text-[var(--foreground)]">
-                      {bold}
-                    </span>{" "}
-                    <span className="text-[var(--muted)]">{detail}</span>
-                  </p>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-8">
-              <Link href="/privacy" className="link-underline text-sm">
-                {t(locale, "home.blockB.link")}{" "}
-                <span className="cta-arrow" aria-hidden>
-                  →
-                </span>
-              </Link>
-            </p>
-          </div>
-        </section>
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* CLOSING - invitation, not a sales pitch */}
-        <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-28">
-          <div className="mx-auto max-w-2xl">
-            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
-              {t(locale, "home.closing.title")}
-            </h2>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-              {t(locale, "home.closing.body")}
-            </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-3">
-              <Link className="btn btn-primary" href="/start">
-                {t(locale, "home.closing.cta1")}
-              </Link>
-              <Link className="btn btn-secondary" href="/faq">
-                {t(locale, "home.closing.cta2")}
-              </Link>
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#0a5e5a]">
+                {sections[7].eyebrow}
+              </p>
+              <h2 className="font-display mt-5 text-[clamp(2.6rem,6vw,6.6rem)] font-normal leading-[0.92] tracking-tight">
+                {sections[7].title}
+              </h2>
+              <p className="mt-6 max-w-lg text-base leading-7 text-[#52615f] sm:text-lg">
+                {sections[7].body}
+              </p>
+              <div className="mt-9 flex flex-wrap gap-3">
+                <Link className="btn btn-primary" href="/start">
+                  Begin safely
+                </Link>
+                <Link className="btn btn-secondary" href="/minor-support">
+                  Minor support
+                </Link>
+              </div>
             </div>
-            <p className="muted mx-auto mt-14 max-w-md text-[13px] leading-[1.7]">
-              {t(locale, "home.closing.partners")}
-            </p>
           </div>
         </section>
       </div>
