@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { computePdqHash, PDQ_CLIENT_VERSION } from "@/lib/pdq/pdq";
 import type { HashPickerPlatform } from "@/lib/hash-submission";
+import { t, type Locale } from "@/lib/i18n";
 
 const MAX_HASH_FILES = 10;
 
@@ -39,9 +40,10 @@ async function hashImageFile(file: File): Promise<{ hash: string; quality: numbe
 type Props = {
   enableHashUpload?: boolean;
   platforms?: HashPickerPlatform[];
+  locale: Locale;
 };
 
-export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) {
+export function SubmitForm({ enableHashUpload = false, platforms = [], locale }: Props) {
   const router = useRouter();
   const [urls, setUrls] = useState("");
   const [declaration, setDeclaration] = useState(false);
@@ -109,7 +111,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
         body: JSON.stringify({ acknowledged: true, version: "draft-2026-05-12", language: "en" }),
       });
       if (!declarationResponse.ok) {
-        setError("Please confirm the declaration before submitting.");
+        setError(t(locale, "submit.declaration.error"));
         return;
       }
       const selectedPlatforms = hashOnly ? platforms.filter((p) => selectedPlatformIds.includes(p.id)) : [];
@@ -131,7 +133,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
       }));
       router.push("/review-sign");
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(t(locale, "submit.error.generic"));
     } finally {
       setSubmitting(false);
     }
@@ -149,10 +151,10 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
           htmlFor="urls"
           className="block text-sm font-semibold text-[var(--foreground)]"
         >
-          Links where the content appears
+          {t(locale, "submit.urls.label")}
         </label>
         <p className="muted mt-1 text-sm leading-[1.6]">
-          One URL per line. Leave empty if you only want to use digital fingerprinting below.
+          {t(locale, "submit.urls.sub")}
         </p>
         <textarea
           className="field mt-3 min-h-40 font-mono text-[13px] leading-[1.7]"
@@ -163,9 +165,9 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
           spellCheck={false}
         />
         <div className="muted mt-2 flex items-center justify-between text-xs">
-          <span>{lineCount} {lineCount === 1 ? "link" : "links"}</span>
+          <span>{lineCount} {lineCount === 1 ? t(locale, "submit.urls.linkSingular") : t(locale, "submit.urls.linkPlural")}</span>
           {detection && (
-            <span className="font-medium text-[var(--teal)]">Detected: {detection}</span>
+            <span className="font-medium text-[var(--teal)]">{t(locale, "submit.urls.detected")} {detection}</span>
           )}
         </div>
       </div>
@@ -177,12 +179,11 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
         >
           <div>
             <p className="text-sm font-semibold text-[var(--foreground)]">
-              Digital fingerprint{" "}
-              <span className="font-normal text-[var(--muted)]">- optional</span>
+              {t(locale, "submit.hash.title")}{" "}
+              <span className="font-normal text-[var(--muted)]">{t(locale, "submit.hash.optional")}</span>
             </p>
             <p className="muted mt-1 text-sm leading-[1.6]">
-              Your photo never leaves this device. Only the fingerprint is sent.
-              Platforms use it to find and remove matching content proactively.
+              {t(locale, "submit.hash.sub")}
             </p>
           </div>
 
@@ -192,7 +193,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
             accept="image/*"
             multiple
             onChange={onSelectFiles}
-            aria-label="Select images to fingerprint"
+            aria-label={t(locale, "submit.hash.fileLabel")}
             className="block w-full text-sm text-[var(--muted)] file:mr-3 file:rounded-lg file:border file:border-[var(--border)] file:bg-[var(--background)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--foreground)] hover:file:border-[var(--teal)]"
           />
 
@@ -209,9 +210,9 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
                     : file.status === "error" ? "text-[var(--rose)]"
                     : "text-[var(--muted)]"
                   }`}>
-                    {file.status === "hashing" && "Processing..."}
-                    {file.status === "hashed" && `Ready (quality ${file.quality}/100)`}
-                    {file.status === "error" && "Could not process"}
+                    {file.status === "hashing" && t(locale, "submit.hash.processing")}
+                    {file.status === "hashed" && `${t(locale, "submit.hash.ready")} ${file.quality}${t(locale, "submit.hash.readySuffix")}`}
+                    {file.status === "error" && t(locale, "submit.hash.error")}
                   </span>
                 </li>
               ))}
@@ -220,17 +221,17 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
 
           {lowQuality && (
             <p className="text-sm text-amber-700">
-              One or more images produced a weak fingerprint. You can still submit, but matching may be less reliable.
+              {t(locale, "submit.hash.lowQuality")}
             </p>
           )}
 
           {hashedFiles.length > 0 && parsedUrls.length === 0 && platforms.length > 0 && (
             <div>
               <p className="block text-sm font-semibold text-[var(--foreground)]">
-                Which platforms is the content on?
+                {t(locale, "submit.hash.platforms.title")}
               </p>
               <p className="muted mt-1 text-sm leading-[1.6]">
-                Select all that apply. We will send the signed fingerprint advisory to their teams. You can select more than one.
+                {t(locale, "submit.hash.platforms.sub")}
               </p>
               <ul className="mt-3 space-y-2">
                 {platforms.map((p) => (
@@ -244,7 +245,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
                       />
                       <span className="flex-1 text-sm text-[var(--foreground)]">{p.name}</span>
                       {!p.hasEmail && (
-                        <span className="shrink-0 font-mono text-[11px] text-[var(--muted)]">form</span>
+                        <span className="shrink-0 font-mono text-[11px] text-[var(--muted)]">{t(locale, "submit.hash.platforms.formNote")}</span>
                       )}
                     </label>
                   </li>
@@ -255,7 +256,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
                 return p && !p.hasEmail;
               }) && (
                 <p className="muted mt-2 text-xs leading-[1.6]">
-                  Platforms marked "form" do not accept direct email. We will guide you to their form after signing.
+                  {t(locale, "submit.hash.platforms.formOnlyNote")}
                 </p>
               )}
             </div>
@@ -273,8 +274,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
           className="mt-1 h-4 w-4 shrink-0 accent-[var(--teal)]"
         />
         <span className="text-sm leading-[1.65] text-[var(--foreground)]">
-          I declare that I am the person depicted in this content and that it
-          has been or may be shared without my consent.
+          {t(locale, "submit.declaration.text")}
         </span>
       </label>
 
@@ -289,10 +289,10 @@ export function SubmitForm({ enableHashUpload = false, platforms = [] }: Props) 
           onClick={submit}
           type="button"
         >
-          {submitting ? "Saving..." : "Review and sign"}
+          {submitting ? t(locale, "submit.cta.saving") : t(locale, "submit.cta.review")}
         </button>
         <Link className="btn btn-secondary" href="/resources">
-          Support resources
+          {t(locale, "submit.cta.resources")}
         </Link>
       </div>
 

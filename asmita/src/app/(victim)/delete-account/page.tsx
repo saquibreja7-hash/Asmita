@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { DeleteAccountForm } from "./DeleteAccountForm";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
-export default function DeleteAccountPage() {
+export default async function DeleteAccountPage() {
+  const locale = await getLocale();
+
   return (
     <AppShell>
       <div className="page-canvas">
@@ -11,16 +15,15 @@ export default function DeleteAccountPage() {
           <div className="mx-auto max-w-2xl">
             <span className="pill">
               <span className="dot" />
-              Account deletion
+              {t(locale, "delete.pill")}
             </span>
             <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[64px] md:leading-[1.06]">
-              Delete your{" "}
-              <em className="not-italic text-gradient">account</em>.
+              {t(locale, "delete.hero.title.1")}{" "}
+              <em className="not-italic text-gradient">{t(locale, "delete.hero.title.em")}</em>
+              {t(locale, "delete.hero.title.2")}
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              This schedules a soft delete immediately. A scheduled job
-              permanently erases the account and all linked case data 30 days
-              later. You can cancel within that window by writing to us.
+              {t(locale, "delete.hero.sub")}
             </p>
           </div>
         </section>
@@ -29,28 +32,27 @@ export default function DeleteAccountPage() {
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              What gets deleted
+              {t(locale, "delete.what.eyebrow")}
             </p>
             <h2 className="font-display mt-4 text-[26px] font-normal leading-[1.2] tracking-tight md:text-[36px] md:leading-[1.18]">
-              Everything tied to your email.
+              {t(locale, "delete.what.title")}
             </h2>
             <ul className="muted mx-auto mt-8 max-w-md space-y-3 text-base leading-[1.75] md:text-lg">
               <li>
                 <span className="font-semibold text-[var(--foreground)]">
-                  Account record.
+                  {t(locale, "delete.what.item1.bold")}
                 </span>{" "}
-                Your email address, sign-in history, and any preferences.
+                {t(locale, "delete.what.item1.rest")}
               </li>
               <li>
                 <span className="font-semibold text-[var(--foreground)]">
-                  Case data.
+                  {t(locale, "delete.what.item2.bold")}
                 </span>{" "}
-                URLs, declarations, notice records, audit trails.
+                {t(locale, "delete.what.item2.rest")}
               </li>
             </ul>
             <p className="muted mx-auto mt-6 max-w-md text-sm leading-[1.7]">
-              Anonymised aggregate notice statistics, which contain no
-              personal data, are retained for accountability reporting.
+              {t(locale, "delete.what.note")}
             </p>
           </div>
         </section>
@@ -58,13 +60,13 @@ export default function DeleteAccountPage() {
         {/* FORM */}
         <section className="container pb-24 md:pb-32">
           <div className="mx-auto max-w-xl">
-            <DeleteAccountForm />
+            <DeleteAccountForm locale={locale} />
             <p className="mt-10 text-center">
               <Link
                 href="/contact"
                 className="link-underline text-sm text-[var(--foreground)]"
               >
-                Cancel within 30 days · write to support
+                {t(locale, "delete.form.cancelLink")}
               </Link>
             </p>
           </div>

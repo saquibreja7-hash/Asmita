@@ -4,6 +4,8 @@ import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platfor
 import { getCaseForUser } from "@/lib/case-ops";
 import { requireSession } from "@/lib/auth/middleware";
 import { listHashesForCase } from "@/lib/hash-submission";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
 export default async function HandoffPage({
   params,
@@ -14,6 +16,7 @@ export default async function HandoffPage({
 }) {
   const { caseId } = await params;
   const { formUrl: queryFormUrl, platformName: queryPlatformName } = await searchParams;
+  const locale = await getLocale();
 
   const auth = await requireSession({ adultOnly: true });
   const record = auth.ok ? await getCaseForUser(caseId, auth.session.sub) : null;
@@ -24,9 +27,11 @@ export default async function HandoffPage({
         <div className="page-canvas">
           <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
             <div className="mx-auto max-w-2xl">
-              <span className="pill"><span className="dot" />Case not available</span>
+              <span className="pill"><span className="dot" />{t(locale, "handoff.notAvailable.pill")}</span>
               <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px]">
-                This case is <em className="not-italic text-gradient">unavailable</em>.
+                {t(locale, "handoff.notAvailable.title.1")}{" "}
+                <em className="not-italic text-gradient">{t(locale, "handoff.notAvailable.title.em")}</em>
+                {t(locale, "handoff.notAvailable.title.2")}
               </h1>
             </div>
           </section>
@@ -81,7 +86,7 @@ Please process this through your official content removal procedure.`;
               <div className="md:sticky md:top-28">
                 <span className="pill">
                   <span className="dot" />
-                  {isHashOnlyPath ? "Image fingerprint" : "Guided handoff"}
+                  {isHashOnlyPath ? t(locale, "handoff.hashPill") : t(locale, "handoff.pill")}
                 </span>
 
                 <p className="font-mono mt-4 text-[13px] text-[var(--muted)]">
@@ -89,16 +94,14 @@ Please process this through your official content removal procedure.`;
                 </p>
 
                 <p className="muted mt-5 text-sm leading-[1.75]">
-                  {isHashOnlyPath
-                    ? "Your image fingerprint has been recorded. Filling out the platform's own form alongside it significantly improves the chance of removal."
-                    : "Asmita doesn't guess platform contacts. When a verified email is unavailable, we hand off to the platform's own form with the notice text ready to paste."}
+                  {isHashOnlyPath ? t(locale, "handoff.aside.hashSub") : t(locale, "handoff.aside.sub")}
                 </p>
 
                 <div className="mt-8 space-y-4">
                   {[
-                    ["Copy the notice text", "Use the read-only box on the right - select all and copy."],
-                    ["Open the platform form", "Click the link below the text box to open the form in a new tab."],
-                    ["Paste and submit", "Paste the copied text into the form's message field and submit."],
+                    [t(locale, "handoff.aside.item1.heading"), t(locale, "handoff.aside.item1.detail")],
+                    [t(locale, "handoff.aside.item2.heading"), t(locale, "handoff.aside.item2.detail")],
+                    [t(locale, "handoff.aside.item3.heading"), t(locale, "handoff.aside.item3.detail")],
                   ].map(([heading, detail]) => (
                     <div key={heading as string} className="flex items-start gap-3">
                       <span
@@ -119,10 +122,10 @@ Please process this through your official content removal procedure.`;
 
                 <div className="mt-8 space-y-2">
                   <Link className="btn btn-primary w-full justify-center" href={`/case/${record.id}`}>
-                    Back to dashboard
+                    {t(locale, "handoff.cta.dashboard")}
                   </Link>
                   <Link className="btn btn-secondary w-full justify-center" href="/resources">
-                    Support resources
+                    {t(locale, "handoff.cta.resources")}
                   </Link>
                 </div>
               </div>
@@ -132,12 +135,10 @@ Please process this through your official content removal procedure.`;
             <div className="min-w-0 flex-1 flex flex-col gap-8">
               <div>
                 <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
-                  {isHashOnlyPath
-                    ? "Fill the platform's form for better results."
-                    : "Use the platform's own form."}
+                  {isHashOnlyPath ? t(locale, "handoff.hashTitle") : t(locale, "handoff.title")}
                 </h1>
                 <p className="muted mt-2 text-sm leading-[1.75]">
-                  Copy the notice text below and paste it into the platform's removal form.
+                  {t(locale, "handoff.sub")}
                 </p>
               </div>
 
@@ -147,10 +148,10 @@ Please process this through your official content removal procedure.`;
                   htmlFor="handoff-text"
                   className="block text-sm font-semibold text-[var(--foreground)]"
                 >
-                  Notice text - read only
+                  {t(locale, "handoff.notice.label")}
                 </label>
                 <p className="muted mt-1 text-sm">
-                  Select all, copy, and paste into the platform form below.
+                  {t(locale, "handoff.notice.sub")}
                 </p>
                 <textarea
                   id="handoff-text"
@@ -164,7 +165,7 @@ Please process this through your official content removal procedure.`;
               {/* Platform form links */}
               <div>
                 <p className="text-sm font-semibold text-[var(--foreground)]">
-                  Platform removal form
+                  {t(locale, "handoff.form.label")}
                 </p>
                 {formLinks.length > 0 ? (
                   <div className="mt-3 space-y-3">
@@ -179,7 +180,7 @@ Please process this through your official content removal procedure.`;
                       >
                         <span className="font-semibold text-[var(--foreground)]">{link.name}</span>
                         <span className="font-mono text-sm text-[var(--teal-dark)]">
-                          Open form ↗
+                          {t(locale, "handoff.form.openForm")}
                         </span>
                       </a>
                     ))}
@@ -187,8 +188,7 @@ Please process this through your official content removal procedure.`;
                 ) : (
                   <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-4">
                     <p className="muted text-sm leading-[1.75]">
-                      No verified form URL is available for this platform yet. Once the admin team
-                      adds one, it will appear here.
+                      {t(locale, "handoff.form.noUrl")}
                     </p>
                   </div>
                 )}

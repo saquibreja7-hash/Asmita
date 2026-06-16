@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
-export default function StartPage() {
+export default async function StartPage() {
+  const locale = await getLocale();
+
   return (
     <AppShell>
       <div className="page-canvas">
@@ -10,15 +14,14 @@ export default function StartPage() {
           <div className="mx-auto max-w-2xl">
             <span className="pill">
               <span className="dot" />
-              Before you start
+              {t(locale, "start.pill")}
             </span>
             <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
-              Two paths.{" "}
-              <em className="not-italic text-gradient">Your</em> safety first.
+              {t(locale, "start.hero.title.1")}{" "}
+              <em className="not-italic text-gradient">{t(locale, "start.hero.title.em")}</em> {t(locale, "start.hero.title.2")}
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              The flow you see next depends on your age. Nothing is stored until
-              you sign in with email - and minors do not sign in at all.
+              {t(locale, "start.hero.sub")}
             </p>
           </div>
         </section>
@@ -39,21 +42,16 @@ export default function StartPage() {
                 style={{ boxShadow: "var(--shadow-soft)" }}
               >
                 <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                  18 or older
+                  {t(locale, "start.adult.eyebrow")}
                 </p>
                 <h2 className="font-display mt-3 text-[20px] font-normal leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[23px]">
-                  Continue to private case setup.
+                  {t(locale, "start.adult.title")}
                 </h2>
                 <p className="muted mt-3 text-sm leading-[1.75] flex-1">
-                  Verify your email with a one-time code, sign a digital
-                  declaration, and submit links as text only. Takes about ten
-                  minutes and you can pause and resume at any point. By
-                  continuing you confirm you are an adult acting on your own
-                  behalf, or an authorised NGO vouching with the
-                  survivor&rsquo;s consent.
+                  {t(locale, "start.adult.body")}
                 </p>
                 <Link className="btn btn-primary mt-7 w-full justify-center" href="/eligibility">
-                  I am 18 or older, continue
+                  {t(locale, "start.adult.cta")}
                 </Link>
               </div>
 
@@ -63,19 +61,16 @@ export default function StartPage() {
                 style={{ boxShadow: "var(--shadow-soft)" }}
               >
                 <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                  Under 18
+                  {t(locale, "start.minor.eyebrow")}
                 </p>
                 <h2 className="font-display mt-3 text-[20px] font-normal leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[23px]">
-                  Go to support resources.
+                  {t(locale, "start.minor.title")}
                 </h2>
                 <p className="muted mt-3 text-sm leading-[1.75] flex-1">
-                  Asmita does not collect URLs from anyone under 18. You will be
-                  taken to CHILDLINE 1098, TakeItDown (NCMEC), and
-                  cybercrime.gov.in with guided instructions. No account, case,
-                  or URL record is created.
+                  {t(locale, "start.minor.body")}
                 </p>
                 <Link className="btn btn-secondary mt-7 w-full justify-center" href="/start/minor">
-                  I am under 18, find help
+                  {t(locale, "start.minor.cta")}
                 </Link>
               </div>
 
@@ -92,24 +87,24 @@ export default function StartPage() {
         <section className="container py-12 text-center md:py-16">
           <div className="mx-auto max-w-xl space-y-5">
             <p className="font-display text-[20px] leading-[1.55] tracking-tight text-[var(--foreground)] md:text-[24px]">
-              If you are in immediate danger, call{" "}
+              {t(locale, "start.danger")}{" "}
               <a
                 href="tel:112"
                 aria-label="Call emergency services 112"
                 className="link-underline text-[var(--foreground)]"
               >
-                112
+                {t(locale, "start.dangerCta")}
               </a>{" "}
-              before anything else.
+              {t(locale, "start.dangerSuffix")}
             </p>
             <p className="muted text-base leading-[1.75]">
-              Want to understand the flow first? Read{" "}
+              {t(locale, "start.readMore")}{" "}
               <Link href="/how-it-works" className="link-underline text-[var(--foreground)]">
-                how Asmita works
+                {t(locale, "start.howLink")}
               </Link>{" "}
-              or the{" "}
+              {t(locale, "start.or")}{" "}
               <Link href="/privacy" className="link-underline text-[var(--foreground)]">
-                privacy policy
+                {t(locale, "start.privacyLink")}
               </Link>
               .
             </p>

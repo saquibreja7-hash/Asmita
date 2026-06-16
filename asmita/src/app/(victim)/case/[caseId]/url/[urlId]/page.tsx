@@ -2,6 +2,8 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
 export default async function UrlDetailPage({
   params,
@@ -9,6 +11,7 @@ export default async function UrlDetailPage({
   params: Promise<{ caseId: string; urlId: string }>;
 }) {
   const { caseId, urlId } = await params;
+  const locale = await getLocale();
   const auth = await requireSession({ adultOnly: true });
   const record = auth.ok ? await getCaseForUser(caseId, auth.session.sub) : null;
   const url = record?.urls.find((item) => item.id === urlId);
@@ -21,21 +24,22 @@ export default async function UrlDetailPage({
             <div className="mx-auto max-w-2xl">
               <span className="pill">
                 <span className="dot" />
-                URL not available
+                {t(locale, "urldetail.notAvailable.pill")}
               </span>
               <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px] md:leading-[1.06]">
-                This URL record is{" "}
-                <em className="not-italic text-gradient">unavailable</em>.
+                {t(locale, "urldetail.notAvailable.title.1")}{" "}
+                <em className="not-italic text-gradient">{t(locale, "urldetail.notAvailable.title.em")}</em>
+                {t(locale, "urldetail.notAvailable.title.2")}
               </h1>
               <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-                Return to the case dashboard and choose a listed item.
+                {t(locale, "urldetail.notAvailable.sub")}
               </p>
               <div className="mt-10 flex flex-wrap justify-center gap-3">
                 <Link
                   className="btn btn-primary"
                   href={record ? `/case/${record.id}` : "/start"}
                 >
-                  Back to dashboard
+                  {t(locale, "urldetail.notAvailable.cta")}
                 </Link>
               </div>
             </div>
@@ -53,10 +57,10 @@ export default async function UrlDetailPage({
           <div className="mx-auto max-w-2xl">
             <span className="pill">
               <span className="dot" />
-              URL status
+              {t(locale, "urldetail.pill")}
             </span>
             <p className="font-mono mt-6 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              Case · {record.referenceNumber}
+              {t(locale, "urldetail.case")} · {record.referenceNumber}
             </p>
             <h1 className="font-display mt-4 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[52px] md:leading-[1.06]">
               {url.platformName}
@@ -71,16 +75,15 @@ export default async function UrlDetailPage({
         <section className="container py-10 md:py-14">
           <div className="mx-auto max-w-2xl">
             <dl className="mx-auto grid max-w-md gap-6 text-center sm:grid-cols-2 sm:text-left">
-              <Field label="Status" value={url.status.replaceAll("_", " ")} />
+              <Field label={t(locale, "urldetail.field.status")} value={url.status.replaceAll("_", " ")} />
               <Field
-                label="URL hash prefix"
+                label={t(locale, "urldetail.field.hash")}
                 value={url.urlHash.slice(0, 16)}
                 mono
               />
             </dl>
             <p className="muted mx-auto mt-10 max-w-lg text-center text-base leading-[1.75]">
-              Asmita shows routing metadata only. It does not preview, fetch,
-              or render submitted content.
+              {t(locale, "urldetail.note")}
             </p>
           </div>
         </section>
@@ -89,10 +92,10 @@ export default async function UrlDetailPage({
         <section className="container pb-24 pt-12 text-center md:pb-32 md:pt-16">
           <div className="flex flex-wrap justify-center gap-3">
             <Link className="btn btn-primary" href={`/case/${record.id}`}>
-              Back to dashboard
+              {t(locale, "urldetail.cta.dashboard")}
             </Link>
             <Link className="btn btn-secondary" href="/resources">
-              Support resources
+              {t(locale, "urldetail.cta.resources")}
             </Link>
           </div>
         </section>

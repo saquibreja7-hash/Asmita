@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { csrfFetch } from "@/lib/client-csrf";
+import { t, type Locale } from "@/lib/i18n";
 
-export function DeleteAccountForm() {
+export function DeleteAccountForm({ locale }: { locale: Locale }) {
   const [confirm, setConfirm] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -16,11 +17,9 @@ export function DeleteAccountForm() {
     setSubmitting(false);
     if (response.ok) {
       setDone(true);
-      setMessage(
-        "Deletion scheduled. Hard delete will run automatically after 30 days."
-      );
+      setMessage(t(locale, "delete.done.sub"));
     } else {
-      setMessage("Please sign in again, then try once more.");
+      setMessage(t(locale, "delete.form.error"));
     }
   }
 
@@ -28,10 +27,10 @@ export function DeleteAccountForm() {
     return (
       <div className="text-center">
         <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-          Confirmed
+          {t(locale, "delete.done.eyebrow")}
         </p>
         <p className="font-display mt-4 text-[24px] leading-[1.3] tracking-tight text-[var(--foreground)] md:text-[32px]">
-          Deletion scheduled. 30 days from now.
+          {t(locale, "delete.done.title")}
         </p>
         <p className="muted mx-auto mt-5 max-w-md text-base leading-[1.75]">
           {message}
@@ -43,10 +42,10 @@ export function DeleteAccountForm() {
   return (
     <form onSubmit={submit} className="space-y-6">
       <p className="font-mono text-center text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-        Confirm deletion
+        {t(locale, "delete.form.eyebrow")}
       </p>
       <h2 className="font-display -mt-2 text-center text-[24px] font-normal leading-[1.22] tracking-tight md:text-[32px] md:leading-[1.18]">
-        Type DELETE to continue.
+        {t(locale, "delete.form.title")}
       </h2>
 
       <div>
@@ -54,7 +53,7 @@ export function DeleteAccountForm() {
           htmlFor="confirm-delete"
           className="sr-only"
         >
-          Type DELETE to continue
+          {t(locale, "delete.form.label")}
         </label>
         <input
           className="field text-center font-mono text-lg tracking-[0.3em]"
@@ -65,8 +64,7 @@ export function DeleteAccountForm() {
           autoComplete="off"
         />
         <p className="muted mt-2 text-center text-xs leading-[1.6]">
-          Case-sensitive. The action is reversible within 30 days by writing
-          to support.
+          {t(locale, "delete.form.note")}
         </p>
       </div>
 
@@ -82,7 +80,7 @@ export function DeleteAccountForm() {
           disabled={confirm !== "DELETE" || submitting}
           type="submit"
         >
-          {submitting ? "Scheduling…" : "Schedule deletion"}
+          {submitting ? t(locale, "delete.form.scheduling") : t(locale, "delete.form.cta")}
         </button>
       </div>
     </form>

@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { csrfFetch } from "@/lib/client-csrf";
+import { t, type Locale } from "@/lib/i18n";
 
 export function CaseDashboardActions({
   caseId,
   firstUrlId,
+  locale,
 }: {
   caseId: string;
   firstUrlId?: string;
+  locale: Locale;
 }) {
   const [urlText, setUrlText] = useState("");
   const [message, setMessage] = useState("");
@@ -29,8 +32,8 @@ export function CaseDashboardActions({
     setMessageOk(response.ok);
     setMessage(
       response.ok
-        ? "Link added. Refresh to see the updated status."
-        : "Could not add this link. Check that it is a valid public URL."
+        ? t(locale, "case.actions.added")
+        : t(locale, "case.actions.error")
     );
     if (response.ok) setUrlText("");
   }
@@ -47,15 +50,15 @@ export function CaseDashboardActions({
     setMessageOk(response.ok);
     setMessage(
       response.ok
-        ? "Link marked as resolved."
-        : "Could not mark this link resolved."
+        ? t(locale, "case.actions.added")
+        : t(locale, "case.actions.resolveError")
     );
   }
 
   return (
     <div className="space-y-8">
       <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[26px]">
-        Add a link
+        {t(locale, "case.actions.title")}
       </h2>
 
       <div>
@@ -63,10 +66,10 @@ export function CaseDashboardActions({
           htmlFor="additional-urls"
           className="block text-sm font-semibold text-[var(--foreground)]"
         >
-          Paste one URL per line
+          {t(locale, "case.actions.label")}
         </label>
         <p className="muted mt-1 text-sm leading-[1.6]">
-          Same rules apply - Asmita reads only the domain. The content at the link is never opened.
+          {t(locale, "case.actions.sub")}
         </p>
         <textarea
           className="field mt-3 min-h-28 font-mono text-[13px] leading-[1.7]"
@@ -83,7 +86,7 @@ export function CaseDashboardActions({
             onClick={addUrl}
             type="button"
           >
-            {loading ? "Working..." : "Add to case"}
+            {loading ? t(locale, "case.actions.working") : t(locale, "case.actions.cta")}
           </button>
 
           {firstUrlId && (
@@ -93,7 +96,7 @@ export function CaseDashboardActions({
               onClick={markResolved}
               type="button"
             >
-              Mark first link resolved
+              {t(locale, "case.actions.markResolved")}
             </button>
           )}
         </div>

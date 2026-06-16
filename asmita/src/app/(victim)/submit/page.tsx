@@ -1,6 +1,8 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { SubmitForm } from "./SubmitForm";
 import { listHashPickerPlatforms, type HashPickerPlatform } from "@/lib/hash-submission";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
 async function getPlatforms(): Promise<HashPickerPlatform[]> {
   if (!process.env.DATABASE_URL) return [];
@@ -12,8 +14,15 @@ async function getPlatforms(): Promise<HashPickerPlatform[]> {
 }
 
 export default async function SubmitPage() {
+  const locale = await getLocale();
   const enableHashUpload = process.env.ENABLE_HASH_UPLOAD === "true";
   const platforms = enableHashUpload ? await getPlatforms() : [];
+
+  const asideItems: [string, string][] = [
+    [t(locale, "submit.aside.item1.heading"), t(locale, "submit.aside.item1.detail")],
+    [t(locale, "submit.aside.item2.heading"), t(locale, "submit.aside.item2.detail")],
+    [t(locale, "submit.aside.item3.heading"), t(locale, "submit.aside.item3.detail")],
+  ];
 
   return (
     <AppShell>
@@ -26,22 +35,16 @@ export default async function SubmitPage() {
               <div className="md:sticky md:top-28">
                 <span className="pill">
                   <span className="dot" />
-                  Create your case
+                  {t(locale, "submit.pill")}
                 </span>
 
                 <p className="muted mt-6 text-sm leading-[1.75]">
-                  Paste links where the content appears, or generate a digital
-                  fingerprint from your device - or both. You review everything
-                  before anything is sent.
+                  {t(locale, "submit.aside.sub")}
                 </p>
 
                 <div className="mt-8 space-y-4">
-                  {[
-                    ["Links are text only", "We read the domain to route the notice. We never open, fetch, or preview the content at any link."],
-                    ["Photos stay on your device", "Fingerprinting runs entirely in your browser. Only the 64-character hash is sent to Asmita."],
-                    ["You sign before it goes out", "No notice is dispatched until you review and sign the declaration on the next screen."],
-                  ].map(([heading, detail]) => (
-                    <div key={heading as string} className="flex items-start gap-3">
+                  {asideItems.map(([heading, detail]) => (
+                    <div key={heading} className="flex items-start gap-3">
                       <span
                         className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
                         aria-hidden
@@ -69,13 +72,13 @@ export default async function SubmitPage() {
             {/* RIGHT - form */}
             <div className="min-w-0 flex-1">
               <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
-                Set up your case.
+                {t(locale, "submit.form.title")}
               </h1>
               <p className="muted mt-2 text-sm leading-[1.75]">
-                Add what you have. You will review everything on the next screen before your case is created.
+                {t(locale, "submit.form.sub")}
               </p>
               <div className="mt-10">
-                <SubmitForm enableHashUpload={enableHashUpload} platforms={platforms} />
+                <SubmitForm enableHashUpload={enableHashUpload} platforms={platforms} locale={locale} />
               </div>
             </div>
 

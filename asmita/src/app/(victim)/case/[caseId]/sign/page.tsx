@@ -4,6 +4,8 @@ import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
 import { SignNoticeForm } from "./SignNoticeForm";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -22,6 +24,7 @@ export default async function SignNoticePage({
   params: Promise<{ caseId: string }>;
 }) {
   const { caseId } = await params;
+  const locale = await getLocale();
   const auth = await requireSession({ adultOnly: true });
   if (!auth.ok) redirect("/start");
   if (isDevNoDb()) redirect(`/case/${caseId}/confirmation`);
@@ -77,20 +80,20 @@ export default async function SignNoticePage({
               <div className="md:sticky md:top-28">
                 <span className="pill">
                   <span className="dot" />
-                  Review &amp; sign
+                  {t(locale, "sign.pill")}
                 </span>
 
                 <p className="muted mt-5 text-sm leading-[1.75]">
-                  This is the notice that will be sent to{" "}
+                  {t(locale, "sign.aside.sub.prefix")}{" "}
                   <span className="font-semibold text-[var(--foreground)]">{url.platform.name}</span>{" "}
-                  on your behalf. Read it carefully before signing.
+                  {t(locale, "sign.aside.sub.suffix")}
                 </p>
 
                 <div className="mt-8 space-y-4">
                   {[
-                    ["Read the notice", "The preview above shows exactly what will be sent. Nothing is added after you sign."],
-                    ["Add your details", "Your name and contact are included so the platform can reach you."],
-                    ["Sign to authorise", "Your typed signature authorises Asmita to dispatch the notice."],
+                    [t(locale, "sign.aside.item1.heading"), t(locale, "sign.aside.item1.detail")],
+                    [t(locale, "sign.aside.item2.heading"), t(locale, "sign.aside.item2.detail")],
+                    [t(locale, "sign.aside.item3.heading"), t(locale, "sign.aside.item3.detail")],
                   ].map(([heading, detail]) => (
                     <div key={heading as string} className="flex items-start gap-3">
                       <span
@@ -114,11 +117,12 @@ export default async function SignNoticePage({
             {/* RIGHT - form */}
             <div className="min-w-0 flex-1">
               <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
-                Review your takedown notice.
+                {t(locale, "sign.title")}
               </h1>
               <p className="muted mt-2 text-sm leading-[1.75]">
-                Notice will be sent to{" "}
-                <span className="font-semibold text-[var(--foreground)]">{url.platform.name}</span>.
+                {t(locale, "sign.sub.prefix")}{" "}
+                <span className="font-semibold text-[var(--foreground)]">{url.platform.name}</span>
+                {t(locale, "sign.sub.suffix")}
               </p>
               <div className="mt-8">
                 <SignNoticeForm
@@ -127,6 +131,7 @@ export default async function SignNoticePage({
                   platformName={url.platform.name}
                   previewPdfUrl={`/api/cases/${caseId}/preview-notice`}
                   confirmationUrl={`/case/${caseId}/confirmation`}
+                  locale={locale}
                 />
               </div>
             </div>

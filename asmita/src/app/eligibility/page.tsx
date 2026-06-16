@@ -1,7 +1,17 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { EligibilityWizard } from "./EligibilityWizard";
+import { getLocale } from "@/lib/get-locale";
+import { t, type Locale } from "@/lib/i18n";
 
-export default function EligibilityPage() {
+export default async function EligibilityPage() {
+  const locale = await getLocale();
+
+  const asideItems: [string, string][] = [
+    [t(locale, "eligibility.aside.item1.heading"), t(locale, "eligibility.aside.item1.detail")],
+    [t(locale, "eligibility.aside.item2.heading"), t(locale, "eligibility.aside.item2.detail")],
+    [t(locale, "eligibility.aside.item3.heading"), t(locale, "eligibility.aside.item3.detail")],
+  ];
+
   return (
     <AppShell>
       <div className="page-canvas">
@@ -13,22 +23,16 @@ export default function EligibilityPage() {
               <div className="md:sticky md:top-28">
                 <span className="pill">
                   <span className="dot" />
-                  Check eligibility
+                  {t(locale, "eligibility.pill")}
                 </span>
 
                 <p className="muted mt-6 text-sm leading-[1.75]">
-                  This page collects no data. Your answers are never sent to
-                  Asmita - they only determine whether the case flow is right
-                  for your situation.
+                  {t(locale, "eligibility.aside.sub")}
                 </p>
 
                 <div className="mt-8 space-y-4">
-                  {[
-                    ["No account needed yet", "You sign in only after eligibility is confirmed."],
-                    ["No URLs on this page", "Links are submitted later, inside your private case."],
-                    ["Stop at any time", "You can close this page and come back whenever you are ready."],
-                  ].map(([heading, detail]) => (
-                    <div key={heading as string} className="flex items-start gap-3">
+                  {asideItems.map(([heading, detail]) => (
+                    <div key={heading} className="flex items-start gap-3">
                       <span
                         className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
                         aria-hidden
@@ -55,7 +59,7 @@ export default function EligibilityPage() {
 
             {/* RIGHT - wizard steps */}
             <div className="min-w-0 flex-1">
-              <EligibilityWizard />
+              <EligibilityWizard locale={locale} />
             </div>
 
           </div>

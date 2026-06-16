@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
-export default function IdentityPage() {
+export default async function IdentityPage() {
+  const locale = await getLocale();
+
   return (
     <AppShell>
       <div className="page-canvas">
@@ -10,16 +14,15 @@ export default function IdentityPage() {
           <div className="mx-auto max-w-2xl">
             <span className="pill">
               <span className="dot" />
-              How we verify you
+              {t(locale, "identity.pill")}
             </span>
             <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[64px] md:leading-[1.06]">
-              Your verified email is the{" "}
-              <em className="not-italic text-gradient">only</em> identity we need.
+              {t(locale, "identity.hero.title.1")}{" "}
+              <em className="not-italic text-gradient">{t(locale, "identity.hero.title.em")}</em>{" "}
+              {t(locale, "identity.hero.title.2")}
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              Asmita does not ask for Aadhaar, PAN, or any government ID. The
-              email you signed in with is the verified identity tied to every
-              notice we send on your behalf.
+              {t(locale, "identity.hero.sub")}
             </p>
           </div>
         </section>
@@ -28,34 +31,29 @@ export default function IdentityPage() {
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              How verification works
+              {t(locale, "identity.how.eyebrow")}
             </p>
             <h2 className="font-display mt-4 text-[28px] font-normal leading-[1.18] tracking-tight md:text-[40px] md:leading-[1.14]">
-              Three things, no documents.
+              {t(locale, "identity.how.title")}
             </h2>
             <ul className="muted mx-auto mt-8 max-w-md space-y-3 text-base leading-[1.75] md:text-lg">
               <li>
                 <span className="font-semibold text-[var(--foreground)]">
-                  Email one-time code.
+                  {t(locale, "identity.how.item1.bold")}
                 </span>{" "}
-                Each sign-in goes through a 6-digit code sent to your
-                inbox.
+                {t(locale, "identity.how.item1.rest")}
               </li>
               <li>
                 <span className="font-semibold text-[var(--foreground)]">
-                  Digital declaration.
+                  {t(locale, "identity.how.item2.bold")}
                 </span>{" "}
-                You confirm, under penalty of law, that the content is
-                non-consensual and that you have the right to ask for its
-                removal.
+                {t(locale, "identity.how.item2.rest")}
               </li>
               <li>
                 <span className="font-semibold text-[var(--foreground)]">
-                  Audit trail.
+                  {t(locale, "identity.how.item3.bold")}
                 </span>{" "}
-                Every action is logged with timestamp and a cryptographic
-                hash chain, so the notices we send have a verifiable
-                history.
+                {t(locale, "identity.how.item3.rest")}
               </li>
             </ul>
           </div>
@@ -65,16 +63,13 @@ export default function IdentityPage() {
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              Why no Aadhaar
+              {t(locale, "identity.why.eyebrow")}
             </p>
             <h2 className="font-display mt-4 text-[24px] font-normal leading-[1.2] tracking-tight md:text-[32px] md:leading-[1.18]">
-              Collecting less is the safest design.
+              {t(locale, "identity.why.title")}
             </h2>
             <p className="muted mx-auto mt-6 max-w-lg text-base leading-[1.75] md:text-lg">
-              Aadhaar tightens the identity link but introduces a category of
-              data that becomes a target. Asmita deliberately refuses to
-              collect it. Platforms that act under IT Rules 2021 do not
-              require Aadhaar to process a takedown.
+              {t(locale, "identity.why.body")}
             </p>
           </div>
         </section>
@@ -84,10 +79,10 @@ export default function IdentityPage() {
           <div className="mx-auto max-w-2xl">
             <div className="flex flex-wrap justify-center gap-3">
               <Link className="btn btn-primary" href="/submit">
-                Continue to submit
+                {t(locale, "identity.cta.submit")}
               </Link>
               <Link className="btn btn-secondary" href="/privacy">
-                Read the privacy policy
+                {t(locale, "identity.cta.privacy")}
               </Link>
             </div>
           </div>

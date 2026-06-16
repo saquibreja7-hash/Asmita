@@ -5,15 +5,17 @@ import { getCaseForUser, isUserDeactivated } from "@/lib/case-ops";
 import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
 import HashGenerator from "@/components/HashGenerator";
 import { CaseDashboardActions } from "./CaseDashboardActions";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
-const HASH_STATUS_LABELS: Record<string, string> = {
+const HASH_STATUS_LABELS_KEYS: Record<string, string> = {
   PENDING_REVIEW: "Awaiting review",
   APPROVED: "Approved – dispatch pending",
   DISPATCHED: "Sent to platforms",
   REJECTED: "Rejected",
 };
 
-const URL_STATUS_LABELS: Record<string, string> = {
+const URL_STATUS_LABELS_KEYS: Record<string, string> = {
   PENDING_REVIEW: "Pending review",
   NOTICE_QUEUED: "Notice queued",
   NOTICE_SENT: "Notice sent",
@@ -22,7 +24,7 @@ const URL_STATUS_LABELS: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const label = URL_STATUS_LABELS[status] ?? status.replaceAll("_", " ");
+  const label = URL_STATUS_LABELS_KEYS[status] ?? status.replaceAll("_", " ");
   const color =
     status === "RESOLVED"
       ? "bg-[var(--teal-soft)] text-[var(--teal-dark)]"
@@ -44,6 +46,7 @@ export default async function CasePage({
   params: Promise<{ caseId: string }>;
 }) {
   const { caseId } = await params;
+  const locale = await getLocale();
   const auth = await requireSession({ adultOnly: true });
   const record = auth.ok ? await getCaseForUser(caseId, auth.session.sub) : null;
   const deactivated = record && auth.ok ? await isUserDeactivated(auth.session.sub) : false;
@@ -68,16 +71,18 @@ export default async function CasePage({
         <div className="page-canvas">
           <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
             <div className="mx-auto max-w-2xl">
-              <span className="pill"><span className="dot" />Case not found</span>
+              <span className="pill"><span className="dot" />{t(locale, "case.notFound.pill")}</span>
               <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px] md:leading-[1.06]">
-                We could not find this <em className="not-italic text-gradient">case</em>.
+                {t(locale, "case.notFound.title.1")}{" "}
+                <em className="not-italic text-gradient">{t(locale, "case.notFound.title.em")}</em>
+                {t(locale, "case.notFound.title.2")}
               </h1>
               <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg">
-                Check the dashboard link from your email, or verify your email again to list your cases.
+                {t(locale, "case.notFound.sub")}
               </p>
               <div className="mt-10 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-primary" href="/register">Verify email</Link>
-                <Link className="btn btn-secondary" href="/resources">Support resources</Link>
+                <Link className="btn btn-primary" href="/register">{t(locale, "case.notFound.cta1")}</Link>
+                <Link className="btn btn-secondary" href="/resources">{t(locale, "case.notFound.cta2")}</Link>
               </div>
             </div>
           </section>
@@ -92,15 +97,15 @@ export default async function CasePage({
         <div className="page-canvas">
           <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
             <div className="mx-auto max-w-2xl">
-              <span className="pill"><span className="dot" />Deletion scheduled</span>
+              <span className="pill"><span className="dot" />{t(locale, "case.deactivated.pill")}</span>
               <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px] md:leading-[1.06]">
-                This case is paused.
+                {t(locale, "case.deactivated.title")}
               </h1>
               <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg">
-                Case access is paused during the 30-day hard-deletion window. Contact support to restore.
+                {t(locale, "case.deactivated.sub")}
               </p>
               <div className="mt-10 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-secondary" href="/contact">Contact Asmita</Link>
+                <Link className="btn btn-secondary" href="/contact">{t(locale, "case.deactivated.cta")}</Link>
               </div>
             </div>
           </section>
@@ -120,20 +125,20 @@ export default async function CasePage({
               <div className="md:sticky md:top-28">
                 <span className="pill">
                   <span className="dot" />
-                  Case dashboard
+                  {t(locale, "case.pill")}
                 </span>
 
                 <p className="font-mono mt-5 text-[22px] font-normal leading-[1.2] tracking-tight text-[var(--foreground)]">
                   {record.referenceNumber}
                 </p>
                 <p className="muted mt-1 text-[11px] leading-[1.6]">
-                  Created{" "}
+                  {t(locale, "case.created")}{" "}
                   {new Date(record.createdAt).toLocaleString("en-IN", {
                     timeZone: "Asia/Kolkata",
                     dateStyle: "medium",
                     timeStyle: "short",
                   })}{" "}
-                  IST
+                  {t(locale, "case.ist")}
                 </p>
 
                 {/* Summary stats */}
@@ -142,14 +147,14 @@ export default async function CasePage({
                     <p className="font-mono text-[20px] font-normal text-[var(--foreground)]">
                       {record.urls.length}
                     </p>
-                    <p className="muted text-[11px]">links</p>
+                    <p className="muted text-[11px]">{t(locale, "case.stat.links")}</p>
                   </div>
                   {hashUploadEnabled && (
                     <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-center">
                       <p className="font-mono text-[20px] font-normal text-[var(--foreground)]">
                         {hashSubmissions.length}
                       </p>
-                      <p className="muted text-[11px]">fingerprints</p>
+                      <p className="muted text-[11px]">{t(locale, "case.stat.fingerprints")}</p>
                     </div>
                   )}
                 </div>
@@ -157,9 +162,9 @@ export default async function CasePage({
                 {/* Section nav */}
                 <nav className="mt-6 space-y-1" aria-label="Case sections">
                   {[
-                    { href: "#urls", label: "Links" },
-                    ...(hashUploadEnabled ? [{ href: "#fingerprints", label: "Fingerprints" }] : []),
-                    { href: "#actions", label: "Add a link" },
+                    { href: "#urls", label: t(locale, "case.nav.links") },
+                    ...(hashUploadEnabled ? [{ href: "#fingerprints", label: t(locale, "case.nav.fingerprints") }] : []),
+                    { href: "#actions", label: t(locale, "case.nav.addLink") },
                   ].map((item) => (
                     <a
                       key={item.href}
@@ -174,11 +179,11 @@ export default async function CasePage({
                 {/* Case tools */}
                 <div className="mt-6 space-y-1.5">
                   <p className="px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
-                    Tools
+                    {t(locale, "case.tools.label")}
                   </p>
                   {[
-                    { href: `/api/cases/${record.id}/export`, label: "Download case PDF" },
-                    { href: `/api/cases/${record.id}/audit-trail`, label: "View audit trail" },
+                    { href: `/api/cases/${record.id}/export`, label: t(locale, "case.tools.downloadPdf") },
+                    { href: `/api/cases/${record.id}/audit-trail`, label: t(locale, "case.tools.auditTrail") },
                   ].map((item) => (
                     <Link
                       key={item.href}
@@ -192,13 +197,13 @@ export default async function CasePage({
                     href="/resources"
                     className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
                   >
-                    Support resources
+                    {t(locale, "case.tools.resources")}
                   </Link>
                   <Link
                     href="/delete-account"
                     className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-rose-50 hover:text-[var(--rose)]"
                   >
-                    Request deletion
+                    {t(locale, "case.tools.delete")}
                   </Link>
                 </div>
               </div>
@@ -211,17 +216,16 @@ export default async function CasePage({
               {hasQueuedUrl && !alreadySigned && (
                 <div className="rounded-xl border border-[var(--teal)] bg-[color-mix(in_srgb,var(--teal)_6%,white)] p-6">
                   <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--teal)]">
-                    Action required
+                    {t(locale, "case.sign.pill")}
                   </p>
                   <h2 className="font-display mt-2 text-[22px] font-normal leading-[1.2] tracking-tight md:text-[26px]">
-                    Your notice is ready to sign.
+                    {t(locale, "case.sign.title")}
                   </h2>
                   <p className="muted mt-3 text-sm leading-[1.75]">
-                    Asmita has reviewed your submission and prepared a legal takedown
-                    notice. Review it, add your details, and sign to authorise dispatch.
+                    {t(locale, "case.sign.sub")}
                   </p>
                   <Link className="btn btn-primary mt-5" href={`/case/${caseId}/sign`}>
-                    Review &amp; sign notice
+                    {t(locale, "case.sign.cta")}
                   </Link>
                 </div>
               )}
@@ -230,10 +234,10 @@ export default async function CasePage({
               <section id="urls">
                 <div className="mb-4 flex items-baseline justify-between gap-4">
                   <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[26px]">
-                    Links in this case
+                    {t(locale, "case.urls.title")}
                   </h2>
                   <span className="font-mono text-[11px] text-[var(--muted)]">
-                    {record.urls.length} {record.urls.length === 1 ? "link" : "links"}
+                    {record.urls.length} {record.urls.length === 1 ? t(locale, "case.urls.linkSingular") : t(locale, "case.urls.linkPlural")}
                   </span>
                 </div>
 
@@ -242,9 +246,7 @@ export default async function CasePage({
                     style={{ boxShadow: "var(--shadow-soft)" }}
                   >
                     <p className="muted text-sm leading-[1.75]">
-                      No links added yet. If the content has been posted
-                      somewhere, paste the link below - Asmita will send a legal
-                      notice to the platform and never open the URL.
+                      {t(locale, "case.urls.empty")}
                     </p>
                   </div>
                 ) : (
@@ -255,7 +257,7 @@ export default async function CasePage({
                       <table className="w-full min-w-[500px] border-collapse text-left text-sm">
                         <thead>
                           <tr className="border-b border-[var(--hairline)]">
-                            {["Platform", "Domain", "Status"].map((h) => (
+                            {[t(locale, "case.urls.col.platform"), t(locale, "case.urls.col.domain"), t(locale, "case.urls.col.status")].map((h) => (
                               <th key={h} className="font-mono px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
                                 {h}
                               </th>
@@ -293,15 +295,14 @@ export default async function CasePage({
                 <section id="fingerprints">
                   <div className="mb-4 flex items-baseline justify-between gap-4">
                     <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[26px]">
-                      Digital fingerprints
+                      {t(locale, "case.fingerprints.title")}
                     </h2>
                     <span className="font-mono text-[11px] text-[var(--muted)]">
-                      {hashSubmissions.length} {hashSubmissions.length === 1 ? "fingerprint" : "fingerprints"}
+                      {hashSubmissions.length} {hashSubmissions.length === 1 ? t(locale, "case.fingerprints.singular") : t(locale, "case.fingerprints.plural")}
                     </span>
                   </div>
                   <p className="muted mb-5 text-sm leading-[1.75]">
-                    Select photos from this device. The fingerprint is generated here - images never leave your device.
-                    Platforms receive the fingerprint as part of a legal notice.
+                    {t(locale, "case.fingerprints.sub")}
                   </p>
 
                   {hashSubmissions.length > 0 && (
@@ -312,7 +313,7 @@ export default async function CasePage({
                         <table className="w-full min-w-[400px] border-collapse text-left text-sm">
                           <thead>
                             <tr className="border-b border-[var(--hairline)]">
-                              {["Fingerprint", "Quality", "Status"].map((h) => (
+                              {[t(locale, "case.fingerprints.col.fp"), t(locale, "case.fingerprints.col.quality"), t(locale, "case.fingerprints.col.status")].map((h) => (
                                 <th key={h} className="font-mono px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
                                   {h}
                                 </th>
@@ -343,7 +344,7 @@ export default async function CasePage({
 
               {/* Actions */}
               <section id="actions">
-                <CaseDashboardActions caseId={record.id} firstUrlId={record.urls[0]?.id} />
+                <CaseDashboardActions caseId={record.id} firstUrlId={record.urls[0]?.id} locale={locale} />
               </section>
 
             </div>

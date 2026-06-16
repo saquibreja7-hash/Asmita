@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
+import { t, type Locale } from "@/lib/i18n";
 
 interface Props {
   caseId: string;
@@ -10,9 +11,10 @@ interface Props {
   platformName: string;
   previewPdfUrl: string;
   confirmationUrl: string;
+  locale: Locale;
 }
 
-export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, confirmationUrl }: Props) {
+export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, confirmationUrl, locale }: Props) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
@@ -35,13 +37,13 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         setError(data.error === "already_signed"
-          ? "This notice has already been signed."
-          : "Something went wrong. Please try again.");
+          ? t(locale, "sign.error.alreadySigned")
+          : t(locale, "sign.error.generic"));
         return;
       }
       router.push(confirmationUrl);
     } catch {
-      setError("The request timed out or failed. Please try again.");
+      setError(t(locale, "sign.error.timeout"));
     } finally {
       setSubmitting(false);
     }
@@ -54,31 +56,31 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       <div className="overflow-hidden rounded-xl border border-[var(--border)]" style={{ boxShadow: "var(--shadow-soft)" }}>
         <div className="border-b border-[var(--hairline)] bg-[var(--surface)] px-5 py-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
-            Notice preview - {platformName}
+            {t(locale, "sign.preview.label")} - {platformName}
           </p>
         </div>
         <iframe
           src={previewPdfUrl}
           className="w-full"
           style={{ height: "520px", border: "none" }}
-          title="Notice preview"
+          title={t(locale, "sign.preview.label")}
         />
       </div>
 
       {/* Survivor details */}
       <div className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
-        <p className="text-sm font-semibold text-[var(--foreground)]">Your details</p>
+        <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "sign.details.title")}</p>
 
         <div>
           <label htmlFor="sign-name" className="block text-sm font-semibold text-[var(--foreground)]">
-            Full name
+            {t(locale, "sign.name.label")}
           </label>
-          <p className="muted mt-1 text-sm">This will appear in the notice as the complainant.</p>
+          <p className="muted mt-1 text-sm">{t(locale, "sign.name.sub")}</p>
           <input
             id="sign-name"
             type="text"
             className="field mt-2"
-            placeholder="Your full legal name"
+            placeholder={t(locale, "sign.name.placeholder")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={100}
@@ -88,14 +90,14 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
 
         <div>
           <label htmlFor="sign-contact" className="block text-sm font-semibold text-[var(--foreground)]">
-            Contact (email or phone)
+            {t(locale, "sign.contact.label")}
           </label>
-          <p className="muted mt-1 text-sm">Included so the platform can contact you if needed.</p>
+          <p className="muted mt-1 text-sm">{t(locale, "sign.contact.sub")}</p>
           <input
             id="sign-contact"
             type="text"
             className="field mt-2"
-            placeholder="email@example.com or +91 98765 43210"
+            placeholder={t(locale, "sign.contact.placeholder")}
             value={contact}
             onChange={(e) => setContact(e.target.value)}
             maxLength={200}
@@ -106,15 +108,15 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
 
       {/* Signature */}
       <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
-        <p className="text-sm font-semibold text-[var(--foreground)]">Signature</p>
+        <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "sign.sig.title")}</p>
         <p className="muted text-sm leading-[1.6]">
-          Type your name as your digital signature. By signing, you confirm the declaration in the notice is accurate.
+          {t(locale, "sign.sig.sub")}
         </p>
         <input
           id="sign-signature"
           type="text"
           className="field font-display text-[18px] italic"
-          placeholder="Type your full name"
+          placeholder={t(locale, "sign.sig.placeholder")}
           value={signature}
           onChange={(e) => setSignature(e.target.value)}
           maxLength={100}
@@ -132,8 +134,7 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
           onChange={(e) => setAgreed(e.target.checked)}
         />
         <span className="text-sm leading-[1.65] text-[var(--foreground)]">
-          I confirm that the information above is accurate and I authorise Asmita to
-          send this takedown notice to {platformName} on my behalf.
+          {t(locale, "sign.agree.prefix")} {platformName} {t(locale, "sign.agree.suffix")}
         </span>
       </label>
 
@@ -148,10 +149,10 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
           disabled={!canSubmit}
           onClick={handleSubmit}
         >
-          {submitting ? "Signing..." : "Sign and submit"}
+          {submitting ? t(locale, "sign.cta.signing") : t(locale, "sign.cta.sign")}
         </button>
         <a className="btn btn-secondary" href={confirmationUrl}>
-          Skip for now
+          {t(locale, "sign.cta.skip")}
         </a>
       </div>
     </div>

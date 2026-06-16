@@ -1,79 +1,11 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { getLocale } from "@/lib/get-locale";
+import { t } from "@/lib/i18n";
 
-type Resource = {
-  num: string;
-  name: string;
-  contact: string;
-  href: string;
-  external: boolean;
-  description: string;
-};
+export default async function MinorSupportPage() {
+  const locale = await getLocale();
 
-const emergency: Resource[] = [
-  {
-    num: "01",
-    name: "Emergency Response Support",
-    contact: "112",
-    href: "tel:112",
-    external: false,
-    description:
-      "Call if you are in immediate danger. Police, ambulance, and fire respond across India.",
-  },
-  {
-    num: "02",
-    name: "CHILDLINE",
-    contact: "1098",
-    href: "tel:1098",
-    external: false,
-    description:
-      "Free 24-hour helpline for anyone under 18 in India. You can call about any situation that scares you - not only the one that brought you here.",
-  },
-];
-
-const removal: Resource[] = [
-  {
-    num: "03",
-    name: "TakeItDown · NCMEC",
-    contact: "takeitdown.ncmec.org",
-    href: "https://takeitdown.ncmec.org/",
-    external: true,
-    description:
-      "Free, designed specifically for people under 18. It uses your phone or computer to create a private hash of the image and helps remove it from participating platforms - your image never leaves your device.",
-  },
-  {
-    num: "04",
-    name: "StopNCII.org",
-    contact: "stopncii.org",
-    href: "https://stopncii.org/",
-    external: true,
-    description:
-      "Hash-based support that helps stop re-sharing of intimate images. Designed for adults but young people can also use it.",
-  },
-];
-
-const reporting: Resource[] = [
-  {
-    num: "05",
-    name: "National Cybercrime Reporting Portal",
-    contact: "cybercrime.gov.in",
-    href: "https://cybercrime.gov.in/",
-    external: true,
-    description:
-      "Government of India portal for cybercrime reporting. Use the women-and-child path. A trusted adult can help you file.",
-  },
-  {
-    num: "06",
-    name: "Cyber Peace Foundation",
-    contact: "cyberpeace.org",
-    href: "https://cyberpeace.org/",
-    external: true,
-    description:
-      "Indian organisation that publishes cyber-safety guidance and offers support resources.",
-  },
-];
-
-export default function MinorSupportPage() {
   return (
     <AppShell>
       <div className="page-canvas">
@@ -82,20 +14,18 @@ export default function MinorSupportPage() {
           <div className="mx-auto max-w-2xl">
             <span className="pill">
               <span className="dot" />
-              For people under 18
+              {t(locale, "minor.pill")}
             </span>
             <p className="muted mt-3 text-xs tracking-wide">
-              Available in English and <span lang="hi">हिंदी</span>
+              {t(locale, "minor.langNote")} <span lang="hi">हिंदी</span>
             </p>
             <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
-              You deserve real
+              {t(locale, "minor.hero.title.1")}
               <br />
-              help - <em className="not-italic text-gradient">right now</em>.
+              <em className="not-italic text-gradient">{t(locale, "minor.hero.title.2")}</em>
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              Asmita does not collect URLs from anyone under 18. Nothing is
-              recorded on this page. Below are services built specifically
-              for people your age - please use them.
+              {t(locale, "minor.hero.sub")}
             </p>
           </div>
         </section>
@@ -104,58 +34,85 @@ export default function MinorSupportPage() {
         <section className="container py-12 text-center md:py-16">
           <div className="mx-auto max-w-2xl">
             <p className="font-display text-[20px] leading-[1.55] tracking-tight text-[var(--foreground)] md:text-[24px] md:leading-[1.5]">
-              What you&rsquo;re feeling is valid. None of this is your fault.
-              Telling a trusted adult - a parent, a teacher, a CHILDLINE
-              counsellor - is the right next step.
+              {t(locale, "minor.validation")}
             </p>
           </div>
         </section>
 
         {/* EMERGENCY GROUP */}
         <SectionHeader
-          label="Group 01"
-          title="If you are in immediate danger or need to talk to someone now."
-          subtitle="Both lines are free, 24-hour, and answer in multiple Indian languages."
+          label={t(locale, "minor.g1.label")}
+          title={t(locale, "minor.g1.title")}
+          subtitle={t(locale, "minor.g1.sub")}
         />
-        {emergency.map((r) => (
-          <ResourceBlock key={r.num} {...r} />
-        ))}
+        <ResourceBlock
+          name={t(locale, "minor.r1.name")}
+          contact={t(locale, "minor.r1.contact")}
+          href="tel:112"
+          external={false}
+          description={t(locale, "minor.r1.desc")}
+        />
+        <ResourceBlock
+          name={t(locale, "minor.r2.name")}
+          contact={t(locale, "minor.r2.contact")}
+          href="tel:1098"
+          external={false}
+          description={t(locale, "minor.r2.desc")}
+        />
 
         {/* REMOVAL GROUP */}
         <SectionHeader
-          label="Group 02"
-          title="To help take the content down."
-          subtitle="These services are designed for people under 18 and do not require you to send the image to anyone."
+          label={t(locale, "minor.g2.label")}
+          title={t(locale, "minor.g2.title")}
+          subtitle={t(locale, "minor.g2.sub")}
         />
-        {removal.map((r) => (
-          <ResourceBlock key={r.num} {...r} />
-        ))}
+        <ResourceBlock
+          name={t(locale, "minor.r3.name")}
+          contact={t(locale, "minor.r3.contact")}
+          href="https://takeitdown.ncmec.org/"
+          external={true}
+          description={t(locale, "minor.r3.desc")}
+        />
+        <ResourceBlock
+          name={t(locale, "minor.r4.name")}
+          contact={t(locale, "minor.r4.contact")}
+          href="https://stopncii.org/"
+          external={true}
+          description={t(locale, "minor.r4.desc")}
+        />
 
         {/* REPORTING GROUP */}
         <SectionHeader
-          label="Group 03"
-          title="To report it formally."
-          subtitle="A trusted adult can help you file. The portal is in English and Hindi."
+          label={t(locale, "minor.g3.label")}
+          title={t(locale, "minor.g3.title")}
+          subtitle={t(locale, "minor.g3.sub")}
         />
-        {reporting.map((r) => (
-          <ResourceBlock key={r.num} {...r} />
-        ))}
+        <ResourceBlock
+          name={t(locale, "minor.r5.name")}
+          contact={t(locale, "minor.r5.contact")}
+          href="https://cybercrime.gov.in/"
+          external={true}
+          description={t(locale, "minor.r5.desc")}
+        />
+        <ResourceBlock
+          name={t(locale, "minor.r6.name")}
+          contact={t(locale, "minor.r6.contact")}
+          href="https://cyberpeace.org/"
+          external={true}
+          description={t(locale, "minor.r6.desc")}
+        />
 
         {/* WHY NOT ASMITA */}
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              Why Asmita does not handle this directly
+              {t(locale, "minor.whyNot.eyebrow")}
             </p>
             <h2 className="font-display mt-4 text-[26px] font-normal leading-[1.2] tracking-tight md:text-[36px] md:leading-[1.18]">
-              The law treats this differently when a minor is involved.
+              {t(locale, "minor.whyNot.title")}
             </h2>
             <p className="muted mx-auto mt-6 max-w-lg text-base leading-[1.75] md:text-lg">
-              In India, content showing anyone under 18 is treated under the
-              POCSO Act, which carries mandatory reporting obligations and
-              specialised handling. Sending you through an adult takedown
-              flow would risk taking that protection away from you. That is
-              why we route you here instead.
+              {t(locale, "minor.whyNot.body")}
             </p>
           </div>
         </section>
@@ -164,18 +121,17 @@ export default function MinorSupportPage() {
         <section className="container pb-24 pt-12 text-center md:pb-32 md:pt-16">
           <div className="mx-auto max-w-2xl">
             <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[40px] md:leading-[1.16]">
-              You are not alone in this.
+              {t(locale, "minor.closing.title")}
             </h2>
             <p className="muted mx-auto mt-6 max-w-lg text-base leading-[1.75] md:text-lg">
-              Reach one of the lines above. They have helped many people in
-              the situation you are in.
+              {t(locale, "minor.closing.body")}
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               <a className="btn btn-primary" href="tel:1098">
-                Call CHILDLINE - 1098
+                {t(locale, "minor.closing.cta1")}
               </a>
               <Link className="btn btn-secondary" href="/">
-                Back to home
+                {t(locale, "minor.closing.cta2")}
               </Link>
             </div>
           </div>
@@ -217,7 +173,13 @@ function ResourceBlock({
   href,
   external,
   description,
-}: Resource) {
+}: {
+  name: string;
+  contact: string;
+  href: string;
+  external: boolean;
+  description: string;
+}) {
   return (
     <section className="container py-8 text-center md:py-12">
       <div className="mx-auto max-w-2xl">

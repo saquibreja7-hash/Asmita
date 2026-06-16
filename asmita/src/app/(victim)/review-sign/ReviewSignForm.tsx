@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
+import { t, type Locale } from "@/lib/i18n";
 
 type HashEntry = { hash: string; quality: number; clientVersion: string };
 
@@ -43,7 +44,7 @@ function CheckItem({ heading, detail }: { heading: string; detail: string }) {
   );
 }
 
-export function ReviewSignForm() {
+export function ReviewSignForm({ locale }: { locale: Locale }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("loading");
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -78,7 +79,7 @@ export function ReviewSignForm() {
     try {
       const createRes = await csrfFetch("/api/cases/create", { method: "POST" });
       if (!createRes.ok) {
-        setError("Failed to create case. Please try again.");
+        setError(t(locale, "review.error.createCase"));
         setStep("review");
         return;
       }
@@ -91,7 +92,7 @@ export function ReviewSignForm() {
           body: JSON.stringify({ urls: draft.urls, declaration: true }),
         });
         if (!urlRes.ok) {
-          setError("Some links could not be accepted. Go back and check the URLs.");
+          setError(t(locale, "review.error.links"));
           setStep("review");
           return;
         }
@@ -108,7 +109,7 @@ export function ReviewSignForm() {
           }),
         });
         if (!hashRes.ok) {
-          setError("Image fingerprints could not be submitted. Please try again.");
+          setError(t(locale, "review.error.hashes"));
           setStep("review");
           return;
         }
@@ -116,13 +117,11 @@ export function ReviewSignForm() {
         // Hash-only path: no URLs
         if (draft.urls.length === 0) {
           if (draft.emailPlatformIds.length > 0) {
-            // Has email platforms - show hash sign flow
             sessionStorage.removeItem("asmita_submit_draft");
             setCaseId(newCaseId);
             setPreviewUrl(`/api/cases/${newCaseId}/preview-hash-advisory`);
             setStep("hash-sign");
           } else {
-            // All form-only - go to handoff for first form-only platform
             sessionStorage.removeItem("asmita_submit_draft");
             const first = draft.formOnlyPlatforms[0];
             if (first) {
@@ -148,7 +147,7 @@ export function ReviewSignForm() {
         router.push(`/case/${newCaseId}`);
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(t(locale, "review.error.generic"));
       setStep("review");
     }
   }
@@ -167,15 +166,15 @@ export function ReviewSignForm() {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         setError(
           data.error === "already_signed"
-            ? "This notice has already been signed."
-            : "Something went wrong. Please try again.",
+            ? t(locale, "review.sign.error.alreadySigned")
+            : t(locale, "review.sign.error.timeout"),
         );
         setStep("sign");
         return;
       }
       router.push(`/case/${caseId}`);
     } catch {
-      setError("The request timed out or failed. Please try again.");
+      setError(t(locale, "review.sign.error.timeout"));
       setStep("sign");
     }
   }
@@ -199,15 +198,15 @@ export function ReviewSignForm() {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         setError(
           data.error === "already_signed"
-            ? "This notice has already been signed."
-            : "Something went wrong. Please try again.",
+            ? t(locale, "review.sign.error.alreadySigned")
+            : t(locale, "review.sign.error.timeout"),
         );
         setStep("hash-sign");
         return;
       }
       router.push(`/case/${caseId}`);
     } catch {
-      setError("The request timed out or failed. Please try again.");
+      setError(t(locale, "review.sign.error.timeout"));
       setStep("hash-sign");
     }
   }
@@ -227,14 +226,14 @@ export function ReviewSignForm() {
       <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
         <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
           <div className="md:sticky md:top-28">
-            <span className="pill"><span className="dot" />Review and sign</span>
+            <span className="pill"><span className="dot" />{t(locale, "review.pill")}</span>
             <p className="muted mt-5 text-sm leading-[1.75]">
-              Check the details below before your case is created. Once you sign, the notice is authorised for dispatch.
+              {t(locale, "review.aside.sub")}
             </p>
             <div className="mt-8 space-y-4">
-              <CheckItem heading="Review your submission" detail="Check the URLs and fingerprints you are about to submit." />
-              <CheckItem heading="Sign the notice" detail="Add your name and signature to authorise dispatch." />
-              <CheckItem heading="Case created" detail="Your reference number is issued and the notice queued for sending." />
+              <CheckItem heading={t(locale, "review.aside.item1.heading")} detail={t(locale, "review.aside.item1.detail")} />
+              <CheckItem heading={t(locale, "review.aside.item2.heading")} detail={t(locale, "review.aside.item2.detail")} />
+              <CheckItem heading={t(locale, "review.aside.item3.heading")} detail={t(locale, "review.aside.item3.detail")} />
             </div>
           </div>
         </aside>
@@ -242,10 +241,10 @@ export function ReviewSignForm() {
         <div className="min-w-0 flex-1 space-y-8">
           <div>
             <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
-              Review your submission.
+              {t(locale, "review.title")}
             </h1>
             <p className="muted mt-2 text-sm leading-[1.75]">
-              Check these details before continuing. Your case will be created on the next step.
+              {t(locale, "review.sub")}
             </p>
           </div>
 
@@ -255,7 +254,7 @@ export function ReviewSignForm() {
               style={{ boxShadow: "var(--shadow-soft)" }}
             >
               <p className="text-sm font-semibold text-[var(--foreground)]">
-                Links ({draft.urls.length})
+                {t(locale, "review.links.label")} ({draft.urls.length})
               </p>
               <ul className="mt-3 space-y-1.5">
                 {draft.urls.map((url, i) => (
@@ -266,7 +265,7 @@ export function ReviewSignForm() {
               </ul>
               {draft.urls.length > 1 && (
                 <p className="muted mt-4 text-xs leading-[1.65]">
-                  You will sign a notice for the first link on the next screen. Notices for remaining links can be signed from your case dashboard.
+                  {t(locale, "review.links.moreNote")}
                 </p>
               )}
             </div>
@@ -278,7 +277,7 @@ export function ReviewSignForm() {
               style={{ boxShadow: "var(--shadow-soft)" }}
             >
               <p className="text-sm font-semibold text-[var(--foreground)]">
-                Digital fingerprints ({draft.hashes.length})
+                {t(locale, "review.fingerprints.label")} ({draft.hashes.length})
               </p>
               <ul className="mt-3 space-y-1.5">
                 {draft.hashes.map((h, i) => (
@@ -289,9 +288,9 @@ export function ReviewSignForm() {
               </ul>
               {draft.platformIds.length > 0 && (
                 <p className="muted mt-3 text-xs leading-[1.65]">
-                  Platforms selected: {draft.platformIds.length}
-                  {draft.emailPlatformIds.length > 0 && ` (${draft.emailPlatformIds.length} will receive a signed notice)`}
-                  {draft.formOnlyPlatforms.length > 0 && ` (${draft.formOnlyPlatforms.length} require a form submission)`}
+                  {t(locale, "review.fingerprints.platformsNote")} {draft.platformIds.length}
+                  {draft.emailPlatformIds.length > 0 && ` (${draft.emailPlatformIds.length} ${t(locale, "review.fingerprints.emailNote")})`}
+                  {draft.formOnlyPlatforms.length > 0 && ` (${draft.formOnlyPlatforms.length} ${t(locale, "review.fingerprints.formNote")})`}
                 </p>
               )}
             </div>
@@ -308,10 +307,10 @@ export function ReviewSignForm() {
               disabled={step === "creating"}
               onClick={createCase}
             >
-              {step === "creating" ? "Creating case..." : "Create case and preview notice"}
+              {step === "creating" ? t(locale, "review.cta.creating") : t(locale, "review.cta.create")}
             </button>
             <a className="btn btn-secondary" href="/submit">
-              Go back
+              {t(locale, "review.cta.back")}
             </a>
           </div>
         </div>
@@ -330,17 +329,15 @@ export function ReviewSignForm() {
         <div className="md:sticky md:top-28">
           <span className="pill">
             <span className="dot" />
-            {isHashSign ? "Sign fingerprint notice" : "Sign notice"}
+            {isHashSign ? t(locale, "review.sign.hashPill") : t(locale, "review.sign.pill")}
           </span>
           <p className="muted mt-5 text-sm leading-[1.75]">
-            {isHashSign
-              ? "Read the fingerprint advisory in full. Your signature authorises Asmita to send it to the selected platforms on your behalf."
-              : "Read the notice in full. Your signature authorises Asmita to send it on your behalf."}
+            {isHashSign ? t(locale, "review.sign.aside.hashSub") : t(locale, "review.sign.aside.sub")}
           </p>
           <div className="mt-8 space-y-4">
-            <CheckItem heading="Read the notice" detail="Scroll through the document on the right to review what will be sent." />
-            <CheckItem heading="Add your details" detail="Enter your name and contact so the platform can respond to you." />
-            <CheckItem heading="Sign to authorise" detail="Type your name as a digital signature to confirm the declaration." />
+            <CheckItem heading={t(locale, "review.sign.aside.item1.heading")} detail={t(locale, "review.sign.aside.item1.detail")} />
+            <CheckItem heading={t(locale, "review.sign.aside.item2.heading")} detail={t(locale, "review.sign.aside.item2.detail")} />
+            <CheckItem heading={t(locale, "review.sign.aside.item3.heading")} detail={t(locale, "review.sign.aside.item3.detail")} />
           </div>
         </div>
       </aside>
@@ -348,10 +345,10 @@ export function ReviewSignForm() {
       <div className="min-w-0 flex-1 space-y-8">
         <div>
           <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
-            {isHashSign ? "Review and sign your fingerprint notice." : "Review and sign your notice."}
+            {isHashSign ? t(locale, "review.sign.hashTitle") : t(locale, "review.sign.title")}
           </h1>
           <p className="muted mt-2 text-sm leading-[1.75]">
-            Read the notice in full, then add your details and signature below.
+            {t(locale, "review.sign.sub")}
           </p>
         </div>
 
@@ -361,14 +358,14 @@ export function ReviewSignForm() {
         >
           <div className="border-b border-[var(--hairline)] bg-[var(--surface)] px-5 py-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              {isHashSign ? "Fingerprint advisory preview" : "Notice preview"}
+              {isHashSign ? t(locale, "review.sign.hashPreviewLabel") : t(locale, "review.sign.previewLabel")}
             </p>
           </div>
           <iframe
             src={previewUrl}
             className="w-full"
             style={{ height: "520px", border: "none" }}
-            title={isHashSign ? "Fingerprint advisory preview" : "Notice preview"}
+            title={isHashSign ? t(locale, "review.sign.hashPreviewLabel") : t(locale, "review.sign.previewLabel")}
           />
         </div>
 
@@ -376,18 +373,18 @@ export function ReviewSignForm() {
           className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
           style={{ boxShadow: "var(--shadow-soft)" }}
         >
-          <p className="text-sm font-semibold text-[var(--foreground)]">Your details</p>
+          <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "review.sign.details.title")}</p>
 
           <div>
             <label htmlFor="rs-name" className="block text-sm font-semibold text-[var(--foreground)]">
-              Full name
+              {t(locale, "review.sign.name.label")}
             </label>
-            <p className="muted mt-1 text-sm">This will appear in the notice as the complainant.</p>
+            <p className="muted mt-1 text-sm">{t(locale, "review.sign.name.sub")}</p>
             <input
               id="rs-name"
               type="text"
               className="field mt-2"
-              placeholder="Your full legal name"
+              placeholder={t(locale, "review.sign.name.placeholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={100}
@@ -397,14 +394,14 @@ export function ReviewSignForm() {
 
           <div>
             <label htmlFor="rs-contact" className="block text-sm font-semibold text-[var(--foreground)]">
-              Contact (email or phone)
+              {t(locale, "review.sign.contact.label")}
             </label>
-            <p className="muted mt-1 text-sm">Included so the platform can contact you if needed.</p>
+            <p className="muted mt-1 text-sm">{t(locale, "review.sign.contact.sub")}</p>
             <input
               id="rs-contact"
               type="text"
               className="field mt-2"
-              placeholder="email@example.com or +91 98765 43210"
+              placeholder={t(locale, "review.sign.contact.placeholder")}
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               maxLength={200}
@@ -417,15 +414,15 @@ export function ReviewSignForm() {
           className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
           style={{ boxShadow: "var(--shadow-soft)" }}
         >
-          <p className="text-sm font-semibold text-[var(--foreground)]">Signature</p>
+          <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "review.sign.sig.title")}</p>
           <p className="muted text-sm leading-[1.6]">
-            Type your name as your digital signature. By signing, you confirm the declaration in the notice is accurate.
+            {t(locale, "review.sign.sig.sub")}
           </p>
           <input
             id="rs-signature"
             type="text"
             className="field font-display text-[18px] italic"
-            placeholder="Type your full name"
+            placeholder={t(locale, "review.sign.sig.placeholder")}
             value={signature}
             onChange={(e) => setSignature(e.target.value)}
             maxLength={100}
@@ -443,8 +440,7 @@ export function ReviewSignForm() {
             onChange={(e) => setAgreed(e.target.checked)}
           />
           <span className="text-sm leading-[1.65] text-[var(--foreground)]">
-            I confirm that the information above is accurate and I authorise Asmita to send this{" "}
-            {isHashSign ? "fingerprint advisory" : "takedown notice"} on my behalf.
+            {isHashSign ? t(locale, "review.sign.agree.hash") : t(locale, "review.sign.agree.notice")}
           </span>
         </label>
 
@@ -459,10 +455,10 @@ export function ReviewSignForm() {
             disabled={!canSign}
             onClick={onSign}
           >
-            {signingInProgress ? "Signing..." : "Sign and submit"}
+            {signingInProgress ? t(locale, "review.sign.cta.signing") : t(locale, "review.sign.cta.sign")}
           </button>
           <a className="btn btn-secondary" href={`/case/${caseId}`}>
-            Skip for now
+            {t(locale, "review.sign.cta.skip")}
           </a>
         </div>
       </div>
