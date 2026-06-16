@@ -231,7 +231,7 @@ export default async function CasePage({
               )}
 
               {/* URLs */}
-              <section id="urls">
+              <section id="urls" className="scroll-mt-24">
                 <div className="mb-4 flex items-baseline justify-between gap-4">
                   <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[26px]">
                     {t(locale, "case.urls.title")}
@@ -292,7 +292,7 @@ export default async function CasePage({
 
               {/* Digital fingerprints */}
               {hashUploadEnabled && (
-                <section id="fingerprints">
+                <section id="fingerprints" className="scroll-mt-24">
                   <div className="mb-4 flex items-baseline justify-between gap-4">
                     <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[26px]">
                       {t(locale, "case.fingerprints.title")}
@@ -343,7 +343,7 @@ export default async function CasePage({
               )}
 
               {/* Actions */}
-              <section id="actions">
+              <section id="actions" className="scroll-mt-24">
                 <CaseDashboardActions caseId={record.id} firstUrlId={record.urls[0]?.id} locale={locale} />
               </section>
 
