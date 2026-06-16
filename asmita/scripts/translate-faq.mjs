@@ -44,6 +44,45 @@ async function translate(text) {
   return data.translated_text;
 }
 
+const hiwKeys = {
+  "hiw.pill": "How it works",
+  "hiw.hero.title.1": "Four steps.",
+  "hiw.hero.title.2": "One",
+  "hiw.hero.title.3": "screen at a time.",
+  "hiw.hero.sub": "Each step happens on its own page. Nothing demands more than one decision from you at a time.",
+  "hiw.flow.eyebrow": "The flow",
+  "hiw.step1.title": "Confirm safety.",
+  "hiw.step1.body": "Age attestation comes first. Adults continue privately. If you are under 18, Asmita does not collect URLs - it routes you to CHILDLINE 1098, TakeItDown, and cybercrime.gov.in with guided instructions.",
+  "hiw.step2.title": "Paste links as text.",
+  "hiw.step2.body": "Asmita reads only the domain string from each URL. It never opens, fetches, renders, or previews the content the link points to. Up to ten URLs every twenty-four hours.",
+  "hiw.step3.title": "Reviewed notices go out.",
+  "hiw.step3.body": "Notice templates are reviewed by Internet Freedom Foundation and SFLC.in. Platform contacts are human-verified before they enter the routing table. You approve every notice before it is sent.",
+  "hiw.step4.title": "Track and escalate.",
+  "hiw.step4.body": "A private dashboard shows each platform, the response window, and an audit trail. If a platform doesn't respond within the legal window, escalation is automatic.",
+  "hiw.routing.eyebrow": "Notice routing",
+  "hiw.routing.title": "Three ways a notice reaches the platform.",
+  "hiw.routing.sub": "Different platforms accept notices differently. Asmita uses the most reliable channel that exists - and never guesses when one doesn't.",
+  "hiw.tier1.title": "Direct API",
+  "hiw.tier1.body": "For the small set of platforms that publish a verified takedown endpoint, Asmita submits the notice through the API and waits on the structured response.",
+  "hiw.tier2.title": "Grievance Officer email",
+  "hiw.tier2.body": "For Indian intermediaries covered by IT Rules 2021, Asmita sends a templated email to the platform's designated Grievance Officer. This is the path most notices take.",
+  "hiw.tier3.title": "Guided form handoff",
+  "hiw.tier3.body": "When a platform has no published contact, Asmita does not guess. It prepares a step-by-step handoff so you can submit through their web form yourself, with the notice text ready to paste.",
+  "hiw.escalation.eyebrow": "Escalation",
+  "hiw.escalation.title": "When platforms don't respond.",
+  "hiw.escalation.sub": "The escalation timeline is automatic. You never have to chase a platform manually - but you can stop the clock at any time.",
+  "hiw.tl1.title": "Notice sent.",
+  "hiw.tl1.body": "First notice goes out the moment you approve it. The 24-hour clock under IT Rules begins.",
+  "hiw.tl2.title": "First escalation.",
+  "hiw.tl2.body": "If there is no response, Asmita escalates to the next contact tier and re-sends automatically.",
+  "hiw.tl3.title": "FIR package ready.",
+  "hiw.tl3.body": "If 7 days pass without resolution, Asmita prepares a police-ready FIR package for cybercrime.gov.in from the same evidence trail.",
+  "hiw.closing.title": "Ready to begin?",
+  "hiw.closing.body": "There is no clock running. You can start, stop, and come back.",
+  "hiw.closing.cta1": "Start a case",
+  "hiw.closing.cta2": "Read the FAQ",
+};
+
 const homeKeys = {
   "home.pill": "Asmita · अस्मिता · for women in India",
   "home.langNote": "Available in English and",
@@ -165,7 +204,7 @@ const faqKeys = {
 
 async function main() {
   const hi = JSON.parse(readFileSync(HI_JSON, "utf8"));
-  const entries = Object.entries(homeKeys);
+  const entries = Object.entries(hiwKeys);
   let done = 0;
 
   for (const [key, english] of entries) {
