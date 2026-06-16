@@ -344,22 +344,47 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
               className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
               style={{ boxShadow: "var(--shadow-soft)" }}
             >
-              <p className="text-sm font-semibold text-[var(--foreground)]">
-                {t(locale, "review.fingerprints.label")} ({draft.hashes.length})
-              </p>
-              <ul className="mt-3 space-y-1.5">
-                {draft.hashes.map((h, i) => (
-                  <li key={i} className="font-mono text-[13px] text-[var(--muted)]">
-                    {h.hash.slice(0, 16)}... (quality {h.quality}/100)
-                  </li>
-                ))}
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--teal-soft)]">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <rect x="1" y="1" width="5" height="5" rx="1" stroke="var(--teal)" strokeWidth="1.2"/>
+                    <rect x="8" y="1" width="5" height="5" rx="1" stroke="var(--teal)" strokeWidth="1.2"/>
+                    <rect x="1" y="8" width="5" height="5" rx="1" stroke="var(--teal)" strokeWidth="1.2"/>
+                    <path d="M8 10.5h5M10.5 8v5" stroke="var(--teal)" strokeWidth="1.2" strokeLinecap="round"/>
+                  </svg>
+                </span>
+                <p className="text-sm font-semibold text-[var(--foreground)]">
+                  {t(locale, "review.fingerprints.label")}
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-[var(--teal-soft)] px-2 py-0.5 font-mono text-[11px] text-[var(--teal)]">{draft.hashes.length}</span>
+                </p>
+              </div>
+              <ul className="mt-4 space-y-2">
+                {draft.hashes.map((h, i) => {
+                  const q = h.quality;
+                  const qColor = q >= 70 ? "text-emerald-700 bg-emerald-50" : q >= 50 ? "text-amber-700 bg-amber-50" : "text-rose-700 bg-rose-50";
+                  return (
+                    <li key={i} className="flex items-center justify-between rounded-lg border border-[var(--hairline)] px-3 py-2.5">
+                      <span className="font-mono text-[12px] text-[var(--muted)]">{h.hash.slice(0, 8)}&thinsp;&middot;&thinsp;{h.hash.slice(8, 16)}&thinsp;&middot;&thinsp;&hellip;</span>
+                      <span className={`ml-3 shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] font-medium ${qColor}`}>{q}%</span>
+                    </li>
+                  );
+                })}
               </ul>
               {draft.platformIds.length > 0 && (
-                <p className="muted mt-3 text-xs leading-[1.65]">
-                  {t(locale, "review.fingerprints.platformsNote")} {draft.platformIds.length}
-                  {draft.emailPlatformIds.length > 0 && ` (${draft.emailPlatformIds.length} ${t(locale, "review.fingerprints.emailNote")})`}
-                  {draft.formOnlyPlatforms.length > 0 && ` (${draft.formOnlyPlatforms.length} ${t(locale, "review.fingerprints.formNote")})`}
-                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {draft.emailPlatformIds.length > 0 && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M1 3l5 3.5L11 3M1 3h10v7H1V3z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
+                      {draft.emailPlatformIds.length} {t(locale, "review.fingerprints.emailNote")}
+                    </span>
+                  )}
+                  {draft.formOnlyPlatforms.length > 0 && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 2h8v8H2z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/><path d="M4 5h4M4 7h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                      {draft.formOnlyPlatforms.length} {t(locale, "review.fingerprints.formNote")}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           )}
