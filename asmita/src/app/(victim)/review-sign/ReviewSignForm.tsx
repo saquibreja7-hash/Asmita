@@ -23,7 +23,8 @@ type Step =
   | "sign"
   | "signing"
   | "hash-sign"
-  | "hash-signing";
+  | "hash-signing"
+  | "form-only-handoff";
 
 function CheckItem({ heading, detail }: { heading: string; detail: string }) {
   return (
@@ -50,6 +51,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [caseId, setCaseId] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
+  const [pendingFormPlatforms, setPendingFormPlatforms] = useState<{ id: string; name: string; formUrl: string }[]>([]);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [signature, setSignature] = useState("");
@@ -117,17 +119,21 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         // Hash-only path: no URLs
         if (draft.urls.length === 0) {
           if (draft.emailPlatformIds.length > 0) {
+            // Save form-only platforms to state before clearing draft (sessionStorage won't survive)
+            if (draft.formOnlyPlatforms.length > 0) {
+              setPendingFormPlatforms(draft.formOnlyPlatforms);
+            }
             sessionStorage.removeItem("asmita_submit_draft");
             setCaseId(newCaseId);
             setPreviewUrl(`/api/cases/${newCaseId}/preview-hash-advisory`);
             setStep("hash-sign");
           } else {
+            // Form-only platforms only — show all of them inline
             sessionStorage.removeItem("asmita_submit_draft");
-            const first = draft.formOnlyPlatforms[0];
-            if (first) {
-              router.push(
-                `/handoff/${newCaseId}?formUrl=${encodeURIComponent(first.formUrl)}&platformName=${encodeURIComponent(first.name)}`,
-              );
+            if (draft.formOnlyPlatforms.length > 0) {
+              setPendingFormPlatforms(draft.formOnlyPlatforms);
+              setCaseId(newCaseId);
+              setStep("form-only-handoff");
             } else {
               router.push(`/case/${newCaseId}/confirmation`);
             }
@@ -204,7 +210,11 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         setStep("hash-sign");
         return;
       }
-      router.push(`/case/${caseId}`);
+      if (pendingFormPlatforms.length > 0) {
+        setStep("form-only-handoff");
+      } else {
+        router.push(`/case/${caseId}`);
+      }
     } catch {
       setError(t(locale, "review.sign.error.timeout"));
       setStep("hash-sign");
@@ -220,6 +230,64 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
     step !== "hash-signing";
 
   if (step === "loading") return null;
+
+  if (step === "form-only-handoff") {
+    return (
+      <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
+        <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
+          <div className="md:sticky md:top-28">
+            <span className="pill"><span className="dot" />{t(locale, "review.formOnly.pill")}</span>
+            <p className="muted mt-5 text-sm leading-[1.75]">
+              {t(locale, "review.formOnly.sub")}
+            </p>
+            <div className="mt-8 space-y-4">
+              <CheckItem heading={t(locale, "review.formOnly.aside.item1.heading")} detail={t(locale, "review.formOnly.aside.item1.detail")} />
+              <CheckItem heading={t(locale, "review.formOnly.aside.item2.heading")} detail={t(locale, "review.formOnly.aside.item2.detail")} />
+              <CheckItem heading={t(locale, "review.formOnly.aside.item3.heading")} detail={t(locale, "review.formOnly.aside.item3.detail")} />
+            </div>
+          </div>
+        </aside>
+
+        <div className="min-w-0 flex-1 space-y-8">
+          <div>
+            <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+              {t(locale, "review.formOnly.title")}
+            </h1>
+            <p className="muted mt-2 text-sm leading-[1.75]">
+              {pendingFormPlatforms.length} {t(locale, "review.formOnly.intro")}
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {pendingFormPlatforms.map((platform) => (
+              <a
+                key={platform.id}
+                href={platform.formUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 hover:border-[var(--teal)] transition-colors"
+                style={{ boxShadow: "var(--shadow-soft)" }}
+              >
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">{platform.name}</p>
+                  <p className="muted mt-0.5 text-xs">{t(locale, "review.formOnly.openForm")} {platform.name} →</p>
+                </div>
+                <svg className="ml-4 shrink-0 text-[var(--teal)]" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M5 10h10M10 5l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </a>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <a className="btn btn-primary" href={`/case/${caseId}`}>
+              {t(locale, "review.formOnly.cta.dashboard")}
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (step === "review" || step === "creating") {
     return (

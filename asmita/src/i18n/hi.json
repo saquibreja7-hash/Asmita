@@ -719,5 +719,17 @@
   "privacy.closing.title": "गोपनीयता ही वास्तुकला है।",
   "privacy.closing.sub": "यदि इस पृष्ठ पर कुछ भी अस्पष्ट है, तो हमें लिखें। हम अंग्रेजी या हिंदी में उत्तर देंगे - जो भी आपके लिए आसान हो।",
   "privacy.closing.cta1": "आशा से संपर्क करें।",
-  "privacy.closing.cta2": "मामला शुरू करें"
+  "privacy.closing.cta2": "मामला शुरू करें",
+  "review.formOnly.pill": "ज़रूरी काम है",
+  "review.formOnly.title": "हर platform पर form भर दीजिए।",
+  "review.formOnly.sub": "इन platforms पर email notice नहीं लगते - आपको सीधे उनके removal form के ज़रिए भेजना होगा। इस case में आपके image fingerprint का note कर लिया गया है।",
+  "review.formOnly.intro": "Platform(s) पर manual form भरना होगा:",
+  "review.formOnly.openForm": "खोलने के लिए form",
+  "review.formOnly.cta.dashboard": "मेरे case के dashboard पर जाइए",
+  "review.formOnly.aside.item1.heading": "हर platform का link खोलिए",
+  "review.formOnly.aside.item1.detail": "नीचे दिए गए हर platform के button पर click कीजिए।",
+  "review.formOnly.aside.item2.heading": "ज़रा content के बारे में बताइए",
+  "review.formOnly.aside.item2.detail": "समझाइए कि ये image आपकी इजाज़त के बिना share की गई थी और इसे हटाने की गुज़ारिश कीजिए।",
+  "review.formOnly.aside.item3.heading": "Reference लिख लीजिए और submit कर दीजिए",
+  "review.formOnly.aside.item3.detail": "Platform से जो भी case या reference number मिलेगा, वो save कर लीजिए।"
 }

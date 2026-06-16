@@ -150,7 +150,6 @@
   "reg.error.codeNoMatch": "The code did not match. Please try again.",
   "reg.progress.email": "Email address",
   "reg.progress.otp": "Verify code",
-
   "faq.hero.pill": "Questions, answered",
   "faq.hero.title": "Frequently asked questions",
   "faq.hero.sub": "Plain-language answers for survivors, supporters, NGOs, and reviewers.",
@@ -158,7 +157,6 @@
   "faq.closing.body": "Reach out before you start a case. We answer in English or Hindi - whichever is easier for you.",
   "faq.closing.cta1": "Contact Asmita",
   "faq.closing.cta2": "See support resources",
-
   "faq.s1.eyebrow": "About Asmita",
   "faq.s1.title": "The basics",
   "faq.s1.q1": "What is Asmita?",
@@ -169,7 +167,6 @@
   "faq.s1.a3": "Yes. Live notice templates are reviewed by a legal advisor before activation. Draft legal text in pre-launch builds is marked pending review and must not be treated as legal advice.",
   "faq.s1.q4": "What happens if a platform does not respond?",
   "faq.s1.a4": "The system schedules a follow-up at 24 hours and a re-send at 48 hours. If there is still no response after 7 days, Asmita prepares a police-ready FIR package for submission to cybercrime.gov.in.",
-
   "faq.s2.eyebrow": "About NCII",
   "faq.s2.title": "Non-consensual intimate imagery",
   "faq.s2.q1": "What counts as 'intimate' content?",
@@ -180,7 +177,6 @@
   "faq.s2.a3": "Yes. If you are in the image and it was shared without your consent, you can file a case regardless of who else appears in it.",
   "faq.s2.q4": "Is NCII illegal in India?",
   "faq.s2.a4": "Yes. Sharing intimate images without consent is a criminal offence under the IT (Amendment) Act 2023 and the Bharatiya Nyaya Sanhita (BNS). Platforms are also required under IT Rules 2021 to respond to takedown notices within 24 hours for such content. Asmita automates that notice process.",
-
   "faq.s3.eyebrow": "Digital fingerprinting",
   "faq.s3.title": "How image hashing works",
   "faq.s3.q1": "What is a digital fingerprint?",
@@ -193,7 +189,6 @@
   "faq.s3.a4": "Yes. Once the fingerprint is generated, you can delete the image from your device. The fingerprint persists and will continue to work. It does not require the original image to remain.",
   "faq.s3.q5": "Does it work on deepfakes or AI-generated images?",
   "faq.s3.a5": "Yes. If a deepfake or AI-generated image depicts you in an intimate way, you can generate a fingerprint from it. Asmita treats synthetic intimate images the same as real ones.",
-
   "faq.s4.eyebrow": "Eligibility & limits",
   "faq.s4.title": "Who can use Asmita, and what it can't do",
   "faq.s4.q1": "Can minors use Asmita?",
@@ -206,7 +201,6 @@
   "faq.s4.a4": "No. Asmita sends notices to platforms that have a verified grievance contact under IT Rules 2021. Personal websites, obscure hosting services, or platforms that ignore notices are beyond what Asmita can automatically resolve - in those cases the FIR package is the next step.",
   "faq.s4.q5": "I don't have the original image anymore. Can I still file?",
   "faq.s4.a5": "For URL takedown, you don't need the image at all - just the link where the content appears. For digital fingerprinting, a high-quality screenshot can work if it is the best version you have access to.",
-
   "start.pill": "Before you start",
   "start.hero.title.1": "Two paths.",
   "start.hero.title.em": "Your",
@@ -227,7 +221,6 @@
   "start.howLink": "how Asmita works",
   "start.or": "or the",
   "start.privacyLink": "privacy policy",
-
   "eligibility.pill": "Check eligibility",
   "eligibility.aside.sub": "This page collects no data. Your answers are never sent to Asmita - they only determine whether the case flow is right for your situation.",
   "eligibility.aside.item1.heading": "No account needed yet",
@@ -281,7 +274,6 @@
   "eligibility.progress.whosDepicted": "Who's depicted",
   "eligibility.progress.contentType": "Content type",
   "eligibility.back": "Back",
-
   "minor.pill": "For people under 18",
   "minor.langNote": "Available in English and",
   "minor.hero.title.1": "You deserve real",
@@ -322,7 +314,6 @@
   "minor.r6.name": "Cyber Peace Foundation",
   "minor.r6.contact": "cyberpeace.org",
   "minor.r6.desc": "Indian organisation that publishes cyber-safety guidance and offers support resources.",
-
   "identity.pill": "How we verify you",
   "identity.hero.title.1": "Your verified email is the",
   "identity.hero.title.em": "only",
@@ -341,7 +332,6 @@
   "identity.why.body": "Aadhaar tightens the identity link but introduces a category of data that becomes a target. Asmita deliberately refuses to collect it. Platforms that act under IT Rules 2021 do not require Aadhaar to process a takedown.",
   "identity.cta.submit": "Continue to submit",
   "identity.cta.privacy": "Read the privacy policy",
-
   "submit.pill": "Create your case",
   "submit.aside.sub": "Paste links where the content appears, or generate a digital fingerprint from your device - or both. You review everything before anything is sent.",
   "submit.aside.item1.heading": "Links are text only",
@@ -376,7 +366,6 @@
   "submit.cta.saving": "Saving...",
   "submit.cta.resources": "Support resources",
   "submit.error.generic": "Something went wrong. Please try again.",
-
   "review.pill": "Review and sign",
   "review.aside.sub": "Check the details below before your case is created. Once you sign, the notice is authorised for dispatch.",
   "review.aside.item1.heading": "Review your submission",
@@ -432,7 +421,6 @@
   "review.sign.cta.sign": "Sign and submit",
   "review.sign.cta.signing": "Signing...",
   "review.sign.cta.skip": "Skip for now",
-
   "case.notFound.pill": "Case not found",
   "case.notFound.title.1": "We could not find this",
   "case.notFound.title.em": "case",
@@ -484,7 +472,6 @@
   "case.actions.added": "Link added. Refresh to see the updated status.",
   "case.actions.error": "Could not add this link. Check that it is a valid public URL.",
   "case.actions.resolveError": "Could not mark this link resolved.",
-
   "sign.pill": "Review & sign",
   "sign.aside.item1.heading": "Read the notice",
   "sign.aside.item1.detail": "The preview above shows exactly what will be sent. Nothing is added after you sign.",
@@ -516,7 +503,6 @@
   "sign.cta.sign": "Sign and submit",
   "sign.cta.signing": "Signing...",
   "sign.cta.skip": "Skip for now",
-
   "confirm.notAvailable.pill": "Unavailable",
   "confirm.notAvailable.title.1": "Case confirmation is",
   "confirm.notAvailable.title.em": "unavailable",
@@ -545,7 +531,6 @@
   "confirm.next.t2.detail": "If no response, Asmita escalates to the platform's senior grievance officer automatically.",
   "confirm.next.t3.time": "7 days",
   "confirm.next.t3.detail": "A police-ready FIR package is prepared for you if the content has not been removed.",
-
   "handoff.notAvailable.pill": "Case not available",
   "handoff.notAvailable.title.1": "This case is",
   "handoff.notAvailable.title.em": "unavailable",
@@ -570,7 +555,6 @@
   "handoff.form.label": "Platform removal form",
   "handoff.form.openForm": "Open form",
   "handoff.form.noUrl": "No verified form URL is available for this platform yet. Once the admin team adds one, it will appear here.",
-
   "urldetail.notAvailable.pill": "URL not available",
   "urldetail.notAvailable.title.1": "This URL record is",
   "urldetail.notAvailable.title.em": "unavailable",
@@ -584,7 +568,6 @@
   "urldetail.note": "Asmita shows routing metadata only. It does not preview, fetch, or render submitted content.",
   "urldetail.cta.dashboard": "Back to dashboard",
   "urldetail.cta.resources": "Support resources",
-
   "delete.pill": "Account deletion",
   "delete.hero.title.1": "Delete your",
   "delete.hero.title.em": "account",
@@ -608,13 +591,11 @@
   "delete.done.eyebrow": "Confirmed",
   "delete.done.title": "Deletion scheduled. 30 days from now.",
   "delete.done.sub": "Deletion scheduled. Hard delete will run automatically after 30 days.",
-
   "privacy.hero.pill": "Privacy policy",
   "privacy.hero.title1": "Privacy is the",
   "privacy.hero.gradient": "architecture",
   "privacy.hero.sub": "What Asmita collects, why, how long we keep it, who can see it, and what rights you have - in plain language.",
   "privacy.hero.version": "Last updated · 17 May 2026 · Version 0.4 · Draft for legal review",
-
   "privacy.tldr.eyebrow": "The short version",
   "privacy.tldr.title": "Three promises that shape everything below.",
   "privacy.tldr.p1.bold": "We never fetch your URLs.",
@@ -623,7 +604,6 @@
   "privacy.tldr.p2.detail": "Asmita keeps notice metadata and case records, not the content the case is about.",
   "privacy.tldr.p3.bold": "We never share without you.",
   "privacy.tldr.p3.detail": "No third party sees your case unless you explicitly route it there, or unless compelled by a court of law.",
-
   "privacy.toc.label": "Contents",
   "privacy.toc.01": "What this policy covers",
   "privacy.toc.02": "Who Asmita is",
@@ -641,13 +621,10 @@
   "privacy.toc.14": "If we ever have a breach",
   "privacy.toc.15": "Changes to this policy",
   "privacy.toc.16": "Contact and Grievance Officer",
-
   "privacy.s01.p1": "This policy applies to the Asmita platform - the website you are reading now, the case dashboard you sign in to with an email one-time-code, and any notices, evidence packages, or correspondence the platform produces on your behalf.",
   "privacy.s01.p2": "It does not cover the websites of any platform Asmita sends a takedown notice to, the cybercrime portal at cybercrime.gov.in, the Grievance Officers we email, or any third-party service you visit from a link in our pages. Those services have their own privacy policies.",
-
   "privacy.s02.p1": "Asmita is a free, India-specific platform built to help women remove non-consensual intimate content from the internet. It operates as a privacy-first notice and tracking service under the framework of the IT Rules 2021 and the Digital Personal Data Protection Act, 2023.",
   "privacy.s02.p2": "Asmita is currently in a pre-launch phase. The legal entity that will operate the production service, and the registered office address, will be published at this section before public launch. For the time being, all enquiries should be sent to the Grievance Officer email listed in section 16.",
-
   "privacy.s03.intro": "The data Asmita stores can be divided into five categories. None of it is collected for marketing, profiling, or sale.",
   "privacy.s03.i1.bold": "Account data.",
   "privacy.s03.i1.detail": "Your email address (used only to send one-time login codes), and the timestamp of each sign-in. Asmita does not store passwords because Asmita does not use passwords.",
@@ -657,7 +634,6 @@
   "privacy.s03.i3.detail": "The text of the takedown notices we send on your behalf, the timestamps of each delivery attempt, and the contents of any reply the platform sends to our handling address.",
   "privacy.s03.i4.bold": "Operational logs.",
   "privacy.s03.i4.detail": "Limited server logs that record IP address, user-agent, request path, status code, and timestamp - used for abuse detection and security incident review. These are kept for 30 days and then automatically purged.",
-
   "privacy.s04.intro": "Some things Asmita refuses to collect by design - meaning the architecture would have to be re-built before it could ever start collecting them.",
   "privacy.s04.i1.bold": "The intimate content itself.",
   "privacy.s04.i1.detail": "We do not request, fetch, render, download, proxy, cache, hash, thumbnail, transcode, or otherwise interact with the media behind any URL you share. URLs are opaque text tokens. A network-level monitor blocks outbound requests to any submitted URL host as a defence in depth.",
@@ -667,7 +643,6 @@
   "privacy.s04.i3.detail": "Asmita does not collect, request, or accept Aadhaar offline-XML bundles, PAN cards, or any other government identity document. The email you sign in with is the verified identity tied to your case.",
   "privacy.s04.i4.bold": "Tracking pixels, advertising identifiers, or cross-site cookies.",
   "privacy.s04.i4.detail": "See section 12.",
-
   "privacy.s05.intro": "Each piece of data exists because a specific feature would not work without it.",
   "privacy.s05.i1.bold": "Email address -",
   "privacy.s05.i1.detail": "to authenticate you (one-time codes), to send case status updates, and to receive replies from platforms on your behalf.",
@@ -677,14 +652,12 @@
   "privacy.s05.i3.detail": "to satisfy the legal requirement that the person filing the notice declares ownership of the rights, under penalty of law.",
   "privacy.s05.i4.bold": "Operational logs -",
   "privacy.s05.i4.detail": "to detect abuse of the platform, to investigate security incidents, and to meet auditability requirements.",
-
   "privacy.s06.p1a": "Under the Digital Personal Data Protection Act, 2023 (DPDP Act), Asmita processes your data on the basis of your",
   "privacy.s06.p1.bold": "explicit consent",
   "privacy.s06.p1b": ", which you give at registration and again at the point of each case creation. The consent is purpose-specific - agreeing to create a case does not consent to anything outside of preparing and routing the takedown notice you ask for.",
   "privacy.s06.p2a": "For the limited operational logs described in section 3, Asmita relies on",
   "privacy.s06.p2.bold": "legitimate use",
   "privacy.s06.p2b": "under Section 7 of the DPDP Act, restricted to security and abuse prevention. These logs are not used for any other purpose.",
-
   "privacy.s07.intro": "The retention schedule below is enforced by automated jobs. Times are measured from the date the relevant event ends (case resolution, account deletion, log creation).",
   "privacy.s07.i1.bold": "Active case data:",
   "privacy.s07.i1.detail": "kept while the case is open and for 90 days after resolution, so you have time to download your audit trail and FIR package.",
@@ -696,7 +669,6 @@
   "privacy.s07.i4.detail": "30 days, then auto-purged.",
   "privacy.s07.i5.bold": "Notice templates and audit metadata (anonymised):",
   "privacy.s07.i5.detail": "kept indefinitely for platform-response statistics and accountability reporting. These contain no personal data.",
-
   "privacy.s08.intro": "Asmita shares your data only in the narrow circumstances listed below. We do not sell data. We do not exchange data with advertisers, data brokers, or social-media platforms outside the takedown notice itself.",
   "privacy.s08.i1.bold": "Platforms, when you send a notice.",
   "privacy.s08.i1.detail": "The notice contains the URLs you submitted, the platform name, your declaration text, and the contact email you authorised. Nothing else.",
@@ -706,7 +678,6 @@
   "privacy.s08.i3.detail": "If you choose to vouch through an NGO partner, the NGO sees only what you authorise it to see for that vouching action.",
   "privacy.s08.i4.bold": "Infrastructure providers, under contract.",
   "privacy.s08.i4.detail": "Asmita uses managed infrastructure for database, email delivery, and hosting. These providers process data under written agreements.",
-
   "privacy.s09.intro": "Security is a stack of overlapping controls. None of them is perfect alone; together they make compromise expensive.",
   "privacy.s09.i1.bold": "Encryption.",
   "privacy.s09.i1.detail": "All data at rest is encrypted at the disk layer. Sensitive fields - submitted URLs, declaration text - are also encrypted at the application layer with per-case keys.",
@@ -720,7 +691,6 @@
   "privacy.s09.i5.detail": "Every access to sensitive data by an administrator is recorded in an append-only security event log.",
   "privacy.s09.i6.bold": "No-fetch monitor.",
   "privacy.s09.i6.detail": "A live integrity check verifies that the application does not make outbound HTTP requests to user-submitted URLs. If it ever did, alerting fires immediately.",
-
   "privacy.s10.intro": "The Digital Personal Data Protection Act, 2023 gives you a set of rights over your own data. Asmita honours each of them without charge.",
   "privacy.s10.i1.bold": "Right to access.",
   "privacy.s10.i1.detail": "You can download every piece of data we hold about you, at any time, from your case dashboard.",
@@ -732,29 +702,34 @@
   "privacy.s10.i4.detail": "You can write to the Grievance Officer listed in section 16. We acknowledge every grievance within 72 hours and resolve or escalate within 14 days.",
   "privacy.s10.i5.bold": "Right to nominate.",
   "privacy.s10.i5.detail": "You can nominate another person to exercise these rights on your behalf in case of incapacity or death. Contact the Grievance Officer to set this up.",
-
   "privacy.s11.p1": "Asmita does not knowingly collect any personal data from a person under the age of 18. The age attestation at the start of every case flow routes anyone who indicates they are under 18 away from URL submission and into a curated set of child-safety resources, including CHILDLINE 1098, TakeItDown (NCMEC), and cybercrime.gov.in.",
   "privacy.s11.p2": "If we learn that we have collected data from a minor through an inaccurate attestation, that data is deleted immediately and the case account is closed. Concerned parents or guardians can write to the Grievance Officer.",
-
   "privacy.s12.p1": "Asmita uses two cookies, both strictly functional: a session cookie that keeps you signed in, and a language-preference cookie that remembers whether you chose English or Hindi. No third-party advertising, marketing, or tracking cookies are set by Asmita.",
   "privacy.s12.p2": "Asmita does not use Google Analytics, Facebook Pixel, or any equivalent third-party analytics suite. Aggregate platform-response statistics are computed from internal logs that contain no personal data.",
-
   "privacy.s13.p1": "Asmita is built for India. All personal data is stored on servers physically located in India. The list of sub-processors is maintained in our public sub-processor register and updated whenever the list changes.",
   "privacy.s13.p2": "We do not transfer your data outside India, except where a specific platform you have asked us to send a notice to is located outside India - in which case the notice itself (and only the notice) crosses the border.",
-
   "privacy.s14.p1": "If a personal-data breach occurs that is likely to result in risk to you, we will notify the Data Protection Board of India and the affected users without undue delay, in accordance with the DPDP Act. The notification will include the nature of the breach, the data affected, the likely consequences, and the steps we have taken to contain it.",
   "privacy.s14.p2": "Even when not legally required, we will notify you of any incident that affected your case data.",
-
   "privacy.s15.p1": "We will post any change to this policy at this URL, with a new \"Last updated\" date at the top. For material changes - anything that expands what we collect, broadens with whom we share, or lengthens retention - we will give you at least 30 days advance notice by email before the change takes effect.",
-
   "privacy.s16.p1": "The Grievance Officer is the named human responsible for replying to your privacy questions and grievances. The production-launch contact will be added to this section before public launch.",
   "privacy.s16.p2a": "For now, please write to",
   "privacy.s16.p2b": "with the subject line \"Privacy grievance\", or use the",
   "privacy.s16.p2c": "contact page",
   "privacy.s16.p3": "Notice templates and policy posture have been reviewed informally with Internet Freedom Foundation and SFLC.in. A full legal opinion is on file and will be linked here at production launch.",
-
   "privacy.closing.title": "Privacy is the architecture.",
   "privacy.closing.sub": "If anything on this page is unclear, write to us. We will answer in English or Hindi - whichever is easier for you.",
   "privacy.closing.cta1": "Contact Asmita",
-  "privacy.closing.cta2": "Start a case"
+  "privacy.closing.cta2": "Start a case",
+  "review.formOnly.pill": "Action required",
+  "review.formOnly.title": "Fill the form on each platform.",
+  "review.formOnly.sub": "These platforms do not accept email notices — you need to submit directly through their own removal form. Your image fingerprint has been noted in this case.",
+  "review.formOnly.intro": "platform(s) require a manual form submission:",
+  "review.formOnly.openForm": "Open form for",
+  "review.formOnly.cta.dashboard": "Go to my case dashboard",
+  "review.formOnly.aside.item1.heading": "Open each platform link",
+  "review.formOnly.aside.item1.detail": "Click the button for each platform below.",
+  "review.formOnly.aside.item2.heading": "Describe the content",
+  "review.formOnly.aside.item2.detail": "Explain that the image was shared without your consent and request removal.",
+  "review.formOnly.aside.item3.heading": "Submit and note the reference",
+  "review.formOnly.aside.item3.detail": "Save any case or reference number the platform gives you."
 }
