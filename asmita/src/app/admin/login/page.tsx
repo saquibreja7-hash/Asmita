@@ -9,7 +9,7 @@ export default function AdminLoginPage() {
           <div className="mx-auto max-w-2xl">
             <span className="pill">
               <span className="dot" />
-              Admin access
+              Restricted workspace
             </span>
             <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[64px] md:leading-[1.06]">
               Sign in to{" "}

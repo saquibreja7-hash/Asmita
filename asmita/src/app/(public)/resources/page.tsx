@@ -168,7 +168,7 @@ export default async function ResourcesPage() {
               {t(locale, "res.hero.sub")}
             </p>
             <p className="font-mono mt-6 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              Last verified: 12 May 2026
+              Last verified against public source pages: 12 May 2026.
             </p>
           </div>
         </section>
