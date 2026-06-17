@@ -56,7 +56,13 @@ async function createCase(page: import("@playwright/test").Page) {
   );
   await page.getByRole("button", { name: "Create case and preview notice" }).click();
   expect((await urlResponse).ok()).toBe(true);
-  await expect(page).toHaveURL(/\/case\/.+\/confirmation$/, { timeout: 15_000 });
+  await page.getByLabel("Full name").fill("Test User");
+  await page.getByLabel("Contact (email or phone)").fill("test@example.com");
+  await page.getByPlaceholder("Type your full name").fill("Test User");
+  const signResponse = page.waitForResponse((response) => response.url().includes("/sign-notice"));
+  await page.getByRole("button", { name: "Sign and submit" }).click();
+  expect((await signResponse).ok()).toBe(true);
+  await expect(page).toHaveURL(/\/case\/[^/]+$/, { timeout: 15_000 });
 }
 
 test("hash API routes are invisible while ENABLE_HASH_UPLOAD is off", async ({ request }) => {
