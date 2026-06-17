@@ -1,14 +1,15 @@
 #!/usr/bin/env sh
-cd asmita
 
 # 1. Lint staged files
-npx lint-staged --cwd .
+cd asmita
+npx lint-staged
+cd ..
 
 # 2. Secret scanning with gitleaks
-if [ -f "./tools/gitleaks.exe" ]; then
-  ./tools/gitleaks.exe protect --staged --verbose
+if [ -f "asmita/tools/gitleaks.exe" ]; then
+  asmita/tools/gitleaks.exe protect --staged --verbose
 elif command -v gitleaks &> /dev/null; then
   gitleaks protect --staged --verbose
 else
-  echo "⚠ gitleaks not found — skipping secret scan (install: https://github.com/gitleaks/gitleaks#installing)"
+  echo "Warning: gitleaks not found, skipping secret scan"
 fi
