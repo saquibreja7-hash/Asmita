@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
-# 1. Lint staged files (config at repo root .lintstagedrc.json)
-npx --prefix asmita lint-staged
+# 1. Lint staged files (run from asmita/ where eslint config lives)
+cd asmita && npx lint-staged --cwd .. && cd ..
 
 # 2. Secret scanning with gitleaks
 if [ -f "asmita/tools/gitleaks.exe" ]; then
