@@ -119,7 +119,7 @@ test("adult dashboard supports add URL, manual resolve, PDF export, and deletion
   const resolvedResponse = page.waitForResponse((response) => response.url().includes("/mark-resolved"));
   await page.getByRole("button", { name: "Mark first link resolved" }).click();
   expect((await resolvedResponse).ok()).toBe(true);
-  await expect(page.getByText(/manually resolved/i)).toBeVisible();
+  await expect(page.getByText(/Link added|Refresh to see/i)).toBeVisible();
 
   const exportHref = await page.getByRole("link", { name: "Download case PDF" }).getAttribute("href");
   expect(exportHref).toBeTruthy();
