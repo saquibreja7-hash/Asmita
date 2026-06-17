@@ -1,0 +1,3 @@
+{
+  "asmita/**/*.{ts,tsx,js,jsx}": "cd asmita && npx eslint --fix"
+}
