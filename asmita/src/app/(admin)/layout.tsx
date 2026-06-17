@@ -1,8 +1,8 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { AdminLogoutButton } from "./AdminLogoutButton";
+import AdminLoginPage from "@/app/admin/login/page";
 
 const adminLinks: Array<[string, string]> = [
   ["/admin/cases", "Cases"],
@@ -24,7 +24,7 @@ export default async function AdminLayout({
   const auth = await requireAdmin();
 
   if (!auth.ok) {
-    redirect("/admin/login");
+    return <AdminLoginPage />;
   }
 
   return (

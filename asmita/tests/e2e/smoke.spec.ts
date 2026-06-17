@@ -38,8 +38,10 @@ async function createCase(page: import("@playwright/test").Page) {
   await page.getByLabel("Links where the content appears").fill("https://www.instagram.com/p/abc");
   await expect(page.getByText(/Detected: Instagram/)).toBeVisible();
   await page.getByLabel(/I declare/).check();
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page).toHaveURL(/\/review-sign$/, { timeout: 15_000 });
   const urlResponse = page.waitForResponse((response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"));
-  await page.getByRole("button", { name: "Create case" }).click();
+  await page.getByRole("button", { name: "Create case and preview notice" }).click();
   expect((await urlResponse).ok()).toBe(true);
   await expect(page).toHaveURL(/\/case\/.+\/confirmation$/, { timeout: 15_000 });
   await expect(page.getByText(/ASMITA-/)).toBeVisible();
@@ -97,16 +99,16 @@ test("adult dashboard supports add URL, manual resolve, PDF export, and deletion
   expect(dashboardHref).toBeTruthy();
   await page.goto(dashboardHref!);
   await expect(page.getByRole("heading", { name: /ASMITA-/ })).toBeVisible();
-  await expect(page.getByText("NOTICE QUEUED")).toBeVisible();
+  await expect(page.getByText("Notice queued")).toBeVisible();
 
   await page.getByLabel("Paste one URL per line").fill("https://www.youtube.com/watch?v=abc123");
   const addUrlResponse = page.waitForResponse((response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"));
-  await page.getByRole("button", { name: "Add URL to case" }).click();
+  await page.getByRole("button", { name: "Add to case" }).click();
   expect((await addUrlResponse).ok()).toBe(true);
-  await expect(page.getByText(/URL added/)).toBeVisible();
+  await expect(page.getByText(/Link added/)).toBeVisible();
 
   const resolvedResponse = page.waitForResponse((response) => response.url().includes("/mark-resolved"));
-  await page.getByRole("button", { name: "Mark first URL resolved" }).click();
+  await page.getByRole("button", { name: "Mark first link resolved" }).click();
   expect((await resolvedResponse).ok()).toBe(true);
   await expect(page.getByText(/manually resolved/i)).toBeVisible();
 

@@ -49,10 +49,12 @@ async function createCase(page: import("@playwright/test").Page) {
   await page.getByLabel("Links where the content appears").fill("https://www.instagram.com/p/abc");
   await expect(page.getByText(/Detected: Instagram/)).toBeVisible();
   await page.getByLabel(/I declare/).check();
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page).toHaveURL(/\/review-sign$/, { timeout: 15_000 });
   const urlResponse = page.waitForResponse(
     (response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"),
   );
-  await page.getByRole("button", { name: "Create case" }).click();
+  await page.getByRole("button", { name: "Create case and preview notice" }).click();
   expect((await urlResponse).ok()).toBe(true);
   await expect(page).toHaveURL(/\/case\/.+\/confirmation$/, { timeout: 15_000 });
 }
