@@ -96,8 +96,7 @@ test("victim case page shows no fingerprint section while flag is off", async ({
   test.setTimeout(120_000);
   await completeAdultRegistration(page, `hash-flag-off-${Date.now()}@example.org`);
   await createCase(page);
-  await page.getByRole("link", { name: "Open dashboard" }).click();
-  await expect(page).toHaveURL(/\/case\/[^/]+$/);
+  // createCase lands on the case dashboard directly
   await expect(page.getByText(/ASMITA-/).first()).toBeVisible();
   await expect(page.getByText("Digital fingerprints")).toHaveCount(0);
   await expect(page.getByText(/photos never leave your device/i)).toHaveCount(0);

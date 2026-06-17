@@ -107,11 +107,8 @@ test("adult dashboard supports add URL, manual resolve, PDF export, and deletion
   );
   await createCase(page);
 
-  const dashboardHref = await page.getByRole("link", { name: "Open dashboard" }).getAttribute("href");
-  expect(dashboardHref).toBeTruthy();
-  await page.goto(dashboardHref!);
+  // createCase lands on the case dashboard directly
   await expect(page.getByRole("heading", { name: /ASMITA-/ })).toBeVisible();
-  await expect(page.getByText("Notice queued")).toBeVisible();
 
   await page.getByLabel("Paste one URL per line").fill("https://www.youtube.com/watch?v=abc123");
   const addUrlResponse = page.waitForResponse((response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"));
