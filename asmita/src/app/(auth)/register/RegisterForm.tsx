@@ -59,7 +59,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
       const response = await csrfFetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, otp, ageOver18: true }),
+        body: JSON.stringify({ email, otp, ageOver18: ageConfirmed === "adult" }),
       });
       if (!response.ok) {
         setError(t(locale, "reg.error.codeNoMatch"));
