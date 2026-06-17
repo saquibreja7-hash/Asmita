@@ -29,17 +29,16 @@ type EventInput = {
 };
 
 function buildEvent(input: EventInput) {
-  const record = {
+  // Mirror createAuditRecord's spread behavior: only include optional fields
+  // when they have real values (undefined keys serialize differently).
+  const record: Record<string, unknown> = {
     eventType: input.eventType,
-    entityType: undefined,
-    entityId: input.entityId ?? undefined,
-    actorId: undefined,
-    data: input.data ?? undefined,
-    ipHash: undefined,
     sequence: input.sequence,
     createdAt: input.createdAt,
     previousHash: input.previousHash,
   };
+  if (input.entityId != null) record.entityId = input.entityId;
+  if (input.data != null) record.data = input.data;
   const eventHash = sha256(canonicalize(record));
   return {
     sequence: input.sequence,

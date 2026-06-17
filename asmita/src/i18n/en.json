@@ -732,5 +732,8 @@
   "review.formOnly.aside.item2.detail": "Explain that the image was shared without your consent and request removal.",
   "review.formOnly.aside.item3.heading": "Submit and note the reference",
   "review.formOnly.aside.item3.detail": "Save any case or reference number the platform gives you.",
-  "submit.hash.fileHint": "Your photos never leave this device"
+  "submit.hash.fileHint": "Your photos never leave this device",
+  "reg.age.title": "Before we begin",
+  "reg.age.sub": "Please confirm your age to continue.",
+  "reg.progress.age": "Age"
 }

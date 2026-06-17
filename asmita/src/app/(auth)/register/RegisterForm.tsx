@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale } from "@/lib/i18n";
 
-type Step = "email" | "otp";
+type Step = "age" | "email" | "otp";
 
 export function RegisterForm({ locale }: { locale: Locale }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("email");
+  const [step, setStep] = useState<Step>("age");
+  const [ageConfirmed, setAgeConfirmed] = useState<"adult" | "minor" | null>(null);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
@@ -20,6 +21,14 @@ export function RegisterForm({ locale }: { locale: Locale }) {
     const id = window.setTimeout(() => setHydrated(true), 0);
     return () => window.clearTimeout(id);
   }, []);
+
+  function continueFromAge() {
+    if (ageConfirmed === "minor") {
+      router.push("/minor-support");
+    } else {
+      setStep("email");
+    }
+  }
 
   async function requestOtp() {
     setLoading(true);
@@ -50,7 +59,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
       const response = await csrfFetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, otp, ageOver18: true }),
+        body: JSON.stringify({ email, otp, ageOver18: ageConfirmed === "adult" }),
       });
       if (!response.ok) {
         setError(t(locale, "reg.error.codeNoMatch"));
@@ -67,6 +76,49 @@ export function RegisterForm({ locale }: { locale: Locale }) {
   return (
     <div>
       <ProgressBar step={step} locale={locale} />
+
+      {step === "age" && (
+        <div className="mt-8">
+          <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+            {t(locale, "reg.age.title")}
+          </h2>
+          <p className="muted mt-2 text-sm leading-[1.75]">
+            {t(locale, "reg.age.sub")}
+          </p>
+          <div className="mt-8 space-y-3">
+            <button
+              type="button"
+              onClick={() => setAgeConfirmed("adult")}
+              className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                ageConfirmed === "adult"
+                  ? "border-[var(--teal)] bg-[var(--teal)]/5 text-[var(--foreground)]"
+                  : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]"
+              }`}
+            >
+              I am 18 years of age or older.
+            </button>
+            <button
+              type="button"
+              onClick={() => setAgeConfirmed("minor")}
+              className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                ageConfirmed === "minor"
+                  ? "border-[var(--teal)] bg-[var(--teal)]/5 text-[var(--foreground)]"
+                  : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]"
+              }`}
+            >
+              I am under 18 years of age.
+            </button>
+          </div>
+          <button
+            className="btn btn-primary mt-6"
+            disabled={!ageConfirmed}
+            type="button"
+            onClick={continueFromAge}
+          >
+            Continue
+          </button>
+        </div>
+      )}
 
       {step === "email" && (
         <div className="mt-8">
@@ -173,8 +225,8 @@ export function RegisterForm({ locale }: { locale: Locale }) {
 }
 
 function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
-  const steps = [t(locale, "reg.progress.email"), t(locale, "reg.progress.otp")];
-  const current = step === "email" ? 0 : 1;
+  const steps = [t(locale, "reg.progress.age"), t(locale, "reg.progress.email"), t(locale, "reg.progress.otp")];
+  const current = step === "age" ? 0 : step === "email" ? 1 : 2;
   return (
     <div className="flex items-center gap-2">
       {steps.map((label, i) => (

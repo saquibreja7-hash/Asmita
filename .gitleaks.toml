@@ -1,0 +1,15 @@
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  '''asmita/tools/''',
+  '''\.env\.example''',
+  '''\.github/workflows/''',
+]
+
+[[rules]]
+id = "asmita-no-real-urls"
+description = "Block real NCII URLs or survivor PII in code"
+regex = '''(?i)(aadhaar|aadhar)\s*[:=]\s*["']\d{12}'''
+tags = ["pii", "safety"]

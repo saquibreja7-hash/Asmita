@@ -46,15 +46,27 @@ async function completeAdultRegistration(
 }
 
 async function createCase(page: import("@playwright/test").Page) {
-  await page.getByLabel("Paste one URL per line").fill("https://www.instagram.com/p/abc");
+  await page.getByLabel("Links where the content appears").fill("https://www.instagram.com/p/abc");
   await expect(page.getByText(/Detected: Instagram/)).toBeVisible();
   await page.getByLabel(/I declare/).check();
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page).toHaveURL(/\/review-sign$/, { timeout: 15_000 });
   const urlResponse = page.waitForResponse(
     (response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"),
   );
-  await page.getByRole("button", { name: "Create case" }).click();
+  await page.getByRole("button", { name: "Create case and preview notice" }).click();
   expect((await urlResponse).ok()).toBe(true);
-  await expect(page).toHaveURL(/\/case\/.+\/confirmation$/, { timeout: 15_000 });
+
+  const signForm = page.getByLabel("Full name");
+  const casePage = page.waitForURL(/\/case\/[^/]+$/, { timeout: 30_000 }).catch(() => {});
+  if (await signForm.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await signForm.fill("Test User");
+    await page.getByLabel("Contact (email or phone)").fill("test@example.com");
+    await page.getByPlaceholder("Type your full name").fill("Test User");
+    await page.getByRole("button", { name: "Sign and submit" }).click();
+  }
+  await casePage;
+  await expect(page).toHaveURL(/\/case\/[^/]+/, { timeout: 15_000 });
 }
 
 test("hash API routes are invisible while ENABLE_HASH_UPLOAD is off", async ({ request }) => {
@@ -84,8 +96,7 @@ test("victim case page shows no fingerprint section while flag is off", async ({
   test.setTimeout(120_000);
   await completeAdultRegistration(page, `hash-flag-off-${Date.now()}@example.org`);
   await createCase(page);
-  await page.getByRole("link", { name: "Open dashboard" }).click();
-  await expect(page).toHaveURL(/\/case\/[^/]+$/);
+  // createCase lands on the case dashboard directly
   await expect(page.getByText(/ASMITA-/).first()).toBeVisible();
   await expect(page.getByText("Digital fingerprints")).toHaveCount(0);
   await expect(page.getByText(/photos never leave your device/i)).toHaveCount(0);
