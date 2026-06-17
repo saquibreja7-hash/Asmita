@@ -46,7 +46,7 @@ async function completeAdultRegistration(
 }
 
 async function createCase(page: import("@playwright/test").Page) {
-  await page.getByLabel("Paste one URL per line").fill("https://www.instagram.com/p/abc");
+  await page.getByLabel("Links where the content appears").fill("https://www.instagram.com/p/abc");
   await expect(page.getByText(/Detected: Instagram/)).toBeVisible();
   await page.getByLabel(/I declare/).check();
   const urlResponse = page.waitForResponse(

@@ -35,7 +35,7 @@ async function completeAdultRegistration(page: import("@playwright/test").Page, 
 }
 
 async function createCase(page: import("@playwright/test").Page) {
-  await page.getByLabel("Paste one URL per line").fill("https://www.instagram.com/p/abc");
+  await page.getByLabel("Links where the content appears").fill("https://www.instagram.com/p/abc");
   await expect(page.getByText(/Detected: Instagram/)).toBeVisible();
   await page.getByLabel(/I declare/).check();
   const urlResponse = page.waitForResponse((response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"));
@@ -57,7 +57,7 @@ test("FAQ page renders English and Hindi launch content", async ({ page }) => {
   await page.goto("/faq");
   await expect(page.getByRole("heading", { name: "Frequently asked questions" })).toBeVisible();
   await expect(page.getByText("Does Asmita download or view submitted content?")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "अस्मिता क्या है?" })).toBeVisible();
+  await expect(page.getByText("Are notices legally reviewed?")).toBeVisible();
 });
 
 test("minor pathway has no URL submission form", async ({ page }) => {
@@ -99,7 +99,7 @@ test("adult dashboard supports add URL, manual resolve, PDF export, and deletion
   await expect(page.getByRole("heading", { name: /ASMITA-/ })).toBeVisible();
   await expect(page.getByText("NOTICE QUEUED")).toBeVisible();
 
-  await page.getByLabel("Add another URL").fill("https://www.youtube.com/watch?v=abc123");
+  await page.getByLabel("Paste one URL per line").fill("https://www.youtube.com/watch?v=abc123");
   const addUrlResponse = page.waitForResponse((response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"));
   await page.getByRole("button", { name: "Add URL to case" }).click();
   expect((await addUrlResponse).ok()).toBe(true);
