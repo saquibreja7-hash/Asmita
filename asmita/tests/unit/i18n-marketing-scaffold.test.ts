@@ -15,17 +15,17 @@ describe("i18n marketing scaffold", () => {
     expect((hi as Record<string, string>)["nav.howItWorks"]).not.toBe("");
   });
 
-  it("leaves the new homepage marketing keys empty in Hindi pending native-speaker review", () => {
+  it("has Hindi translations for all homepage marketing keys", () => {
     const homepageKeys = Object.keys(hi).filter((key) => key.startsWith("home."));
     expect(homepageKeys.length).toBeGreaterThan(0);
     for (const key of homepageKeys) {
-      expect((hi as Record<string, string>)[key]).toBe("");
+      expect((hi as Record<string, string>)[key]).not.toBe("");
     }
   });
 
-  it("falls back to English when the Hindi value is empty (so untranslated pages still render)", () => {
-    expect(t("hi", "home.hero.cta" as never)).toBe("Start a case");
-    expect(t("hi", "home.hero.sub" as never)).toBe("Free, confidential, and built around your dignity.");
+  it("returns Hindi value for translated homepage keys", () => {
+    expect(t("hi", "home.hero.cta" as never)).toBe("केस शुरू करें");
+    expect(t("hi", "home.hero.sub" as never)).toBe("निशुल्क, गोपनीय, और आपकी गरिमा के लिए बना।");
   });
 
   it("returns the Hindi value when one is present", () => {
