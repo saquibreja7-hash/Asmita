@@ -71,6 +71,10 @@ export default function ContactPage() {
           </div>
         </section>
 
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
         {/* WHAT TO NOT SEND - short trauma-informed warning */}
         <section className="container py-12 text-center md:py-16">
           <div className="mx-auto max-w-2xl">
@@ -81,13 +85,17 @@ export default function ContactPage() {
           </div>
         </section>
 
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
         {/* CHANNELS - five quiet contact blocks */}
         {channels.map((c) => (
           <section
             key={c.num}
-            className="container py-12 text-center md:py-16"
+            className="container py-12 md:py-16"
           >
-            <div className="mx-auto max-w-2xl">
+            <div className="mx-auto max-w-3xl">
               <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
                 Channel {c.num}
               </p>
@@ -102,23 +110,27 @@ export default function ContactPage() {
                   {c.email}
                 </a>
               </p>
-              <p className="muted mx-auto mt-5 max-w-lg text-base leading-[1.75] md:text-lg">
+              <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-lg">
                 {c.body}
               </p>
             </div>
           </section>
         ))}
 
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
         {/* RESPONSE TIMES */}
-        <section className="container py-14 text-center md:py-20">
-          <div className="mx-auto max-w-2xl">
+        <section className="container py-14 md:py-20">
+          <div className="mx-auto max-w-3xl">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
               Response times
             </p>
             <h2 className="font-display mt-4 text-[28px] font-normal leading-[1.18] tracking-tight md:text-[40px] md:leading-[1.14]">
               How quickly we reply.
             </h2>
-            <ul className="muted mx-auto mt-7 max-w-md space-y-3 text-base leading-[1.75] md:text-lg">
+            <ul className="muted mt-7 max-w-lg space-y-3 text-base leading-[1.75] md:text-lg">
               <li>
                 <span className="font-semibold text-[var(--foreground)]">
                   Privacy grievances:
@@ -139,7 +151,7 @@ export default function ContactPage() {
                 usually within 48 hours on working days.
               </li>
             </ul>
-            <p className="muted mx-auto mt-6 max-w-md text-sm leading-[1.7]">
+            <p className="muted mt-6 max-w-lg text-sm leading-[1.7]">
               Asmita is not an emergency service. If you are in immediate
               danger, call{" "}
               <a
