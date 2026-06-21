@@ -11,7 +11,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
     <div className="page-shell">
       <Header locale={locale} />
       <main className="flex-1">{children}</main>
-      <Footer />
+      <Footer locale={locale} />
       <SupportPanel locale={locale} />
     </div>
   );
