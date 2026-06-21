@@ -6,9 +6,14 @@ export function Header({ locale }: { locale: Locale }) {
   return (
     <header className="border-b border-[var(--border)] bg-white/90 backdrop-blur">
       <div className="container flex min-h-16 items-center justify-between gap-4">
-        <Link href="/" className="flex items-baseline gap-2">
-          <span className="text-xl font-black tracking-tight">Asmita</span>
-          <span className="text-sm text-[var(--muted)]">अस्मिता</span>
+        <Link href="/" className="flex items-center">
+          <img
+            src="/asmita-wordmark.png"
+            alt="Asmita"
+            className="h-8 w-auto"
+            width={520}
+            height={178}
+          />
         </Link>
         <nav className="hidden items-center gap-5 text-sm font-medium text-[var(--muted)] md:flex">
           <Link href="/how-it-works">{t(locale, "nav.howItWorks")}</Link>

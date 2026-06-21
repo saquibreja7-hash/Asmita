@@ -5,6 +5,11 @@ import "@fontsource/noto-sans-devanagari/400.css";
 import "@fontsource/noto-sans-devanagari/700.css";
 import "./globals.css";
 
+const siteUrl = new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://meriasmita.org");
+const siteTitle = "Asmita - Dignity restoration support";
+const siteDescription =
+  "Free, confidential support for Indian women reporting non-consensual intimate content.";
+
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
@@ -26,9 +31,43 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Asmita - Dignity restoration support",
-  description:
-    "Free, confidential support for Indian women reporting non-consensual intimate content.",
+  metadataBase: siteUrl,
+  applicationName: "Asmita",
+  title: {
+    default: siteTitle,
+    template: "%s | Asmita",
+  },
+  description: siteDescription,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: siteTitle,
+    description: siteDescription,
+    url: "/",
+    siteName: "Asmita",
+    images: [
+      {
+        url: "/asmita-link-preview.png",
+        width: 1200,
+        height: 630,
+        alt: "Asmita - Dignity restoration support",
+      },
+    ],
+    locale: "en_IN",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteTitle,
+    description: siteDescription,
+    images: [
+      {
+        url: "/asmita-link-preview.png",
+        alt: "Asmita - Dignity restoration support",
+      },
+    ],
+  },
 };
 
 export default async function RootLayout({
