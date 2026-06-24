@@ -31,10 +31,10 @@ export function Footer({ locale }: { locale: Locale }) {
 
           <div className="site-footer-childline">
             <p className="site-footer-cl-label">
-              {isHi ? "आपातकालीन हेल्पलाइन" : "Emergency helpline"}
+              {isHi ? "महिला हेल्पलाइन" : "Women's helpline"}
             </p>
-            <p className="site-footer-cl-num">1098</p>
-            <p className="site-footer-cl-sub">CHILDLINE · 24 hours · Free</p>
+            <p className="site-footer-cl-num">181</p>
+            <p className="site-footer-cl-sub">{isHi ? "राष्ट्रीय महिला हेल्पलाइन · 24 घंटे" : "National Women Helpline · 24 hours"}</p>
           </div>
 
           <div className="site-footer-links">
@@ -55,12 +55,12 @@ export function Footer({ locale }: { locale: Locale }) {
 
         {isHi ? (
           <p className="site-footer-bottom site-footer-bottom-hi hi">
-            © 2026 Asmita. हमेशा निःशुल्क। · अगर आप तुरंत खतरे में हैं, तो{" "}
+            © 2026 Asmita. · अगर आप तुरंत खतरे में हैं, तो{" "}
             <strong>112</strong> पर कॉल करें।
           </p>
         ) : (
           <p className="site-footer-bottom en">
-            © 2026 Asmita. Free to use, always. · If you are in immediate danger, call{" "}
+            © 2026 Asmita. · If you are in immediate danger, call{" "}
             <strong>112</strong>.
           </p>
         )}

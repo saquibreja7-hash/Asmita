@@ -64,10 +64,6 @@ export default function ContactPage() {
               There are five ways to write to us. Pick the one that matches
               what you need - or use the first one if you are not sure.
             </p>
-            <p className="font-mono mt-8 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              Pre-launch · email addresses provisional · will be confirmed
-              before public launch
-            </p>
           </div>
         </section>
 

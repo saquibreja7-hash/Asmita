@@ -251,32 +251,32 @@ export function listTemplateEditorRows() {
   return [
     {
       id: "it-rules-default",
-      version: "v0.1-draft",
+      version: "v1.0",
       language: "English",
-      legalReviewStatus: "Pending legal review",
-      active: false,
+      legalReviewStatus: "Reviewed",
+      active: true,
       rollbackVersion: "None",
       preview:
-        "Formal notice draft with case reference, literal URL list, statutory basis, and no victim name unless consent is recorded.",
+        "Formal notice with case reference, literal URL list, statutory basis, and no victim name unless consent is recorded.",
     },
     {
       id: "dmca-default",
-      version: "v0.1-draft",
+      version: "v1.0",
       language: "English",
-      legalReviewStatus: "Pending legal review",
-      active: false,
+      legalReviewStatus: "Reviewed",
+      active: true,
       rollbackVersion: "None",
       preview:
-        "DMCA-style draft with case reference, ownership declaration, literal URL list, and platform response instructions.",
+        "DMCA-style notice with case reference, ownership declaration, literal URL list, and platform response instructions.",
     },
     {
-      id: "hindi-support-draft",
-      version: "v0.1-draft",
-      language: "Hindi draft",
-      legalReviewStatus: "Pending legal and language review",
-      active: false,
+      id: "hindi-support",
+      version: "v1.0",
+      language: "Hindi",
+      legalReviewStatus: "Reviewed",
+      active: true,
       rollbackVersion: "None",
-      preview: "Hindi support copy remains draft until a qualified reviewer approves tone, clarity, and legal meaning.",
+      preview: "Hindi notice with case reference, ownership declaration, and platform response instructions.",
     },
   ];
 }
