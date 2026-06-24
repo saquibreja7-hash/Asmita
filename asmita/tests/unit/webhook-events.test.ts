@@ -19,7 +19,7 @@ describe("recordDeliveryEvent", () => {
     const response = await POST(
       new Request("https://example.test/api/webhooks/resend", {
         method: "POST",
-        body: JSON.stringify({ type: "delivered", messageId: "msg-1", platformId: "platform-1" }),
+        body: JSON.stringify({ type: "email.delivered", data: { email_id: "msg-1", tags: { platformId: "platform-1" } } }),
       }),
     );
     const body = await response.json();
