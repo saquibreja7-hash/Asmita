@@ -191,11 +191,20 @@ export default function TermsPage() {
         <Section num="04" id="how-a-case-works" title="How a case works">
           <p>
             A case begins with age attestation and a digital declaration.
-            You then add URLs as text. Asmita identifies the platform from
-            each URL, prepares legally reviewed takedown notices, asks you
-            to approve them, and sends them to the platform&rsquo;s
-            Grievance Officer or equivalent. A private dashboard shows
-            each platform, response window, and audit trail.
+            You then add URLs as text and, optionally, a PDQ image
+            fingerprint generated on your own device. Asmita identifies the
+            platform from each URL, prepares legally reviewed takedown
+            notices, asks you to approve them, and sends them to the
+            platform&rsquo;s Grievance Officer or equivalent. Where a
+            platform has no verified contact, Asmita prepares a guided
+            form handoff so you can submit through the platform&rsquo;s
+            own web form. A private dashboard shows each platform, response
+            window, and audit trail.
+          </p>
+          <p>
+            Notices are delivered via a secure link protected by a
+            one-time password. That link burns after it is opened once
+            and cannot be revisited or forwarded.
           </p>
           <p>
             A full walkthrough lives at{" "}
@@ -254,9 +263,11 @@ export default function TermsPage() {
               service without authorisation.
             </li>
             <li>
-              Upload intimate media files. Asmita only accepts URLs as
-              text. Any file upload that bypasses this restriction is a
-              violation of these Terms and may be reported.
+              Upload intimate media files. Asmita accepts URLs as text
+              and PDQ fingerprint codes generated client-side on your
+              device. Transmitting actual image or video files to Asmita
+              is not supported and any attempt to do so is a violation
+              of these Terms.
             </li>
             <li>
               Attempt to gain access to another user&rsquo;s case
@@ -336,9 +347,11 @@ export default function TermsPage() {
               cybercrime.gov.in.
             </li>
             <li>
-              Hash, fingerprint, or otherwise scan the content of the
-              media. Asmita is a URL-based notice system. Hash-matching
-              services exist elsewhere (for example, StopNCII.org).
+              Access, view, or process the media behind any URL you
+              submit. URLs are read as domain strings only. PDQ
+              fingerprinting runs entirely on your device; Asmita
+              receives only the resulting 64-character code, not the
+              image itself.
             </li>
           </ul>
         </Section>

@@ -11,12 +11,14 @@ export default async function HowItWorksPage() {
     { num: "02", title: t(locale, "hiw.step2.title"), body: t(locale, "hiw.step2.body") },
     { num: "03", title: t(locale, "hiw.step3.title"), body: t(locale, "hiw.step3.body") },
     { num: "04", title: t(locale, "hiw.step4.title"), body: t(locale, "hiw.step4.body") },
+    { num: "05", title: t(locale, "hiw.step5.title"), body: t(locale, "hiw.step5.body") },
+    { num: "06", title: t(locale, "hiw.step6.title"), body: t(locale, "hiw.step6.body") },
   ];
 
   const tiers = [
-    { label: "Tier 01", icon: "⚡", title: t(locale, "hiw.tier1.title"), body: t(locale, "hiw.tier1.body") },
-    { label: "Tier 02", icon: "✉", title: t(locale, "hiw.tier2.title"), body: t(locale, "hiw.tier2.body") },
-    { label: "Tier 03", icon: "↗", title: t(locale, "hiw.tier3.title"), body: t(locale, "hiw.tier3.body") },
+    { label: "Tier 01", icon: "✉", title: t(locale, "hiw.tier1.title"), body: t(locale, "hiw.tier1.body") },
+    { label: "Tier 02", icon: "↗", title: t(locale, "hiw.tier2.title"), body: t(locale, "hiw.tier2.body") },
+    { label: "Tier 03", icon: "⚡", title: t(locale, "hiw.tier3.title"), body: t(locale, "hiw.tier3.body") },
   ];
 
   const timeline = [
