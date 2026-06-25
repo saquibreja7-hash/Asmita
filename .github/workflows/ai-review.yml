@@ -70,7 +70,7 @@ jobs:
       - name: Enforce severity threshold
         run: |
           out=/home/runner/work/_temp/claude-execution-output.json
-          if jq -r '.[] | select(.type=="result") | .result' "$out" 2>/dev/null | grep -q 'Verdict: \*\*PASS\*\*'; then
+          if jq -r '.[] | select(.type=="result") | .result' "$out" 2>/dev/null | grep -qE 'Verdict: (\*\*)?PASS(\*\*)?'; then
             echo "AI review verdict: PASS"
           else
             echo "::error::AI review verdict is BLOCK or missing. Merge blocked."
