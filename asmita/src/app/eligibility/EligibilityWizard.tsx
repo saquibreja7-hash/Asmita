@@ -261,7 +261,7 @@ function WizardShell({
     <div>
       <ProgressBar step={step} locale={locale} />
       <div className="mt-8 flex items-start justify-between gap-4">
-        <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+        <h2 className="text-[26px] font-semibold leading-[1.2] tracking-tight md:text-[32px]">
           {title}
         </h2>
         {showBack && (
@@ -306,7 +306,7 @@ function ChoiceOption({
         className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
       />
       <span>
-        <span className="font-display block text-[15px] leading-[1.4] tracking-tight text-[var(--foreground)] md:text-[17px]">
+        <span className="block text-[15px] font-semibold leading-[1.4] text-[var(--foreground)] md:text-[17px]">
           {label}
         </span>
         <span className="mt-1 block text-sm leading-[1.6] text-[var(--muted)]">
@@ -326,7 +326,7 @@ function InfoBox({
 }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
-      <p className="font-display text-[14px] font-semibold leading-[1.3] tracking-tight text-[var(--foreground)]">
+      <p className="text-[14px] font-semibold leading-[1.3] text-[var(--foreground)]">
         {title}
       </p>
       <div className="text-[var(--muted)]">{children}</div>
@@ -349,7 +349,7 @@ function ResourceLink({
 }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
-      <p className="font-display text-[15px] leading-[1.3] tracking-tight text-[var(--foreground)]">
+      <p className="text-[15px] font-semibold leading-[1.3] text-[var(--foreground)]">
         {name}
       </p>
       <a

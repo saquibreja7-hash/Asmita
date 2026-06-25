@@ -16,7 +16,7 @@ export default async function HomePage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO - centered */}
-        <section className="container pb-20 pt-20 text-center md:pb-28 md:pt-32">
+        <section className="container pb-20 pt-10 text-center md:pb-28 md:pt-16">
           <div className="mx-auto max-w-2xl">
             <span className="pill">
               <span className="dot" />
@@ -51,9 +51,6 @@ export default async function HomePage() {
                 </span>
               </Link>
             </p>
-            <p className="muted mx-auto mt-12 max-w-md text-[13px] leading-[1.7]">
-              {t(locale, "home.hero.noFetch")}
-            </p>
           </div>
         </section>
 
@@ -61,10 +58,10 @@ export default async function HomePage() {
           <div className="hairline" />
         </div>
 
-        {/* VALIDATION - trauma-informed affirmation */}
+        {/* VALIDATION - privacy assurance */}
         <section className="container py-12 text-center md:py-16">
-          <p className="font-display mx-auto max-w-2xl text-xl leading-[1.55] tracking-tight text-[var(--foreground)] md:text-2xl md:leading-[1.5]">
-            {t(locale, "home.validation")}
+          <p className="muted mx-auto max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
+            {t(locale, "home.hero.noFetch")}
           </p>
         </section>
 
@@ -191,9 +188,6 @@ export default async function HomePage() {
                 {t(locale, "home.closing.cta2")}
               </Link>
             </div>
-            <p className="muted mx-auto mt-14 max-w-md text-[13px] leading-[1.7]">
-              {t(locale, "home.closing.partners")}
-            </p>
           </div>
         </section>
       </div>

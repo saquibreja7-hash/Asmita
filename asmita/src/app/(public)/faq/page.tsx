@@ -18,6 +18,7 @@ export default async function FaqPage() {
         { question: t(locale, "faq.s1.q2"), answer: t(locale, "faq.s1.a2") },
         { question: t(locale, "faq.s1.q3"), answer: t(locale, "faq.s1.a3") },
         { question: t(locale, "faq.s1.q4"), answer: t(locale, "faq.s1.a4") },
+        { question: t(locale, "faq.s1.q5"), answer: t(locale, "faq.s1.a5") },
       ],
     },
     {
@@ -50,6 +51,7 @@ export default async function FaqPage() {
         { question: t(locale, "faq.s4.q3"), answer: t(locale, "faq.s4.a3") },
         { question: t(locale, "faq.s4.q4"), answer: t(locale, "faq.s4.a4") },
         { question: t(locale, "faq.s4.q5"), answer: t(locale, "faq.s4.a5") },
+        { question: t(locale, "faq.s4.q6"), answer: t(locale, "faq.s4.a6") },
       ],
     },
   ];

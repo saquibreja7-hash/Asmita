@@ -108,7 +108,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
       const declarationResponse = await csrfFetch("/api/profile/declaration", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ acknowledged: true, version: "draft-2026-05-12", language: "en" }),
+        body: JSON.stringify({ acknowledged: true, version: "v1.0-2026-05-12", language: "en" }),
       });
       if (!declarationResponse.ok) {
         setError(t(locale, "submit.declaration.error"));

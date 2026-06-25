@@ -30,51 +30,33 @@ export default async function StartPage() {
           <div className="hairline" />
         </div>
 
-        {/* PATH CARDS */}
+        {/* PATH CARD */}
         <section className="container py-14 md:py-20">
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto max-w-lg">
 
-            <div className="grid items-stretch gap-3 md:grid-cols-2">
-
-              {/* Adult path */}
-              <div
-                className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-7"
-                style={{ boxShadow: "var(--shadow-soft)" }}
-              >
-                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                  {t(locale, "start.adult.eyebrow")}
-                </p>
-                <h2 className="font-display mt-3 text-[20px] font-normal leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[23px]">
-                  {t(locale, "start.adult.title")}
-                </h2>
-                <p className="muted mt-3 text-sm leading-[1.75] flex-1">
-                  {t(locale, "start.adult.body")}
-                </p>
-                <Link className="btn btn-primary mt-7 w-full justify-center" href="/eligibility">
-                  {t(locale, "start.adult.cta")}
-                </Link>
-              </div>
-
-              {/* Minor path */}
-              <div
-                className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-7"
-                style={{ boxShadow: "var(--shadow-soft)" }}
-              >
-                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                  {t(locale, "start.minor.eyebrow")}
-                </p>
-                <h2 className="font-display mt-3 text-[20px] font-normal leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[23px]">
-                  {t(locale, "start.minor.title")}
-                </h2>
-                <p className="muted mt-3 text-sm leading-[1.75] flex-1">
-                  {t(locale, "start.minor.body")}
-                </p>
-                <Link className="btn btn-secondary mt-7 w-full justify-center" href="/start/minor">
-                  {t(locale, "start.minor.cta")}
-                </Link>
-              </div>
-
+            <div
+              className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-7"
+              style={{ boxShadow: "var(--shadow-soft)" }}
+            >
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+                {t(locale, "start.adult.eyebrow")}
+              </p>
+              <h2 className="mt-3 text-[20px] font-semibold leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[23px]">
+                {t(locale, "start.adult.title")}
+              </h2>
+              <p className="muted mt-3 text-sm leading-[1.75]">
+                {t(locale, "start.adult.body")}
+              </p>
+              <Link className="btn btn-primary mt-7 w-full justify-center" href="/eligibility">
+                {t(locale, "start.adult.cta")}
+              </Link>
             </div>
+
+            <p className="mt-5 text-center text-sm text-[var(--muted)]">
+              <Link href="/start/minor" className="link-underline text-[var(--muted)] hover:text-[var(--foreground)]">
+                {t(locale, "start.minor.link")}
+              </Link>
+            </p>
 
           </div>
         </section>
@@ -86,7 +68,7 @@ export default async function StartPage() {
         {/* SAFETY + CLOSING */}
         <section className="container py-12 text-center md:py-16">
           <div className="mx-auto max-w-xl space-y-5">
-            <p className="font-display text-[20px] leading-[1.55] tracking-tight text-[var(--foreground)] md:text-[24px]">
+            <p className="text-[18px] font-semibold leading-[1.55] text-[var(--foreground)] md:text-[20px]">
               {t(locale, "start.danger")}{" "}
               <a
                 href="tel:112"

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Geist_Mono, Instrument_Serif, Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "@fontsource/noto-sans-devanagari/400.css";
 import "@fontsource/noto-sans-devanagari/700.css";
 import "./globals.css";
@@ -82,7 +83,10 @@ export default async function RootLayout({
       lang={lang}
       className={`${inter.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }

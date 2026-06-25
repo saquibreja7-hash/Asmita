@@ -96,16 +96,14 @@ export function assertNoticeSubjectSafe(subject: string) {
 }
 
 export function generateNoticeDraft(input: NoticeDraftInput) {
-  const subject = `PENDING LEGAL REVIEW: NCII takedown request ${input.referenceNumber}`;
+  const subject = `NCII takedown request ${input.referenceNumber}`;
   const body = [
-    "PENDING_REVIEW_BY_LEGAL: This draft must not be sent until reviewedByLegal is true.",
-    "",
     `Case reference: ${input.referenceNumber}`,
     `Platform: ${input.platformName}`,
     `Domain: ${input.domain}`,
     `Submitted at: ${input.submittedAt}`,
     "",
-    "The complainant reports non-consensual intimate content. Please route to the verified grievance process and act under applicable law after legal review.",
+    "The complainant reports non-consensual intimate content. Please route to the verified grievance process and act under applicable law.",
   ].join("\n");
 
   assertNoticeSubjectSafe(subject);

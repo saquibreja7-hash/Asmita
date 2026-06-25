@@ -11,39 +11,27 @@ export default async function ResourcesPage() {
     { name: t(locale, "res.emergency2.name"), contact: "1098", href: "tel:1098", description: t(locale, "res.emergency2.desc") },
   ];
 
-  const groups = [
+  const support = [
     {
-      eyebrow: t(locale, "res.counselling.eyebrow"),
-      title: t(locale, "res.counselling.title"),
-      subtitle: t(locale, "res.counselling.sub"),
-      items: [
-        { name: "iCALL · TISS", contact: "9152987821", href: "tel:9152987821", description: t(locale, "res.icall.desc") },
-      ],
+      category: t(locale, "res.counselling.eyebrow"),
+      name: "iCALL · TISS",
+      description: t(locale, "res.icall.desc"),
+      contact: "9152987821",
+      href: "tel:9152987821",
     },
     {
-      eyebrow: t(locale, "res.legalaid.eyebrow"),
-      title: t(locale, "res.legalaid.title"),
-      subtitle: t(locale, "res.legalaid.sub"),
-      items: [
-        { name: "NALSA / DLSA Directory", contact: "nalsa.gov.in/directory", href: "https://nalsa.gov.in/directory/", description: t(locale, "res.nalsa.desc") },
-      ],
+      category: t(locale, "res.legalaid.eyebrow"),
+      name: "NALSA / DLSA Directory",
+      description: t(locale, "res.nalsa.desc"),
+      contact: "nalsa.gov.in",
+      href: "https://nalsa.gov.in/directory/",
     },
     {
-      eyebrow: t(locale, "res.cybercrime.eyebrow"),
-      title: t(locale, "res.cybercrime.title"),
-      subtitle: t(locale, "res.cybercrime.sub"),
-      items: [
-        { name: "National Cybercrime Reporting Portal", contact: "cybercrime.gov.in", href: "https://cybercrime.gov.in/", description: t(locale, "res.ncrp.desc") },
-      ],
-    },
-    {
-      eyebrow: t(locale, "res.community.eyebrow"),
-      title: t(locale, "res.community.title"),
-      subtitle: t(locale, "res.community.sub"),
-      items: [
-        { name: "Cyber Peace Foundation", contact: "cyberpeace.org", href: "https://cyberpeace.org", description: t(locale, "res.cyberpeace.desc") },
-        { name: "Red Dot Foundation", contact: "reddotfoundation.org", href: "https://reddotfoundation.org/", description: t(locale, "res.reddot.desc") },
-      ],
+      category: t(locale, "res.cybercrime.eyebrow"),
+      name: "National Cybercrime Reporting Portal",
+      description: t(locale, "res.ncrp.desc"),
+      contact: "cybercrime.gov.in",
+      href: "https://cybercrime.gov.in/",
     },
   ];
 
@@ -53,7 +41,7 @@ export default async function ResourcesPage() {
       notes: "Use the in-app report on the specific post or profile. Instagram's Safety Center also has a dedicated NCII removal path.",
       links: [
         { label: "Report on Instagram", href: "https://help.instagram.com/165828726894770" },
-        { label: "Instagram Safety Center", href: "https://about.instagram.com/safety" },
+        { label: "Safety Center", href: "https://about.instagram.com/safety" },
       ],
     },
     {
@@ -66,7 +54,7 @@ export default async function ResourcesPage() {
     },
     {
       name: "Google Search",
-      notes: "You can request Google remove links to intimate images from search results - even if you cannot get the content taken down at the source.",
+      notes: "You can request Google remove links to intimate images from search results, even if you cannot get the content taken down at the source.",
       links: [
         { label: "Submit an NCII removal request", href: "https://support.google.com/websearch/answer/6302812" },
       ],
@@ -92,7 +80,7 @@ export default async function ResourcesPage() {
       notes: "Snapchat allows in-app anonymous reporting. Both you and the person reported receive wellbeing resources.",
       links: [
         { label: "Report abuse in-app", href: "https://support.snapchat.com/en-US/article/report-abuse-in-app" },
-        { label: "Snapchat Safety Resources", href: "https://support.snapchat.com/en-US/a/Snapchat-Safety" },
+        { label: "Safety Resources", href: "https://support.snapchat.com/en-US/a/Snapchat-Safety" },
       ],
     },
     {
@@ -100,19 +88,19 @@ export default async function ResourcesPage() {
       notes: "Use TikTok's Report a Problem tool for content violations. The Safety Center has a dedicated path for privacy and intimate image reports.",
       links: [
         { label: "Report a Problem", href: "https://support.tiktok.com/en/safety-hc/report-a-problem" },
-        { label: "TikTok Safety Center", href: "https://www.tiktok.com/safety/en-us/" },
+        { label: "Safety Center", href: "https://www.tiktok.com/safety/en-us/" },
       ],
     },
     {
       name: "WhatsApp",
-      notes: "WhatsApp can block and remove a contact. Reporting sends WhatsApp your most recent messages - they review for policy violations.",
+      notes: "WhatsApp can block and remove a contact. Reporting sends WhatsApp your most recent messages for policy review.",
       links: [
         { label: "Block and report a contact", href: "https://faq.whatsapp.com/iphone/security-and-privacy/how-to-block-and-unblock-contacts" },
       ],
     },
     {
       name: "Telegram",
-      notes: "Telegram has no centralised reporting form. Use @notoscam on Telegram to report, or email abuse@telegram.org with channel/group links.",
+      notes: "Telegram has no centralised reporting form. Use @notoscam on Telegram to report, or email abuse@telegram.org with channel or group links.",
       links: [
         { label: "Telegram support", href: "https://telegram.org/support" },
       ],
@@ -122,7 +110,7 @@ export default async function ResourcesPage() {
       notes: "Submit an abuse report to Discord's Trust and Safety team. Include message IDs and channel IDs where possible.",
       links: [
         { label: "Submit an Abuse Report", href: "https://support.discord.com/hc/en-us/requests/new?ticket_form_id=360000029731" },
-        { label: "Discord Safety Center", href: "https://discord.com/safety" },
+        { label: "Safety Center", href: "https://discord.com/safety" },
       ],
     },
     {
@@ -130,7 +118,7 @@ export default async function ResourcesPage() {
       notes: "Use LinkedIn's in-product reporting for inappropriate content, or contact LinkedIn Safety directly.",
       links: [
         { label: "Report inappropriate content", href: "https://www.linkedin.com/help/linkedin/answer/146" },
-        { label: "LinkedIn Safety Center", href: "https://safety.linkedin.com/" },
+        { label: "Safety Center", href: "https://safety.linkedin.com/" },
       ],
     },
     {
@@ -167,7 +155,7 @@ export default async function ResourcesPage() {
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               {t(locale, "res.hero.sub")}
             </p>
-            <p className="font-mono mt-6 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="muted mt-5 text-xs tracking-wide">
               Last verified against public source pages: 12 May 2026.
             </p>
           </div>
@@ -177,7 +165,7 @@ export default async function ResourcesPage() {
           <div className="hairline" />
         </div>
 
-        {/* EMERGENCY - always first, always prominent */}
+        {/* EMERGENCY */}
         <section className="container py-14 md:py-20">
           <div className="mx-auto max-w-3xl">
             <span className="eyebrow mb-6 block">{t(locale, "res.emergency.eyebrow")}</span>
@@ -192,13 +180,13 @@ export default async function ResourcesPage() {
                   className="group flex flex-col rounded-xl border-2 border-[var(--teal)] bg-[var(--teal-soft)] p-6 transition-colors hover:bg-[color-mix(in_srgb,var(--teal-soft)_70%,white)]"
                   aria-label={`${item.name} - call ${item.contact}`}
                 >
-                  <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--teal)]">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-[var(--teal-dark)]">
                     {item.name}
                   </span>
-                  <span className="font-display mt-2 text-[52px] font-normal leading-none tracking-tight text-[var(--teal-dark)] md:text-[64px]">
+                  <span className="mt-3 text-[52px] font-normal leading-none tracking-tight text-[var(--teal-dark)] md:text-[64px]">
                     {item.contact}
                   </span>
-                  <span className="muted mt-3 text-sm leading-[1.65]">{item.description}</span>
+                  <span className="muted mt-4 text-sm leading-[1.65]">{item.description}</span>
                 </a>
               ))}
             </div>
@@ -209,38 +197,30 @@ export default async function ResourcesPage() {
           <div className="hairline" />
         </div>
 
-        {/* SUPPORT GROUPS */}
+        {/* SUPPORT */}
         <section className="container py-14 md:py-20">
-          <div className="mx-auto max-w-3xl space-y-14">
-            {groups.map((group) => (
-              <div key={group.eyebrow}>
-                <span className="eyebrow mb-3 block">{group.eyebrow}</span>
-                <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[30px]">
-                  {group.title}
-                </h2>
-                <p className="muted mt-2 text-sm leading-[1.7]">{group.subtitle}</p>
-                <div className="mt-6 space-y-3">
-                  {group.items.map((item) => (
-                    <a
-                      key={item.name}
-                      href={item.href}
-                      target={item.href.startsWith("http") ? "_blank" : undefined}
-                      rel={item.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                      className="flex items-start justify-between gap-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-5 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
-                      style={{ boxShadow: "var(--shadow-soft)" }}
-                    >
-                      <div>
-                        <p className="font-semibold text-[var(--foreground)]">{item.name}</p>
-                        <p className="muted mt-1 text-sm leading-[1.65]">{item.description}</p>
-                      </div>
-                      <span className="font-mono shrink-0 text-[15px] font-semibold text-[var(--teal-dark)] md:text-[18px]">
-                        {item.contact} ↗
-                      </span>
-                    </a>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="mx-auto max-w-3xl">
+            <span className="eyebrow mb-8 block">Support</span>
+            <div className="divide-y divide-[var(--hairline)]">
+              {support.map((item) => (
+                <a
+                  key={item.name}
+                  href={item.href}
+                  target={item.href.startsWith("http") ? "_blank" : undefined}
+                  rel={item.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                  className="flex flex-col gap-3 py-8 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-12 transition-colors hover:bg-transparent group"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[var(--muted)] mb-1">{item.category}</p>
+                    <p className="font-semibold text-[var(--foreground)] text-base md:text-[17px]">{item.name}</p>
+                    <p className="muted mt-2 text-sm leading-[1.75] max-w-md">{item.description}</p>
+                  </div>
+                  <span className="shrink-0 text-sm font-medium text-[var(--teal-dark)] underline decoration-[var(--teal-dark)]/30 underline-offset-4 transition-colors group-hover:decoration-[var(--teal-dark)] md:text-base">
+                    {item.contact} ↗
+                  </span>
+                </a>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -248,26 +228,24 @@ export default async function ResourcesPage() {
           <div className="hairline" />
         </div>
 
-        {/* PLATFORM REPORTING GUIDES */}
+        {/* PLATFORM REPORTING */}
         <section className="container py-14 md:py-20">
           <div className="mx-auto max-w-3xl">
             <span className="eyebrow mb-4 block">{t(locale, "res.platforms.eyebrow")}</span>
-            <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
+            <p className="font-semibold text-[var(--foreground)] text-[18px] leading-[1.3] md:text-[22px]">
               {t(locale, "res.platforms.title")}
-            </h2>
-            <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
+            </p>
+            <p className="muted mt-3 max-w-lg text-base leading-[1.75]">
               {t(locale, "res.platforms.sub")}
             </p>
-            <div className="mt-10 grid gap-4 md:grid-cols-2">
+            <div className="mt-8 grid gap-3 md:grid-cols-2">
               {platforms.map((p) => (
                 <div
                   key={p.name}
                   className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"
                   style={{ boxShadow: "var(--shadow-soft)" }}
                 >
-                  <h3 className="font-display text-[17px] font-normal leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[19px]">
-                    {p.name}
-                  </h3>
+                  <p className="font-semibold text-[var(--foreground)] text-base">{p.name}</p>
                   <p className="muted mt-2 text-sm leading-[1.65]">{p.notes}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {p.links.map((l) => (
@@ -276,7 +254,7 @@ export default async function ResourcesPage() {
                         href={l.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-block rounded-full border border-[var(--hairline)] px-3 py-1 font-mono text-[11px] text-[var(--teal-dark)] transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
+                        className="inline-block rounded-full border border-[var(--hairline)] px-3 py-1 text-[11px] font-medium text-[var(--teal-dark)] transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
                       >
                         {l.label} ↗
                       </a>
@@ -296,13 +274,13 @@ export default async function ResourcesPage() {
         <section className="container py-14 md:py-20">
           <div className="mx-auto max-w-3xl">
             <span className="eyebrow mb-4 block">{t(locale, "res.filing.eyebrow")}</span>
-            <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
+            <p className="font-semibold text-[var(--foreground)] text-[18px] leading-[1.3] md:text-[22px]">
               {t(locale, "res.filing.title")}
-            </h2>
-            <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
+            </p>
+            <p className="muted mt-3 max-w-lg text-base leading-[1.75]">
               {t(locale, "res.filing.sub")}
             </p>
-            <ol className="mt-10 space-y-0">
+            <ol className="mt-8 space-y-0">
               {filingSteps.map((text, i) => (
                 <li key={i} className="relative flex gap-6 pb-8 last:pb-0">
                   {i < filingSteps.length - 1 && (
@@ -313,10 +291,10 @@ export default async function ResourcesPage() {
                     />
                   )}
                   <div
-                    className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] font-mono text-[11px] font-semibold tracking-widest text-[var(--teal)]"
+                    className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[13px] font-semibold text-[var(--teal)]"
                     style={{ boxShadow: "var(--shadow-soft)" }}
                   >
-                    {String(i + 1).padStart(2, "0")}
+                    {i + 1}
                   </div>
                   <p className="pt-2 text-base leading-[1.75] text-[var(--foreground)] md:text-[17px]">
                     {text}

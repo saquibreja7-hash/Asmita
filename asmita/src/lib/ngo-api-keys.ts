@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { sha256 } from "@/lib/hash";
 
 export type NgoApiKeyRecord = {
@@ -25,5 +25,14 @@ export function issueNgoApiKey(partnerName: string) {
 
 export function verifyNgoApiKey(secret: string) {
   const keyHash = sha256(secret);
-  return Array.from(ngoApiKeys.values()).find((record) => record.keyHash === keyHash && !record.revokedAt) || null;
+  return (
+    Array.from(ngoApiKeys.values()).find((record) => {
+      if (record.revokedAt) return false;
+      try {
+        return timingSafeEqual(Buffer.from(keyHash, "hex"), Buffer.from(record.keyHash, "hex"));
+      } catch {
+        return false;
+      }
+    }) || null
+  );
 }

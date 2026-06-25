@@ -6,7 +6,7 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 
 const schema = z.object({
   acknowledged: z.literal(true),
-  version: z.string().min(1).default("draft-2026-05-12"),
+  version: z.string().min(1).default("v1.0-2026-05-12"),
   language: z.enum(["en", "hi"]).default("en"),
 });
 

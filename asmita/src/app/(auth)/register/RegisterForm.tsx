@@ -10,7 +10,7 @@ type Step = "age" | "email" | "otp";
 export function RegisterForm({ locale }: { locale: Locale }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("age");
-  const [ageConfirmed, setAgeConfirmed] = useState<"adult" | "minor" | null>(null);
+  const [ageConfirmed, setAgeConfirmed] = useState<"adult" | "minor" | "">("");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
@@ -25,9 +25,9 @@ export function RegisterForm({ locale }: { locale: Locale }) {
   function continueFromAge() {
     if (ageConfirmed === "minor") {
       router.push("/minor-support");
-    } else {
-      setStep("email");
+      return;
     }
+    setStep("email");
   }
 
   async function requestOtp() {
@@ -85,37 +85,49 @@ export function RegisterForm({ locale }: { locale: Locale }) {
           <p className="muted mt-2 text-sm leading-[1.75]">
             {t(locale, "reg.age.sub")}
           </p>
-          <div className="mt-8 space-y-3">
-            <button
-              type="button"
-              onClick={() => setAgeConfirmed("adult")}
-              className={`w-full rounded-xl border p-4 text-left transition-colors ${
+          <div className="mt-6 space-y-3">
+            <label
+              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
                 ageConfirmed === "adult"
-                  ? "border-[var(--teal)] bg-[var(--teal)]/5 text-[var(--foreground)]"
-                  : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]"
+                  ? "border-[var(--teal)] bg-[var(--teal-soft)]"
+                  : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
               }`}
             >
-              I am 18 years of age or older.
-            </button>
-            <button
-              type="button"
-              onClick={() => setAgeConfirmed("minor")}
-              className={`w-full rounded-xl border p-4 text-left transition-colors ${
+              <input
+                type="radio"
+                checked={ageConfirmed === "adult"}
+                onChange={() => setAgeConfirmed("adult")}
+                className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
+              />
+              <span className="text-[15px] font-semibold leading-[1.4] text-[var(--foreground)]">
+                {t(locale, "auth.ageAdult")}
+              </span>
+            </label>
+            <label
+              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
                 ageConfirmed === "minor"
-                  ? "border-[var(--teal)] bg-[var(--teal)]/5 text-[var(--foreground)]"
-                  : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]"
+                  ? "border-[var(--teal)] bg-[var(--teal-soft)]"
+                  : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
               }`}
             >
-              I am under 18 years of age.
-            </button>
+              <input
+                type="radio"
+                checked={ageConfirmed === "minor"}
+                onChange={() => setAgeConfirmed("minor")}
+                className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
+              />
+              <span className="text-[15px] font-semibold leading-[1.4] text-[var(--foreground)]">
+                {t(locale, "auth.ageMinor")}
+              </span>
+            </label>
           </div>
           <button
-            className="btn btn-primary mt-6"
-            disabled={!ageConfirmed}
-            type="button"
+            className="btn btn-primary mt-8"
+            disabled={!ageConfirmed || !hydrated}
             onClick={continueFromAge}
+            type="button"
           >
-            Continue
+            {t(locale, "reg.otp.verifyBtn")}
           </button>
         </div>
       )}

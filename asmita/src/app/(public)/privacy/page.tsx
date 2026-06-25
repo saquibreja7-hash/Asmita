@@ -168,7 +168,7 @@ export default async function PrivacyPage() {
                 <PolicySection num="05" id="why-we-collect" title={t(locale, "privacy.toc.05")}>
                   <p>{t(locale, "privacy.s05.intro")}</p>
                   <ul className="mt-4 space-y-3">
-                    {(["i1","i2","i3","i4"] as const).map((i) => (
+                    {(["i1","i2","i2b","i3","i4"] as const).map((i) => (
                       <li key={i}>
                         <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s05.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s05.${i}.detail` as Parameters<typeof t>[1])}
