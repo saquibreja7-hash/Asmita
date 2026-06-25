@@ -1,8 +1,8 @@
 {
   "auth.enterEmail": "अपना email address डालिए",
   "auth.otpInstructions": "आपके email पर छह digit का code भेजा गया है।",
-  "auth.ageAdult": "मैं confirm करता हूँ कि मैं 18 या उससे ज़्यादा उम्र का हूँ।",
-  "auth.ageMinor": "मैं 18 साल से कम उम्र का हूँ।",
+  "auth.ageAdult": "मैं 18 वर्ष या उससे अधिक आयु का/की हूँ।",
+  "auth.ageMinor": "मैं 18 वर्ष से कम आयु का/की हूँ।",
   "submit.declarationTitle": "घोषणा",
   "submit.noUpload": "ज़ाहिर है, ये बात आपको थोड़ी अजीब लगेगी, लेकिन ये सच है।",
   "support.childline": "CHILDLINE 1098",

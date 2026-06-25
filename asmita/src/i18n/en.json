@@ -1,8 +1,8 @@
 {
   "auth.enterEmail": "Enter your email address",
   "auth.otpInstructions": "We sent a six digit code to your email.",
-  "auth.ageAdult": "I confirm I am 18 or older.",
-  "auth.ageMinor": "I am under 18.",
+  "auth.ageAdult": "I am 18 years of age or older.",
+  "auth.ageMinor": "I am under 18 years of age.",
   "submit.declarationTitle": "Declaration",
   "submit.noUpload": "Do not upload intimate images or videos.",
   "support.childline": "CHILDLINE 1098",
