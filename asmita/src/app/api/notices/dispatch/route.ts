@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { devFlagEnabled } from "@/lib/dev-flags";
 import { z } from "zod";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { db } from "@/lib/db";
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "email_notice_not_supported" }, { status: 409 });
   }
 
-  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
   const template = await db.noticeTemplate.findFirst({
     where: {
       templateType,

@@ -1,4 +1,4 @@
-﻿import { randomInt } from "node:crypto";
+﻿import { randomInt, timingSafeEqual } from "node:crypto";
 import { hashEmail, sha256 } from "@/lib/hash";
 import { db } from "@/lib/db";
 
@@ -24,6 +24,12 @@ const MAX_FAILED_ATTEMPTS = 5;
 // production). Set OTP_PERSISTENCE=database in production.
 function databasePersistenceEnabled() {
   return process.env.OTP_PERSISTENCE === "database";
+}
+
+function tokenMatchesHash(token: string, storedHashHex: string) {
+  const submitted = Buffer.from(sha256(token), "hex");
+  const stored = Buffer.from(storedHashHex, "hex");
+  return submitted.length === stored.length && timingSafeEqual(submitted, stored);
 }
 
 export function generateOtp() {
@@ -65,7 +71,7 @@ export async function verifyOtp(email: string, token: string) {
       orderBy: { createdAt: "desc" },
     });
     if (!stored) return false;
-    if (stored.tokenHash !== sha256(token)) {
+    if (!tokenMatchesHash(token, stored.tokenHash)) {
       const failedAttempts = stored.failedAttempts + 1;
       await db.otpToken.update({
         where: { id: stored.id },
@@ -84,7 +90,7 @@ export async function verifyOtp(email: string, token: string) {
   if (!stored || stored.used || stored.expiresAt < Date.now()) {
     return false;
   }
-  if (stored.tokenHash !== sha256(token)) {
+  if (!tokenMatchesHash(token, stored.tokenHash)) {
     stored.failedAttempts += 1;
     if (stored.failedAttempts >= MAX_FAILED_ATTEMPTS) {
       stored.used = true;

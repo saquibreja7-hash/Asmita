@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { devFlagEnabled } from "@/lib/dev-flags";
 import { z } from "zod";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireSession } from "@/lib/auth/middleware";
@@ -91,7 +92,7 @@ export async function POST(
     return NextResponse.json({ error: "no_hashes" }, { status: 409 });
   }
 
-  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
   const template = await db.noticeTemplate.findFirst({
     where: {
       templateType: "HASH_ADVISORY",

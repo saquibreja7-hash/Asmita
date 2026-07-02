@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { devFlagEnabled } from "@/lib/dev-flags";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
@@ -24,7 +25,7 @@ export async function GET(
   const record = await getCaseForUser(caseId, auth.session.sub);
   if (!record) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
 
   const url = await db.submittedUrl.findFirst({
     where: {

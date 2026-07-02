@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { devFlagEnabled } from "@/lib/dev-flags";
 import { z } from "zod";
 import type { UrlStatus } from "@prisma/client";
 import { verifyCsrfRequest } from "@/lib/csrf";
@@ -95,7 +96,7 @@ export async function POST(
   }
 
   const { urlId, name, contact, signature } = parsed.data;
-  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
   const allowedStatuses: UrlStatus[] = skipLegalGate
     ? ["NOTICE_QUEUED", "PENDING_REVIEW"]
     : ["NOTICE_QUEUED"];
