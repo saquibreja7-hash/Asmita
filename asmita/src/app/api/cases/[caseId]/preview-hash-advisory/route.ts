@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { devFlagEnabled } from "@/lib/dev-flags";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
@@ -42,7 +43,7 @@ export async function GET(
     return NextResponse.json({ error: "no_hashes" }, { status: 409 });
   }
 
-  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
   const template = await db.noticeTemplate.findFirst({
     where: {
       templateType: "HASH_ADVISORY",

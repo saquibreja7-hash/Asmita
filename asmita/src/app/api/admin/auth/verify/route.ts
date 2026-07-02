@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { devFlagEnabled } from "@/lib/dev-flags";
 import { z } from "zod";
 import { createAdminIdentity, getAdminRole, isAdminEmail } from "@/lib/auth/admin-allowlist";
 import { verifyAdminTotp } from "@/lib/auth/admin-mfa";
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
 
   const admin = createAdminIdentity(parsed.data.email);
   const otpOk = await verifyOtp(parsed.data.email, parsed.data.otp);
-  const skipMfa = process.env.DEV_SKIP_ADMIN_MFA === "true";
+  const skipMfa = devFlagEnabled("DEV_SKIP_ADMIN_MFA");
   const mfaOk = skipMfa || verifyAdminTotp({ token: parsed.data.totp });
   if (!otpOk || !mfaOk) {
     logSecurityEvent({

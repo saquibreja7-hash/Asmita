@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { devFlagEnabled } from "@/lib/dev-flags";
 import { decryptField } from "@/lib/encryption";
 import { sendNoticeDraft } from "@/lib/email";
 import { writeAuditLog } from "@/lib/audit";
@@ -54,7 +55,7 @@ export async function dispatchHashAdvisories(input: {
   });
   if (submissions.length === 0) throw new Error("no_approved_hashes");
 
-  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
   const template = await db.noticeTemplate.findFirst({
     where: {
       templateType: "HASH_ADVISORY",

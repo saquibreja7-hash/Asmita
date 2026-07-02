@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { devFlagEnabled } from "@/lib/dev-flags";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
@@ -38,7 +39,7 @@ export default async function SignNoticePage({
   });
   if (alreadySigned) redirect(`/case/${caseId}/confirmation`);
 
-  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
 
   const url = await db.submittedUrl.findFirst({
     where: {

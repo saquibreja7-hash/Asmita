@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { devFlagEnabled } from "@/lib/dev-flags";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser, isUserDeactivated } from "@/lib/case-ops";
@@ -48,7 +49,7 @@ export default async function CasePage({
   if (record && hashUploadEnabled) {
     hashSubmissions = await listHashesForCase(record.id);
   }
-  const skipLegalGate = process.env.DEV_SKIP_LEGAL_REVIEW === "true";
+  const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
   const hasQueuedUrl = record?.urls.some(
     (u) => u.status === "NOTICE_QUEUED" || (skipLegalGate && u.status === "PENDING_REVIEW" && u.platformId),
   ) ?? false;
