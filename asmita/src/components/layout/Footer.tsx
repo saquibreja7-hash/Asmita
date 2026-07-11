@@ -42,7 +42,7 @@ export function Footer({ locale }: { locale: Locale }) {
               <div className="site-footer-row">
                 <Link href="/how-it-works">{isHi ? "हमारे बारे में" : "About"}</Link>
                 <Link href="/resources">{isHi ? "संसाधन" : "Resources"}</Link>
-                <Link href="/faq">FAQ</Link>
+                <Link href="/faq">{isHi ? "सामान्य प्रश्न" : "FAQ"}</Link>
               </div>
               <div className="site-footer-row">
                 <Link href="/privacy">{isHi ? "गोपनीयता" : "Privacy"}</Link>

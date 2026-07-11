@@ -15,10 +15,50 @@ export default async function HowItWorksPage() {
     { num: "06", title: t(locale, "hiw.step6.title"), body: t(locale, "hiw.step6.body") },
   ];
 
+  const tierIconProps = {
+    width: 18,
+    height: 18,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.75,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+
   const tiers = [
-    { label: "Tier 01", icon: "✉", title: t(locale, "hiw.tier1.title"), body: t(locale, "hiw.tier1.body") },
-    { label: "Tier 02", icon: "↗", title: t(locale, "hiw.tier2.title"), body: t(locale, "hiw.tier2.body") },
-    { label: "Tier 03", icon: "⚡", title: t(locale, "hiw.tier3.title"), body: t(locale, "hiw.tier3.body") },
+    {
+      label: "Tier 01",
+      icon: (
+        <svg {...tierIconProps}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M3 7l9 6 9-6" />
+        </svg>
+      ),
+      title: t(locale, "hiw.tier1.title"),
+      body: t(locale, "hiw.tier1.body"),
+    },
+    {
+      label: "Tier 02",
+      icon: (
+        <svg {...tierIconProps}>
+          <path d="M7 17L17 7" />
+          <path d="M9 7h8v8" />
+        </svg>
+      ),
+      title: t(locale, "hiw.tier2.title"),
+      body: t(locale, "hiw.tier2.body"),
+    },
+    {
+      label: "Tier 03",
+      icon: (
+        <svg {...tierIconProps}>
+          <path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z" />
+        </svg>
+      ),
+      title: t(locale, "hiw.tier3.title"),
+      body: t(locale, "hiw.tier3.body"),
+    },
   ];
 
   const timeline = [
@@ -110,9 +150,12 @@ export default async function HowItWorksPage() {
                   <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
                     {tier.label}
                   </p>
-                  <p className="mt-3 text-2xl" aria-hidden>
+                  <span
+                    className="mt-3 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--teal-soft)] text-[var(--teal)]"
+                    aria-hidden
+                  >
                     {tier.icon}
-                  </p>
+                  </span>
                   <h3 className="font-display mt-2 text-[18px] font-normal leading-[1.25] tracking-tight md:text-[20px]">
                     {tier.title}
                   </h3>
@@ -137,26 +180,21 @@ export default async function HowItWorksPage() {
             <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
               {t(locale, "hiw.escalation.sub")}
             </p>
-            <div className="mt-10 grid gap-4 md:grid-cols-3">
+            <div className="mt-10 grid gap-8 md:grid-cols-3 md:gap-6">
               {timeline.map((item, i) => (
                 <div
                   key={item.day}
-                  className="relative rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
-                  style={{ boxShadow: "var(--shadow-soft)" }}
+                  className="pt-5"
+                  style={{
+                    borderTop: `2px solid ${i === 0 ? "var(--teal)" : i === 1 ? "var(--saffron)" : "var(--rose)"}`,
+                  }}
                 >
-                  <div className="mb-4 flex items-center gap-3">
-                    <div
-                      className="h-2 w-2 rounded-full"
-                      style={{ background: i === 0 ? "var(--teal)" : i === 1 ? "var(--saffron)" : "var(--rose)" }}
-                      aria-hidden
-                    />
-                    <p
-                      className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em]"
-                      style={{ color: i === 0 ? "var(--teal)" : i === 1 ? "var(--saffron)" : "var(--rose)" }}
-                    >
-                      {item.day}
-                    </p>
-                  </div>
+                  <p
+                    className="mb-4 font-mono text-[11px] font-semibold uppercase tracking-[0.16em]"
+                    style={{ color: i === 0 ? "var(--teal)" : i === 1 ? "var(--saffron)" : "var(--rose)" }}
+                  >
+                    {item.day}
+                  </p>
                   <h3 className="font-display text-[18px] font-normal leading-[1.25] tracking-tight md:text-[20px]">
                     {item.title}
                   </h3>

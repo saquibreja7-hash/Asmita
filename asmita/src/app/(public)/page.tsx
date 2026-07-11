@@ -91,17 +91,47 @@ export default async function HomePage() {
                 </p>
               </div>
               <div className="hidden md:block">
+                {/* Redacted notice preview - the real artifact this platform produces */}
                 <div
-                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-8 py-6 text-center"
-                  style={{ boxShadow: "var(--shadow-soft)" }}
+                  className="w-[300px] rounded-md border border-[var(--border)] bg-white p-6"
+                  style={{ boxShadow: "var(--shadow-soft)", transform: "rotate(0.5deg)" }}
+                  aria-hidden
                 >
-                  <p className="font-display text-[48px] font-normal leading-none text-[var(--teal)]">
-                    {t(locale, "home.blockA.stat")}
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+                    Takedown notice
                   </p>
-                  <p className="muted mt-2 text-sm leading-[1.6]">
-                    {t(locale, "home.blockA.statLabel")}
+                  <p className="font-display mt-2 text-[15px] leading-snug">
+                    Re: Removal under Rule 3(2)(b), IT Rules 2021
                   </p>
+                  <div className="mt-4 space-y-2">
+                    <div className="h-2 rounded-full bg-[var(--hairline)]" />
+                    <div className="h-2 w-4/5 rounded-full bg-[var(--hairline)]" />
+                    <div className="h-2 w-2/3 rounded-full bg-[var(--foreground)] opacity-70" />
+                    <div className="h-2 rounded-full bg-[var(--hairline)]" />
+                    <div className="h-2 w-3/5 rounded-full bg-[var(--hairline)]" />
+                  </div>
+                  <p className="mt-4 font-mono text-[10px] text-[var(--muted)]">
+                    PDQ fingerprint only. No image attached.
+                  </p>
+                  <div className="mt-4 flex items-center justify-between border-t border-[var(--hairline)] pt-3">
+                    <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--teal)]">
+                      Signed
+                    </span>
+                    <svg width="12" height="10" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M1 4l2.5 2.5L9 1"
+                        stroke="var(--teal)"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
                 </div>
+                <p className="muted mt-4 max-w-[300px] text-center text-sm leading-[1.6]">
+                  <span className="font-semibold text-[var(--teal)]">{t(locale, "home.blockA.stat")}</span>{" "}
+                  {t(locale, "home.blockA.statLabel")}
+                </p>
               </div>
             </div>
           </div>
@@ -120,13 +150,9 @@ export default async function HomePage() {
               <br />
               {t(locale, "home.blockB.title.2")}
             </h2>
-            <ul className="mt-10 space-y-4">
+            <ul className="mt-8 divide-y divide-[var(--hairline)]">
               {privacyItems.map(({ bold, detail }) => (
-                <li
-                  key={bold}
-                  className="flex items-start gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-5"
-                  style={{ boxShadow: "var(--shadow-soft)" }}
-                >
+                <li key={bold} className="flex items-start gap-4 py-6">
                   <span
                     className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
                     aria-hidden
@@ -167,26 +193,24 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* CLOSING - invitation, not a sales pitch */}
-        <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-28">
-          <div className="mx-auto max-w-2xl">
-            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
-              {t(locale, "home.closing.title")}
-            </h2>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-              {t(locale, "home.closing.body")}
-            </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-3">
-              <Link className="btn btn-primary" href="/start">
-                {t(locale, "home.closing.cta1")}
-              </Link>
-              <Link className="btn btn-secondary" href="/faq">
-                {t(locale, "home.closing.cta2")}
-              </Link>
+        {/* CLOSING - full-bleed teal band, invitation not a sales pitch */}
+        <section className="band-teal">
+          <div className="container pb-20 pt-16 text-center md:pb-28 md:pt-24">
+            <div className="mx-auto max-w-2xl">
+              <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
+                {t(locale, "home.closing.title")}
+              </h2>
+              <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
+                {t(locale, "home.closing.body")}
+              </p>
+              <div className="mt-10 flex flex-wrap justify-center gap-3">
+                <Link className="btn btn-inverse" href="/start">
+                  {t(locale, "home.closing.cta1")}
+                </Link>
+                <Link className="btn btn-ghost-light" href="/faq">
+                  {t(locale, "home.closing.cta2")}
+                </Link>
+              </div>
             </div>
           </div>
         </section>
