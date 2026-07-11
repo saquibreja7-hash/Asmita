@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { EligibilityWizard } from "./EligibilityWizard";
+import { FlowProgress } from "@/components/FlowProgress";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 
@@ -59,6 +60,7 @@ export default async function EligibilityPage() {
 
             {/* RIGHT - wizard steps */}
             <div className="min-w-0 flex-1">
+              <FlowProgress step={1} locale={locale} />
               <EligibilityWizard locale={locale} />
             </div>
 

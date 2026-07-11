@@ -8,7 +8,7 @@ export function SupportPanel({ locale }: { locale: Locale }) {
         <a href="tel:1098">CHILDLINE 1098</a>
         <a href="tel:112">{t(locale, "support.emergency")} 112</a>
         <a href="tel:9152987821">iCall 9152987821</a>
-        <a href="/resources">Resources</a>
+        <a href="/resources">{t(locale, "nav.resources")}</a>
       </div>
     </aside>
   );

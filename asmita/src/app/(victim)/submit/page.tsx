@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { SubmitForm } from "./SubmitForm";
+import { FlowProgress } from "@/components/FlowProgress";
 import { listHashPickerPlatforms, type HashPickerPlatform } from "@/lib/hash-submission";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
@@ -71,6 +72,7 @@ export default async function SubmitPage() {
 
             {/* RIGHT - form */}
             <div className="min-w-0 flex-1">
+              <FlowProgress step={3} locale={locale} />
               <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
                 {t(locale, "submit.form.title")}
               </h1>

@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { RegisterForm } from "./RegisterForm";
+import { FlowProgress } from "@/components/FlowProgress";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 
@@ -59,6 +60,7 @@ export default async function RegisterPage() {
 
             {/* RIGHT - form */}
             <div className="min-w-0 flex-1">
+              <FlowProgress step={2} locale={locale} />
               <RegisterForm locale={locale} />
             </div>
 

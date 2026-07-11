@@ -12,6 +12,7 @@
   --teal-soft: #e8f5f3;
   --saffron: #9f4f17;
   --rose: #b24a5a;
+  --font-deva: "Noto Sans Devanagari";
   --radius: 8px;
   --radius-lg: 14px;
   --shadow-soft: 0 16px 50px rgba(17, 24, 39, 0.06);
@@ -22,7 +23,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), "Inter", "Noto Sans Devanagari", system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-serif), "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --font-display: var(--font-serif), "Noto Serif Devanagari", "Iowan Old Style", Georgia, "Times New Roman", serif;
 }
 
 body {
@@ -38,6 +39,17 @@ body {
   font-family: var(--font-display);
   font-feature-settings: "kern", "liga";
   letter-spacing: -0.01em;
+}
+
+/* Devanagari needs no negative tracking (compresses matras/conjuncts)
+   and taller line-height for stacked diacritics */
+html[lang="hi"] body {
+  letter-spacing: 0;
+}
+
+html[lang="hi"] .font-display {
+  letter-spacing: 0;
+  line-height: 1.45;
 }
 
 a {
@@ -273,6 +285,27 @@ select {
 
 .link-underline:hover::after {
   opacity: 1;
+}
+
+/* Full-bleed teal band - breaks the cream card rhythm once per page */
+.band-teal {
+  background: var(--teal);
+  color: #ffffff;
+}
+
+.band-teal .muted {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.btn-inverse {
+  background: #ffffff;
+  color: var(--teal-dark);
+}
+
+.btn-ghost-light {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: #ffffff;
 }
 
 .site-footer {

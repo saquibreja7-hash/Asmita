@@ -243,6 +243,18 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
             </ul>
           )}
 
+          {hashFiles.some((f) => f.status === "hashing") && (
+            <p className="muted text-sm leading-[1.6]">
+              {t(locale, "submit.hash.processingNote")}
+            </p>
+          )}
+
+          {hashedFiles.length > 0 && hashFiles.every((f) => f.status !== "hashing") && (
+            <p className="text-sm leading-[1.6] font-medium text-[var(--teal)]">
+              {t(locale, "submit.hash.doneNote")}
+            </p>
+          )}
+
           {lowQuality && (
             <p className="text-sm text-amber-700">
               {t(locale, "submit.hash.lowQuality")}
