@@ -82,7 +82,9 @@ export async function GET(
     date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
   });
 
-  return new NextResponse(pdfBytes.buffer as ArrayBuffer, {
+  // Copy into an exact-sized buffer: Buffer.buffer may be Node's shared 8KB
+  // pool with a non-zero offset, which serves garbage bytes around the PDF.
+  return new NextResponse(new Uint8Array(pdfBytes), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="hash-advisory-preview-${record.referenceNumber}.pdf"`,
