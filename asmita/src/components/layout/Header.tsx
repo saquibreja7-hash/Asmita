@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LanguageToggle } from "@/components/layout/LanguageToggle";
+import { MobileMenu } from "@/components/layout/MobileMenu";
 import { t, type Locale } from "@/lib/i18n";
 
 export function Header({ locale }: { locale: Locale }) {
@@ -28,19 +29,7 @@ export function Header({ locale }: { locale: Locale }) {
         </nav>
         <div className="flex items-center gap-3 md:hidden">
           <LanguageToggle initialLocale={locale} />
-          <details className="relative">
-            <summary className="btn btn-secondary list-none">{t(locale, "nav.menu")}</summary>
-            <nav className="panel absolute right-0 top-14 z-30 grid w-56 gap-3 p-4 text-sm font-bold text-[var(--muted)]">
-              <Link href="/how-it-works">{t(locale, "nav.howItWorks")}</Link>
-              <Link href="/check-image">{t(locale, "nav.checkImage")}</Link>
-              <Link href="/resources">{t(locale, "nav.resources")}</Link>
-              <Link href="/faq">{t(locale, "nav.faq")}</Link>
-              <Link href="/privacy">{t(locale, "nav.privacy")}</Link>
-              <Link href="/start" className="btn btn-primary">
-                {t(locale, "nav.start")}
-              </Link>
-            </nav>
-          </details>
+          <MobileMenu locale={locale} />
         </div>
       </div>
     </header>
