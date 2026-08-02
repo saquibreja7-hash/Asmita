@@ -51,6 +51,33 @@ export default async function HomePage() {
                 </span>
               </Link>
             </p>
+
+            {/* SUPPORTER CREDIT */}
+            <div className="mt-10 flex justify-center">
+              <span className="cf-badge">
+            <svg
+              className="cf-badge-icon"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden
+            >
+              <path
+                d="M16.9 15.8c.15-.5.09-.97-.16-1.31-.23-.31-.62-.49-1.09-.51l-8.9-.11a.17.17 0 0 1-.14-.07.18.18 0 0 1-.02-.16.24.24 0 0 1 .2-.15l8.98-.12c1.07-.05 2.22-.9 2.63-1.94l.51-1.3a.3.3 0 0 0 .01-.17A5.86 5.86 0 0 0 7.35 9.4a2.65 2.65 0 0 0-4.14 2.6A3.77 3.77 0 0 0 .3 15.7c0 .18.02.36.04.54.01.09.08.15.17.15h16.02c.1 0 .18-.06.2-.15l.17-.44Z"
+                fill="#F6821F"
+              />
+              <path
+                d="M20.1 9.9h-.26a.15.15 0 0 0-.14.1l-.35.98c-.15.5-.09.97.16 1.31.23.31.62.49 1.09.52l1.9.11c.06 0 .11.03.14.07a.18.18 0 0 1 .02.17.24.24 0 0 1-.2.14l-1.97.12c-1.08.05-2.23.9-2.63 1.94l-.14.36c-.03.07.02.14.1.14h6.78a.2.2 0 0 0 .2-.14 4.86 4.86 0 0 0 .17-1.29A4.66 4.66 0 0 0 20.1 9.9Z"
+                fill="#FBAD41"
+              />
+            </svg>
+              <span className="cf-badge-text">
+                {locale === "hi" ? "Cloudflare for Startups द्वारा समर्थित" : "Supported by Cloudflare for Startups"}
+              </span>
+              </span>
+            </div>
           </div>
         </section>
 
