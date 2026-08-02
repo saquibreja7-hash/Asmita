@@ -17,6 +17,7 @@ export function Header({ locale }: { locale: Locale }) {
         </Link>
         <nav className="hidden items-center gap-5 text-sm font-medium text-[var(--muted)] md:flex">
           <Link href="/how-it-works">{t(locale, "nav.howItWorks")}</Link>
+          <Link href="/check-image">{t(locale, "nav.checkImage")}</Link>
           <Link href="/resources">{t(locale, "nav.resources")}</Link>
           <Link href="/faq">{t(locale, "nav.faq")}</Link>
           <Link href="/privacy">{t(locale, "nav.privacy")}</Link>
@@ -31,6 +32,7 @@ export function Header({ locale }: { locale: Locale }) {
             <summary className="btn btn-secondary list-none">{t(locale, "nav.menu")}</summary>
             <nav className="panel absolute right-0 top-14 z-30 grid w-56 gap-3 p-4 text-sm font-bold text-[var(--muted)]">
               <Link href="/how-it-works">{t(locale, "nav.howItWorks")}</Link>
+              <Link href="/check-image">{t(locale, "nav.checkImage")}</Link>
               <Link href="/resources">{t(locale, "nav.resources")}</Link>
               <Link href="/faq">{t(locale, "nav.faq")}</Link>
               <Link href="/privacy">{t(locale, "nav.privacy")}</Link>
