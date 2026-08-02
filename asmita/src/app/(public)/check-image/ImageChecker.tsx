@@ -18,7 +18,7 @@ type DeepCheck = {
 };
 type DeepResult = { detected: boolean; checks: DeepCheck[] };
 
-export function ImageChecker({ locale }: { locale: Locale }) {
+export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; deepCheckEnabled: boolean }) {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<ProvenanceResult | null>(null);
@@ -211,7 +211,8 @@ export function ImageChecker({ locale }: { locale: Locale }) {
             )}
           </div>
 
-          {/* DEEPER CHECK (opt-in, sends image to OpenAI) */}
+          {/* DEEPER CHECK (opt-in, sends image to OpenAI). Off-by-default flag. */}
+          {deepCheckEnabled && (
           <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
             <p className="font-display text-[18px] font-normal leading-snug tracking-tight">
               {t(locale, "check.deep.title")}
@@ -287,6 +288,7 @@ export function ImageChecker({ locale }: { locale: Locale }) {
               </div>
             )}
           </div>
+          )}
         </div>
       )}
     </div>

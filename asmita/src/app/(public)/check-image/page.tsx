@@ -44,7 +44,7 @@ export default async function CheckImagePage() {
 
         {/* CHECKER */}
         <section className="container py-14 md:py-20">
-          <ImageChecker locale={locale} />
+          <ImageChecker locale={locale} deepCheckEnabled={process.env.ENABLE_PROVENANCE_CHECK === "true"} />
           <p className="muted mx-auto mt-8 max-w-xl text-center text-xs leading-[1.7]">
             {t(locale, "check.privacy.note")}
           </p>

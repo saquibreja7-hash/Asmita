@@ -31,6 +31,18 @@ type OpenAiResult = {
 };
 
 export async function POST(request: Request) {
+  // Off-by-default safety gate. This forwards media to a third party (OpenAI),
+  // which ADR 002 forbids until legal sign-off. The route does not exist unless
+  // ENABLE_PROVENANCE_CHECK is explicitly set, so setting OPENAI_API_KEY alone
+  // never makes it live. Do NOT set this flag in production or preview until the
+  // ADR 002 blockers (counsel, security review, child-protection protocol) clear.
+  // Note: age is client self-attested and cannot be verified on a public
+  // endpoint. When this flag is eventually enabled, the route must additionally
+  // be bound to an authenticated case that already passed the adult age gate.
+  if (process.env.ENABLE_PROVENANCE_CHECK !== "true") {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
   if (!verifyCsrfRequest(request)) {
     logSecurityEvent({ event: "csrf_failed", route: "/api/check-image" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });

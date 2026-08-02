@@ -45,6 +45,10 @@ It is allowed as a narrow, opt-in exception because:
 
 Residual risk accepted by Saquib (2026-08-02): OpenAI receives the image and retains it briefly under its own API data policy. This exception must be revisited if we move detection fully in-house.
 
+Current shipping state: the route and its UI are behind `ENABLE_PROVENANCE_CHECK`, off by default. With the flag unset, `/api/check-image` returns 404 and the deeper-check UI is hidden, so setting `OPENAI_API_KEY` alone does not make the feature live. The flag stays off in production and preview until the blockers below clear.
+
+Known limitation to resolve before enabling: the adults-only gate is client self-attestation, which a caller can bypass on a public endpoint. Before the flag is turned on anywhere real, the route must be bound to an authenticated case that already passed the adult age gate, and the in-memory IP rate limit must move to the Redis driver (it does not hold across stateless serverless instances).
+
 ## Status and blockers
 
 This ADR is **proposed, not accepted**. It must not ship until:
