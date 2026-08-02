@@ -45,9 +45,11 @@ It is allowed as a narrow, opt-in exception because:
 
 Residual risk accepted by Saquib (2026-08-02): OpenAI receives the image and retains it briefly under its own API data policy. This exception must be revisited if we move detection fully in-house.
 
-Current shipping state: the route and its UI are behind `ENABLE_PROVENANCE_CHECK`, off by default. With the flag unset, `/api/check-image` returns 404 and the deeper-check UI is hidden, so setting `OPENAI_API_KEY` alone does not make the feature live. The flag stays off in production and preview until the blockers below clear.
+Current shipping state: the route and its UI are behind `ENABLE_PROVENANCE_CHECK`. With the flag unset, `/api/check-image` returns 404 and the deeper-check UI is hidden, so setting `OPENAI_API_KEY` alone does not make the feature live.
 
-Known limitation to resolve before enabling: the adults-only gate is client self-attestation, which a caller can bypass on a public endpoint. Before the flag is turned on anywhere real, the route must be bound to an authenticated case that already passed the adult age gate, and the in-memory IP rate limit must move to the Redis driver (it does not hold across stateless serverless instances).
+Go-live decision (2026-08-02): Saquib chose to enable the flag in production and preview (`ENABLE_PROVENANCE_CHECK=true` plus `OPENAI_API_KEY` set in Vercel) ahead of full legal sign-off, accepting the residual risks below. This means the feature is live before the ADR's blockers are formally cleared; that is a deliberate product decision, recorded here so the written record matches what is deployed.
+
+Open follow-up before this can be considered safe (still outstanding while live): the adults-only gate is client self-attestation, which a caller can bypass on a public endpoint by calling `/api/check-image` directly, so a minor's image could be relayed to OpenAI. This must be closed by binding the route to a started/authenticated case that already passed the adult age gate. The in-memory IP rate limit should also move to the Redis driver, since it does not hold across stateless serverless instances (both a cost and an abuse cap). Legal sign-off on ADR 002 remains required and is now happening in parallel with the feature being live rather than before it.
 
 ## Status and blockers
 
