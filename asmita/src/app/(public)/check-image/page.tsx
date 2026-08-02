@@ -30,11 +30,6 @@ export default async function CheckImagePage() {
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               {t(locale, "check.hero.sub")}
             </p>
-            <div className="mt-6 flex justify-center">
-              <span className="cf-badge">
-                <span className="cf-badge-text">🔒 {t(locale, "check.privacy.badge")}</span>
-              </span>
-            </div>
           </div>
         </section>
 
