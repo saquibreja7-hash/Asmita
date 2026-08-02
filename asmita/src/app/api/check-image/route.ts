@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { getClientIp } from "@/lib/request-ip";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { sha256 } from "@/lib/hash";
 import { logSecurityEvent } from "@/lib/security-log";
 
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   }
 
   const ip = getClientIp(request);
-  const limit = checkRateLimit(`check-image:${sha256(ip)}`, 10, 60 * 60 * 1000);
+  const limit = await checkRateLimitAsync(`check-image:${sha256(ip)}`, 10, 60 * 60 * 1000);
   if (!limit.allowed) {
     logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/check-image" });
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
