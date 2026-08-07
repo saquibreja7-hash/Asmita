@@ -5,18 +5,18 @@ import Link from "next/link";
 import { t, type Locale } from "@/lib/i18n";
 
 const links = [
-  { href: "/how-it-works", key: "nav.howItWorks" },
-  { href: "/check-image", key: "nav.checkImage" },
-  { href: "/resources", key: "nav.resources" },
-  { href: "/faq", key: "nav.faq" },
-  { href: "/privacy", key: "nav.privacy" },
+  { href: "/#issue", en: "Issue", hi: "समस्या" },
+  { href: "/how-it-works", en: "Solutions", hi: "समाधान" },
+  { href: "/check-image", key: "nav.checkImage" as const },
+  { href: "/resources", key: "nav.resources" as const },
+  { href: "/faq", key: "nav.faq" as const },
+  { href: "/privacy", key: "nav.privacy" as const },
 ] as const;
 
 export function MobileMenu({ locale }: { locale: Locale }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside tap or Escape. (Each link also closes the menu on click.)
   useEffect(() => {
     if (!open) return;
     function onPointer(e: PointerEvent) {
@@ -39,7 +39,7 @@ export function MobileMenu({ locale }: { locale: Locale }) {
     <div className="relative" ref={wrapRef}>
       <button
         type="button"
-        className="btn btn-secondary px-2.5"
+        className="btn btn-secondary !min-h-[44px] !px-2.5 !py-2"
         aria-expanded={open}
         aria-controls="mobile-menu"
         aria-label={t(locale, "nav.menu")}
@@ -73,16 +73,37 @@ export function MobileMenu({ locale }: { locale: Locale }) {
       {open && (
         <nav
           id="mobile-menu"
-          className="panel absolute right-0 top-14 z-30 grid w-56 gap-3 p-4 text-sm font-bold text-[var(--muted)]"
+          className="panel absolute right-0 top-14 z-[60] grid w-64 gap-1 p-3 text-[15px] font-medium text-[var(--theme-color-2)]"
+          style={{ fontFamily: "var(--font-display)" }}
+          aria-label="Mobile"
         >
-          {links.map((link) => (
-            <Link key={link.href} href={link.href} onClick={() => setOpen(false)}>
-              {t(locale, link.key)}
+          {links.map((link) => {
+            const label =
+              "key" in link
+                ? t(locale, link.key)
+                : locale === "hi"
+                  ? link.hi
+                  : link.en;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded-[8px] px-3 py-2.5 hover:bg-[var(--theme-color-3)]"
+                onClick={() => setOpen(false)}
+              >
+                {label}
+              </Link>
+            );
+          })}
+          <div className="mt-1 border-t border-[var(--warm-border)] pt-2">
+            <Link
+              href="/get-help"
+              className="btn btn-primary btn-arrow w-full !m-0"
+              onClick={() => setOpen(false)}
+            >
+              {locale === "hi" ? "मदद लें" : "Get Help"}
             </Link>
-          ))}
-          <Link href="/start" className="btn btn-primary" onClick={() => setOpen(false)}>
-            {t(locale, "nav.start")}
-          </Link>
+          </div>
         </nav>
       )}
     </div>

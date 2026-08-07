@@ -1,0 +1,17 @@
+<svg viewBox="0 0 1559 652" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+  <!-- Exact thorn.org line-1 path + gradient (stroke-width 110) -->
+  <path
+    d="M5.50195 56.253C54.1239 51.7749 180.925 76.9822 299.154 213.636C446.94 384.453 658.062 363.341 859.588 384.453C1061.11 405.565 1385.48 497.692 1523.66 609.011"
+    stroke="url(#thorn-line1-grad)"
+    stroke-width="110"
+    stroke-linecap="round"
+  />
+  <defs>
+    <linearGradient id="thorn-line1-grad" x1="1260.28" y1="50.3777" x2="107.782" y2="50.3777" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B9A5EF"/>
+      <stop offset="0.31228" stop-color="#F87B5E"/>
+      <stop offset="0.650047" stop-color="#F9D6A5"/>
+      <stop offset="1" stop-color="#D7EAE0"/>
+    </linearGradient>
+  </defs>
+</svg>

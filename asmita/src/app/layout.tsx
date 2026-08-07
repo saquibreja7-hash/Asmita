@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { Geist_Mono, Instrument_Serif, Inter } from "next/font/google";
+import { Geist_Mono, Red_Hat_Display, Rubik } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "@fontsource/noto-sans-devanagari/400.css";
 import "@fontsource/noto-sans-devanagari/700.css";
@@ -12,23 +12,24 @@ const siteTitle = "Asmita - Dignity restoration support";
 const siteDescription =
   "Free, confidential support for Indian women reporting non-consensual intimate content.";
 
-const inter = Inter({
-  variable: "--font-inter",
+/* Thorn.org fonts: Rubik (body) + Red Hat Display (headings / UI) */
+const rubik = Rubik({
+  variable: "--font-rubik",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
+});
+
+const redHatDisplay = Red_Hat_Display({
+  variable: "--font-redhat",
+  subsets: ["latin"],
+  weight: ["300", "500", "600", "700"],
   display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-  display: "swap",
-});
-
-const instrumentSerif = Instrument_Serif({
-  variable: "--font-serif",
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
   display: "swap",
 });
 
@@ -82,7 +83,7 @@ export default async function RootLayout({
   return (
     <html
       lang={lang}
-      className={`${inter.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${rubik.variable} ${redHatDisplay.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         {children}
