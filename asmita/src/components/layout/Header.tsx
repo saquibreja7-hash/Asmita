@@ -9,7 +9,7 @@ type NavLink =
 
 const navLinks: NavLink[] = [
   { href: "/issue", kind: "static", en: "Issue", hi: "समस्या" },
-  { href: "/how-it-works", kind: "static", en: "Solutions", hi: "समाधान" },
+  { href: "/what-we-do", kind: "static", en: "What we do", hi: "हम क्या करते हैं" },
   { href: "/check-image", kind: "i18n", key: "nav.checkImage" },
   { href: "/resources", kind: "i18n", key: "nav.resources" },
   { href: "/faq", kind: "i18n", key: "nav.faq" },
