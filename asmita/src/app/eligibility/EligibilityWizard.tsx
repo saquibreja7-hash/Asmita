@@ -64,7 +64,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
         </div>
 
         <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 text-sm leading-[1.7] text-[var(--muted)]">
-          <span className="font-semibold text-[var(--foreground)]">{t(locale, "eligibility.limits.bold")}</span>{" "}
+          <span className="font-medium text-[var(--foreground)]">{t(locale, "eligibility.limits.bold")}</span>{" "}
           {t(locale, "eligibility.limits.rest")}
         </div>
 
@@ -212,7 +212,7 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
           <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
             <div className="flex items-center gap-2">
               <div
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold transition-colors ${
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium transition-colors ${
                   i < current
                     ? "bg-[var(--teal)] text-white"
                     : i === current
@@ -228,7 +228,7 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
                   i + 1
                 )}
               </div>
-              <span className={`hidden text-[11px] sm:block ${i === current ? "font-semibold text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
+              <span className={`hidden text-[11px] sm:block ${i === current ? "font-medium text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
                 {label}
               </span>
             </div>
@@ -261,7 +261,7 @@ function WizardShell({
     <div>
       <ProgressBar step={step} locale={locale} />
       <div className="mt-8 flex items-start justify-between gap-4">
-        <h2 className="text-[26px] font-semibold leading-[1.2] tracking-tight md:text-[32px]">
+        <h2 className="text-[26px] font-medium leading-[1.2] tracking-tight md:text-[32px]">
           {title}
         </h2>
         {showBack && (
@@ -306,7 +306,7 @@ function ChoiceOption({
         className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
       />
       <span>
-        <span className="block text-[15px] font-semibold leading-[1.4] text-[var(--foreground)] md:text-[17px]">
+        <span className="block text-[15px] font-medium leading-[1.4] text-[var(--foreground)] md:text-[17px]">
           {label}
         </span>
         <span className="mt-1 block text-sm leading-[1.6] text-[var(--muted)]">
@@ -326,7 +326,7 @@ function InfoBox({
 }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
-      <p className="text-[14px] font-semibold leading-[1.3] text-[var(--foreground)]">
+      <p className="text-[14px] font-medium leading-[1.3] text-[var(--foreground)]">
         {title}
       </p>
       <div className="text-[var(--muted)]">{children}</div>
@@ -349,7 +349,7 @@ function ResourceLink({
 }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
-      <p className="text-[15px] font-semibold leading-[1.3] text-[var(--foreground)]">
+      <p className="text-[15px] font-medium leading-[1.3] text-[var(--foreground)]">
         {name}
       </p>
       <a

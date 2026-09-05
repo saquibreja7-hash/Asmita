@@ -39,13 +39,13 @@ export default async function DeleteAccountPage() {
             </h2>
             <ul className="muted mx-auto mt-8 max-w-md space-y-3 text-base leading-[1.75] md:text-lg">
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   {t(locale, "delete.what.item1.bold")}
                 </span>{" "}
                 {t(locale, "delete.what.item1.rest")}
               </li>
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   {t(locale, "delete.what.item2.bold")}
                 </span>{" "}
                 {t(locale, "delete.what.item2.rest")}

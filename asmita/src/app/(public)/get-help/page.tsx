@@ -115,8 +115,8 @@ export default function GetHelpPage() {
             </div>
 
             {/* Emergency strip — safety before instructions */}
-            <div className="mx-auto mt-10 max-w-3xl rounded-[var(--radius-lg)] border border-[var(--warm-border)] bg-white/70 p-6 backdrop-blur-sm">
-              <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[var(--heading)]">
+            <div className="mx-auto mt-10 max-w-3xl rounded-[var(--radius-lg)] border border-[var(--warm-border)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm">
+              <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--heading)]">
                 If you need urgent help
               </p>
               <ul className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -160,15 +160,15 @@ export default function GetHelpPage() {
                 <Link
                   key={s.title}
                   href={s.href}
-                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
                 >
-                  <h3 className="text-[17px] font-semibold leading-snug text-[var(--heading)]">
+                  <h3 className="text-[17px] font-medium leading-snug text-[var(--heading)]">
                     &ldquo;{s.title}&rdquo;
                   </h3>
                   <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
                     {s.action}
                   </p>
-                  <span className="mt-4 inline-block text-sm font-semibold text-[var(--coral-deep)]">
+                  <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
                     What to do{" "}
                     <span className="transition-transform group-hover:translate-x-0.5 inline-block" aria-hidden>
                       →
@@ -200,12 +200,12 @@ export default function GetHelpPage() {
               {steps.map((s) => (
                 <li
                   key={s.n}
-                  className="rounded-[var(--radius-lg)] bg-white/75 p-6 backdrop-blur-sm"
+                  className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm"
                 >
-                  <span className="font-display text-[var(--coral-deep)] text-2xl font-semibold">
+                  <span className="font-display text-[var(--color-off-black)] text-2xl font-medium">
                     {s.n}
                   </span>
-                  <h3 className="mt-2 text-[18px] font-semibold text-[var(--heading)]">
+                  <h3 className="mt-2 text-[18px] font-medium text-[var(--heading)]">
                     {s.title}
                   </h3>
                   <p className="mt-2 text-sm leading-[1.65] text-[var(--body)]">
@@ -228,11 +228,11 @@ export default function GetHelpPage() {
             </h2>
             <div className="mt-10 grid gap-8 md:grid-cols-3">
               {tools.map((tool) => (
-                <div key={tool.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-7 shadow-[var(--shadow-sm)]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--coral-deep)]">
+                <div key={tool.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)]">
+                  <p className="text-xs font-medium uppercase tracking-[-0.033em] text-[var(--color-off-black)]">
                     {tool.tag}
                   </p>
-                  <h3 className="mt-3 text-[19px] font-semibold text-[var(--heading)]">
+                  <h3 className="mt-3 text-[19px] font-medium text-[var(--heading)]">
                     {tool.title}
                   </h3>
                   <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--muted)]">
@@ -261,7 +261,7 @@ export default function GetHelpPage() {
               </h2>
               <div className="mt-6 grid gap-8 md:grid-cols-2">
                 <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[var(--success)]">
+                  <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--success)]">
                     What it can do
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--body)]">
@@ -271,7 +271,7 @@ export default function GetHelpPage() {
                   </ul>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[var(--warning)]">
+                  <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--warning)]">
                     What it cannot do
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--body)]">

@@ -12,7 +12,7 @@ const stepKeys: Record<number, MessageKey> = {
 export function FlowProgress({ step, locale }: { step: 1 | 2 | 3 | 4; locale: Locale }) {
   return (
     <div className="mb-8">
-      <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--teal)]">
+      <p className="font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--teal)]">
         {t(locale, "flow.stepLabel")} {step}/{TOTAL} · {t(locale, stepKeys[step])}
       </p>
       <div className="mt-3 flex gap-1.5" aria-hidden>

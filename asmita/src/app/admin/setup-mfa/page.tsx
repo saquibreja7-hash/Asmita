@@ -50,10 +50,10 @@ export default async function SetupMfaPage() {
         <section className="container pb-24 md:pb-32">
           <div className="mx-auto max-w-sm">
             <div
-              className="rounded-[14px] border border-[var(--hairline)] bg-white p-6"
+              className="rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)] p-6"
               dangerouslySetInnerHTML={{ __html: svgString }}
             />
-            <div className="mt-6 rounded-[14px] border border-[var(--hairline)] bg-white p-5">
+            <div className="mt-6 rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)] p-5">
               <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
                 Manual entry key
               </p>

@@ -38,7 +38,7 @@ function CheckItem({ heading, detail }: { heading: string; detail: string }) {
         </svg>
       </span>
       <div>
-        <p className="text-sm font-semibold text-[var(--foreground)]">{heading}</p>
+        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
       </div>
     </div>
@@ -269,7 +269,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
                 style={{ boxShadow: "var(--shadow-soft)" }}
               >
                 <div>
-                  <p className="text-sm font-semibold text-[var(--foreground)]">{platform.name}</p>
+                  <p className="text-sm font-medium text-[var(--foreground)]">{platform.name}</p>
                   <p className="muted mt-0.5 text-xs">{t(locale, "review.formOnly.openForm")} {platform.name} →</p>
                 </div>
                 <svg className="ml-4 shrink-0 text-[var(--teal)]" width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -321,7 +321,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
               className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
               style={{ boxShadow: "var(--shadow-soft)" }}
             >
-              <p className="text-sm font-semibold text-[var(--foreground)]">
+              <p className="text-sm font-medium text-[var(--foreground)]">
                 {t(locale, "review.links.label")} ({draft.urls.length})
               </p>
               <ul className="mt-3 space-y-1.5">
@@ -353,7 +353,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
                     <path d="M8 10.5h5M10.5 8v5" stroke="var(--teal)" strokeWidth="1.2" strokeLinecap="round"/>
                   </svg>
                 </span>
-                <p className="text-sm font-semibold text-[var(--foreground)]">
+                <p className="text-sm font-medium text-[var(--foreground)]">
                   {t(locale, "review.fingerprints.label")}
                   <span className="ml-1.5 inline-flex items-center rounded-full bg-[var(--teal-soft)] px-2 py-0.5 font-mono text-[11px] text-[var(--teal)]">{draft.hashes.length}</span>
                 </p>
@@ -390,7 +390,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
           )}
 
           {error && (
-            <p className="text-sm font-semibold text-[var(--rose)]">{error}</p>
+            <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
           )}
 
           <div className="flex flex-wrap items-center gap-3">
@@ -466,10 +466,10 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
           className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
           style={{ boxShadow: "var(--shadow-soft)" }}
         >
-          <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "review.sign.details.title")}</p>
+          <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "review.sign.details.title")}</p>
 
           <div>
-            <label htmlFor="rs-name" className="block text-sm font-semibold text-[var(--foreground)]">
+            <label htmlFor="rs-name" className="block text-sm font-medium text-[var(--foreground)]">
               {t(locale, "review.sign.name.label")}
             </label>
             <p className="muted mt-1 text-sm">{t(locale, "review.sign.name.sub")}</p>
@@ -486,7 +486,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
           </div>
 
           <div>
-            <label htmlFor="rs-contact" className="block text-sm font-semibold text-[var(--foreground)]">
+            <label htmlFor="rs-contact" className="block text-sm font-medium text-[var(--foreground)]">
               {t(locale, "review.sign.contact.label")}
             </label>
             <p className="muted mt-1 text-sm">{t(locale, "review.sign.contact.sub")}</p>
@@ -507,7 +507,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
           className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
           style={{ boxShadow: "var(--shadow-soft)" }}
         >
-          <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "review.sign.sig.title")}</p>
+          <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "review.sign.sig.title")}</p>
           <p className="muted text-sm leading-[1.6]">
             {t(locale, "review.sign.sig.sub")}
           </p>
@@ -538,7 +538,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         </label>
 
         {error && (
-          <p className="text-sm font-semibold text-[var(--rose)]">{error}</p>
+          <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
         )}
 
         <div className="flex flex-wrap items-center gap-3">

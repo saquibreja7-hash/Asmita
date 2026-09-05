@@ -40,7 +40,7 @@ export default function IssuePage() {
               <p className="max-w-2xl text-lg leading-[1.6] text-[var(--body)]">
                 Pick the one closest to your situation, or read them all.
               </p>
-              <Link href="/glossary" className="text-link text-sm font-semibold">
+              <Link href="/glossary" className="text-link text-sm font-medium">
                 See the glossary of terms →
               </Link>
             </div>
@@ -50,15 +50,15 @@ export default function IssuePage() {
                 <Link
                   key={topic.slug}
                   href={`/issue/${topic.slug}`}
-                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
                 >
-                  <h3 className="text-[18px] font-semibold leading-snug text-[var(--heading)]">
+                  <h3 className="text-[18px] font-medium leading-snug text-[var(--heading)]">
                     {topic.term}
                   </h3>
                   <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
                     {topic.short}
                   </p>
-                  <span className="mt-4 inline-block text-sm font-semibold text-[var(--coral-deep)]">
+                  <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
                     Learn more{" "}
                     <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
                       →

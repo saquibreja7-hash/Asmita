@@ -17,7 +17,7 @@ export default function GuidesPage() {
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-3xl">
               <p className="text-sm">
-                <Link href="/resources" className="text-link font-semibold">
+                <Link href="/resources" className="text-link font-medium">
                   Resources
                 </Link>
               </p>
@@ -39,7 +39,7 @@ export default function GuidesPage() {
                 <article
                   key={guide.slug}
                   id={guide.slug}
-                  className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-7 shadow-[var(--shadow-sm)] md:p-9"
+                  className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)] md:p-9"
                 >
                   <h2 className="font-display text-[clamp(1.35rem,3vw,1.9rem)] font-medium leading-[1.16]">
                     {guide.title}
@@ -50,7 +50,7 @@ export default function GuidesPage() {
                   <ol className="mt-6 space-y-3">
                     {guide.steps.map((step, i) => (
                       <li key={step} className="flex gap-3 text-[15px] leading-[1.6] text-[var(--body)]">
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)] text-[13px] font-semibold text-[var(--heading)]">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)] text-[13px] font-medium text-[var(--heading)]">
                           {i + 1}
                         </span>
                         <span className="pt-0.5">{step}</span>

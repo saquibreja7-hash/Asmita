@@ -89,7 +89,7 @@ export default async function ConfirmationPage({
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-semibold text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>
@@ -152,7 +152,7 @@ export default async function ConfirmationPage({
                     [t(locale, "confirm.next.t3.time"), t(locale, "confirm.next.t3.detail")],
                   ].map(([time, detail]) => (
                     <div key={time as string} className="flex items-start gap-4">
-                      <span className="font-mono mt-0.5 shrink-0 text-[13px] font-semibold text-[var(--teal-dark)] w-16">
+                      <span className="font-mono mt-0.5 shrink-0 text-[13px] font-medium text-[var(--teal-dark)] w-16">
                         {time}
                       </span>
                       <p className="muted text-sm leading-[1.65]">{detail}</p>

@@ -59,7 +59,7 @@ export default function ContactPage() {
           <div className="mx-auto max-w-3xl">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-5" style={{ boxShadow: "var(--shadow-soft)" }}>
               <p className="text-base leading-[1.75] text-[var(--foreground)]">
-                <span className="font-semibold">Please do not email intimate images or videos.</span>{" "}
+                <span className="font-medium">Please do not email intimate images or videos.</span>{" "}
                 <span className="text-[var(--muted)]">Asmita only ever needs links as text, never the content itself.</span>
               </p>
             </div>
@@ -78,7 +78,7 @@ export default function ContactPage() {
               {channels.map((c) => (
                 <div key={c.email} className="flex flex-col gap-3 py-8 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-12">
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-[var(--foreground)] text-base md:text-[17px]">{c.title}</p>
+                    <p className="font-medium text-[var(--foreground)] text-base md:text-[17px]">{c.title}</p>
                     <p className="muted mt-2 text-sm leading-[1.75] max-w-md">{c.body}</p>
                   </div>
                   <a
@@ -112,7 +112,7 @@ export default function ContactPage() {
                   className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"
                   style={{ boxShadow: "var(--shadow-soft)" }}
                 >
-                  <p className="font-semibold text-[var(--foreground)] text-sm">{row.label}</p>
+                  <p className="font-medium text-[var(--foreground)] text-sm">{row.label}</p>
                   <p className="mt-3 text-[22px] font-normal leading-[1.2] tracking-tight text-[var(--teal-dark)]">{row.time}</p>
                   <p className="muted mt-3 text-sm leading-[1.7]">{row.detail}</p>
                 </div>

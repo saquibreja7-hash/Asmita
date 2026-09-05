@@ -114,17 +114,17 @@ export default async function PortalPage({
         </div>
 
         {error === "invalid" && (
-          <p className="text-sm font-semibold text-[var(--rose)]">
+          <p className="text-sm font-medium text-[var(--rose)]">
             Incorrect access code. Please check the notice email and try again.
           </p>
         )}
         {error === "used" && (
-          <p className="text-sm font-semibold text-[var(--rose)]">
+          <p className="text-sm font-medium text-[var(--rose)]">
             This link has already been accessed and is no longer active.
           </p>
         )}
         {error === "rate_limited" && (
-          <p className="text-sm font-semibold text-[var(--rose)]">
+          <p className="text-sm font-medium text-[var(--rose)]">
             Too many attempts. Please wait 15 minutes before trying again.
           </p>
         )}

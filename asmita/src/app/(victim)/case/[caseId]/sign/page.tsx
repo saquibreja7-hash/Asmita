@@ -86,7 +86,7 @@ export default async function SignNoticePage({
 
                 <p className="muted mt-5 text-sm leading-[1.75]">
                   {t(locale, "sign.aside.sub.prefix")}{" "}
-                  <span className="font-semibold text-[var(--foreground)]">{url.platform.name}</span>{" "}
+                  <span className="font-medium text-[var(--foreground)]">{url.platform.name}</span>{" "}
                   {t(locale, "sign.aside.sub.suffix")}
                 </p>
 
@@ -106,7 +106,7 @@ export default async function SignNoticePage({
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-semibold text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>
@@ -122,7 +122,7 @@ export default async function SignNoticePage({
               </h1>
               <p className="muted mt-2 text-sm leading-[1.75]">
                 {t(locale, "sign.sub.prefix")}{" "}
-                <span className="font-semibold text-[var(--foreground)]">{url.platform.name}</span>
+                <span className="font-medium text-[var(--foreground)]">{url.platform.name}</span>
                 {t(locale, "sign.sub.suffix")}
               </p>
               <div className="mt-8">

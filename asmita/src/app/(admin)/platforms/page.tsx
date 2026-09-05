@@ -37,7 +37,7 @@ export default async function PlatformsPage() {
       <h2 className="font-display mt-12 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[28px]">
         Verified contacts
       </h2>
-      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
         <table className="w-full min-w-[980px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--hairline)]">
@@ -58,7 +58,7 @@ export default async function PlatformsPage() {
                 className="border-t border-[var(--hairline)] align-top"
                 key={platform.id}
               >
-                <td className="p-4 font-semibold">
+                <td className="p-4 font-medium">
                   {platform.name}
                   <div className="mt-3">
                     <PlatformEditForm
@@ -117,7 +117,7 @@ export default async function PlatformsPage() {
       <h2 className="font-display mt-14 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[28px]">
         Grievance Officer change history
       </h2>
-      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--hairline)]">
@@ -136,7 +136,7 @@ export default async function PlatformsPage() {
                 className="border-t border-[var(--hairline)] align-top"
                 key={row.id}
               >
-                <td className="p-4 font-semibold">{row.platformName}</td>
+                <td className="p-4 font-medium">{row.platformName}</td>
                 <td className="font-mono p-4 text-xs">{row.changedBy}</td>
                 <td className="p-4">{row.field}</td>
                 <td className="font-mono p-4 text-xs text-[var(--muted)]">

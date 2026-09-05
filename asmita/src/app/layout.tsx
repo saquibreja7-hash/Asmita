@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { Geist_Mono, Red_Hat_Display, Rubik } from "next/font/google";
+import { IBM_Plex_Mono, Newsreader } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "@fontsource/noto-sans-devanagari/400.css";
 import "@fontsource/noto-sans-devanagari/700.css";
@@ -12,24 +12,23 @@ const siteTitle = "Asmita - Dignity restoration support";
 const siteDescription =
   "Free, confidential support for Indian women reporting non-consensual intimate content.";
 
-/* Thorn.org fonts: Rubik (body) + Red Hat Display (headings / UI) */
-const rubik = Rubik({
-  variable: "--font-rubik",
+/*
+ * Editorial system (see DESIGN.md): serif for headings at weight 400 only,
+ * monospace for every body and UI string.
+ * Newsreader stands in for Untitled Serif; IBM Plex Mono for ABC Diatype Mono.
+ */
+const serif = Newsreader({
+  variable: "--font-serif",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
-const redHatDisplay = Red_Hat_Display({
-  variable: "--font-redhat",
+const mono = IBM_Plex_Mono({
+  variable: "--font-mono-ui",
   subsets: ["latin"],
-  weight: ["300", "500", "600", "700"],
-  display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "500"],
   display: "swap",
 });
 
@@ -83,7 +82,7 @@ export default async function RootLayout({
   return (
     <html
       lang={lang}
-      className={`${rubik.variable} ${redHatDisplay.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${serif.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         {children}

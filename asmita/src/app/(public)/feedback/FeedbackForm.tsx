@@ -105,7 +105,7 @@ export function FeedbackForm() {
 
       {error && (
         <p
-          className="text-center text-sm font-semibold text-[var(--rose)]"
+          className="text-center text-sm font-medium text-[var(--rose)]"
           role="alert"
           aria-live="assertive"
         >

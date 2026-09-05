@@ -55,15 +55,15 @@ export default function ResourcesPage() {
                 <Link
                   key={s.title}
                   href={s.href}
-                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
                 >
-                  <h2 className="text-[19px] font-semibold text-[var(--heading)]">
+                  <h2 className="text-[19px] font-medium text-[var(--heading)]">
                     {s.title}
                   </h2>
                   <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
                     {s.body}
                   </p>
-                  <span className="mt-5 inline-block text-sm font-semibold text-[var(--coral-deep)]">
+                  <span className="mt-5 inline-block text-sm font-medium text-[var(--color-off-black)]">
                     {s.cta}{" "}
                     <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
                       →

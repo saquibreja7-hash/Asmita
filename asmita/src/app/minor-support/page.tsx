@@ -139,10 +139,10 @@ export default async function MinorSupportPage() {
                       style={{ boxShadow: "var(--shadow-soft)" }}
                     >
                       <div>
-                        <p className="font-semibold text-[var(--foreground)]">{item.name}</p>
+                        <p className="font-medium text-[var(--foreground)]">{item.name}</p>
                         <p className="muted mt-1 text-sm leading-[1.65]">{item.description}</p>
                       </div>
-                      <span className="font-mono shrink-0 text-[15px] font-semibold text-[var(--teal-dark)] md:text-[18px]">
+                      <span className="font-mono shrink-0 text-[15px] font-medium text-[var(--teal-dark)] md:text-[18px]">
                         {item.contact} {item.external ? "↗" : "→"}
                       </span>
                     </a>

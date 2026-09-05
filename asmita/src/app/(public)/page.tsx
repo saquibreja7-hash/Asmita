@@ -2,104 +2,82 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 
 /*
- * Home layout. Visual rhythm comes from soft per-section gradient washes
- * (see .hero / .transform-section / .zone-sunset in globals.css), not ribbons.
+ * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
+ * monospace for every functional string, pill buttons, hairline cards, one blue action.
  */
 
 const audiences = [
   { title: "Survivors", href: "/who-we-help/survivors" },
-  { title: "People helping", href: "/who-we-help/helping-someone" },
-  { title: "Parents & families", href: "/who-we-help/parents" },
+  { title: "People helping someone", href: "/who-we-help/helping-someone" },
+  { title: "Parents and families", href: "/who-we-help/parents" },
   { title: "Young people", href: "/who-we-help/young-people" },
 ] as const;
 
-const proofFacts = [
-  {
-    label: "Privacy by architecture.",
-    value: "On-device",
-    detail:
-      "fingerprints computed on your phone — the image never reaches our servers",
-  },
-  {
-    label: "Legal grounding.",
-    value: "24 hours",
-    detail:
-      "mandatory platform response window under the IT Rules, made usable",
-  },
-  {
-    label: "What never happens.",
-    value: "No media",
-    detail:
-      "we never fetch, preview, store, or view intimate content at any link you share",
-  },
+const pipeline = [
+  { icon: "¶", label: "Links as text" },
+  { icon: "§", label: "Legal notice" },
+  { icon: "✎", label: "You sign" },
+  { icon: "→", label: "Platform" },
 ] as const;
 
-const pillars = [
-  "We generate legally-grounded takedown notices",
-  "We block re-uploads without seeing the image",
-  "We help you understand AI-made harm",
-  "We stay honest about what a notice can and cannot do",
-] as const;
-
-const principles = [
+const features = [
   {
-    quote:
-      "Your image never leaves your device. Fingerprints are computed on your phone — only a 64-character code reaches our servers.",
-    attribution: "Privacy architecture",
+    icon: "§",
+    title: "Legally grounded takedown notices",
+    body: "A removal notice that cites the IT Rules and the MeitY procedure, routed to the platform's grievance channel. You read and sign it before anything is sent.",
+    href: "/what-we-do",
+    cta: "How notices work",
   },
   {
-    quote:
-      "Platforms must act on certain takedown notices within 24 hours under Indian law. We turn that right into one calm, reviewable flow.",
-    attribution: "IT Rules & MeitY SOP",
+    icon: "#",
+    title: "Re-upload blocking without the image",
+    body: "A fingerprint is computed on your own phone. Only a 64-character code reaches us, and matching copies can be blocked on partner platforms.",
+    href: "/get-help",
+    cta: "Fingerprint an image",
   },
   {
-    quote:
-      "We do not promise to erase content from the whole internet. We say exactly what a notice can and cannot do — that honesty is the product.",
-    attribution: "Honest limits",
-  },
-] as const;
-
-const knowledgeCards = [
-  {
-    tag: "Guide",
-    title: "How notices actually reach platforms",
-    body: "Grievance officers, guided form handoffs, and what happens after you sign.",
-    href: "/how-it-works",
-    cta: "How it works",
-    img: "/images/knowledge-1.jpg",
-  },
-  {
-    tag: "Tool",
-    title: "Check whether an image may be AI-made",
-    body: "A private check for signals that an image was generated or edited by AI.",
+    icon: "?",
+    title: "AI and deepfake check",
+    body: "A private check for signals that an image was generated or edited by AI. A fake image is still abuse, and you can still report it.",
     href: "/check-image",
     cta: "Check an image",
-    img: "/images/knowledge-2.jpg",
-  },
-  {
-    tag: "Resources",
-    title: "Helplines, rights, and practical next steps",
-    body: "Secure your accounts, collect evidence safely, and reach verified support.",
-    href: "/resources",
-    cta: "Browse resources",
-    img: "/images/knowledge-3.jpg",
   },
 ] as const;
 
-const darkModules = [
+const commitments = [
   {
-    tag: "Start",
-    title: "Begin a confidential report",
-    body: "Paste links as text, review notices, and sign when you are ready. Your image never leaves your device.",
-    href: "/start",
-    cta: "Get Help",
+    value: "On-device",
+    label: "Privacy by architecture",
+    detail: "Fingerprints are computed on your phone. The image never reaches our servers.",
   },
   {
-    tag: "Privacy",
-    title: "How we keep images off our servers",
-    body: "URLs are text tokens only. Fingerprints are computed on-device. Read the privacy promise.",
-    href: "/privacy",
-    cta: "Read privacy",
+    value: "24 hours",
+    label: "Legal grounding",
+    detail: "The mandatory platform response window under the IT Rules, made usable.",
+  },
+  {
+    value: "No media",
+    label: "What never happens",
+    detail: "We never fetch, preview, store, or view intimate content at any link you share.",
+  },
+] as const;
+
+const faqs = [
+  {
+    q: "Do I have to upload the image?",
+    a: "No. You paste links as text. If you choose to block re-uploads, a fingerprint is computed on your own device and only a short code is sent to us. We never see the picture.",
+  },
+  {
+    q: "Will the content disappear from the whole internet?",
+    a: "No one can honestly promise that. A notice obliges the named platform to act within the legal window. Fingerprints help stop the same image coming back on partner platforms. We say exactly what each step can and cannot do.",
+  },
+  {
+    q: "Is this a government service?",
+    a: "No. Asmita is an independent platform built by JAMSAQ Studio. We route you to official channels where they help, and stay honest about where they do not.",
+  },
+  {
+    q: "What if I am under 18, or the image is from when I was?",
+    a: "There is a separate, safer path. Cases involving minors are routed under POCSO and never enter the adult flow. Start from the minor support page.",
   },
 ] as const;
 
@@ -107,298 +85,231 @@ export default function HomePage() {
   return (
     <AppShell>
       <div className="page-canvas">
-        {/*
-          Peach zone = Thorn .has-peach-white-gradient-background
-          Shape placed AFTER media (exact HTML order from saved file)
-        */}
+        {/* HERO: pure typographic, wash behind */}
         <section className="hero" aria-label="Introduction">
-          <div className="hero-content">
-            {/* 1. Heading + CTAs */}
-            <div className="container section-pad text-center !pb-0">
-              <h1 className="font-display mx-auto max-w-4xl text-[clamp(2.5rem,7vw,5.6rem)] font-medium leading-[1.05] text-[var(--heading)]">
-                Will you help stop image-based abuse?
-              </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--theme-color-2)]">
-                Free, confidential tools for anyone in India facing
-                non-consensual or AI-made intimate images.
-              </p>
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/get-help">
-                  Get Help
-                </Link>
-                <Link
-                  className="btn btn-midnight btn-arrow !m-0"
-                  href="/how-it-works"
-                >
-                  Explore how it works
-                </Link>
-              </div>
-              <p className="mt-5">
-                <Link
-                  href="/minor-support"
-                  className="text-sm font-medium text-[var(--muted)] underline decoration-[var(--warm-border)] underline-offset-4 hover:opacity-60"
-                >
-                  Under 18, or was the image taken when you were? Find the right
-                  help →
-                </Link>
-              </p>
-            </div>
-
-            {/* 2. Spacer (Thorn #hero-video height:99px) */}
-            <div className="hero-spacer" aria-hidden="true" />
-
-            {/* 3. Media (Thorn video block) */}
-            <div className="container">
-              <div className="hero-media-wrap">
-                <div className="hero-media">
-                  <img
-                    src="/images/hero.jpg"
-                    alt=""
-                    width={1199}
-                    height={674}
-                    fetchPriority="high"
-                  />
-                  <span className="hero-media-overlay" aria-hidden />
-                  <p className="hero-media-caption">
-                    At Asmita, we&rsquo;re building tools and knowledge so
-                    survivors can act.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Issue + stats — sits in the warm hero wash */}
-          <div className="hero-content">
-            <div
-              id="issue"
-              className="container section-pad"
-              aria-labelledby="issue-heading"
-            >
-              <div className="grid items-start gap-12 lg:grid-cols-[1.35fr_1fr] lg:gap-16">
-                <div>
-                  <h2
-                    id="issue-heading"
-                    className="font-display text-[clamp(1.85rem,4vw,3.5rem)] font-medium leading-[1.12]"
-                  >
-                    The internet makes it easier to harm people
-                  </h2>
-                  <p className="mt-6 text-lg leading-[1.6] text-[var(--body)]">
-                    Non-consensual intimate imagery (NCII), deepfakes, morphing,
-                    and sextortion spread fast across platforms and WhatsApp
-                    groups.{" "}
-                    <Link href="/issue" className="text-link">
-                      Learn more about the issue
-                    </Link>
-                    .
-                  </p>
-                  <p className="mt-4 text-lg leading-[1.6] text-[var(--body)]">
-                    We&rsquo;re building a digital response so people can remove
-                    content, reduce re-uploads, and reach the right support.
-                  </p>
-                  <div className="mt-8">
-                    <Link
-                      className="btn btn-midnight btn-arrow !m-0"
-                      href="/how-it-works"
-                    >
-                      Explore how it works
-                    </Link>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="font-size-small font-semibold uppercase tracking-[0.04em] text-[var(--theme-color-2)]">
-                    What we commit to, every day:
-                  </p>
-                  {proofFacts.map((fact, i) => (
-                    <div key={fact.label} className="stat-block">
-                      {i > 0 && <hr className="hr-thorn" />}
-                      <div className={i === 0 ? "mt-5" : ""}>
-                        <p className="stat-label">{fact.label}</p>
-                        <span className="statistic mt-1">{fact.value}</span>
-                        <p className="stat-detail">{fact.detail}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Mint transform — line-3-wide via CSS background-image */}
-        <section
-          className="transform-section"
-          aria-labelledby="transform-heading"
-        >
-          <div className="transform-content">
-            <div className="collage-row">
-              <img src="/images/collage-1.jpg" alt="" width={300} height={400} />
-              <img src="/images/collage-2.jpg" alt="" width={600} height={450} />
-              <img src="/images/collage-3.jpg" alt="" width={500} height={375} />
-            </div>
-            <div className="container">
-              <div className="plate mx-auto max-w-3xl px-6 py-12 text-center md:px-14 md:py-16">
-                <h2
-                  id="transform-heading"
-                  className="font-display text-[clamp(1.75rem,3.8vw,2.85rem)] font-medium leading-[1.15]"
-                >
-                  Let&rsquo;s transform how India responds to image-based abuse
-                </h2>
-                <p className="font-size-large mx-auto mt-5 max-w-xl text-[var(--body)]">
-                  We don&rsquo;t have to scroll past while harm happens. Everyone
-                  has a role to play.{" "}
-                  <Link href="/how-it-works" className="text-link">
-                    Asmita&rsquo;s tools
-                  </Link>{" "}
-                  help you become an active partner in taking content down.
-                </p>
-                <p className="mt-8 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--heading)]">
-                  Explore paths for:
-                </p>
-                <div className="audience-pills mt-4">
-                  {audiences.map((a) => (
-                    <Link
-                      key={a.title}
-                      href={a.href}
-                      className="btn btn-secondary !m-0 !min-h-[44px] !px-5 !text-[15px]"
-                    >
-                      {a.title}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="zone-white section-pad" aria-labelledby="why-heading">
-          <div className="container">
-            <h2
-              id="why-heading"
-              className="font-display text-[clamp(1.85rem,4vw,3rem)] font-medium leading-[1.12]"
-            >
-              Why Asmita?
-            </h2>
-            <div className="mt-10 grid gap-10 md:grid-cols-3 md:gap-12">
-              {principles.map((p) => (
-                <div key={p.attribution} className="line-left">
-                  <p className="principle-quote">{p.quote}</p>
-                  <p className="principle-attr">{p.attribution}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section
-          className="zone-white section-pad !pt-2"
-          aria-labelledby="knowledge-heading"
-        >
-          <div className="container">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <h2
-                id="knowledge-heading"
-                className="font-display text-[clamp(1.85rem,4vw,3rem)] font-medium leading-[1.12]"
-              >
-                Guides, tools, and answers
-              </h2>
-              <Link href="/resources" className="text-link text-sm font-semibold">
-                View all resources →
+          <div
+            className="wash wash-coral-sky"
+            aria-hidden
+            style={{ width: "48vw", height: "48vw", maxWidth: 720, maxHeight: 720, top: "-18vw", left: "50%", transform: "translateX(-50%)" }}
+          />
+          <div className="hero-content container pt-20 pb-16 text-center md:pt-32 md:pb-24">
+            <span className="pill">
+              <span className="dot" />
+              Free and confidential, for India
+            </span>
+            <h1 className="mx-auto mt-8 max-w-5xl text-[clamp(40px,7vw,80px)]">
+              Take the image down.
+              <br />
+              Keep the image private.
+            </h1>
+            <p className="font-size-large mx-auto mt-6 max-w-2xl">
+              Legally grounded takedown notices and on-device fingerprint blocking for
+              anyone in India facing non-consensual or AI-made intimate images. Your
+              image never leaves your phone.
+            </p>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              <Link className="btn btn-primary btn-arrow" href="/get-help">
+                Get help
+              </Link>
+              <Link className="btn btn-secondary" href="/what-we-do">
+                How it works
               </Link>
             </div>
-            <div className="mt-10 grid gap-8 md:grid-cols-3">
-              {knowledgeCards.map((card) => (
-                <Link key={card.title} href={card.href} className="post-card">
-                  <div className="post-image">
-                    <img src={card.img} alt="" width={1000} height={700} />
+          </div>
+
+          {/* Pipeline diagram */}
+          <div className="hero-content container pb-20 md:pb-28">
+            <div className="pipeline" role="list" aria-label="How a report moves">
+              {pipeline.map((n, i) => (
+                <div key={n.label} className="contents" role="listitem">
+                  {i > 0 && <span className="pipeline-link" aria-hidden />}
+                  <span className={`node ${i === 1 ? "node-hub" : ""}`}>
+                    <span className="node-icon" aria-hidden>
+                      {n.icon}
+                    </span>
+                    {n.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="eyebrow mt-6 w-full justify-center text-center">
+              No image is uploaded at any step
+            </p>
+          </div>
+        </section>
+
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
+        {/* ISSUE + COMMITMENTS */}
+        <section id="issue" className="section-pad" aria-labelledby="issue-heading">
+          <div className="container grid items-start gap-12 lg:grid-cols-[1.2fr_1fr] lg:gap-24">
+            <div>
+              <span className="eyebrow">The issue</span>
+              <h2 id="issue-heading" className="mt-5 text-[clamp(32px,4vw,48px)]">
+                The internet makes it easier to harm people. The law gives you a way back.
+              </h2>
+              <p className="mt-6 max-w-xl text-[16px] leading-[1.5] text-[var(--color-graphite)] md:text-[18px]">
+                Non-consensual intimate imagery, deepfakes, morphing, and sextortion spread
+                fast across platforms and WhatsApp groups. Platforms must act on certain
+                takedown notices within 24 hours under Indian law. We turn that right into
+                one calm, reviewable flow.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link className="arrow-link" href="/issue">
+                  Learn about the issue
+                </Link>
+              </div>
+            </div>
+
+            <div>
+              <p className="eyebrow">What we commit to, every day</p>
+              {commitments.map((c, i) => (
+                <div key={c.label} className="stat-block">
+                  {i > 0 && <hr className="hr-thorn" />}
+                  <div className={i === 0 ? "mt-6" : ""}>
+                    <p className="stat-label">{c.label}</p>
+                    <span className="statistic mt-2">{c.value}</span>
+                    <p className="stat-detail">{c.detail}</p>
                   </div>
-                  <p className="post-tag">{card.tag}</p>
-                  <h3 className="post-title">{card.title}</h3>
-                  <p className="post-excerpt">{card.body}</p>
-                  <span className="post-link">{card.cta} →</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* FEATURES */}
+        <section className="section-pad !pt-0" aria-labelledby="features-heading">
+          <div className="container">
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div>
+                <span className="eyebrow">What we do</span>
+                <h2 id="features-heading" className="mt-5 text-[clamp(32px,4vw,48px)]">
+                  Tools that actually remove content
+                </h2>
+              </div>
+              <Link href="/what-we-do" className="arrow-link">
+                More on what we do
+              </Link>
+            </div>
+
+            <div className="mt-12 grid gap-4 md:grid-cols-3">
+              {features.map((f) => (
+                <Link key={f.title} href={f.href} className="card fade flex flex-col">
+                  <span className="card-icon" aria-hidden>
+                    {f.icon}
+                  </span>
+                  <h3>{f.title}</h3>
+                  <p className="mt-4 flex-1">{f.body}</p>
+                  <span className="arrow-link mt-8">{f.cta}</span>
+                </Link>
+              ))}
+            </div>
+
+            {/* Elevated periwinkle card */}
+            <div className="card card-elevated mt-4 grid gap-8 md:grid-cols-[1.1fr_1fr] md:items-center">
+              <div className="wash-art" aria-hidden />
+              <div className="relative z-[1]">
+                <span className="card-icon" aria-hidden>
+                  ◐
+                </span>
+                <h3 className="text-[clamp(24px,3vw,32px)]">
+                  Your image never leaves your device
+                </h3>
+                <p className="mt-4 max-w-md">
+                  Links are handled as text tokens only. Fingerprints are computed on your
+                  phone. The signed notice you review is exactly what gets sent. Read the
+                  full privacy promise before you begin.
+                </p>
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Link href="/privacy" className="btn btn-midnight">
+                    Read the privacy promise
+                  </Link>
+                </div>
+              </div>
+              <div className="relative z-[1] hidden md:block" aria-hidden />
+            </div>
+          </div>
+        </section>
+
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
+        {/* AUDIENCES */}
+        <section className="section-pad" aria-labelledby="audience-heading">
+          <div className="container text-center">
+            <span className="eyebrow">Who we help</span>
+            <h2 id="audience-heading" className="mx-auto mt-5 max-w-3xl text-[clamp(32px,4vw,48px)]">
+              Everyone has a role to play
+            </h2>
+            <p className="font-size-large mx-auto mt-6 max-w-xl">
+              We do not have to scroll past while harm happens. Find the path written for
+              your situation.
+            </p>
+            <div className="audience-pills mt-10">
+              {audiences.map((a) => (
+                <Link key={a.title} href={a.href} className="btn btn-secondary">
+                  {a.title}
                 </Link>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="zone-white section-pad !pt-2" aria-label="Key actions">
-          <div className="container grid gap-5 md:grid-cols-2">
-            {darkModules.map((m) => (
-              <div key={m.title} className="module-dark">
-                <p className="module-tag">{m.tag}</p>
-                <h3>{m.title}</h3>
-                <p>{m.body}</p>
-                <div className="mt-6">
-                  <Link
-                    href={m.href}
-                    className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]"
-                  >
-                    {m.cta}
-                  </Link>
-                </div>
-              </div>
-            ))}
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
+        {/* FAQ */}
+        <section className="section-pad" aria-labelledby="faq-heading">
+          <div className="container grid gap-12 lg:grid-cols-[1fr_2fr] lg:gap-24">
+            <div>
+              <span className="eyebrow">Questions</span>
+              <h2 id="faq-heading" className="mt-5 text-[clamp(32px,4vw,48px)]">
+                Honest answers first
+              </h2>
+              <p className="mt-6 text-[16px] leading-[1.5] text-[var(--color-graphite)]">
+                We say exactly what a notice can and cannot do. That honesty is the product.
+              </p>
+              <Link href="/faq" className="arrow-link mt-8">
+                Read the full FAQ
+              </Link>
+            </div>
+            <div className="border-t border-[var(--color-ash)]">
+              {faqs.map((f) => (
+                <details key={f.q} className="faq-item">
+                  <summary>{f.q}</summary>
+                  <div className="faq-answer">{f.a}</div>
+                </details>
+              ))}
+            </div>
           </div>
         </section>
 
-        <section
-          id="what-we-do"
-          className="zone-sunset"
-          aria-labelledby="pillars-heading"
-        >
-          <div className="zone-sunset-content">
-            <div className="container section-pad text-center">
-              <h2
-                id="pillars-heading"
-                className="font-display text-[clamp(1.85rem,4vw,3.25rem)] font-medium leading-[1.12]"
-              >
-                <span className="font-color-coral">
-                  One bold goal drives our work
-                </span>
-              </h2>
-              <p className="mx-auto mt-4 max-w-xl text-base leading-[1.6] text-[var(--body)] md:text-lg">
-                Help people in India facing non-consensual or AI-made intimate
-                images regain control. How?
+        {/* CLOSING */}
+        <section className="relative overflow-hidden section-pad" aria-label="Get help">
+          <div
+            className="wash wash-sky-mint"
+            aria-hidden
+            style={{ width: "40vw", height: "40vw", maxWidth: 600, maxHeight: 600, bottom: "-20vw", right: "-8vw" }}
+          />
+          <div className="container relative z-[1]">
+            <div className="pledge-block">
+              <p className="pledge-label">The Asmita promise</p>
+              <p className="pledge-quote">You do not have to deal with this alone.</p>
+              <p className="mt-6 text-[16px] leading-[1.5] text-[var(--color-graphite)]">
+                Start a confidential report, or read how it works first. In your language,
+                on your terms.
               </p>
-              <div className="pillar-list mt-10">
-                {pillars.map((title, i) => (
-                  <div key={title}>
-                    {i > 0 && <hr />}
-                    <h3>{title}</h3>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-8">
-                <Link
-                  className="btn btn-midnight btn-arrow !m-0"
-                  href="/how-it-works"
-                >
-                  More on what we do
+              <div className="mt-10 flex flex-wrap justify-center gap-3">
+                <Link className="btn btn-primary btn-arrow" href="/get-help">
+                  Get help
                 </Link>
-              </div>
-            </div>
-
-            <div className="container section-pad-sm text-center !pt-4">
-              <div className="pledge-block">
-                <p className="pledge-label">The Asmita promise</p>
-                <p className="pledge-quote">
-                  &ldquo;You do not have to deal with this alone.&rdquo;
-                </p>
-                <p className="mt-5 text-base leading-[1.65] text-[var(--body)]">
-                  Start a confidential report, or read how it works first. In
-                  your language, on your terms.
-                </p>
-                <div className="mt-8 flex flex-wrap justify-center gap-3">
-                  <Link className="btn btn-midnight btn-arrow !m-0" href="/start">
-                    Get Help
-                  </Link>
-                  <Link className="btn btn-secondary btn-arrow !m-0" href="/faq">
-                    Read the FAQ
-                  </Link>
-                </div>
+                <Link className="btn btn-secondary" href="/faq">
+                  Read the FAQ
+                </Link>
               </div>
             </div>
           </div>

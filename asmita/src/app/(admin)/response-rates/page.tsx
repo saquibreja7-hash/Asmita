@@ -18,7 +18,7 @@ export default function ResponseRatesPage() {
         </h1>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--hairline)]">
@@ -38,7 +38,7 @@ export default function ResponseRatesPage() {
                 className="border-t border-[var(--hairline)]"
                 key={row.platformId}
               >
-                <td className="p-4 font-semibold">{row.platformName}</td>
+                <td className="p-4 font-medium">{row.platformName}</td>
                 <td className="font-mono p-4 tabular-nums">{row.noticesSent}</td>
                 <td className="font-mono p-4 tabular-nums">{row.responded}</td>
                 <td className="font-mono p-4 tabular-nums">{row.removals}</td>
@@ -63,7 +63,7 @@ export default function ResponseRatesPage() {
       <h2 className="font-display mt-14 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[28px]">
         NGO vouching
       </h2>
-      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--hairline)]">
@@ -80,7 +80,7 @@ export default function ResponseRatesPage() {
                 className="border-t border-[var(--hairline)]"
                 key={`${row.partnerName}-${row.auditEventId}`}
               >
-                <td className="p-4 font-semibold">{row.partnerName}</td>
+                <td className="p-4 font-medium">{row.partnerName}</td>
                 <td className="font-mono p-4">{row.caseReference}</td>
                 <td className="font-mono p-4 text-xs text-[var(--muted)]">
                   {new Date(row.vouchedAt).toLocaleString("en-IN", {

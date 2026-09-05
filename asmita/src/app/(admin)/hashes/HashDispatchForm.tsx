@@ -81,7 +81,7 @@ export default function HashDispatchForm({
   }
 
   return (
-    <div className="rounded-[14px] border border-[var(--hairline)] bg-white p-6">
+    <div className="rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)] p-6">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="grid gap-1.5">
           <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">

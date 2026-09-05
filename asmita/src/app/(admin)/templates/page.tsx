@@ -18,7 +18,7 @@ export default function TemplatesPage() {
         </p>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--hairline)]">
@@ -37,7 +37,7 @@ export default function TemplatesPage() {
                 key={row.id}
               >
                 <td className="p-4">
-                  <p className="font-semibold">{row.id}</p>
+                  <p className="font-medium">{row.id}</p>
                   <p className="muted mt-2 text-xs leading-[1.55]">
                     {row.preview}
                   </p>

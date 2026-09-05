@@ -64,14 +64,14 @@ export default function TermsPage() {
             </h2>
             <ul className="muted mx-auto mt-8 max-w-md space-y-3 text-base leading-[1.75] md:text-lg">
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   You are an adult acting on your own behalf,
                 </span>{" "}
                 or you are a person vouching for an adult survivor with
                 their consent.
               </li>
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   Your declaration is truthful.
                 </span>{" "}
                 You have the right to ask for removal of the content at
@@ -79,7 +79,7 @@ export default function TermsPage() {
                 declaration carries legal consequences.
               </li>
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   Asmita is a tool, not a guarantee.
                 </span>{" "}
                 We do everything we can to get content removed quickly,

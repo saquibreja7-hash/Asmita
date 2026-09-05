@@ -69,7 +69,7 @@ export function DeleteAccountForm({ locale }: { locale: Locale }) {
       </div>
 
       {message && !done && (
-        <p className="text-center text-sm font-semibold text-[var(--rose)]">
+        <p className="text-center text-sm font-medium text-[var(--rose)]">
           {message}
         </p>
       )}

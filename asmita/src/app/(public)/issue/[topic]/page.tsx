@@ -38,7 +38,7 @@ export default async function IssueTopicPage({
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-3xl">
               <p className="text-sm">
-                <Link href="/issue" className="text-link font-semibold">
+                <Link href="/issue" className="text-link font-medium">
                   The issue
                 </Link>
               </p>
@@ -67,7 +67,7 @@ export default async function IssueTopicPage({
                       key={ex}
                       className="flex gap-3 text-[16px] leading-[1.6] text-[var(--body)]"
                     >
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--coral)]" aria-hidden />
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-off-black)]" aria-hidden />
                       {ex}
                     </li>
                   ))}
@@ -109,15 +109,15 @@ export default async function IssueTopicPage({
                 <Link
                   key={t.slug}
                   href={`/issue/${t.slug}`}
-                  className="group flex flex-col rounded-[var(--radius-lg)] bg-white/75 p-6 backdrop-blur-sm transition hover:bg-white"
+                  className="group flex flex-col rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm transition hover:bg-[var(--color-parchment)]"
                 >
-                  <h3 className="text-[16px] font-semibold leading-snug text-[var(--heading)]">
+                  <h3 className="text-[16px] font-medium leading-snug text-[var(--heading)]">
                     {t.term}
                   </h3>
                   <p className="mt-2 flex-1 text-sm leading-[1.55] text-[var(--muted)]">
                     {t.short}
                   </p>
-                  <span className="mt-3 inline-block text-sm font-semibold text-[var(--coral-deep)]">
+                  <span className="mt-3 inline-block text-sm font-medium text-[var(--color-off-black)]">
                     Learn more{" "}
                     <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
                       →

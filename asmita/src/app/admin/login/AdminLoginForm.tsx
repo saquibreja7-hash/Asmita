@@ -127,7 +127,7 @@ export function AdminLoginForm() {
       )}
 
       {error && (
-        <p className="text-center text-sm font-semibold text-[var(--rose)]">
+        <p className="text-center text-sm font-medium text-[var(--rose)]">
           {error}
         </p>
       )}

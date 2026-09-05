@@ -61,7 +61,7 @@ export default async function SubmitPage() {
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-semibold text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>

@@ -87,7 +87,7 @@ export default async function PrivacyPage() {
                     </svg>
                   </span>
                   <p className="text-base leading-[1.7] md:text-[17px]">
-                    <span className="font-semibold text-[var(--foreground)]">{bold}</span>{" "}
+                    <span className="font-medium text-[var(--foreground)]">{bold}</span>{" "}
                     <span className="text-[var(--muted)]">{detail}</span>
                   </p>
                 </li>
@@ -146,7 +146,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s03.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s03.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s03.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -158,7 +158,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s04.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s04.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s04.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -170,7 +170,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i2b","i3","i4"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s05.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s05.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s05.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -180,12 +180,12 @@ export default async function PrivacyPage() {
                 <PolicySection num="06" id="legal-basis" title={t(locale, "privacy.toc.06")}>
                   <p>
                     {t(locale, "privacy.s06.p1a")}{" "}
-                    <span className="font-semibold text-[var(--foreground)]">{t(locale, "privacy.s06.p1.bold")}</span>
+                    <span className="font-medium text-[var(--foreground)]">{t(locale, "privacy.s06.p1.bold")}</span>
                     {t(locale, "privacy.s06.p1b")}
                   </p>
                   <p>
                     {t(locale, "privacy.s06.p2a")}{" "}
-                    <span className="font-semibold text-[var(--foreground)]">{t(locale, "privacy.s06.p2.bold")}</span>{" "}
+                    <span className="font-medium text-[var(--foreground)]">{t(locale, "privacy.s06.p2.bold")}</span>{" "}
                     {t(locale, "privacy.s06.p2b")}
                   </p>
                 </PolicySection>
@@ -195,7 +195,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4","i5"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s07.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s07.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s07.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -207,7 +207,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s08.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s08.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s08.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -219,7 +219,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4","i5","i6"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s09.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s09.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s09.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -231,7 +231,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4","i5"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s10.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s10.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s10.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}

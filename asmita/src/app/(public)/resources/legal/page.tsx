@@ -17,7 +17,7 @@ export default function LegalRightsPage() {
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-3xl">
               <p className="text-sm">
-                <Link href="/resources" className="text-link font-semibold">
+                <Link href="/resources" className="text-link font-medium">
                   Resources
                 </Link>
               </p>

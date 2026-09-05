@@ -155,7 +155,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
             </svg>
           </span>
           <div>
-            <label htmlFor="urls" className="block text-sm font-semibold text-[var(--foreground)]">
+            <label htmlFor="urls" className="block text-sm font-medium text-[var(--foreground)]">
               {t(locale, "submit.urls.label")}
             </label>
             <p className="muted text-xs leading-[1.5]">
@@ -185,7 +185,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
           style={{ boxShadow: "var(--shadow-soft)" }}
         >
           <div>
-            <p className="text-sm font-semibold text-[var(--foreground)]">
+            <p className="text-sm font-medium text-[var(--foreground)]">
               {t(locale, "submit.hash.title")}{" "}
               <span className="font-normal text-[var(--muted)]">{t(locale, "submit.hash.optional")}</span>
             </p>
@@ -216,7 +216,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
               </svg>
             </span>
             <span>
-              <span className="block text-sm font-semibold text-[var(--foreground)]">{t(locale, "submit.hash.fileLabel")}</span>
+              <span className="block text-sm font-medium text-[var(--foreground)]">{t(locale, "submit.hash.fileLabel")}</span>
               <span className="muted mt-0.5 block text-xs">{t(locale, "submit.hash.fileHint")}</span>
             </span>
           </button>
@@ -263,7 +263,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
 
           {hashedFiles.length > 0 && parsedUrls.length === 0 && platforms.length > 0 && (
             <div>
-              <p className="block text-sm font-semibold text-[var(--foreground)]">
+              <p className="block text-sm font-medium text-[var(--foreground)]">
                 {t(locale, "submit.hash.platforms.title")}
               </p>
               <p className="muted mt-1 text-sm leading-[1.6]">
@@ -315,7 +315,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
       </label>
 
       {error && (
-        <p className="text-sm font-semibold text-[var(--rose)]">{error}</p>
+        <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">

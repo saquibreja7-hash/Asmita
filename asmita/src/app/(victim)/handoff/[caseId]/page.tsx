@@ -113,7 +113,7 @@ Please process this through your official content removal procedure.`;
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-semibold text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>
@@ -146,7 +146,7 @@ Please process this through your official content removal procedure.`;
               <div className="flex flex-col">
                 <label
                   htmlFor="handoff-text"
-                  className="block text-sm font-semibold text-[var(--foreground)]"
+                  className="block text-sm font-medium text-[var(--foreground)]"
                 >
                   {t(locale, "handoff.notice.label")}
                 </label>
@@ -164,7 +164,7 @@ Please process this through your official content removal procedure.`;
 
               {/* Platform form links */}
               <div>
-                <p className="text-sm font-semibold text-[var(--foreground)]">
+                <p className="text-sm font-medium text-[var(--foreground)]">
                   {t(locale, "handoff.form.label")}
                 </p>
                 {formLinks.length > 0 ? (
@@ -178,7 +178,7 @@ Please process this through your official content removal procedure.`;
                         className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-4 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
                         style={{ boxShadow: "var(--shadow-soft)" }}
                       >
-                        <span className="font-semibold text-[var(--foreground)]">{link.name}</span>
+                        <span className="font-medium text-[var(--foreground)]">{link.name}</span>
                         <span className="font-mono text-sm text-[var(--teal-dark)]">
                           {t(locale, "handoff.form.openForm")}
                         </span>

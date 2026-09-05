@@ -37,15 +37,15 @@ export default function WhoWeHelpPage() {
                 <Link
                   key={a.slug}
                   href={`/who-we-help/${a.slug}`}
-                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
                 >
-                  <h2 className="text-[19px] font-semibold leading-snug text-[var(--heading)]">
+                  <h2 className="text-[19px] font-medium leading-snug text-[var(--heading)]">
                     {a.term}
                   </h2>
                   <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
                     {a.cardLine}
                   </p>
-                  <span className="mt-4 inline-block text-sm font-semibold text-[var(--coral-deep)]">
+                  <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
                     Open{" "}
                     <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
                       →

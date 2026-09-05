@@ -112,7 +112,7 @@ function AnalyticsTable({
   labelKey: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+    <div className="overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
       <h2 className="font-display border-b border-[var(--hairline)] p-4 text-[18px] tracking-tight">
         {title}
       </h2>

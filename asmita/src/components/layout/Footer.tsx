@@ -69,13 +69,7 @@ export function Footer({ locale }: { locale: Locale }) {
         <div className="site-footer-grid">
           <div className="site-footer-brand">
             <Link href="/" className="site-footer-logo-link" aria-label="Asmita home">
-              <img
-                src="/asmita-wordmark.png"
-                alt="Asmita"
-                className="site-footer-logo"
-                width={520}
-                height={178}
-              />
+              <span className="wordmark">Asmita</span>
             </Link>
             {isHi ? (
               <p className="site-footer-desc site-footer-desc-hi hi">
@@ -107,12 +101,12 @@ export function Footer({ locale }: { locale: Locale }) {
           <div className="site-footer-helpline !mt-0">
             <p className="site-footer-cl-label">
               {isHi ? "महिला हेल्पलाइन" : "Women's helpline"} ·{" "}
-              <a href="tel:181" className="font-semibold text-[var(--theme-color-2)]">
+              <a href="tel:181" className="font-medium text-[var(--color-off-black)]">
                 181
               </a>
               {" · "}
               {isHi ? "आपातकाल" : "Emergency"}{" "}
-              <a href="tel:112" className="font-semibold text-[var(--theme-color-2)]">
+              <a href="tel:112" className="font-medium text-[var(--color-off-black)]">
                 112
               </a>
             </p>

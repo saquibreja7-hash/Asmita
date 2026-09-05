@@ -69,10 +69,10 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
 
       {/* Survivor details */}
       <div className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
-        <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "sign.details.title")}</p>
+        <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "sign.details.title")}</p>
 
         <div>
-          <label htmlFor="sign-name" className="block text-sm font-semibold text-[var(--foreground)]">
+          <label htmlFor="sign-name" className="block text-sm font-medium text-[var(--foreground)]">
             {t(locale, "sign.name.label")}
           </label>
           <p className="muted mt-1 text-sm">{t(locale, "sign.name.sub")}</p>
@@ -89,7 +89,7 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
         </div>
 
         <div>
-          <label htmlFor="sign-contact" className="block text-sm font-semibold text-[var(--foreground)]">
+          <label htmlFor="sign-contact" className="block text-sm font-medium text-[var(--foreground)]">
             {t(locale, "sign.contact.label")}
           </label>
           <p className="muted mt-1 text-sm">{t(locale, "sign.contact.sub")}</p>
@@ -108,7 +108,7 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
 
       {/* Signature */}
       <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
-        <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "sign.sig.title")}</p>
+        <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "sign.sig.title")}</p>
         <p className="muted text-sm leading-[1.6]">
           {t(locale, "sign.sig.sub")}
         </p>
@@ -139,7 +139,7 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       </label>
 
       {error && (
-        <p className="text-sm font-semibold text-[var(--rose)]">{error}</p>
+        <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">

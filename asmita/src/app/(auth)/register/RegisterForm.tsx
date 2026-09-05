@@ -99,7 +99,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
                 onChange={() => setAgeConfirmed("adult")}
                 className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
               />
-              <span className="text-[15px] font-semibold leading-[1.4] text-[var(--foreground)]">
+              <span className="text-[15px] font-medium leading-[1.4] text-[var(--foreground)]">
                 {t(locale, "auth.ageAdult")}
               </span>
             </label>
@@ -116,7 +116,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
                 onChange={() => setAgeConfirmed("minor")}
                 className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
               />
-              <span className="text-[15px] font-semibold leading-[1.4] text-[var(--foreground)]">
+              <span className="text-[15px] font-medium leading-[1.4] text-[var(--foreground)]">
                 {t(locale, "auth.ageMinor")}
               </span>
             </label>
@@ -147,7 +147,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-semibold text-[var(--foreground)]"
+                className="block text-sm font-medium text-[var(--foreground)]"
               >
                 {t(locale, "reg.email.label")}
               </label>
@@ -192,7 +192,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
             <div>
               <label
                 htmlFor="otp"
-                className="block text-sm font-semibold text-[var(--foreground)]"
+                className="block text-sm font-medium text-[var(--foreground)]"
               >
                 {t(locale, "reg.otp.label")}
               </label>
@@ -245,7 +245,7 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
         <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
           <div className="flex items-center gap-2">
             <div
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold transition-colors ${
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium transition-colors ${
                 i < current
                   ? "bg-[var(--teal)] text-white"
                   : i === current
@@ -261,7 +261,7 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
                 i + 1
               )}
             </div>
-            <span className={`hidden text-[11px] sm:block ${i === current ? "font-semibold text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
+            <span className={`hidden text-[11px] sm:block ${i === current ? "font-medium text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
               {label}
             </span>
           </div>
@@ -276,6 +276,6 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
 
 function FormError({ message }: { message: string }) {
   return (
-    <p className="text-sm font-semibold text-[var(--rose)]">{message}</p>
+    <p className="text-sm font-medium text-[var(--rose)]">{message}</p>
   );
 }

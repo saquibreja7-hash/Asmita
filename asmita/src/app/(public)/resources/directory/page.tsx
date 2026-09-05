@@ -17,7 +17,7 @@ export default function DirectoryPage() {
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-3xl">
               <p className="text-sm">
-                <Link href="/resources" className="text-link font-semibold">
+                <Link href="/resources" className="text-link font-medium">
                   Resources
                 </Link>
               </p>
@@ -44,14 +44,14 @@ export default function DirectoryPage() {
                     {group.items.map((item) => (
                       <li
                         key={item.name}
-                        className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-6 shadow-[var(--shadow-sm)]"
+                        className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)]"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="max-w-xl">
-                            <p className="text-[16px] font-semibold text-[var(--heading)]">
+                            <p className="text-[16px] font-medium text-[var(--heading)]">
                               {item.name}
                               {item.note && (
-                                <span className="ml-2 rounded-full bg-[var(--teal-soft)] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--heading)]">
+                                <span className="ml-2 rounded-full bg-[var(--teal-soft)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-[-0.033em] text-[var(--heading)]">
                                   {item.note}
                                 </span>
                               )}

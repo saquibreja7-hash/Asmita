@@ -41,7 +41,7 @@ export default async function StartPage() {
               <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
                 {t(locale, "start.adult.eyebrow")}
               </p>
-              <h2 className="mt-3 text-[20px] font-semibold leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[23px]">
+              <h2 className="mt-3 text-[20px] font-medium leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[23px]">
                 {t(locale, "start.adult.title")}
               </h2>
               <p className="muted mt-3 text-sm leading-[1.75]">
@@ -68,7 +68,7 @@ export default async function StartPage() {
         {/* SAFETY + CLOSING */}
         <section className="container py-12 text-center md:py-16">
           <div className="mx-auto max-w-xl space-y-5">
-            <p className="text-[18px] font-semibold leading-[1.55] text-[var(--foreground)] md:text-[20px]">
+            <p className="text-[18px] font-medium leading-[1.55] text-[var(--foreground)] md:text-[20px]">
               {t(locale, "start.danger")}{" "}
               <a
                 href="tel:112"

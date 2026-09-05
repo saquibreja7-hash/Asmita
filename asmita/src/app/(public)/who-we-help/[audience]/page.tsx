@@ -38,7 +38,7 @@ export default async function AudiencePage({
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-3xl">
               <p className="text-sm">
-                <Link href="/who-we-help" className="text-link font-semibold">
+                <Link href="/who-we-help" className="text-link font-medium">
                   Who we help
                 </Link>
               </p>
@@ -82,9 +82,9 @@ export default async function AudiencePage({
                 {data.points.map((p) => (
                   <div
                     key={p.title}
-                    className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-6 shadow-[var(--shadow-sm)]"
+                    className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)]"
                   >
-                    <h2 className="text-[17px] font-semibold text-[var(--heading)]">
+                    <h2 className="text-[17px] font-medium text-[var(--heading)]">
                       {p.title}
                     </h2>
                     <p className="mt-2 text-sm leading-[1.65] text-[var(--body)]">
@@ -111,15 +111,15 @@ export default async function AudiencePage({
                 <Link
                   key={a.slug}
                   href={`/who-we-help/${a.slug}`}
-                  className="group flex flex-col rounded-[var(--radius-lg)] bg-white/75 p-6 backdrop-blur-sm transition hover:bg-white"
+                  className="group flex flex-col rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm transition hover:bg-[var(--color-parchment)]"
                 >
-                  <h3 className="text-[16px] font-semibold leading-snug text-[var(--heading)]">
+                  <h3 className="text-[16px] font-medium leading-snug text-[var(--heading)]">
                     {a.term}
                   </h3>
                   <p className="mt-2 flex-1 text-sm leading-[1.55] text-[var(--muted)]">
                     {a.cardLine}
                   </p>
-                  <span className="mt-3 inline-block text-sm font-semibold text-[var(--coral-deep)]">
+                  <span className="mt-3 inline-block text-sm font-medium text-[var(--color-off-black)]">
                     Open{" "}
                     <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
                       →

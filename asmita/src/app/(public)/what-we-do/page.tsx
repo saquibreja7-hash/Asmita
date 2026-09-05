@@ -63,9 +63,9 @@ export default function WhatWeDoPage() {
           <div className="container">
             <div className="grid gap-4 md:grid-cols-3">
               {capabilities.map((c) => (
-                <div key={c.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-7 shadow-[var(--shadow-sm)]">
-                  <span className="font-mono text-xs font-semibold text-[var(--coral-deep)]">{c.n}</span>
-                  <h2 className="mt-4 text-[19px] font-semibold text-[var(--heading)]">{c.title}</h2>
+                <div key={c.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)]">
+                  <span className="font-mono text-xs font-medium text-[var(--color-off-black)]">{c.n}</span>
+                  <h2 className="mt-4 text-[19px] font-medium text-[var(--heading)]">{c.title}</h2>
                   <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--body)]">{c.body}</p>
                   <div className="mt-6">
                     <Link href={c.href} className="btn btn-midnight btn-arrow !m-0 !min-h-[44px] !text-[15px]">
@@ -89,9 +89,9 @@ export default function WhatWeDoPage() {
             </div>
             <ol className="mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {flow.map((f, i) => (
-                <li key={f.title} className="rounded-[var(--radius-lg)] bg-white/75 p-6 backdrop-blur-sm">
-                  <span className="font-display text-2xl font-semibold text-[var(--coral-deep)]">{i + 1}</span>
-                  <h3 className="mt-2 text-[16px] font-semibold text-[var(--heading)]">{f.title}</h3>
+                <li key={f.title} className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm">
+                  <span className="font-display text-2xl font-medium text-[var(--color-off-black)]">{i + 1}</span>
+                  <h3 className="mt-2 text-[16px] font-medium text-[var(--heading)]">{f.title}</h3>
                   <p className="mt-2 text-sm leading-[1.6] text-[var(--body)]">{f.body}</p>
                 </li>
               ))}

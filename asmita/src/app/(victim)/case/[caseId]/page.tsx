@@ -28,7 +28,7 @@ function StatusBadge({ status }: { status: string }) {
       ? "bg-rose-50 text-[var(--rose)]"
       : "bg-[var(--background)] text-[var(--muted)]";
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${color}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${color}`}>
       {label}
     </span>
   );

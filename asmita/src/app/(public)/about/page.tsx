@@ -79,8 +79,8 @@ export default function AboutPage() {
             </h2>
             <div className="mt-10 grid gap-4 md:grid-cols-3">
               {principles.map((p) => (
-                <div key={p.title} className="rounded-[var(--radius-lg)] bg-white/80 p-7 backdrop-blur-sm">
-                  <h3 className="text-[18px] font-semibold text-[var(--heading)]">{p.title}</h3>
+                <div key={p.title} className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-7 backdrop-blur-sm">
+                  <h3 className="text-[18px] font-medium text-[var(--heading)]">{p.title}</h3>
                   <p className="mt-3 text-sm leading-[1.65] text-[var(--body)]">{p.body}</p>
                 </div>
               ))}
