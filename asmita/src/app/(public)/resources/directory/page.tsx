@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
-import { directory } from "@/lib/resources-content";
+import { directory, directoryLastVerified } from "@/lib/resources-content";
 
 export const metadata: Metadata = {
   title: "Support directory",
@@ -27,6 +27,9 @@ export default function DirectoryPage() {
               <p className="font-size-large mt-5 max-w-2xl text-[var(--theme-color-2)]">
                 Real helplines and services in India. Every one is a verified,
                 official source, not a paid listing.
+              </p>
+              <p className="eyebrow mt-6">
+                Last verified against public source pages: {directoryLastVerified}.
               </p>
             </div>
           </div>

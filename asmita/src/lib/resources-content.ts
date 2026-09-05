@@ -124,17 +124,25 @@ export const directory: DirectoryGroup[] = [
     ],
   },
   {
-    group: "NGO support",
+    group: "Counselling and NGO support",
     items: [
       {
-        name: "CyberPeace Foundation",
-        what: "Helpline and guidance on cybercrime and online harm.",
-        href: "https://cyberpeace.org/",
+        name: "iCall (TISS)",
+        what: "Free, confidential psychosocial counselling by trained professionals, run by the Tata Institute of Social Sciences.",
         tel: "9152987821",
+        href: "https://icallhelpline.org/",
+      },
+      {
+        name: "CyberPeace Foundation",
+        what: "Guidance and resources on cybercrime and online harm.",
+        href: "https://cyberpeace.org/",
       },
     ],
   },
 ];
+
+/* Date the directory contacts were last checked against their public source pages. */
+export const directoryLastVerified = "12 May 2026";
 
 export type LegalSection = { title: string; body: string };
 
