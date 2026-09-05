@@ -9,7 +9,7 @@ export function Footer({ locale }: { locale: Locale }) {
         {
           title: "समस्या",
           links: [
-            { href: "/#issue", label: "छवि-आधारित दुर्व्यवहार" },
+            { href: "/issue", label: "छवि-आधारित दुर्व्यवहार" },
             { href: "/check-image", label: "डीपफेक जाँच" },
             { href: "/how-it-works", label: "यह कैसे काम करता है" },
           ],
@@ -26,10 +26,11 @@ export function Footer({ locale }: { locale: Locale }) {
         {
           title: "संगठन",
           links: [
-            { href: "/how-it-works", label: "हमारे बारे में" },
+            { href: "/about", label: "हमारे बारे में" },
             { href: "/privacy", label: "गोपनीयता" },
             { href: "/legal", label: "कानूनी" },
             { href: "/contact", label: "संपर्क" },
+            { href: "/sitemap", label: "साइटमैप" },
           ],
         },
       ]
@@ -37,15 +38,17 @@ export function Footer({ locale }: { locale: Locale }) {
         {
           title: "The Issue",
           links: [
-            { href: "/#issue", label: "Image-based abuse" },
-            { href: "/check-image", label: "Deepfakes & AI" },
-            { href: "/how-it-works", label: "How it works" },
+            { href: "/issue", label: "Image-based abuse" },
+            { href: "/issue/deepfakes", label: "Deepfakes and AI" },
+            { href: "/who-we-help", label: "Who we help" },
+            { href: "/glossary", label: "Glossary" },
           ],
         },
         {
           title: "Get Help",
           links: [
-            { href: "/start", label: "Start a report" },
+            { href: "/start", label: "Start a case" },
+            { href: "/get-help", label: "What to do" },
             { href: "/minor-support", label: "Under 18" },
             { href: "/resources", label: "Resources" },
             { href: "/faq", label: "FAQ" },
@@ -54,10 +57,11 @@ export function Footer({ locale }: { locale: Locale }) {
         {
           title: "About",
           links: [
-            { href: "/how-it-works", label: "Who we are" },
+            { href: "/about", label: "Who we are" },
+            { href: "/what-we-do", label: "What we do" },
             { href: "/privacy", label: "Privacy" },
-            { href: "/legal", label: "Legal" },
             { href: "/contact", label: "Contact" },
+            { href: "/sitemap", label: "Sitemap" },
           ],
         },
       ];

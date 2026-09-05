@@ -36,16 +36,16 @@ export default async function IssueTopicPage({
         {/* HERO */}
         <section className="hero" aria-label={data.term}>
           <div className="hero-content container section-pad">
-            <div className="mx-auto max-w-3xl">
+            <div className="mx-auto max-w-5xl">
               <p className="text-sm">
                 <Link href="/issue" className="text-link font-medium">
                   The issue
                 </Link>
               </p>
-              <h1 className="font-display mt-4 text-[clamp(2rem,5vw,3.5rem)] font-medium leading-[1.08] text-[var(--heading)]">
+              <h1 className="font-display mt-4 max-w-3xl text-[clamp(2rem,5vw,3.5rem)] font-medium leading-[1.08] text-[var(--heading)]">
                 {data.title}
               </h1>
-              <p className="font-size-large mt-6 text-[var(--theme-color-2)]">
+              <p className="font-size-large mt-6 max-w-2xl text-[var(--theme-color-2)]">
                 {data.definition}
               </p>
             </div>
@@ -55,7 +55,7 @@ export default async function IssueTopicPage({
         {/* BODY */}
         <section className="zone-white section-pad !pt-4" aria-label="Details">
           <div className="container">
-            <div className="mx-auto grid max-w-4xl gap-12 lg:grid-cols-[1.4fr_1fr]">
+            <div className="mx-auto grid max-w-5xl gap-12 lg:grid-cols-[1.4fr_1fr]">
               {/* What it looks like */}
               <div>
                 <h2 className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]">
@@ -98,33 +98,35 @@ export default async function IssueTopicPage({
         {/* RELATED */}
         <section className="transform-section" aria-labelledby="related-heading">
           <div className="transform-content container section-pad">
-            <h2
-              id="related-heading"
-              className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]"
-            >
-              Read about other forms of abuse
-            </h2>
-            <div className="mt-8 grid gap-4 md:grid-cols-3">
-              {others.map((t) => (
-                <Link
-                  key={t.slug}
-                  href={`/issue/${t.slug}`}
-                  className="group flex flex-col rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm transition hover:bg-[var(--color-parchment)]"
-                >
-                  <h3 className="text-[16px] font-medium leading-snug text-[var(--heading)]">
-                    {t.term}
-                  </h3>
-                  <p className="mt-2 flex-1 text-sm leading-[1.55] text-[var(--muted)]">
-                    {t.short}
-                  </p>
-                  <span className="mt-3 inline-block text-sm font-medium text-[var(--color-off-black)]">
-                    Learn more{" "}
-                    <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
-                      →
+            <div className="mx-auto max-w-5xl">
+              <h2
+                id="related-heading"
+                className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]"
+              >
+                Read about other forms of abuse
+              </h2>
+              <div className="mt-8 grid gap-4 md:grid-cols-3">
+                {others.map((t) => (
+                  <Link
+                    key={t.slug}
+                    href={`/issue/${t.slug}`}
+                    className="group flex flex-col rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm transition hover:bg-[var(--color-parchment)]"
+                  >
+                    <h3 className="text-[16px] font-medium leading-snug text-[var(--heading)]">
+                      {t.term}
+                    </h3>
+                    <p className="mt-2 flex-1 text-sm leading-[1.55] text-[var(--muted)]">
+                      {t.short}
+                    </p>
+                    <span className="mt-3 inline-block text-sm font-medium text-[var(--color-off-black)]">
+                      Learn more{" "}
+                      <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
+                        →
+                      </span>
                     </span>
-                  </span>
-                </Link>
-              ))}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </section>

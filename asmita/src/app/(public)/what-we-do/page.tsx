@@ -61,19 +61,21 @@ export default function WhatWeDoPage() {
         {/* CAPABILITIES */}
         <section className="zone-white section-pad" aria-label="Capabilities">
           <div className="container">
-            <div className="grid gap-4 md:grid-cols-3">
-              {capabilities.map((c) => (
-                <div key={c.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)]">
-                  <span className="font-mono text-xs font-medium text-[var(--color-off-black)]">{c.n}</span>
-                  <h2 className="mt-4 text-[19px] font-medium text-[var(--heading)]">{c.title}</h2>
-                  <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--body)]">{c.body}</p>
-                  <div className="mt-6">
-                    <Link href={c.href} className="btn btn-midnight btn-arrow !m-0 !min-h-[44px] !text-[15px]">
-                      {c.cta}
-                    </Link>
+            <div className="mx-auto max-w-5xl">
+              <div className="grid gap-4 md:grid-cols-3">
+                {capabilities.map((c) => (
+                  <div key={c.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)]">
+                    <span className="font-mono text-xs font-medium text-[var(--color-off-black)]">{c.n}</span>
+                    <h2 className="mt-4 text-[19px] font-medium text-[var(--heading)]">{c.title}</h2>
+                    <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--body)]">{c.body}</p>
+                    <div className="mt-6">
+                      <Link href={c.href} className="btn btn-midnight btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                        {c.cta}
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -87,7 +89,7 @@ export default function WhatWeDoPage() {
                 From a link to a takedown
               </h2>
             </div>
-            <ol className="mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <ol className="mx-auto mt-10 grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {flow.map((f, i) => (
                 <li key={f.title} className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm">
                   <span className="font-display text-2xl font-medium text-[var(--color-off-black)]">{i + 1}</span>
@@ -102,7 +104,7 @@ export default function WhatWeDoPage() {
         {/* HONEST LIMITS */}
         <section className="zone-white section-pad" aria-labelledby="limits-heading">
           <div className="container">
-            <div className="mx-auto max-w-3xl rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-8 md:p-10">
+            <div className="mx-auto max-w-5xl rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-8 md:p-10">
               <h2 id="limits-heading" className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]">
                 What we will not do
               </h2>

@@ -36,7 +36,7 @@ export default async function AudiencePage({
         {/* HERO */}
         <section className="hero" aria-label={data.term}>
           <div className="hero-content container section-pad">
-            <div className="mx-auto max-w-3xl">
+            <div className="mx-auto max-w-5xl">
               <p className="text-sm">
                 <Link href="/who-we-help" className="text-link font-medium">
                   Who we help
@@ -46,7 +46,7 @@ export default async function AudiencePage({
               <h1 className="font-display mt-3 text-[clamp(2rem,5vw,3.5rem)] font-medium leading-[1.08] text-[var(--heading)]">
                 {data.title}
               </h1>
-              <p className="font-size-large mt-6 text-[var(--theme-color-2)]">
+              <p className="font-size-large mt-6 max-w-2xl text-[var(--theme-color-2)]">
                 {data.intro}
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
@@ -66,7 +66,7 @@ export default async function AudiencePage({
         {/* POINTS */}
         <section className="zone-white section-pad !pt-4" aria-label="How we help">
           <div className="container">
-            <div className="mx-auto max-w-4xl">
+            <div className="mx-auto max-w-5xl">
               {data.callout && (
                 <div className="mb-10 rounded-[var(--radius-lg)] border-l-4 border-[var(--coral)] bg-[var(--coral-soft)] p-6 md:p-7">
                   <p className="font-display text-[1.05rem] font-medium text-[var(--heading)]">

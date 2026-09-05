@@ -145,37 +145,39 @@ export default function GetHelpPage() {
         {/* SCENARIOS — survivor voice */}
         <section className="zone-white section-pad" aria-labelledby="scenarios-heading">
           <div className="container">
-            <h2
-              id="scenarios-heading"
-              className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]"
-            >
-              Start with your situation
-            </h2>
-            <p className="mt-4 max-w-2xl text-lg leading-[1.6] text-[var(--body)]">
-              Whatever is happening, there is a path. Choose the one that sounds
-              closest to yours.
-            </p>
-            <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {scenarios.map((s) => (
-                <Link
-                  key={s.title}
-                  href={s.href}
-                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
-                >
-                  <h3 className="text-[17px] font-medium leading-snug text-[var(--heading)]">
-                    &ldquo;{s.title}&rdquo;
-                  </h3>
-                  <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
-                    {s.action}
-                  </p>
-                  <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
-                    What to do{" "}
-                    <span className="transition-transform group-hover:translate-x-0.5 inline-block" aria-hidden>
-                      →
+            <div className="mx-auto max-w-5xl">
+              <h2
+                id="scenarios-heading"
+                className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]"
+              >
+                Start with your situation
+              </h2>
+              <p className="mt-4 max-w-2xl text-lg leading-[1.6] text-[var(--body)]">
+                Whatever is happening, there is a path. Choose the one that sounds
+                closest to yours.
+              </p>
+              <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {scenarios.map((s) => (
+                  <Link
+                    key={s.title}
+                    href={s.href}
+                    className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                  >
+                    <h3 className="text-[17px] font-medium leading-snug text-[var(--heading)]">
+                      &ldquo;{s.title}&rdquo;
+                    </h3>
+                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
+                      {s.action}
+                    </p>
+                    <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
+                      What to do{" "}
+                      <span className="transition-transform group-hover:translate-x-0.5 inline-block" aria-hidden>
+                        →
+                      </span>
                     </span>
-                  </span>
-                </Link>
-              ))}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -220,31 +222,33 @@ export default function GetHelpPage() {
         {/* TOOLS */}
         <section className="zone-white section-pad" aria-labelledby="tools-heading">
           <div className="container">
-            <h2
-              id="tools-heading"
-              className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]"
-            >
-              The tools you can use now
-            </h2>
-            <div className="mt-10 grid gap-8 md:grid-cols-3">
-              {tools.map((tool) => (
-                <div key={tool.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)]">
-                  <p className="text-xs font-medium uppercase tracking-[-0.033em] text-[var(--color-off-black)]">
-                    {tool.tag}
-                  </p>
-                  <h3 className="mt-3 text-[19px] font-medium text-[var(--heading)]">
-                    {tool.title}
-                  </h3>
-                  <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--muted)]">
-                    {tool.body}
-                  </p>
-                  <div className="mt-6">
-                    <Link href={tool.href} className="btn btn-midnight btn-arrow !m-0 !min-h-[44px] !text-[15px]">
-                      {tool.cta}
-                    </Link>
+            <div className="mx-auto max-w-5xl">
+              <h2
+                id="tools-heading"
+                className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]"
+              >
+                The tools you can use now
+              </h2>
+              <div className="mt-10 grid gap-8 md:grid-cols-3">
+                {tools.map((tool) => (
+                  <div key={tool.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)]">
+                    <p className="text-xs font-medium uppercase tracking-[-0.033em] text-[var(--color-off-black)]">
+                      {tool.tag}
+                    </p>
+                    <h3 className="mt-3 text-[19px] font-medium text-[var(--heading)]">
+                      {tool.title}
+                    </h3>
+                    <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--muted)]">
+                      {tool.body}
+                    </p>
+                    <div className="mt-6">
+                      <Link href={tool.href} className="btn btn-midnight btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                        {tool.cta}
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -252,33 +256,35 @@ export default function GetHelpPage() {
         {/* HONEST OUTCOMES */}
         <section className="zone-white section-pad !pt-0" aria-labelledby="honest-heading">
           <div className="container">
-            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-8 md:p-12">
-              <h2
-                id="honest-heading"
-                className="font-display text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-[1.15]"
-              >
-                What a takedown can and cannot do
-              </h2>
-              <div className="mt-6 grid gap-8 md:grid-cols-2">
-                <div>
-                  <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--success)]">
-                    What it can do
-                  </p>
-                  <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--body)]">
-                    <li>Get content removed from platforms that respond.</li>
-                    <li>Ask search engines to stop showing it in results.</li>
-                    <li>Help block matching re-uploads, without us seeing your image.</li>
-                  </ul>
-                </div>
-                <div>
-                  <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--warning)]">
-                    What it cannot do
-                  </p>
-                  <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--body)]">
-                    <li>Erase content from the whole internet or private devices.</li>
-                    <li>Force a platform that ignores the law to act instantly.</li>
-                    <li>Promise a result. We tell you exactly where things stand.</li>
-                  </ul>
+            <div className="mx-auto max-w-5xl">
+              <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-8 md:p-12">
+                <h2
+                  id="honest-heading"
+                  className="font-display text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-[1.15]"
+                >
+                  What a takedown can and cannot do
+                </h2>
+                <div className="mt-6 grid gap-8 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--success)]">
+                      What it can do
+                    </p>
+                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--body)]">
+                      <li>Get content removed from platforms that respond.</li>
+                      <li>Ask search engines to stop showing it in results.</li>
+                      <li>Help block matching re-uploads, without us seeing your image.</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--warning)]">
+                      What it cannot do
+                    </p>
+                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--body)]">
+                      <li>Erase content from the whole internet or private devices.</li>
+                      <li>Force a platform that ignores the law to act instantly.</li>
+                      <li>Promise a result. We tell you exactly where things stand.</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>

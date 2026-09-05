@@ -46,7 +46,7 @@ export default function AboutPage() {
         {/* WHO WE ARE / NOT */}
         <section className="zone-white section-pad" aria-labelledby="who-heading">
           <div className="container">
-            <div className="mx-auto grid max-w-4xl gap-10 lg:grid-cols-2 lg:gap-16">
+            <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-2 lg:gap-16">
               <div>
                 <h2 id="who-heading" className="font-display text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-[1.16]">
                   Who we are
@@ -74,16 +74,18 @@ export default function AboutPage() {
         {/* PRINCIPLES */}
         <section className="transform-section" aria-labelledby="principles-heading">
           <div className="transform-content container section-pad">
-            <h2 id="principles-heading" className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]">
-              What guides the work
-            </h2>
-            <div className="mt-10 grid gap-4 md:grid-cols-3">
-              {principles.map((p) => (
-                <div key={p.title} className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-7 backdrop-blur-sm">
-                  <h3 className="text-[18px] font-medium text-[var(--heading)]">{p.title}</h3>
-                  <p className="mt-3 text-sm leading-[1.65] text-[var(--body)]">{p.body}</p>
-                </div>
-              ))}
+            <div className="mx-auto max-w-5xl">
+              <h2 id="principles-heading" className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]">
+                What guides the work
+              </h2>
+              <div className="mt-10 grid gap-4 md:grid-cols-3">
+                {principles.map((p) => (
+                  <div key={p.title} className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-7 backdrop-blur-sm">
+                    <h3 className="text-[18px] font-medium text-[var(--heading)]">{p.title}</h3>
+                    <p className="mt-3 text-sm leading-[1.65] text-[var(--body)]">{p.body}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -91,7 +93,7 @@ export default function AboutPage() {
         {/* TEAM + PARTNERS (honest, no invented names) */}
         <section className="zone-white section-pad" aria-labelledby="team-heading">
           <div className="container">
-            <div className="mx-auto grid max-w-4xl gap-10 lg:grid-cols-2 lg:gap-16">
+            <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-2 lg:gap-16">
               <div>
                 <h2 id="team-heading" className="font-display text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-[1.16]">
                   Who is behind Asmita

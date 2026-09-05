@@ -33,39 +33,41 @@ export default function IssuePage() {
         {/* TOPIC GRID */}
         <section className="zone-white section-pad" aria-labelledby="topics-heading">
           <div className="container">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <h2 id="topics-heading" className="sr-only">
-                Types of image-based abuse
-              </h2>
-              <p className="max-w-2xl text-lg leading-[1.6] text-[var(--body)]">
-                Pick the one closest to your situation, or read them all.
-              </p>
-              <Link href="/glossary" className="text-link text-sm font-medium">
-                See the glossary of terms →
-              </Link>
-            </div>
-
-            <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {issueTopics.map((topic) => (
-                <Link
-                  key={topic.slug}
-                  href={`/issue/${topic.slug}`}
-                  className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
-                >
-                  <h3 className="text-[18px] font-medium leading-snug text-[var(--heading)]">
-                    {topic.term}
-                  </h3>
-                  <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
-                    {topic.short}
-                  </p>
-                  <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
-                    Learn more{" "}
-                    <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
-                      →
-                    </span>
-                  </span>
+            <div className="mx-auto max-w-5xl">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <h2 id="topics-heading" className="sr-only">
+                  Types of image-based abuse
+                </h2>
+                <p className="max-w-2xl text-lg leading-[1.6] text-[var(--body)]">
+                  Pick the one closest to your situation, or read them all.
+                </p>
+                <Link href="/glossary" className="text-link text-sm font-medium">
+                  See the glossary of terms →
                 </Link>
-              ))}
+              </div>
+
+              <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {issueTopics.map((topic) => (
+                  <Link
+                    key={topic.slug}
+                    href={`/issue/${topic.slug}`}
+                    className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                  >
+                    <h3 className="text-[18px] font-medium leading-snug text-[var(--heading)]">
+                      {topic.term}
+                    </h3>
+                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
+                      {topic.short}
+                    </p>
+                    <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
+                      Learn more{" "}
+                      <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
+                        →
+                      </span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </section>
