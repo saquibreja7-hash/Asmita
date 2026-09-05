@@ -49,6 +49,15 @@ These flags exist for local development only. Never set them in Vercel productio
 - `DEV_SKIP_LEGAL_REVIEW=true` — bypasses `reviewedByLegal` template gate and hash `PENDING_REVIEW` status; hashes auto-approve immediately
 - `DEV_OTP_CODE=123456` — lifts OTP rate limits for local testing (non-prod only). The code itself is always random; it is returned as `devOtp` in the request-otp response only when `RESEND_API_KEY` is unset
 
+## Admin MFA
+
+Each admin has their own authenticator secret, encrypted at rest in `AdminMfaSecret` (keyed by email hash). `ADMIN_TOTP_SECRET` is only a bootstrap: it works for an admin until they enrol at `/admin/setup-mfa`, after which only their own secret is accepted. Enrolment shows the secret once. A SUPER_ADMIN resets a lost device via `POST /api/admin/mfa/reset` (`users:manage`), which returns that admin to the bootstrap state. Once every admin has enrolled, rotate or remove `ADMIN_TOTP_SECRET`.
+
+## Notice integrity in code
+
+- `/api/notices/dispatch` refuses a URL without `signedNoticePdf` (409 `signature_required`).
+- `src/lib/case-hash-annex.ts` is the single builder for the fingerprint annex: preview and sign list every non-rejected fingerprint; dispatch sends only approved fingerprints submitted before `declarationSignedAt`. `declarationSignedAt` is set only by the two sign routes.
+
 ## Commands
 
 Run from `asmita/`:

@@ -420,6 +420,15 @@ model AdminProfile {
   user User @relation(fields: [userId], references: [id])
 }
 
+/// Per-admin authenticator secret, encrypted at rest. Keyed by email hash so
+/// it needs no User row. See src/lib/auth/admin-mfa-store.ts.
+model AdminMfaSecret {
+  emailHash       String    @id
+  secretEncrypted String
+  enrolledAt      DateTime  @default(now())
+  lastUsedAt      DateTime?
+}
+
 model AdminAccessLog {
   id        String   @id @default(uuid())
   adminId   String?

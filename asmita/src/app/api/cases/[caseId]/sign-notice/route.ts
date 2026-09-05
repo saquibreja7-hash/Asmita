@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
+import { buildCaseHashAnnex } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
 
 const FORBIDDEN_CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
@@ -145,7 +146,12 @@ export async function POST(
   };
 
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
-  const body = renderNoticeTemplate(template.bodyTemplate, variables);
+  // The signed document lists every fingerprint on the case so the declaration
+  // explicitly covers any annex later sent with the notice.
+  const annex = await buildCaseHashAnnex(caseId, { kind: "for-signing" });
+  const body = annex
+    ? `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex}`
+    : renderNoticeTemplate(template.bodyTemplate, variables);
 
   const pdfBytes = await generateNoticePdf({
     platformName: url.platform.name,
@@ -162,6 +168,11 @@ export async function POST(
   await db.submittedUrl.update({
     where: { id: url.id },
     data: { signedNoticePdf: encryptedPdf },
+  });
+  // The declaration is signed here, by a signed document, never by a checkbox.
+  await db.case.updateMany({
+    where: { id: caseId, declarationSignedAt: null },
+    data: { declarationSignedAt: new Date() },
   });
 
   return NextResponse.json({ ok: true });

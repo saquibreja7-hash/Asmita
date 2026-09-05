@@ -3,6 +3,7 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { z } from "zod";
 import { createAdminIdentity, getAdminRole, isAdminEmail } from "@/lib/auth/admin-allowlist";
 import { verifyAdminTotp } from "@/lib/auth/admin-mfa";
+import { getAdminMfaSecret, touchAdminMfa } from "@/lib/auth/admin-mfa-store";
 import { verifyOtp } from "@/lib/auth/otp";
 import { signAdminSession } from "@/lib/auth/jwt";
 import { verifyCsrfRequest } from "@/lib/csrf";
@@ -30,7 +31,15 @@ export async function POST(request: Request) {
   const admin = createAdminIdentity(parsed.data.email);
   const otpOk = await verifyOtp(parsed.data.email, parsed.data.otp);
   const skipMfa = devFlagEnabled("DEV_SKIP_ADMIN_MFA");
-  const mfaOk = skipMfa || verifyAdminTotp({ token: parsed.data.totp });
+  // Enrolled admins must use their own secret. The shared ADMIN_TOTP_SECRET
+  // only bootstraps a first login so the admin can reach /admin/setup-mfa.
+  const ownSecret = await getAdminMfaSecret(admin.emailHash);
+  const enrolled = ownSecret !== null;
+  const mfaOk =
+    skipMfa ||
+    (enrolled
+      ? verifyAdminTotp({ token: parsed.data.totp, secret: ownSecret })
+      : Boolean(process.env.ADMIN_TOTP_SECRET) && verifyAdminTotp({ token: parsed.data.totp }));
   if (!otpOk || !mfaOk) {
     logSecurityEvent({
       event: "auth_failed",
@@ -40,6 +49,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }
+
+  if (enrolled) await touchAdminMfa(admin.emailHash);
 
   const session = await signAdminSession({
     sub: admin.id,
@@ -51,9 +62,12 @@ export async function POST(request: Request) {
     entityType: "Admin",
     entityId: admin.id,
     actorId: admin.id,
-    data: { action: "ADMIN_LOGIN" },
+    data: { action: "ADMIN_LOGIN", mfa: enrolled ? "enrolled" : "bootstrap" },
   });
-  const response = NextResponse.json({ success: true, redirectTo: "/admin/cases" });
+  const response = NextResponse.json({
+    success: true,
+    redirectTo: enrolled ? "/admin/cases" : "/admin/setup-mfa",
+  });
   response.cookies.set("asmita_admin_session", session, {
     httpOnly: true,
     sameSite: "strict",

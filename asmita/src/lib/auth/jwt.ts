@@ -10,6 +10,9 @@ export type SessionClaims = {
   adminRole?: AdminRole;
 };
 
+const ISSUER = "asmita";
+const AUDIENCE = "asmita-web";
+
 function getSecret() {
   const configured = process.env.JWT_SECRET;
   if (!configured) {
@@ -32,6 +35,8 @@ export async function signSession(claims: SessionClaims) {
     namespace: claims.namespace || "victim",
   })
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCE)
     .setSubject(claims.sub)
     .setIssuedAt()
     .setExpirationTime("4h")
@@ -49,6 +54,8 @@ export async function signAdminSession(
     adminRole: claims.adminRole ?? "SUPER_ADMIN",
   })
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCE)
     .setSubject(claims.sub)
     .setIssuedAt()
     .setExpirationTime("8h")
@@ -58,7 +65,11 @@ export async function signAdminSession(
 export async function verifySession(token: string | undefined | null) {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, getSecret(), {
+      algorithms: ["HS256"],
+      issuer: ISSUER,
+      audience: AUDIENCE,
+    });
     return {
       sub: payload.sub || "",
       role: payload.role as SessionClaims["role"],
