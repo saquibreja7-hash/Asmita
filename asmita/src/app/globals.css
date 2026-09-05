@@ -1069,32 +1069,6 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   color: var(--color-parchment);
 }
 
-/* ── Support bar ──────────────────────────────────────────────── */
-
-.support-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 40;
-  border-top: 1px solid var(--color-ash);
-  background: var(--color-parchment);
-  color: var(--color-off-black);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: -0.033em;
-}
-
-.support-bar a {
-  color: var(--color-off-black);
-  font-weight: 500;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-color: var(--color-ash);
-}
-
-.support-bar a:hover { text-decoration-color: currentColor; }
-
-html[lang="hi"] .support-bar { text-transform: none; letter-spacing: 0; }
-
 /* ── Footer ───────────────────────────────────────────────────── */
 
 .site-footer {

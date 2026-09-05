@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
-import { SupportPanel } from "@/components/layout/SupportPanel";
 import { normalizeLocale } from "@/lib/i18n";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
@@ -12,7 +11,6 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <Header locale={locale} />
       <main className="flex-1">{children}</main>
       <Footer locale={locale} />
-      <SupportPanel locale={locale} />
     </div>
   );
 }
