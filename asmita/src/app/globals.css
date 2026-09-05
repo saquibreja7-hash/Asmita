@@ -1117,8 +1117,9 @@ html[lang="hi"] .support-bar { text-transform: none; letter-spacing: 0; }
     ),
     url("/images/footer-bg.webp");
   background-repeat: no-repeat, no-repeat;
-  background-size: 100% 100%, cover;
-  background-position: top, center bottom;
+  /* Full-width image shifted down past the footer edge: the sky and canopy stay, the foreground crops */
+  background-size: 100% 100%, 100% auto;
+  background-position: top, center calc(100% + 11vw);
   background-blend-mode: normal, multiply;
 }
 
