@@ -120,8 +120,11 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Pipeline diagram */}
-          <div className="hero-content container pb-20 md:pb-28">
+        </section>
+
+        {/* Pipeline diagram */}
+        <section aria-label="How a report moves">
+          <div className="container pt-16 pb-20 md:pt-20 md:pb-28">
             <div className="pipeline" role="list" aria-label="How a report moves">
               {pipeline.map((n, i) => (
                 <div key={n.label} className="contents" role="listitem">
