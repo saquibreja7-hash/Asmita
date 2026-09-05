@@ -109,8 +109,8 @@ export default function HomePage() {
               image never leaves your phone.
             </p>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              <Link className="btn btn-primary btn-arrow" href="/get-help">
-                Get help
+              <Link className="btn btn-primary btn-arrow" href="/start">
+                Start a case
               </Link>
               <Link className="btn btn-secondary" href="/what-we-do">
                 How it works
