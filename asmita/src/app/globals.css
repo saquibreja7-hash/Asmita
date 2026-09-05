@@ -1103,7 +1103,7 @@ html[lang="hi"] .support-bar { text-transform: none; letter-spacing: 0; }
   z-index: 1;
   overflow: hidden;
   color: var(--color-off-black);
-  padding: 64px 0 clamp(260px, 30vw, 420px);
+  padding: 64px 0 clamp(300px, 34vw, 520px);
   font-size: 14px;
   border-top: 1px solid var(--color-ash);
   background-color: var(--color-parchment);
@@ -1111,13 +1111,13 @@ html[lang="hi"] .support-bar { text-transform: none; letter-spacing: 0; }
     linear-gradient(
       180deg,
       #f6f3f1 0%,
-      #f6f3f1 40%,
-      rgba(246, 243, 241, 0.7) 58%,
-      rgba(246, 243, 241, 0) 82%
+      #f6f3f1 34%,
+      rgba(246, 243, 241, 0.75) 48%,
+      rgba(246, 243, 241, 0) 66%
     ),
     url("/images/footer-bg.webp");
   background-repeat: no-repeat, no-repeat;
-  background-size: 100% 100%, 100% auto;
+  background-size: 100% 100%, cover;
   background-position: top, center bottom;
   background-blend-mode: normal, multiply;
 }
