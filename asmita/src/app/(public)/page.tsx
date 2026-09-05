@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
-import { ShaderBackground } from "@/components/ui/shader-background";
 
 /*
  * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
@@ -87,34 +86,37 @@ export default function HomePage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO: pure typographic, wash behind */}
-        <section className="hero hero-shader" aria-label="Introduction">
-          <div className="hero-shader-bg" aria-hidden>
-            <ShaderBackground className="hero-shader-canvas" />
-            <span className="hero-shader-scrim" />
-            <span className="hero-shader-fade" />
+        <section className="hero hero-image" aria-label="Introduction">
+          <div className="hero-image-bg" aria-hidden>
+            <picture>
+              <source media="(max-width: 720px)" srcSet="/images/hero-bg-sm.webp" />
+              <img src="/images/hero-bg.webp" alt="" width={2400} height={1350} fetchPriority="high" decoding="async" />
+            </picture>
+            <span className="hero-image-tint" />
+            <span className="hero-image-fade" />
           </div>
-          <div className="hero-content container pt-20 pb-16 text-center md:pt-32 md:pb-24">
-            <span className="pill">
-              <span className="dot" />
-              Free and confidential, for India
-            </span>
-            <h1 className="mx-auto mt-8 max-w-5xl text-[clamp(40px,7vw,80px)]">
-              Take the image down.
-              <br />
-              Keep the image private.
-            </h1>
-            <p className="font-size-large mx-auto mt-6 max-w-2xl">
-              Legally grounded takedown notices and on-device fingerprint blocking for
-              anyone in India facing non-consensual or AI-made intimate images. Your
-              image never leaves your phone.
-            </p>
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              <Link className="btn btn-primary btn-arrow" href="/start">
-                Start a case
-              </Link>
-              <Link className="btn btn-secondary" href="/what-we-do">
-                How it works
-              </Link>
+          <div className="hero-content container">
+            <div className="hero-image-copy">
+              <span className="pill">
+                <span className="dot" />
+                Free and confidential, for India
+              </span>
+              <h1 className="mt-8 max-w-3xl text-[clamp(40px,6vw,76px)]">
+                Take the image down. Keep the image private.
+              </h1>
+              <p className="font-size-large mt-6 max-w-xl">
+                Legally grounded takedown notices and on-device fingerprint blocking for
+                anyone in India facing non-consensual or AI-made intimate images. Your
+                image never leaves your phone.
+              </p>
+              <div className="mt-10 flex flex-wrap items-center gap-3">
+                <Link className="btn btn-primary btn-arrow" href="/start">
+                  Start a case
+                </Link>
+                <Link className="btn btn-secondary" href="/what-we-do">
+                  How it works
+                </Link>
+              </div>
             </div>
           </div>
 

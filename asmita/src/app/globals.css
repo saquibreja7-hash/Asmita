@@ -1232,57 +1232,74 @@ html[lang="hi"] .support-bar { text-transform: none; letter-spacing: 0; }
   html { scroll-behavior: auto; }
 }
 
-/* ── Hero shader background ───────────────────────────────────── */
+/* ── Hero image background ────────────────────────────────────── */
 
-.hero-shader {
+.hero-image {
   position: relative;
   overflow: hidden;
   isolation: isolate;
 }
 
-.hero-shader-bg {
+.hero-image-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
 }
 
-.hero-shader-canvas {
+.hero-image-bg img {
   position: absolute;
   inset: 0;
-  opacity: 0.65;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 78% 50%;
+  display: block;
 }
 
-/* Parchment scrim keeps Off-Black type at readable contrast over the mesh */
-.hero-shader-scrim {
+/* Multiply the grayscale art into the parchment so its whites become the canvas */
+.hero-image-tint {
   position: absolute;
   inset: 0;
-  background: rgba(246, 243, 241, 0.36);
+  background: var(--color-parchment);
+  mix-blend-mode: multiply;
 }
 
-/* Fade into the parchment canvas so the pipeline and hairline below sit on solid ground */
-.hero-shader-fade {
+/* Left scrim behind the copy, and a fade into the page canvas at the bottom */
+.hero-image-fade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(246, 243, 241, 0.35) 0%,
-    rgba(246, 243, 241, 0) 30%,
-    rgba(246, 243, 241, 0) 60%,
-    rgba(246, 243, 241, 0.9) 88%,
-    #f6f3f1 100%
-  );
+  background:
+    linear-gradient(90deg, rgba(246, 243, 241, 0.82) 0%, rgba(246, 243, 241, 0.55) 38%, rgba(246, 243, 241, 0) 62%),
+    linear-gradient(180deg, rgba(246, 243, 241, 0) 70%, #f6f3f1 100%);
 }
 
-.hero-shader .hero-content { position: relative; z-index: 1; }
-
-.hero-shader .pill {
-  background: rgba(246, 243, 241, 0.8);
-  backdrop-filter: blur(6px);
+.hero-image .hero-content {
+  position: relative;
+  z-index: 1;
+  min-height: clamp(560px, 72vh, 820px);
+  display: flex;
+  align-items: center;
+  padding-top: 64px;
+  padding-bottom: 96px;
 }
 
-.hero-shader .font-size-large { color: var(--color-off-black); }
+.hero-image-copy {
+  max-width: 640px;
+  text-align: left;
+}
 
-@media (prefers-reduced-motion: reduce) {
-  .hero-shader-canvas { opacity: 0.4; }
+.hero-image .pill {
+  background: rgba(246, 243, 241, 0.85);
+}
+
+.hero-image .font-size-large { color: var(--color-off-black); }
+
+@media (max-width: 720px) {
+  .hero-image-bg img { object-position: 70% 30%; opacity: 0.7; }
+  .hero-image-fade {
+    background:
+      linear-gradient(180deg, rgba(246, 243, 241, 0.7) 0%, rgba(246, 243, 241, 0.4) 50%, #f6f3f1 100%);
+  }
+  .hero-image .hero-content { min-height: 0; padding-top: 48px; padding-bottom: 64px; }
 }
