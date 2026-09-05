@@ -1111,15 +1111,15 @@ html[lang="hi"] .support-bar { text-transform: none; letter-spacing: 0; }
     linear-gradient(
       180deg,
       #f6f3f1 0%,
-      #f6f3f1 38%,
-      rgba(246, 243, 241, 0.85) 52%,
-      rgba(246, 243, 241, 0.35) 68%,
-      rgba(246, 243, 241, 0) 88%
+      #f6f3f1 40%,
+      rgba(246, 243, 241, 0.7) 58%,
+      rgba(246, 243, 241, 0) 82%
     ),
     url("/images/footer-bg.webp");
   background-repeat: no-repeat, no-repeat;
-  background-size: 100% 100%, cover;
+  background-size: 100% 100%, 100% auto;
   background-position: top, center bottom;
+  background-blend-mode: normal, multiply;
 }
 
 /* Film grain over the whole footer, strongest where the image shows through */
@@ -1129,7 +1129,7 @@ html[lang="hi"] .support-bar { text-transform: none; letter-spacing: 0; }
   inset: 0;
   pointer-events: none;
   background: url("/images/textures/grain-big.jpg") center / 900px auto repeat;
-  opacity: 0.35;
+  opacity: 0.18;
   mix-blend-mode: soft-light;
 }
 
