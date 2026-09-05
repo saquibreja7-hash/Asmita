@@ -37,7 +37,7 @@ const schema = z.object({
     .min(1)
     .max(MAX_HASHES_PER_SUBMISSION),
   declaration: z.boolean().refine(Boolean),
-  platformIds: z.array(z.string()).max(20).optional(),
+  platformIds: z.array(z.string().uuid()).max(20).optional(),
 });
 
 const MAX_BODY_BYTES = 16_384;
@@ -109,6 +109,12 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   }
 
   const { platformIds } = parsed.data;
+  if (platformIds && platformIds.length > 0) {
+    const known = await db.platform.count({ where: { id: { in: platformIds }, isActive: true } });
+    if (known !== new Set(platformIds).size) {
+      return NextResponse.json({ error: "unknown_platform" }, { status: 400 });
+    }
+  }
   const results = await addHashesToCase(caseId, parsed.data.hashes, {
     requestedPlatformId: platformIds?.[0],
   });

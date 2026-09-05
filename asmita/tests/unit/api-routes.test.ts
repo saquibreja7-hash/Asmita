@@ -319,7 +319,10 @@ describe("POST /api/cases/[caseId]/urls", () => {
     vi.mocked(abuse.checkUrlSubmission).mockReturnValue({ flagged: true, reasons: ["too_many_urls"] });
     const res = await addUrlsRoute(csrfPost("/api/cases/case-1/urls", validBody), ctx);
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ flaggedForReview: true, flagReasons: ["too_many_urls"] });
+    const body = await res.json();
+    expect(body).toMatchObject({ flaggedForReview: true });
+    // Heuristic names stay admin-only so a bad-faith submitter cannot tune around them.
+    expect(body).not.toHaveProperty("flagReasons");
   });
 });
 

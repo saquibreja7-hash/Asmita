@@ -47,7 +47,7 @@ FORM_ONLY platforms (e.g. Meta, X, LinkedIn) have a `formUrl` but no verified gr
 These flags exist for local development only. Never set them in Vercel production environment:
 
 - `DEV_SKIP_LEGAL_REVIEW=true` — bypasses `reviewedByLegal` template gate and hash `PENDING_REVIEW` status; hashes auto-approve immediately
-- `DEV_OTP_CODE=123456` — fixed OTP for local testing (all environments except prod)
+- `DEV_OTP_CODE=123456` — lifts OTP rate limits for local testing (non-prod only). The code itself is always random; it is returned as `devOtp` in the request-otp response only when `RESEND_API_KEY` is unset
 
 ## Commands
 

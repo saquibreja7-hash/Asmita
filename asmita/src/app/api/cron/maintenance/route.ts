@@ -1,3 +1,4 @@
+import { safeEqual } from "@/lib/safe-equal";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { createReverificationQueue } from "@/lib/go-reverification";
@@ -120,7 +121,7 @@ function verifyCronAuth(request: NextRequest): NextResponse | null {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 503 });
   }
   const header = request.headers.get("authorization");
-  if (header !== `Bearer ${secret}`) {
+  if (!safeEqual(header, `Bearer ${secret}`)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   return null;

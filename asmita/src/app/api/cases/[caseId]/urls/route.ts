@@ -80,7 +80,6 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   const body = {
     results,
     flaggedForReview: abuse.flagged,
-    flagReasons: abuse.reasons,
   };
   if (idemKey) {
     rememberResponse(SCOPE, idemActor, idemKey, 200, body);

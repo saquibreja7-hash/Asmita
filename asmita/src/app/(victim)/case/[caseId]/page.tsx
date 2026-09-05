@@ -57,7 +57,7 @@ export default async function CasePage({
     (record?.urls.some((u) => u.status === "NOTICE_SENT") ?? false) ||
     (record?.urls
       .filter((u) => u.status === "NOTICE_QUEUED" || (skipLegalGate && u.status === "PENDING_REVIEW" && u.platformId))
-      .every((u) => u.signedNoticePdf != null) ?? false);
+      .every((u) => u.hasSignedNotice) ?? false);
 
   if (!record) {
     return (

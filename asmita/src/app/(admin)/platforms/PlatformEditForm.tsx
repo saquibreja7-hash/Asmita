@@ -135,7 +135,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
       </label>
 
       <label className="flex items-center gap-2 text-xs">
-        <input type="checkbox" name="markVerified" defaultChecked />
+        <input type="checkbox" name="markVerified" />
         <span>Mark contact verified by human (sets last-verified timestamp)</span>
       </label>
 

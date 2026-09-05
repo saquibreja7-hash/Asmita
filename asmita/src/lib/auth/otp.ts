@@ -72,18 +72,23 @@ export async function verifyOtp(email: string, token: string) {
     });
     if (!stored) return false;
     if (!tokenMatchesHash(token, stored.tokenHash)) {
-      const failedAttempts = stored.failedAttempts + 1;
+      // Atomic increment so parallel guesses cannot exceed the limit.
       await db.otpToken.update({
         where: { id: stored.id },
-        data: {
-          failedAttempts,
-          used: failedAttempts >= MAX_FAILED_ATTEMPTS,
-        },
+        data: { failedAttempts: { increment: 1 } },
+      });
+      await db.otpToken.updateMany({
+        where: { id: stored.id, failedAttempts: { gte: MAX_FAILED_ATTEMPTS } },
+        data: { used: true },
       });
       return false;
     }
-    await db.otpToken.update({ where: { id: stored.id }, data: { used: true } });
-    return true;
+    // Claim the token atomically: a concurrent duplicate verify gets count 0.
+    const claimed = await db.otpToken.updateMany({
+      where: { id: stored.id, used: false },
+      data: { used: true },
+    });
+    return claimed.count === 1;
   }
 
   const stored = otpStore.get(emailHash);

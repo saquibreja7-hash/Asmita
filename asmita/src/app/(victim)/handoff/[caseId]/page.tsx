@@ -9,13 +9,10 @@ import { t } from "@/lib/i18n";
 
 export default async function HandoffPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ caseId: string }>;
-  searchParams: Promise<{ formUrl?: string; platformName?: string }>;
 }) {
   const { caseId } = await params;
-  const { formUrl: queryFormUrl, platformName: queryPlatformName } = await searchParams;
   const locale = await getLocale();
 
   const auth = await requireSession({ adultOnly: true });
@@ -65,15 +62,14 @@ Please process this through your official content removal procedure.`;
   type FormLink = { name: string; formUrl: string };
   let formLinks: FormLink[];
 
+  // Form links come only from the platform registry, never from the request.
   if (urlFormLinks.length > 0) {
     formLinks = urlFormLinks.map((p) => ({ name: p!.name, formUrl: p!.formUrl! }));
-  } else if (queryFormUrl) {
-    formLinks = [{ name: queryPlatformName ?? "Platform", formUrl: queryFormUrl }];
   } else {
     formLinks = [];
   }
 
-  const isHashOnlyPath = record.urls.length === 0 && !!queryFormUrl;
+  const isHashOnlyPath = record.urls.length === 0;
 
   return (
     <AppShell>

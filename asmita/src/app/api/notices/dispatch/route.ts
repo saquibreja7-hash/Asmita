@@ -62,6 +62,11 @@ export async function POST(request: Request) {
   if (submittedUrl.status !== "NOTICE_QUEUED") {
     return NextResponse.json({ error: "url_not_ready_for_dispatch" }, { status: 409 });
   }
+  // Notice integrity: nothing goes out in the survivor's name that they have
+  // not reviewed and signed.
+  if (!submittedUrl.signedNoticePdf) {
+    return NextResponse.json({ error: "signature_required" }, { status: 409 });
+  }
 
   const platform = submittedUrl.platform;
   if (!platform?.isActive) {
@@ -104,8 +109,9 @@ export async function POST(request: Request) {
     caseReference: submittedUrl.case.referenceNumber,
     platformName: platform.name,
     url: portalLink,
-    declarationReference:
-      submittedUrl.case.declarationSignedAt?.toISOString() ?? submittedUrl.case.referenceNumber,
+    // Same reference the signed PDF carries (see sign-notice), so the email
+    // body and the attached declaration agree.
+    declarationReference: submittedUrl.case.referenceNumber,
   };
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
   let body = renderNoticeTemplate(template.bodyTemplate, variables);

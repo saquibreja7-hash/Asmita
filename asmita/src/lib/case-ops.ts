@@ -19,7 +19,7 @@ export type DisplayUrl = {
   status: string;
   urlHash: string;
   platformId: string | null;
-  signedNoticePdf?: string | null;
+  hasSignedNotice?: boolean;
   flaggedForReview?: boolean;
   flagReason?: string | null;
 };
@@ -50,7 +50,7 @@ function toDisplayUrl(url: {
     status: url.status,
     urlHash: url.urlHash,
     platformId: url.platformId,
-    signedNoticePdf: url.signedNoticePdf,
+    hasSignedNotice: url.signedNoticePdf != null,
     flaggedForReview: url.flaggedForReview,
     flagReason: url.flagReason,
   };

@@ -56,9 +56,11 @@ export async function POST(request: Request) {
   const response = NextResponse.json({ success: true, redirectTo: "/admin/cases" });
   response.cookies.set("asmita_admin_session", session, {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "strict",
     secure: process.env.NODE_ENV === "production",
-    path: "/admin",
+    // Admin APIs live under /api/admin/*, so the cookie must be site-wide.
+    // Cross-use with the survivor session is prevented by the namespace claim.
+    path: "/",
     maxAge: 8 * 60 * 60,
   });
   return response;

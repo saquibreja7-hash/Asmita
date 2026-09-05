@@ -11,6 +11,12 @@ import { getClientIp } from "@/lib/request-ip";
 
 const schema = z.object({ email: z.email() });
 
+const PUBLIC_MAIL_DOMAINS = new Set([
+  "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.in", "yahoo.in", "ymail.com",
+  "outlook.com", "hotmail.com", "live.com", "msn.com", "icloud.com", "me.com",
+  "proton.me", "protonmail.com", "rediffmail.com", "zoho.com", "zohomail.in", "aol.com",
+]);
+
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
     logSecurityEvent({ event: "csrf_failed", route: "/api/auth/request-otp" });
@@ -29,8 +35,14 @@ export async function POST(request: Request) {
     try {
       emailLimit = await checkRateLimitAsync(`otp:${emailHash}`, 10, 60 * 60_000);
       const domain = parsed.data.email.split("@")[1]?.toLowerCase() || "unknown";
-      domainLimit = await checkRateLimitAsync(`registration-domain:${domain}`, 3, 24 * 60 * 60_000);
-      ipLimit = await checkRateLimitAsync(`registration-ip:${getClientIp(request)}`, 3, 60 * 60_000);
+      // Public mail providers are shared by millions of survivors; a per-domain
+      // bucket there lets three requests lock everyone out. Only throttle
+      // unusual domains, which is where bulk fake signups come from.
+      domainLimit = PUBLIC_MAIL_DOMAINS.has(domain)
+        ? { allowed: true, remaining: Number.MAX_SAFE_INTEGER }
+        : await checkRateLimitAsync(`registration-domain:${domain}`, 10, 24 * 60 * 60_000);
+      // Carrier-grade NAT on Indian mobile networks puts many people behind one IP.
+      ipLimit = await checkRateLimitAsync(`registration-ip:${getClientIp(request)}`, 30, 60 * 60_000);
     } catch (error) {
       logSecurityEvent({
         event: "rate_limit_unavailable",
