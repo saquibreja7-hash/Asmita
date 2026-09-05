@@ -18,8 +18,19 @@ export function FlowProgress({ step, locale }: { step: 1 | 2 | 3 | 4; locale: Lo
     <div className="mb-10">
       <p className="eyebrow">
         {t(locale, "flow.stepLabel")} {step}/{TOTAL}
+        <span className="sm:hidden"> · {t(locale, stepKeys[step])}</span>
       </p>
-      <ol className="mt-4 flex flex-wrap items-center gap-y-3" aria-label="Progress">
+      {/* Phones: four thin segments. */}
+      <div className="mt-3 flex gap-1.5 sm:hidden" aria-hidden>
+        {Array.from({ length: TOTAL }, (_, i) => (
+          <span
+            key={i}
+            className="h-1 flex-1 rounded-full"
+            style={{ background: i < step ? "var(--color-off-black)" : "var(--color-ash)" }}
+          />
+        ))}
+      </div>
+      <ol className="mt-4 hidden flex-wrap items-center gap-y-3 sm:flex" aria-label="Progress">
         {Array.from({ length: TOTAL }, (_, i) => {
           const n = (i + 1) as 1 | 2 | 3 | 4;
           const state = n < step ? "done" : n === step ? "current" : "todo";
@@ -35,7 +46,7 @@ export function FlowProgress({ step, locale }: { step: 1 | 2 | 3 | 4; locale: Lo
                 <span className="node-icon" aria-hidden>
                   {state === "done" ? "✓" : String(n).padStart(2, "0")}
                 </span>
-                <span className={state === "current" ? "" : "hidden xl:inline"}>
+                <span className={state === "current" ? "" : "sr-only"}>
                   {t(locale, stepKeys[n])}
                 </span>
               </span>

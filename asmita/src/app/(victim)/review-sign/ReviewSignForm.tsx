@@ -233,8 +233,8 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
 
   if (step === "form-only-handoff") {
     return (
-      <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
-        <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
+      <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
+        <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
           <div className="md:sticky md:top-28">
             <span className="pill"><span className="dot" />{t(locale, "review.formOnly.pill")}</span>
             <p className="muted mt-5 text-sm leading-[1.75]">
@@ -248,7 +248,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
           </div>
         </aside>
 
-        <div className="min-w-0 flex-1 space-y-8">
+        <div className="order-1 min-w-0 flex-1 md:order-2 space-y-8">
           <div>
             <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
               {t(locale, "review.formOnly.title")}
@@ -290,8 +290,8 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
 
   if (step === "review" || step === "creating") {
     return (
-      <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
-        <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
+      <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
+        <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
           <div className="md:sticky md:top-28">
             <span className="pill"><span className="dot" />{t(locale, "review.pill")}</span>
             <p className="muted mt-5 text-sm leading-[1.75]">
@@ -305,7 +305,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
           </div>
         </aside>
 
-        <div className="min-w-0 flex-1 space-y-8">
+        <div className="order-1 min-w-0 flex-1 md:order-2 space-y-8">
           <div>
             <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
               {t(locale, "review.title")}
@@ -414,8 +414,8 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
   const signingInProgress = step === "signing" || step === "hash-signing";
 
   return (
-    <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
-      <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
+    <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
+      <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
         <div className="md:sticky md:top-28">
           <span className="pill">
             <span className="dot" />
@@ -432,7 +432,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         </div>
       </aside>
 
-      <div className="min-w-0 flex-1 space-y-8">
+      <div className="order-1 min-w-0 flex-1 md:order-2 space-y-8">
         <div>
           <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
             {isHashSign ? t(locale, "review.sign.hashTitle") : t(locale, "review.sign.title")}

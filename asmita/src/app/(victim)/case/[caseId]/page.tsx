@@ -111,11 +111,11 @@ export default async function CasePage({
   return (
     <AppShell>
       <div className="page-canvas">
-        <div className="container py-16 md:py-24">
-          <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
+        <div className="container py-8 md:py-24">
+          <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
 
             {/* LEFT - sticky case sidebar */}
-            <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
+            <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
               <div className="md:sticky md:top-28">
                 <span className="pill">
                   <span className="dot" />
@@ -204,7 +204,7 @@ export default async function CasePage({
             </aside>
 
             {/* RIGHT - main content */}
-            <div className="min-w-0 flex-1 space-y-10">
+            <div className="order-1 min-w-0 flex-1 md:order-2 space-y-10">
 
               {/* Sign notice CTA */}
               {hasQueuedUrl && !alreadySigned && (

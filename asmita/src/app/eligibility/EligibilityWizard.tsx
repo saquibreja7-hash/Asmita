@@ -206,7 +206,7 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
     t(locale, "eligibility.progress.contentType"),
   ];
   return (
-    <div className="mb-8">
+    <div className="mb-8 hidden sm:block">
       <div className="flex items-center gap-2">
         {labels.map((label, i) => (
           <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">

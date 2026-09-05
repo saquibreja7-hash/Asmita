@@ -997,6 +997,29 @@ textarea.input {
   color: var(--color-off-black);
 }
 
+/* ── Phone refinements ────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .font-size-large { font-size: 17px; }
+  .section-pad { padding-top: 48px; padding-bottom: 48px; }
+  .hero .section-pad { padding-top: 40px; padding-bottom: 40px; }
+  h1 { font-size: clamp(32px, 9vw, 40px); }
+  .card, .panel, .box-white, .plate, .box, .module-dark { padding: 20px; border-radius: 20px; }
+  .faq-item summary { font-size: 19px; padding: 20px 0; }
+}
+
+@media (max-width: 480px) {
+  /* Thumb-friendly: action buttons inside page content span the full width.
+     Header and footer buttons are outside <main> and keep their size. */
+  main .btn:not(.btn-link):not(.node) { width: 100%; }
+  main .flex.flex-wrap:has(> .btn) { flex-direction: column; align-items: stretch; }
+  .audience-pills { flex-direction: column; align-items: stretch; }
+  .hero-image-copy { max-width: none; }
+  .pipeline { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .pipeline .pipeline-link { display: none; }
+  .node { padding: 10px 14px; font-size: 12px; }
+}
+
 /* ── Header ───────────────────────────────────────────────────── */
 
 .site-header {

@@ -27,10 +27,13 @@ export function Header({ locale }: { locale: Locale }) {
       {/* Announcement bar: the one Ink surface on the page */}
       <div className="announce">
         <div className="container flex min-h-[40px] items-center justify-between gap-4 py-1.5">
-          <p className="m-0 truncate">
-            {isHi
-              ? "18 से कम उम्र के हैं, या तस्वीर तब की है? अलग, सुरक्षित रास्ता है।"
-              : "Under 18, or was the image taken when you were? There is a separate, safer path."}
+          <p className="m-0 min-w-0">
+            <span className="hidden sm:inline">
+              {isHi
+                ? "18 से कम उम्र के हैं, या तस्वीर तब की है? अलग, सुरक्षित रास्ता है।"
+                : "Under 18, or was the image taken when you were? There is a separate, safer path."}
+            </span>
+            <span className="sm:hidden">{isHi ? "18 से कम? सुरक्षित रास्ता है।" : "Under 18? There is a safer path."}</span>
           </p>
           <Link href="/minor-support" className="pill shrink-0">
             {isHi ? "देखें" : "Find it"}

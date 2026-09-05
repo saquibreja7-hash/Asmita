@@ -15,7 +15,7 @@ export default async function ReviewSignPage() {
   return (
     <AppShell>
       <div className="page-canvas">
-        <div className="container py-16 md:py-24">
+        <div className="container py-8 md:py-24">
           <div className="mx-auto max-w-5xl">
             <FlowProgress step={4} locale={locale} />
           </div>
