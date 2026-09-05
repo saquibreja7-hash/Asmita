@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { HeroArt } from "@/components/HeroArt";
 
 /*
  * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
@@ -87,12 +88,7 @@ export default function HomePage() {
       <div className="page-canvas">
         {/* HERO: pure typographic, wash behind */}
         <section className="hero" aria-label="Introduction">
-          <div
-            className="wash wash-coral-sky"
-            aria-hidden
-            style={{ width: "48vw", height: "48vw", maxWidth: 720, maxHeight: 720, top: "-18vw", left: "50%", transform: "translateX(-50%)" }}
-          />
-          <div className="hero-content container pt-20 pb-16 text-center md:pt-32 md:pb-24">
+          <div className="hero-content container pt-16 pb-12 text-center md:pt-24 md:pb-16">
             <span className="pill">
               <span className="dot" />
               Free and confidential, for India
@@ -115,6 +111,11 @@ export default function HomePage() {
                 How it works
               </Link>
             </div>
+          </div>
+
+          {/* Animated art */}
+          <div className="hero-content container pb-16 md:pb-20">
+            <HeroArt />
           </div>
 
           {/* Pipeline diagram */}

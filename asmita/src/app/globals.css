@@ -1224,3 +1224,187 @@ html[lang="hi"] .support-bar { text-transform: none; letter-spacing: 0; }
   }
   html { scroll-behavior: auto; }
 }
+
+/* ── Hero art (animated) ──────────────────────────────────────── */
+
+.hero-art {
+  --mx: 0.5;
+  --my: 0.5;
+  position: relative;
+  max-width: 1120px;
+  margin: 0 auto;
+  perspective: 1400px;
+}
+
+.hero-art-scene {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--color-ash);
+  aspect-ratio: 21 / 9;
+  background: var(--color-periwinkle-mist);
+  transform-style: preserve-3d;
+  transform:
+    rotateX(calc((0.5 - var(--my)) * 6deg))
+    rotateY(calc((var(--mx) - 0.5) * 8deg));
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.hero-art[data-hover="true"] .hero-art-scene {
+  transition: transform 0.12s linear;
+}
+
+.hero-art-scene img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 40%;
+  display: block;
+  transform:
+    translate(calc((0.5 - var(--mx)) * 2.5%), calc((0.5 - var(--my)) * 2.5%))
+    scale(1.08);
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  filter: saturate(0.92);
+}
+
+.hero-art[data-hover="true"] .hero-art-scene img {
+  transition: transform 0.12s linear;
+}
+
+.hero-art-scene > span {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Drifting mist bands */
+.hero-art-mist {
+  inset: -20%;
+  opacity: 0.55;
+  mix-blend-mode: soft-light;
+  filter: blur(40px);
+}
+
+.hero-art-mist-a {
+  background:
+    radial-gradient(40% 30% at 20% 70%, rgba(255, 255, 255, 0.9), transparent 70%),
+    radial-gradient(35% 25% at 65% 30%, rgba(255, 255, 255, 0.7), transparent 70%);
+  animation: hero-mist-a 22s ease-in-out infinite alternate;
+}
+
+.hero-art-mist-b {
+  background:
+    radial-gradient(45% 30% at 80% 85%, rgba(255, 210, 190, 0.8), transparent 70%),
+    radial-gradient(30% 30% at 35% 20%, rgba(207, 218, 245, 0.9), transparent 70%);
+  animation: hero-mist-b 28s ease-in-out infinite alternate;
+}
+
+@keyframes hero-mist-a {
+  from { transform: translate3d(-3%, 1%, 0) scale(1); }
+  to   { transform: translate3d(3%, -2%, 0) scale(1.08); }
+}
+
+@keyframes hero-mist-b {
+  from { transform: translate3d(2%, -1%, 0) scale(1.05); }
+  to   { transform: translate3d(-3%, 2%, 0) scale(1); }
+}
+
+/* The flower breathes: a warm glow centred on the bloom */
+.hero-art-bloom {
+  left: 74%;
+  top: 62%;
+  width: 30%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 214, 150, 0.85) 0%,
+    rgba(255, 160, 110, 0.45) 30%,
+    rgba(255, 148, 115, 0) 70%
+  );
+  mix-blend-mode: screen;
+  filter: blur(18px);
+  animation: hero-bloom 5.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.hero-art[data-hover="true"] .hero-art-bloom {
+  animation-duration: 3s;
+}
+
+@keyframes hero-bloom {
+  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.92); }
+  50%      { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
+}
+
+/* Warm halo that follows the pointer */
+.hero-art-halo {
+  left: calc(var(--mx) * 100%);
+  top: calc(var(--my) * 100%);
+  width: 46%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 236, 200, 0.55) 0%,
+    rgba(255, 180, 140, 0.25) 35%,
+    rgba(255, 148, 115, 0) 70%
+  );
+  mix-blend-mode: soft-light;
+  filter: blur(30px);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.hero-art[data-hover="true"] .hero-art-halo {
+  opacity: 1;
+}
+
+/* Sheen sweeping across on hover */
+.hero-art-sheen {
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.18) 48%,
+    rgba(255, 255, 255, 0.28) 50%,
+    rgba(255, 255, 255, 0.18) 52%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  mix-blend-mode: soft-light;
+}
+
+.hero-art[data-hover="true"] .hero-art-sheen {
+  animation: hero-sheen 1.8s ease-out 1 forwards;
+}
+
+@keyframes hero-sheen {
+  to { transform: translateX(120%); }
+}
+
+@media (max-width: 720px) {
+  .hero-art-scene {
+    aspect-ratio: 4 / 3;
+    border-radius: 24px;
+  }
+  .hero-art-scene img { object-position: 60% 40%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-art-scene,
+  .hero-art-scene img,
+  .hero-art-mist,
+  .hero-art-bloom,
+  .hero-art-sheen {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+  .hero-art-bloom { opacity: 0.8; transform: translate(-50%, -50%) !important; }
+  .hero-art-halo { display: none; }
+}
