@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
-import { HeroArt } from "@/components/HeroArt";
+import { HeroScene } from "@/components/HeroScene";
 
 /*
  * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
@@ -88,34 +88,32 @@ export default function HomePage() {
       <div className="page-canvas">
         {/* HERO: pure typographic, wash behind */}
         <section className="hero" aria-label="Introduction">
-          <div className="hero-content container pt-16 pb-12 text-center md:pt-24 md:pb-16">
-            <span className="pill">
-              <span className="dot" />
-              Free and confidential, for India
-            </span>
-            <h1 className="mx-auto mt-8 max-w-5xl text-[clamp(40px,7vw,80px)]">
-              Take the image down.
-              <br />
-              Keep the image private.
-            </h1>
-            <p className="font-size-large mx-auto mt-6 max-w-2xl">
-              Legally grounded takedown notices and on-device fingerprint blocking for
-              anyone in India facing non-consensual or AI-made intimate images. Your
-              image never leaves your phone.
-            </p>
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              <Link className="btn btn-primary btn-arrow" href="/get-help">
-                Get help
-              </Link>
-              <Link className="btn btn-secondary" href="/what-we-do">
-                How it works
-              </Link>
+          <div className="hero-content container pt-12 pb-8 md:pt-20 md:pb-12">
+            <div className="hero-grid">
+              <div className="text-center lg:text-left">
+                <span className="pill">
+                  <span className="dot" />
+                  Free and confidential, for India
+                </span>
+                <h1 className="mx-auto mt-8 max-w-3xl text-[clamp(40px,6vw,76px)] lg:mx-0">
+                  Take the image down. Keep the image private.
+                </h1>
+                <p className="font-size-large mx-auto mt-6 max-w-xl lg:mx-0">
+                  Legally grounded takedown notices and on-device fingerprint blocking for
+                  anyone in India facing non-consensual or AI-made intimate images. Your
+                  image never leaves your phone.
+                </p>
+                <div className="mt-10 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
+                  <Link className="btn btn-primary btn-arrow" href="/get-help">
+                    Get help
+                  </Link>
+                  <Link className="btn btn-secondary" href="/what-we-do">
+                    How it works
+                  </Link>
+                </div>
+              </div>
+              <HeroScene />
             </div>
-          </div>
-
-          {/* Animated art */}
-          <div className="hero-content container pb-16 md:pb-20">
-            <HeroArt />
           </div>
 
           {/* Pipeline diagram */}

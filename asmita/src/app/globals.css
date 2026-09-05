@@ -1225,186 +1225,152 @@ html[lang="hi"] .support-bar { text-transform: none; letter-spacing: 0; }
   html { scroll-behavior: auto; }
 }
 
-/* ── Hero art (animated) ──────────────────────────────────────── */
+/* ── Hero scene (vector) ──────────────────────────────────────── */
 
-.hero-art {
-  --mx: 0.5;
-  --my: 0.5;
+.scene {
+  --px: 0;
+  --py: 0;
   position: relative;
-  max-width: 1120px;
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 660px;
   margin: 0 auto;
-  perspective: 1400px;
 }
 
-.hero-art-scene {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-cards);
-  border: 1px solid var(--color-ash);
-  aspect-ratio: 21 / 9;
-  background: var(--color-periwinkle-mist);
-  transform-style: preserve-3d;
-  transform:
-    rotateX(calc((0.5 - var(--my)) * 6deg))
-    rotateY(calc((var(--mx) - 0.5) * 8deg));
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-  will-change: transform;
-}
-
-.hero-art[data-hover="true"] .hero-art-scene {
-  transition: transform 0.12s linear;
-}
-
-.hero-art-scene img {
+.scene-svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center 40%;
-  display: block;
-  transform:
-    translate(calc((0.5 - var(--mx)) * 2.5%), calc((0.5 - var(--my)) * 2.5%))
-    scale(1.08);
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-  filter: saturate(0.92);
+  overflow: visible;
 }
 
-.hero-art[data-hover="true"] .hero-art-scene img {
-  transition: transform 0.12s linear;
+/* Parallax: each layer moves by its depth */
+.scene .layer {
+  transform: translate(calc(var(--px) * var(--d, 1) * 14px), calc(var(--py) * var(--d, 1) * 10px));
+  will-change: transform;
 }
 
-.hero-art-scene > span {
-  position: absolute;
-  pointer-events: none;
+.scene .wash-a { animation: scene-wash-a 18s ease-in-out infinite alternate; transform-origin: 560px 330px; }
+.scene .wash-b { animation: scene-wash-b 24s ease-in-out infinite alternate; transform-origin: 250px 560px; }
+
+@keyframes scene-wash-a {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(-30px, 24px) scale(1.12); }
+}
+@keyframes scene-wash-b {
+  from { transform: translate(0, 0) scale(1.08); }
+  to   { transform: translate(28px, -20px) scale(0.96); }
 }
 
-/* Drifting mist bands */
-.hero-art-mist {
-  inset: -20%;
-  opacity: 0.55;
-  mix-blend-mode: soft-light;
-  filter: blur(40px);
+.scene .ring-dash {
+  animation: scene-dash 60s linear infinite;
 }
+@keyframes scene-dash { to { stroke-dashoffset: -600; } }
 
-.hero-art-mist-a {
-  background:
-    radial-gradient(40% 30% at 20% 70%, rgba(255, 255, 255, 0.9), transparent 70%),
-    radial-gradient(35% 25% at 65% 30%, rgba(255, 255, 255, 0.7), transparent 70%);
-  animation: hero-mist-a 22s ease-in-out infinite alternate;
+.scene .orbit {
+  transform-origin: 400px 440px;
+  animation: scene-spin linear infinite;
 }
+.scene .orbit-1 { animation-duration: 26s; }
+.scene .orbit-2 { animation-duration: 40s; animation-direction: reverse; }
+.scene .orbit-3 { animation-duration: 42s; }
 
-.hero-art-mist-b {
-  background:
-    radial-gradient(45% 30% at 80% 85%, rgba(255, 210, 190, 0.8), transparent 70%),
-    radial-gradient(30% 30% at 35% 20%, rgba(207, 218, 245, 0.9), transparent 70%);
-  animation: hero-mist-b 28s ease-in-out infinite alternate;
-}
-
-@keyframes hero-mist-a {
-  from { transform: translate3d(-3%, 1%, 0) scale(1); }
-  to   { transform: translate3d(3%, -2%, 0) scale(1.08); }
-}
-
-@keyframes hero-mist-b {
-  from { transform: translate3d(2%, -1%, 0) scale(1.05); }
-  to   { transform: translate3d(-3%, 2%, 0) scale(1); }
-}
-
-/* The flower breathes: a warm glow centred on the bloom */
-.hero-art-bloom {
-  left: 74%;
-  top: 62%;
-  width: 30%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 9999px;
-  background: radial-gradient(
-    circle,
-    rgba(255, 214, 150, 0.85) 0%,
-    rgba(255, 160, 110, 0.45) 30%,
-    rgba(255, 148, 115, 0) 70%
-  );
-  mix-blend-mode: screen;
-  filter: blur(18px);
-  animation: hero-bloom 5.5s ease-in-out infinite;
+/* keep the pills upright while their carrier spins */
+.scene .upright {
+  transform-box: fill-box;
   transform-origin: center;
+  animation: scene-spin-reverse 42s linear infinite;
 }
 
-.hero-art[data-hover="true"] .hero-art-bloom {
-  animation-duration: 3s;
+@keyframes scene-spin { to { transform: rotate(360deg); } }
+@keyframes scene-spin-reverse { to { transform: rotate(-360deg); } }
+
+.scene .node-text {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: -0.02em;
+  fill: #242424;
+}
+.scene .node-text-light { fill: #f6f3f1; }
+
+.scene .sway {
+  transform-origin: 400px 800px;
+  animation: scene-sway 9s ease-in-out infinite alternate;
+}
+@keyframes scene-sway {
+  from { transform: rotate(-1.6deg); }
+  to   { transform: rotate(1.6deg); }
 }
 
-@keyframes hero-bloom {
-  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.92); }
-  50%      { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
+.scene .head {
+  transform-origin: 400px 440px;
+  animation: scene-head 9s ease-in-out infinite alternate;
+}
+@keyframes scene-head {
+  from { transform: rotate(2deg); }
+  to   { transform: rotate(-2deg); }
 }
 
-/* Warm halo that follows the pointer */
-.hero-art-halo {
-  left: calc(var(--mx) * 100%);
-  top: calc(var(--my) * 100%);
-  width: 46%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 9999px;
-  background: radial-gradient(
-    circle,
-    rgba(255, 236, 200, 0.55) 0%,
-    rgba(255, 180, 140, 0.25) 35%,
-    rgba(255, 148, 115, 0) 70%
-  );
-  mix-blend-mode: soft-light;
-  filter: blur(30px);
+.scene .petal {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: scene-petal 6s ease-in-out infinite alternate;
+}
+.scene .petal-inner { animation-duration: 5s; }
+@keyframes scene-petal {
+  from { transform: scale(0.95) rotate(-1.5deg); }
+  to   { transform: scale(1.04) rotate(1.5deg); }
+}
+
+.scene .bloom-glow {
+  transform-origin: 400px 440px;
+  animation: scene-glow 5s ease-in-out infinite alternate;
+}
+@keyframes scene-glow {
+  from { opacity: 0.55; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1.12); }
+}
+
+.scene .stamen {
+  transform-origin: 400px 440px;
+  animation: scene-stamen 3s ease-in-out infinite alternate;
+}
+@keyframes scene-stamen {
+  from { opacity: 0.5; }
+  to   { opacity: 1; }
+}
+
+.scene .particle {
   opacity: 0;
-  transition: opacity 0.5s ease;
+  animation-name: scene-rise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes scene-rise {
+  0%   { transform: translateY(0); opacity: 0; }
+  10%  { opacity: 0.9; }
+  80%  { opacity: 0.5; }
+  100% { transform: translateY(-520px); opacity: 0; }
 }
 
-.hero-art[data-hover="true"] .hero-art-halo {
-  opacity: 1;
+/* Two-column hero */
+.hero-grid {
+  display: grid;
+  gap: 48px;
+  align-items: center;
 }
 
-/* Sheen sweeping across on hover */
-.hero-art-sheen {
-  inset: 0;
-  background: linear-gradient(
-    115deg,
-    transparent 30%,
-    rgba(255, 255, 255, 0.18) 48%,
-    rgba(255, 255, 255, 0.28) 50%,
-    rgba(255, 255, 255, 0.18) 52%,
-    transparent 70%
-  );
-  transform: translateX(-120%);
-  mix-blend-mode: soft-light;
-}
-
-.hero-art[data-hover="true"] .hero-art-sheen {
-  animation: hero-sheen 1.8s ease-out 1 forwards;
-}
-
-@keyframes hero-sheen {
-  to { transform: translateX(120%); }
-}
-
-@media (max-width: 720px) {
-  .hero-art-scene {
-    aspect-ratio: 4 / 3;
-    border-radius: 24px;
+@media (min-width: 1024px) {
+  .hero-grid {
+    grid-template-columns: 1.05fr 1fr;
+    gap: 64px;
   }
-  .hero-art-scene img { object-position: 60% 40%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-art-scene,
-  .hero-art-scene img,
-  .hero-art-mist,
-  .hero-art-bloom,
-  .hero-art-sheen {
-    animation: none !important;
-    transition: none !important;
-    transform: none !important;
-  }
-  .hero-art-bloom { opacity: 0.8; transform: translate(-50%, -50%) !important; }
-  .hero-art-halo { display: none; }
+  .scene * { animation: none !important; }
+  .scene .layer { transform: none !important; }
+  .scene .particle { display: none; }
+  .scene .bloom-glow { opacity: 0.8; }
 }
