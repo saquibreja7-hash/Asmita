@@ -265,8 +265,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
                 href={platform.formUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 hover:border-[var(--teal)] transition-colors"
-                style={{ boxShadow: "var(--shadow-soft)" }}
+                className="flex items-center justify-between rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5 hover:border-[var(--teal)] transition-colors"
               >
                 <div>
                   <p className="text-sm font-medium text-[var(--foreground)]">{platform.name}</p>
@@ -318,8 +317,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
 
           {draft && draft.urls.length > 0 && (
             <div
-              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
-              style={{ boxShadow: "var(--shadow-soft)" }}
+              className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6"
             >
               <p className="text-sm font-medium text-[var(--foreground)]">
                 {t(locale, "review.links.label")} ({draft.urls.length})
@@ -341,11 +339,10 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
 
           {draft && draft.hashes.length > 0 && (
             <div
-              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
-              style={{ boxShadow: "var(--shadow-soft)" }}
+              className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6"
             >
               <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--teal-soft)]">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[16px] bg-[var(--teal-soft)]">
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <rect x="1" y="1" width="5" height="5" rx="1" stroke="var(--teal)" strokeWidth="1.2"/>
                     <rect x="8" y="1" width="5" height="5" rx="1" stroke="var(--teal)" strokeWidth="1.2"/>
@@ -361,9 +358,9 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
               <ul className="mt-4 space-y-2">
                 {draft.hashes.map((h, i) => {
                   const q = h.quality;
-                  const qColor = q >= 70 ? "text-emerald-700 bg-emerald-50" : q >= 50 ? "text-amber-700 bg-amber-50" : "text-rose-700 bg-rose-50";
+                  const qColor = q >= 70 ? "text-[var(--success)] bg-[#dff5ea]" : q >= 50 ? "text-[var(--warning)] bg-[#f3ead0]" : "text-[var(--danger)] bg-[#f8e1de]";
                   return (
-                    <li key={i} className="flex items-center justify-between rounded-lg border border-[var(--hairline)] px-3 py-2.5">
+                    <li key={i} className="flex items-center justify-between rounded-[16px] border border-[var(--hairline)] px-3 py-2.5">
                       <span className="font-mono text-[12px] text-[var(--muted)]">{h.hash.slice(0, 8)}&thinsp;&middot;&thinsp;{h.hash.slice(8, 16)}&thinsp;&middot;&thinsp;&hellip;</span>
                       <span className={`ml-3 shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] font-medium ${qColor}`}>{q}%</span>
                     </li>
@@ -446,11 +443,10 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         </div>
 
         <div
-          className="overflow-hidden rounded-xl border border-[var(--border)]"
-          style={{ boxShadow: "var(--shadow-soft)" }}
+          className="overflow-hidden rounded-[24px] border border-[var(--border)]"
         >
           <div className="border-b border-[var(--hairline)] bg-[var(--surface)] px-5 py-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
               {isHashSign ? t(locale, "review.sign.hashPreviewLabel") : t(locale, "review.sign.previewLabel")}
             </p>
           </div>
@@ -463,8 +459,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         </div>
 
         <div
-          className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
-          style={{ boxShadow: "var(--shadow-soft)" }}
+          className="space-y-5 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6"
         >
           <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "review.sign.details.title")}</p>
 
@@ -504,8 +499,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         </div>
 
         <div
-          className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
-          style={{ boxShadow: "var(--shadow-soft)" }}
+          className="space-y-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6"
         >
           <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "review.sign.sig.title")}</p>
           <p className="muted text-sm leading-[1.6]">

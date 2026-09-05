@@ -23,9 +23,9 @@ function StatusBadge({ status }: { status: string }) {
     status === "RESOLVED"
       ? "bg-[var(--teal-soft)] text-[var(--teal-dark)]"
       : status === "NOTICE_SENT" || status === "NOTICE_QUEUED"
-      ? "bg-amber-50 text-amber-800"
+      ? "bg-[#f3ead0] text-[var(--warning)]"
       : status === "ESCALATED"
-      ? "bg-rose-50 text-[var(--rose)]"
+      ? "bg-[#f8e1de] text-[var(--danger)]"
       : "bg-[var(--background)] text-[var(--muted)]";
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${color}`}>
@@ -137,14 +137,14 @@ export default async function CasePage({
 
                 {/* Summary stats */}
                 <div className="mt-6 grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-center">
+                  <div className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-center">
                     <p className="font-mono text-[20px] font-normal text-[var(--foreground)]">
                       {record.urls.length}
                     </p>
                     <p className="muted text-[11px]">{t(locale, "case.stat.links")}</p>
                   </div>
                   {hashUploadEnabled && (
-                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-center">
+                    <div className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-center">
                       <p className="font-mono text-[20px] font-normal text-[var(--foreground)]">
                         {hashSubmissions.length}
                       </p>
@@ -163,7 +163,7 @@ export default async function CasePage({
                     <a
                       key={item.href}
                       href={item.href}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
+                      className="flex items-center gap-2 rounded-[12px] px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
                     >
                       {item.label}
                     </a>
@@ -172,7 +172,7 @@ export default async function CasePage({
 
                 {/* Case tools */}
                 <div className="mt-6 space-y-1.5">
-                  <p className="px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                  <p className="px-2 font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
                     {t(locale, "case.tools.label")}
                   </p>
                   {[
@@ -182,20 +182,20 @@ export default async function CasePage({
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
+                      className="flex items-center gap-2 rounded-[12px] px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
                     >
                       {item.label}
                     </Link>
                   ))}
                   <Link
                     href="/resources"
-                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
+                    className="flex items-center gap-2 rounded-[12px] px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
                   >
                     {t(locale, "case.tools.resources")}
                   </Link>
                   <Link
                     href="/delete-account"
-                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-rose-50 hover:text-[var(--rose)]"
+                    className="flex items-center gap-2 rounded-[12px] px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[#f8e1de] hover:text-[var(--rose)]"
                   >
                     {t(locale, "case.tools.delete")}
                   </Link>
@@ -208,8 +208,8 @@ export default async function CasePage({
 
               {/* Sign notice CTA */}
               {hasQueuedUrl && !alreadySigned && (
-                <div className="rounded-xl border border-[var(--teal)] bg-[color-mix(in_srgb,var(--teal)_6%,white)] p-6">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--teal)]">
+                <div className="rounded-[24px] border border-[var(--teal)] bg-[color-mix(in_srgb,var(--teal)_6%,white)] p-6">
+                  <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--teal)]">
                     {t(locale, "case.sign.pill")}
                   </p>
                   <h2 className="font-display mt-2 text-[22px] font-normal leading-[1.2] tracking-tight md:text-[26px]">
@@ -236,23 +236,21 @@ export default async function CasePage({
                 </div>
 
                 {record.urls.length === 0 ? (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-8 text-center"
-                    style={{ boxShadow: "var(--shadow-soft)" }}
+                  <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-6 py-8 text-center"
                   >
                     <p className="muted text-sm leading-[1.75]">
                       {t(locale, "case.urls.empty")}
                     </p>
                   </div>
                 ) : (
-                  <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
-                    style={{ boxShadow: "var(--shadow-soft)" }}
+                  <div className="overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface)]"
                   >
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[500px] border-collapse text-left text-sm">
                         <thead>
                           <tr className="border-b border-[var(--hairline)]">
                             {[t(locale, "case.urls.col.platform"), t(locale, "case.urls.col.domain"), t(locale, "case.urls.col.status")].map((h) => (
-                              <th key={h} className="font-mono px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                              <th key={h} className="font-mono px-5 py-3 text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
                                 {h}
                               </th>
                             ))}
@@ -300,15 +298,14 @@ export default async function CasePage({
                   </p>
 
                   {hashSubmissions.length > 0 && (
-                    <div className="mb-5 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
-                      style={{ boxShadow: "var(--shadow-soft)" }}
+                    <div className="mb-5 overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface)]"
                     >
                       <div className="overflow-x-auto">
                         <table className="w-full min-w-[400px] border-collapse text-left text-sm">
                           <thead>
                             <tr className="border-b border-[var(--hairline)]">
                               {[t(locale, "case.fingerprints.col.fp"), t(locale, "case.fingerprints.col.quality"), t(locale, "case.fingerprints.col.status")].map((h) => (
-                                <th key={h} className="font-mono px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                                <th key={h} className="font-mono px-5 py-3 text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
                                   {h}
                                 </th>
                               ))}

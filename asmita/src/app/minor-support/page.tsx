@@ -135,8 +135,7 @@ export default async function MinorSupportPage() {
                           ? `${item.name} - ${item.contact} (opens in new tab)`
                           : `${item.name} - call ${item.contact}`
                       }
-                      className="flex items-start justify-between gap-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-5 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
-                      style={{ boxShadow: "var(--shadow-soft)" }}
+                      className="flex items-start justify-between gap-6 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-6 py-5 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
                     >
                       <div>
                         <p className="font-medium text-[var(--foreground)]">{item.name}</p>

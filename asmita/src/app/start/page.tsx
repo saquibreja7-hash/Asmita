@@ -34,20 +34,11 @@ export default async function StartPage() {
         <section className="container py-14 md:py-20">
           <div className="mx-auto max-w-lg">
 
-            <div
-              className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-7"
-              style={{ boxShadow: "var(--shadow-soft)" }}
-            >
-              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                {t(locale, "start.adult.eyebrow")}
-              </p>
-              <h2 className="mt-3 text-[20px] font-medium leading-[1.25] tracking-tight text-[var(--foreground)] md:text-[23px]">
-                {t(locale, "start.adult.title")}
-              </h2>
-              <p className="muted mt-3 text-sm leading-[1.75]">
-                {t(locale, "start.adult.body")}
-              </p>
-              <Link className="btn btn-primary mt-7 w-full justify-center" href="/eligibility">
+            <div className="card flex flex-col">
+              <span className="eyebrow">{t(locale, "start.adult.eyebrow")}</span>
+              <h2 className="mt-4">{t(locale, "start.adult.title")}</h2>
+              <p className="mt-4">{t(locale, "start.adult.body")}</p>
+              <Link className="btn btn-primary btn-arrow mt-8 w-full justify-center" href="/eligibility">
                 {t(locale, "start.adult.cta")}
               </Link>
             </div>

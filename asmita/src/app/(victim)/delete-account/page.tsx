@@ -31,7 +31,7 @@ export default async function DeleteAccountPage() {
         {/* WHAT GETS DELETED */}
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
               {t(locale, "delete.what.eyebrow")}
             </p>
             <h2 className="font-display mt-4 text-[26px] font-normal leading-[1.2] tracking-tight md:text-[36px] md:leading-[1.18]">

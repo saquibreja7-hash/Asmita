@@ -63,7 +63,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
           </InfoBox>
         </div>
 
-        <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 text-sm leading-[1.7] text-[var(--muted)]">
+        <div className="mt-5 rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4 text-sm leading-[1.7] text-[var(--muted)]">
           <span className="font-medium text-[var(--foreground)]">{t(locale, "eligibility.limits.bold")}</span>{" "}
           {t(locale, "eligibility.limits.rest")}
         </div>
@@ -147,7 +147,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
           {t(locale, "eligibility.stop.other.sub2")}
         </p>
         <div className="mt-6 space-y-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+          <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
             {t(locale, "eligibility.stop.other.orgs")}
           </p>
           <ResourceLink name="iCall - Psychosocial Support" contact="9152987821" href="tel:9152987821">
@@ -174,7 +174,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
           {t(locale, "eligibility.stop.content.sub")}
         </p>
         <div className="mt-6 space-y-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+          <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
             {t(locale, "eligibility.stop.content.orgs")}
           </p>
           <ResourceLink name="National Cybercrime Portal" contact="cybercrime.gov.in" href="https://cybercrime.gov.in/" external>
@@ -212,9 +212,9 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
           <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
             <div className="flex items-center gap-2">
               <div
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium transition-colors ${
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-medium transition-colors ${
                   i < current
-                    ? "bg-[var(--teal)] text-white"
+                    ? "bg-[var(--color-off-black)] text-[var(--color-parchment)]"
                     : i === current
                     ? "border-2 border-[var(--teal)] text-[var(--teal)]"
                     : "border border-[var(--border)] text-[var(--muted)]"
@@ -268,7 +268,7 @@ function WizardShell({
           <button
             type="button"
             onClick={onBack}
-            className="shrink-0 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+            className="shrink-0 font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
             aria-label="Go back to previous step"
           >
             {t(locale, "eligibility.back")}
@@ -293,7 +293,7 @@ function ChoiceOption({
 }) {
   return (
     <label
-      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-left transition-colors ${
+      className={`flex cursor-pointer items-start gap-3 rounded-[24px] border p-4 text-left transition-colors ${
         checked
           ? "border-[var(--teal)] bg-[var(--teal-soft)]"
           : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
@@ -325,7 +325,7 @@ function InfoBox({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
+    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4">
       <p className="text-[14px] font-medium leading-[1.3] text-[var(--foreground)]">
         {title}
       </p>
@@ -348,7 +348,7 @@ function ResourceLink({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
+    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4">
       <p className="text-[15px] font-medium leading-[1.3] text-[var(--foreground)]">
         {name}
       </p>

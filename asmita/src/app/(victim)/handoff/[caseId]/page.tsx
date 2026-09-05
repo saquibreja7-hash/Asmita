@@ -175,8 +175,7 @@ Please process this through your official content removal procedure.`;
                         href={link.formUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-4 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
-                        style={{ boxShadow: "var(--shadow-soft)" }}
+                        className="flex items-center justify-between rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-5 py-4 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
                       >
                         <span className="font-medium text-[var(--foreground)]">{link.name}</span>
                         <span className="font-mono text-sm text-[var(--teal-dark)]">
@@ -186,7 +185,7 @@ Please process this through your official content removal procedure.`;
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-4">
+                  <div className="mt-3 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-5 py-4">
                     <p className="muted text-sm leading-[1.75]">
                       {t(locale, "handoff.form.noUrl")}
                     </p>

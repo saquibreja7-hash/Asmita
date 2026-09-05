@@ -87,7 +87,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
           </p>
           <div className="mt-6 space-y-3">
             <label
-              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
+              className={`flex cursor-pointer items-start gap-3 rounded-[24px] border p-4 transition-colors ${
                 ageConfirmed === "adult"
                   ? "border-[var(--teal)] bg-[var(--teal-soft)]"
                   : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
@@ -104,7 +104,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
               </span>
             </label>
             <label
-              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
+              className={`flex cursor-pointer items-start gap-3 rounded-[24px] border p-4 transition-colors ${
                 ageConfirmed === "minor"
                   ? "border-[var(--teal)] bg-[var(--teal-soft)]"
                   : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
@@ -245,9 +245,9 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
         <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
           <div className="flex items-center gap-2">
             <div
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium transition-colors ${
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-medium transition-colors ${
                 i < current
-                  ? "bg-[var(--teal)] text-white"
+                  ? "bg-[var(--color-off-black)] text-[var(--color-parchment)]"
                   : i === current
                   ? "border-2 border-[var(--teal)] text-[var(--teal)]"
                   : "border border-[var(--border)] text-[var(--muted)]"

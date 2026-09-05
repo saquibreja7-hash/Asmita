@@ -120,10 +120,9 @@ export default async function ConfirmationPage({
 
               {/* Reference number block */}
               <div
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8"
-                style={{ boxShadow: "var(--shadow-soft)" }}
+                className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-8"
               >
-                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
                   {t(locale, "confirm.ref.eyebrow")}
                 </p>
                 <p className="font-mono mt-4 text-[32px] tracking-tight text-[var(--teal-dark)] md:text-[44px]">
@@ -136,10 +135,9 @@ export default async function ConfirmationPage({
 
               {/* What happens next */}
               <div
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8"
-                style={{ boxShadow: "var(--shadow-soft)" }}
+                className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-8"
               >
-                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
                   {t(locale, "confirm.next.eyebrow")}
                 </p>
                 <h2 className="font-display mt-4 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[26px]">

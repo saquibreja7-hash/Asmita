@@ -198,6 +198,13 @@ button, input, textarea, select {
   border-radius: 4px;
 }
 
+/* Editorial emphasis inside serif headings: italic, same weight, no colour shift */
+.text-gradient {
+  font-style: italic;
+  color: var(--color-off-black);
+  background: none;
+}
+
 /* ── Shell and layout ─────────────────────────────────────────── */
 
 .page-shell {
@@ -546,7 +553,7 @@ textarea.input {
 
 @media (max-width: 720px) {
   .pipeline { flex-direction: column; }
-  .pipeline-link { width: 1px; height: 20px; }
+  .pipeline .pipeline-link { width: 1px; height: 20px; }
 }
 
 /* ── Cards ────────────────────────────────────────────────────── */
