@@ -1,6 +1,6 @@
 # Asmita
 
-Asmita is a privacy-preserving NCII support and notice-routing application for adult victim self-submission. Phase 1 is URL-only: the app must never fetch, preview, scrape, thumbnail, store, or upload intimate media.
+Asmita is an NCII support and notice-routing application for adult self-submission. A case can include post URLs as text and fingerprints generated on the user's device. The separate AI checker can inspect provenance locally or perform a consented deeper provider check.
 
 ## Getting Started
 
@@ -25,13 +25,13 @@ npm run build
 npm run test:e2e
 ```
 
-## Safety Rules
+## Current data handling
 
 - Do not fetch, resolve, preview, embed, or render submitted URLs.
-- Do not store intimate image or video files in Phase 1.
+- Image provenance can be checked locally; the optional deeper check forwards a selected image to its provider only with explicit consent and keeps no server copy.
 - Do not store Aadhaar numbers.
 - Do not send real notices until platform contacts, sender domains, and templates are human-verified.
-- Keep `ENABLE_HASH_UPLOAD=false` and `ENABLE_PLATFORM_API=false` until Phase 2 gates pass.
+- Adults can generate PDQ fingerprints on their device and submit the hash code with a case. Platform API dispatch remains disabled until its contacts and integration are verified.
 
 ## Operational Docs
 
@@ -43,4 +43,4 @@ npm run test:e2e
 
 ## Deployment
 
-`vercel.json` targets the Mumbai region (`bom1`). Production deployment still requires human-owned infrastructure setup, India-region database/Redis provisioning, email DNS verification, legal review, POCSO protocol approval, GO contact verification, security review, and accessibility sign-off.
+Cloudflare Workers is the selected hosting and backend target. The vinext build in `vite.config.ts` and `wrangler.jsonc` builds and renders locally. PostgreSQL remains the system of record, and Cloudflare Cron Triggers invoke the database-backed sweep routes. Production deployment still requires Cloudflare account authentication, staging database and Hyperdrive setup, staging migrations and workflow proof, email DNS verification, GO contact verification, legal and POCSO review, security review, and accessibility sign-off. `vercel.json` is legacy configuration and is not the Cloudflare deployment path.

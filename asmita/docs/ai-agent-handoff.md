@@ -1,4 +1,6 @@
-﻿# Asmita — Handoff for the next AI agent
+# Asmita — Handoff for the next AI agent
+
+**Historical snapshot:** This document describes the May 2026 Vercel design and is not current deployment guidance. The selected hosting and backend target is Cloudflare Workers. The parallel vinext build lives in `vite.config.ts` and `wrangler.jsonc`; case storage, queues, and scheduled jobs remain to be integrated. Image checking and on-device hash generation have been restored in the redesign worktree. Read `README.md` and the current code before using this snapshot.
 
 **Last refreshed:** 2026-05-17
 **Repo HEAD when written:** `b913414`

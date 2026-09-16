@@ -1,0 +1,49 @@
+import app from "vinext/server/fetch-handler";
+
+type WorkerEnv = {
+  ASSETS: unknown;
+  CRON_SECRET: string;
+};
+
+type WorkerExecutionContext = {
+  waitUntil(promise: Promise<unknown>): void;
+};
+
+type WorkerScheduledController = {
+  cron: string;
+};
+
+const cronRoutes: Record<string, string> = {
+  "30 20 * * *": "/api/cron/sweep-due-jobs",
+  "30 22 * * *": "/api/cron/maintenance",
+};
+
+const worker = {
+  fetch(request: Request, env: WorkerEnv, ctx: WorkerExecutionContext) {
+    return app.fetch(request, env, ctx);
+  },
+
+  scheduled(controller: WorkerScheduledController, env: WorkerEnv, ctx: WorkerExecutionContext) {
+    const path = cronRoutes[controller.cron];
+    if (!path) {
+      console.error(`Unknown Cloudflare cron schedule: ${controller.cron}`);
+      return;
+    }
+    if (!env.CRON_SECRET) {
+      console.error("CRON_SECRET is not configured; scheduled task skipped");
+      return;
+    }
+    const request = new Request(`https://asmita.internal${path}`, {
+      headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
+    });
+    ctx.waitUntil(
+      app.fetch(request, env, ctx).then(async (response: Response) => {
+        if (!response.ok) {
+          console.error(`Scheduled task ${path} failed with ${response.status}: ${await response.text()}`);
+        }
+      }),
+    );
+  },
+};
+
+export default worker;
