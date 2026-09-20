@@ -31,6 +31,7 @@ interface WorkerDatabase {
     userId: string;
     registrationKeyHash: string | null;
     status: "OPEN" | "PARTIALLY_RESOLVED" | "RESOLVED" | "CLOSED" | "ESCALATED";
+    hashAdvisoryPlatformIds: string[];
     createdAt: Generated<Timestamp>;
     updatedAt: Generated<Timestamp>;
   };

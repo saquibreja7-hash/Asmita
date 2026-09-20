@@ -262,6 +262,7 @@ export async function registerCaseWithUrls(
         const record = await workerDb.transaction().execute(async (tx) => {
           const createdCase = await tx.insertInto("Case").values({
             id: randomUUID(), referenceNumber, userId, registrationKeyHash: options?.registrationKeyHash ?? null, status: "OPEN",
+            hashAdvisoryPlatformIds: [], createdAt: new Date(), updatedAt: new Date(),
           }).returning(["id", "referenceNumber"]).executeTakeFirstOrThrow();
           for (const parsed of uniqueUrls) {
             const platform = parsed.platform
