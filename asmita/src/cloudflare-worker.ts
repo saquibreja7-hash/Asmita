@@ -26,6 +26,7 @@ function configureDatabase(env: WorkerEnv) {
   // PostgreSQL origin. The Prisma adapter reads DATABASE_URL at first use.
   if (env.HYPERDRIVE?.connectionString) {
     process.env.DATABASE_URL = env.HYPERDRIVE.connectionString;
+    process.env.ASMITA_DATABASE_DRIVER = "pg";
   }
 }
 
