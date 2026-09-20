@@ -8,7 +8,7 @@ This is the current deployment runbook for Asmita. Older Vercel documents descri
 | --- | --- |
 | Web application and API | Cloudflare Workers using vinext |
 | Static assets | Workers Assets |
-| Case database | Existing PostgreSQL schema through Prisma; Hyperdrive preferred |
+| Case database | PostgreSQL through Hyperdrive, `pg`, and Kysely at Worker runtime |
 | Scheduled work | Cloudflare Cron Triggers plus PostgreSQL-backed sweep routes |
 | Email | Resend |
 | Secrets | Cloudflare Worker secrets |
@@ -52,19 +52,16 @@ If `whoami` cannot list an account, refresh the login or use a token with Worker
 
 ## PostgreSQL and Hyperdrive
 
-Keep Prisma/PostgreSQL during this migration. A D1 move would require a separate schema and query migration.
+PostgreSQL remains the system of record. The deployed Worker uses the `pg` driver with Kysely for typed, parameterised queries. Each Worker request opens a short-lived `pg.Client` against the `HYPERDRIVE.connectionString`; Hyperdrive owns the shared connection pool. The Worker must not initialise PrismaClient at runtime.
 
-Create separate Hyperdrive configurations for staging and production from a trusted terminal. The connection string is sensitive; do not save the command in shell history where others can read it.
+Prisma remains in this repository for migration history, schema validation, generated local types, and the local non-Worker fallback. Prisma migrations use `DIRECT_URL` from a trusted local or CI migration environment. Hyperdrive is for Worker traffic, not schema administration.
 
-After creation, add each returned Hyperdrive ID to the corresponding Wrangler environment as a binding named `HYPERDRIVE`. Application wiring must be verified with a deployed staging registration before removing the direct `DATABASE_URL` fallback.
-
-Prisma migrations use `DIRECT_URL` outside the Worker. Hyperdrive is for runtime application traffic, not schema administration.
+Create a separate Hyperdrive configuration per environment and add its returned ID to the Wrangler configuration as the `HYPERDRIVE` binding. The staging binding is `asmita-staging-db` (`5f54acb46aac45beb104c5d6eaaa9b90`). Never reuse it for production.
 
 ## Required Worker secrets
 
 Set secrets separately with `npx wrangler secret put NAME --name asmita-staging` or `--name asmita-production`:
 
-* `DATABASE_URL` during the direct-connection staging phase
 * `ENCRYPTION_KEY`
 * `JWT_SECRET`
 * `CSRF_SECRET`
@@ -84,6 +81,8 @@ EMAIL_PROOF_PERSISTENCE=database
 NOTICE_DISPATCH_PERSISTENCE=database
 ENABLE_HASH_UPLOAD=true
 ```
+
+`DATABASE_URL` is set by `src/cloudflare-worker.ts` from the Hyperdrive binding, and `ASMITA_DATABASE_DRIVER=pg` is set there as an internal Worker runtime switch. Do not create either as a public variable or Worker secret. Keep `DIRECT_URL` only in an ignored migration environment.
 
 Do not set `QUEUE_DRIVER=bullmq` on Workers. The current migration uses the database-backed cron sweeps; the legacy in-process queue arrays are not a production delivery mechanism. Add Cloudflare Queues only when an actively consumed asynchronous job path is introduced.
 
@@ -107,7 +106,6 @@ The current redesign adds migrations for confirmed admin MFA enrollment and case
 
 ```powershell
 npm run lint
-npm run type-check
 npm run test
 npm run build
 npm run build:vinext
@@ -120,17 +118,20 @@ Set `ASMITA_PROD_URL` to the staging URL despite the historical variable name, s
 npx playwright test tests/e2e/cron-smoke.spec.ts --project=chromium
 ```
 
+Run `npm run type-check` separately. It must pass before production promotion; generated `.next` route type errors should be repaired or the build output regenerated instead of being ignored.
+
 ## Staging registration proof
 
 Use synthetic test data only. Verify:
 
-1. Adult registration requests and verifies an OTP.
-2. A URL-only case reaches its dashboard.
-3. A URL plus on-device fingerprint case stores both records.
-4. A hash-only case reaches its selected platform handoff.
-5. Log out, sign in again, and confirm the cases remain present.
-6. Confirm the database contains one user and the expected cases without duplicate registration rows.
-7. Confirm both authenticated cron endpoints return successful summaries.
+1. Adult registration requests and verifies an OTP. Use a verified Resend staging sender and inbox for the real email-delivery proof.
+2. A URL-only case reaches its dashboard and remains visible after a fresh sign-in.
+3. Retrying the registration request with the same idempotency key returns the same case without a duplicate row.
+4. The case and audit data persist in the staging PostgreSQL database.
+5. Confirm both authenticated cron endpoints return successful summaries.
+6. Seed one synthetic, template-less, due notice with an `example.invalid` URL; the sweep must report `blocked_no_template`, with zero fired notices and zero errors. Remove that fixture and its audit record immediately after the test.
+
+Hash-only and URL-plus-fingerprint flows require their own approved staging test plan. They must remain URL/hash-only: never upload, fetch, render, cache, or store intimate media.
 
 Do not run the cron smoke test against production if it could fire real escalations or deletion work.
 

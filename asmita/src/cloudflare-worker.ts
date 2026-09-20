@@ -23,7 +23,7 @@ const cronRoutes: Record<string, string> = {
 
 function configureDatabase(env: WorkerEnv) {
   // Hyperdrive provides an edge-safe connection string to the regional
-  // PostgreSQL origin. The Prisma adapter reads DATABASE_URL at first use.
+  // PostgreSQL origin. The Worker Kysely/pg layer reads it at first use.
   if (env.HYPERDRIVE?.connectionString) {
     process.env.DATABASE_URL = env.HYPERDRIVE.connectionString;
     process.env.ASMITA_DATABASE_DRIVER = "pg";
