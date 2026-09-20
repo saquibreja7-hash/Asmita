@@ -556,6 +556,31 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
 }
 
 export async function hardDeleteDueUsers(now = new Date()): Promise<string[]> {
+  if (usesWorkerKysely()) {
+    const workerDb = getWorkerDb();
+    const dueJobs = await workerDb.selectFrom("DeletionJob as j")
+      .innerJoin("Case as c", "c.id", "j.caseId")
+      .select(["j.id as jobId", "c.id as caseId", "c.userId"])
+      .where("j.status", "=", "SCHEDULED")
+      .where("j.scheduledAt", "<=", now)
+      .execute();
+    const deletedUserIds: string[] = [];
+    for (const job of dueJobs) {
+      try {
+        await workerDb.transaction().execute(async (tx) => {
+          await tx.deleteFrom("SubmittedUrl").where("caseId", "=", job.caseId).execute();
+          await tx.updateTable("Case").set({ status: "CLOSED", updatedAt: new Date() }).where("id", "=", job.caseId).execute();
+          await tx.updateTable("User").set({ emailEncrypted: "deleted", emailHash: `deleted:${job.userId}`, deactivatedAt: null }).where("id", "=", job.userId).execute();
+          await tx.updateTable("DeletionJob").set({ status: "COMPLETED", completedAt: new Date() }).where("id", "=", job.jobId).execute();
+        });
+        await writeAuditLog({ eventType: "CASE_HARD_DELETED", entityType: "User", entityId: job.userId, data: { retained: "audit_metadata_only" } });
+        if (!deletedUserIds.includes(job.userId)) deletedUserIds.push(job.userId);
+      } catch (error) {
+        await workerDb.updateTable("DeletionJob").set({ status: "FAILED", error: String(error) }).where("id", "=", job.jobId).execute();
+      }
+    }
+    return deletedUserIds;
+  }
   const db = await getPrismaDb();
   const dueJobs = await db.deletionJob.findMany({
     where: { status: "SCHEDULED", scheduledAt: { lte: now } },

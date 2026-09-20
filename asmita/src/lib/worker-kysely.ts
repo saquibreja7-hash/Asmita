@@ -32,6 +32,7 @@ interface WorkerDatabase {
     registrationKeyHash: string | null;
     status: "OPEN" | "PARTIALLY_RESOLVED" | "RESOLVED" | "CLOSED" | "ESCALATED";
     hashAdvisoryPlatformIds: string[];
+    firPackageGeneratedAt: Timestamp | null;
     createdAt: Generated<Timestamp>;
     updatedAt: Generated<Timestamp>;
   };
@@ -88,6 +89,36 @@ interface WorkerDatabase {
     eventType: string;
     platformId: string | null;
     receivedAt: Generated<Timestamp>;
+  };
+  DeletionJob: {
+    id: string;
+    caseId: string;
+    scheduledAt: Timestamp;
+    completedAt: Timestamp | null;
+    status: "SCHEDULED" | "COMPLETED" | "CANCELLED" | "FAILED";
+    error: string | null;
+  };
+  Notice: {
+    id: string;
+    urlId: string;
+    templateId: string | null;
+    sentAt: Timestamp | null;
+    responseType: string | null;
+    removedAt: Timestamp | null;
+    escalationLevel: Generated<number>;
+  };
+  NoticeTemplate: {
+    id: string;
+    bodyTemplate: string;
+    subjectTemplate: string;
+    reviewedByLegal: Generated<boolean>;
+  };
+  Escalation: {
+    id: string;
+    noticeId: string;
+    level: number;
+    actionType: string;
+    completedAt: Timestamp | null;
   };
 }
 
