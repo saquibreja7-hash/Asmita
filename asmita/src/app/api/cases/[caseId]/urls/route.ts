@@ -77,6 +77,9 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     });
   }
   const results = await addUrlsToCase(caseId, parsed.data.urls, { flagReasons: abuse.reasons });
+  if (results.every((result) => !result.ok)) {
+    return NextResponse.json({ error: "invalid_urls", results }, { status: 400 });
+  }
   const body = {
     results,
     flaggedForReview: abuse.flagged,

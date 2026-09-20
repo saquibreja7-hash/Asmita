@@ -153,6 +153,7 @@ model Case {
   id                    String     @id @default(uuid())
   referenceNumber       String     @unique
   userId                String
+  registrationKeyHash   String?
   status                CaseStatus @default(OPEN)
   state                 String?
   city                  String?
@@ -172,6 +173,8 @@ model Case {
   feedback        Feedback[]
   deletionJobs    DeletionJob[]
   hashSubmissions HashSubmission[]
+
+  @@unique([userId, registrationKeyHash])
 }
 
 // Phase 2: client-generated perceptual hashes. The hash is the ONLY artifact
@@ -426,6 +429,7 @@ model AdminMfaSecret {
   emailHash       String    @id
   secretEncrypted String
   enrolledAt      DateTime  @default(now())
+  confirmedAt     DateTime?
   lastUsedAt      DateTime?
 }
 

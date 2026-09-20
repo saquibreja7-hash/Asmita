@@ -68,6 +68,7 @@ async function findUrl(
       case: { userId },
       status: { in: allowedStatuses },
       platformId: { not: null },
+      signedNoticePdf: null,
       platform: { isActive: true, ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }) },
     },
     select: URL_SELECT,

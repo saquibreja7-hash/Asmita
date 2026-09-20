@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCaseForUser } from "@/lib/case-ops";
-import { addHashesToCase, listHashesForCase, MAX_HASHES_PER_SUBMISSION } from "@/lib/hash-submission";
+import { addHashesToCase, listHashesForCase, listDevHashPickerPlatforms, MAX_HASHES_PER_SUBMISSION } from "@/lib/hash-submission";
 import { requireSession } from "@/lib/auth/middleware";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { verifyCsrfRequest } from "@/lib/csrf";
@@ -110,7 +110,9 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
 
   const { platformIds } = parsed.data;
   if (platformIds && platformIds.length > 0) {
-    const known = await db.platform.count({ where: { id: { in: platformIds }, isActive: true } });
+    const known = process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL
+      ? platformIds.filter((id) => listDevHashPickerPlatforms().some((p) => p.id === id)).length
+      : await db.platform.count({ where: { id: { in: platformIds }, isActive: true } });
     if (known !== new Set(platformIds).size) {
       return NextResponse.json({ error: "unknown_platform" }, { status: 400 });
     }

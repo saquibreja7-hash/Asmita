@@ -18,6 +18,7 @@ export async function buildCaseHashAnnex(
   caseId: string,
   mode: { kind: "for-signing" } | { kind: "for-dispatch"; signedAt: Date | null },
 ): Promise<string> {
+  if (process.env.ENABLE_HASH_UPLOAD !== "true") return "";
   const sent: HashSubmissionStatus[] = ["APPROVED", "DISPATCHED"];
   const where: Prisma.HashSubmissionWhereInput | null =
     mode.kind === "for-signing"

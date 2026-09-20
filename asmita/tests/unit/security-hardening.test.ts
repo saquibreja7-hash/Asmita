@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -41,7 +41,22 @@ describe("per-admin MFA secrets", () => {
 });
 
 describe("fingerprint annex coverage", () => {
-  beforeEach(() => vi.mocked(db.hashSubmission.findMany).mockReset());
+  const originalHashFlag = process.env.ENABLE_HASH_UPLOAD;
+  beforeEach(() => {
+    vi.mocked(db.hashSubmission.findMany).mockReset();
+    process.env.ENABLE_HASH_UPLOAD = "true";
+  });
+  afterEach(() => {
+    if (originalHashFlag === undefined) delete process.env.ENABLE_HASH_UPLOAD;
+    else process.env.ENABLE_HASH_UPLOAD = originalHashFlag;
+  });
+
+  it("never reads or appends fingerprints while Phase 1 hash upload is disabled", async () => {
+    process.env.ENABLE_HASH_UPLOAD = "false";
+    expect(await buildCaseHashAnnex("case-1", { kind: "for-signing" })).toBe("");
+    expect(await buildCaseHashAnnex("case-1", { kind: "for-dispatch", signedAt: new Date() })).toBe("");
+    expect(db.hashSubmission.findMany).not.toHaveBeenCalled();
+  });
 
   it("for signing, lists every non-rejected fingerprint", async () => {
     vi.mocked(db.hashSubmission.findMany).mockResolvedValue([

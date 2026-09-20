@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfRequest } from "@/lib/csrf";
-import { recordFeedback } from "@/lib/feedback";
+import { containsUrlLikeText, recordFeedback } from "@/lib/feedback";
 import { logSecurityEvent } from "@/lib/security-log";
 
 const schema = z.object({
-  caseReference: z.string().max(64).optional(),
+  caseReference: z.string().regex(/^ASMITA-[A-Z0-9-]{4,32}$/).optional(),
   rating: z.number().int().min(1).max(5),
   comment: z.string().max(1000).optional(),
 });
@@ -18,6 +18,9 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
+  }
+  if (containsUrlLikeText(parsed.data.comment ?? "")) {
+    return NextResponse.json({ error: "links_not_allowed" }, { status: 400 });
   }
   const record = recordFeedback({
     ...parsed.data,

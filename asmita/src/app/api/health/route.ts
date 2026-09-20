@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { safeEqual } from "@/lib/safe-equal";
+import { probePostgresConnection } from "@/lib/worker-postgres";
 
 /*
  * Public liveness probe. Configuration detail is only returned to callers
@@ -10,10 +11,18 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   const header = request.headers.get("authorization");
   if (secret && safeEqual(header, `Bearer ${secret}`)) {
+    let database: "ok" | "unavailable" | "not_configured" = "not_configured";
+    if (process.env.DATABASE_URL) {
+      try {
+        database = (await probePostgresConnection()) ? "ok" : "unavailable";
+      } catch {
+        database = "unavailable";
+      }
+    }
     return NextResponse.json({
       ok: true,
       service: "asmita",
-      db: process.env.DATABASE_URL ? "configured" : "not_configured",
+      db: database,
       redis: process.env.REDIS_URL ? "configured" : "not_configured",
     });
   }

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { writeAuditLog } from "@/lib/audit";
+import { platformDirectory } from "@/lib/platforms";
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -261,10 +262,23 @@ export type HashPickerPlatform = {
   formUrl: string | null;
 };
 
+function devPlatformId(id: string): string {
+  const hex = sha256(`asmita-dev-platform:${id}`).slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20)}`;
+}
+
+export function listDevHashPickerPlatforms(): HashPickerPlatform[] {
+  return platformDirectory
+    .filter((p) => p.lastContactVerifiedByHuman && p.formUrl)
+    .map((p) => ({ id: devPlatformId(p.id), name: p.name, hasEmail: false, formUrl: p.formUrl ?? null }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // Platforms shown in the hash-only picker. Includes email-capable and form-only
 // platforms so survivors can always direct their advisory somewhere. Filtered to
 // human-verified contacts only.
 export async function listHashPickerPlatforms(): Promise<HashPickerPlatform[]> {
+  if (isDevNoDb()) return listDevHashPickerPlatforms();
   const platforms = await db.platform.findMany({
     where: {
       isActive: true,

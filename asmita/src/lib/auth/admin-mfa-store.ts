@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { decryptField, encryptField } from "@/lib/encryption";
+import { verifyAdminTotp } from "@/lib/auth/admin-mfa";
 
 /*
  * Per-admin TOTP secrets, encrypted at rest and keyed by the admin's email hash.
@@ -30,43 +31,79 @@ function databaseEnabled() {
   return Boolean(process.env.DATABASE_URL);
 }
 
-const memoryStore = new Map<string, { secret: string; enrolledAt: Date }>();
+const memoryStore = new Map<string, { secret: string; enrolledAt: Date; confirmedAt: Date | null }>();
 
 export async function getAdminMfaSecret(emailHash: string): Promise<string | null> {
-  if (!databaseEnabled()) return memoryStore.get(emailHash)?.secret ?? null;
+  if (!databaseEnabled()) {
+    const row = memoryStore.get(emailHash);
+    return row?.confirmedAt ? row.secret : null;
+  }
   const row = await db.adminMfaSecret.findUnique({ where: { emailHash } });
-  return row ? decryptField(row.secretEncrypted) : null;
+  return row?.confirmedAt ? decryptField(row.secretEncrypted) : null;
 }
 
 export async function getAdminMfaEnrolment(emailHash: string): Promise<{ enrolledAt: Date } | null> {
   if (!databaseEnabled()) {
     const row = memoryStore.get(emailHash);
-    return row ? { enrolledAt: row.enrolledAt } : null;
+    return row?.confirmedAt ? { enrolledAt: row.enrolledAt } : null;
   }
   const row = await db.adminMfaSecret.findUnique({
     where: { emailHash },
-    select: { enrolledAt: true },
+    select: { enrolledAt: true, confirmedAt: true },
   });
-  return row;
+  return row?.confirmedAt ? { enrolledAt: row.enrolledAt } : null;
 }
 
-/** Creates a fresh secret for an admin who has none. Returns null if already enrolled. */
+/** Stages a fresh secret. A failed delivery can be retried without locking out the admin. */
 export async function enrolAdminMfa(emailHash: string): Promise<string | null> {
   const secret = generateBase32Secret();
+  const now = new Date();
   if (!databaseEnabled()) {
-    if (memoryStore.has(emailHash)) return null;
-    memoryStore.set(emailHash, { secret, enrolledAt: new Date() });
+    if (memoryStore.get(emailHash)?.confirmedAt) return null;
+    memoryStore.set(emailHash, { secret, enrolledAt: now, confirmedAt: null });
     return secret;
+  }
+  const existing = await db.adminMfaSecret.findUnique({
+    where: { emailHash }, select: { confirmedAt: true },
+  });
+  if (existing?.confirmedAt) return null;
+  if (existing) {
+    const updated = await db.adminMfaSecret.updateMany({
+      where: { emailHash, confirmedAt: null },
+      data: { secretEncrypted: encryptField(secret), enrolledAt: now },
+    });
+    return updated.count === 1 ? secret : null;
   }
   try {
     await db.adminMfaSecret.create({
-      data: { emailHash, secretEncrypted: encryptField(secret) },
+      data: { emailHash, secretEncrypted: encryptField(secret), enrolledAt: now },
     });
     return secret;
   } catch {
     // Unique violation: a concurrent or earlier enrolment won.
     return null;
   }
+}
+
+/** Commits enrollment only after a code proves the authenticator received the secret. */
+export async function confirmAdminMfa(emailHash: string, token: string): Promise<boolean> {
+  if (!databaseEnabled()) {
+    const row = memoryStore.get(emailHash);
+    if (!row || row.confirmedAt || !verifyAdminTotp({ token, secret: row.secret })) return false;
+    const now = new Date();
+    memoryStore.set(emailHash, { ...row, enrolledAt: now, confirmedAt: now });
+    return true;
+  }
+  const row = await db.adminMfaSecret.findUnique({ where: { emailHash } });
+  if (!row || row.confirmedAt) return false;
+  const secret = decryptField(row.secretEncrypted);
+  if (!verifyAdminTotp({ token, secret })) return false;
+  const now = new Date();
+  const updated = await db.adminMfaSecret.updateMany({
+    where: { emailHash, confirmedAt: null, secretEncrypted: row.secretEncrypted },
+    data: { confirmedAt: now, enrolledAt: now },
+  });
+  return updated.count === 1;
 }
 
 export async function resetAdminMfa(emailHash: string): Promise<boolean> {

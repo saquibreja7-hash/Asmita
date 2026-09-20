@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import QRCode from "qrcode";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { requireAdminSetup } from "@/lib/auth/require-admin";
 import { enrolAdminMfa } from "@/lib/auth/admin-mfa-store";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { writeAuditLog } from "@/lib/audit";
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     logSecurityEvent({ event: "csrf_failed", route: "/api/admin/mfa/enroll" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
-  const auth = await requireAdmin();
+  const auth = await requireAdminSetup();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const secret = await enrolAdminMfa(auth.session.emailHash);

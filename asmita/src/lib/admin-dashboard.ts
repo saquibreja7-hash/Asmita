@@ -156,6 +156,17 @@ export function listPlatformEditorRows() {
 export type PlatformEditorRow = ReturnType<typeof listPlatformEditorRows>[number];
 
 export async function listPlatformEditorRowsFromDb(now: Date = new Date()) {
+  if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
+    return listPlatformEditorRows().map((row) => ({
+      ...row,
+      grievanceName: null,
+      grievanceAddress: null,
+      formUrl: row.formUrl ?? null,
+      apiEndpoint: row.apiEndpoint ?? null,
+      lastContactVerifiedAt: row.lastContactVerifiedAt ?? null,
+      lastContactVerifiedByHuman: row.lastContactVerifiedByHuman,
+    }));
+  }
   const platforms = await db.platform.findMany({
     where: { isActive: true },
     orderBy: [{ tier: "asc" }, { name: "asc" }],
@@ -201,6 +212,9 @@ export async function listPlatformEditorRowsFromDb(now: Date = new Date()) {
 }
 
 export async function listGoChangeHistoryRowsFromDb(limit = 50): Promise<GoChangeHistoryRow[]> {
+  if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
+    return listGoChangeHistoryRows().slice(0, limit);
+  }
   const rows = await db.platformGoHistory.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,

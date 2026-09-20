@@ -56,6 +56,7 @@ export async function POST(request: Request) {
     sub: admin.id,
     emailHash: admin.emailHash,
     adminRole: getAdminRole(parsed.data.email),
+    mfaComplete: enrolled || skipMfa,
   });
   await writeAuditLog({
     eventType: "ADMIN_ACTION",
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
     // Admin APIs live under /api/admin/*, so the cookie must be site-wide.
     // Cross-use with the survivor session is prevented by the namespace claim.
     path: "/",
-    maxAge: 8 * 60 * 60,
+    maxAge: enrolled || skipMfa ? 8 * 60 * 60 : 10 * 60,
   });
   return response;
 }

@@ -25,6 +25,10 @@ export async function GET(
 
   const record = await getCaseForUser(caseId, auth.session.sub);
   if (!record) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  // The memory-backed local store has no verified contacts or reviewed templates.
+  if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
+    return NextResponse.json({ error: "no_eligible_url" }, { status: 404 });
+  }
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
 
@@ -33,6 +37,7 @@ export async function GET(
       caseId,
       status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
       platformId: { not: null },
+      signedNoticePdf: null,
       platform: {
         isActive: true,
         ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
