@@ -15,6 +15,7 @@ const builtConfig = JSON.parse(await readFile(builtConfigPath, "utf8"));
 const productionConfig = {
   ...builtConfig,
   name: production.name,
+  routes: production.routes,
   hyperdrive: production.hyperdrive,
   vars: production.vars,
 };

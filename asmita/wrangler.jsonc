@@ -38,6 +38,12 @@
   "env": {
     "production": {
       "name": "asmita-production",
+      "routes": [
+        {
+          "pattern": "meriasmita.org",
+          "custom_domain": true
+        }
+      ],
       "hyperdrive": [
         {
           "binding": "HYPERDRIVE",
