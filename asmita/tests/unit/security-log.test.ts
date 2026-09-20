@@ -39,8 +39,7 @@ describe("security-log", () => {
 
   it("writes to the DB when SECURITY_LOG_PERSISTENCE=database", async () => {
     process.env.SECURITY_LOG_PERSISTENCE = "database";
-    logSecurityEvent({ event: "rate_limit_exceeded", actorHash: "hash-1", route: "/api/z", reason: "ip:10.0.0.1" });
-    await Promise.resolve();
+    await logSecurityEvent({ event: "rate_limit_exceeded", actorHash: "hash-1", route: "/api/z", reason: "ip:10.0.0.1" });
     expect(db.securityEventLog.create).toHaveBeenCalledWith({
       data: {
         event: "rate_limit_exceeded",
@@ -57,8 +56,7 @@ describe("security-log", () => {
     vi.mocked(db.securityEventLog.create).mockRejectedValueOnce(dbError);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(() => logSecurityEvent({ event: "csrf_failed", route: "/api/x" })).not.toThrow();
-    await new Promise((r) => setImmediate(r));
+    await expect(logSecurityEvent({ event: "csrf_failed", route: "/api/x" })).resolves.toBeUndefined();
     expect(errSpy).toHaveBeenCalled();
 
     errSpy.mockRestore();
