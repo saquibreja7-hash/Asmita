@@ -1,7 +1,8 @@
 import type { AuditEventType } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
 import { sha256 } from "@/lib/hash";
+import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import { randomUUID } from "node:crypto";
+import { sql } from "kysely";
 
 type AuditEvent = {
   eventType: AuditEventType;
@@ -72,7 +73,9 @@ export type AuditChainValidation = {
 };
 
 export async function validateAuditChainFromDb(limit = 10_000): Promise<AuditChainValidation> {
-  const rows = await db.auditLog.findMany({
+  const rows = usesWorkerKysely()
+    ? await getWorkerDb().selectFrom("audit_log").selectAll().orderBy("sequence", "asc").limit(limit).execute()
+    : await (await import("@/lib/db")).db.auditLog.findMany({
     orderBy: { sequence: "asc" },
     take: limit,
     select: {
@@ -87,7 +90,7 @@ export async function validateAuditChainFromDb(limit = 10_000): Promise<AuditCha
       eventHash: true,
       createdAt: true,
     },
-  });
+    });
 
   let previousHash = "GENESIS";
   let expectedSequence = 1;
@@ -161,6 +164,20 @@ function createAuditRecord(event: AuditEvent, sequence: number, previousHash: st
 }
 
 async function persistAuditLog(event: AuditEvent) {
+  if (usesWorkerKysely()) {
+    await getWorkerDb().transaction().execute(async (tx) => {
+      await sql`LOCK TABLE "audit_log" IN EXCLUSIVE MODE`.execute(tx);
+      const previous = await tx.selectFrom("audit_log").select(["sequence", "eventHash"]).orderBy("sequence", "desc").executeTakeFirst();
+      const record = createAuditRecord(event, (previous?.sequence || 0) + 1, previous?.eventHash || "GENESIS");
+      await tx.insertInto("audit_log").values({
+        id: randomUUID(), sequence: record.sequence, eventType: event.eventType, entityType: event.entityType ?? null,
+        entityId: event.entityId ?? null, actorId: event.actorId ?? null, data: event.data ?? null, ipHash: event.ipHash ?? null,
+        previousHash: record.previousHash, eventHash: sha256(canonicalize(record)), createdAt: new Date(record.createdAt),
+      }).execute();
+    });
+    return;
+  }
+  const { db } = await import("@/lib/db");
   await db.$transaction(async (tx) => {
     await tx.$executeRawUnsafe('LOCK TABLE "audit_log" IN EXCLUSIVE MODE');
     const previous = await tx.auditLog.findFirst({
@@ -176,7 +193,7 @@ async function persistAuditLog(event: AuditEvent) {
         previousHash: record.previousHash,
         eventHash,
         createdAt: new Date(record.createdAt),
-        data: event.data as Prisma.InputJsonValue | undefined,
+        data: event.data as never,
       },
     });
   });
