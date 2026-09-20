@@ -40,8 +40,8 @@
       "name": "asmita-production",
       "routes": [
         {
-          "pattern": "meriasmita.org",
-          "custom_domain": true
+          "pattern": "meriasmita.org/*",
+          "zone_name": "meriasmita.org"
         }
       ],
       "hyperdrive": [
