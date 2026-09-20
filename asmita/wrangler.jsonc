@@ -17,6 +17,17 @@
       "id": "5f54acb46aac45beb104c5d6eaaa9b90"
     }
   ],
+  "vars": {
+    "NODE_ENV": "production",
+    "OTP_PERSISTENCE": "database",
+    "AUDIT_LOG_PERSISTENCE": "database",
+    "SECURITY_LOG_PERSISTENCE": "database",
+    "EMAIL_PROOF_PERSISTENCE": "database",
+    "NOTICE_DISPATCH_PERSISTENCE": "database",
+    "ENABLE_HASH_UPLOAD": "true",
+    "ENABLE_PLATFORM_API": "false",
+    "ENABLE_PROVENANCE_CHECK": "false"
+  },
   "triggers": {
     "crons": [
       "30 20 * * *",
