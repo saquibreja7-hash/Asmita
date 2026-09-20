@@ -24,7 +24,7 @@
     "start:vinext": "wrangler dev --config dist/server/wrangler.json",
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
     "deploy:staging": "npm run build:vinext && vinext-cloudflare deploy --config dist/server/wrangler.json",
-    "deploy:production": "npm run build:vinext && node scripts/prepare-production-wrangler.mjs && vinext-cloudflare deploy --config dist/server/wrangler.production.json"
+    "deploy:production": "npm run build:vinext && node scripts/prepare-production-wrangler.mjs && wrangler deploy --config dist/server/wrangler.production.json"
   },
   "dependencies": {
     "@fontsource/noto-sans-devanagari": "^5.2.8",
