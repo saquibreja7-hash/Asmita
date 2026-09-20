@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { audiences, getAudience } from "@/lib/audience-content";
+import { audiencesHi } from "@/lib/audience-content-hi";
+import { getLocale } from "@/lib/get-locale";
 
 export function generateStaticParams() {
   return audiences.map((a) => ({ audience: a.slug }));
@@ -16,6 +18,10 @@ export async function generateMetadata({
   const { audience } = await params;
   const data = getAudience(audience);
   if (!data) return { title: "Who we help" };
+  if (await getLocale() === "hi") {
+    const translated = audiencesHi[audience];
+    return { title: translated.term, description: translated.cardLine };
+  }
   return { title: data.term, description: data.cardLine };
 }
 
@@ -25,10 +31,14 @@ export default async function AudiencePage({
   params: Promise<{ audience: string }>;
 }) {
   const { audience } = await params;
-  const data = getAudience(audience);
-  if (!data) notFound();
+  const englishData = getAudience(audience);
+  if (!englishData) notFound();
+  const locale = await getLocale();
+  const say = (en: string, hi: string) => locale === "hi" ? hi : en;
+  const data = locale === "hi" ? audiencesHi[audience] : englishData;
 
-  const others = audiences.filter((a) => a.slug !== data.slug).slice(0, 3);
+  const others = audiences.filter((a) => a.slug !== data.slug).slice(0, 3)
+    .map((a) => locale === "hi" ? audiencesHi[a.slug] : a);
 
   return (
     <AppShell>
@@ -39,7 +49,7 @@ export default async function AudiencePage({
             <div className="mx-auto max-w-5xl">
               <p className="text-sm">
                 <Link href="/who-we-help" className="text-link font-medium">
-                  Who we help
+                  {say("Who we help", "हम किसकी मदद करते हैं")}
                 </Link>
               </p>
               <span className="eyebrow mt-4 inline-block">{data.term}</span>
@@ -64,7 +74,7 @@ export default async function AudiencePage({
         </section>
 
         {/* POINTS */}
-        <section className="zone-white section-pad !pt-4" aria-label="How we help">
+        <section className="zone-white section-pad !pt-4" aria-label={say("How we help", "हम कैसे मदद करते हैं")}>
           <div className="container">
             <div className="mx-auto max-w-5xl">
               {data.callout && (
@@ -104,7 +114,7 @@ export default async function AudiencePage({
               id="others-heading"
               className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]"
             >
-              Coming from somewhere else?
+              {say("Coming from somewhere else?", "किसी और स्थिति के बारे में पढ़ना है?")}
             </h2>
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               {others.map((a) => (
@@ -120,7 +130,7 @@ export default async function AudiencePage({
                     {a.cardLine}
                   </p>
                   <span className="mt-3 inline-block text-sm font-medium text-[var(--color-off-black)]">
-                    Open{" "}
+                    {say("Open", "देखें")}{" "}
                     <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
                       →
                     </span>

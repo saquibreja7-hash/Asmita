@@ -191,15 +191,14 @@ export default function TermsPage() {
         <Section num="04" id="how-a-case-works" title="How a case works">
           <p>
             A case begins with age attestation and a digital declaration.
-            You then add URLs as text and, optionally, a PDQ image
-            fingerprint generated on your own device. Asmita identifies the
-            platform from each URL, prepares legally reviewed takedown
-            notices, asks you to approve them, and sends them to the
-            platform&rsquo;s Grievance Officer or equivalent. Where a
-            platform has no verified contact, Asmita prepares a guided
-            form handoff so you can submit through the platform&rsquo;s
-            own web form. A private dashboard shows each platform, response
-            window, and audit trail.
+            You then add URLs as text. The current flow does not accept image
+            fingerprints. Asmita identifies the
+            platform from each URL and prepares a takedown notice for you to
+            review and sign. Real dispatch requires human verification of the
+            platform contact, sender domain, and notice template. Where a
+            platform has no verified contact, a guided form handoff may help
+            you submit through the platform&rsquo;s own web form. A private
+            dashboard shows each platform, response window, and audit trail.
           </p>
           <p>
             Notices are delivered via a secure link protected by a
@@ -263,9 +262,8 @@ export default function TermsPage() {
               service without authorisation.
             </li>
             <li>
-              Upload intimate media files. Asmita accepts URLs as text
-              and PDQ fingerprint codes generated client-side on your
-              device. Transmitting actual image or video files to Asmita
+              Upload intimate media files. The current flow accepts URLs
+              as text only. Transmitting actual image or video files to Asmita
               is not supported and any attempt to do so is a violation
               of these Terms.
             </li>
@@ -347,11 +345,10 @@ export default function TermsPage() {
               cybercrime.gov.in.
             </li>
             <li>
-              Access, view, or process the media behind any URL you
-              submit. URLs are read as domain strings only. PDQ
-              fingerprinting runs entirely on your device; Asmita
-              receives only the resulting 64-character code, not the
-              image itself.
+              Access, view, or process media behind a URL you submit.
+              URLs are handled as text. You may submit a fingerprint
+              generated on your device. The optional deeper AI check
+              forwards an image to its provider only after your consent.
             </li>
           </ul>
         </Section>

@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/layout/AppShell";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { redirect } from "next/navigation";
+import { requireAdminSetup } from "@/lib/auth/require-admin";
 import { getAdminMfaEnrolment } from "@/lib/auth/admin-mfa-store";
 import { EnrolMfa } from "./EnrolMfa";
 
@@ -9,8 +10,9 @@ import { EnrolMfa } from "./EnrolMfa";
  * displayed after the moment of enrolment.
  */
 export default async function SetupMfaPage() {
-  const auth = await requireAdmin();
-  const enrolment = auth.ok ? await getAdminMfaEnrolment(auth.session.emailHash) : null;
+  const auth = await requireAdminSetup();
+  if (!auth.ok) redirect("/admin/login");
+  const enrolment = await getAdminMfaEnrolment(auth.session.emailHash);
 
   return (
     <AppShell>

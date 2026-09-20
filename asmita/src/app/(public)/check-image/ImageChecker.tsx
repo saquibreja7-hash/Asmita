@@ -47,7 +47,7 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
   }
 
   async function runDeepCheck() {
-    if (!file || !deepConsent) return;
+    if (!ageConfirmed || !deepCheckEnabled || !file || !deepConsent) return;
     setDeepStatus("checking");
     setDeepResult(null);
     try {
@@ -71,7 +71,7 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
 
   function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) void handleFile(file);
+    if (ageConfirmed && file) void handleFile(file);
   }
 
   const rawEntries = result ? Object.entries(result.raw) : [];
@@ -104,12 +104,13 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
       </div>
 
       {/* UPLOADER */}
-      <div className={ageConfirmed ? "mt-6" : "mt-6 pointer-events-none opacity-45"}>
+      <div className="mt-6">
         <input
           ref={inputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
           onChange={onInputChange}
+          disabled={!ageConfirmed}
           className="sr-only"
           aria-hidden={!ageConfirmed}
           tabIndex={ageConfirmed ? 0 : -1}

@@ -240,7 +240,18 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
   const steps = [t(locale, "reg.progress.age"), t(locale, "reg.progress.email"), t(locale, "reg.progress.otp")];
   const current = step === "age" ? 0 : step === "email" ? 1 : 2;
   return (
-    <div className="hidden items-center gap-2 sm:flex">
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-[var(--foreground)] sm:hidden" aria-live="polite">
+        {current + 1}/{steps.length} · {steps[current]}
+      </p>
+      <div className="flex gap-1.5 sm:hidden" aria-hidden>
+        {steps.map((label, i) => (
+          <span key={label} className="h-1 flex-1 rounded-full" style={{
+            background: i <= current ? "var(--teal)" : "var(--hairline)",
+          }} />
+        ))}
+      </div>
+      <div className="hidden items-center gap-2 sm:flex">
       {steps.map((label, i) => (
         <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
           <div className="flex items-center gap-2">
@@ -270,6 +281,7 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
           )}
         </div>
       ))}
+      </div>
     </div>
   );
 }

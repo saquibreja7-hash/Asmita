@@ -1,6 +1,6 @@
 /*
  * Content for The Issue section and the Glossary.
- * Plain-language, India-specific, honest. English now; Hindi + i18n follow.
+ * Plain-language, India-specific educational content.
  * Sources: our own domain knowledge + framing patterns from eSafety and Thorn.
  * These are education explainers, not legal advice.
  */
@@ -30,7 +30,7 @@ export const issueTopics: IssueTopic[] = [
       "Someone threatens to send your photos to your relatives unless you do what they say.",
     ],
     whatToDo:
-      "Save the evidence, then start a report. We help you send a legally grounded takedown notice and, if you want, block re-uploads with a fingerprint made on your own device.",
+      "Keep the post URL as text and preserve related messages. Adults can prepare a takedown notice and generate a fingerprint on their device. Sending waits for verified platform contacts and templates; blocking depends on the platform.",
   },
   {
     slug: "deepfakes",
@@ -45,7 +45,7 @@ export const issueTopics: IssueTopic[] = [
       "A fake image spreads with a caption claiming it is really you.",
     ],
     whatToDo:
-      "You can check an image for AI signals, then report it. A fake image is still image-based abuse, and you can ask platforms to take it down the same way.",
+      "A fake image is still image-based abuse. Use its post URL to prepare a report. The image checker can read provenance signals locally; a deeper check sends the image only with your consent.",
   },
   {
     slug: "morphing",
@@ -60,7 +60,7 @@ export const issueTopics: IssueTopic[] = [
       "A group photo is cropped and altered to target you.",
     ],
     whatToDo:
-      "Report morphed images the same way as any other. Keep the original alongside the altered version if you have it; it helps show what was changed.",
+      "Report the post URL without uploading the image to Asmita. If you already have related messages or the original photo, ask a trusted support service how to preserve them safely; do not forward intimate media.",
   },
   {
     slug: "sextortion",
@@ -138,7 +138,7 @@ export const glossary: GlossaryEntry[] = [
   {
     term: "Hash or fingerprint (PDQ)",
     definition:
-      "A short code that stands for an image without being the image. It is computed on your own device, so the picture itself never leaves your phone. Platforms use it to block matching re-uploads.",
+      "A short code that can represent an image without being the image. Adults can generate a fingerprint on their device and submit it with a case; matching depends on participating platforms.",
   },
   {
     term: "Takedown notice",

@@ -39,7 +39,7 @@ export function FlowProgress({ step, locale }: { step: 1 | 2 | 3 | 4; locale: Lo
               {i > 0 && <span className="pipeline-link !w-6 md:!w-10" aria-hidden />}
               <span
                 className={`node !py-2.5 !px-4 !text-[12px] ${
-                  state === "current" ? "node-hub" : state === "todo" ? "opacity-60" : ""
+                  state === "current" ? "node-hub" : ""
                 }`}
                 aria-current={state === "current" ? "step" : undefined}
               >

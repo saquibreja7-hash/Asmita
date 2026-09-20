@@ -117,7 +117,7 @@ export default async function PrivacyPage() {
                             href={`#${s.id}`}
                             className="flex items-baseline gap-2 rounded-md px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
                           >
-                            <span className="font-mono text-[10px] shrink-0 tabular-nums opacity-60">
+                            <span className="font-mono text-[10px] shrink-0 tabular-nums">
                               {s.num}
                             </span>
                             <span className="leading-[1.5]">{s.title}</span>
@@ -327,7 +327,7 @@ function PolicySection({
   return (
     <section id={id} className="scroll-mt-24 border-t border-[var(--hairline)] py-10 first:border-t-0 first:pt-0">
       <div className="flex items-baseline gap-3 mb-5">
-        <span className="font-mono text-[10px] tabular-nums text-[var(--muted)] opacity-60 shrink-0">
+        <span className="font-mono text-[10px] tabular-nums text-[var(--muted)] shrink-0">
           {num}
         </span>
         <h2 className="font-display text-[20px] font-normal leading-[1.25] tracking-tight md:text-[26px] md:leading-[1.2]">

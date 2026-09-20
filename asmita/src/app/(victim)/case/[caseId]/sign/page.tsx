@@ -33,12 +33,6 @@ export default async function SignNoticePage({
   const record = await getCaseForUser(caseId, auth.session.sub);
   if (!record) redirect("/start");
 
-  const alreadySigned = await db.submittedUrl.findFirst({
-    where: { caseId, signedNoticePdf: { not: null } },
-    select: { id: true },
-  });
-  if (alreadySigned) redirect(`/case/${caseId}/confirmation`);
-
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
 
   const url = await db.submittedUrl.findFirst({
@@ -46,6 +40,7 @@ export default async function SignNoticePage({
       caseId,
       status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
       platformId: { not: null },
+      signedNoticePdf: null,
       platform: {
         isActive: true,
         ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),

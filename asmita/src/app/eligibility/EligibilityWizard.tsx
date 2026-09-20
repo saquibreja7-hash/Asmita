@@ -206,8 +206,18 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
     t(locale, "eligibility.progress.contentType"),
   ];
   return (
-    <div className="mb-8 hidden sm:block">
-      <div className="flex items-center gap-2">
+    <div className="mb-8">
+      <p className="text-xs font-medium text-[var(--foreground)] sm:hidden" aria-live="polite">
+        {current + 1}/{labels.length} · {labels[current]}
+      </p>
+      <div className="mt-2 flex gap-1.5 sm:hidden" aria-hidden>
+        {labels.map((label, i) => (
+          <span key={label} className="h-1 flex-1 rounded-full" style={{
+            background: i <= current ? "var(--teal)" : "var(--hairline)",
+          }} />
+        ))}
+      </div>
+      <div className="hidden items-center gap-2 sm:flex">
         {labels.map((label, i) => (
           <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
             <div className="flex items-center gap-2">

@@ -36,13 +36,13 @@ export const guides: Guide[] = [
     intro:
       "Evidence disappears when content is deleted or accounts go private. Saving it early helps with platform reports, the police, and any legal step later.",
     steps: [
-      "Take screenshots of the post, the profile, and the web address (URL).",
+      "Keep the post URL as text and note the public account handle. Avoid screenshots that include intimate media.",
       "Note the date, time, and the username or account handle.",
       "Save any threatening messages and any demands for money, including payment details.",
       "Keep a simple, dated list of what happened and when.",
-      "Block the person only after you have saved everything, not before.",
+      "If it is safe for you, preserve related messages and account details before blocking the person. Seek help first if blocking could increase danger.",
     ],
-    note: "One firm rule: never save, download, or forward an intimate image of anyone under 18, even as evidence. For anyone under 18, use the child-protection path instead.",
+    note: "Do not download or forward intimate images as evidence. Never save, download, or forward an intimate image of anyone under 18. For anyone under 18, use the child-protection path instead.",
   },
   {
     slug: "report-to-platform",
@@ -78,9 +78,9 @@ export const directory: DirectoryGroup[] = [
     group: "Emergency and helplines",
     items: [
       { name: "Emergency", what: "Immediate danger to your safety.", tel: "112" },
-      { name: "Women's helpline", what: "Support for women, any time.", tel: "181", note: "24 hours" },
+      { name: "Women's helpline", what: "Support for women. Availability varies by location; the national scheme is not currently operational in West Bengal. If you are in immediate danger, call 112.", tel: "181", note: "Check local availability" },
       { name: "Childline", what: "For anyone under 18.", tel: "1098", note: "Free, 24 hours" },
-      { name: "Cyber financial fraud helpline", what: "If money has been taken or demanded.", tel: "1930" },
+      { name: "Cyber financial fraud helpline", what: "For urgent reporting of cyber financial fraud or a payment already made. For threats without a payment, use the cybercrime portal or local police.", tel: "1930" },
     ],
   },
   {
@@ -128,7 +128,7 @@ export const directory: DirectoryGroup[] = [
     items: [
       {
         name: "iCall (TISS)",
-        what: "Free, confidential psychosocial counselling by trained professionals, run by the Tata Institute of Social Sciences.",
+        what: "Psychosocial counselling by trained professionals at TISS. Check the service site for current hours; it is not a 24-hour crisis line.",
         tel: "9152987821",
         href: "https://icallhelpline.org/",
       },
@@ -141,7 +141,7 @@ export const directory: DirectoryGroup[] = [
   },
 ];
 
-/* Date the directory contacts were last checked against their public source pages. */
+/* Date this directory underwent a complete source-by-source verification. */
 export const directoryLastVerified = "12 May 2026";
 
 export type LegalSection = { title: string; body: string };
@@ -149,7 +149,7 @@ export type LegalSection = { title: string; body: string };
 export const legalSections: LegalSection[] = [
   {
     title: "Platforms must act on non-consensual intimate content",
-    body: "Under the IT Rules, 2021 (Rule 3(2)(b)), online platforms in India must remove non-consensual intimate content after a valid complaint, within the timeframe the rules set. A takedown notice puts your complaint on that legal footing.",
+    body: "Under the IT Rules, 2021 (Rule 3(2)(b)), intermediaries must take reasonable and practicable measures to remove or disable access to qualifying intimate content within 24 hours of receiving a complaint from the affected person or an authorised representative. The rule has conditions; a notice can state the grounds for a qualifying complaint.",
   },
   {
     title: "There is a government procedure for NCII",
@@ -157,15 +157,15 @@ export const legalSections: LegalSection[] = [
   },
   {
     title: "You can report it as a crime",
-    body: "The National Cyber Crime Reporting Portal (cybercrime.gov.in) lets you report online, with a dedicated path for crimes against women and children. You can report anonymously if you choose.",
+    body: "The National Cyber Crime Reporting Portal (cybercrime.gov.in) accepts online cybercrime complaints. Its women-and-children section offers an anonymous option for certain sexual-content complaints; other reports may require your details.",
   },
   {
     title: "If a platform ignores you, you can escalate",
-    body: "Every platform must name a grievance officer to handle complaints. If they do not act, you can take it to the Grievance Appellate Committee (GAC), and to the police.",
+    body: "Intermediaries must publish a grievance mechanism. After contacting the relevant officer, a user who is dissatisfied with the decision, or receives no response within the prescribed period, may be able to appeal to the Grievance Appellate Committee. Cybercrime can also be reported to the police or cybercrime portal; GAC is not a cybercrime investigation body.",
   },
   {
     title: "You can get free legal help",
-    body: "Free legal aid is available through NALSA and District Legal Services Authorities. One Stop Centres can help you with police and legal steps in person.",
+    body: "People who meet the eligibility rules can apply for free legal aid through NALSA and local Legal Services Authorities. One Stop Centres may also help women facing violence with police and legal steps.",
   },
   {
     title: "Different rules protect anyone under 18",

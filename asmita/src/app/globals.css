@@ -23,7 +23,7 @@
   --color-off-black: #242424;
   --color-ink: #000000;
   --color-graphite: #4e4d4d;
-  --color-smoke: #797776;
+  --color-smoke: #625f5e;
   --color-ash: #cecac8;
 
   /* Type scale */
@@ -86,7 +86,7 @@
   --teal-soft: var(--color-periwinkle-mist);
   --accent: var(--color-lake-blue);
   --accent-soft: var(--color-periwinkle-mist);
-  --success: #1f7a4d;
+  --success: #176b42;
   --warning: #9a5b00;
   --danger: #b42318;
   --saffron: var(--color-lake-blue);

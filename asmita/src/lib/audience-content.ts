@@ -3,7 +3,7 @@
  * Audience-segmented, in each reader's own voice (eSafety pattern).
  * Hard guardrail: anything involving a person under 18 is information and
  * safe routing only, never an upload or case intake (POCSO).
- * English now; Hindi + i18n follow.
+ * Educational audience content; current service is URL-only.
  */
 
 export type AudiencePoint = { title: string; body: string };
@@ -31,15 +31,15 @@ export const audiences: Audience[] = [
     points: [
       {
         title: "Report and take it down",
-        body: "We help you write a legally grounded takedown notice and send it to the platform. You read it and sign it before anything goes out.",
+        body: "The URL-only flow helps you prepare a takedown notice. You review and sign it; sending waits for verified platform contacts and templates.",
       },
       {
-        title: "Block re-uploads privately",
-        body: "You can block matching copies with a fingerprint made on your own device. The image itself never reaches us.",
+        title: "Understand what comes later",
+        body: "Adults can generate a fingerprint on their device and add it to a case. Platform matching and blocking depend on each platform's own process.",
       },
       {
         title: "Understand a fake image",
-        body: "If it is a deepfake or a morphed photo, you can check it and still report it. A fake image is still abuse.",
+        body: "A deepfake or morphed photo can still be reported by post URL. The image checker can read provenance signals locally; an optional deeper check requires your consent.",
       },
       {
         title: "Reach real support",
@@ -67,7 +67,7 @@ export const audiences: Audience[] = [
       },
       {
         title: "Help preserve evidence",
-        body: "Encourage them to save screenshots, links, and messages before blocking anyone. You can sit with them while they do it.",
+        body: "Help them keep post URLs as text and preserve related messages without saving or forwarding intimate media. You can sit with them while they do it.",
       },
       {
         title: "Point them to help",
@@ -139,22 +139,22 @@ export const audiences: Audience[] = [
   {
     slug: "platforms",
     term: "Platforms & partners",
-    cardLine: "How takedowns and fingerprint blocking work with us.",
+    cardLine: "How URL-based notice preparation works with us.",
     title: "Work with us to remove abuse faster.",
     intro:
-      "Asmita routes legally grounded takedown notices and privacy-preserving fingerprints to platforms in India. We are built so that acting on a report never requires exposing the survivor's image.",
+      "Asmita supports URL-based notice preparation and on-device fingerprint generation. Real dispatch waits for verified contacts and templates.",
     points: [
       {
         title: "Legally grounded notices",
-        body: "Notices cite the IT Rules and the MeitY NCII SOP, and reach the right grievance channel, so your team gets a clear, actionable request.",
+        body: "Prepared notices can cite the applicable rules and identify the relevant grievance channel. Sending depends on verified contacts and templates.",
       },
       {
         title: "No media changes hands",
-        body: "We never fetch or store intimate content. Reports are text and links; matching uses on-device fingerprints, not the image.",
+        body: "Submitted links are handled as text. Adults can generate fingerprints on their device; matching depends on participating platforms.",
       },
       {
         title: "Built for real workflows",
-        body: "Structured requests, clear reference details, and honest scope, so removals and re-upload blocking fit how your team already works.",
+        body: "Structured URL-based requests and clear reference details can support your existing grievance workflow. Re-upload blocking is not available yet.",
       },
     ],
     cta: { label: "Get in touch", href: "/contact" },

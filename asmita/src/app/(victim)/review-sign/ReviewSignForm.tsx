@@ -8,6 +8,7 @@ import { t, type Locale } from "@/lib/i18n";
 type HashEntry = { hash: string; quality: number; clientVersion: string };
 
 type Draft = {
+  registrationKey?: string;
   urls: string[];
   hashes: HashEntry[];
   platformIds: string[];
@@ -65,6 +66,8 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         if (!raw) { router.replace("/submit"); return; }
         const data = JSON.parse(raw) as Draft;
         if (!data.urls?.length && !data.hashes?.length) { router.replace("/submit"); return; }
+        data.registrationKey ??= crypto.randomUUID();
+        sessionStorage.setItem("asmita_submit_draft", JSON.stringify(data));
         setDraft(data);
         setStep("review");
       } catch {
@@ -79,26 +82,21 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
     setStep("creating");
     setError("");
     try {
-      const createRes = await csrfFetch("/api/cases/create", { method: "POST" });
+      const createRes = await csrfFetch("/api/cases/create", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": draft.registrationKey ?? crypto.randomUUID(),
+        },
+        body: JSON.stringify({ urls: draft.urls, declaration: draft.declaration }),
+      });
       if (!createRes.ok) {
-        setError(t(locale, "review.error.createCase"));
+        const response = (await createRes.json().catch(() => ({}))) as { error?: string };
+        setError(t(locale, response.error === "invalid_urls" ? "review.error.links" : "review.error.createCase"));
         setStep("review");
         return;
       }
       const { caseId: newCaseId } = (await createRes.json()) as { caseId: string };
-
-      if (draft.urls.length > 0) {
-        const urlRes = await csrfFetch(`/api/cases/${newCaseId}/urls`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ urls: draft.urls, declaration: true }),
-        });
-        if (!urlRes.ok) {
-          setError(t(locale, "review.error.links"));
-          setStep("review");
-          return;
-        }
-      }
 
       if (draft.hashes.length > 0) {
         const hashRes = await csrfFetch(`/api/cases/${newCaseId}/hashes`, {

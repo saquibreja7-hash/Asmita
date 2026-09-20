@@ -50,14 +50,11 @@ export default async function CasePage({
     hashSubmissions = await listHashesForCase(record.id);
   }
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
-  const hasQueuedUrl = record?.urls.some(
-    (u) => u.status === "NOTICE_QUEUED" || (skipLegalGate && u.status === "PENDING_REVIEW" && u.platformId),
+  const hasUnsignedQueuedUrl = record?.urls.some((u) =>
+    (u.status === "NOTICE_QUEUED" ||
+      (skipLegalGate && u.status === "PENDING_REVIEW" && u.platformId)) &&
+    !u.hasSignedNotice,
   ) ?? false;
-  const alreadySigned =
-    (record?.urls.some((u) => u.status === "NOTICE_SENT") ?? false) ||
-    (record?.urls
-      .filter((u) => u.status === "NOTICE_QUEUED" || (skipLegalGate && u.status === "PENDING_REVIEW" && u.platformId))
-      .every((u) => u.hasSignedNotice) ?? false);
 
   if (!record) {
     return (
@@ -207,7 +204,7 @@ export default async function CasePage({
             <div className="order-1 min-w-0 flex-1 md:order-2 space-y-10">
 
               {/* Sign notice CTA */}
-              {hasQueuedUrl && !alreadySigned && (
+              {hasUnsignedQueuedUrl && (
                 <div className="rounded-[24px] border border-[var(--teal)] bg-[color-mix(in_srgb,var(--teal)_6%,white)] p-6">
                   <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--teal)]">
                     {t(locale, "case.sign.pill")}

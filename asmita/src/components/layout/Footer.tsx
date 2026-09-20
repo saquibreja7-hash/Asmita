@@ -10,7 +10,7 @@ export function Footer({ locale }: { locale: Locale }) {
           title: "समस्या",
           links: [
             { href: "/issue", label: "छवि-आधारित दुर्व्यवहार" },
-            { href: "/check-image", label: "डीपफेक जाँच" },
+            { href: "/check-image", label: "AI से बनी तस्वीर की रिपोर्ट" },
             { href: "/how-it-works", label: "यह कैसे काम करता है" },
           ],
         },

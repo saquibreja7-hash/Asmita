@@ -17,7 +17,7 @@ export const siteMap: SiteGroup[] = [
       { href: "/get-help", label: "Get help", note: "Situations, steps, and tools" },
       { href: "/start", label: "Start a case", note: "Begin a confidential report" },
       { href: "/eligibility", label: "Check eligibility" },
-      { href: "/check-image", label: "Check an image for AI", note: "Private deepfake signals check" },
+      { href: "/check-image", label: "AI-made image check", note: "Local provenance signals and an optional consented deeper check" },
       { href: "/minor-support", label: "Under 18", note: "A separate, safer path" },
     ],
   },
@@ -41,7 +41,7 @@ export const siteMap: SiteGroup[] = [
     links: [
       { href: "/resources", label: "Resources" },
       { href: "/resources/guides", label: "Practical guides" },
-      { href: "/resources/directory", label: "Support directory", note: "Verified helplines and services" },
+      { href: "/resources/directory", label: "Support directory", note: "Public helplines and services; check current availability" },
       { href: "/resources/legal", label: "Your legal rights" },
       { href: "/faq", label: "FAQ" },
     ],

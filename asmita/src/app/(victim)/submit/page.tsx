@@ -6,7 +6,6 @@ import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 
 async function getPlatforms(): Promise<HashPickerPlatform[]> {
-  if (!process.env.DATABASE_URL) return [];
   try {
     return await listHashPickerPlatforms();
   } catch {
