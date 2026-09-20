@@ -11,6 +11,12 @@
     "not_found_handling": "none",
     "binding": "ASSETS"
   },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "5f54acb46aac45beb104c5d6eaaa9b90"
+    }
+  ],
   "triggers": {
     "crons": [
       "30 20 * * *",

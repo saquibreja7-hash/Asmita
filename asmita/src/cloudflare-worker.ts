@@ -3,6 +3,9 @@ import app from "vinext/server/fetch-handler";
 type WorkerEnv = {
   ASSETS: unknown;
   CRON_SECRET: string;
+  HYPERDRIVE?: {
+    connectionString: string;
+  };
 };
 
 type WorkerExecutionContext = {
@@ -18,12 +21,22 @@ const cronRoutes: Record<string, string> = {
   "30 22 * * *": "/api/cron/maintenance",
 };
 
+function configureDatabase(env: WorkerEnv) {
+  // Hyperdrive provides an edge-safe connection string to the regional
+  // PostgreSQL origin. The Prisma adapter reads DATABASE_URL at first use.
+  if (env.HYPERDRIVE?.connectionString) {
+    process.env.DATABASE_URL = env.HYPERDRIVE.connectionString;
+  }
+}
+
 const worker = {
   fetch(request: Request, env: WorkerEnv, ctx: WorkerExecutionContext) {
+    configureDatabase(env);
     return app.fetch(request, env, ctx);
   },
 
   scheduled(controller: WorkerScheduledController, env: WorkerEnv, ctx: WorkerExecutionContext) {
+    configureDatabase(env);
     const path = cronRoutes[controller.cron];
     if (!path) {
       console.error(`Unknown Cloudflare cron schedule: ${controller.cron}`);
