@@ -17,6 +17,7 @@ const productionConfig = {
   name: production.name,
   routes: production.routes,
   hyperdrive: production.hyperdrive,
+  triggers: production.triggers,
   vars: production.vars,
 };
 

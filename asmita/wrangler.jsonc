@@ -11,12 +11,7 @@
     "not_found_handling": "none",
     "binding": "ASSETS"
   },
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "5f54acb46aac45beb104c5d6eaaa9b90"
-    }
-  ],
+  "hyperdrive": [],
   "vars": {
     "NEXT_PUBLIC_APP_URL": "https://asmita-staging.saquibreja7.workers.dev",
     "NODE_ENV": "production",
@@ -28,12 +23,6 @@
     "ENABLE_HASH_UPLOAD": "true",
     "ENABLE_PLATFORM_API": "false",
     "ENABLE_PROVENANCE_CHECK": "false"
-  },
-  "triggers": {
-    "crons": [
-      "30 20 * * *",
-      "30 22 * * *"
-    ]
   },
   "env": {
     "production": {
@@ -50,6 +39,12 @@
           "id": "36433621ad834c41abbccdf8a09ba845"
         }
       ],
+      "triggers": {
+        "crons": [
+          "30 20 * * *",
+          "30 22 * * *"
+        ]
+      },
       "vars": {
         "NEXT_PUBLIC_APP_URL": "https://meriasmita.org",
         "NODE_ENV": "production",

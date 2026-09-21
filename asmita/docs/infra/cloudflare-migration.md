@@ -26,18 +26,20 @@ Use separate Cloudflare Workers and separate databases:
 
 Deployment scripts use the separate Worker names `asmita-staging` and `asmita-production`. vinext generates a flattened Wrangler configuration, so do not rely on Wrangler `env` inheritance for these deployments.
 
-### Current staging inventory
+### Production database and staging isolation
 
 | Setting | Value |
 | --- | --- |
 | PostgreSQL provider | Supabase |
-| Project | `asmita-staging` |
+| Project | `asmita-staging` (now the production system of record) |
 | Project reference | `rijfuazecspigawklwuv` |
 | Region | South Asia (Mumbai), `ap-south-1` |
 | Data API | Disabled; the application connects through PostgreSQL |
-| Permitted data | Synthetic staging records only |
+| Permitted data | Production data, subject to the applicable safeguards |
 
-The staging database is independent from the restored historical ASMITA project. Keep its password and connection strings only in ignored local environment files, Cloudflare secrets, and approved secret stores. The production database has not been selected or configured.
+`asmita-production` connects to this database through `asmita-production-db` (`36433621ad834c41abbccdf8a09ba845`). The `asmita-staging` Worker is deliberately deployed without a Hyperdrive binding or Cron Triggers while no separate staging database exists. It must not be used for application testing until a new Mumbai staging project and Hyperdrive configuration are created.
+
+Keep database passwords and connection strings only in ignored local environment files, Cloudflare secrets, and approved secret stores.
 
 ## Account setup
 
