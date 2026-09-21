@@ -31,6 +31,10 @@
         {
           "pattern": "meriasmita.org/*",
           "zone_name": "meriasmita.org"
+        },
+        {
+          "pattern": "www.meriasmita.org/*",
+          "zone_name": "meriasmita.org"
         }
       ],
       "hyperdrive": [

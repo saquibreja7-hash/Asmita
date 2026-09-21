@@ -39,6 +39,8 @@ Deployment scripts use the separate Worker names `asmita-staging` and `asmita-pr
 
 `asmita-production` connects to this database through `asmita-production-db` (`36433621ad834c41abbccdf8a09ba845`). The `asmita-staging` Worker is deliberately deployed without a Hyperdrive binding or Cron Triggers while no separate staging database exists. It must not be used for application testing until a new Mumbai staging project and Hyperdrive configuration are created.
 
+The production Worker owns both `meriasmita.org/*` and `www.meriasmita.org/*`. Requests to `www` receive a permanent redirect to the canonical root domain before application processing.
+
 Keep database passwords and connection strings only in ignored local environment files, Cloudflare secrets, and approved secret stores.
 
 ## Account setup

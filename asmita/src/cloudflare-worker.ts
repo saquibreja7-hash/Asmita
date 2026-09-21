@@ -33,6 +33,11 @@ function configureDatabase(env: WorkerEnv) {
 const worker = {
   fetch(request: Request, env: WorkerEnv, ctx: WorkerExecutionContext) {
     configureDatabase(env);
+    const url = new URL(request.url);
+    if (url.hostname === "www.meriasmita.org") {
+      url.hostname = "meriasmita.org";
+      return Response.redirect(url.toString(), 308);
+    }
     return app.fetch(request, env, ctx);
   },
 
