@@ -6,9 +6,10 @@ export const adminUrl =
   process.env.E2E_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5433/asmita_e2e";
 
 const target = new URL(adminUrl);
-if (!["localhost", "127.0.0.1"].includes(target.hostname) || !target.pathname.endsWith("_e2e")) {
+// No query string: node-postgres lets ?host= override the URL host.
+if (!["localhost", "127.0.0.1"].includes(target.hostname) || !target.pathname.endsWith("_e2e") || target.search) {
   throw new Error(
-    `E2E_DATABASE_URL must be a local database whose name ends in _e2e (got ${target.hostname}${target.pathname})`,
+    `E2E_DATABASE_URL must be a local database whose name ends in _e2e, with no query string (got ${target.hostname}${target.pathname}${target.search})`,
   );
 }
 
