@@ -1,33 +1,4 @@
-import IORedis from "ioredis";
-
 const buckets = new Map<string, { count: number; resetAt: number }>();
-let redis: IORedis | null = null;
-
-function shouldUseRedis() {
-  return process.env.RATE_LIMIT_DRIVER === "redis" && Boolean(process.env.REDIS_URL);
-}
-
-function getRedis() {
-  if (!redis) {
-    redis = new IORedis(process.env.REDIS_URL!, {
-      commandTimeout: 5_000,
-      connectTimeout: 5_000,
-      maxRetriesPerRequest: 1,
-      retryStrategy: (times) => (times > 1 ? null : 500),
-    });
-  }
-  return redis;
-}
-
-export async function checkRedisRateLimit(key: string, limit: number, windowMs: number) {
-  const client = getRedis();
-  const redisKey = `rate:${key}`;
-  const count = await client.incr(redisKey);
-  if (count === 1) {
-    await client.pexpire(redisKey, windowMs);
-  }
-  return { allowed: count <= limit, remaining: Math.max(0, limit - count) };
-}
 
 export function checkMemoryRateLimit(key: string, limit: number, windowMs: number) {
   const now = Date.now();
@@ -54,18 +25,9 @@ export function checkRateLimit(key: string, limit: number, windowMs: number) {
   if (testBypassEnabled()) {
     return { allowed: true, remaining: limit };
   }
-  if (shouldUseRedis()) {
-    throw new Error("Use checkRateLimitAsync when RATE_LIMIT_DRIVER=redis.");
-  }
   return checkMemoryRateLimit(key, limit, windowMs);
 }
 
 export async function checkRateLimitAsync(key: string, limit: number, windowMs: number) {
-  if (testBypassEnabled()) {
-    return { allowed: true, remaining: limit };
-  }
-  if (shouldUseRedis()) {
-    return checkRedisRateLimit(key, limit, windowMs);
-  }
-  return checkMemoryRateLimit(key, limit, windowMs);
+  return checkRateLimit(key, limit, windowMs);
 }
