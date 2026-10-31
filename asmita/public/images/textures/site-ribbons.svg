@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 2800" fill="none" preserveAspectRatio="xMidYMin meet">
+  <!--
+    Thorn-style ribbons v5 — matched against the thorn.org screenshot.
+    The look: SLIM sashes (~170-200 stroke), pastel rainbow along the length,
+    soft feathered edges (blur 10), long shallow arcs at a ~12deg diagonal.
+    Band 1 hugs the top-left corner and exits right at hero height as lavender.
+    Band 2 arcs across below the fold and dives into the bottom-right.
+    Transparent background: the page's warm white shows through.
+    Rendered at natural scale (width 100%, height auto) — never stretched.
+  -->
+  <defs>
+    <filter id="feather" x="-12%" y="-12%" width="124%" height="124%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+
+    <!-- Band 1: green top-left -> cream -> orange -> coral -> lavender right -->
+    <linearGradient id="sashA" x1="-150" y1="150" x2="1700" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#CFE7C3"/>
+      <stop offset="0.22" stop-color="#F9EEC4"/>
+      <stop offset="0.45" stop-color="#F6B16D"/>
+      <stop offset="0.65" stop-color="#EF7358"/>
+      <stop offset="0.82" stop-color="#E9615C"/>
+      <stop offset="1"    stop-color="#B7A2EC"/>
+    </linearGradient>
+
+    <!-- Band 2: mint/cream left -> orange/red centre -> purple right tail -->
+    <linearGradient id="sashB" x1="-150" y1="1150" x2="1650" y2="1050" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#EFF0D8"/>
+      <stop offset="0.3"  stop-color="#F6C285"/>
+      <stop offset="0.55" stop-color="#EC6D55"/>
+      <stop offset="0.8"  stop-color="#D98BA8"/>
+      <stop offset="1"    stop-color="#A88FE0"/>
+    </linearGradient>
+
+    <!-- Band 3: faint continuation deeper in the page -->
+    <linearGradient id="sashC" x1="-100" y1="2100" x2="1700" y2="2350" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#B7A2EC"/>
+      <stop offset="0.45" stop-color="#EE8663"/>
+      <stop offset="1"    stop-color="#F8D9A0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ═ Band 1: enters top-left corner, shallow dip, exits right at hero height ═ -->
+  <path
+    filter="url(#feather)"
+    d="M -150 170
+       C 300 240, 620 330, 950 360
+       C 1220 385, 1430 430, 1700 540"
+    stroke="url(#sashA)"
+    stroke-width="185"
+    stroke-linecap="butt"
+    fill="none"
+    opacity="0.9"
+  />
+
+  <!-- ═ Band 2: enters left below the fold, bows up slightly, dives bottom-right ═ -->
+  <path
+    filter="url(#feather)"
+    d="M -150 1180
+       C 350 1080, 750 1160, 1080 1100
+       C 1330 1055, 1500 1180, 1640 1420"
+    stroke="url(#sashB)"
+    stroke-width="205"
+    stroke-linecap="butt"
+    fill="none"
+    opacity="0.9"
+  />
+
+  <!-- ═ Band 3: quiet lower sash so the scroll doesn't go dead white ═ -->
+  <path
+    filter="url(#feather)"
+    d="M -150 2260
+       C 400 2140, 850 2300, 1250 2220
+       C 1450 2180, 1580 2240, 1700 2320"
+    stroke="url(#sashC)"
+    stroke-width="175"
+    stroke-linecap="butt"
+    fill="none"
+    opacity="0.75"
+  />
+</svg>

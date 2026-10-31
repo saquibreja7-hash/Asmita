@@ -87,7 +87,7 @@ export default async function PrivacyPage() {
                     </svg>
                   </span>
                   <p className="text-base leading-[1.7] md:text-[17px]">
-                    <span className="font-semibold text-[var(--foreground)]">{bold}</span>{" "}
+                    <span className="font-medium text-[var(--foreground)]">{bold}</span>{" "}
                     <span className="text-[var(--muted)]">{detail}</span>
                   </p>
                 </li>
@@ -117,7 +117,7 @@ export default async function PrivacyPage() {
                             href={`#${s.id}`}
                             className="flex items-baseline gap-2 rounded-md px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
                           >
-                            <span className="font-mono text-[10px] shrink-0 tabular-nums opacity-60">
+                            <span className="font-mono text-[10px] shrink-0 tabular-nums">
                               {s.num}
                             </span>
                             <span className="leading-[1.5]">{s.title}</span>
@@ -146,7 +146,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s03.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s03.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s03.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -158,7 +158,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s04.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s04.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s04.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -170,7 +170,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i2b","i3","i4"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s05.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s05.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s05.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -180,12 +180,12 @@ export default async function PrivacyPage() {
                 <PolicySection num="06" id="legal-basis" title={t(locale, "privacy.toc.06")}>
                   <p>
                     {t(locale, "privacy.s06.p1a")}{" "}
-                    <span className="font-semibold text-[var(--foreground)]">{t(locale, "privacy.s06.p1.bold")}</span>
+                    <span className="font-medium text-[var(--foreground)]">{t(locale, "privacy.s06.p1.bold")}</span>
                     {t(locale, "privacy.s06.p1b")}
                   </p>
                   <p>
                     {t(locale, "privacy.s06.p2a")}{" "}
-                    <span className="font-semibold text-[var(--foreground)]">{t(locale, "privacy.s06.p2.bold")}</span>{" "}
+                    <span className="font-medium text-[var(--foreground)]">{t(locale, "privacy.s06.p2.bold")}</span>{" "}
                     {t(locale, "privacy.s06.p2b")}
                   </p>
                 </PolicySection>
@@ -195,7 +195,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4","i5"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s07.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s07.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s07.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -207,7 +207,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s08.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s08.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s08.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -219,7 +219,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4","i5","i6"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s09.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s09.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s09.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -231,7 +231,7 @@ export default async function PrivacyPage() {
                   <ul className="mt-4 space-y-3">
                     {(["i1","i2","i3","i4","i5"] as const).map((i) => (
                       <li key={i}>
-                        <span className="font-semibold text-[var(--foreground)]">{t(locale, `privacy.s10.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
+                        <span className="font-medium text-[var(--foreground)]">{t(locale, `privacy.s10.${i}.bold` as Parameters<typeof t>[1])}</span>{" "}
                         {t(locale, `privacy.s10.${i}.detail` as Parameters<typeof t>[1])}
                       </li>
                     ))}
@@ -327,7 +327,7 @@ function PolicySection({
   return (
     <section id={id} className="scroll-mt-24 border-t border-[var(--hairline)] py-10 first:border-t-0 first:pt-0">
       <div className="flex items-baseline gap-3 mb-5">
-        <span className="font-mono text-[10px] tabular-nums text-[var(--muted)] opacity-60 shrink-0">
+        <span className="font-mono text-[10px] tabular-nums text-[var(--muted)] shrink-0">
           {num}
         </span>
         <h2 className="font-display text-[20px] font-normal leading-[1.25] tracking-tight md:text-[26px] md:leading-[1.2]">

@@ -1,5 +1,7 @@
 ﻿# Vercel + Azure Deployment Guide
 
+> **Superseded (2026-10-31).** Hosting moved to Cloudflare Workers with production data on Supabase (Mumbai) through Hyperdrive. Current runbook: `docs/infra/cloudflare-migration.md`. Kept for history.
+
 **Status:** Pre-launch checklist. Each step needs human action — none of this can be done from inside the codebase.
 
 **Decisions locked on 2026-05-17**

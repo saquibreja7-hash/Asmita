@@ -1,10 +1,11 @@
+import { safeEqual } from "@/lib/safe-equal";
 import { NextResponse, type NextRequest } from "next/server";
-import { db } from "@/lib/db";
 import { createReverificationQueue } from "@/lib/go-reverification";
 import { summarizeDeliverability } from "@/lib/deliverability-monitor";
 import { sendOnCallAlertFireAndForget } from "@/lib/alerts";
 import type { DeliveryEvent } from "@/lib/webhook-events";
 import type { PlatformDirectoryEntry } from "@/lib/platforms";
+import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,6 +70,25 @@ export async function GET(request: NextRequest) {
 }
 
 async function loadPlatformDirectoryFromDb(): Promise<PlatformDirectoryEntry[]> {
+  if (usesWorkerKysely()) {
+    const rows = await getWorkerDb().selectFrom("Platform").select([
+      "id", "name", "domainPatterns", "tier", "noticeBasis", "grievanceEmail", "formUrl", "apiEndpoint",
+      "lastContactVerifiedByHuman", "lastContactVerifiedAt",
+    ]).where("isActive", "=", true).execute();
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      domainPatterns: row.domainPatterns,
+      tier: row.tier,
+      noticeBasis: row.noticeBasis,
+      grievanceEmail: row.grievanceEmail ?? "<TO_BE_VERIFIED_BY_HUMAN>",
+      formUrl: row.formUrl ?? undefined,
+      apiEndpoint: row.apiEndpoint ?? undefined,
+      lastContactVerifiedByHuman: row.lastContactVerifiedByHuman,
+      lastContactVerifiedAt: row.lastContactVerifiedAt?.toISOString(),
+    }));
+  }
+  const { db } = await import("@/lib/db");
   const rows = await db.platform.findMany({
     where: { isActive: true },
     select: {
@@ -99,6 +119,20 @@ async function loadPlatformDirectoryFromDb(): Promise<PlatformDirectoryEntry[]> 
 }
 
 async function loadDeliveryEvents(since: Date): Promise<DeliveryEvent[]> {
+  if (usesWorkerKysely()) {
+    const rows = await getWorkerDb().selectFrom("EmailDeliveryProof")
+      .select(["messageId", "eventType", "platformId", "receivedAt"])
+      .where("receivedAt", ">=", since)
+      .where("eventType", "in", ["delivered", "bounced", "complained"])
+      .execute();
+    return rows.map((row) => ({
+      type: row.eventType as DeliveryEvent["type"],
+      messageId: row.messageId,
+      platformId: row.platformId ?? undefined,
+      createdAt: row.receivedAt.toISOString(),
+    }));
+  }
+  const { db } = await import("@/lib/db");
   const rows = await db.emailDeliveryProof.findMany({
     where: {
       receivedAt: { gte: since },
@@ -120,7 +154,7 @@ function verifyCronAuth(request: NextRequest): NextResponse | null {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 503 });
   }
   const header = request.headers.get("authorization");
-  if (header !== `Bearer ${secret}`) {
+  if (!safeEqual(header, `Bearer ${secret}`)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   return null;

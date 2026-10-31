@@ -31,7 +31,7 @@ export default async function DeleteAccountPage() {
         {/* WHAT GETS DELETED */}
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
               {t(locale, "delete.what.eyebrow")}
             </p>
             <h2 className="font-display mt-4 text-[26px] font-normal leading-[1.2] tracking-tight md:text-[36px] md:leading-[1.18]">
@@ -39,13 +39,13 @@ export default async function DeleteAccountPage() {
             </h2>
             <ul className="muted mx-auto mt-8 max-w-md space-y-3 text-base leading-[1.75] md:text-lg">
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   {t(locale, "delete.what.item1.bold")}
                 </span>{" "}
                 {t(locale, "delete.what.item1.rest")}
               </li>
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   {t(locale, "delete.what.item2.bold")}
                 </span>{" "}
                 {t(locale, "delete.what.item2.rest")}

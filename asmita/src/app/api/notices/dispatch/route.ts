@@ -9,9 +9,9 @@ import { dispatchTier2Notice } from "@/lib/notice-dispatch";
 import {
   assertNoticeBodySafe,
   assertNoticeSubjectSafe,
-  buildHashAnnex,
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
+import { buildCaseHashAnnex } from "@/lib/case-hash-annex";
 import { createPortalToken } from "@/lib/url-portal";
 
 const schema = z.object({
@@ -62,6 +62,11 @@ export async function POST(request: Request) {
   if (submittedUrl.status !== "NOTICE_QUEUED") {
     return NextResponse.json({ error: "url_not_ready_for_dispatch" }, { status: 409 });
   }
+  // Notice integrity: nothing goes out in the survivor's name that they have
+  // not reviewed and signed.
+  if (!submittedUrl.signedNoticePdf) {
+    return NextResponse.json({ error: "signature_required" }, { status: 409 });
+  }
 
   const platform = submittedUrl.platform;
   if (!platform?.isActive) {
@@ -104,27 +109,20 @@ export async function POST(request: Request) {
     caseReference: submittedUrl.case.referenceNumber,
     platformName: platform.name,
     url: portalLink,
-    declarationReference:
-      submittedUrl.case.declarationSignedAt?.toISOString() ?? submittedUrl.case.referenceNumber,
+    // Same reference the signed PDF carries (see sign-notice), so the email
+    // body and the attached declaration agree.
+    declarationReference: submittedUrl.case.referenceNumber,
   };
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
   let body = renderNoticeTemplate(template.bodyTemplate, variables);
 
-  // If APPROVED hashes exist for this case, append the hash annex so the
-  // platform receives both the URL notice and the perceptual hash in one email.
-  const approvedHashes = await db.hashSubmission.findMany({
-    where: { caseId: parsed.data.caseId, status: { in: ["APPROVED", "DISPATCHED"] } },
-    orderBy: { submittedAt: "asc" },
+  // Append only fingerprints that were approved and already on the case when
+  // the survivor signed, so the annex never exceeds what the signature covers.
+  const annex = await buildCaseHashAnnex(parsed.data.caseId, {
+    kind: "for-dispatch",
+    signedAt: submittedUrl.case.declarationSignedAt,
   });
-  if (approvedHashes.length > 0) {
-    const annex = buildHashAnnex({
-      algorithm: "PDQ",
-      hashes: approvedHashes.map((h) => ({
-        value: decryptField(h.hashEncrypted),
-        quality: h.quality,
-      })),
-      clientVersion: approvedHashes[0].clientVersion,
-    });
+  if (annex) {
     body = `${body}\n\n${annex}`;
   }
 

@@ -64,7 +64,7 @@ export function CaseDashboardActions({
       <div>
         <label
           htmlFor="additional-urls"
-          className="block text-sm font-semibold text-[var(--foreground)]"
+          className="block text-sm font-medium text-[var(--foreground)]"
         >
           {t(locale, "case.actions.label")}
         </label>
@@ -105,7 +105,7 @@ export function CaseDashboardActions({
       {message && (
         <p
           aria-live="polite"
-          className={`text-sm font-semibold ${messageOk ? "text-[var(--teal)]" : "text-[var(--rose)]"}`}
+          className={`text-sm font-medium ${messageOk ? "text-[var(--teal)]" : "text-[var(--rose)]"}`}
         >
           {message}
         </p>

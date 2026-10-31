@@ -8,7 +8,11 @@ export type SessionClaims = {
   emailHash: string;
   namespace?: "victim" | "admin";
   adminRole?: AdminRole;
+  mfaComplete?: boolean;
 };
+
+const ISSUER = "asmita";
+const AUDIENCE = "asmita-web";
 
 function getSecret() {
   const configured = process.env.JWT_SECRET;
@@ -17,6 +21,9 @@ function getSecret() {
       throw new Error("JWT_SECRET is required in production.");
     }
     return new TextEncoder().encode("dev-secret-change-before-prod-32chars");
+  }
+  if (configured.length < 32) {
+    throw new Error("JWT_SECRET must be at least 32 characters.");
   }
   return new TextEncoder().encode(configured);
 }
@@ -29,6 +36,8 @@ export async function signSession(claims: SessionClaims) {
     namespace: claims.namespace || "victim",
   })
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCE)
     .setSubject(claims.sub)
     .setIssuedAt()
     .setExpirationTime("4h")
@@ -36,7 +45,7 @@ export async function signSession(claims: SessionClaims) {
 }
 
 export async function signAdminSession(
-  claims: Omit<SessionClaims, "role" | "ageOver18" | "namespace"> & { adminRole?: AdminRole },
+  claims: Omit<SessionClaims, "role" | "ageOver18" | "namespace"> & { adminRole?: AdminRole; mfaComplete: boolean },
 ) {
   return new SignJWT({
     role: "ADMIN",
@@ -44,18 +53,25 @@ export async function signAdminSession(
     emailHash: claims.emailHash,
     namespace: "admin",
     adminRole: claims.adminRole ?? "SUPER_ADMIN",
+    mfaComplete: claims.mfaComplete,
   })
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCE)
     .setSubject(claims.sub)
     .setIssuedAt()
-    .setExpirationTime("8h")
+    .setExpirationTime(claims.mfaComplete ? "8h" : "10m")
     .sign(getSecret());
 }
 
-export async function verifySession(token: string | undefined | null) {
+export async function verifySession(token: string | undefined | null): Promise<SessionClaims | null> {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, getSecret(), {
+      algorithms: ["HS256"],
+      issuer: ISSUER,
+      audience: AUDIENCE,
+    });
     return {
       sub: payload.sub || "",
       role: payload.role as SessionClaims["role"],
@@ -63,13 +79,14 @@ export async function verifySession(token: string | undefined | null) {
       emailHash: String(payload.emailHash || ""),
       namespace: (payload.namespace as SessionClaims["namespace"]) || "victim",
       adminRole: payload.adminRole as SessionClaims["adminRole"],
+      mfaComplete: payload.mfaComplete === true,
     };
   } catch {
     return null;
   }
 }
 
-export async function verifyAdminSession(token: string | undefined | null) {
+export async function verifyAdminSession(token: string | undefined | null): Promise<SessionClaims | null> {
   const session = await verifySession(token);
   if (!session || session.role !== "ADMIN" || session.namespace !== "admin") return null;
   return session;

@@ -113,7 +113,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
             type={field.type}
             defaultValue={current[field.key] ?? ""}
             placeholder={field.placeholder}
-            className="font-mono rounded border border-[var(--hairline)] bg-white px-3 py-2 text-xs"
+            className="font-mono rounded border border-[var(--hairline)] bg-[var(--color-parchment)] px-3 py-2 text-xs"
           />
         </label>
       ))}
@@ -127,7 +127,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
           type="url"
           required
           placeholder="https://help.platform.com/grievance-officer"
-          className="font-mono rounded border border-[var(--hairline)] bg-white px-3 py-2 text-xs"
+          className="font-mono rounded border border-[var(--hairline)] bg-[var(--color-parchment)] px-3 py-2 text-xs"
         />
         <span className="muted text-xs">
           Link to the official public page where you verified these details (legal page, transparency report, etc.).
@@ -135,7 +135,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
       </label>
 
       <label className="flex items-center gap-2 text-xs">
-        <input type="checkbox" name="markVerified" defaultChecked />
+        <input type="checkbox" name="markVerified" />
         <span>Mark contact verified by human (sets last-verified timestamp)</span>
       </label>
 

@@ -5,6 +5,7 @@ import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/encryption";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
+import { buildCaseHashAnnex } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
 
 function templateTypeForNoticeBasis(noticeBasis: string) {
@@ -24,6 +25,10 @@ export async function GET(
 
   const record = await getCaseForUser(caseId, auth.session.sub);
   if (!record) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  // The memory-backed local store has no verified contacts or reviewed templates.
+  if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
+    return NextResponse.json({ error: "no_eligible_url" }, { status: 404 });
+  }
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
 
@@ -32,6 +37,7 @@ export async function GET(
       caseId,
       status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
       platformId: { not: null },
+      signedNoticePdf: null,
       platform: {
         isActive: true,
         ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
@@ -68,7 +74,10 @@ export async function GET(
   };
 
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
-  const body = renderNoticeTemplate(template.bodyTemplate, variables);
+  const annex = await buildCaseHashAnnex(caseId, { kind: "for-signing" });
+  const body = annex
+    ? `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex}`
+    : renderNoticeTemplate(template.bodyTemplate, variables);
 
   const pdfBytes = await generateNoticePdf({
     platformName: url.platform.name,

@@ -102,15 +102,32 @@ export default function HashGenerator({ caseId }: { caseId: string }) {
         multiple
         onChange={onSelectFiles}
         aria-label="Select images to fingerprint"
-        className="block w-full text-sm"
+        className="sr-only"
+        tabIndex={-1}
       />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-[24px] border border-dashed border-[var(--color-ash)] bg-[var(--color-parchment)] px-6 py-8 text-center transition-colors hover:border-[var(--color-off-black)]"
+      >
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-periwinkle-mist)]">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+            <path d="M10 13V4M10 4l-3 3M10 4l3 3" stroke="var(--color-off-black)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M3 14v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" stroke="var(--color-off-black)" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </span>
+        <span>
+          <span className="block text-sm font-medium text-[var(--color-off-black)]">Choose photos to fingerprint</span>
+          <span className="muted mt-0.5 block text-xs">Up to {MAX_FILES} images. They never leave this device.</span>
+        </span>
+      </button>
 
       {files.length > 0 && (
         <ul className="space-y-1 text-sm" aria-live="polite">
           {files.map((file, index) => (
-            <li key={`${file.name}-${index}`} className="flex items-center justify-between rounded border border-gray-200 px-3 py-2">
+            <li key={`${file.name}-${index}`} className="flex items-center justify-between rounded-[16px] border border-[var(--color-ash)] px-4 py-2.5">
               <span className="truncate">{file.name}</span>
-              <span>
+              <span className={`ml-3 shrink-0 text-xs ${file.status === "error" ? "text-[var(--danger)]" : "text-[var(--color-graphite)]"}`}>
                 {file.status === "hashing" && "Creating fingerprint…"}
                 {file.status === "hashed" && `Fingerprint ready (quality ${file.quality}/100)`}
                 {file.status === "error" && "Could not process this image"}
@@ -121,19 +138,19 @@ export default function HashGenerator({ caseId }: { caseId: string }) {
       )}
 
       {lowQuality && (
-        <p className="text-sm text-amber-700">
+        <p className="text-sm text-[var(--warning)]">
           One or more images produced a weak fingerprint (very flat or blurred images do
           this). You can still submit, but matching may be less reliable.
         </p>
       )}
 
       {hashedCount > 0 && (
-        <label className="flex items-start gap-2 text-sm">
+        <label className="flex cursor-pointer items-start gap-3 text-sm leading-[1.6]">
           <input
             type="checkbox"
             checked={declaration}
             onChange={(event) => setDeclaration(event.target.checked)}
-            className="mt-1"
+            className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-off-black)]"
           />
           <span>
             I declare that I appear in this content (or I am the authorized reporter), that
@@ -147,19 +164,19 @@ export default function HashGenerator({ caseId }: { caseId: string }) {
         type="button"
         onClick={onSubmit}
         disabled={hashedCount === 0 || !declaration || submitState === "submitting"}
-        className="rounded bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="btn btn-midnight disabled:opacity-40"
       >
         {submitState === "submitting" ? "Submitting fingerprints…" : `Submit ${hashedCount} fingerprint${hashedCount === 1 ? "" : "s"}`}
       </button>
 
       {submitState === "submitted" && (
-        <p className="text-sm text-emerald-800" role="status">
+        <p className="text-sm text-[var(--success)]" role="status">
           Fingerprints submitted. Our team reviews every submission before notices go out;
           you can track the status on your case page.
         </p>
       )}
       {submitState === "error" && (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm text-[var(--danger)]" role="alert">
           Something went wrong while submitting. Your photos are still only on your device.
           Please try again.
         </p>

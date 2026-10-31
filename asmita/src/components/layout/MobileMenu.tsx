@@ -5,18 +5,18 @@ import Link from "next/link";
 import { t, type Locale } from "@/lib/i18n";
 
 const links = [
-  { href: "/how-it-works", key: "nav.howItWorks" },
-  { href: "/check-image", key: "nav.checkImage" },
-  { href: "/resources", key: "nav.resources" },
-  { href: "/faq", key: "nav.faq" },
-  { href: "/privacy", key: "nav.privacy" },
+  { href: "/issue", en: "Issue", hi: "समस्या" },
+  { href: "/what-we-do", en: "What we do", hi: "हम क्या करते हैं" },
+  { href: "/check-image", key: "nav.checkImage" as const },
+  { href: "/resources", key: "nav.resources" as const },
+  { href: "/faq", key: "nav.faq" as const },
+  { href: "/privacy", key: "nav.privacy" as const },
 ] as const;
 
 export function MobileMenu({ locale }: { locale: Locale }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside tap or Escape. (Each link also closes the menu on click.)
   useEffect(() => {
     if (!open) return;
     function onPointer(e: PointerEvent) {
@@ -39,49 +39,40 @@ export function MobileMenu({ locale }: { locale: Locale }) {
     <div className="relative" ref={wrapRef}>
       <button
         type="button"
-        className="btn btn-secondary px-2.5"
+        className="btn btn-secondary !min-h-[44px] !px-4"
         aria-expanded={open}
         aria-controls="mobile-menu"
         aria-label={t(locale, "nav.menu")}
         onClick={() => setOpen((v) => !v)}
       >
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-        >
-          {open ? (
-            <>
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </>
-          ) : (
-            <>
-              <path d="M3 6h18" />
-              <path d="M3 12h18" />
-              <path d="M3 18h18" />
-            </>
-          )}
-        </svg>
+        {open ? "×" : t(locale, "nav.menu")}
       </button>
       {open && (
         <nav
           id="mobile-menu"
-          className="panel absolute right-0 top-14 z-30 grid w-56 gap-3 p-4 text-sm font-bold text-[var(--muted)]"
+          className="card absolute right-0 top-14 z-[60] grid w-72 gap-0 !p-4"
+          aria-label="Mobile"
         >
-          {links.map((link) => (
-            <Link key={link.href} href={link.href} onClick={() => setOpen(false)}>
-              {t(locale, link.key)}
-            </Link>
-          ))}
-          <Link href="/start" className="btn btn-primary" onClick={() => setOpen(false)}>
-            {t(locale, "nav.start")}
+          {links.map((link) => {
+            const label =
+              "key" in link ? t(locale, link.key) : locale === "hi" ? link.hi : link.en;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="nav-link border-b border-[var(--color-ash)] !px-2 last:border-0"
+                onClick={() => setOpen(false)}
+              >
+                {label}
+              </Link>
+            );
+          })}
+          <Link
+            href="/get-help"
+            className="btn btn-primary btn-arrow mt-4 w-full"
+            onClick={() => setOpen(false)}
+          >
+            {locale === "hi" ? "मदद लें" : "Get help"}
           </Link>
         </nav>
       )}

@@ -22,17 +22,12 @@ Asmita is not legal advice and should not be deployed for real cases without qua
 ```text
 asmita/                 Next.js application, Prisma schema, tests, docs
 homepage/               Static public landing-page prototype
-PRD_Asmita.md           Product requirements and policy context
-TRD_Asmita.md           Technical requirements
-IMPLEMENTATION_PLAN_Asmita.md
-UXUI_DESIGN_PLAN_Asmita.md
-TODO_Asmita.md
-TODOS.md
+asmita/docs/archive/    Original PRD, TRD, implementation and design plans (May 2026)
 ```
 
 ## Core Safety Rule
 
-Asmita Phase 1 is URL-only. The application must not fetch, preview, scrape, thumbnail, store, or upload intimate images or videos.
+The server must not fetch, preview, scrape, thumbnail, store, or upload intimate images or videos. Image fingerprints (PDQ) are computed on the survivor's device; only the fingerprint string reaches the server.
 
 That rule is enforced through architecture, tests, review guidance, and documentation. If a proposed change touches URL handling, evidence handling, outbound notices, minors, platform APIs, or storage, treat it as safety-sensitive.
 

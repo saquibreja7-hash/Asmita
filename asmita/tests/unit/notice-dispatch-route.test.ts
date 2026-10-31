@@ -69,6 +69,7 @@ const dispatchableUrl = {
   urlEncrypted: "encrypted-url",
   domain: "example.com",
   status: "NOTICE_QUEUED",
+  signedNoticePdf: "encrypted-signed-pdf",
   case: {
     referenceNumber: "ASMITA-2026-00001",
     declarationSignedAt: new Date("2026-06-01T00:00:00.000Z"),
@@ -135,6 +136,17 @@ describe("POST /api/notices/dispatch", () => {
     expect(dispatchTier2Notice).not.toHaveBeenCalled();
   });
 
+  it("blocks dispatch when the survivor has not signed the notice", async () => {
+    vi.mocked(db.submittedUrl.findFirst).mockResolvedValue({
+      ...dispatchableUrl,
+      signedNoticePdf: null,
+    } as never);
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: "signature_required" });
+    expect(dispatchTier2Notice).not.toHaveBeenCalled();
+  });
+
   it("blocks dispatch when the platform contact is not human verified", async () => {
     vi.mocked(db.submittedUrl.findFirst).mockResolvedValue({
       ...dispatchableUrl,
@@ -165,7 +177,7 @@ describe("POST /api/notices/dispatch", () => {
         subject: "Notice ASMITA-2026-00001",
         // Body contains the portal link (not the raw URL) and the access code block.
         body: expect.stringContaining("meriasmita.org/r/abc123token"),
-        signedNoticePdf: null,
+        signedNoticePdf: expect.any(Buffer),
       }),
     );
     const calledBody = vi.mocked(dispatchTier2Notice).mock.calls[0][0].body;

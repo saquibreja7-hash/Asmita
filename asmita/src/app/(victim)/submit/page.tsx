@@ -6,7 +6,6 @@ import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 
 async function getPlatforms(): Promise<HashPickerPlatform[]> {
-  if (!process.env.DATABASE_URL) return [];
   try {
     return await listHashPickerPlatforms();
   } catch {
@@ -28,11 +27,11 @@ export default async function SubmitPage() {
   return (
     <AppShell>
       <div className="page-canvas">
-        <div className="container py-16 md:py-24">
-          <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
+        <div className="container py-8 md:py-24">
+          <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
 
             {/* LEFT - sticky context panel */}
-            <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
+            <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
               <div className="md:sticky md:top-28">
                 <span className="pill">
                   <span className="dot" />
@@ -61,7 +60,7 @@ export default async function SubmitPage() {
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-semibold text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>
@@ -71,7 +70,7 @@ export default async function SubmitPage() {
             </aside>
 
             {/* RIGHT - form */}
-            <div className="min-w-0 flex-1">
+            <div className="order-1 min-w-0 flex-1 md:order-2">
               <FlowProgress step={3} locale={locale} />
               <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
                 {t(locale, "submit.form.title")}

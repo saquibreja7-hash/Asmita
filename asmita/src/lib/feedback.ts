@@ -8,7 +8,16 @@ export type FeedbackRecord = {
 
 export const feedbackRecords: FeedbackRecord[] = [];
 
+// Feedback is for service experience only. Reject links before persistence so
+// pasted case URLs cannot enter a secondary, unprotected data store.
+export function containsUrlLikeText(value: string) {
+  return /(?:https?:\/\/|www\.|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\/(?:\S*)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|in|co|io|me|site|xyz)\b)/i.test(value);
+}
+
 export function recordFeedback(input: Omit<FeedbackRecord, "id" | "createdAt">) {
+  if (containsUrlLikeText(input.comment ?? "") || containsUrlLikeText(input.caseReference ?? "")) {
+    throw new Error("feedback_url_not_allowed");
+  }
   const record: FeedbackRecord = {
     ...input,
     id: crypto.randomUUID(),

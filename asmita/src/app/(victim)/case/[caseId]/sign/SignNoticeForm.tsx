@@ -53,9 +53,9 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
     <div className="space-y-8">
 
       {/* PDF Preview */}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)]" style={{ boxShadow: "var(--shadow-soft)" }}>
+      <div className="overflow-hidden rounded-[24px] border border-[var(--border)]">
         <div className="border-b border-[var(--hairline)] bg-[var(--surface)] px-5 py-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+          <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
             {t(locale, "sign.preview.label")} - {platformName}
           </p>
         </div>
@@ -68,11 +68,11 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       </div>
 
       {/* Survivor details */}
-      <div className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
-        <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "sign.details.title")}</p>
+      <div className="space-y-5 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6">
+        <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "sign.details.title")}</p>
 
         <div>
-          <label htmlFor="sign-name" className="block text-sm font-semibold text-[var(--foreground)]">
+          <label htmlFor="sign-name" className="block text-sm font-medium text-[var(--foreground)]">
             {t(locale, "sign.name.label")}
           </label>
           <p className="muted mt-1 text-sm">{t(locale, "sign.name.sub")}</p>
@@ -89,7 +89,7 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
         </div>
 
         <div>
-          <label htmlFor="sign-contact" className="block text-sm font-semibold text-[var(--foreground)]">
+          <label htmlFor="sign-contact" className="block text-sm font-medium text-[var(--foreground)]">
             {t(locale, "sign.contact.label")}
           </label>
           <p className="muted mt-1 text-sm">{t(locale, "sign.contact.sub")}</p>
@@ -107,8 +107,8 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       </div>
 
       {/* Signature */}
-      <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
-        <p className="text-sm font-semibold text-[var(--foreground)]">{t(locale, "sign.sig.title")}</p>
+      <div className="space-y-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6">
+        <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "sign.sig.title")}</p>
         <p className="muted text-sm leading-[1.6]">
           {t(locale, "sign.sig.sub")}
         </p>
@@ -139,7 +139,7 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       </label>
 
       {error && (
-        <p className="text-sm font-semibold text-[var(--rose)]">{error}</p>
+        <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">

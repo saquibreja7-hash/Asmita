@@ -30,7 +30,7 @@ import { POST as markResolvedRoute } from "@/app/api/cases/[caseId]/mark-resolve
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
-function csrfPost(path: string, body: unknown): Request {
+function csrfPost(path: string, body: unknown, extraHeaders: Record<string, string> = {}): Request {
   const { nonce, token } = createCsrfPair();
   return new Request(`https://asmita.test${path}`, {
     method: "POST",
@@ -38,6 +38,7 @@ function csrfPost(path: string, body: unknown): Request {
       "content-type": "application/json",
       cookie: `asmita_csrf=${nonce}`,
       "x-csrf-token": token,
+      ...extraHeaders,
     },
     body: JSON.stringify(body),
   });
@@ -184,11 +185,16 @@ describe("POST /api/auth/verify-otp", () => {
 // ─── POST /api/cases/create ─────────────────────────────────────────────────
 
 describe("POST /api/cases/create", () => {
+  const validRegistration = { urls: ["https://example.invalid/post/1"], declaration: true };
   beforeEach(() => {
     vi.mocked(middleware.requireSession).mockResolvedValue(authed);
-    vi.mocked(caseOps.createCase).mockResolvedValue({ id: "case-1", referenceNumber: "ASMITA-2026-00001" });
+    vi.mocked(caseOps.registerCaseWithUrls).mockResolvedValue({
+      ok: true, id: "case-1", referenceNumber: "ASMITA-2026-00001", accepted: 1,
+    });
     vi.mocked(caseOps.getVerifiedUserEmail).mockResolvedValue("victim@example.com");
     vi.mocked(emailLib.sendVictimConfirmation).mockResolvedValue(undefined as never);
+    vi.mocked(rateLimit.checkRateLimitAsync).mockResolvedValue(allowed);
+    vi.mocked(abuse.checkUrlSubmission).mockReturnValue({ flagged: false, reasons: [] });
   });
 
   it("returns 403 on missing CSRF", async () => {
@@ -198,12 +204,12 @@ describe("POST /api/cases/create", () => {
 
   it("returns 401 when the session is missing", async () => {
     vi.mocked(middleware.requireSession).mockResolvedValue(unauthed);
-    const res = await createCaseRoute(csrfPost("/api/cases/create", {}));
+    const res = await createCaseRoute(csrfPost("/api/cases/create", validRegistration));
     expect(res.status).toBe(401);
   });
 
   it("returns caseId and referenceNumber on success", async () => {
-    const res = await createCaseRoute(csrfPost("/api/cases/create", {}));
+    const res = await createCaseRoute(csrfPost("/api/cases/create", validRegistration));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       caseId: "case-1",
@@ -213,9 +219,39 @@ describe("POST /api/cases/create", () => {
 
   it("still returns 200 when confirmation email fails (non-fatal)", async () => {
     vi.mocked(emailLib.sendVictimConfirmation).mockRejectedValue(new Error("SMTP timeout"));
-    const res = await createCaseRoute(csrfPost("/api/cases/create", {}));
+    const res = await createCaseRoute(csrfPost("/api/cases/create", validRegistration));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ caseId: "case-1" });
+  });
+
+  it("rejects empty URL-only cases before creating or emailing", async () => {
+    const res = await createCaseRoute(csrfPost("/api/cases/create", { urls: [], declaration: true }));
+    expect(res.status).toBe(400);
+    expect(caseOps.registerCaseWithUrls).not.toHaveBeenCalled();
+    expect(emailLib.sendVictimConfirmation).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid links before sending confirmation", async () => {
+    vi.mocked(caseOps.registerCaseWithUrls).mockResolvedValue({
+      ok: false, errors: [{ index: 0, error: "blocked_scheme" }],
+    });
+    const res = await createCaseRoute(csrfPost("/api/cases/create", validRegistration));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_urls" });
+    expect(emailLib.sendVictimConfirmation).not.toHaveBeenCalled();
+  });
+
+  it("replays an existing registration from persistent storage without another email", async () => {
+    vi.mocked(caseOps.getRegisteredCaseByKey).mockResolvedValue({
+      id: "case-1", referenceNumber: "ASMITA-2026-00001", accepted: 1,
+    });
+    const res = await createCaseRoute(csrfPost("/api/cases/create", validRegistration, {
+      "Idempotency-Key": "synthetic-registration-key",
+    }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(caseOps.registerCaseWithUrls).not.toHaveBeenCalled();
+    expect(emailLib.sendVictimConfirmation).not.toHaveBeenCalled();
   });
 });
 
@@ -315,11 +351,25 @@ describe("POST /api/cases/[caseId]/urls", () => {
     expect(await res.json()).toMatchObject({ flaggedForReview: false, results: expect.any(Array) });
   });
 
+  it("returns an error when no submitted URL is accepted", async () => {
+    vi.mocked(caseOps.addUrlsToCase).mockResolvedValue([
+      { ok: false, rawUrl: "file:///private/image", error: "blocked_scheme" },
+    ]);
+    const res = await addUrlsRoute(csrfPost("/api/cases/case-1/urls", {
+      urls: ["file:///private/image"], declaration: true,
+    }), ctx);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_urls" });
+  });
+
   it("returns flaggedForReview:true when abuse detection fires", async () => {
     vi.mocked(abuse.checkUrlSubmission).mockReturnValue({ flagged: true, reasons: ["too_many_urls"] });
     const res = await addUrlsRoute(csrfPost("/api/cases/case-1/urls", validBody), ctx);
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ flaggedForReview: true, flagReasons: ["too_many_urls"] });
+    const body = await res.json();
+    expect(body).toMatchObject({ flaggedForReview: true });
+    // Heuristic names stay admin-only so a bad-faith submitter cannot tune around them.
+    expect(body).not.toHaveProperty("flagReasons");
   });
 });
 

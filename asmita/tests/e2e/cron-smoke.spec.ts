@@ -1,16 +1,16 @@
 /**
  * Production cron smoke test.
  *
- * This spec hits the deployed Vercel cron endpoints with the production
+ * This spec hits deployed Cloudflare Worker cron endpoints with the environment
  * CRON_SECRET to verify they answer correctly. It is intentionally skipped
  * when ASMITA_PROD_URL or ASMITA_CRON_SECRET env vars are absent, so the
  * default CI run on PRs does NOT execute it (those run against the local
  * dev server via playwright.config.ts).
  *
- * To run manually after the env vars are set on Vercel:
+ * To run manually after the staging Worker secrets and database are configured:
  *
- *   $env:ASMITA_PROD_URL = "https://your-deployment.vercel.app"
- *   $env:ASMITA_CRON_SECRET = "<copy from Vercel env vars>"
+ *   $env:ASMITA_PROD_URL = "https://asmita-staging.<account>.workers.dev"
+ *   $env:ASMITA_CRON_SECRET = "<same value stored as the staging Worker secret>"
  *   npx playwright test tests/e2e/cron-smoke.spec.ts --project chromium
  *
  * If your sweep results in real escalation firing (because real notices have

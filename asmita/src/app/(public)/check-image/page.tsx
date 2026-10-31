@@ -6,6 +6,7 @@ import { ImageChecker } from "./ImageChecker";
 
 export default async function CheckImagePage() {
   const locale = await getLocale();
+  const deepCheckEnabled = process.env.ENABLE_PROVENANCE_CHECK === "true";
 
   return (
     <AppShell>
@@ -24,8 +25,7 @@ export default async function CheckImagePage() {
               </span>
             </p>
             <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[60px] md:leading-[1.06]">
-              {t(locale, "check.hero.title.1")}{" "}
-              <em className="not-italic text-gradient">{t(locale, "check.hero.title.2")}</em>
+              {t(locale, "check.hero.title.1")}{" "}<em className="not-italic text-gradient">{t(locale, "check.hero.title.2")}</em>
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               {t(locale, "check.hero.sub")}
@@ -38,8 +38,8 @@ export default async function CheckImagePage() {
         </div>
 
         {/* CHECKER */}
-        <section className="container py-14 md:py-20">
-          <ImageChecker locale={locale} deepCheckEnabled={process.env.ENABLE_PROVENANCE_CHECK === "true"} />
+        <section className="container py-14 md:py-20" aria-label="Image check">
+          <ImageChecker locale={locale} deepCheckEnabled={deepCheckEnabled} />
           <p className="muted mx-auto mt-8 max-w-xl text-center text-xs leading-[1.7]">
             {t(locale, "check.privacy.note")}
           </p>

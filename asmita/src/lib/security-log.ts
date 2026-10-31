@@ -1,4 +1,5 @@
-import { db } from "@/lib/db";
+import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import { randomUUID } from "node:crypto";
 
 export type SecurityEvent = {
   event:
@@ -20,12 +21,23 @@ export type SecurityEvent = {
 
 export const securityEvents: SecurityEvent[] = [];
 
-export function logSecurityEvent(event: SecurityEvent) {
+export async function logSecurityEvent(event: SecurityEvent) {
   const entry = { ...event, createdAt: new Date().toISOString() };
   securityEvents.push(entry);
   console.warn(JSON.stringify(entry));
 
   if (process.env.SECURITY_LOG_PERSISTENCE === "database") {
+    if (usesWorkerKysely()) {
+      try {
+        await getWorkerDb().insertInto("SecurityEventLog").values({
+          id: randomUUID(), event: entry.event, actorHash: entry.actorHash ?? null, route: entry.route ?? null, reason: entry.reason ?? null,
+        }).execute();
+      } catch (err) {
+        console.error("[security-log] DB write failed:", err);
+      }
+      return;
+    }
+    const { db } = await import("@/lib/db");
     db.securityEventLog
       .create({
         data: {

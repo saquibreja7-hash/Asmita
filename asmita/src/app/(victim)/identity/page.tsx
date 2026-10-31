@@ -30,7 +30,7 @@ export default async function IdentityPage() {
         {/* HOW IT WORKS */}
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
               {t(locale, "identity.how.eyebrow")}
             </p>
             <h2 className="font-display mt-4 text-[28px] font-normal leading-[1.18] tracking-tight md:text-[40px] md:leading-[1.14]">
@@ -38,19 +38,19 @@ export default async function IdentityPage() {
             </h2>
             <ul className="muted mx-auto mt-8 max-w-md space-y-3 text-base leading-[1.75] md:text-lg">
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   {t(locale, "identity.how.item1.bold")}
                 </span>{" "}
                 {t(locale, "identity.how.item1.rest")}
               </li>
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   {t(locale, "identity.how.item2.bold")}
                 </span>{" "}
                 {t(locale, "identity.how.item2.rest")}
               </li>
               <li>
-                <span className="font-semibold text-[var(--foreground)]">
+                <span className="font-medium text-[var(--foreground)]">
                   {t(locale, "identity.how.item3.bold")}
                 </span>{" "}
                 {t(locale, "identity.how.item3.rest")}
@@ -62,7 +62,7 @@ export default async function IdentityPage() {
         {/* WHY NOT AADHAAR */}
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
               {t(locale, "identity.why.eyebrow")}
             </p>
             <h2 className="font-display mt-4 text-[24px] font-normal leading-[1.2] tracking-tight md:text-[32px] md:leading-[1.18]">

@@ -59,7 +59,7 @@ export default async function UrlDetailPage({
               <span className="dot" />
               {t(locale, "urldetail.pill")}
             </span>
-            <p className="font-mono mt-6 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="font-mono mt-6 text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
               {t(locale, "urldetail.case")} · {record.referenceNumber}
             </p>
             <h1 className="font-display mt-4 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[52px] md:leading-[1.06]">
@@ -115,7 +115,7 @@ function Field({
 }) {
   return (
     <div>
-      <dt className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+      <dt className="font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
         {label}
       </dt>
       <dd

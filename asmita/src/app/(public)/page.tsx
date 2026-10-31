@@ -1,83 +1,195 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
-import { t } from "@/lib/i18n";
+
+/*
+ * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
+ * monospace for every functional string, pill buttons, hairline cards, one blue action.
+ */
+
+const audiences = [
+  { title: "Survivors", href: "/who-we-help/survivors" },
+  { title: "People helping someone", href: "/who-we-help/helping-someone" },
+  { title: "Parents and families", href: "/who-we-help/parents" },
+  { title: "Young people", href: "/who-we-help/young-people" },
+] as const;
+
+const pipeline = [
+  { icon: "¶", label: "Links as text" },
+  { icon: "§", label: "Legal notice" },
+  { icon: "✎", label: "You sign" },
+  { icon: "→", label: "Platform" },
+] as const;
+
+const features = [
+  {
+    icon: "§",
+    title: "Legally grounded takedown notices",
+    body: "A removal notice citing the IT Rules and MeitY procedure. You read and sign it; delivery follows verified contact and template review.",
+    href: "/what-we-do",
+    cta: "How notices work",
+  },
+  {
+    icon: "#",
+    title: "Generate a private fingerprint",
+    body: "Adults can generate a fingerprint on their device and add the code to a case. Matching depends on participating platforms.",
+    href: "/get-help",
+    cta: "Current ways to get help",
+  },
+  {
+    icon: "?",
+    title: "AI and deepfake check",
+    body: "A private check for signals that an image was generated or edited by AI. A fake image is still abuse, and you can still report it.",
+    href: "/check-image",
+    cta: "Check an image",
+  },
+] as const;
+
+const commitments = [
+  {
+    value: "URL-only",
+    label: "Privacy by architecture",
+    detail: "Current reporting uses links as text. We do not receive or inspect the image.",
+  },
+  {
+    value: "24 hours",
+    label: "Qualifying complaints",
+    detail: "Under the IT Rules, platforms must take reasonable removal steps within 24 hours of receiving a qualifying complaint.",
+  },
+  {
+    value: "No media",
+    label: "What never happens",
+    detail: "We never fetch, preview, store, or view intimate content at any link you share.",
+  },
+] as const;
+
+const faqs = [
+  {
+    q: "Do I have to upload the image?",
+    a: "No. In the current reporting flow, you paste links as text. We do not fetch or view the image.",
+  },
+  {
+    q: "Will the content disappear from the whole internet?",
+    a: "No one can honestly promise that. A report targets the named platform. Re-uploads need a new report while fingerprint blocking remains under development.",
+  },
+  {
+    q: "Is this a government service?",
+    a: "No. Asmita is an independent platform built by JAMSAQ Studio. We route you to official channels where they help, and stay honest about where they do not.",
+  },
+  {
+    q: "What if I am under 18, or the image is from when I was?",
+    a: "There is a separate, safer path. Cases involving minors are routed under POCSO and never enter the adult flow. Start from the minor support page.",
+  },
+] as const;
+
+const hindi = {
+  audiences: ["प्रभावित व्यक्ति", "किसी की मदद कर रहे लोग", "माता-पिता और परिवार", "युवा लोग"],
+  pipeline: ["लिंक केवल पाठ के रूप में", "कानूनी सूचना", "आप हस्ताक्षर करें", "प्लेटफ़ॉर्म"],
+  features: [
+    {
+      title: "कानूनी आधार वाली हटाने की सूचना",
+      body: "हम IT Rules और MeitY की प्रक्रिया का हवाला देने वाली सूचना तैयार करने में मदद करते हैं। आप इसे पढ़कर हस्ताक्षर करते हैं; पुष्टि किए गए संपर्क और समीक्षा के बाद ही इसे भेजा जाता है।",
+      cta: "सूचना कैसे काम करती है",
+    },
+    {
+      title: "दोबारा अपलोड रोकने का तरीका विकसित हो रहा है",
+      body: "भविष्य के डिजिटल फ़िंगरप्रिंट उपकरण आपके डिवाइस पर काम करेंगे। मौजूदा URL-आधारित रिपोर्ट में वे उपलब्ध नहीं हैं।",
+      cta: "अभी उपलब्ध मदद देखें",
+    },
+    {
+      title: "AI और डीपफ़ेक की जाँच",
+      body: "निजी तौर पर देखें कि तस्वीर में AI से बनाए या बदले जाने के संकेत हैं या नहीं। नकली तस्वीर भी उत्पीड़न है और आप उसकी रिपोर्ट कर सकते हैं।",
+      cta: "तस्वीर जाँचें",
+    },
+  ],
+  commitments: [
+    { value: "केवल URL", label: "बनावट में ही निजता", detail: "मौजूदा रिपोर्ट में लिंक केवल पाठ के रूप में लिए जाते हैं। हम तस्वीर प्राप्त या जाँच नहीं करते।" },
+    { value: "24 घंटे", label: "योग्य शिकायतें", detail: "IT Rules के तहत योग्य शिकायत मिलने पर प्लेटफ़ॉर्म को हटाने के उचित कदम 24 घंटे में उठाने होते हैं।" },
+    { value: "कोई मीडिया नहीं", label: "हम क्या नहीं करते", detail: "आपके साझा किए लिंक पर मौजूद निजी सामग्री को हम खोलते, देखते या सहेजते नहीं हैं।" },
+  ],
+  faqs: [
+    {
+      q: "क्या मुझे तस्वीर अपलोड करनी होगी?",
+      a: "नहीं। मौजूदा रिपोर्ट में आप लिंक केवल पाठ के रूप में देते हैं। हम तस्वीर खोलते या देखते नहीं हैं।",
+    },
+    {
+      q: "क्या सामग्री पूरे इंटरनेट से हट जाएगी?",
+      a: "इसका वादा कोई ईमानदारी से नहीं कर सकता। रिपोर्ट संबंधित प्लेटफ़ॉर्म के लिए होती है। सामग्री दोबारा दिखे तो नया लिंक रिपोर्ट करें; फ़िंगरप्रिंट से रोकने का तरीका अभी विकसित हो रहा है।",
+    },
+    {
+      q: "क्या यह सरकारी सेवा है?",
+      a: "नहीं। अस्मिता JAMSAQ Studio द्वारा बनाया गया स्वतंत्र प्लेटफ़ॉर्म है। जहाँ मदद मिल सकती है, वहाँ हम आपको आधिकारिक रास्ते दिखाते हैं।",
+    },
+    {
+      q: "अगर मेरी उम्र 18 से कम है, या तस्वीर उस समय की है जब मैं नाबालिग था?",
+      a: "इसके लिए अलग और अधिक सुरक्षित रास्ता है। नाबालिगों से जुड़े मामले वयस्क रिपोर्ट प्रक्रिया में नहीं जाते। नाबालिग सहायता पृष्ठ से शुरू करें।",
+    },
+  ],
+} as const;
 
 export default async function HomePage() {
   const locale = await getLocale();
-
-  const privacyItems = [
-    { bold: t(locale, "home.blockB.item1.bold"), detail: t(locale, "home.blockB.item1.rest") },
-    { bold: t(locale, "home.blockB.item2.bold"), detail: t(locale, "home.blockB.item2.rest") },
-    { bold: t(locale, "home.blockB.item3.bold"), detail: t(locale, "home.blockB.item3.rest") },
-  ];
-
+  const say = (en: string, hi: string) => locale === "hi" ? hi : en;
   return (
     <AppShell>
       <div className="page-canvas">
-        {/* HERO - centered */}
-        <section className="container pb-20 pt-10 text-center md:pb-28 md:pt-16">
-          <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {t(locale, "home.pill")}
-            </span>
-            <p className="muted mt-3 text-xs tracking-wide">
-              {t(locale, "home.langNote")}{" "}
-              <span lang={locale === "hi" ? "en" : "hi"}>
-                {locale === "hi" ? "English" : "हिंदी"}
+        {/* HERO: pure typographic, wash behind */}
+        <section className="hero hero-image" aria-label={say("Introduction", "परिचय")}>
+          <div className="hero-image-bg" aria-hidden>
+            <picture>
+              <source media="(max-width: 720px)" srcSet="/images/hero-bg-sm.webp" />
+              <img src="/images/hero-bg.webp" alt="" width={2400} height={1350} fetchPriority="high" decoding="async" />
+            </picture>
+            <span className="hero-image-tint" />
+            <span className="hero-image-fade" />
+          </div>
+          <div className="hero-content container">
+            <div className="hero-image-copy">
+              <span className="pill">
+                <span className="dot" />
+                {say("Free and confidential, for India", "भारत के लिए नि:शुल्क और गोपनीय")}
               </span>
-            </p>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
-              {t(locale, "home.hero.title.1")}{" "}
-              <em className="not-italic text-gradient">{t(locale, "home.hero.title.2")}</em>
-            </h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "home.hero.sub")}
-            </p>
-            <div className="mt-10 flex justify-center">
-              <Link className="btn btn-primary" href="/start">
-                {t(locale, "home.hero.cta")}
-              </Link>
+              <h1 className="mt-8 max-w-3xl text-[clamp(40px,6vw,76px)]">
+                {say("Take the image down. Keep the image private.", "तस्वीर हटाने की कार्रवाई करें। तस्वीर निजी रखें।")}
+              </h1>
+              <p className="font-size-large mt-6 max-w-xl">
+                {say(
+                  "A private path to prepare takedown notices for anyone in India facing non-consensual or AI-made intimate images. You can report a link or generate a fingerprint on your device.",
+                  "बिना सहमति साझा की गई या AI से बनाई गई निजी तस्वीरों के लिए, भारत में URL के ज़रिए गोपनीय रिपोर्ट और हटाने की सूचना तैयार करने का रास्ता। आपकी तस्वीर आपके फ़ोन से बाहर नहीं जाती।",
+                )}
+              </p>
+              <div className="mt-10 flex flex-wrap items-center gap-3">
+                <Link className="btn btn-primary btn-arrow" href="/start">
+                  {say("Start a case", "मामला शुरू करें")}
+                </Link>
+                <Link className="btn btn-secondary" href="/what-we-do">
+                  {say("How it works", "यह कैसे काम करता है")}
+                </Link>
+              </div>
             </div>
-            <p className="mt-6">
-              <Link
-                href="/minor-support"
-                className="text-sm font-medium text-[var(--muted)] link-underline"
-              >
-                {t(locale, "home.hero.minorLink")}{" "}
-                <span className="cta-arrow" aria-hidden>
-                  →
-                </span>
-              </Link>
-            </p>
+          </div>
 
-            {/* SUPPORTER CREDIT */}
-            <div className="mt-10 flex justify-center">
-              <span className="cf-badge">
-            <svg
-              className="cf-badge-icon"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden
-            >
-              <path
-                d="M16.9 15.8c.15-.5.09-.97-.16-1.31-.23-.31-.62-.49-1.09-.51l-8.9-.11a.17.17 0 0 1-.14-.07.18.18 0 0 1-.02-.16.24.24 0 0 1 .2-.15l8.98-.12c1.07-.05 2.22-.9 2.63-1.94l.51-1.3a.3.3 0 0 0 .01-.17A5.86 5.86 0 0 0 7.35 9.4a2.65 2.65 0 0 0-4.14 2.6A3.77 3.77 0 0 0 .3 15.7c0 .18.02.36.04.54.01.09.08.15.17.15h16.02c.1 0 .18-.06.2-.15l.17-.44Z"
-                fill="#F6821F"
-              />
-              <path
-                d="M20.1 9.9h-.26a.15.15 0 0 0-.14.1l-.35.98c-.15.5-.09.97.16 1.31.23.31.62.49 1.09.52l1.9.11c.06 0 .11.03.14.07a.18.18 0 0 1 .02.17.24.24 0 0 1-.2.14l-1.97.12c-1.08.05-2.23.9-2.63 1.94l-.14.36c-.03.07.02.14.1.14h6.78a.2.2 0 0 0 .2-.14 4.86 4.86 0 0 0 .17-1.29A4.66 4.66 0 0 0 20.1 9.9Z"
-                fill="#FBAD41"
-              />
-            </svg>
-              <span className="cf-badge-text">
-                {locale === "hi" ? "Cloudflare for Startups द्वारा समर्थित" : "Supported by Cloudflare for Startups"}
-              </span>
-              </span>
+        </section>
+
+        {/* Pipeline diagram */}
+        <section aria-label={say("How a report moves", "रिपोर्ट के चरण")}>
+          <div className="container pt-16 pb-20 md:pt-20 md:pb-28">
+            <div className="pipeline" role="list" aria-label={say("How a report moves", "रिपोर्ट के चरण")}>
+              {pipeline.map((n, i) => (
+                <div key={n.label} className="contents" role="listitem">
+                  {i > 0 && <span className="pipeline-link" aria-hidden />}
+                  <span className={`node ${i === 1 ? "node-hub" : ""}`}>
+                    <span className="node-icon" aria-hidden>
+                      {n.icon}
+                    </span>
+                    {locale === "hi" ? hindi.pipeline[i] : n.label}
+                  </span>
+                </div>
+              ))}
             </div>
+            <p className="eyebrow mt-6 w-full justify-center text-center">
+              {say("No image is uploaded at any step", "किसी भी चरण में तस्वीर अपलोड नहीं होती")}
+            </p>
           </div>
         </section>
 
@@ -85,81 +197,94 @@ export default async function HomePage() {
           <div className="hairline" />
         </div>
 
-        {/* VALIDATION - privacy assurance */}
-        <section className="container py-12 text-center md:py-16">
-          <p className="muted mx-auto max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-            {t(locale, "home.hero.noFetch")}
-          </p>
-        </section>
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* BLOCK A - your legal rights */}
-        <section className="container py-20 md:py-28">
-          <div className="mx-auto max-w-3xl">
-            <span className="eyebrow mb-6 block">{t(locale, "home.blockA.eyebrow")}</span>
-            <div className="grid gap-10 md:grid-cols-[1fr_auto] md:items-start md:gap-16">
-              <div>
-                <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
-                  {t(locale, "home.blockA.title")}
-                </h2>
-                <p className="muted mt-6 max-w-lg text-base leading-[1.75] md:text-lg">
-                  {t(locale, "home.blockA.body")}
-                </p>
-                <p className="mt-8">
-                  <Link href="/how-it-works" className="link-underline text-sm">
-                    {t(locale, "home.blockA.link")}{" "}
-                    <span className="cta-arrow" aria-hidden>
-                      →
-                    </span>
-                  </Link>
-                </p>
+        {/* ISSUE + COMMITMENTS */}
+        <section id="issue" className="section-pad" aria-labelledby="issue-heading">
+          <div className="container grid items-start gap-12 lg:grid-cols-[1.2fr_1fr] lg:gap-24">
+            <div>
+              <span className="eyebrow">{say("The issue", "समस्या")}</span>
+              <h2 id="issue-heading" className="mt-5 text-[clamp(32px,4vw,48px)]">
+                {say("The internet makes it easier to harm people. The law gives you a way back.", "इंटरनेट पर नुकसान फैलना आसान है। कानून कार्रवाई का रास्ता देता है।")}
+              </h2>
+              <p className="mt-6 max-w-xl text-[16px] leading-[1.5] text-[var(--color-graphite)] md:text-[18px]">
+                {say(
+                  "Non-consensual intimate imagery, deepfakes, morphing, and sextortion spread fast across platforms and WhatsApp groups. Platforms must act on certain takedown notices within 24 hours under Indian law. We turn that right into one calm, reviewable flow.",
+                  "बिना सहमति साझा की गई निजी तस्वीरें, डीपफ़ेक, बदली हुई तस्वीरें और धमकियाँ कई प्लेटफ़ॉर्म पर तेज़ी से फैल सकती हैं। भारतीय कानून के तहत कुछ हटाने की सूचनाओं पर प्लेटफ़ॉर्म को 24 घंटे में कार्रवाई करनी होती है। हम इस रास्ते को शांत और समझने योग्य चरणों में रखते हैं।",
+                )}
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link className="arrow-link" href="/issue">
+                  {say("Learn about the issue", "समस्या को समझें")}
+                </Link>
               </div>
-              <div className="hidden md:block">
-                {/* Redacted notice preview - the real artifact this platform produces */}
-                <div
-                  className="w-[300px] rounded-md border border-[var(--border)] bg-white p-6"
-                  style={{ boxShadow: "var(--shadow-soft)", transform: "rotate(0.5deg)" }}
-                  aria-hidden
-                >
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                    Takedown notice
-                  </p>
-                  <p className="font-display mt-2 text-[15px] leading-snug">
-                    Re: Removal under Rule 3(2)(b), IT Rules 2021
-                  </p>
-                  <div className="mt-4 space-y-2">
-                    <div className="h-2 rounded-full bg-[var(--hairline)]" />
-                    <div className="h-2 w-4/5 rounded-full bg-[var(--hairline)]" />
-                    <div className="h-2 w-2/3 rounded-full bg-[var(--foreground)] opacity-70" />
-                    <div className="h-2 rounded-full bg-[var(--hairline)]" />
-                    <div className="h-2 w-3/5 rounded-full bg-[var(--hairline)]" />
-                  </div>
-                  <p className="mt-4 font-mono text-[10px] text-[var(--muted)]">
-                    PDQ fingerprint only. No image attached.
-                  </p>
-                  <div className="mt-4 flex items-center justify-between border-t border-[var(--hairline)] pt-3">
-                    <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--teal)]">
-                      Signed
-                    </span>
-                    <svg width="12" height="10" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        d="M1 4l2.5 2.5L9 1"
-                        stroke="var(--teal)"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+            </div>
+
+            <div>
+              <p className="eyebrow">{say("What we commit to, every day", "हमारी प्रतिबद्धता")}</p>
+              {commitments.map((c, i) => (
+                <div key={c.label} className="stat-block">
+                  {i > 0 && <hr className="hr-thorn" />}
+                  <div className={i === 0 ? "mt-6" : ""}>
+                    <p className="stat-label">{locale === "hi" ? hindi.commitments[i].label : c.label}</p>
+                    <span className="statistic mt-2">{locale === "hi" ? hindi.commitments[i].value : c.value}</span>
+                    <p className="stat-detail">{locale === "hi" ? hindi.commitments[i].detail : c.detail}</p>
                   </div>
                 </div>
-                <p className="muted mt-4 max-w-[300px] text-center text-sm leading-[1.6]">
-                  <span className="font-semibold text-[var(--teal)]">{t(locale, "home.blockA.stat")}</span>{" "}
-                  {t(locale, "home.blockA.statLabel")}
-                </p>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* FEATURES */}
+        <section className="section-pad !pt-0" aria-labelledby="features-heading">
+          <div className="container">
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div>
+                <span className="eyebrow">{say("What we do", "हम क्या करते हैं")}</span>
+                <h2 id="features-heading" className="mt-5 text-[clamp(32px,4vw,48px)]">
+                  {say("Tools for taking action on content", "सामग्री पर कार्रवाई के साधन")}
+                </h2>
               </div>
+              <Link href="/what-we-do" className="arrow-link">
+                {say("More on what we do", "हमारे काम के बारे में और जानें")}
+              </Link>
+            </div>
+
+            <div className="mt-12 grid gap-4 md:grid-cols-3">
+              {features.map((f, i) => (
+                <Link key={f.title} href={f.href} className="card fade flex flex-col">
+                  <span className="card-icon" aria-hidden>
+                    {f.icon}
+                  </span>
+                  <h3>{locale === "hi" ? hindi.features[i].title : f.title}</h3>
+                  <p className="mt-4 flex-1">{locale === "hi" ? hindi.features[i].body : f.body}</p>
+                  <span className="arrow-link mt-8">{locale === "hi" ? hindi.features[i].cta : f.cta}</span>
+                </Link>
+              ))}
+            </div>
+
+            {/* Elevated periwinkle card */}
+            <div className="card card-elevated mt-4 grid gap-8 md:grid-cols-[1.1fr_1fr] md:items-center">
+              <div className="wash-art" aria-hidden />
+              <div className="relative z-[1]">
+                <span className="card-icon" aria-hidden>
+                  ◐
+                </span>
+                <h3 className="text-[clamp(24px,3vw,32px)]">
+                  {say("Your case can start with a link", "आप लिंक से मामला शुरू कर सकते हैं")}
+                </h3>
+                <p className="mt-4 max-w-md">
+                  {say(
+                    "Links are handled as text. Fingerprints are generated on your device. The optional deeper AI check sends an image only with your consent. Read the privacy promise before you begin.",
+                    "लिंक पाठ के रूप में लिए जाते हैं। फिंगरप्रिंट आपके डिवाइस पर बनता है। वैकल्पिक विस्तृत AI जाँच में आपकी सहमति से ही तस्वीर भेजी जाती है। शुरू करने से पहले निजता का वादा पढ़ें।",
+                  )}
+                </p>
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Link href="/privacy" className="btn btn-midnight">
+                    {say("Read the privacy promise", "निजता का वादा पढ़ें")}
+                  </Link>
+                </div>
+              </div>
+              <div className="relative z-[1] hidden md:block" aria-hidden />
             </div>
           </div>
         </section>
@@ -168,74 +293,85 @@ export default async function HomePage() {
           <div className="hairline" />
         </div>
 
-        {/* BLOCK B - privacy commitments */}
-        <section className="container py-20 md:py-28">
-          <div className="mx-auto max-w-3xl">
-            <span className="eyebrow mb-6 block">{t(locale, "home.blockB.eyebrow")}</span>
-            <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
-              {t(locale, "home.blockB.title.1")}
-              <br />
-              {t(locale, "home.blockB.title.2")}
+        {/* AUDIENCES */}
+        <section className="section-pad" aria-labelledby="audience-heading">
+          <div className="container text-center">
+            <span className="eyebrow">{say("Who we help", "हम किसकी मदद करते हैं")}</span>
+            <h2 id="audience-heading" className="mx-auto mt-5 max-w-3xl text-[clamp(32px,4vw,48px)]">
+              {say("Everyone has a role to play", "हर व्यक्ति मदद कर सकता है")}
             </h2>
-            <ul className="mt-8 divide-y divide-[var(--hairline)]">
-              {privacyItems.map(({ bold, detail }) => (
-                <li key={bold} className="flex items-start gap-4 py-6">
-                  <span
-                    className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
-                    aria-hidden
-                  >
-                    <svg
-                      width="10"
-                      height="8"
-                      viewBox="0 0 10 8"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M1 4l2.5 2.5L9 1"
-                        stroke="var(--teal)"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <p className="text-base leading-[1.7] md:text-[17px]">
-                    <span className="font-semibold text-[var(--foreground)]">
-                      {bold}
-                    </span>{" "}
-                    <span className="text-[var(--muted)]">{detail}</span>
-                  </p>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-8">
-              <Link href="/privacy" className="link-underline text-sm">
-                {t(locale, "home.blockB.link")}{" "}
-                <span className="cta-arrow" aria-hidden>
-                  →
-                </span>
-              </Link>
+            <p className="font-size-large mx-auto mt-6 max-w-xl">
+              {say(
+                "We do not have to scroll past while harm happens. Find the path written for your situation.",
+                "नुकसान को देखकर आगे बढ़ जाना ज़रूरी नहीं है। अपनी स्थिति के मुताबिक सहायता का रास्ता चुनें।",
+              )}
             </p>
+            <div className="audience-pills mt-10">
+              {audiences.map((a, i) => (
+                <Link key={a.title} href={a.href} className="btn btn-secondary">
+                  {locale === "hi" ? hindi.audiences[i] : a.title}
+                </Link>
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* CLOSING - full-bleed teal band, invitation not a sales pitch */}
-        <section className="band-teal">
-          <div className="container pb-20 pt-16 text-center md:pb-28 md:pt-24">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
-                {t(locale, "home.closing.title")}
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
+        {/* FAQ */}
+        <section className="section-pad" aria-labelledby="faq-heading">
+          <div className="container grid gap-12 lg:grid-cols-[1fr_2fr] lg:gap-24">
+            <div>
+              <span className="eyebrow">{say("Questions", "सवाल")}</span>
+              <h2 id="faq-heading" className="mt-5 text-[clamp(32px,4vw,48px)]">
+                {say("Honest answers first", "पहले स्पष्ट जवाब")}
               </h2>
-              <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-                {t(locale, "home.closing.body")}
+              <p className="mt-6 text-[16px] leading-[1.5] text-[var(--color-graphite)]">
+                {say(
+                  "We say exactly what a notice can and cannot do. That honesty is the product.",
+                  "हम साफ़ बताते हैं कि सूचना से क्या हो सकता है और क्या नहीं।",
+                )}
+              </p>
+              <Link href="/faq" className="arrow-link mt-8">
+                {say("Read the full FAQ", "सभी सवाल-जवाब पढ़ें")}
+              </Link>
+            </div>
+            <div className="border-t border-[var(--color-ash)]">
+              {faqs.map((f, i) => (
+                <details key={f.q} className="faq-item">
+                  <summary>{locale === "hi" ? hindi.faqs[i].q : f.q}</summary>
+                  <div className="faq-answer">{locale === "hi" ? hindi.faqs[i].a : f.a}</div>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* CLOSING */}
+        <section className="relative overflow-hidden section-pad" aria-label={say("Get help", "मदद लें")}>
+          <div
+            className="wash wash-sky-mint"
+            aria-hidden
+            style={{ width: "40vw", height: "40vw", maxWidth: 600, maxHeight: 600, bottom: "-20vw", right: "-8vw" }}
+          />
+          <div className="container relative z-[1]">
+            <div className="pledge-block">
+              <p className="pledge-label">{say("The Asmita promise", "अस्मिता का वादा")}</p>
+              <p className="pledge-quote">{say("You do not have to deal with this alone.", "आपको इसका सामना अकेले नहीं करना है।")}</p>
+              <p className="mt-6 text-[16px] leading-[1.5] text-[var(--color-graphite)]">
+                {say(
+                  "Start a confidential report, or read how it works first. In your language, on your terms.",
+                  "गोपनीय रिपोर्ट शुरू करें, या पहले प्रक्रिया समझें। अपनी भाषा में, अपनी गति से।",
+                )}
               </p>
               <div className="mt-10 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-inverse" href="/start">
-                  {t(locale, "home.closing.cta1")}
+                <Link className="btn btn-primary btn-arrow" href="/get-help">
+                  {say("Get help", "मदद लें")}
                 </Link>
-                <Link className="btn btn-ghost-light" href="/faq">
-                  {t(locale, "home.closing.cta2")}
+                <Link className="btn btn-secondary" href="/faq">
+                  {say("Read the FAQ", "सवाल-जवाब पढ़ें")}
                 </Link>
               </div>
             </div>
