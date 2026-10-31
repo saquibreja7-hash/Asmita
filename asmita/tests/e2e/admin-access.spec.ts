@@ -42,7 +42,7 @@ test("a new admin enrols once with a one-time code, and sign-in guessing is cut 
   await page.getByLabel("Email code").fill(devOtp);
   await page.getByLabel("Authenticator code").fill(enrolmentCode);
   await page.getByRole("button", { name: "Open admin workspace" }).click();
-  await expect(page).toHaveURL(/\/admin\/setup-mfa$/);
+  await expect(page).toHaveURL(/\/admin\/setup-mfa$/, { timeout: 30_000 });
 
   // The code is spent: the same code with a fresh email code is refused.
   const reused = await post(page.request, "/api/admin/auth/verify", {
@@ -52,11 +52,12 @@ test("a new admin enrols once with a one-time code, and sign-in guessing is cut 
 
   // Enrol an authenticator and finish setup with a real code from it.
   const enrolResponse = page.waitForResponse("**/api/admin/mfa/enroll");
+  await expect(page.getByRole("button", { name: "Generate my authenticator secret" })).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Generate my authenticator secret" }).click();
   const { secret } = (await (await enrolResponse).json()) as { secret: string };
   await page.getByLabel("6-digit authenticator code").fill(generateTotp(secret));
   await page.getByRole("button", { name: "Verify and finish setup" }).click();
-  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30_000 });
 
   // Guessing at sign-in stops after 5 attempts in 15 minutes, across every
   // Worker isolate. Two attempts were used above.

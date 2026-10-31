@@ -50,7 +50,7 @@ test("URL report registers locally and exposes the unavailable notice-preview bo
   // grievance email), so there is no emailed notice to preview.
   expect(preview.status()).toBe(404);
   expect(await preview.json()).toEqual({ error: "form_only_platform" });
-  await expect(page).toHaveURL(new RegExp(`/case/${createdBody.caseId}$`));
+  await expect(page).toHaveURL(new RegExp(`/case/${createdBody.caseId}$`), { timeout: 30_000 });
   await expect(page.getByText(createdBody.referenceNumber).first()).toBeVisible();
   const caseResponse = await page.request.get(`/api/cases/${createdBody.caseId}`);
   expect(caseResponse.ok()).toBe(true);

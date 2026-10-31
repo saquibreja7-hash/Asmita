@@ -1,4 +1,5 @@
 import app from "vinext/server/fetch-handler";
+import { requestScope } from "./lib/request-scope";
 
 type WorkerEnv = {
   ASSETS: unknown;
@@ -38,7 +39,8 @@ const worker = {
       url.hostname = "meriasmita.org";
       return Response.redirect(url.toString(), 308);
     }
-    return app.fetch(request, env, ctx);
+    // One scope per request: connection-backed clients must not be shared.
+    return requestScope.run(new Map(), () => app.fetch(request, env, ctx));
   },
 
   scheduled(controller: WorkerScheduledController, env: WorkerEnv, ctx: WorkerExecutionContext) {
@@ -56,7 +58,7 @@ const worker = {
       headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
     });
     ctx.waitUntil(
-      app.fetch(request, env, ctx).then(async (response: Response) => {
+      requestScope.run(new Map(), () => app.fetch(request, env, ctx)).then(async (response: Response) => {
         if (!response.ok) {
           console.error(`Scheduled task ${path} failed with ${response.status}: ${await response.text()}`);
         }

@@ -106,6 +106,8 @@ Next.js 16 App Router + TypeScript, built with vinext and run on Cloudflare Work
 - `prisma/` — schema, migrations, seeds (notice templates in `template-seeds.ts`)
 - `docs/` — ops, legal, security, ADR docs. `docs/infra/cloudflare-migration.md` is the current deployment runbook. `docs/archive/` is historical (May 2026 Vercel design) and is kept only for the PRD citations and the PDQ system design
 
+**Prisma on Workers:** on the Worker, `src/lib/db.ts` uses `@prisma/client/edge` (the query engine loads as a precompiled WebAssembly module; the Node build compiles it at runtime, which Workers forbid) and gives each request its own client via `src/lib/request-scope.ts` (Workers forbid reusing another request's connection). The E2E suite runs the Node dev server, so CI also runs `scripts/worker-smoke.mjs`, which drives the production bundle in workerd. Anything Worker-specific needs a check there.
+
 **Dual-backend pattern:** store, audit/persistence and email have a memory path (dev/test) and a real implementation (Prisma/Kysely, Resend) selected by env vars. Rate limiting is in-memory only. Production must use the database path (`case-ops.ts`), never `store.ts`.
 
 ## Next.js Note
