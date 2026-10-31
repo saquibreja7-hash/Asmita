@@ -18,13 +18,13 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/admin/auth/verify" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/admin/auth/verify" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
 
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success || !isAdminEmail(parsed.data.email)) {
-    logSecurityEvent({ event: "admin_denied", route: "/api/admin/auth/verify" });
+    await logSecurityEvent({ event: "admin_denied", route: "/api/admin/auth/verify" });
     return NextResponse.json({ error: "admin_not_allowed" }, { status: 403 });
   }
 
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       ? verifyAdminTotp({ token: parsed.data.totp, secret: ownSecret })
       : Boolean(process.env.ADMIN_TOTP_SECRET) && verifyAdminTotp({ token: parsed.data.totp }));
   if (!otpOk || !mfaOk) {
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "auth_failed",
       actorHash: admin.emailHash,
       route: "/api/admin/auth/verify",

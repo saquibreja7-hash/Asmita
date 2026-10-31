@@ -47,7 +47,7 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/cases/[caseId]/hashes" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/cases/[caseId]/hashes" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   // Hash intake is adult-only by hard rule: minors are routed to the
@@ -59,7 +59,7 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
 
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (contentLength > MAX_BODY_BYTES) {
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "media_payload_rejected",
       actorHash: auth.session.emailHash,
       route: "/api/cases/[caseId]/hashes",
@@ -104,7 +104,7 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     60 * 60_000,
   );
   if (!limit.allowed || !ipLimit.allowed) {
-    logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/cases/[caseId]/hashes", reason: caseId });
+    await logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/cases/[caseId]/hashes", reason: caseId });
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
@@ -122,7 +122,7 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   });
   const rejectedAsMedia = results.some((r) => !r.ok && r.error === "media_payload_rejected");
   if (rejectedAsMedia) {
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "media_payload_rejected",
       actorHash: auth.session.emailHash,
       route: "/api/cases/[caseId]/hashes",

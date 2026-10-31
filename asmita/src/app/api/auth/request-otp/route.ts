@@ -19,7 +19,7 @@ const PUBLIC_MAIL_DOMAINS = new Set([
 
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/auth/request-otp" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/auth/request-otp" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   const parsed = schema.safeParse(await request.json());
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       // Carrier-grade NAT on Indian mobile networks puts many people behind one IP.
       ipLimit = await checkRateLimitAsync(`registration-ip:${getClientIp(request)}`, 30, 60 * 60_000);
     } catch (error) {
-      logSecurityEvent({
+      await logSecurityEvent({
         event: "rate_limit_unavailable",
         actorHash: emailHash,
         route: "/api/auth/request-otp",
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "service_unavailable" }, { status: 503 });
     }
     if (!emailLimit.allowed || !domainLimit.allowed || !ipLimit.allowed) {
-      logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/auth/request-otp" });
+      await logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/auth/request-otp" });
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }
   }
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
   try {
     otp = await createOtpForEmail(parsed.data.email);
   } catch (error) {
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "otp_persistence_failed",
       actorHash: emailHash,
       route: "/api/auth/request-otp",
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   try {
     await sendOtp(parsed.data.email, otp.token);
   } catch (error) {
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "email_failed",
       actorHash: emailHash,
       route: "/api/auth/request-otp",

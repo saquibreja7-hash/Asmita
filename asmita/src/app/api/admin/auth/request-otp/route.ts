@@ -13,13 +13,13 @@ const schema = z.object({ email: z.email() });
 
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/admin/auth/request-otp" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/admin/auth/request-otp" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
 
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success || !isAdminEmail(parsed.data.email)) {
-    logSecurityEvent({ event: "admin_denied", route: "/api/admin/auth/request-otp" });
+    await logSecurityEvent({ event: "admin_denied", route: "/api/admin/auth/request-otp" });
     return NextResponse.json({ error: "admin_not_allowed" }, { status: 403 });
   }
 
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       emailLimit = await checkRateLimitAsync(`admin-otp:${emailHash}`, 5, 60 * 60_000);
       ipLimit = await checkRateLimitAsync(`admin-login-ip:${getClientIp(request)}`, 10, 60 * 60_000);
     } catch (error) {
-      logSecurityEvent({
+      await logSecurityEvent({
         event: "rate_limit_unavailable",
         actorHash: emailHash,
         route: "/api/admin/auth/request-otp",
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "service_unavailable" }, { status: 503 });
     }
     if (!emailLimit.allowed || !ipLimit.allowed) {
-      logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/admin/auth/request-otp" });
+      await logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/admin/auth/request-otp" });
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }
   }
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   try {
     otp = await createOtpForEmail(parsed.data.email);
   } catch (error) {
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "otp_persistence_failed",
       actorHash: emailHash,
       route: "/api/admin/auth/request-otp",
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
   try {
     await sendOtp(parsed.data.email, otp.token);
   } catch (error) {
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "email_failed",
       actorHash: emailHash,
       route: "/api/admin/auth/request-otp",

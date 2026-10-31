@@ -17,7 +17,7 @@ const schema = z.object({ email: z.email() });
  */
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/admin/mfa/reset" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/admin/mfa/reset" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   const auth = await requireAdminPermission("users:manage");

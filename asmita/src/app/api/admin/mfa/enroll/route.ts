@@ -13,7 +13,7 @@ import { logSecurityEvent } from "@/lib/security-log";
  */
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/admin/mfa/enroll" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/admin/mfa/enroll" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   const auth = await requireAdminSetup();

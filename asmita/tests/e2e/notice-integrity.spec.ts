@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
-import { SignJWT } from "jose";
+import { adminContext } from "./support/admin";
 import { withAdmin } from "./support/database";
 
 // ADR 004, M8 + M9: what the survivor signs is exactly what is sent. Each
@@ -82,21 +82,7 @@ async function addFingerprint(page: Page, caseId: string) {
 }
 
 async function adminRequest(browser: Browser) {
-  const token = await new SignJWT({
-    role: "ADMIN", adminRole: "SUPER_ADMIN", ageOver18: true, emailHash: "integrity-admin", namespace: "admin", mfaComplete: true,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuer("asmita")
-    .setAudience("asmita-web")
-    .setSubject("integrity-admin")
-    .setIssuedAt()
-    .setExpirationTime("1h")
-    .sign(new TextEncoder().encode("e2e-test-only-jwt-secret-32-chars-long"));
-  const context = await browser.newContext({ baseURL: "http://127.0.0.1:3001" });
-  await context.addCookies([
-    { name: "asmita_admin_session", value: token, domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Lax" },
-  ]);
-  return context.request;
+  return (await adminContext(browser, "integrity-admin")).request;
 }
 
 const fingerprintIds = (caseId: string) =>
