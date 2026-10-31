@@ -9,7 +9,9 @@ ADR 004 (M1-M3). The app connects through Hyperdrive as a login role that is a m
 | `asmita_worker` (login, member of `asmita_app`) | Hyperdrive in production | Same as `asmita_app` |
 | `anon`, `authenticated` | Supabase Data API | Nothing |
 
-CI checks all of this against a real Postgres (`scripts/check-db-privileges.mjs`), and `tests/unit/migrations-rls.test.ts` fails if a new table is created without row-level security and a policy.
+The e2e suite runs on a real Postgres shaped like Supabase (`tests/e2e/global-setup.ts`), with the dev server connected as a member of `asmita_app`. `tests/e2e/database-hardening.spec.ts` walks a survivor report through the app, then checks that `anon` and `authenticated` cannot read or edit anything and that the app cannot rewrite `audit_log`.
+
+Local run: start Postgres 17 on port 5433 (`docker run -d --name asmita-e2e-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=asmita_e2e -p 5433:5432 postgres:17`), then `npm run test:e2e`.
 
 ## Production rollout
 
@@ -54,7 +56,7 @@ The migration is safe to apply while Hyperdrive still connects as `postgres`, be
 
 Run migrations as `postgres`: default privileges only cover tables that role creates. A new table automatically gives `asmita_app` select, insert, update and delete. In the same migration:
 
-- enable row-level security and add the `asmita_app_all` policy (the unit test fails otherwise);
+- enable row-level security and add the `asmita_app_all` policy, or the app role cannot see its rows and the e2e journeys fail;
 - for an append-only table, `REVOKE UPDATE, DELETE` from `asmita_app`, as for `audit_log`.
 
 ## Keepalive

@@ -87,8 +87,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/asmita
-      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/asmita
+      # Playwright's global setup resets this database, migrates and seeds it.
+      E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/asmita
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -97,10 +97,6 @@ jobs:
           cache: npm
           cache-dependency-path: asmita/package-lock.json
       - run: npm ci
-      - run: node scripts/check-db-privileges.mjs setup
-      - run: npx prisma migrate deploy
-      - run: npx prisma db seed
-      - run: node scripts/check-db-privileges.mjs verify
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --project=chromium
       - uses: actions/upload-artifact@v4
