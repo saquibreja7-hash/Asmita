@@ -43,4 +43,4 @@ npm run test:e2e
 
 ## Deployment
 
-Cloudflare Workers is the selected hosting and backend target. The vinext build in `vite.config.ts` and `wrangler.jsonc` builds and renders locally. PostgreSQL remains the system of record, and Cloudflare Cron Triggers invoke the database-backed sweep routes. Production deployment still requires Cloudflare account authentication, staging database and Hyperdrive setup, staging migrations and workflow proof, email DNS verification, GO contact verification, legal and POCSO review, security review, and accessibility sign-off. `vercel.json` is legacy configuration and is not the Cloudflare deployment path.
+Cloudflare Workers is the selected hosting and backend target. The vinext build in `vite.config.ts` and `wrangler.jsonc` builds and renders locally. PostgreSQL remains the system of record, and Cloudflare Cron Triggers invoke the database-backed sweep routes. Production deployment still requires Cloudflare account authentication, staging database and Hyperdrive setup, staging migrations and workflow proof, email DNS verification, GO contact verification, legal and POCSO review, security review, and accessibility sign-off.
