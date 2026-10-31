@@ -4,6 +4,16 @@
 -- owners bypass row-level security. Production then switches Hyperdrive to a
 -- login role that is a member of asmita_app (docs/infra/database-roles.md).
 
+-- Requires Postgres 17 for the MAINTAIN privilege (see audit_log below).
+-- Checked first so nothing is applied on an older server.
+DO $$
+BEGIN
+  IF current_setting('server_version_num')::int < 170000 THEN
+    RAISE EXCEPTION 'This migration requires Postgres 17 or later (found %)', current_setting('server_version');
+  END IF;
+END
+$$;
+
 -- App role ---------------------------------------------------------------
 
 DO $$
@@ -23,19 +33,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO as
 REVOKE ALL ON "_prisma_migrations" FROM asmita_app;
 
 -- audit_log is append-only. src/lib/audit.ts takes LOCK TABLE ... IN EXCLUSIVE
--- MODE, which needs MAINTAIN (Postgres 17+) or UPDATE/DELETE/TRUNCATE. Prefer
--- MAINTAIN; on older servers grant UPDATE, which the append-only trigger still
--- blocks.
+-- MODE, which needs MAINTAIN, UPDATE, DELETE or TRUNCATE. MAINTAIN allows the
+-- lock without allowing any change to rows.
 REVOKE UPDATE, DELETE ON "audit_log" FROM asmita_app;
-DO $$
-BEGIN
-  IF current_setting('server_version_num')::int >= 170000 THEN
-    EXECUTE 'GRANT MAINTAIN ON "audit_log" TO asmita_app';
-  ELSE
-    EXECUTE 'GRANT UPDATE ON "audit_log" TO asmita_app';
-  END IF;
-END
-$$;
+GRANT MAINTAIN ON "audit_log" TO asmita_app;
 
 -- Supabase Data API roles -----------------------------------------------
 -- The app never uses the Data API. Remove every grant Supabase gives its

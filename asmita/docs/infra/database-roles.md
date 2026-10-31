@@ -15,7 +15,7 @@ CI checks all of this against a real Postgres (`scripts/check-db-privileges.mjs`
 
 The migration is safe to apply while Hyperdrive still connects as `postgres`, because table owners bypass row-level security.
 
-1. **Apply the migration** from `asmita/`, with `DIRECT_URL` from `.env.production.local`:
+1. **Apply the migration** from `asmita/`, with `DIRECT_URL` from `.env.production.local`. It requires Postgres 17 (check with `show server_version;` in the SQL editor) and refuses to run on older servers:
    ```bash
    npx prisma migrate deploy
    ```

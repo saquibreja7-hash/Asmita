@@ -8,6 +8,13 @@ import pg from "pg";
 const adminUrl = process.env.DIRECT_URL;
 if (!adminUrl) throw new Error("DIRECT_URL is required");
 
+// `setup` re-grants the Supabase API roles and `verify` creates a weak login.
+// Never run against anything but the throwaway CI database.
+const host = new URL(adminUrl).hostname;
+if (process.env.CI !== "true" || !["localhost", "127.0.0.1"].includes(host)) {
+  throw new Error(`Refusing to run outside CI against a local database (host: ${host})`);
+}
+
 async function withClient(url, fn) {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
