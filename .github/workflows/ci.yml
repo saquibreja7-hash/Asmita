@@ -98,7 +98,7 @@ jobs:
           cache-dependency-path: asmita/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test --project=chromium
+      - run: npx playwright test --project=chromium --reporter=list
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
