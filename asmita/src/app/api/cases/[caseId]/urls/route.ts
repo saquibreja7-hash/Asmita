@@ -22,7 +22,7 @@ const schema = z.object({
 
 export async function POST(request: Request, context: { params: Promise<{ caseId: string }> }) {
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/cases/[caseId]/urls" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/cases/[caseId]/urls" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   const auth = await requireSession({ adultOnly: true });
@@ -64,12 +64,12 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   const limit = await checkRateLimitAsync(`urls:${caseId}`, 10, 24 * 60 * 60_000);
   const ipLimit = await checkRateLimitAsync(`url-submit-ip:${getClientIp(request)}`, 30, 60 * 60_000);
   if (!limit.allowed || !ipLimit.allowed) {
-    logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/cases/[caseId]/urls", reason: caseId });
+    await logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/cases/[caseId]/urls", reason: caseId });
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   const abuse = checkUrlSubmission({ urls: parsed.data.urls, emailHash: auth.session.emailHash });
   if (abuse.flagged) {
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "flagged_submission",
       actorHash: auth.session.emailHash,
       route: "/api/cases/[caseId]/urls",

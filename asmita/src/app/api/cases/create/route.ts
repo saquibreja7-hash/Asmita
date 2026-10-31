@@ -24,12 +24,12 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/cases/create" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/cases/create" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   const auth = await requireSession({ adultOnly: true });
   if (!auth.ok) {
-    logSecurityEvent({
+    await logSecurityEvent({
       event: auth.error === "minor_pathway_required" ? "minor_route_blocked" : "auth_failed",
       route: "/api/cases/create",
       reason: auth.error,

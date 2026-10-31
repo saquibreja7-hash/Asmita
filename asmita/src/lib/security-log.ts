@@ -37,18 +37,21 @@ export async function logSecurityEvent(event: SecurityEvent) {
       }
       return;
     }
-    const { db } = await import("@/lib/db");
-    db.securityEventLog
-      .create({
+    // Awaited, never fire-and-forget: a request that ends before the write
+    // finishes can lose it (on Workers the isolate may stop), and these
+    // events include minor_route_blocked.
+    try {
+      const { db } = await import("@/lib/db");
+      await db.securityEventLog.create({
         data: {
           event: entry.event,
           actorHash: entry.actorHash ?? null,
           route: entry.route ?? null,
           reason: entry.reason ?? null,
         },
-      })
-      .catch((err: unknown) => {
-        console.error("[security-log] DB write failed:", err);
       });
+    } catch (err) {
+      console.error("[security-log] DB write failed:", err);
+    }
   }
 }

@@ -11,7 +11,7 @@ const schema = z.object({ token: z.string().regex(/^\d{6}$/) });
 
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/admin/mfa/confirm" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/admin/mfa/confirm" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   const auth = await requireAdminSetup();
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   if (!(await confirmAdminMfa(auth.session.emailHash, parsed.data.token))) {
-    logSecurityEvent({ event: "auth_failed", actorHash: auth.session.emailHash,
+    await logSecurityEvent({ event: "auth_failed", actorHash: auth.session.emailHash,
       route: "/api/admin/mfa/confirm", reason: "invalid_totp" });
     return NextResponse.json({ error: "invalid_totp" }, { status: 401 });
   }

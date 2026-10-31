@@ -13,5 +13,13 @@ export async function POST(request: Request) {
     path: "/",
     maxAge: 0,
   });
+  // Older sessions were scoped to /admin and stay valid for up to 8 hours
+  // unless cleared at that path too. response.cookies keys by name, so the
+  // second path needs its own header.
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  response.headers.append(
+    "Set-Cookie",
+    `asmita_admin_session=; Path=/admin; Max-Age=0; HttpOnly; SameSite=Lax${secure}`,
+  );
   return response;
 }

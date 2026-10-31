@@ -7,6 +7,11 @@ import { logSecurityEvent } from "@/lib/security-log";
 
 // Server-side content-provenance check.
 //
+// WARNING: this route sends survivor images to a third party (OpenAI). ADR 002
+// is still PROPOSED and blocked on legal sign-off. Never set
+// ENABLE_PROVENANCE_CHECK=true in staging or production, and never widen what
+// this route sends, until ADR 002 is accepted by counsel.
+//
 // This route forwards the image to OpenAI's content-provenance endpoint to read
 // C2PA credentials and the SynthID watermark. It is a documented exception to the
 // "no media on our server" rule (see docs/adr/002-consented-encrypted-media.md):
@@ -36,14 +41,14 @@ export async function POST(request: Request) {
   }
 
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/check-image" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/check-image" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
 
   const ip = getClientIp(request);
   const limit = await checkRateLimitAsync(`check-image:${sha256(ip)}`, 10, 60 * 60 * 1000);
   if (!limit.allowed) {
-    logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/check-image" });
+    await logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/check-image" });
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
@@ -56,7 +61,7 @@ export async function POST(request: Request) {
 
   // Both gates are mandatory: adults-only, and explicit consent to send to OpenAI.
   if (form.get("ageConfirmed") !== "true") {
-    logSecurityEvent({ event: "minor_route_blocked", route: "/api/check-image", reason: "age_not_confirmed" });
+    await logSecurityEvent({ event: "minor_route_blocked", route: "/api/check-image", reason: "age_not_confirmed" });
     return NextResponse.json({ error: "age_not_confirmed" }, { status: 400 });
   }
   if (form.get("consent") !== "true") {

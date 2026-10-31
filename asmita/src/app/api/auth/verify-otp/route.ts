@@ -16,7 +16,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
-    logSecurityEvent({ event: "csrf_failed", route: "/api/auth/verify-otp" });
+    await logSecurityEvent({ event: "csrf_failed", route: "/api/auth/verify-otp" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   const parsed = schema.safeParse(await request.json());
