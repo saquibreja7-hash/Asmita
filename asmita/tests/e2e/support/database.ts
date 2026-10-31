@@ -5,9 +5,11 @@ import pg from "pg";
 export const adminUrl =
   process.env.E2E_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5433/asmita_e2e";
 
-const host = new URL(adminUrl).hostname;
-if (!["localhost", "127.0.0.1"].includes(host)) {
-  throw new Error(`E2E_DATABASE_URL must point at a local database (host: ${host})`);
+const target = new URL(adminUrl);
+if (!["localhost", "127.0.0.1"].includes(target.hostname) || !target.pathname.endsWith("_e2e")) {
+  throw new Error(
+    `E2E_DATABASE_URL must be a local database whose name ends in _e2e (got ${target.hostname}${target.pathname})`,
+  );
 }
 
 // The app connects as a login role inside asmita_app, like production.

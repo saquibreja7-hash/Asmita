@@ -5,6 +5,11 @@ import { adminUrl, appRole, withAdmin } from "./support/database";
 // every new table by default, and the migrations have to take that away.
 export default async function globalSetup() {
   await withAdmin(async (db) => {
+    // A tunnel can make a real Supabase database look local. Supabase servers
+    // always have supabase_admin; never wipe one.
+    const supabase = await db.query("SELECT 1 FROM pg_roles WHERE rolname = 'supabase_admin'");
+    if (supabase.rowCount) throw new Error("Refusing to reset a Supabase database");
+
     await db.query("DROP SCHEMA IF EXISTS public CASCADE");
     await db.query("CREATE SCHEMA public");
     for (const role of ["anon", "authenticated"]) {
