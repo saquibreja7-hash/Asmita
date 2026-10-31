@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { appRole, withAdmin } from "./support/database";
 
-const surveyedTables = ["User", "Case", "SubmittedUrl", "Platform", "NoticeTemplate", "audit_log", "_prisma_migrations"];
-
 async function deniedAs(role: string, statement: string) {
   return withAdmin(async (db) => {
     await db.query("BEGIN");
@@ -50,8 +48,20 @@ test("survivor report works as the app role and stays out of reach of the Data A
   const casesAfter = await withAdmin(async (db) => (await db.query('SELECT count(*)::int AS n FROM "Case"')).rows[0].n);
   expect(casesAfter).toBe(casesBefore + 1);
 
-  // Someone holding the Supabase publishable key gets nothing.
-  for (const table of surveyedTables) {
+  // Every table, including any added later, has row-level security on.
+  const tables = await withAdmin(async (db) =>
+    (
+      await db.query<{ name: string; rls: boolean }>(`
+        SELECT c.relname AS name, c.relrowsecurity AS rls
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r'`)
+    ).rows,
+  );
+  const withoutRls = tables.filter((t) => !t.rls && t.name !== "_prisma_migrations").map((t) => t.name);
+  expect(withoutRls, "tables without row-level security").toEqual([]);
+
+  // Someone holding the Supabase publishable key gets nothing, from any table.
+  for (const { name: table } of tables) {
     expect(await deniedAs("anon", `SELECT 1 FROM "${table}" LIMIT 1`), `anon reads ${table}`).toBe(true);
     expect(await deniedAs("authenticated", `SELECT 1 FROM "${table}" LIMIT 1`), `authenticated reads ${table}`).toBe(true);
   }

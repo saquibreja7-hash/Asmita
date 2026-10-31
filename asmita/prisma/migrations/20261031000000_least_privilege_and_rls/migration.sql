@@ -61,7 +61,7 @@ $$;
 
 -- Row-level security -------------------------------------------------------
 -- Every table denies by default; only asmita_app gets rows. Every new table
--- must do the same (enforced by tests/unit/migrations-rls.test.ts).
+-- must do the same (enforced by tests/e2e/database-hardening.spec.ts).
 
 ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY asmita_app_all ON "User" FOR ALL TO asmita_app USING (true) WITH CHECK (true);
