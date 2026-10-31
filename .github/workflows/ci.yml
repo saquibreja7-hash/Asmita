@@ -99,6 +99,10 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --project=chromium --reporter=list
+      # The suite above runs the Node dev server; this runs the production Worker
+      # bundle in the real Workers runtime against the same database.
+      - run: npm run build:vinext && node scripts/prepare-production-wrangler.mjs
+      - run: node scripts/worker-smoke.mjs
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
