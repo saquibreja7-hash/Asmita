@@ -46,7 +46,7 @@ The migration is safe to apply while Hyperdrive still connects as `postgres`, be
    ```
 6. **Verify.** The authenticated health check must return `"db":"ok"`, and `/`, `/start`, `/research` must return 200:
    ```bash
-   curl -s -H "Authorization: Bearer <CRON_SECRET>" https://meriasmita.org/api/health
+   curl -s -H "Authorization: Bearer <HEALTH_CHECK_SECRET>" https://meriasmita.org/api/health
    ```
    Watch `npx wrangler tail asmita-production` for permission errors while using the site.
 
@@ -61,4 +61,4 @@ Run migrations as `postgres`: default privileges only cover tables that role cre
 
 ## Keepalive
 
-`.github/workflows/supabase-keepalive.yml` calls the authenticated health check daily so Supabase Free never pauses the project. It needs the repository secret `CRON_SECRET`, set to the same value as the Worker secret.
+`.github/workflows/supabase-keepalive.yml` calls the authenticated health check daily so Supabase Free never pauses the project. It needs the repository secret `HEALTH_CHECK_SECRET`, set to the same value as the Worker secret of that name. Use its own random value, never `CRON_SECRET`: the health check only reads status, while the cron secret can trigger notice sweeps.

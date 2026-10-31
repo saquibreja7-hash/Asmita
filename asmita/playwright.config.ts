@@ -23,6 +23,8 @@ export default defineConfig({
       ENABLE_PROVENANCE_CHECK: "true",
       DEV_SKIP_ADMIN_MFA: "true",
       JWT_SECRET: "e2e-test-only-jwt-secret-32-chars-long",
+      CRON_SECRET: "e2e-test-only-cron-secret-32-chars-long",
+      HEALTH_CHECK_SECRET: "e2e-test-only-health-secret-32-chars",
     },
     url: "http://127.0.0.1:3001",
     reuseExistingServer: false,

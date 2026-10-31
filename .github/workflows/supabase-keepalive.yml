@@ -17,11 +17,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     env:
-      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      HEALTH_CHECK_SECRET: ${{ secrets.HEALTH_CHECK_SECRET }}
     steps:
       - name: Check configuration
         shell: bash
-        run: test -n "$CRON_SECRET"
+        run: test -n "$HEALTH_CHECK_SECRET"
 
       - name: Run the authenticated health check
         shell: bash
@@ -31,6 +31,6 @@ jobs:
             --silent \
             --show-error \
             --max-time 30 \
-            --header "Authorization: Bearer $CRON_SECRET" \
+            --header "Authorization: Bearer $HEALTH_CHECK_SECRET" \
             "https://meriasmita.org/api/health")
           echo "$body" | grep -q '"db":"ok"' || { echo "Database check failed: $body"; exit 1; }

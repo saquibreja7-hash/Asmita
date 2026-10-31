@@ -4,11 +4,12 @@ import { probePostgresConnection } from "@/lib/worker-postgres";
 
 /*
  * Public liveness probe. Configuration detail is only returned to callers
- * presenting the cron secret, so the public response reveals nothing about
- * the deployment.
+ * presenting the health-check secret, so the public response reveals nothing
+ * about the deployment. It is deliberately not CRON_SECRET: the keepalive
+ * workflow holds this one, and it must not be able to trigger notice sweeps.
  */
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
+  const secret = process.env.HEALTH_CHECK_SECRET;
   const header = request.headers.get("authorization");
   if (secret && safeEqual(header, `Bearer ${secret}`)) {
     let database: "ok" | "unavailable" | "not_configured" = "not_configured";
