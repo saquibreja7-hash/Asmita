@@ -1,6 +1,6 @@
 # Asmita — Handoff for the next AI agent
 
-**Historical snapshot:** This document describes the May 2026 Vercel design and is not current deployment guidance. The selected hosting and backend target is Cloudflare Workers. The parallel vinext build lives in `vite.config.ts` and `wrangler.jsonc`; case storage, queues, and scheduled jobs remain to be integrated. Image checking and on-device hash generation have been restored in the redesign worktree. Read `README.md` and the current code before using this snapshot.
+**Historical snapshot (re-marked 2026-10-31):** This describes the May 2026 Phase 1 design on Vercel and is not current guidance. Since then: hosting moved to Cloudflare Workers with Supabase (Mumbai) through Hyperdrive and Kysely; on-device PDQ fingerprinting shipped, so the "no hashes" rule below no longer applies; the planning docs it links to are in `docs/archive/planning-2026-05/`. Current rules live in the root `CLAUDE.md` and current deployment in `docs/infra/cloudflare-migration.md`.
 
 **Last refreshed:** 2026-05-17
 **Repo HEAD when written:** `b913414`
@@ -31,7 +31,7 @@ Project owner contact / email: `ncii-complaint@csrindia.org`.
 
 ## 2. ⛔ Hard rules — never violate these, even if asked
 
-These come from `Desktop/Asmita/TODOS.md` and are non-negotiable. Many of them are encoded as ESLint rules or CI checks that will fail your build.
+These come from `asmita/docs/archive/planning-2026-05/TODOS.md` and are non-negotiable. Many of them are encoded as ESLint rules or CI checks that will fail your build.
 
 1. **No server-side URL fetching.** Never call `fetch`, `axios`, `got`, `http.request`, etc. on any value derived from `submitted_urls`. URLs are opaque tokens used only for domain extraction. An ESLint custom rule and an integration test (`tests/integration/no-url-fetch.test.ts`) enforce this. If a task seems to require fetching a submitted URL, you have misunderstood the task — stop and ask.
 2. **No invented Grievance Officer emails / phone numbers / addresses.** Every contact must be sourced from a human-verified CSV row or the admin GO editor. If a contact is missing, use the literal string `<TO_BE_VERIFIED_BY_HUMAN>`. Never guess.
@@ -48,12 +48,12 @@ These come from `Desktop/Asmita/TODOS.md` and are non-negotiable. Many of them a
 
 | Path | What |
 |---|---|
-| `Desktop/Asmita/PRD_Asmita.md` | Product Requirements Document v0.2 — source of truth for product decisions |
-| `Desktop/Asmita/TRD_Asmita.md` | Technical Requirements Document v0.1 |
-| `Desktop/Asmita/IMPLEMENTATION_PLAN_Asmita.md` | 6-phase month-by-month plan |
-| `Desktop/Asmita/UXUI_DESIGN_PLAN_Asmita.md` | Visual language, screens, design tokens |
-| `Desktop/Asmita/TODO_Asmita.md` | Living project tracker (some entries stale post-development) |
-| `Desktop/Asmita/TODOS.md` | AI-agent task list with `[AI]` / `[HUMAN]` / `[GATED]` labels and the FORBIDDEN list |
+| `asmita/docs/archive/planning-2026-05/PRD_Asmita.md` | Product Requirements Document v0.2 — source of truth for product decisions |
+| `asmita/docs/archive/planning-2026-05/TRD_Asmita.md` | Technical Requirements Document v0.1 |
+| `asmita/docs/archive/planning-2026-05/IMPLEMENTATION_PLAN_Asmita.md` | 6-phase month-by-month plan |
+| `asmita/docs/archive/planning-2026-05/UXUI_DESIGN_PLAN_Asmita.md` | Visual language, screens, design tokens |
+| `asmita/docs/archive/planning-2026-05/TODO_Asmita.md` | Living project tracker (some entries stale post-development) |
+| `asmita/docs/archive/planning-2026-05/TODOS.md` | AI-agent task list with `[AI]` / `[HUMAN]` / `[GATED]` labels and the FORBIDDEN list |
 | `Desktop/Asmita/asmita/` | **The Next.js app. This is where you write code.** |
 | `Desktop/Asmita/asmita/AGENTS.md` | "This is NOT the Next.js you know" — read `node_modules/next/dist/docs/` before writing Next code |
 | `Desktop/Asmita/asmita/CLAUDE.md` | Just re-exports AGENTS.md |

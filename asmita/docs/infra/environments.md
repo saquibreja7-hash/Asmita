@@ -1,5 +1,7 @@
 # Environment Provisioning Checklist
 
+> **Partly out of date (2026-10-31).** The Redis, BullMQ and RDS parts describe the old plan. Production runs on Cloudflare Workers with Supabase (Mumbai) through Hyperdrive, and scheduled work uses Cron Triggers plus database sweeps. See `docs/infra/cloudflare-migration.md`. The local-dev section and smoke checks still apply.
+
 Status: engineering checklist ready; live provisioning still requires cloud, database, Redis, KMS, email, and monitoring owners.
 
 Asmita uses three isolated environments. Never reuse production secrets in local or staging.

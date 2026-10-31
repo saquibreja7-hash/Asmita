@@ -46,6 +46,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "test-results/**",
     "tests/lint/**",
+    "docs/archive/**",
   ]),
 ]);
 
