@@ -72,6 +72,8 @@ export async function dispatchTier2Notice(input: {
   subject: string;
   body: string;
   signedNoticePdf?: Buffer | null;
+  // Fingerprints in the annex; recorded in the audit log, never their values.
+  fingerprintIds?: string[];
 }) {
   assertVerifiedNoticeRecipient(input.recipientEmail);
   const idempotencyKey = sha256(`${input.caseId}:${input.urlId}:${input.recipientEmail}`);
@@ -114,7 +116,12 @@ export async function dispatchTier2Notice(input: {
     eventType: "NOTICE_SENT",
     entityType: "SubmittedUrl",
     entityId: input.urlId,
-    data: { caseId: input.caseId, messageId: notice.messageId, idempotencyKey },
+    data: {
+      caseId: input.caseId,
+      messageId: notice.messageId,
+      idempotencyKey,
+      fingerprintIds: input.fingerprintIds ?? [],
+    },
   });
   return { dispatched: true, notice };
 }

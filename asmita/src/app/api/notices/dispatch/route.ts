@@ -11,7 +11,7 @@ import {
   assertNoticeSubjectSafe,
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
-import { buildCaseHashAnnex } from "@/lib/case-hash-annex";
+import { buildSignedHashAnnex, voidSignaturesWithRejectedFingerprints } from "@/lib/case-hash-annex";
 import { createPortalToken } from "@/lib/url-portal";
 
 const schema = z.object({
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   const submittedUrl = await db.submittedUrl.findFirst({
     where: { id: parsed.data.urlId, caseId: parsed.data.caseId },
     include: {
-      case: { select: { referenceNumber: true, declarationSignedAt: true } },
+      case: { select: { referenceNumber: true } },
       platform: {
         select: {
           id: true,
@@ -95,6 +95,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "reviewed_template_required" }, { status: 409 });
   }
 
+  // Exactly the fingerprints the signed PDF lists, and only once all of them
+  // are approved, so the email never differs from what the survivor signed.
+  // Checked before the portal token is created so a refusal leaves no trace.
+  const signedAnnex = await buildSignedHashAnnex(submittedUrl.signedHashSubmissionIds);
+  if (!signedAnnex.ok) {
+    // A signature listing a rejected fingerprint can never go out: void it so
+    // the survivor signs again (heals a failed or raced void at rejection).
+    if (signedAnnex.reason === "signed_fingerprints_changed") {
+      await voidSignaturesWithRejectedFingerprints(parsed.data.caseId, { trigger: "dispatch", actorId: auth.session.sub });
+    }
+    return NextResponse.json({ error: signedAnnex.reason }, { status: 409 });
+  }
+
   // Generate a one-time portal token. The raw URL never appears in the email -
   // only the portal link. The platform officer enters an access code to view it
   // once; if they reply quoting the email, Asmita sees a spent token, not the URL.
@@ -116,14 +129,8 @@ export async function POST(request: Request) {
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
   let body = renderNoticeTemplate(template.bodyTemplate, variables);
 
-  // Append only fingerprints that were approved and already on the case when
-  // the survivor signed, so the annex never exceeds what the signature covers.
-  const annex = await buildCaseHashAnnex(parsed.data.caseId, {
-    kind: "for-dispatch",
-    signedAt: submittedUrl.case.declarationSignedAt,
-  });
-  if (annex) {
-    body = `${body}\n\n${annex}`;
+  if (signedAnnex.annex.text) {
+    body = `${body}\n\n${signedAnnex.annex.text}`;
   }
 
   // Append access instructions. The portal link appears in the body above
@@ -160,6 +167,7 @@ export async function POST(request: Request) {
     subject,
     body,
     signedNoticePdf,
+    fingerprintIds: signedAnnex.annex.hashSubmissionIds,
   });
   return NextResponse.json(result);
 }

@@ -75,8 +75,8 @@ Ordered by priority. M items are must-fix before launch; the first block is this
 
 ### Phase 2: next (issue #17 and rate limits)
 
-- [ ] **M8. Notice integrity, critical.** The fingerprint annex cutoff is case-level, not per notice: `sign-hash-advisory` overwrites `declarationSignedAt`, so a URL notice signed earlier can be dispatched with a fingerprint its signed PDF never listed. Store the exact fingerprint IDs covered by each signed document and dispatch exactly that set.
-- [ ] **M9. Signed PDF vs email mismatch.** The signed PDF lists PENDING_REVIEW fingerprints, the email lists only APPROVED ones. Make both cover the same set.
+- [x] **M8. Notice integrity, critical.** The fingerprint annex cutoff is case-level, not per notice: `sign-hash-advisory` overwrites `declarationSignedAt`, so a URL notice signed earlier can be dispatched with a fingerprint its signed PDF never listed. Store the exact fingerprint IDs covered by each signed document and dispatch exactly that set.
+- [x] **M9. Signed PDF vs email mismatch.** The signed PDF lists PENDING_REVIEW fingerprints, the email lists only APPROVED ones. Make both cover the same set.
 - [ ] **M10. Dropped security logs.** `logSecurityEvent` is async but mostly not awaited; on Workers the writes (including `minor_route_blocked`) can be lost. Await them or use `ctx.waitUntil`.
 - [ ] **M11. Admin MFA bootstrap.** Email OTP plus the shared `ADMIN_TOTP_SECRET` lets anyone with both enrol an authenticator, including after a reset. Remove the bootstrap once all admins have enrolled, or require out-of-band approval.
 - [ ] **M12. Global rate limits.** Limits live in per-isolate memory, so they are not enforced across Workers. Add exact Postgres counters for OTP, admin OTP, `/api/admin/mfa/confirm`, portal tokens and case creation, with the Workers Rate Limiting binding in front.

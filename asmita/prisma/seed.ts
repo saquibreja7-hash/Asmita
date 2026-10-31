@@ -279,23 +279,33 @@ async function main() {
         version: 1,
         platformId: null,
       },
-      select: { id: true },
+      select: { id: true, subjectTemplate: true, bodyTemplate: true, legalCitations: true },
     });
 
+    // Only a human legal reviewer sets reviewedByLegal. The seed creates
+    // templates unreviewed, keeps a reviewer's decision on re-seed, and resets
+    // it only when the legal text itself changed.
     const data = {
       subjectTemplate: template.subjectTemplate,
       bodyTemplate: template.bodyTemplate,
       legalCitations: template.legalCitations,
-      reviewedByLegal: process.env.NODE_ENV !== "production",
       isActive: true,
     };
 
     if (existing) {
-      await prisma.noticeTemplate.update({ where: { id: existing.id }, data });
+      const textChanged =
+        existing.subjectTemplate !== template.subjectTemplate ||
+        existing.bodyTemplate !== template.bodyTemplate ||
+        JSON.stringify(existing.legalCitations) !== JSON.stringify(template.legalCitations);
+      await prisma.noticeTemplate.update({
+        where: { id: existing.id },
+        data: textChanged ? { ...data, reviewedByLegal: false } : data,
+      });
     } else {
       await prisma.noticeTemplate.create({
         data: {
           ...data,
+          reviewedByLegal: false,
           templateType: template.templateType,
           version: 1,
         },
