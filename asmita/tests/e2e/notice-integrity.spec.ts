@@ -51,10 +51,15 @@ async function reportWithFingerprint(page: Page, links: string[]) {
   await page.getByRole("button", { name: "Continue to review" }).click();
   await expect(page).toHaveURL(/\/review-sign$/);
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
+  const hashResponse = page.waitForResponse(
+    (r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()) && r.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Create case and preview notice" }).click();
   const created = await createResponse;
   expect(created.ok()).toBe(true);
   const { caseId } = (await created.json()) as { caseId: string };
+  // The fingerprint is saved by a second request; let it finish before leaving.
+  expect((await hashResponse).ok()).toBe(true);
   // Whether the sign form shows here depends on legal review state, which
   // other journeys change; sign from the case instead.
   await page.goto(`/case/${caseId}`);
@@ -218,7 +223,7 @@ test.describe("notice integrity", () => {
       signature: "Synthetic Survivor",
       platformIds: [whatsapp],
     });
-    expect(signed.ok()).toBe(true);
+    expect(signed.ok(), await signed.text()).toBe(true);
     await addFingerprint(page, caseId);
     const [, fingerprintB] = await fingerprintIds(caseId);
 

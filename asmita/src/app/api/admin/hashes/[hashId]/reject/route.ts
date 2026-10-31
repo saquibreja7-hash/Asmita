@@ -46,16 +46,23 @@ export async function POST(
 
   // Unsent signatures that list this fingerprint can never be dispatched;
   // void them so the survivor can sign the current set again.
-  const { caseId } = await db.hashSubmission.findUniqueOrThrow({ where: { id: hashId }, select: { caseId: true } });
-  const voided = await voidSignaturesWithRejectedFingerprints(caseId);
-  if (voided.urlNotices > 0 || voided.hashAdvisory) {
-    await writeAuditLog({
-      eventType: "ADMIN_ACTION",
-      entityType: "Case",
-      entityId: caseId,
-      actorId: auth.session.sub,
-      data: { action: "signatures_voided_by_rejection", hashSubmissionId: hashId, ...voided },
-    });
+  // The rejection is already committed. If voiding fails here, dispatch voids
+  // the same signatures on its next attempt, so report success either way.
+  let voided: Awaited<ReturnType<typeof voidSignaturesWithRejectedFingerprints>> | null = null;
+  try {
+    const { caseId } = await db.hashSubmission.findUniqueOrThrow({ where: { id: hashId }, select: { caseId: true } });
+    voided = await voidSignaturesWithRejectedFingerprints(caseId);
+    if (voided.urlNotices > 0 || voided.hashAdvisory) {
+      await writeAuditLog({
+        eventType: "ADMIN_ACTION",
+        entityType: "Case",
+        entityId: caseId,
+        actorId: auth.session.sub,
+        data: { action: "signatures_voided_by_rejection", hashSubmissionId: hashId, ...voided },
+      });
+    }
+  } catch (err) {
+    console.error("Voiding signatures after rejection failed; dispatch will retry", err);
   }
   return NextResponse.json({ success: true, submission, voided });
 }
