@@ -21,8 +21,7 @@ Asmita is not legal advice and should not be deployed for real cases without qua
 
 ```text
 asmita/                 Next.js application, Prisma schema, tests, docs
-homepage/               Static public landing-page prototype
-asmita/docs/archive/    Original PRD, TRD, implementation and design plans (May 2026)
+asmita/docs/archive/    Original PRD and PDQ system design (May 2026)
 ```
 
 ## Core Safety Rule
