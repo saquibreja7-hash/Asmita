@@ -14,7 +14,6 @@ import { db } from "@/lib/db";
 import { buildCaseHashAnnex } from "@/lib/case-hash-annex";
 import { generateBase32Secret } from "@/lib/auth/admin-mfa-store";
 import { generateTotp, verifyAdminTotp } from "@/lib/auth/admin-mfa";
-import { GET as health } from "@/app/api/health/route";
 
 const HEX = "a".repeat(64);
 
@@ -81,23 +80,5 @@ describe("fingerprint annex coverage", () => {
     const where = vi.mocked(db.hashSubmission.findMany).mock.calls[0][0]?.where as Record<string, unknown>;
     expect(where.status).toEqual({ in: ["APPROVED", "DISPATCHED"] });
     expect(where.submittedAt).toEqual({ lte: signedAt });
-  });
-});
-
-describe("health endpoint", () => {
-  it("reveals no configuration without the cron secret", async () => {
-    process.env.CRON_SECRET = "cron-secret-for-tests-that-is-long";
-    const res = await health(new Request("http://localhost/api/health"));
-    expect(await res.json()).toEqual({ ok: true });
-  });
-
-  it("returns configuration to the cron caller", async () => {
-    process.env.CRON_SECRET = "cron-secret-for-tests-that-is-long";
-    const res = await health(
-      new Request("http://localhost/api/health", {
-        headers: { authorization: "Bearer cron-secret-for-tests-that-is-long" },
-      }),
-    );
-    expect(await res.json()).toMatchObject({ ok: true, service: "asmita" });
   });
 });

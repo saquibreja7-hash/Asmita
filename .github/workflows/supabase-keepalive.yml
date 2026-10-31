@@ -2,9 +2,10 @@ name: Supabase keepalive
 
 on:
   schedule:
-    # Supabase Free projects may pause after a period without database activity.
-    # Run early enough to keep the Mumbai staging project available.
-    - cron: "17 3 */5 * *"
+    # Supabase Free projects pause after a week without database activity.
+    # The Worker's Cron Triggers query the database daily; this is a second
+    # signal that also fails loudly if the site or database is down.
+    - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -12,27 +13,24 @@ permissions:
 
 jobs:
   nudge:
-    name: Run a zero-row database query
-    runs-on: ubuntu-latest
+    name: Query the database through the live site
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     env:
-      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      HEALTH_CHECK_SECRET: ${{ secrets.HEALTH_CHECK_SECRET }}
     steps:
       - name: Check configuration
         shell: bash
-        run: |
-          test -n "$SUPABASE_URL"
-          test -n "$SUPABASE_PUBLISHABLE_KEY"
+        run: test -n "$HEALTH_CHECK_SECRET"
 
-      - name: Nudge the database
+      - name: Run the authenticated health check
         shell: bash
         run: |
-          curl \
+          body=$(curl \
             --fail-with-body \
             --silent \
             --show-error \
             --max-time 30 \
-            --output /dev/null \
-            --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-            "$SUPABASE_URL/rest/v1/Platform?select=*&limit=0"
+            --header "Authorization: Bearer $HEALTH_CHECK_SECRET" \
+            "https://meriasmita.org/api/health")
+          echo "$body" | grep -q '"db":"ok"' || { echo "Database check failed: $body"; exit 1; }

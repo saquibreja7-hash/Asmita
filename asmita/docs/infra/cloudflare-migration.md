@@ -70,6 +70,7 @@ Set secrets separately with `npx wrangler secret put NAME --name asmita-staging`
 * `JWT_SECRET`
 * `CSRF_SECRET`
 * `CRON_SECRET`
+* `HEALTH_CHECK_SECRET` (health-check detail only; never the same value as `CRON_SECRET`)
 * `RESEND_API_KEY`
 * `RESEND_WEBHOOK_SECRET`
 * `OPENAI_API_KEY` when the deeper image check is enabled

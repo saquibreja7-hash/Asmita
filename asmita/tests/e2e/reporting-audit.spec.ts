@@ -46,8 +46,10 @@ test("URL report registers locally and exposes the unavailable notice-preview bo
   const createdBody = await created.json();
   expect(createdBody.referenceNumber).toMatch(/^ASMITA-/);
   const preview = await previewResponse;
+  // Instagram is FORM_ONLY in the seeded platform directory (no verified
+  // grievance email), so there is no emailed notice to preview.
   expect(preview.status()).toBe(404);
-  expect(await preview.json()).toEqual({ error: "no_eligible_url" });
+  expect(await preview.json()).toEqual({ error: "form_only_platform" });
   await expect(page).toHaveURL(new RegExp(`/case/${createdBody.caseId}$`));
   await expect(page.getByText(createdBody.referenceNumber).first()).toBeVisible();
   const caseResponse = await page.request.get(`/api/cases/${createdBody.caseId}`);
