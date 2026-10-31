@@ -23,8 +23,6 @@ test("survivor report works as the app role and stays out of reach of the Data A
   test.skip(testInfo.project.name !== "chromium", "One database journey is enough");
   test.setTimeout(120_000);
 
-  const casesBefore = await withAdmin(async (db) => (await db.query('SELECT count(*)::int AS n FROM "Case"')).rows[0].n);
-
   await page.goto("/register");
   await page.getByText("I am 18 years of age or older.").click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -42,11 +40,14 @@ test("survivor report works as the app role and stays out of reach of the Data A
   await expect(page).toHaveURL(/\/review-sign$/);
   const createResponse = page.waitForResponse((response) => response.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Create case and preview notice" }).click();
-  expect((await createResponse).ok()).toBe(true);
+  const created = await createResponse;
+  expect(created.ok()).toBe(true);
+  const { caseId } = (await created.json()) as { caseId: string };
 
-  // The case really landed in Postgres, written by the least-privilege role.
-  const casesAfter = await withAdmin(async (db) => (await db.query('SELECT count(*)::int AS n FROM "Case"')).rows[0].n);
-  expect(casesAfter).toBe(casesBefore + 1);
+  // This survivor's case really landed in Postgres, written by the
+  // least-privilege role. (Other journeys run in parallel, so look it up by id.)
+  const stored = await withAdmin((db) => db.query('SELECT 1 FROM "Case" WHERE id = $1', [caseId]));
+  expect(stored.rowCount).toBe(1);
 
   // Every table, including any added later, has row-level security on.
   const tables = await withAdmin(async (db) =>
