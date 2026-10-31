@@ -49,17 +49,22 @@ jobs:
             test coverage gaps in untouched code. Do not comment on anything
             a linter would catch.
 
-            For each finding, post an inline comment on the PR at the
-            relevant line using:
+            Classify each finding as "CRITICAL:" (must fix before merge:
+            exploitable, breaks a safety invariant, or corrupts data) or
+            "WARNING:" (informational, author's call).
+
+            Post ONLY CRITICAL findings as inline comments on the PR at the
+            relevant line, using:
               gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
-                -f body="..." -f commit_id="${{ github.event.pull_request.head.sha }}" \
+                -f body="CRITICAL: ..." -f commit_id="${{ github.event.pull_request.head.sha }}" \
                 -f path="..." -F line=N -f side=RIGHT
-            Prefix each comment with its severity: "CRITICAL:" (must fix
-            before merge — exploitable, breaks a safety invariant, or
-            corrupts data) or "WARNING:" (informational, author's call).
+            Inline comments become review conversations that block merging
+            until resolved, so never post a WARNING inline.
 
             Finally post ONE summary comment on the PR
             (gh pr comment ${{ github.event.pull_request.number }} --body "...").
+            List every CRITICAL finding, then every WARNING under a
+            "Non-blocking warnings" heading, each with its file and line.
             Your very last output line must be exactly one of:
               Verdict: **PASS**   (no critical issues)
               Verdict: **BLOCK**  (one or more CRITICAL issues)
