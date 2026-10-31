@@ -3,8 +3,8 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
-import { decryptField } from "@/lib/encryption";
-import { buildHashAnnex, renderNoticeTemplate } from "@/lib/notice-generator";
+import { renderNoticeTemplate } from "@/lib/notice-generator";
+import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
 
 // GET /api/cases/[caseId]/preview-hash-advisory
@@ -35,11 +35,9 @@ export async function GET(
     return NextResponse.json({ error: "database_required" }, { status: 503 });
   }
 
-  const submissions = await db.hashSubmission.findMany({
-    where: { caseId, status: { notIn: ["REJECTED"] } },
-    orderBy: { submittedAt: "asc" },
-  });
-  if (submissions.length === 0) {
+  // Same builder as signing, so the preview matches the signed PDF.
+  const annex = await buildHashAnnexForSigning(caseId);
+  if (annex.hashSubmissionIds.length === 0) {
     return NextResponse.json({ error: "no_hashes" }, { status: 409 });
   }
 
@@ -56,15 +54,6 @@ export async function GET(
     return NextResponse.json({ error: "template_missing" }, { status: 409 });
   }
 
-  const annex = buildHashAnnex({
-    algorithm: "PDQ",
-    hashes: submissions.map((s) => ({
-      value: decryptField(s.hashEncrypted),
-      quality: s.quality,
-    })),
-    clientVersion: submissions[0].clientVersion,
-  });
-
   const variables = {
     caseReference: record.referenceNumber,
     declarationReference: record.referenceNumber,
@@ -72,7 +61,7 @@ export async function GET(
   };
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
   const body = renderNoticeTemplate(template.bodyTemplate, variables);
-  const noticeBody = `${body}\n\n${annex}`;
+  const noticeBody = `${body}\n\n${annex.text}`;
 
   const pdfBytes = await generateNoticePdf({
     platformName: "Grievance Officer(s) / Trust and Safety Teams",

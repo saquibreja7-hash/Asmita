@@ -7,16 +7,17 @@ import { assertVerifiedNoticeRecipient } from "@/lib/notice-dispatch";
 import {
   assertNoticeBodySafe,
   assertNoticeSubjectSafe,
-  buildHashAnnex,
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
+import { buildSignedHashAnnex } from "@/lib/case-hash-annex";
 
 // Dispatches the signed hash advisory to each target email platform.
 // Hard gates, in order:
 //   1. ENABLE_HASH_UPLOAD must be on (checked by callers' routes).
 //   2. Case must have a signedHashAdvisoryPdf - survivor must have reviewed and signed.
 //   3. The HASH_ADVISORY template must be human-legally reviewed (or DEV bypass).
-//   4. Only APPROVED (admin-reviewed) submissions are ever dispatched.
+//   4. Only the fingerprints the signed advisory lists are dispatched, and only
+//      once every one of them is APPROVED (admin-reviewed).
 //   5. Recipients must be human-verified platform contacts.
 //   6. Idempotent per (hashSubmission, platform) via the HashDispatch unique
 //      constraint - re-runs never double-send.
@@ -41,19 +42,22 @@ export async function dispatchHashAdvisories(input: {
       id: true,
       referenceNumber: true,
       signedHashAdvisoryPdf: true,
+      hashAdvisorySignedHashIds: true,
     },
   });
   if (!dbCase) throw new Error("case_not_found");
   if (!dbCase.signedHashAdvisoryPdf) throw new Error("hash_advisory_not_signed");
+  // Advisories signed before the signed set was recorded cannot prove what
+  // they cover, so they are never sent.
+  if (dbCase.hashAdvisorySignedHashIds.length === 0) throw new Error("no_signed_fingerprints");
 
   const pdfBase64 = decryptField(dbCase.signedHashAdvisoryPdf);
   const pdfBuffer = Buffer.from(pdfBase64, "base64");
 
-  const submissions = await db.hashSubmission.findMany({
-    where: { caseId: input.caseId, status: { in: ["APPROVED", "DISPATCHED"] } },
-    orderBy: { submittedAt: "asc" },
-  });
-  if (submissions.length === 0) throw new Error("no_approved_hashes");
+  // Exactly the fingerprints the signed PDF lists, once all are approved.
+  const signed = await buildSignedHashAnnex(dbCase.hashAdvisorySignedHashIds);
+  if (!signed.ok) throw new Error(signed.reason);
+  const submissions = signed.annex.hashSubmissionIds.map((id) => ({ id }));
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
   const template = await db.noticeTemplate.findFirst({
@@ -66,15 +70,6 @@ export async function dispatchHashAdvisories(input: {
   });
   if (!template) throw new Error("hash_advisory_template_missing");
 
-  const annex = buildHashAnnex({
-    algorithm: "PDQ",
-    hashes: submissions.map((s) => ({
-      value: decryptField(s.hashEncrypted),
-      quality: s.quality,
-    })),
-    clientVersion: submissions[0].clientVersion,
-  });
-
   // Render the notice body ONCE. The HASH_ADVISORY template is platform-agnostic;
   // passing platformName: "your service" handles any remaining {{platformName}}
   // references in the v1 template while v2+ templates omit the variable entirely.
@@ -85,7 +80,7 @@ export async function dispatchHashAdvisories(input: {
   };
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
   const noticeBody = renderNoticeTemplate(template.bodyTemplate, variables);
-  const emailBody = `${noticeBody}\n\n${annex}`;
+  const emailBody = `${noticeBody}\n\n${signed.annex.text}`;
   assertNoticeSubjectSafe(subject);
   assertNoticeBodySafe(emailBody);
 

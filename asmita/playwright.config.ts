@@ -22,6 +22,13 @@ export default defineConfig({
       ENABLE_PLATFORM_API: "false",
       ENABLE_PROVENANCE_CHECK: "true",
       DEV_SKIP_ADMIN_MFA: "true",
+      // next dev also loads .env.local; pin anything there that would change
+      // behaviour or reach a real service, so local runs match CI.
+      DEV_SKIP_LEGAL_REVIEW: "false",
+      DEV_OTP_CODE: "",
+      OPENAI_API_KEY: "",
+      DIRECT_URL: "",
+      MAINTENANCE_MODE: "false",
       JWT_SECRET: "e2e-test-only-jwt-secret-32-chars-long",
       CRON_SECRET: "e2e-test-only-cron-secret-32-chars-long",
       HEALTH_CHECK_SECRET: "e2e-test-only-health-secret-32-chars",

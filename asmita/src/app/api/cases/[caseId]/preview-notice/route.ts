@@ -5,7 +5,7 @@ import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/encryption";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
-import { buildCaseHashAnnex } from "@/lib/case-hash-annex";
+import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
 
 function templateTypeForNoticeBasis(noticeBasis: string) {
@@ -74,9 +74,9 @@ export async function GET(
   };
 
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
-  const annex = await buildCaseHashAnnex(caseId, { kind: "for-signing" });
-  const body = annex
-    ? `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex}`
+  const annex = await buildHashAnnexForSigning(caseId);
+  const body = annex.text
+    ? `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex.text}`
     : renderNoticeTemplate(template.bodyTemplate, variables);
 
   const pdfBytes = await generateNoticePdf({

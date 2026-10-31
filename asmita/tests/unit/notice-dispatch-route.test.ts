@@ -70,6 +70,7 @@ const dispatchableUrl = {
   domain: "example.com",
   status: "NOTICE_QUEUED",
   signedNoticePdf: "encrypted-signed-pdf",
+  signedHashSubmissionIds: [],
   case: {
     referenceNumber: "ASMITA-2026-00001",
     declarationSignedAt: new Date("2026-06-01T00:00:00.000Z"),

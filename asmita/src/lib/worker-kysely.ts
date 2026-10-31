@@ -32,6 +32,7 @@ interface WorkerDatabase {
     registrationKeyHash: string | null;
     status: "OPEN" | "PARTIALLY_RESOLVED" | "RESOLVED" | "CLOSED" | "ESCALATED";
     hashAdvisoryPlatformIds: string[];
+    hashAdvisorySignedHashIds: Generated<string[]>;
     firPackageGeneratedAt: Timestamp | null;
     createdAt: Generated<Timestamp>;
     updatedAt: Generated<Timestamp>;
@@ -48,6 +49,7 @@ interface WorkerDatabase {
     flaggedForReview: Generated<boolean>;
     flagReason: string | null;
     signedNoticePdf: string | null;
+    signedHashSubmissionIds: Generated<string[]>;
   };
   Platform: {
     id: string;
