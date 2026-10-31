@@ -97,8 +97,10 @@ jobs:
           cache: npm
           cache-dependency-path: asmita/package-lock.json
       - run: npm ci
+      - run: node scripts/check-db-privileges.mjs setup
       - run: npx prisma migrate deploy
       - run: npx prisma db seed
+      - run: node scripts/check-db-privileges.mjs verify
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --project=chromium
       - uses: actions/upload-artifact@v4
