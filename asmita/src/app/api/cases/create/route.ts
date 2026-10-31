@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
   const userLimit = await checkRateLimitAsync(`case-create:${auth.session.sub}`, 10, 24 * 60 * 60_000);
-  const ipLimit = await checkRateLimitAsync(`case-create-ip:${getClientIp(request)}`, 30, 60 * 60_000);
+  const ipLimit = await checkRateLimitAsync(`case-create-ip:${getClientIp(request)}`, 30, 60 * 60_000, { shared: true });
   if (!userLimit.allowed || !ipLimit.allowed) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }

@@ -1,18 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { POST as verifyAdmin } from "@/app/api/admin/auth/verify/route";
 import { POST as logoutAdmin } from "@/app/api/admin/auth/logout/route";
 import { generateTotp, verifyAdminTotp } from "@/lib/auth/admin-mfa";
-import { createOtpForEmail, resetOtpStore } from "@/lib/auth/otp";
+import { resetOtpStore } from "@/lib/auth/otp";
 import { createCsrfPair } from "@/lib/csrf";
 import { signAdminSession, signSession, verifyAdminSession, verifySession } from "@/lib/auth/jwt";
 
 describe("admin auth", () => {
   const originalAdminEmails = process.env.ADMIN_EMAILS;
-  const originalTotp = process.env.ADMIN_TOTP_SECRET;
 
   afterEach(() => {
     process.env.ADMIN_EMAILS = originalAdminEmails;
-    process.env.ADMIN_TOTP_SECRET = originalTotp;
     resetOtpStore();
   });
 
@@ -31,34 +28,6 @@ describe("admin auth", () => {
     await expect(verifySession(victim)).resolves.toMatchObject({ namespace: "victim" });
     await expect(verifyAdminSession(victim)).resolves.toBeNull();
     await expect(verifyAdminSession(admin)).resolves.toMatchObject({ namespace: "admin", role: "ADMIN" });
-  });
-
-  it("sets a setup-only 10-minute admin cookie before enrollment", async () => {
-    process.env.ADMIN_EMAILS = "admin@example.com";
-    process.env.ADMIN_TOTP_SECRET = "3132333435363738393031323334353637383930";
-    const email = "admin@example.com";
-    const otp = await createOtpForEmail(email);
-    const csrf = createCsrfPair();
-    const totp = generateTotp(process.env.ADMIN_TOTP_SECRET);
-
-    const response = await verifyAdmin(
-      new Request("https://asmita.test/api/admin/auth/verify", {
-        method: "POST",
-        headers: {
-          cookie: `asmita_csrf=${csrf.nonce}`,
-          "x-csrf-token": csrf.token,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ email, otp: otp.token, totp }),
-      }),
-    );
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("asmita_admin_session=");
-    expect(response.headers.get("set-cookie")).toContain("Max-Age=600");
-    expect(await response.json()).toMatchObject({ redirectTo: "/admin/setup-mfa" });
-    const token = response.cookies.get("asmita_admin_session")?.value;
-    expect(await verifyAdminSession(token)).toMatchObject({ mfaComplete: false });
   });
 
   it("expires the site-wide admin cookie on logout", async () => {

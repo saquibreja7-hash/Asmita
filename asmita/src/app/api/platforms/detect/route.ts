@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     `platform-detect:${getClientIp(request)}`,
     60,
     60 * 60_000,
+    { shared: true },
   );
   if (!ipLimit.allowed) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });

@@ -504,3 +504,24 @@ model SecurityEventLog {
   @@index([event])
   @@index([createdAt])
 }
+
+// Fixed-window rate limit counters shared by every Worker isolate. The key is
+// a sha256 of the bucket name, so no IP or email is stored.
+model RateLimitBucket {
+  key         String   @id
+  windowStart DateTime @default(now())
+  count       Int      @default(0)
+
+  @@index([windowStart])
+}
+
+// One-time code a SUPER_ADMIN (or the bootstrap script) issues so a named
+// admin can sign in once and enrol an authenticator. Stored hashed, single
+// use, short-lived. Replaces the shared ADMIN_TOTP_SECRET bootstrap.
+model AdminEnrolmentCode {
+  emailHash String   @id
+  codeHash  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  createdBy String
+}

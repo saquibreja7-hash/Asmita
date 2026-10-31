@@ -21,7 +21,11 @@ export default defineConfig({
       ENABLE_HASH_UPLOAD: "true",
       ENABLE_PLATFORM_API: "false",
       ENABLE_PROVENANCE_CHECK: "true",
-      DEV_SKIP_ADMIN_MFA: "true",
+      // MFA is enforced as in production; global-setup enrols the synthetic
+      // admins the specs sign sessions for.
+      DEV_SKIP_ADMIN_MFA: "false",
+      ADMIN_EMAILS: "e2e-new-admin@example.invalid",
+      OTP_GLOBAL_HOURLY_LIMIT: "1000",
       // next dev also loads .env.local; pin anything there that would change
       // behaviour or reach a real service, so local runs match CI.
       DEV_SKIP_LEGAL_REVIEW: "false",

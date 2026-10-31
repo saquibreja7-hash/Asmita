@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { isAdminEmail } from "@/lib/auth/admin-allowlist";
 import { resetAdminMfa } from "@/lib/auth/admin-mfa-store";
+import { issueAdminEnrolmentCode } from "@/lib/auth/admin-enrolment";
 import { hashEmail } from "@/lib/hash";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { writeAuditLog } from "@/lib/audit";
@@ -11,9 +12,10 @@ import { logSecurityEvent } from "@/lib/security-log";
 const schema = z.object({ email: z.email() });
 
 /*
- * Clears another admin's authenticator enrolment so they can enrol a new
- * device. Requires users:manage (SUPER_ADMIN). The target falls back to the
- * shared bootstrap secret for their next login, then must re-enrol.
+ * Resets or invites an admin: clears any authenticator enrolment and issues a
+ * one-time enrolment code, returned once in this response, for the SUPER_ADMIN
+ * to hand over out of band. The admin signs in with their email code plus that
+ * code, then enrols a new authenticator. Requires users:manage.
  */
 export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
@@ -30,14 +32,15 @@ export async function POST(request: Request) {
 
   const targetHash = hashEmail(parsed.data.email);
   const removed = await resetAdminMfa(targetHash);
+  const { code, expiresAt } = await issueAdminEnrolmentCode(targetHash, auth.session.sub);
 
   await writeAuditLog({
     eventType: "ADMIN_ACTION",
     entityType: "Admin",
     entityId: `admin-${targetHash.slice(0, 24)}`,
     actorId: auth.session.sub,
-    data: { action: "ADMIN_MFA_RESET", removed },
+    data: { action: "ADMIN_MFA_RESET", removed, enrolmentCodeIssued: true },
   });
 
-  return NextResponse.json({ ok: true, removed });
+  return NextResponse.json({ ok: true, removed, enrolmentCode: code, expiresAt: expiresAt.toISOString() });
 }

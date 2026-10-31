@@ -3,8 +3,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 const PERIOD_SECONDS = 30;
 const DIGITS = 6;
 
-export function verifyAdminTotp(input: { token: string; secret?: string; now?: Date; windowSteps?: number }) {
-  const secret = input.secret || process.env.ADMIN_TOTP_SECRET;
+// Verifies against one admin's own secret. There is no shared fallback secret.
+export function verifyAdminTotp(input: { token: string; secret: string; now?: Date; windowSteps?: number }) {
+  const secret = input.secret;
   if (!secret || !/^\d{6}$/.test(input.token)) return false;
 
   const now = input.now || new Date();

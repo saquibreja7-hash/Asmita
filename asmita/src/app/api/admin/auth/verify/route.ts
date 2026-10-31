@@ -4,6 +4,8 @@ import { z } from "zod";
 import { createAdminIdentity, getAdminRole, isAdminEmail } from "@/lib/auth/admin-allowlist";
 import { verifyAdminTotp } from "@/lib/auth/admin-mfa";
 import { getAdminMfaSecret, touchAdminMfa } from "@/lib/auth/admin-mfa-store";
+import { consumeAdminEnrolmentCode } from "@/lib/auth/admin-enrolment";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { verifyOtp } from "@/lib/auth/otp";
 import { signAdminSession } from "@/lib/auth/jwt";
 import { verifyCsrfRequest } from "@/lib/csrf";
@@ -13,7 +15,8 @@ import { logSecurityEvent } from "@/lib/security-log";
 const schema = z.object({
   email: z.email(),
   otp: z.string().regex(/^\d{6}$/),
-  totp: z.string().regex(/^\d{6}$/),
+  // 6 digits: the admin's authenticator. 12 digits: a one-time enrolment code.
+  totp: z.string().regex(/^(\d{6}|\d{12})$/),
 });
 
 export async function POST(request: Request) {
@@ -29,17 +32,24 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminIdentity(parsed.data.email);
+  const attempts = await checkRateLimitAsync(`admin-verify:${admin.emailHash}`, 5, 15 * 60_000);
+  if (!attempts.allowed) {
+    await logSecurityEvent({ event: "rate_limit_exceeded", actorHash: admin.emailHash, route: "/api/admin/auth/verify" });
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
   const otpOk = await verifyOtp(parsed.data.email, parsed.data.otp);
   const skipMfa = devFlagEnabled("DEV_SKIP_ADMIN_MFA");
-  // Enrolled admins must use their own secret. The shared ADMIN_TOTP_SECRET
-  // only bootstraps a first login so the admin can reach /admin/setup-mfa.
+  // Enrolled admins must use their own authenticator. An admin who has not
+  // enrolled signs in once with a one-time enrolment code issued for them, and
+  // is sent to /admin/setup-mfa. The code is only spent after the email code
+  // checks out, so a wrong email code never burns it.
   const ownSecret = await getAdminMfaSecret(admin.emailHash);
   const enrolled = ownSecret !== null;
   const mfaOk =
     skipMfa ||
     (enrolled
       ? verifyAdminTotp({ token: parsed.data.totp, secret: ownSecret })
-      : Boolean(process.env.ADMIN_TOTP_SECRET) && verifyAdminTotp({ token: parsed.data.totp }));
+      : otpOk && (await consumeAdminEnrolmentCode(admin.emailHash, parsed.data.totp)));
   if (!otpOk || !mfaOk) {
     await logSecurityEvent({
       event: "auth_failed",
@@ -63,7 +73,7 @@ export async function POST(request: Request) {
     entityType: "Admin",
     entityId: admin.id,
     actorId: admin.id,
-    data: { action: "ADMIN_LOGIN", mfa: enrolled ? "enrolled" : "bootstrap" },
+    data: { action: "ADMIN_LOGIN", mfa: enrolled ? "enrolled" : skipMfa ? "dev_skip" : "enrolment_code" },
   });
   const response = NextResponse.json({
     success: true,

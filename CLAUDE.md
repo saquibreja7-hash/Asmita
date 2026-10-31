@@ -57,7 +57,11 @@ These flags exist for local development only. Never set them in `wrangler.jsonc`
 
 ## Admin MFA
 
-Each admin has their own authenticator secret, encrypted at rest in `AdminMfaSecret` (keyed by email hash). `ADMIN_TOTP_SECRET` is only a bootstrap: it works for an admin until they enrol at `/admin/setup-mfa`, after which only their own secret is accepted. Enrolment shows the secret once. A SUPER_ADMIN resets a lost device via `POST /api/admin/mfa/reset` (`users:manage`), which returns that admin to the bootstrap state. Once every admin has enrolled, rotate or remove `ADMIN_TOTP_SECRET`.
+Each admin has their own authenticator secret, encrypted at rest in `AdminMfaSecret` (keyed by email hash). There is no shared bootstrap secret (`ADMIN_TOTP_SECRET` is gone). An admin who has not enrolled signs in once with their email code plus a one-time 12-digit enrolment code (`AdminEnrolmentCode`: hashed, single use, 24 hours), then enrols at `/admin/setup-mfa`. A SUPER_ADMIN issues codes via `POST /api/admin/mfa/reset` (`users:manage`), which also clears a lost device; the very first code comes from `asmita/scripts/issue-admin-enrolment-code.mjs`. Admin sign-in and MFA confirmation allow 5 attempts per 15 minutes.
+
+## Rate limits
+
+Counters live in Postgres (`RateLimitBucket`, keys hashed) so every Worker isolate shares them; on a database error the in-memory counter still applies. Buckets many users share (client IP, email domain) pass `{ shared: true }` and are the only ones the E2E bypass lifts. Survivor OTP emails also have a site-wide hourly budget (`OTP_GLOBAL_HOURLY_LIMIT`, default 300). The maintenance cron prunes old counters.
 
 ## Notice integrity in code
 

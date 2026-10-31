@@ -62,7 +62,7 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   }
 
   const limit = await checkRateLimitAsync(`urls:${caseId}`, 10, 24 * 60 * 60_000);
-  const ipLimit = await checkRateLimitAsync(`url-submit-ip:${getClientIp(request)}`, 30, 60 * 60_000);
+  const ipLimit = await checkRateLimitAsync(`url-submit-ip:${getClientIp(request)}`, 30, 60 * 60_000, { shared: true });
   if (!limit.allowed || !ipLimit.allowed) {
     await logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/cases/[caseId]/urls", reason: caseId });
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });

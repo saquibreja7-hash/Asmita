@@ -6,6 +6,7 @@ import { signAdminSession } from "@/lib/auth/jwt";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { writeAuditLog } from "@/lib/audit";
 import { logSecurityEvent } from "@/lib/security-log";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 
 const schema = z.object({ token: z.string().regex(/^\d{6}$/) });
 
@@ -18,6 +19,13 @@ export async function POST(request: Request) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
+  // Guessing a 6-digit code needs many attempts; allow 5 per 15 minutes.
+  const attempts = await checkRateLimitAsync(`admin-mfa-confirm:${auth.session.emailHash}`, 5, 15 * 60_000);
+  if (!attempts.allowed) {
+    await logSecurityEvent({ event: "rate_limit_exceeded", actorHash: auth.session.emailHash,
+      route: "/api/admin/mfa/confirm" });
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
   if (!(await confirmAdminMfa(auth.session.emailHash, parsed.data.token))) {
     await logSecurityEvent({ event: "auth_failed", actorHash: auth.session.emailHash,
       route: "/api/admin/mfa/confirm", reason: "invalid_totp" });

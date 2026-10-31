@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { AdminLogoutButton } from "./AdminLogoutButton";
 import AdminLoginPage from "@/app/admin/login/page";
+import SetupMfaPage from "@/app/admin/setup-mfa/page";
 
 const adminLinks: Array<[string, string]> = [
   ["/admin/cases", "Cases"],
@@ -24,6 +25,9 @@ export default async function AdminLayout({
   const auth = await requireAdmin();
 
   if (!auth.ok) {
+    // Signed in with an enrolment code but not enrolled yet: the only thing
+    // this session may do is set up its authenticator, on any admin path.
+    if (auth.error === "mfa_setup_required") return <SetupMfaPage />;
     return <AdminLoginPage />;
   }
 

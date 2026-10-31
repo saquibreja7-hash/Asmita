@@ -51,7 +51,7 @@ export default async function PortalPage({
     const reqHeaders = await headers();
     const ip = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
     // 5 attempts per token per IP per 15 minutes - prevents access code brute-force.
-    const rl = await checkRateLimitAsync(`portal:${token.slice(0, 16)}:${ip}`, 5, 15 * 60 * 1000);
+    const rl = await checkRateLimitAsync(`portal:${token.slice(0, 16)}:${ip}`, 5, 15 * 60 * 1000, { shared: true });
     if (!rl.allowed) redirect(`/r/${token}?error=rate_limited`);
 
     const code = (formData.get("code") as string | null)?.trim() ?? "";
