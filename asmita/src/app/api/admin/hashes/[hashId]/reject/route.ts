@@ -3,6 +3,9 @@ import { z } from "zod";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { reviewHashSubmission } from "@/lib/hash-submission";
+import { db } from "@/lib/db";
+import { writeAuditLog } from "@/lib/audit";
+import { voidUnsentSignaturesListing } from "@/lib/case-hash-annex";
 
 const schema = z.object({ reason: z.string().max(500).optional() });
 
@@ -28,16 +31,31 @@ export async function POST(
   } catch {
     // Body is optional for rejections.
   }
+  let submission;
   try {
-    const submission = await reviewHashSubmission({
+    submission = await reviewHashSubmission({
       hashSubmissionId: hashId,
       decision: "reject",
       reviewerId: auth.session.sub,
       reason,
     });
-    return NextResponse.json({ success: true, submission });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "error";
     return NextResponse.json({ error: msg }, { status: 404 });
   }
+
+  // Unsent signatures that list this fingerprint can never be dispatched;
+  // void them so the survivor can sign the current set again.
+  const { caseId } = await db.hashSubmission.findUniqueOrThrow({ where: { id: hashId }, select: { caseId: true } });
+  const voided = await voidUnsentSignaturesListing(caseId, hashId);
+  if (voided.urlNotices > 0 || voided.hashAdvisory) {
+    await writeAuditLog({
+      eventType: "ADMIN_ACTION",
+      entityType: "Case",
+      entityId: caseId,
+      actorId: auth.session.sub,
+      data: { action: "signatures_voided_by_rejection", hashSubmissionId: hashId, ...voided },
+    });
+  }
+  return NextResponse.json({ success: true, submission, voided });
 }

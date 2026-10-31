@@ -42,10 +42,12 @@ export async function buildHashAnnexForSigning(caseId: string): Promise<HashAnne
 
 export type SignedAnnexResult =
   | { ok: true; annex: HashAnnex }
-  | { ok: false; reason: "fingerprints_pending_review" | "signed_fingerprints_changed" };
+  | { ok: false; reason: "fingerprints_pending_review" | "signed_fingerprints_changed" | "hash_upload_disabled" };
 
 export async function buildSignedHashAnnex(signedIds: string[]): Promise<SignedAnnexResult> {
   if (signedIds.length === 0) return { ok: true, annex: EMPTY };
+  // Dropping the fingerprints would make the email differ from the PDF.
+  if (process.env.ENABLE_HASH_UPLOAD !== "true") return { ok: false, reason: "hash_upload_disabled" };
   const rows = await db.hashSubmission.findMany({
     where: { id: { in: signedIds } },
     orderBy: { submittedAt: "asc" },
@@ -57,4 +59,33 @@ export async function buildSignedHashAnnex(signedIds: string[]): Promise<SignedA
     return { ok: false, reason: "fingerprints_pending_review" };
   }
   return { ok: true, annex: render(rows) };
+}
+
+/*
+ * A rejected fingerprint can never be sent, so a signature that lists it
+ * could never be dispatched. Every such signature that has not gone out yet
+ * is voided, and the survivor signs the current set again. Signatures already
+ * sent are left as the record of what was sent.
+ */
+export async function voidUnsentSignaturesListing(caseId: string, hashSubmissionId: string) {
+  const urls = await db.submittedUrl.updateMany({
+    where: { caseId, signedHashSubmissionIds: { has: hashSubmissionId }, notices: { none: {} } },
+    data: { signedNoticePdf: null, signedHashSubmissionIds: [] },
+  });
+
+  let hashAdvisory = false;
+  const dbCase = await db.case.findUnique({ where: { id: caseId }, select: { hashAdvisorySignedHashIds: true } });
+  if (dbCase?.hashAdvisorySignedHashIds.includes(hashSubmissionId)) {
+    const sent = await db.hashDispatch.count({
+      where: { hashSubmissionId: { in: dbCase.hashAdvisorySignedHashIds } },
+    });
+    if (sent === 0) {
+      await db.case.update({
+        where: { id: caseId },
+        data: { signedHashAdvisoryPdf: null, hashAdvisorySignedHashIds: [] },
+      });
+      hashAdvisory = true;
+    }
+  }
+  return { urlNotices: urls.count, hashAdvisory };
 }

@@ -121,7 +121,7 @@ async function signNextNotice(page: Page, caseId: string) {
 }
 
 test.describe("notice integrity", () => {
-  test("each signed URL notice sends exactly the fingerprints it lists", async ({ page, browser }, testInfo) => {
+  test("each signed URL notice sends exactly the fingerprints it lists, and a rejection asks for a new signature", async ({ page, browser }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
     test.setTimeout(180_000);
     const caseId = await reportWithFingerprint(page, [
@@ -162,14 +162,28 @@ test.describe("notice integrity", () => {
     expect(early.status(), await early.text()).toBe(409);
     expect(await early.json()).toEqual({ error: "fingerprints_pending_review" });
 
-    for (const id of [fingerprintA, fingerprintB]) {
-      expect((await post(admin, `/api/admin/hashes/${id}/approve`, {})).ok()).toBe(true);
-    }
-    for (const { id } of signedSets) {
-      const sent = await post(admin, "/api/notices/dispatch", { caseId, urlId: id });
-      expect(sent.ok()).toBe(true);
-      expect((await sent.json()).dispatched).toBe(true);
-    }
+    // A is approved, B is rejected. The second notice listed B and can never
+    // be sent as signed, so its signature is voided; the first is untouched.
+    expect((await post(admin, `/api/admin/hashes/${fingerprintA}/approve`, {})).ok()).toBe(true);
+    const rejected = await post(admin, `/api/admin/hashes/${fingerprintB}/reject`, { reason: "synthetic" });
+    expect(rejected.ok()).toBe(true);
+    expect((await rejected.json()).voided).toEqual({ urlNotices: 1, hashAdvisory: false });
+
+    const sendFirst = await post(admin, "/api/notices/dispatch", { caseId, urlId: first.id });
+    expect((await sendFirst.json()).dispatched).toBe(true);
+    const unsigned = await post(admin, "/api/notices/dispatch", { caseId, urlId: second.id });
+    expect(unsigned.status()).toBe(409);
+    expect(await unsigned.json()).toEqual({ error: "signature_required" });
+
+    // The survivor signs the second notice again; it now lists only A.
+    await signNextNotice(page, caseId);
+    const resigned = await withAdmin(async (db) =>
+      (await db.query('SELECT "signedHashSubmissionIds" AS ids FROM "SubmittedUrl" WHERE id = $1', [second.id])).rows[0]
+        .ids as string[],
+    );
+    expect(resigned).toEqual([fingerprintA]);
+    const sendSecond = await post(admin, "/api/notices/dispatch", { caseId, urlId: second.id });
+    expect((await sendSecond.json()).dispatched).toBe(true);
 
     // The audit trail shows each notice carried only what its PDF lists:
     // fingerprint B, added after the first signature, never rides on it.
@@ -185,7 +199,7 @@ test.describe("notice integrity", () => {
       ),
     );
     expect(sentSets[first.id]).toEqual([fingerprintA]);
-    expect(sentSets[second.id]).toEqual([fingerprintA, fingerprintB]);
+    expect(sentSets[second.id]).toEqual([fingerprintA]);
   });
 
   test("a signed hash advisory never carries fingerprints added after signing", async ({ page, browser }, testInfo) => {
