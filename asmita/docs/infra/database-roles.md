@@ -17,6 +17,12 @@ Local run: start Postgres 17 on port 5433 (`docker run -d --name asmita-e2e-db -
 
 The migration is safe to apply while Hyperdrive still connects as `postgres`, because table owners bypass row-level security.
 
+0. **Before deploying this release,** generate a new random value and set it in both places, so the keepalive keeps working:
+   ```bash
+   npx wrangler secret put HEALTH_CHECK_SECRET --name asmita-production
+   ```
+   and as the GitHub repository secret `HEALTH_CHECK_SECRET`.
+
 1. **Apply the migration** from `asmita/`, with `DIRECT_URL` from `.env.production.local`. It requires Postgres 17 (check with `show server_version;` in the SQL editor) and refuses to run on older servers:
    ```bash
    npx prisma migrate deploy
@@ -54,7 +60,7 @@ The migration is safe to apply while Hyperdrive still connects as `postgres`, be
 
 ## Adding a table
 
-Run migrations as `postgres`: default privileges only cover tables that role creates. A new table automatically gives `asmita_app` select, insert, update and delete. In the same migration:
+Run migrations as `postgres`: default privileges only cover tables that role creates (Supabase's own `supabase_admin` defaults still grant `anon` on tables it creates, which is why the e2e journey checks every table in `public`). A new table automatically gives `asmita_app` select, insert, update and delete. In the same migration:
 
 - enable row-level security and add the `asmita_app_all` policy, or the app role cannot see its rows and the e2e journeys fail;
 - for an append-only table, `REVOKE UPDATE, DELETE` from `asmita_app`, as for `audit_log`.
