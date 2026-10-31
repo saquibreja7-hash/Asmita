@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { IBM_Plex_Mono, Newsreader } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import "@fontsource/noto-sans-devanagari/400.css";
 import "@fontsource/noto-sans-devanagari/700.css";
 import "@fontsource/noto-serif-devanagari/400.css";
@@ -86,7 +85,6 @@ export default async function RootLayout({
     >
       <body className="min-h-full">
         {children}
-        <Analytics />
       </body>
     </html>
   );

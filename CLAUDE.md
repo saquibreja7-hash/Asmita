@@ -36,7 +36,7 @@ Both URL takedown and image fingerprint (hash) submission are live and deployed.
 | Hash upload (PDQ fingerprinting) | `ENABLE_HASH_UPLOAD=true` | Built, deployed (Worker vars in `wrangler.jsonc`) |
 | Platform API (StopNCII, I4C) | `ENABLE_PLATFORM_API=true` | Not yet built |
 | Provenance check | `ENABLE_PROVENANCE_CHECK=true` | Off in staging and production |
-| BullMQ queue | `QUEUE_DRIVER=bullmq` + `REDIS_URL` | Not used on Workers. Scheduled work runs on Cron Triggers plus database sweeps |
+| Scheduled work | none | Cron Triggers plus database sweeps. BullMQ/Redis removed (2026-10-31) |
 
 ## Survivor Paths
 
@@ -95,12 +95,12 @@ Next.js 16 App Router + TypeScript, built with vinext and run on Cloudflare Work
 - `src/app/` — route groups: `(public)`, `(victim)`, `(admin)`, `(auth)`, `api/`
 - `src/lib/` — domain logic: case lifecycle (`case-ops.ts` = database, Kysely on the Worker via `worker-kysely.ts` and Prisma otherwise; `store.ts` = memory dev/test), notice generation/dispatch (`notice-*.ts`), hash submission/dispatch (`hash-submission.ts`, `hash-dispatch.ts`), escalation, audit, encryption, rate limiting, CSRF
 - `src/lib/auth/` — OTP login, JWT (jose), admin allowlist + MFA + permissions
-- `src/jobs/` — queue abstraction: in-memory by default; BullMQ code remains but is not used in deployment
+- `src/jobs/` — in-memory job arrays (not used for production delivery)
 - `src/cloudflare-worker.ts` — Worker entry, including Cron Trigger handlers
 - `prisma/` — schema, migrations, seeds (notice templates in `template-seeds.ts`)
 - `docs/` — ops, legal, security, ADR docs. `docs/infra/cloudflare-migration.md` is the current deployment runbook. `docs/archive/` is historical (May 2026 Vercel design) and is kept only for the PRD citations and the PDQ system design
 
-**Dual-backend pattern:** queue, store, rate limit, email all have a memory path (dev/test) and a real implementation (Prisma/Redis/Resend) selected by env vars. Production must use the database path (`case-ops.ts`), never `store.ts`.
+**Dual-backend pattern:** store, audit/persistence and email have a memory path (dev/test) and a real implementation (Prisma/Kysely, Resend) selected by env vars. Rate limiting is in-memory only. Production must use the database path (`case-ops.ts`), never `store.ts`.
 
 ## Next.js Note
 

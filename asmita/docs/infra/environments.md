@@ -8,7 +8,6 @@ Asmita uses three isolated environments. Never reuse production secrets in local
 
 - Runtime: developer machine (`npm run dev`, or `npm run dev:vinext` for the Worker build).
 - Database: memory store by default; set `DATABASE_URL` in `.env.local` to use local PostgreSQL through Prisma.
-- Rate limit: `RATE_LIMIT_DRIVER=memory`.
 - Email proof persistence: `EMAIL_PROOF_PERSISTENCE=memory`.
 - Email: no real notice dispatch; dev OTP may be returned only outside production.
 - Required checks: `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`.

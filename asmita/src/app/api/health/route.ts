@@ -23,7 +23,6 @@ export async function GET(request: Request) {
       ok: true,
       service: "asmita",
       db: database,
-      redis: process.env.REDIS_URL ? "configured" : "not_configured",
     });
   }
   return NextResponse.json({ ok: true });

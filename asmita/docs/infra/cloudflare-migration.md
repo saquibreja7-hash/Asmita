@@ -88,7 +88,7 @@ ENABLE_HASH_UPLOAD=true
 
 `DATABASE_URL` is set by `src/cloudflare-worker.ts` from the Hyperdrive binding, and `ASMITA_DATABASE_DRIVER=pg` is set there as an internal Worker runtime switch. Do not create either as a public variable or Worker secret. Keep `DIRECT_URL` only in an ignored migration environment.
 
-Do not set `QUEUE_DRIVER=bullmq` on Workers. The current migration uses the database-backed cron sweeps; the legacy in-process queue arrays are not a production delivery mechanism. Add Cloudflare Queues only when an actively consumed asynchronous job path is introduced.
+Scheduled work uses the database-backed cron sweeps. The in-process queue arrays in `src/jobs/queue.ts` are not a production delivery mechanism (BullMQ and Redis were removed on 2026-10-31). Add Cloudflare Queues only when an actively consumed asynchronous job path is introduced.
 
 Keep `ENABLE_PLATFORM_API=false` until each external platform integration is configured and tested.
 
