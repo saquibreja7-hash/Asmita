@@ -52,9 +52,9 @@ describe("ops documentation", () => {
     expect(environments).toContain("Local");
     expect(environments).toContain("Staging");
     expect(environments).toContain("Production");
-    expect(environments).toContain("India-region deployment");
-    expect(environments).toContain("ENABLE_HASH_UPLOAD=false");
-    expect(environments).toContain("/admin/milestones");
+    expect(environments).toContain("Supabase (Mumbai");
+    expect(environments).toContain("DEV_SKIP_LEGAL_REVIEW");
+    expect(environments).toContain("/api/health");
     expect(environments).toContain("Smoke-Test Evidence");
   });
 });

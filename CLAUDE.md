@@ -98,7 +98,7 @@ Next.js 16 App Router + TypeScript, built with vinext and run on Cloudflare Work
 - `src/jobs/` — queue abstraction: in-memory by default; BullMQ code remains but is not used in deployment
 - `src/cloudflare-worker.ts` — Worker entry, including Cron Trigger handlers
 - `prisma/` — schema, migrations, seeds (notice templates in `template-seeds.ts`)
-- `docs/` — ops, legal, security, ADR docs. `docs/infra/cloudflare-migration.md` is the current deployment runbook. `docs/archive/` and `docs/ai-agent-handoff.md` are historical (May 2026 Vercel design)
+- `docs/` — ops, legal, security, ADR docs. `docs/infra/cloudflare-migration.md` is the current deployment runbook. `docs/archive/` is historical (May 2026 Vercel design) and is kept only for the PRD citations and the PDQ system design
 
 **Dual-backend pattern:** queue, store, rate limit, email all have a memory path (dev/test) and a real implementation (Prisma/Redis/Resend) selected by env vars. Production must use the database path (`case-ops.ts`), never `store.ts`.
 
