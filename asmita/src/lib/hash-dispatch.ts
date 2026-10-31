@@ -58,7 +58,7 @@ export async function dispatchHashAdvisories(input: {
   const signed = await buildSignedHashAnnex(dbCase.hashAdvisorySignedHashIds);
   if (!signed.ok) {
     if (signed.reason === "signed_fingerprints_changed") {
-      await voidSignaturesWithRejectedFingerprints(input.caseId);
+      await voidSignaturesWithRejectedFingerprints(input.caseId, { trigger: "dispatch", actorId: input.actorId });
     }
     throw new Error(signed.reason);
   }

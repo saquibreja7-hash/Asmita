@@ -173,6 +173,18 @@ test.describe("notice integrity", () => {
     const rejected = await post(admin, `/api/admin/hashes/${fingerprintB}/reject`, { reason: "synthetic" });
     expect(rejected.ok()).toBe(true);
     expect((await rejected.json()).voided).toEqual({ urlNotices: 1, hashAdvisory: false });
+    const voidAudit = await withAdmin(async (db) =>
+      (
+        await db.query(
+          `SELECT data FROM "audit_log" WHERE "eventType" = 'ADMIN_ACTION' AND "entityId" = $1
+           AND data->>'action' = 'signatures_voided'`,
+          [caseId],
+        )
+      ).rows.map((r) => r.data),
+    );
+    expect(voidAudit).toEqual([
+      expect.objectContaining({ trigger: "rejection", urlIds: [second.id], hashAdvisory: false }),
+    ]);
 
     const sendFirst = await post(admin, "/api/notices/dispatch", { caseId, urlId: first.id });
     expect((await sendFirst.json()).dispatched).toBe(true);

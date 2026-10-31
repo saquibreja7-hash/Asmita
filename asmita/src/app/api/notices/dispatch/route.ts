@@ -103,7 +103,7 @@ export async function POST(request: Request) {
     // A signature listing a rejected fingerprint can never go out: void it so
     // the survivor signs again (heals a failed or raced void at rejection).
     if (signedAnnex.reason === "signed_fingerprints_changed") {
-      await voidSignaturesWithRejectedFingerprints(parsed.data.caseId);
+      await voidSignaturesWithRejectedFingerprints(parsed.data.caseId, { trigger: "dispatch", actorId: auth.session.sub });
     }
     return NextResponse.json({ error: signedAnnex.reason }, { status: 409 });
   }

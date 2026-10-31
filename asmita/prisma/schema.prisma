@@ -143,7 +143,6 @@ model User {
 
   cases         Case[]     @relation("VictimCases")
   verifiedCases Case[]     @relation("NgoVerifiedCases")
-  auditLogs     AuditLog[]
   adminProfile  AdminProfile?
   sessionTokens SessionToken[]
   ngoApiKeys    NgoApiKey[]
@@ -381,8 +380,8 @@ model AuditLog {
   eventHash    String         @unique
   createdAt    DateTime       @default(now())
 
-  actor User? @relation(fields: [actorId], references: [id])
-
+  // actorId is a survivor's User id or an admin id (admin-...), so it has no
+  // foreign key; the log is append-only and outlives the actors it records.
   @@index([entityId])
   @@index([createdAt])
   @@map("audit_log")

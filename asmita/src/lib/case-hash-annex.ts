@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/encryption";
 import { buildHashAnnex } from "@/lib/notice-generator";
+import { writeAuditLog } from "@/lib/audit";
 
 /*
  * One builder for the fingerprint annex so the notice the survivor previews,
@@ -71,7 +72,10 @@ export async function buildSignedHashAnnex(signedIds: string[]): Promise<SignedA
  * dispatch finds a signed set that is no longer valid, so a failure or race
  * between rejecting and signing heals on the next attempt.
  */
-export async function voidSignaturesWithRejectedFingerprints(caseId: string) {
+export async function voidSignaturesWithRejectedFingerprints(
+  caseId: string,
+  context: { trigger: "rejection" | "dispatch"; actorId?: string },
+) {
   const usable = new Set(
     (
       await db.hashSubmission.findMany({
@@ -110,6 +114,16 @@ export async function voidSignaturesWithRejectedFingerprints(caseId: string) {
       });
       hashAdvisory = true;
     }
+  }
+  // Voiding a survivor-signed document is always on the audit trail.
+  if (voidUrlIds.length > 0 || hashAdvisory) {
+    await writeAuditLog({
+      eventType: "ADMIN_ACTION",
+      entityType: "Case",
+      entityId: caseId,
+      actorId: context.actorId,
+      data: { action: "signatures_voided", trigger: context.trigger, urlIds: voidUrlIds, hashAdvisory },
+    });
   }
   return { urlNotices: voidUrlIds.length, hashAdvisory };
 }
