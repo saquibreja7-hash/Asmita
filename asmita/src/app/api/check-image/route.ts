@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   }
 
   const ip = getClientIp(request);
-  const limit = await checkRateLimitAsync(`check-image:${sha256(ip)}`, 10, 60 * 60 * 1000);
+  const limit = await checkRateLimitAsync(`check-image:${sha256(ip)}`, 10, 60 * 60 * 1000, { shared: true });
   if (!limit.allowed) {
     await logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/check-image" });
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });

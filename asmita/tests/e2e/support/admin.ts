@@ -3,6 +3,10 @@ import { SignJWT } from "jose";
 
 export const baseURL = "http://127.0.0.1:3001";
 
+// Synthetic admin identities the specs sign sessions for; global-setup enrols
+// each one, since MFA is enforced in E2E as in production.
+export const enrolledTestAdmins = ["e2e-admin", "integrity-admin", "admin-hash"];
+
 // A signed admin session, as /api/admin/auth/verify would issue it.
 export function signAdminToken(sub = "e2e-admin") {
   return new SignJWT({

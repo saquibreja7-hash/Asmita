@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 
 export function AdminLoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [totp, setTotp] = useState("");
@@ -41,11 +39,19 @@ export function AdminLoginForm() {
         method: "POST",
         body: JSON.stringify({ email, otp, totp }),
       });
+      if (response.status === 429) {
+        setError("Too many attempts. Please wait 15 minutes and try again.");
+        return;
+      }
       if (!response.ok) {
         setError("The email code or authenticator code did not match.");
         return;
       }
-      router.push("/admin/cases");
+      // A first sign-in with an enrolment code goes to authenticator setup.
+      // A full page load, not router.push: the admin layout is shared by these
+      // routes and must re-check the new session cookie.
+      const { redirectTo } = (await response.json()) as { redirectTo?: string };
+      window.location.assign(redirectTo === "/admin/setup-mfa" ? "/admin/setup-mfa" : "/admin/cases");
     } catch {
       setError("The request timed out. Please try again.");
     } finally {
@@ -109,16 +115,16 @@ export function AdminLoginForm() {
           </Row>
           <Row
             label="Authenticator code"
-            hint="6-digit TOTP from your authenticator app."
+            hint="6-digit code from your authenticator app, or the 12-digit setup code you were given."
             htmlFor="admin-totp"
           >
             <input
-              className="field font-mono text-center text-2xl tracking-[0.4em]"
+              className="field font-mono text-center text-2xl tracking-[0.2em]"
               id="admin-totp"
               inputMode="numeric"
-              maxLength={6}
+              maxLength={12}
               onChange={(event) =>
-                setTotp(event.target.value.replace(/\D/g, "").slice(0, 6))
+                setTotp(event.target.value.replace(/\D/g, "").slice(0, 12))
               }
               value={totp}
             />
@@ -138,7 +144,7 @@ export function AdminLoginForm() {
           disabled={
             loading ||
             !email ||
-            (step === "verify" && (otp.length !== 6 || totp.length !== 6))
+            (step === "verify" && (otp.length !== 6 || (totp.length !== 6 && totp.length !== 12)))
           }
           type="submit"
         >

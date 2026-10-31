@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 
 type Enrolment = { secret: string; qrSvg: string };
 
 export function EnrolMfa() {
-  const router = useRouter();
   const [state, setState] = useState<"idle" | "loading" | "staged" | "confirming" | "error">("idle");
   const [enrolment, setEnrolment] = useState<Enrolment | null>(null);
   const [code, setCode] = useState("");
@@ -48,12 +46,14 @@ export function EnrolMfa() {
       });
       if (!res.ok) {
         setError(res.status === 401 ? "That code did not match. Check your authenticator and try again."
+          : res.status === 429 ? "Too many attempts. Please wait 15 minutes and try again."
           : "Could not finish setup. Try again or sign in again if your session expired.");
         setState("staged");
         return;
       }
-      router.replace("/admin/cases");
-      router.refresh();
+      // Full page load so the shared admin layout re-checks the upgraded session.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- the shared admin layout must re-check the session
+      window.location.assign("/admin/cases");
     } catch {
       setError("Network error. Try again.");
       setState("staged");

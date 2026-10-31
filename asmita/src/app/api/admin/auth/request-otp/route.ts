@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     let ipLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
     try {
       emailLimit = await checkRateLimitAsync(`admin-otp:${emailHash}`, 5, 60 * 60_000);
-      ipLimit = await checkRateLimitAsync(`admin-login-ip:${getClientIp(request)}`, 10, 60 * 60_000);
+      ipLimit = await checkRateLimitAsync(`admin-login-ip:${getClientIp(request)}`, 10, 60 * 60_000, { shared: true });
     } catch (error) {
       await logSecurityEvent({
         event: "rate_limit_unavailable",

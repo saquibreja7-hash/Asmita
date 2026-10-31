@@ -11,6 +11,13 @@ import { getClientIp } from "@/lib/request-ip";
 
 const schema = z.object({ email: z.email() });
 
+// Default 300 OTP emails per hour across the whole site; override with
+// OTP_GLOBAL_HOURLY_LIMIT.
+function otpGlobalHourlyLimit() {
+  const value = Number(process.env.OTP_GLOBAL_HOURLY_LIMIT);
+  return Number.isInteger(value) && value > 0 ? value : 300;
+}
+
 const PUBLIC_MAIL_DOMAINS = new Set([
   "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.in", "yahoo.in", "ymail.com",
   "outlook.com", "hotmail.com", "live.com", "msn.com", "icloud.com", "me.com",
@@ -32,6 +39,7 @@ export async function POST(request: Request) {
     let emailLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
     let domainLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
     let ipLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
+    let globalLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
     try {
       emailLimit = await checkRateLimitAsync(`otp:${emailHash}`, 10, 60 * 60_000);
       const domain = parsed.data.email.split("@")[1]?.toLowerCase() || "unknown";
@@ -40,9 +48,13 @@ export async function POST(request: Request) {
       // unusual domains, which is where bulk fake signups come from.
       domainLimit = PUBLIC_MAIL_DOMAINS.has(domain)
         ? { allowed: true, remaining: Number.MAX_SAFE_INTEGER }
-        : await checkRateLimitAsync(`registration-domain:${domain}`, 10, 24 * 60 * 60_000);
+        : await checkRateLimitAsync(`registration-domain:${domain}`, 10, 24 * 60 * 60_000, { shared: true });
       // Carrier-grade NAT on Indian mobile networks puts many people behind one IP.
-      ipLimit = await checkRateLimitAsync(`registration-ip:${getClientIp(request)}`, 30, 60 * 60_000);
+      ipLimit = await checkRateLimitAsync(`registration-ip:${getClientIp(request)}`, 30, 60 * 60_000, { shared: true });
+      // A site-wide hourly budget, so a flood of fake sign-ups spread across
+      // many IPs and addresses cannot exhaust the email quota and sender
+      // reputation survivors depend on.
+      globalLimit = await checkRateLimitAsync("otp-global", otpGlobalHourlyLimit(), 60 * 60_000);
     } catch (error) {
       await logSecurityEvent({
         event: "rate_limit_unavailable",
@@ -52,8 +64,13 @@ export async function POST(request: Request) {
       });
       return NextResponse.json({ error: "service_unavailable" }, { status: 503 });
     }
-    if (!emailLimit.allowed || !domainLimit.allowed || !ipLimit.allowed) {
-      await logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/auth/request-otp" });
+    if (!emailLimit.allowed || !domainLimit.allowed || !ipLimit.allowed || !globalLimit.allowed) {
+      await logSecurityEvent({
+        event: "rate_limit_exceeded",
+        actorHash: emailHash,
+        route: "/api/auth/request-otp",
+        reason: globalLimit.allowed ? undefined : "global_budget",
+      });
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }
   }

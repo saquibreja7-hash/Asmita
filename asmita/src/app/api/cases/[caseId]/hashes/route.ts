@@ -102,6 +102,7 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     `hash-submit-ip:${getClientIp(request)}`,
     40,
     60 * 60_000,
+    { shared: true },
   );
   if (!limit.allowed || !ipLimit.allowed) {
     await logSecurityEvent({ event: "rate_limit_exceeded", route: "/api/cases/[caseId]/hashes", reason: caseId });

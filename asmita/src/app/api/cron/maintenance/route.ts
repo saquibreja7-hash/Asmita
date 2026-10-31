@@ -6,6 +6,7 @@ import { sendOnCallAlertFireAndForget } from "@/lib/alerts";
 import type { DeliveryEvent } from "@/lib/webhook-events";
 import type { PlatformDirectoryEntry } from "@/lib/platforms";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import { pruneRateLimitBuckets } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
     finishedAt?: string;
     reverification?: { dueCount: number; items: ReturnType<typeof createReverificationQueue> };
     deliverability?: ReturnType<typeof summarizeDeliverability>;
+    rateLimitBucketsPruned?: number;
     error?: string;
   } = { startedAt: startedAt.toISOString() };
 
@@ -52,6 +54,8 @@ export async function GET(request: NextRequest) {
         route: "/api/cron/maintenance",
       });
     }
+
+    result.rateLimitBucketsPruned = await pruneRateLimitBuckets();
 
     result.finishedAt = new Date().toISOString();
     return NextResponse.json(result);

@@ -6,12 +6,10 @@ import { verifyAdminTotp } from "@/lib/auth/admin-mfa";
 /*
  * Per-admin TOTP secrets, encrypted at rest and keyed by the admin's email hash.
  *
- * Login order of preference:
- *   1. the admin's own enrolled secret;
- *   2. only while an admin has NOT enrolled, the shared ADMIN_TOTP_SECRET env
- *      value as a bootstrap so a first login can reach /admin/setup-mfa.
- * Once enrolled, the shared secret no longer works for that admin. A SUPER_ADMIN
- * can reset an enrolment, which returns that admin to the bootstrap state.
+ * An enrolled admin signs in with their own secret. An admin who has not
+ * enrolled signs in once with a one-time enrolment code (admin-enrolment.ts)
+ * and enrols here. A SUPER_ADMIN reset clears the enrolment and issues a new
+ * code. There is no shared bootstrap secret.
  */
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";

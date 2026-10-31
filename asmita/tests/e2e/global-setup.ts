@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { enrolledTestAdmins } from "./support/admin";
 import { adminUrl, appRole, withAdmin } from "./support/database";
 
 // Fresh database per run, shaped like Supabase: the Data API roles receive
@@ -24,11 +25,20 @@ export default async function globalSetup() {
   execSync("npx prisma migrate deploy", { env, stdio: "inherit" });
   execSync("npx prisma db seed", { env, stdio: "inherit" });
 
-  await withAdmin((db) =>
-    db.query(`DO $$ BEGIN
+  await withAdmin(async (db) => {
+    await db.query(`DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${appRole}') THEN
         CREATE ROLE ${appRole} LOGIN PASSWORD 'e2e' IN ROLE asmita_app;
       END IF;
-    END $$`),
-  );
+    END $$`);
+    // Specs sign admin sessions for these synthetic identities; with MFA
+    // enforced, each needs a confirmed enrolment (the secret is never used).
+    for (const emailHash of enrolledTestAdmins) {
+      await db.query(
+        `INSERT INTO "AdminMfaSecret" ("emailHash", "secretEncrypted", "enrolledAt", "confirmedAt")
+         VALUES ($1, 'unused', now(), now()) ON CONFLICT ("emailHash") DO NOTHING`,
+        [emailHash],
+      );
+    }
+  });
 }
