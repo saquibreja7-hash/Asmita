@@ -107,7 +107,7 @@ export default async function HowItWorksPage() {
                     />
                   )}
                   <div
-                    className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] font-mono text-[11px] font-semibold tracking-widest text-[var(--teal)]"
+                    className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] font-mono text-[11px] font-medium tracking-widest text-[var(--teal)]"
                     style={{ boxShadow: "var(--shadow-soft)" }}
                   >
                     {step.num}
@@ -190,7 +190,7 @@ export default async function HowItWorksPage() {
                   }}
                 >
                   <p
-                    className="mb-4 font-mono text-[11px] font-semibold uppercase tracking-[0.16em]"
+                    className="mb-4 font-mono text-[11px] font-medium uppercase tracking-[0.16em]"
                     style={{ color: i === 0 ? "var(--teal)" : i === 1 ? "var(--saffron)" : "var(--rose)" }}
                   >
                     {item.day}

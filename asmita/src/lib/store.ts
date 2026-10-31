@@ -9,6 +9,7 @@ export type CaseRecord = {
   id: string;
   referenceNumber: string;
   userId: string;
+  registrationKeyHash?: string | null;
   createdAt: string;
   status: "OPEN" | "RESOLVED";
   urls: UrlRecord[];
@@ -58,12 +59,13 @@ export function createReferenceNumber() {
   return generateCaseReference();
 }
 
-export async function createCase(userId: string) {
+export async function createCase(userId: string, registrationKeyHash?: string) {
   assertDevOrTest();
   const record: CaseRecord = {
     id: randomUUID(),
     referenceNumber: createReferenceNumber(),
     userId,
+    registrationKeyHash,
     createdAt: new Date().toISOString(),
     status: "OPEN",
     urls: [],

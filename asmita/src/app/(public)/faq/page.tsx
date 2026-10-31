@@ -88,37 +88,11 @@ export default async function FaqPage() {
                 {section.title}
               </h2>
 
-              <div
-                className="mt-8 divide-y divide-[var(--hairline)] rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
-                style={{ boxShadow: "var(--shadow-soft)" }}
-              >
+              <div className="mt-8 border-t border-[var(--color-ash)]">
                 {section.items.map((faq) => (
-                  <details key={faq.question} className="group">
-                    <summary className="flex cursor-pointer items-start justify-between gap-6 px-6 py-5 marker:content-none list-none [&::-webkit-details-marker]:hidden">
-                      <span className="font-medium text-[var(--foreground)] text-base leading-[1.5] md:text-[17px]">
-                        {faq.question}
-                      </span>
-                      <svg
-                        className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)] transition-transform duration-200 group-open:rotate-180"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                        aria-hidden
-                      >
-                        <path
-                          d="M4 6l4 4 4-4"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </summary>
-                    <div className="px-6 pb-6 pt-1">
-                      <p className="muted text-base leading-[1.8] md:text-[17px]">
-                        {faq.answer}
-                      </p>
-                    </div>
+                  <details key={faq.question} className="faq-item">
+                    <summary>{faq.question}</summary>
+                    <div className="faq-answer">{faq.answer}</div>
                   </details>
                 ))}
               </div>

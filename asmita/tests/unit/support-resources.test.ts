@@ -1,15 +1,27 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { directory, directoryLastVerified } from "@/lib/resources-content";
 
-describe("support resources page", () => {
+function findByTel(tel: string) {
+  return directory.flatMap((g) => g.items).find((i) => i.tel === tel);
+}
+
+describe("support resources directory", () => {
   it("includes verified helplines and the NALSA directory", () => {
-    const page = readFileSync(path.join(process.cwd(), "src", "app", "(public)", "resources", "page.tsx"), "utf8");
+    const items = directory.flatMap((g) => g.items);
+    expect(findByTel("112")).toBeDefined();
+    expect(findByTel("1098")).toBeDefined();
+    expect(items.some((i) => i.href === "https://nalsa.gov.in/directory/")).toBe(true);
+  });
 
-    expect(page).toContain("112");
-    expect(page).toContain("1098");
-    expect(page).toContain("9152987821");
-    expect(page).toContain("https://nalsa.gov.in/directory/");
-    expect(page).toContain("Last verified against public source pages: 12 May 2026.");
+  it("attributes the iCall helpline to TISS, not another organisation", () => {
+    const icall = findByTel("9152987821");
+    expect(icall).toBeDefined();
+    expect(icall!.name).toMatch(/iCall/i);
+    expect(icall!.name).toMatch(/TISS/);
+  });
+
+  it("records a parseable directory verification date that is not in the future", () => {
+    expect(directoryLastVerified).toMatch(/^\d{1,2} [A-Z][a-z]+ \d{4}$/);
+    expect(Date.parse(directoryLastVerified)).toBeLessThanOrEqual(Date.now());
   });
 });

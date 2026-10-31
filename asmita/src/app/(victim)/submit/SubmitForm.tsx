@@ -108,7 +108,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
       const declarationResponse = await csrfFetch("/api/profile/declaration", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ acknowledged: true, version: "v1.0-2026-05-12", language: "en" }),
+        body: JSON.stringify({ acknowledged: true, version: "v1.0-2026-05-12", language: locale }),
       });
       if (!declarationResponse.ok) {
         setError(t(locale, "submit.declaration.error"));
@@ -146,16 +146,16 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
     <div className="space-y-8">
 
       {/* URL section */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3" style={{ boxShadow: "var(--shadow-soft)" }}>
+      <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--teal-soft)]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[16px] bg-[var(--teal-soft)]">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M6.5 9.5a3.535 3.535 0 0 0 5 0l2-2a3.536 3.536 0 0 0-5-5l-1.5 1.5" stroke="var(--teal)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
               <path d="M9.5 6.5a3.535 3.535 0 0 0-5 0l-2 2a3.536 3.536 0 0 0 5 5L9 12" stroke="var(--teal)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </span>
           <div>
-            <label htmlFor="urls" className="block text-sm font-semibold text-[var(--foreground)]">
+            <label htmlFor="urls" className="block text-sm font-medium text-[var(--foreground)]">
               {t(locale, "submit.urls.label")}
             </label>
             <p className="muted text-xs leading-[1.5]">
@@ -181,11 +181,10 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
 
       {/* Hash section */}
       {enableHashUpload && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-5"
-          style={{ boxShadow: "var(--shadow-soft)" }}
+        <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5 space-y-5"
         >
           <div>
-            <p className="text-sm font-semibold text-[var(--foreground)]">
+            <p className="text-sm font-medium text-[var(--foreground)]">
               {t(locale, "submit.hash.title")}{" "}
               <span className="font-normal text-[var(--muted)]">{t(locale, "submit.hash.optional")}</span>
             </p>
@@ -207,7 +206,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--background)] px-6 py-8 text-center transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
+            className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-[24px] border border-dashed border-[var(--border)] bg-[var(--background)] px-6 py-8 text-center transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--teal-soft)]">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
@@ -216,7 +215,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
               </svg>
             </span>
             <span>
-              <span className="block text-sm font-semibold text-[var(--foreground)]">{t(locale, "submit.hash.fileLabel")}</span>
+              <span className="block text-sm font-medium text-[var(--foreground)]">{t(locale, "submit.hash.fileLabel")}</span>
               <span className="muted mt-0.5 block text-xs">{t(locale, "submit.hash.fileHint")}</span>
             </span>
           </button>
@@ -226,7 +225,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
               {hashFiles.map((file, i) => (
                 <li
                   key={`${file.name}-${i}`}
-                  className="flex items-center justify-between rounded-lg border border-[var(--hairline)] px-3 py-2"
+                  className="flex items-center justify-between rounded-[16px] border border-[var(--hairline)] px-3 py-2"
                 >
                   <span className="truncate text-[var(--foreground)]">{file.name}</span>
                   <span className={`ml-2 shrink-0 text-xs font-mono ${
@@ -256,14 +255,14 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
           )}
 
           {lowQuality && (
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-[var(--warning)]">
               {t(locale, "submit.hash.lowQuality")}
             </p>
           )}
 
           {hashedFiles.length > 0 && parsedUrls.length === 0 && platforms.length > 0 && (
             <div>
-              <p className="block text-sm font-semibold text-[var(--foreground)]">
+              <p className="block text-sm font-medium text-[var(--foreground)]">
                 {t(locale, "submit.hash.platforms.title")}
               </p>
               <p className="muted mt-1 text-sm leading-[1.6]">
@@ -272,7 +271,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
               <ul className="mt-3 space-y-2">
                 {platforms.map((p) => (
                   <li key={p.id}>
-                    <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-3 hover:border-[var(--teal)] transition-colors">
+                    <label className="flex cursor-pointer items-center gap-3 rounded-[16px] border border-[var(--border)] bg-[var(--background)] px-4 py-3 hover:border-[var(--teal)] transition-colors">
                       <input
                         type="checkbox"
                         className="h-4 w-4 shrink-0 accent-[var(--teal)]"
@@ -315,7 +314,7 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
       </label>
 
       {error && (
-        <p className="text-sm font-semibold text-[var(--rose)]">{error}</p>
+        <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">

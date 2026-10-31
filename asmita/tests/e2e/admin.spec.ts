@@ -5,10 +5,12 @@ import { hasAdminPermission, type AdminPermission, type AdminRole } from "@/lib/
 async function signCookie(payload: Record<string, unknown>, sub: string) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer("asmita")
+    .setAudience("asmita-web")
     .setSubject(sub)
     .setIssuedAt()
     .setExpirationTime("8h")
-    .sign(new TextEncoder().encode(process.env.JWT_SECRET || "dev-secret-change-before-prod-32chars"));
+    .sign(new TextEncoder().encode("e2e-test-only-jwt-secret-32-chars-long"));
 }
 
 test("admin routes reject anonymous and victim sessions", async ({ page, context }) => {
@@ -36,7 +38,7 @@ test("admin routes reject anonymous and victim sessions", async ({ page, context
 test("admin session can open operational admin routes", async ({ page, context }) => {
   test.setTimeout(60_000);
   const adminToken = await signCookie(
-    { role: "ADMIN", ageOver18: true, emailHash: "admin-hash", namespace: "admin" },
+    { role: "ADMIN", ageOver18: true, emailHash: "admin-hash", namespace: "admin", mfaComplete: true },
     "admin-1",
   );
   await context.addCookies([

@@ -33,12 +33,6 @@ export default async function SignNoticePage({
   const record = await getCaseForUser(caseId, auth.session.sub);
   if (!record) redirect("/start");
 
-  const alreadySigned = await db.submittedUrl.findFirst({
-    where: { caseId, signedNoticePdf: { not: null } },
-    select: { id: true },
-  });
-  if (alreadySigned) redirect(`/case/${caseId}/confirmation`);
-
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
 
   const url = await db.submittedUrl.findFirst({
@@ -46,6 +40,7 @@ export default async function SignNoticePage({
       caseId,
       status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
       platformId: { not: null },
+      signedNoticePdf: null,
       platform: {
         isActive: true,
         ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
@@ -86,7 +81,7 @@ export default async function SignNoticePage({
 
                 <p className="muted mt-5 text-sm leading-[1.75]">
                   {t(locale, "sign.aside.sub.prefix")}{" "}
-                  <span className="font-semibold text-[var(--foreground)]">{url.platform.name}</span>{" "}
+                  <span className="font-medium text-[var(--foreground)]">{url.platform.name}</span>{" "}
                   {t(locale, "sign.aside.sub.suffix")}
                 </p>
 
@@ -106,7 +101,7 @@ export default async function SignNoticePage({
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-semibold text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>
@@ -122,7 +117,7 @@ export default async function SignNoticePage({
               </h1>
               <p className="muted mt-2 text-sm leading-[1.75]">
                 {t(locale, "sign.sub.prefix")}{" "}
-                <span className="font-semibold text-[var(--foreground)]">{url.platform.name}</span>
+                <span className="font-medium text-[var(--foreground)]">{url.platform.name}</span>
                 {t(locale, "sign.sub.suffix")}
               </p>
               <div className="mt-8">

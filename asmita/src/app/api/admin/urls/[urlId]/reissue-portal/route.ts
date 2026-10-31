@@ -91,8 +91,7 @@ export async function POST(
     caseReference: submittedUrl.case.referenceNumber,
     platformName: platform.name,
     url: portalLink,
-    declarationReference:
-      submittedUrl.case.declarationSignedAt?.toISOString() ?? submittedUrl.case.referenceNumber,
+    declarationReference: submittedUrl.case.referenceNumber,
   };
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
   let body = renderNoticeTemplate(template.bodyTemplate, variables);

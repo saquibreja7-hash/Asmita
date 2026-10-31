@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const emailHash = hashEmail(parsed.data.email);
   const valid = await verifyOtp(parsed.data.email, parsed.data.otp);
   if (!valid) {
-    logSecurityEvent({ event: "auth_failed", actorHash: emailHash, route: "/api/auth/verify-otp", reason: "invalid_otp" });
+    await logSecurityEvent({ event: "auth_failed", actorHash: emailHash, route: "/api/auth/verify-otp", reason: "invalid_otp" });
     return NextResponse.json({ error: "invalid_otp" }, { status: 401 });
   }
   if (!parsed.data.ageOver18) {

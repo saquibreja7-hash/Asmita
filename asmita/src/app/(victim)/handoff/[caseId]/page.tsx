@@ -9,13 +9,10 @@ import { t } from "@/lib/i18n";
 
 export default async function HandoffPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ caseId: string }>;
-  searchParams: Promise<{ formUrl?: string; platformName?: string }>;
 }) {
   const { caseId } = await params;
-  const { formUrl: queryFormUrl, platformName: queryPlatformName } = await searchParams;
   const locale = await getLocale();
 
   const auth = await requireSession({ adultOnly: true });
@@ -65,15 +62,14 @@ Please process this through your official content removal procedure.`;
   type FormLink = { name: string; formUrl: string };
   let formLinks: FormLink[];
 
+  // Form links come only from the platform registry, never from the request.
   if (urlFormLinks.length > 0) {
     formLinks = urlFormLinks.map((p) => ({ name: p!.name, formUrl: p!.formUrl! }));
-  } else if (queryFormUrl) {
-    formLinks = [{ name: queryPlatformName ?? "Platform", formUrl: queryFormUrl }];
   } else {
     formLinks = [];
   }
 
-  const isHashOnlyPath = record.urls.length === 0 && !!queryFormUrl;
+  const isHashOnlyPath = record.urls.length === 0;
 
   return (
     <AppShell>
@@ -113,7 +109,7 @@ Please process this through your official content removal procedure.`;
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-semibold text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>
@@ -146,7 +142,7 @@ Please process this through your official content removal procedure.`;
               <div className="flex flex-col">
                 <label
                   htmlFor="handoff-text"
-                  className="block text-sm font-semibold text-[var(--foreground)]"
+                  className="block text-sm font-medium text-[var(--foreground)]"
                 >
                   {t(locale, "handoff.notice.label")}
                 </label>
@@ -164,7 +160,7 @@ Please process this through your official content removal procedure.`;
 
               {/* Platform form links */}
               <div>
-                <p className="text-sm font-semibold text-[var(--foreground)]">
+                <p className="text-sm font-medium text-[var(--foreground)]">
                   {t(locale, "handoff.form.label")}
                 </p>
                 {formLinks.length > 0 ? (
@@ -175,10 +171,9 @@ Please process this through your official content removal procedure.`;
                         href={link.formUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-4 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
-                        style={{ boxShadow: "var(--shadow-soft)" }}
+                        className="flex items-center justify-between rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-5 py-4 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
                       >
-                        <span className="font-semibold text-[var(--foreground)]">{link.name}</span>
+                        <span className="font-medium text-[var(--foreground)]">{link.name}</span>
                         <span className="font-mono text-sm text-[var(--teal-dark)]">
                           {t(locale, "handoff.form.openForm")}
                         </span>
@@ -186,7 +181,7 @@ Please process this through your official content removal procedure.`;
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-4">
+                  <div className="mt-3 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-5 py-4">
                     <p className="muted text-sm leading-[1.75]">
                       {t(locale, "handoff.form.noUrl")}
                     </p>

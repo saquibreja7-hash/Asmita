@@ -1,7 +1,8 @@
-﻿import type { Prisma } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { processEscalationJob } from "@/jobs/escalation-worker";
 import type { NoticeJob } from "@/jobs/queue";
-import { db } from "@/lib/db";
+import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import { randomUUID } from "node:crypto";
 import { writeAuditLog } from "@/lib/audit";
 import { decryptField } from "@/lib/encryption";
 import { dispatchEscalationFollowUp } from "@/lib/notice-dispatch";
@@ -120,20 +121,59 @@ const candidateSelect = {
   },
 } as const satisfies Prisma.NoticeSelect;
 
-type CandidateNotice = Prisma.NoticeGetPayload<{ select: typeof candidateSelect }>;
+type CandidateNotice = {
+  id: string;
+  sentAt: Date | null;
+  escalationLevel: number;
+  responseType: string | null;
+  templateId: string | null;
+  submittedUrl: {
+    id: string;
+    caseId: string;
+    status: string;
+    domain: string;
+    platform: { name: string; grievanceEmail: string | null; lastContactVerifiedByHuman: boolean } | null;
+    case: { id: string; referenceNumber: string; user: { id: string; emailEncrypted: string; preferredLocale: string | null } | null };
+  };
+  template: { bodyTemplate: string; subjectTemplate: string; reviewedByLegal: boolean } | null;
+};
+
+async function getPrismaDb(): Promise<PrismaClient> {
+  return (await import("@/lib/db")).db;
+}
 
 export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<DueEscalationSummary> {
   const summary: DueEscalationSummary = { swept: 0, fired: [], skipped: [], errors: [] };
 
   const cutoff = new Date(now.getTime() - ESCALATION_HOURS[1] * 60 * 60_000);
-  const candidates = await db.notice.findMany({
-    where: {
-      sentAt: { not: null, lte: cutoff },
-      escalationLevel: { lt: 3 },
-      removedAt: null,
-    },
-    select: candidateSelect,
-  });
+  const candidates: CandidateNotice[] = usesWorkerKysely()
+    ? (await getWorkerDb().selectFrom("Notice as n")
+      .innerJoin("SubmittedUrl as u", "u.id", "n.urlId")
+      .innerJoin("Case as c", "c.id", "u.caseId")
+      .leftJoin("Platform as p", "p.id", "u.platformId")
+      .leftJoin("User as usr", "usr.id", "c.userId")
+      .leftJoin("NoticeTemplate as t", "t.id", "n.templateId")
+      .select([
+        "n.id as noticeId", "n.sentAt", "n.escalationLevel", "n.responseType", "n.templateId",
+        "u.id as urlId", "u.caseId", "u.status as urlStatus", "u.domain",
+        "p.name as platformName", "p.grievanceEmail", "p.lastContactVerifiedByHuman",
+        "c.id as caseIdValue", "c.referenceNumber", "usr.id as userId", "usr.emailEncrypted", "usr.preferredLocale",
+        "t.bodyTemplate", "t.subjectTemplate", "t.reviewedByLegal",
+      ])
+      .where("n.sentAt", "<=", cutoff).where("n.escalationLevel", "<", 3).where("n.removedAt", "is", null).execute())
+      .map((row) => ({
+        id: row.noticeId, sentAt: row.sentAt, escalationLevel: row.escalationLevel, responseType: row.responseType, templateId: row.templateId,
+        submittedUrl: {
+          id: row.urlId, caseId: row.caseId, status: row.urlStatus, domain: row.domain,
+          platform: row.platformName ? { name: row.platformName, grievanceEmail: row.grievanceEmail, lastContactVerifiedByHuman: row.lastContactVerifiedByHuman ?? false } : null,
+          case: { id: row.caseIdValue, referenceNumber: row.referenceNumber, user: row.userId && row.emailEncrypted ? { id: row.userId, emailEncrypted: row.emailEncrypted, preferredLocale: row.preferredLocale } : null },
+        },
+        template: row.bodyTemplate && row.subjectTemplate && row.reviewedByLegal != null ? { bodyTemplate: row.bodyTemplate, subjectTemplate: row.subjectTemplate, reviewedByLegal: row.reviewedByLegal } : null,
+      }))
+    : await (await getPrismaDb()).notice.findMany({
+      where: { sentAt: { not: null, lte: cutoff }, escalationLevel: { lt: 3 }, removedAt: null },
+      select: candidateSelect,
+    });
 
   summary.swept = candidates.length;
 
@@ -173,6 +213,14 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
       // stays at the prior tier; next sweep will see the Escalation row
       // missing for this level and re-attempt, which dispatchEscalationFollowUp
       // dedupes on at the in-memory map.
+      if (usesWorkerKysely()) {
+        await getWorkerDb().transaction().execute(async (tx) => {
+          await tx.insertInto("Escalation").values({ id: randomUUID(), noticeId: notice.id, level: dueLevel, actionType: action, completedAt: now }).execute();
+          await tx.updateTable("Notice").set({ escalationLevel: dueLevel }).where("id", "=", notice.id).execute();
+          if (dueLevel === 3) await tx.updateTable("Case").set({ firPackageGeneratedAt: now, updatedAt: new Date() }).where("id", "=", notice.submittedUrl.case.id).execute();
+        });
+      } else {
+      const db = await getPrismaDb();
       const txOps: Prisma.PrismaPromise<unknown>[] = [
         db.escalation.create({
           data: { noticeId: notice.id, level: dueLevel, actionType: action, completedAt: now },
@@ -191,6 +239,7 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
         );
       }
       await db.$transaction(txOps);
+      }
 
       summary.fired.push({ noticeId: notice.id, level: dueLevel, action });
     } catch (err) {

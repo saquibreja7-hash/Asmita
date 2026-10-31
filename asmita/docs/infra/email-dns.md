@@ -70,5 +70,5 @@ populate.
       SPF=pass, DKIM=pass, DMARC=pass
 - [ ] Reply to that test email; confirm the reply lands in the Workspace inbox
 - [ ] DMARC reports arriving at dmarc@meriasmita.org
-- [ ] RESEND_API_KEY + EMAIL_FROM env vars set in Vercel
+- [ ] RESEND_API_KEY + EMAIL_FROM set as Cloudflare Worker secrets
 - [ ] Legal templates approved (separate gate)

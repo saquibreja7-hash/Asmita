@@ -4,7 +4,7 @@ import { decode } from "jpeg-js";
 import { describe, expect, it } from "vitest";
 import { computePdqHash, hammingDistance } from "@/lib/pdq/pdq";
 
-// Rollout gate #1 (see ncii-india-system-design.md §10): the TS PDQ port must
+// Rollout gate #1 (see docs/archive/planning-2026-05/ncii-india-system-design.md §10): the TS PDQ port must
 // match Meta's reference implementation on the official regression vectors
 // from github.com/facebook/ThreatExchange (pdq/data/reg-test-input/dih,
 // expected hashes from pdq/cpp/reg_test/expected/out).

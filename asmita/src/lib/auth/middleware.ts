@@ -4,7 +4,7 @@ import { verifySession } from "@/lib/auth/jwt";
 export async function requireSession(options?: { adultOnly?: boolean }) {
   const cookieStore = await cookies();
   const session = await verifySession(cookieStore.get("asmita_session")?.value);
-  if (!session) {
+  if (!session || session.namespace !== "victim" || session.role === "ADMIN") {
     return { ok: false as const, status: 401, error: "unauthorized" };
   }
   if (options?.adultOnly && !session.ageOver18) {

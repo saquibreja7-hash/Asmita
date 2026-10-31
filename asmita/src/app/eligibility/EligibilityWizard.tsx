@@ -63,8 +63,8 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
           </InfoBox>
         </div>
 
-        <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 text-sm leading-[1.7] text-[var(--muted)]">
-          <span className="font-semibold text-[var(--foreground)]">{t(locale, "eligibility.limits.bold")}</span>{" "}
+        <div className="mt-5 rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4 text-sm leading-[1.7] text-[var(--muted)]">
+          <span className="font-medium text-[var(--foreground)]">{t(locale, "eligibility.limits.bold")}</span>{" "}
           {t(locale, "eligibility.limits.rest")}
         </div>
 
@@ -147,7 +147,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
           {t(locale, "eligibility.stop.other.sub2")}
         </p>
         <div className="mt-6 space-y-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+          <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
             {t(locale, "eligibility.stop.other.orgs")}
           </p>
           <ResourceLink name="iCall - Psychosocial Support" contact="9152987821" href="tel:9152987821">
@@ -174,7 +174,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
           {t(locale, "eligibility.stop.content.sub")}
         </p>
         <div className="mt-6 space-y-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+          <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
             {t(locale, "eligibility.stop.content.orgs")}
           </p>
           <ResourceLink name="National Cybercrime Portal" contact="cybercrime.gov.in" href="https://cybercrime.gov.in/" external>
@@ -207,14 +207,24 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
   ];
   return (
     <div className="mb-8">
-      <div className="flex items-center gap-2">
+      <p className="text-xs font-medium text-[var(--foreground)] sm:hidden" aria-live="polite">
+        {current + 1}/{labels.length} · {labels[current]}
+      </p>
+      <div className="mt-2 flex gap-1.5 sm:hidden" aria-hidden>
+        {labels.map((label, i) => (
+          <span key={label} className="h-1 flex-1 rounded-full" style={{
+            background: i <= current ? "var(--teal)" : "var(--hairline)",
+          }} />
+        ))}
+      </div>
+      <div className="hidden items-center gap-2 sm:flex">
         {labels.map((label, i) => (
           <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
             <div className="flex items-center gap-2">
               <div
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold transition-colors ${
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-medium transition-colors ${
                   i < current
-                    ? "bg-[var(--teal)] text-white"
+                    ? "bg-[var(--color-off-black)] text-[var(--color-parchment)]"
                     : i === current
                     ? "border-2 border-[var(--teal)] text-[var(--teal)]"
                     : "border border-[var(--border)] text-[var(--muted)]"
@@ -228,7 +238,7 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
                   i + 1
                 )}
               </div>
-              <span className={`hidden text-[11px] sm:block ${i === current ? "font-semibold text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
+              <span className={`hidden text-[11px] sm:block ${i === current ? "font-medium text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
                 {label}
               </span>
             </div>
@@ -261,14 +271,14 @@ function WizardShell({
     <div>
       <ProgressBar step={step} locale={locale} />
       <div className="mt-8 flex items-start justify-between gap-4">
-        <h2 className="text-[26px] font-semibold leading-[1.2] tracking-tight md:text-[32px]">
+        <h2 className="text-[26px] font-medium leading-[1.2] tracking-tight md:text-[32px]">
           {title}
         </h2>
         {showBack && (
           <button
             type="button"
             onClick={onBack}
-            className="shrink-0 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+            className="shrink-0 font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
             aria-label="Go back to previous step"
           >
             {t(locale, "eligibility.back")}
@@ -293,7 +303,7 @@ function ChoiceOption({
 }) {
   return (
     <label
-      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-left transition-colors ${
+      className={`flex cursor-pointer items-start gap-3 rounded-[24px] border p-4 text-left transition-colors ${
         checked
           ? "border-[var(--teal)] bg-[var(--teal-soft)]"
           : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
@@ -306,7 +316,7 @@ function ChoiceOption({
         className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
       />
       <span>
-        <span className="block text-[15px] font-semibold leading-[1.4] text-[var(--foreground)] md:text-[17px]">
+        <span className="block text-[15px] font-medium leading-[1.4] text-[var(--foreground)] md:text-[17px]">
           {label}
         </span>
         <span className="mt-1 block text-sm leading-[1.6] text-[var(--muted)]">
@@ -325,8 +335,8 @@ function InfoBox({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
-      <p className="text-[14px] font-semibold leading-[1.3] text-[var(--foreground)]">
+    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4">
+      <p className="text-[14px] font-medium leading-[1.3] text-[var(--foreground)]">
         {title}
       </p>
       <div className="text-[var(--muted)]">{children}</div>
@@ -348,8 +358,8 @@ function ResourceLink({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
-      <p className="text-[15px] font-semibold leading-[1.3] text-[var(--foreground)]">
+    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4">
+      <p className="text-[15px] font-medium leading-[1.3] text-[var(--foreground)]">
         {name}
       </p>
       <a

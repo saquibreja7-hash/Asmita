@@ -5,6 +5,6 @@ node_modules/
 !.env.example
 
 # Temporary throwaway research crawler — never commit
-research/
+/research/
 
 hash-advisory-preview-*.pdf

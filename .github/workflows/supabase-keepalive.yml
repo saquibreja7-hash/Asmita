@@ -1,0 +1,38 @@
+name: Supabase keepalive
+
+on:
+  schedule:
+    # Supabase Free projects may pause after a period without database activity.
+    # Run early enough to keep the Mumbai staging project available.
+    - cron: "17 3 */5 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nudge:
+    name: Run a zero-row database query
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+    steps:
+      - name: Check configuration
+        shell: bash
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_PUBLISHABLE_KEY"
+
+      - name: Nudge the database
+        shell: bash
+        run: |
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --max-time 30 \
+            --output /dev/null \
+            --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            "$SUPABASE_URL/rest/v1/Platform?select=*&limit=0"

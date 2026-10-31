@@ -4,6 +4,18 @@ const guardedFlowRoutes = ["/submit", "/identity", "/delete-account"];
 
 const MAINTENANCE_COOKIE = "asmita_maint_bypass";
 
+/** Constant-time compare that works in the Edge runtime (no node:crypto). */
+function safeEqual(a: string | null | undefined, b: string): boolean {
+  if (typeof a !== "string") return false;
+  const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  let diff = ab.length ^ bb.length;
+  const n = Math.max(ab.length, bb.length);
+  for (let i = 0; i < n; i++) diff |= (ab[i] ?? 0) ^ (bb[i] ?? 0);
+  return diff === 0;
+}
+
 function maintenanceResponse() {
   return new NextResponse(
     `<!doctype html>
@@ -37,7 +49,7 @@ export function middleware(request: NextRequest) {
     const provided =
       request.nextUrl.searchParams.get("maint_bypass") ??
       request.cookies.get(MAINTENANCE_COOKIE)?.value;
-    if (!secret || provided !== secret) {
+    if (!secret || !safeEqual(provided, secret)) {
       return maintenanceResponse();
     }
     if (request.nextUrl.searchParams.has("maint_bypass")) {

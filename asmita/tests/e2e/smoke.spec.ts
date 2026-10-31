@@ -1,24 +1,4 @@
-import { connect } from "node:net";
 import { expect, test } from "@playwright/test";
-
-// Registration persists users in Postgres; without a local DB those flows
-// cannot complete. Probe once and skip DB-dependent tests instead of failing
-// with a misleading timeout (same pattern as hash-flow.spec.ts).
-function postgresReachable(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = connect({ host: "127.0.0.1", port: 5432, timeout: 1000 });
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(true);
-    });
-    const fail = () => {
-      socket.destroy();
-      resolve(false);
-    };
-    socket.once("error", fail);
-    socket.once("timeout", fail);
-  });
-}
 
 async function completeAdultRegistration(page: import("@playwright/test").Page, email: string) {
   await page.goto("/register");
@@ -40,9 +20,9 @@ async function createCase(page: import("@playwright/test").Page) {
   await page.getByLabel(/I declare/).check();
   await page.getByRole("button", { name: "Continue to review" }).click();
   await expect(page).toHaveURL(/\/review-sign$/, { timeout: 15_000 });
-  const urlResponse = page.waitForResponse((response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"));
+  const createResponse = page.waitForResponse((response) => response.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Create case and preview notice" }).click();
-  expect((await urlResponse).ok()).toBe(true);
+  expect((await createResponse).ok()).toBe(true);
 
   // Flow branches: if notice preview succeeds, a sign step appears;
   // otherwise the app redirects straight to the case dashboard.
@@ -59,12 +39,12 @@ async function createCase(page: import("@playwright/test").Page) {
   await expect(page.getByText(/ASMITA-/)).toBeVisible();
 }
 
-test("landing and support bar render", async ({ page }) => {
+test("landing and minor-support entry render", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /You don.t have to face this/i }),
+    page.getByRole("heading", { name: /Take the image down. Keep the image private./i }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: /CHILDLINE 1098/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /Under 18/i }).first()).toBeVisible();
 });
 
 test("FAQ page renders English and Hindi launch content", async ({ page }) => {
@@ -76,7 +56,7 @@ test("FAQ page renders English and Hindi launch content", async ({ page }) => {
 
 test("minor pathway has no URL submission form", async ({ page }) => {
   await page.goto("/minor-support");
-  await expect(page.getByRole("link", { name: /CHILDLINE 1098/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /CHILDLINE.*1098/i }).first()).toBeVisible();
   await expect(page.locator("textarea")).toHaveCount(0);
 });
 
@@ -89,7 +69,6 @@ test("minor registration branches before collecting email", async ({ page }) => 
 });
 
 test("full adult flow creates a case and reaches confirmation", async ({ page }, testInfo) => {
-  test.skip(!(await postgresReachable()), "requires local Postgres (registration persists users)");
   test.setTimeout(120_000);
   await completeAdultRegistration(
     page,
@@ -99,7 +78,6 @@ test("full adult flow creates a case and reaches confirmation", async ({ page },
 });
 
 test("adult dashboard supports add URL, manual resolve, PDF export, and deletion request", async ({ page }, testInfo) => {
-  test.skip(!(await postgresReachable()), "requires local Postgres (registration persists users)");
   test.setTimeout(120_000);
   await completeAdultRegistration(
     page,
@@ -145,4 +123,11 @@ test("language toggle persists Hindi preference", async ({ page }) => {
   await page.getByRole("button", { name: "हिंदी" }).click();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "hi");
+  await expect(page.getByRole("heading", { name: "तस्वीर हटाने की कार्रवाई करें। तस्वीर निजी रखें।" })).toBeVisible();
+  await page.goto("/get-help");
+  await expect(page.getByRole("heading", { name: "कुछ हुआ है। अब आप ये कदम उठा सकते हैं।" })).toBeVisible();
+  await page.goto("/what-we-do");
+  await expect(page.getByRole("heading", { name: "सामग्री पर कार्रवाई के साधन" })).toBeVisible();
+  await page.goto("/about");
+  await expect(page.getByRole("heading", { name: "कार्रवाई में साथ देने वाला मंच" })).toBeVisible();
 });

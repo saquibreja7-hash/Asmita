@@ -41,7 +41,7 @@ export default async function MilestonesPage() {
         </div>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--hairline)]">

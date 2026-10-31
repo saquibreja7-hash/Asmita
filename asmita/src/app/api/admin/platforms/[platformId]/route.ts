@@ -19,7 +19,7 @@ const fieldSchema = z
 const bodySchema = z
   .object({
     sourceUrl: z.string().url(),
-    markVerified: z.boolean().default(true),
+    markVerified: z.boolean().default(false),
     fields: fieldSchema,
   })
   .strict();

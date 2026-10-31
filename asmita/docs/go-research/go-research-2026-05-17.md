@@ -5,7 +5,7 @@
 
 ## ⚠️ Read this before you import anything
 
-**This document is NOT a green light to bulk-import these into the database.** Asmita's policy (see `Desktop/Asmita/TODOS.md` FORBIDDEN list, rule 1) is that every Grievance Officer entry must be **verified by a human against the platform's current official page** before it is marked verified. Names and emails change frequently (WhatsApp's GO has rotated at least twice; Meta's GO has changed; Twitter renamed to X mid-stream).
+**This document is NOT a green light to bulk-import these into the database.** Asmita's policy (see the "Hard rules" in the root `CLAUDE.md`) is that every Grievance Officer entry must be **verified by a human against the platform's current official page** before it is marked verified. Names and emails change frequently (WhatsApp's GO has rotated at least twice; Meta's GO has changed; Twitter renamed to X mid-stream).
 
 For each platform below:
 

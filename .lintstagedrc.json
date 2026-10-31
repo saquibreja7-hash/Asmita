@@ -1,3 +1,0 @@
-{
-  "asmita/**/*.{ts,tsx,js,jsx}": "eslint --fix"
-}

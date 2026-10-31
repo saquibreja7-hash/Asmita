@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { Geist_Mono, Instrument_Serif, Inter } from "next/font/google";
+import { IBM_Plex_Mono, Newsreader } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "@fontsource/noto-sans-devanagari/400.css";
 import "@fontsource/noto-sans-devanagari/700.css";
@@ -12,23 +12,23 @@ const siteTitle = "Asmita - Dignity restoration support";
 const siteDescription =
   "Free, confidential support for Indian women reporting non-consensual intimate content.";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const instrumentSerif = Instrument_Serif({
+/*
+ * Editorial system (see DESIGN.md): serif for headings at weight 400 only,
+ * monospace for every body and UI string.
+ * Newsreader stands in for Untitled Serif; IBM Plex Mono for ABC Diatype Mono.
+ */
+const serif = Newsreader({
   variable: "--font-serif",
   subsets: ["latin"],
-  weight: "400",
+  weight: ["400"],
   style: ["normal", "italic"],
+  display: "swap",
+});
+
+const mono = IBM_Plex_Mono({
+  variable: "--font-mono-ui",
+  subsets: ["latin"],
+  weight: ["400", "500"],
   display: "swap",
 });
 
@@ -82,7 +82,7 @@ export default async function RootLayout({
   return (
     <html
       lang={lang}
-      className={`${inter.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${serif.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         {children}

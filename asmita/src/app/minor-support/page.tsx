@@ -135,14 +135,13 @@ export default async function MinorSupportPage() {
                           ? `${item.name} - ${item.contact} (opens in new tab)`
                           : `${item.name} - call ${item.contact}`
                       }
-                      className="flex items-start justify-between gap-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-5 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
-                      style={{ boxShadow: "var(--shadow-soft)" }}
+                      className="flex items-start justify-between gap-6 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-6 py-5 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
                     >
                       <div>
-                        <p className="font-semibold text-[var(--foreground)]">{item.name}</p>
+                        <p className="font-medium text-[var(--foreground)]">{item.name}</p>
                         <p className="muted mt-1 text-sm leading-[1.65]">{item.description}</p>
                       </div>
-                      <span className="font-mono shrink-0 text-[15px] font-semibold text-[var(--teal-dark)] md:text-[18px]">
+                      <span className="font-mono shrink-0 text-[15px] font-medium text-[var(--teal-dark)] md:text-[18px]">
                         {item.contact} {item.external ? "↗" : "→"}
                       </span>
                     </a>

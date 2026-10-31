@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCaseForUser } from "@/lib/case-ops";
-import { addHashesToCase, listHashesForCase, MAX_HASHES_PER_SUBMISSION } from "@/lib/hash-submission";
+import { addHashesToCase, listHashesForCase, listDevHashPickerPlatforms, MAX_HASHES_PER_SUBMISSION } from "@/lib/hash-submission";
 import { requireSession } from "@/lib/auth/middleware";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { verifyCsrfRequest } from "@/lib/csrf";
@@ -37,7 +37,7 @@ const schema = z.object({
     .min(1)
     .max(MAX_HASHES_PER_SUBMISSION),
   declaration: z.boolean().refine(Boolean),
-  platformIds: z.array(z.string()).max(20).optional(),
+  platformIds: z.array(z.string().uuid()).max(20).optional(),
 });
 
 const MAX_BODY_BYTES = 16_384;
@@ -109,6 +109,14 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   }
 
   const { platformIds } = parsed.data;
+  if (platformIds && platformIds.length > 0) {
+    const known = process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL
+      ? platformIds.filter((id) => listDevHashPickerPlatforms().some((p) => p.id === id)).length
+      : await db.platform.count({ where: { id: { in: platformIds }, isActive: true } });
+    if (known !== new Set(platformIds).size) {
+      return NextResponse.json({ error: "unknown_platform" }, { status: 400 });
+    }
+  }
   const results = await addHashesToCase(caseId, parsed.data.hashes, {
     requestedPlatformId: platformIds?.[0],
   });
@@ -120,21 +128,6 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
       route: "/api/cases/[caseId]/hashes",
       reason: caseId,
     });
-  }
-
-  // Stamp declarationSignedAt so dispatchHashAdvisories (called at admin approval)
-  // doesn't fail with declaration_required. Skip in dev (no DB).
-  if (process.env.DATABASE_URL) {
-    const caseRecord = await db.case.findUnique({
-      where: { id: caseId },
-      select: { declarationSignedAt: true },
-    });
-    if (!caseRecord?.declarationSignedAt) {
-      await db.case.update({
-        where: { id: caseId },
-        data: { declarationSignedAt: new Date() },
-      });
-    }
   }
 
   const body = { results };

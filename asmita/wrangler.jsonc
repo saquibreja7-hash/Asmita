@@ -1,0 +1,66 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "asmita-staging",
+  "compatibility_date": "2026-09-15",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "main": "src/cloudflare-worker.ts",
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "hyperdrive": [],
+  "vars": {
+    "NEXT_PUBLIC_APP_URL": "https://asmita-staging.saquibreja7.workers.dev",
+    "NODE_ENV": "production",
+    "OTP_PERSISTENCE": "database",
+    "AUDIT_LOG_PERSISTENCE": "database",
+    "SECURITY_LOG_PERSISTENCE": "database",
+    "EMAIL_PROOF_PERSISTENCE": "database",
+    "NOTICE_DISPATCH_PERSISTENCE": "database",
+    "ENABLE_HASH_UPLOAD": "true",
+    "ENABLE_PLATFORM_API": "false",
+    "ENABLE_PROVENANCE_CHECK": "false"
+  },
+  "env": {
+    "production": {
+      "name": "asmita-production",
+      "routes": [
+        {
+          "pattern": "meriasmita.org/*",
+          "zone_name": "meriasmita.org"
+        },
+        {
+          "pattern": "www.meriasmita.org/*",
+          "zone_name": "meriasmita.org"
+        }
+      ],
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "36433621ad834c41abbccdf8a09ba845"
+        }
+      ],
+      "triggers": {
+        "crons": [
+          "30 20 * * *",
+          "30 22 * * *"
+        ]
+      },
+      "vars": {
+        "NEXT_PUBLIC_APP_URL": "https://meriasmita.org",
+        "NODE_ENV": "production",
+        "OTP_PERSISTENCE": "database",
+        "AUDIT_LOG_PERSISTENCE": "database",
+        "SECURITY_LOG_PERSISTENCE": "database",
+        "EMAIL_PROOF_PERSISTENCE": "database",
+        "NOTICE_DISPATCH_PERSISTENCE": "database",
+        "ENABLE_HASH_UPLOAD": "true",
+        "ENABLE_PLATFORM_API": "false",
+        "ENABLE_PROVENANCE_CHECK": "false"
+      }
+    }
+  }
+}

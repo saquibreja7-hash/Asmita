@@ -1,3 +1,4 @@
+import { safeEqual } from "@/lib/safe-equal";
 import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/encryption";
@@ -82,7 +83,7 @@ export async function resolvePortalToken(
     const record = devTokenStore().get(token);
     if (!record) return { ok: false, error: "not_found" };
     if (record.usedAt) return { ok: false, error: "already_used" };
-    if (sha256(accessCode) !== record.accessCodeHash) return { ok: false, error: "invalid_code" };
+    if (!safeEqual(sha256(accessCode), record.accessCodeHash)) return { ok: false, error: "invalid_code" };
     record.usedAt = new Date().toISOString();
     await writeAuditLog({
       eventType: "URL_PORTAL_ACCESSED",
@@ -99,7 +100,7 @@ export async function resolvePortalToken(
   });
   if (!record) return { ok: false, error: "not_found" };
   if (record.usedAt) return { ok: false, error: "already_used" };
-  if (sha256(accessCode) !== record.accessCodeHash) return { ok: false, error: "invalid_code" };
+  if (!safeEqual(sha256(accessCode), record.accessCodeHash)) return { ok: false, error: "invalid_code" };
 
   // Atomic claim: only one concurrent request wins; loser gets count=0.
   // The URL is never returned unless this update succeeds.

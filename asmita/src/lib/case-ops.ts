@@ -1,5 +1,4 @@
-import { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import type { PrismaClient } from "@prisma/client";
 import { generateCaseReference } from "@/lib/case-reference";
 import { encryptField, decryptField } from "@/lib/encryption";
 import { hashEmail } from "@/lib/hash";
@@ -7,6 +6,9 @@ import { parseSubmittedUrl } from "@/lib/url-parser";
 import { findPlatformByDomain } from "@/lib/platforms";
 import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
+import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import { randomUUID } from "node:crypto";
+import { sql } from "kysely";
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -19,7 +21,7 @@ export type DisplayUrl = {
   status: string;
   urlHash: string;
   platformId: string | null;
-  signedNoticePdf?: string | null;
+  hasSignedNotice?: boolean;
   flaggedForReview?: boolean;
   flagReason?: string | null;
 };
@@ -50,7 +52,7 @@ function toDisplayUrl(url: {
     status: url.status,
     urlHash: url.urlHash,
     platformId: url.platformId,
-    signedNoticePdf: url.signedNoticePdf,
+    hasSignedNotice: url.signedNoticePdf != null,
     flaggedForReview: url.flaggedForReview,
     flagReason: url.flagReason,
   };
@@ -112,6 +114,15 @@ export async function upsertVerifiedUser(
   }
 
   const emailEncrypted = encryptField(email);
+  if (usesWorkerKysely()) {
+    const user = await getWorkerDb().insertInto("User").values({
+      id: randomUUID(), emailHash, emailEncrypted, ageOver18, emailVerified: true, role: "VICTIM",
+    }).onConflict((conflict) => conflict.column("emailHash").doUpdateSet({ emailEncrypted, lastActiveAt: new Date() }))
+      .returning(["id", "emailHash"]).executeTakeFirst();
+    if (!user) throw new Error("user_upsert_failed");
+    return user;
+  }
+  const db = await getPrismaDb();
   const user = await db.user.upsert({
     where: { emailHash },
     create: { emailHash, emailEncrypted, ageOver18, emailVerified: true, role: "VICTIM" },
@@ -123,18 +134,26 @@ export async function upsertVerifiedUser(
 
 export async function getVerifiedUserEmail(userId: string): Promise<string | null> {
   if (isDevNoDb()) return store.getVerifiedUserEmail(userId);
+  if (usesWorkerKysely()) {
+    const encrypted = (await getWorkerDb().selectFrom("User").select("emailEncrypted").where("id", "=", userId).executeTakeFirst())?.emailEncrypted;
+    return encrypted ? decryptField(encrypted) : null;
+  }
+  const db = await getPrismaDb();
   const user = await db.user.findUnique({ where: { id: userId }, select: { emailEncrypted: true } });
   return user ? decryptField(user.emailEncrypted) : null;
 }
 
 export async function isUserDeactivated(userId: string): Promise<boolean> {
   if (isDevNoDb()) return false;
+  if (usesWorkerKysely()) return Boolean((await getWorkerDb().selectFrom("User").select("deactivatedAt").where("id", "=", userId).executeTakeFirst())?.deactivatedAt);
+  const db = await getPrismaDb();
   const user = await db.user.findUnique({ where: { id: userId }, select: { deactivatedAt: true } });
   return Boolean(user?.deactivatedAt);
 }
 
 export async function createCase(userId: string): Promise<{ id: string; referenceNumber: string }> {
   if (isDevNoDb()) return store.createCase(userId);
+  const db = await getPrismaDb();
   let dbCase: { id: string; referenceNumber: string } | null = null;
   for (let attempt = 0; attempt < 5 && !dbCase; attempt += 1) {
     const referenceNumber = generateCaseReference();
@@ -145,7 +164,7 @@ export async function createCase(userId: string): Promise<{ id: string; referenc
       });
     } catch (error) {
       // Unique-constraint collision on referenceNumber: regenerate.
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) {
+      if ((error as { code?: string }).code !== "P2002") {
         throw error;
       }
     }
@@ -157,12 +176,193 @@ export async function createCase(userId: string): Promise<{ id: string; referenc
   return dbCase;
 }
 
+async function getPrismaDb(): Promise<PrismaClient> {
+  return (await import("@/lib/db")).db;
+}
+
+export type RegisterUrlError = { index: number; error: string };
+
+export async function getRegisteredCaseByKey(
+  userId: string,
+  registrationKeyHash: string,
+): Promise<{ id: string; referenceNumber: string; accepted: number } | null> {
+  if (isDevNoDb()) {
+    const record = Array.from(store.cases.values()).find(
+      (item) => item.userId === userId && item.registrationKeyHash === registrationKeyHash,
+    );
+    return record ? { id: record.id, referenceNumber: record.referenceNumber, accepted: record.urls.length } : null;
+  }
+  if (usesWorkerKysely()) {
+    const record = await getWorkerDb().selectFrom("Case as c")
+      .leftJoin("SubmittedUrl as u", "u.caseId", "c.id")
+      .select(["c.id", "c.referenceNumber"])
+      .select((eb) => eb.fn.count("u.id").as("accepted"))
+      .where("c.userId", "=", userId).where("c.registrationKeyHash", "=", registrationKeyHash)
+      .groupBy(["c.id", "c.referenceNumber"]).executeTakeFirst();
+    return record ? { id: record.id, referenceNumber: record.referenceNumber, accepted: Number(record.accepted) } : null;
+  }
+  const db = await getPrismaDb();
+  const record = await db.case.findFirst({
+    where: { userId, registrationKeyHash },
+    select: { id: true, referenceNumber: true, _count: { select: { submittedUrls: true } } },
+  });
+  return record
+    ? { id: record.id, referenceNumber: record.referenceNumber, accepted: record._count.submittedUrls }
+    : null;
+}
+
+export async function registerCaseWithUrls(
+  userId: string,
+  rawUrls: string[],
+  options?: { flagReasons?: string[]; registrationKeyHash?: string },
+): Promise<
+  | { ok: false; errors: RegisterUrlError[] }
+  | { ok: true; id: string; referenceNumber: string; accepted: number; replayed?: true }
+> {
+  const errors: RegisterUrlError[] = [];
+  const parsedUrls = rawUrls.map((rawUrl, index) => {
+    const parsed = parseSubmittedUrl(rawUrl);
+    if (!parsed.ok) errors.push({ index, error: parsed.error });
+    return parsed;
+  });
+  if (errors.length > 0) return { ok: false, errors };
+
+  const uniqueUrls = Array.from(
+    new Map(
+      parsedUrls
+        .filter((parsed): parsed is Extract<typeof parsed, { ok: true }> => parsed.ok)
+        .map((parsed) => [parsed.urlHash, parsed]),
+    ).values(),
+  );
+  if (uniqueUrls.length === 0) return { ok: false, errors: [{ index: 0, error: "invalid_url" }] };
+
+  if (options?.registrationKeyHash) {
+    const existing = await getRegisteredCaseByKey(userId, options.registrationKeyHash);
+    if (existing) return { ok: true, ...existing, replayed: true };
+  }
+
+  if (isDevNoDb()) {
+    const record = await store.createCase(userId, options?.registrationKeyHash);
+    try {
+      const results = await store.addUrlsToCase(record.id, rawUrls, options);
+      if (results.some((result) => !result.ok)) throw new Error("validated_url_rejected");
+    } catch (error) {
+      store.cases.delete(record.id);
+      throw error;
+    }
+    return { ok: true, id: record.id, referenceNumber: record.referenceNumber, accepted: uniqueUrls.length };
+  }
+
+  const flaggedForReview = Boolean(options?.flagReasons?.length);
+  if (usesWorkerKysely()) {
+    const workerDb = getWorkerDb();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const referenceNumber = generateCaseReference();
+      try {
+        const record = await workerDb.transaction().execute(async (tx) => {
+          const createdCase = await tx.insertInto("Case").values({
+            id: randomUUID(), referenceNumber, userId, registrationKeyHash: options?.registrationKeyHash ?? null, status: "OPEN",
+            hashAdvisoryPlatformIds: [], createdAt: new Date(), updatedAt: new Date(),
+          }).returning(["id", "referenceNumber"]).executeTakeFirstOrThrow();
+          for (const parsed of uniqueUrls) {
+            const platform = parsed.platform
+              ? await tx.selectFrom("Platform").select("id")
+                .where(sql<boolean>`${parsed.domain} = ANY("domainPatterns") OR ${`www.${parsed.domain}`} = ANY("domainPatterns")`)
+                .executeTakeFirst()
+              : null;
+            await tx.insertInto("SubmittedUrl").values({
+              id: randomUUID(), caseId: createdCase.id, urlEncrypted: encryptField(parsed.normalizedUrl), urlHash: parsed.urlHash,
+              domain: parsed.domain, platformId: platform?.id ?? null,
+              status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
+              flaggedForReview, flagReason: options?.flagReasons?.join(",") ?? null,
+            }).execute();
+          }
+          return createdCase;
+        });
+        await writeAuditLog({ eventType: "CASE_CREATED", entityType: "Case", entityId: record.id, actorId: userId });
+        await writeAuditLog({ eventType: "URL_SUBMITTED", entityType: "Case", entityId: record.id, actorId: userId, data: { accepted: uniqueUrls.length } });
+        return { ok: true, ...record, accepted: uniqueUrls.length };
+      } catch (error) {
+        if (options?.registrationKeyHash && (error as { code?: string }).code === "23505") {
+          const existing = await getRegisteredCaseByKey(userId, options.registrationKeyHash);
+          if (existing) return { ok: true, ...existing, replayed: true };
+        } else if ((error as { code?: string }).code !== "23505") {
+          throw error;
+        }
+      }
+    }
+    throw new Error("case_reference_collision_exhausted");
+  }
+  const db = await getPrismaDb();
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const referenceNumber = generateCaseReference();
+    try {
+      const record = await db.$transaction(async (tx) => {
+        const createdCase = await tx.case.create({
+          data: { referenceNumber, userId, registrationKeyHash: options?.registrationKeyHash, status: "OPEN" },
+          select: { id: true, referenceNumber: true },
+        });
+        for (const parsed of uniqueUrls) {
+          const dbPlatform = parsed.platform
+            ? await tx.platform.findFirst({
+                where: {
+                  OR: [
+                    { domainPatterns: { has: parsed.domain } },
+                    { domainPatterns: { has: `www.${parsed.domain}` } },
+                  ],
+                },
+                select: { id: true },
+              })
+            : null;
+          await tx.submittedUrl.create({
+            data: {
+              caseId: createdCase.id,
+              urlEncrypted: encryptField(parsed.normalizedUrl),
+              urlHash: parsed.urlHash,
+              domain: parsed.domain,
+              platformId: dbPlatform?.id ?? null,
+              status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
+              flaggedForReview,
+              flagReason: options?.flagReasons?.join(",") ?? null,
+            },
+          });
+        }
+        return createdCase;
+      });
+      await writeAuditLog({ eventType: "CASE_CREATED", entityType: "Case", entityId: record.id, actorId: userId });
+      await writeAuditLog({
+        eventType: "URL_SUBMITTED",
+        entityType: "Case",
+        entityId: record.id,
+        actorId: userId,
+        data: { accepted: uniqueUrls.length },
+      });
+      return { ok: true, ...record, accepted: uniqueUrls.length };
+    } catch (error) {
+      if ((error as { code?: string }).code !== "P2002") throw error;
+      if (options?.registrationKeyHash) {
+        const existing = await getRegisteredCaseByKey(userId, options.registrationKeyHash);
+        if (existing) return { ok: true, ...existing, replayed: true };
+      }
+    }
+  }
+  throw new Error("case_reference_collision_exhausted");
+}
+
 export async function getCaseForUser(caseId: string, userId: string): Promise<DisplayCase | null> {
   if (isDevNoDb()) {
     const rec = store.cases.get(caseId);
     if (!rec || rec.userId !== userId) return null;
     return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls };
   }
+  if (usesWorkerKysely()) {
+    const workerDb = getWorkerDb();
+    const record = await workerDb.selectFrom("Case").selectAll().where("id", "=", caseId).where("userId", "=", userId).executeTakeFirst();
+    if (!record) return null;
+    const urls = await workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", caseId).orderBy("submittedAt", "asc").execute();
+    return toDisplayCase({ ...record, createdAt: new Date(record.createdAt), submittedUrls: urls.map((url) => ({ ...url, submittedAt: new Date(url.submittedAt) })) });
+  }
+  const db = await getPrismaDb();
   const dbCase = await db.case.findFirst({
     where: { id: caseId, userId },
     include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
@@ -176,6 +376,15 @@ export async function listCasesForUser(userId: string): Promise<DisplayCase[]> {
       .filter((rec) => rec.userId === userId)
       .map((rec) => ({ id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls }));
   }
+  if (usesWorkerKysely()) {
+    const workerDb = getWorkerDb();
+    const records = await workerDb.selectFrom("Case").selectAll().where("userId", "=", userId).orderBy("createdAt", "desc").execute();
+    return Promise.all(records.map(async (record) => {
+      const urls = await workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", record.id).orderBy("submittedAt", "asc").execute();
+      return toDisplayCase({ ...record, submittedUrls: urls });
+    }));
+  }
+  const db = await getPrismaDb();
   const dbCases = await db.case.findMany({
     where: { userId },
     include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
@@ -195,6 +404,7 @@ export async function addUrlsToCase(
   options?: { flagReasons?: string[] },
 ): Promise<AddUrlResult[]> {
   if (isDevNoDb()) return store.addUrlsToCase(caseId, rawUrls, options);
+  const db = await getPrismaDb();
   const flaggedForReview = Boolean(options?.flagReasons?.length);
   const results: AddUrlResult[] = [];
 
@@ -249,6 +459,16 @@ export async function addUrlsToCase(
 }
 
 export async function markUrlResolved(caseId: string, userId: string, urlId?: string): Promise<void> {
+  if (isDevNoDb()) {
+    const record = store.cases.get(caseId);
+    if (!record || record.userId !== userId) throw new Error("case_not_found");
+    const url = urlId ? record.urls.find((item) => item.id === urlId) : record.urls[0];
+    if (!url) throw new Error("url_not_found");
+    url.status = "REMOVED";
+    await writeAuditLog({ eventType: "CONTENT_REMOVED", entityType: "SubmittedUrl", entityId: url.id, actorId: userId });
+    return;
+  }
+  const db = await getPrismaDb();
   const dbCase = await db.case.findFirst({ where: { id: caseId, userId }, select: { id: true } });
   if (!dbCase) throw new Error("case_not_found");
 
@@ -269,6 +489,7 @@ export async function reviewSubmittedUrl(input: {
   reviewerId?: string;
   reason?: string;
 }): Promise<DisplayUrl> {
+  const db = await getPrismaDb();
   const url = await db.submittedUrl.findFirst({ where: { id: input.urlId, caseId: input.caseId } });
   if (!url) throw new Error("url_not_found");
 
@@ -297,6 +518,7 @@ export async function vouchCase(
   partnerName: string,
   partnerId: string,
 ): Promise<void> {
+  const db = await getPrismaDb();
   const dbCase = await db.case.findUnique({ where: { id: caseId }, select: { id: true } });
   if (!dbCase) throw new Error("case_not_found");
 
@@ -316,6 +538,8 @@ export async function vouchCase(
 }
 
 export async function deactivateUser(userId: string): Promise<{ deactivatedAt: string; hardDeleteAfter: string }> {
+  if (isDevNoDb()) return store.deactivateUser(userId);
+  const db = await getPrismaDb();
   const deactivatedAt = new Date();
   const hardDeleteAfter = new Date(deactivatedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
 
@@ -332,6 +556,32 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
 }
 
 export async function hardDeleteDueUsers(now = new Date()): Promise<string[]> {
+  if (usesWorkerKysely()) {
+    const workerDb = getWorkerDb();
+    const dueJobs = await workerDb.selectFrom("DeletionJob as j")
+      .innerJoin("Case as c", "c.id", "j.caseId")
+      .select(["j.id as jobId", "c.id as caseId", "c.userId"])
+      .where("j.status", "=", "SCHEDULED")
+      .where("j.scheduledAt", "<=", now)
+      .execute();
+    const deletedUserIds: string[] = [];
+    for (const job of dueJobs) {
+      try {
+        await workerDb.transaction().execute(async (tx) => {
+          await tx.deleteFrom("SubmittedUrl").where("caseId", "=", job.caseId).execute();
+          await tx.updateTable("Case").set({ status: "CLOSED", updatedAt: new Date() }).where("id", "=", job.caseId).execute();
+          await tx.updateTable("User").set({ emailEncrypted: "deleted", emailHash: `deleted:${job.userId}`, deactivatedAt: null }).where("id", "=", job.userId).execute();
+          await tx.updateTable("DeletionJob").set({ status: "COMPLETED", completedAt: new Date() }).where("id", "=", job.jobId).execute();
+        });
+        await writeAuditLog({ eventType: "CASE_HARD_DELETED", entityType: "User", entityId: job.userId, data: { retained: "audit_metadata_only" } });
+        if (!deletedUserIds.includes(job.userId)) deletedUserIds.push(job.userId);
+      } catch (error) {
+        await workerDb.updateTable("DeletionJob").set({ status: "FAILED", error: String(error) }).where("id", "=", job.jobId).execute();
+      }
+    }
+    return deletedUserIds;
+  }
+  const db = await getPrismaDb();
   const dueJobs = await db.deletionJob.findMany({
     where: { status: "SCHEDULED", scheduledAt: { lte: now } },
     include: { case: { select: { id: true, userId: true } } },
@@ -374,6 +624,19 @@ export async function hardDeleteDueUsers(now = new Date()): Promise<string[]> {
 }
 
 export async function listAllCases(): Promise<DisplayCase[]> {
+  if (isDevNoDb()) {
+    return Array.from(store.cases.values())
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((record) => ({
+        id: record.id,
+        referenceNumber: record.referenceNumber,
+        userId: record.userId,
+        createdAt: record.createdAt,
+        status: record.status,
+        urls: record.urls.map((url) => ({ ...url, flagReason: url.flagReason ?? null })),
+      }));
+  }
+  const db = await getPrismaDb();
   const dbCases = await db.case.findMany({
     include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
     orderBy: { createdAt: "desc" },

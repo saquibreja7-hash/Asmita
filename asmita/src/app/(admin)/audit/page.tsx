@@ -60,7 +60,7 @@ export default async function AuditPage({
         </button>
       </form>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-white">
+      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--hairline)]">
@@ -81,7 +81,7 @@ export default async function AuditPage({
                 <td className="font-mono p-4 tabular-nums text-[var(--muted)]">
                   {row.sequence}
                 </td>
-                <td className="p-4 font-semibold">{row.eventType}</td>
+                <td className="p-4 font-medium">{row.eventType}</td>
                 <td className="font-mono p-4 text-xs">{row.actorId}</td>
                 <td className="font-mono p-4 text-xs text-[var(--muted)]">
                   {row.entityType}: {row.entityId}
@@ -131,7 +131,7 @@ function ChainStatusBanner({
   }
   if (validation.valid) {
     return (
-      <div className="mt-8 rounded-[12px] border border-[var(--accent)] bg-white p-4 text-sm">
+      <div className="mt-8 rounded-[12px] border border-[var(--accent)] bg-[var(--color-parchment)] p-4 text-sm">
         <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)]">
           Chain integrity · OK
         </p>
@@ -143,7 +143,7 @@ function ChainStatusBanner({
   }
   const broken = validation.brokenAt;
   return (
-    <div className="mt-8 rounded-[12px] border border-[var(--rose)] bg-white p-4 text-sm">
+    <div className="mt-8 rounded-[12px] border border-[var(--rose)] bg-[var(--color-parchment)] p-4 text-sm">
       <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--rose)]">
         Chain integrity · BROKEN
       </p>

@@ -12,6 +12,9 @@ function secret() {
     }
     return "dev-secret-change-before-prod-32chars";
   }
+  if (configured.length < 32) {
+    throw new Error("CSRF_SECRET must be at least 32 characters.");
+  }
   return configured;
 }
 
