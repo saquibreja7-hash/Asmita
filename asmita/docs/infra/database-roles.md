@@ -36,13 +36,12 @@ The migration is safe to apply while Hyperdrive still connects as `postgres`, be
    npx wrangler cert upload certificate-authority --ca-cert <downloaded.crt> --name supabase-ca
    ```
    Note the certificate ID it prints.
-5. **Switch Hyperdrive** (production config `36433621ad834c41abbccdf8a09ba845`):
-   ```bash
-   npx wrangler hyperdrive update 36433621ad834c41abbccdf8a09ba845 \
-     --origin-user asmita_worker --origin-password '<random password>' \
-     --ca-certificate-id <certificate id> --sslmode verify-full
+5. **Switch Hyperdrive** (production config `36433621ad834c41abbccdf8a09ba845`). In PowerShell, read the password into a variable so it never lands in shell history, then pass it as an argument (not through stdin):
+   ```powershell
+   $p = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host -AsSecureString 'asmita_worker password')))
+   npx wrangler hyperdrive update 36433621ad834c41abbccdf8a09ba845 --origin-user asmita_worker --origin-password $p --ca-certificate-id <certificate id> --sslmode verify-full
+   Remove-Variable p
    ```
-   Pass the password as an argument, not through stdin.
 6. **Verify.** The authenticated health check must return `"db":"ok"`, and `/`, `/start`, `/research` must return 200:
    ```bash
    curl -s -H "Authorization: Bearer <CRON_SECRET>" https://meriasmita.org/api/health
@@ -50,6 +49,13 @@ The migration is safe to apply while Hyperdrive still connects as `postgres`, be
    Watch `npx wrangler tail asmita-production` for permission errors while using the site.
 
 **Rollback:** run step 5 again with `--origin-user postgres`, its password and `--sslmode require`.
+
+## Adding a table
+
+Run migrations as `postgres`: default privileges only cover tables that role creates. A new table automatically gives `asmita_app` select, insert, update and delete. In the same migration:
+
+- enable row-level security and add the `asmita_app_all` policy (the unit test fails otherwise);
+- for an append-only table, `REVOKE UPDATE, DELETE` from `asmita_app`, as for `audit_log`.
 
 ## Keepalive
 
