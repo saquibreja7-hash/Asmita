@@ -44,8 +44,10 @@ export async function writeAuditLog(event: AuditEvent) {
     if (process.env.AUDIT_LOG_PERSISTENCE === "database") {
       await persistAuditLog(event);
     }
-  } catch {
-    // Audit logging must never break the victim-facing flow.
+  } catch (err) {
+    // Audit logging must never break the victim-facing flow, but a lost
+    // entry must never be silent either.
+    console.error(`Audit write failed for ${event.eventType}`, err);
   }
 }
 

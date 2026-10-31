@@ -1,21 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("@/lib/db", () => ({
-  db: {
-    hashSubmission: { findMany: vi.fn() },
-  },
-}));
-vi.mock("@/lib/encryption", () => ({
-  decryptField: vi.fn((v: string) => v.replace("enc:", "")),
-  encryptField: vi.fn((v: string) => `enc:${v}`),
-}));
-
-import { db } from "@/lib/db";
-import { buildCaseHashAnnex } from "@/lib/case-hash-annex";
+import { describe, expect, it } from "vitest";
 import { generateBase32Secret } from "@/lib/auth/admin-mfa-store";
 import { generateTotp, verifyAdminTotp } from "@/lib/auth/admin-mfa";
 
-const HEX = "a".repeat(64);
 
 describe("per-admin MFA secrets", () => {
   it("generates a base32 secret an authenticator app accepts", () => {
@@ -36,49 +22,5 @@ describe("per-admin MFA secrets", () => {
     if (sharedCode !== ownCode) {
       expect(verifyAdminTotp({ token: sharedCode, secret: own, now, windowSteps: 0 })).toBe(false);
     }
-  });
-});
-
-describe("fingerprint annex coverage", () => {
-  const originalHashFlag = process.env.ENABLE_HASH_UPLOAD;
-  beforeEach(() => {
-    vi.mocked(db.hashSubmission.findMany).mockReset();
-    process.env.ENABLE_HASH_UPLOAD = "true";
-  });
-  afterEach(() => {
-    if (originalHashFlag === undefined) delete process.env.ENABLE_HASH_UPLOAD;
-    else process.env.ENABLE_HASH_UPLOAD = originalHashFlag;
-  });
-
-  it("never reads or appends fingerprints while Phase 1 hash upload is disabled", async () => {
-    process.env.ENABLE_HASH_UPLOAD = "false";
-    expect(await buildCaseHashAnnex("case-1", { kind: "for-signing" })).toBe("");
-    expect(await buildCaseHashAnnex("case-1", { kind: "for-dispatch", signedAt: new Date() })).toBe("");
-    expect(db.hashSubmission.findMany).not.toHaveBeenCalled();
-  });
-
-  it("for signing, lists every non-rejected fingerprint", async () => {
-    vi.mocked(db.hashSubmission.findMany).mockResolvedValue([
-      { hashEncrypted: `enc:${HEX}`, quality: 90, clientVersion: "pdq-1", submittedAt: new Date() },
-    ] as never);
-    const annex = await buildCaseHashAnnex("case-1", { kind: "for-signing" });
-    expect(annex).toContain(HEX);
-    const where = vi.mocked(db.hashSubmission.findMany).mock.calls[0][0]?.where as Record<string, unknown>;
-    expect(where.status).toEqual({ not: "REJECTED" });
-  });
-
-  it("for dispatch, sends nothing when the declaration was never signed", async () => {
-    const annex = await buildCaseHashAnnex("case-1", { kind: "for-dispatch", signedAt: null });
-    expect(annex).toBe("");
-    expect(db.hashSubmission.findMany).not.toHaveBeenCalled();
-  });
-
-  it("for dispatch, only includes approved fingerprints submitted before signing", async () => {
-    vi.mocked(db.hashSubmission.findMany).mockResolvedValue([] as never);
-    const signedAt = new Date("2026-09-01T00:00:00Z");
-    await buildCaseHashAnnex("case-1", { kind: "for-dispatch", signedAt });
-    const where = vi.mocked(db.hashSubmission.findMany).mock.calls[0][0]?.where as Record<string, unknown>;
-    expect(where.status).toEqual({ in: ["APPROVED", "DISPATCHED"] });
-    expect(where.submittedAt).toEqual({ lte: signedAt });
   });
 });

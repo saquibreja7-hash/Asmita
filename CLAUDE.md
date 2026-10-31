@@ -62,7 +62,9 @@ Each admin has their own authenticator secret, encrypted at rest in `AdminMfaSec
 ## Notice integrity in code
 
 - `/api/notices/dispatch` refuses a URL without `signedNoticePdf` (409 `signature_required`).
-- `src/lib/case-hash-annex.ts` is the single builder for the fingerprint annex: preview and sign list every non-rejected fingerprint; dispatch sends only approved fingerprints submitted before `declarationSignedAt`. `declarationSignedAt` is set only by the two sign routes.
+- `src/lib/case-hash-annex.ts` is the single builder for the fingerprint annex. Preview and sign list every non-rejected fingerprint, and each signed document stores the exact ids it lists (`SubmittedUrl.signedHashSubmissionIds`, `Case.hashAdvisorySignedHashIds`). Dispatch sends exactly that set, and refuses (`fingerprints_pending_review`, `signed_fingerprints_changed`) until every listed fingerprint is approved, so the email always matches the signed PDF. Fingerprints added after signing are never sent under that signature. `NOTICE_SENT` audit entries record the fingerprint ids sent.
+- `declarationSignedAt` records the first signature on a case; later signatures never move it, and dispatch does not depend on it.
+- `prisma/seed.ts` never sets `reviewedByLegal: true`: templates are created unreviewed, a re-seed keeps a human reviewer's decision, and changed legal text resets it to unreviewed.
 
 ## Commands
 

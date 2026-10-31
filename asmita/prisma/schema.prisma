@@ -143,7 +143,6 @@ model User {
 
   cases         Case[]     @relation("VictimCases")
   verifiedCases Case[]     @relation("NgoVerifiedCases")
-  auditLogs     AuditLog[]
   adminProfile  AdminProfile?
   sessionTokens SessionToken[]
   ngoApiKeys    NgoApiKey[]
@@ -164,6 +163,8 @@ model Case {
   firPackageGeneratedAt   DateTime?
   signedHashAdvisoryPdf   String?
   hashAdvisoryPlatformIds String[]  @default([])
+  // Fingerprints listed in the signed hash advisory; dispatch sends exactly these.
+  hashAdvisorySignedHashIds String[] @default([])
   createdAt               DateTime   @default(now())
   updatedAt               DateTime   @updatedAt
 
@@ -274,6 +275,8 @@ model SubmittedUrl {
   flaggedForReview Boolean   @default(false)
   flagReason       String?
   signedNoticePdf  String?
+  // Fingerprints listed in the signed notice; dispatch sends exactly these.
+  signedHashSubmissionIds String[] @default([])
 
   case         Case             @relation(fields: [caseId], references: [id])
   platform     Platform?        @relation(fields: [platformId], references: [id])
@@ -377,8 +380,8 @@ model AuditLog {
   eventHash    String         @unique
   createdAt    DateTime       @default(now())
 
-  actor User? @relation(fields: [actorId], references: [id])
-
+  // actorId is a survivor's User id or an admin id (admin-...), so it has no
+  // foreign key; the log is append-only and outlives the actors it records.
   @@index([entityId])
   @@index([createdAt])
   @@map("audit_log")

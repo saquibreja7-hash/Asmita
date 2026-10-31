@@ -5,8 +5,9 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
-import { decryptField, encryptField } from "@/lib/encryption";
-import { buildHashAnnex, renderNoticeTemplate } from "@/lib/notice-generator";
+import { encryptField } from "@/lib/encryption";
+import { renderNoticeTemplate } from "@/lib/notice-generator";
+import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
 import { dispatchHashAdvisories } from "@/lib/hash-dispatch";
 import { writeAuditLog } from "@/lib/audit";
@@ -75,7 +76,7 @@ export async function POST(
 
   const dbCase = await db.case.findUnique({
     where: { id: caseId },
-    select: { signedHashAdvisoryPdf: true },
+    select: { signedHashAdvisoryPdf: true, declarationSignedAt: true },
   });
   if (!dbCase) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -84,11 +85,10 @@ export async function POST(
     return NextResponse.json({ error: "already_signed" }, { status: 409 });
   }
 
-  const submissions = await db.hashSubmission.findMany({
-    where: { caseId, status: { notIn: ["REJECTED"] } },
-    orderBy: { submittedAt: "asc" },
-  });
-  if (submissions.length === 0) {
+  // The ids listed here are stored with the signed advisory, and dispatch
+  // sends exactly these fingerprints.
+  const annex = await buildHashAnnexForSigning(caseId);
+  if (annex.hashSubmissionIds.length === 0) {
     return NextResponse.json({ error: "no_hashes" }, { status: 409 });
   }
 
@@ -105,15 +105,6 @@ export async function POST(
     return NextResponse.json({ error: "template_missing" }, { status: 409 });
   }
 
-  const annex = buildHashAnnex({
-    algorithm: "PDQ",
-    hashes: submissions.map((s) => ({
-      value: decryptField(s.hashEncrypted),
-      quality: s.quality,
-    })),
-    clientVersion: submissions[0].clientVersion,
-  });
-
   // Render with the same variables as preview-hash-advisory so the signed PDF
   // content is byte-identical to what the survivor previewed.
   const variables = {
@@ -122,7 +113,7 @@ export async function POST(
     platformName: "your service",
   };
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
-  const noticeBody = `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex}`;
+  const noticeBody = `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex.text}`;
 
   const pdfBytes = await generateNoticePdf({
     platformName: "Grievance Officer(s) / Trust and Safety Teams",
@@ -137,13 +128,15 @@ export async function POST(
 
   const encryptedPdf = encryptField(Buffer.from(pdfBytes).toString("base64"));
 
-  // Ensure declarationSignedAt is set (gates dispatch).
+  // declarationSignedAt records the first signature on the case; a later
+  // signature never moves it.
   await db.case.update({
     where: { id: caseId },
     data: {
       signedHashAdvisoryPdf: encryptedPdf,
       hashAdvisoryPlatformIds: platformIds,
-      declarationSignedAt: new Date(),
+      hashAdvisorySignedHashIds: annex.hashSubmissionIds,
+      ...(dbCase.declarationSignedAt ? {} : { declarationSignedAt: new Date() }),
     },
   });
 
