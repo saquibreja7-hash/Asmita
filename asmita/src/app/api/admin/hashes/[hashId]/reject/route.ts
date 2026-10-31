@@ -5,7 +5,7 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { reviewHashSubmission } from "@/lib/hash-submission";
 import { db } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
-import { voidUnsentSignaturesListing } from "@/lib/case-hash-annex";
+import { voidSignaturesWithRejectedFingerprints } from "@/lib/case-hash-annex";
 
 const schema = z.object({ reason: z.string().max(500).optional() });
 
@@ -47,7 +47,7 @@ export async function POST(
   // Unsent signatures that list this fingerprint can never be dispatched;
   // void them so the survivor can sign the current set again.
   const { caseId } = await db.hashSubmission.findUniqueOrThrow({ where: { id: hashId }, select: { caseId: true } });
-  const voided = await voidUnsentSignaturesListing(caseId, hashId);
+  const voided = await voidSignaturesWithRejectedFingerprints(caseId);
   if (voided.urlNotices > 0 || voided.hashAdvisory) {
     await writeAuditLog({
       eventType: "ADMIN_ACTION",

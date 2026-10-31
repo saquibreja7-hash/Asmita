@@ -11,7 +11,7 @@ import {
   assertNoticeSubjectSafe,
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
-import { buildSignedHashAnnex } from "@/lib/case-hash-annex";
+import { buildSignedHashAnnex, voidSignaturesWithRejectedFingerprints } from "@/lib/case-hash-annex";
 import { createPortalToken } from "@/lib/url-portal";
 
 const schema = z.object({
@@ -100,6 +100,11 @@ export async function POST(request: Request) {
   // Checked before the portal token is created so a refusal leaves no trace.
   const signedAnnex = await buildSignedHashAnnex(submittedUrl.signedHashSubmissionIds);
   if (!signedAnnex.ok) {
+    // A signature listing a rejected fingerprint can never go out: void it so
+    // the survivor signs again (heals a failed or raced void at rejection).
+    if (signedAnnex.reason === "signed_fingerprints_changed") {
+      await voidSignaturesWithRejectedFingerprints(parsed.data.caseId);
+    }
     return NextResponse.json({ error: signedAnnex.reason }, { status: 409 });
   }
 

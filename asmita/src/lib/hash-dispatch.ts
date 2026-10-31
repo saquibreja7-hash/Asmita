@@ -9,7 +9,7 @@ import {
   assertNoticeSubjectSafe,
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
-import { buildSignedHashAnnex } from "@/lib/case-hash-annex";
+import { buildSignedHashAnnex, voidSignaturesWithRejectedFingerprints } from "@/lib/case-hash-annex";
 
 // Dispatches the signed hash advisory to each target email platform.
 // Hard gates, in order:
@@ -56,7 +56,12 @@ export async function dispatchHashAdvisories(input: {
 
   // Exactly the fingerprints the signed PDF lists, once all are approved.
   const signed = await buildSignedHashAnnex(dbCase.hashAdvisorySignedHashIds);
-  if (!signed.ok) throw new Error(signed.reason);
+  if (!signed.ok) {
+    if (signed.reason === "signed_fingerprints_changed") {
+      await voidSignaturesWithRejectedFingerprints(input.caseId);
+    }
+    throw new Error(signed.reason);
+  }
   const submissions = signed.annex.hashSubmissionIds.map((id) => ({ id }));
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");

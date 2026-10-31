@@ -62,20 +62,44 @@ export async function buildSignedHashAnnex(signedIds: string[]): Promise<SignedA
 }
 
 /*
- * A rejected fingerprint can never be sent, so a signature that lists it
- * could never be dispatched. Every such signature that has not gone out yet
- * is voided, and the survivor signs the current set again. Signatures already
- * sent are left as the record of what was sent.
+ * A rejected (or missing) fingerprint can never be sent, so a signature that
+ * lists one could never be dispatched. Void every such signature that has not
+ * gone out yet, and the survivor signs the current set again. Sent signatures
+ * stay as the record of what was sent.
+ *
+ * Idempotent and safe to repeat: it runs after a rejection and again whenever
+ * dispatch finds a signed set that is no longer valid, so a failure or race
+ * between rejecting and signing heals on the next attempt.
  */
-export async function voidUnsentSignaturesListing(caseId: string, hashSubmissionId: string) {
-  const urls = await db.submittedUrl.updateMany({
-    where: { caseId, signedHashSubmissionIds: { has: hashSubmissionId }, notices: { none: {} } },
-    data: { signedNoticePdf: null, signedHashSubmissionIds: [] },
+export async function voidSignaturesWithRejectedFingerprints(caseId: string) {
+  const usable = new Set(
+    (
+      await db.hashSubmission.findMany({
+        where: { caseId, status: { not: "REJECTED" } },
+        select: { id: true },
+      })
+    ).map((h) => h.id),
+  );
+  const invalid = (ids: string[]) => ids.some((id) => !usable.has(id));
+
+  const unsentUrls = await db.submittedUrl.findMany({
+    where: { caseId, signedNoticePdf: { not: null }, notices: { none: {} } },
+    select: { id: true, signedHashSubmissionIds: true },
   });
+  const voidUrlIds = unsentUrls.filter((u) => invalid(u.signedHashSubmissionIds)).map((u) => u.id);
+  if (voidUrlIds.length > 0) {
+    await db.submittedUrl.updateMany({
+      where: { id: { in: voidUrlIds } },
+      data: { signedNoticePdf: null, signedHashSubmissionIds: [] },
+    });
+  }
 
   let hashAdvisory = false;
   const dbCase = await db.case.findUnique({ where: { id: caseId }, select: { hashAdvisorySignedHashIds: true } });
-  if (dbCase?.hashAdvisorySignedHashIds.includes(hashSubmissionId)) {
+  if (dbCase && invalid(dbCase.hashAdvisorySignedHashIds)) {
+    // Dispatch sends nothing until every signed fingerprint is approved, and
+    // only pending fingerprints can be rejected, so a sent advisory cannot
+    // reach this state; the check is defence in depth.
     const sent = await db.hashDispatch.count({
       where: { hashSubmissionId: { in: dbCase.hashAdvisorySignedHashIds } },
     });
@@ -87,5 +111,5 @@ export async function voidUnsentSignaturesListing(caseId: string, hashSubmission
       hashAdvisory = true;
     }
   }
-  return { urlNotices: urls.count, hashAdvisory };
+  return { urlNotices: voidUrlIds.length, hashAdvisory };
 }
