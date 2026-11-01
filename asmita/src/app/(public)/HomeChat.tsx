@@ -116,6 +116,9 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
       }
       const { reply } = (await response.json()) as { reply: string };
       setMessages((current) => [...current, { role: "assistant", content: reply }]);
+      // The hero box keeps what the person typed until it has gone through, so
+      // a failed first send never makes them write it again.
+      if (history.length === 0) setHeroDraft("");
     } catch {
       setError("chat.error.unavailable");
       setPhase("error");
@@ -126,7 +129,6 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
 
   function start() {
     setPhase("open");
-    setHeroDraft("");
     if (pending) {
       const text = pending;
       setPending("");
@@ -215,7 +217,15 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
             <p role="alert" className="text-sm leading-[1.6] text-[var(--foreground)]">
               {copy[error]}
             </p>
-            <button type="button" className="btn btn-secondary mt-3" onClick={() => setPhase("notice")}>
+            <button
+              type="button"
+              className="btn btn-secondary mt-3"
+              onClick={() => {
+                setPending(heroDraft.trim());
+                setMessages([]);
+                setPhase("notice");
+              }}
+            >
               {copy["chat.again"]}
             </button>
           </div>
