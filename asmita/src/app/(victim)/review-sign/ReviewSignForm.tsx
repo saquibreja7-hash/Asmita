@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
+import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 
 type HashEntry = { hash: string; quality: number; clientVersion: string };
@@ -58,18 +59,27 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
   const [signature, setSignature] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
+  const started = useRef(false);
+  // Review and signing are one screen: the case is created as soon as the
+  // draft is read, so the notice preview appears without another click.
+  const startCase = useEffectEvent((d: Draft) => {
+    if (started.current) return;
+    started.current = true;
+    void createCase(d);
+  });
 
   useEffect(() => {
     const id = window.setTimeout(() => {
       try {
-        const raw = sessionStorage.getItem("asmita_submit_draft");
+        const raw = sessionStorage.getItem(DRAFT_KEY);
         if (!raw) { router.replace("/submit"); return; }
         const data = JSON.parse(raw) as Draft;
         if (!data.urls?.length && !data.hashes?.length) { router.replace("/submit"); return; }
         data.registrationKey ??= crypto.randomUUID();
-        sessionStorage.setItem("asmita_submit_draft", JSON.stringify(data));
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data));
         setDraft(data);
-        setStep("review");
+        setStep("creating");
+        startCase(data);
       } catch {
         router.replace("/submit");
       }
@@ -77,18 +87,27 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
     return () => window.clearTimeout(id);
   }, [router]);
 
-  async function createCase() {
-    if (!draft) return;
+  async function createCase(d: Draft) {
     setStep("creating");
     setError("");
     try {
+      const declared = await csrfFetch("/api/profile/declaration", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acknowledged: true, version: "v1.0-2026-05-12", language: locale }),
+      });
+      if (!declared.ok) {
+        setError(t(locale, "submit.declaration.error"));
+        setStep("review");
+        return;
+      }
       const createRes = await csrfFetch("/api/cases/create", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "Idempotency-Key": draft.registrationKey ?? crypto.randomUUID(),
+          "Idempotency-Key": d.registrationKey ?? crypto.randomUUID(),
         },
-        body: JSON.stringify({ urls: draft.urls, declaration: draft.declaration }),
+        body: JSON.stringify({ urls: d.urls, declaration: d.declaration }),
       });
       if (!createRes.ok) {
         const response = (await createRes.json().catch(() => ({}))) as { error?: string };
@@ -98,14 +117,14 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       }
       const { caseId: newCaseId } = (await createRes.json()) as { caseId: string };
 
-      if (draft.hashes.length > 0) {
+      if (d.hashes.length > 0) {
         const hashRes = await csrfFetch(`/api/cases/${newCaseId}/hashes`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            hashes: draft.hashes,
+            hashes: d.hashes,
             declaration: true,
-            platformIds: draft.platformIds,
+            platformIds: d.platformIds,
           }),
         });
         if (!hashRes.ok) {
@@ -115,21 +134,21 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         }
 
         // Hash-only path: no URLs
-        if (draft.urls.length === 0) {
-          if (draft.emailPlatformIds.length > 0) {
-            // Save form-only platforms to state before clearing draft (sessionStorage won't survive)
-            if (draft.formOnlyPlatforms.length > 0) {
-              setPendingFormPlatforms(draft.formOnlyPlatforms);
+        if (d.urls.length === 0) {
+          if (d.emailPlatformIds.length > 0) {
+            // Save form-only platforms to state before clearing d (sessionStorage won't survive)
+            if (d.formOnlyPlatforms.length > 0) {
+              setPendingFormPlatforms(d.formOnlyPlatforms);
             }
-            sessionStorage.removeItem("asmita_submit_draft");
+            sessionStorage.removeItem(DRAFT_KEY);
             setCaseId(newCaseId);
             setPreviewUrl(`/api/cases/${newCaseId}/preview-hash-advisory`);
             setStep("hash-sign");
           } else {
             // Form-only platforms only — show all of them inline
-            sessionStorage.removeItem("asmita_submit_draft");
-            if (draft.formOnlyPlatforms.length > 0) {
-              setPendingFormPlatforms(draft.formOnlyPlatforms);
+            sessionStorage.removeItem(DRAFT_KEY);
+            if (d.formOnlyPlatforms.length > 0) {
+              setPendingFormPlatforms(d.formOnlyPlatforms);
               setCaseId(newCaseId);
               setStep("form-only-handoff");
             } else {
@@ -140,7 +159,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         }
       }
 
-      sessionStorage.removeItem("asmita_submit_draft");
+      sessionStorage.removeItem(DRAFT_KEY);
       setCaseId(newCaseId);
 
       const previewRes = await fetch(`/api/cases/${newCaseId}/preview-notice`);
@@ -148,7 +167,8 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         setPreviewUrl(`/api/cases/${newCaseId}/preview-notice`);
         setStep("sign");
       } else {
-        router.push(`/case/${newCaseId}`);
+        // No notice to sign yet (for example a new site): the case is saved.
+        router.push(`/case/${newCaseId}/confirmation`);
       }
     } catch {
       setError(t(locale, "review.error.generic"));
@@ -176,7 +196,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         setStep("sign");
         return;
       }
-      router.push(`/case/${caseId}`);
+      router.push(`/case/${caseId}/confirmation`);
     } catch {
       setError(t(locale, "review.sign.error.timeout"));
       setStep("sign");
@@ -211,7 +231,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       if (pendingFormPlatforms.length > 0) {
         setStep("form-only-handoff");
       } else {
-        router.push(`/case/${caseId}`);
+        router.push(`/case/${caseId}/confirmation`);
       }
     } catch {
       setError(t(locale, "review.sign.error.timeout"));
@@ -393,9 +413,13 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
               type="button"
               className="btn btn-primary"
               disabled={step === "creating"}
-              onClick={createCase}
+              onClick={() => {
+                if (!draft) return;
+                setStep("creating");
+                void createCase(draft);
+              }}
             >
-              {step === "creating" ? t(locale, "review.cta.creating") : t(locale, "review.cta.create")}
+              {step === "creating" ? t(locale, "review.cta.creating") : t(locale, "review.cta.retry")}
             </button>
             <a className="btn btn-secondary" href="/submit">
               {t(locale, "review.cta.back")}
@@ -439,6 +463,19 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
             {t(locale, "review.sign.sub")}
           </p>
         </div>
+
+        {draft && draft.urls.length > 0 && !isHashSign && (
+          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5">
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              {t(locale, "review.links.label")} ({draft.urls.length})
+            </p>
+            <ul className="mt-2 space-y-1">
+              {draft.urls.map((url) => (
+                <li key={url} className="break-all font-mono text-[13px] text-[var(--muted)]">{url}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div
           className="overflow-hidden rounded-[24px] border border-[var(--border)]"

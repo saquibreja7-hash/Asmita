@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const flowFiles = [
   "src/app/(auth)/register/RegisterForm.tsx",
-  "src/app/(victim)/submit/SubmitForm.tsx",
+  "src/app/(auth)/submit/SubmitForm.tsx",
+  "src/app/(victim)/review-sign/ReviewSignForm.tsx",
+  "src/app/eligibility/EligibilityWizard.tsx",
+  "src/lib/eligibility.ts",
   "src/app/(victim)/identity/page.tsx",
 ];
 

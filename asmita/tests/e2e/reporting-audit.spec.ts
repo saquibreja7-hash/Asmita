@@ -19,6 +19,7 @@ test("URL report registers locally and exposes the unavailable notice-preview bo
 
   await page.goto("/register");
   await page.getByText("I am 18 years of age or older.").click();
+  await page.getByText("I was 18 or older.").click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Email address").fill(`audit-${randomUUID()}@example.invalid`);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -36,11 +37,9 @@ test("URL report registers locally and exposes the unavailable notice-preview bo
   // This is a synthetic string, never a URL to open or fetch.
   await page.getByLabel("Links where the content appears").fill(`https://www.instagram.com/p/asmita-synthetic-${randomUUID()}/`);
   await page.getByLabel(/I declare/).check();
-  await page.getByRole("button", { name: "Continue to review" }).click();
-  await expect(page).toHaveURL(/\/review-sign$/);
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   const previewResponse = page.waitForResponse((r) => r.url().endsWith("/preview-notice"));
-  await page.getByRole("button", { name: "Create case and preview notice" }).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
   const created = await createResponse;
   expect(created.ok()).toBe(true);
   const createdBody = await created.json();
@@ -50,7 +49,7 @@ test("URL report registers locally and exposes the unavailable notice-preview bo
   // grievance email), so there is no emailed notice to preview.
   expect(preview.status()).toBe(404);
   expect(await preview.json()).toEqual({ error: "form_only_platform" });
-  await expect(page).toHaveURL(new RegExp(`/case/${createdBody.caseId}$`), { timeout: 30_000 });
+  await expect(page).toHaveURL(new RegExp(`/case/${createdBody.caseId}/confirmation$`), { timeout: 30_000 });
   await expect(page.getByText(createdBody.referenceNumber).first()).toBeVisible();
   const caseResponse = await page.request.get(`/api/cases/${createdBody.caseId}`);
   expect(caseResponse.ok()).toBe(true);

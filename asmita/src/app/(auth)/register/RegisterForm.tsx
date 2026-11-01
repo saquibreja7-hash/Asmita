@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
+import { hasDraft, isEligibleAdult, rememberEligibleAdult } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 
 type Step = "age" | "email" | "otp";
@@ -11,6 +12,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("age");
   const [ageConfirmed, setAgeConfirmed] = useState<"adult" | "minor" | "">("");
+  const [ageThen, setAgeThen] = useState<"adult" | "minor" | "">("");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
@@ -18,15 +20,23 @@ export function RegisterForm({ locale }: { locale: Locale }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const id = window.setTimeout(() => setHydrated(true), 0);
+    const id = window.setTimeout(() => {
+      // Answered on the eligibility screen already: go straight to the email.
+      if (isEligibleAdult()) {
+        setAgeConfirmed("adult");
+        setStep("email");
+      }
+      setHydrated(true);
+    }, 0);
     return () => window.clearTimeout(id);
   }, []);
 
   function continueFromAge() {
-    if (ageConfirmed === "minor") {
+    if (ageConfirmed === "minor" || ageThen === "minor") {
       router.push("/minor-support");
       return;
     }
+    rememberEligibleAdult();
     setStep("email");
   }
 
@@ -65,7 +75,8 @@ export function RegisterForm({ locale }: { locale: Locale }) {
         setError(t(locale, "reg.error.codeNoMatch"));
         return;
       }
-      router.push("/submit");
+      // Links added before the email code go straight to review and signing.
+      router.push(hasDraft() ? "/review-sign" : "/submit");
     } catch {
       setError(t(locale, "reg.error.timeout"));
     } finally {
@@ -121,9 +132,37 @@ export function RegisterForm({ locale }: { locale: Locale }) {
               </span>
             </label>
           </div>
+          {ageConfirmed === "adult" && (
+            <fieldset className="mt-8 space-y-3">
+              <legend className="text-[15px] font-medium leading-[1.4] text-[var(--foreground)]">
+                {t(locale, "eligibility.ageThen.title")}
+              </legend>
+              <p className="muted text-sm leading-[1.6]">{t(locale, "eligibility.ageThen.sub")}</p>
+              {(["adult", "minor"] as const).map((value) => (
+                <label
+                  key={value}
+                  className={`flex cursor-pointer items-start gap-3 rounded-[24px] border p-4 transition-colors ${
+                    ageThen === value
+                      ? "border-[var(--teal)] bg-[var(--teal-soft)]"
+                      : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    checked={ageThen === value}
+                    onChange={() => setAgeThen(value)}
+                    className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
+                  />
+                  <span className="text-[15px] font-medium leading-[1.4] text-[var(--foreground)]">
+                    {t(locale, value === "adult" ? "auth.ageThenAdult" : "auth.ageThenMinor")}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          )}
           <button
             className="btn btn-primary mt-8"
-            disabled={!ageConfirmed || !hydrated}
+            disabled={!ageConfirmed || (ageConfirmed === "adult" && !ageThen) || !hydrated}
             onClick={continueFromAge}
             type="button"
           >
@@ -139,6 +178,9 @@ export function RegisterForm({ locale }: { locale: Locale }) {
           </h2>
           <p className="muted mt-2 text-sm leading-[1.75]">
             {t(locale, "reg.email.sub")}
+          </p>
+          <p className="mt-3 rounded-[16px] bg-[var(--teal-soft)] px-4 py-3 text-sm leading-[1.6] text-[var(--teal-dark)]">
+            {t(locale, "reg.email.safe")}
           </p>
           <form
             className="mt-8 space-y-4"

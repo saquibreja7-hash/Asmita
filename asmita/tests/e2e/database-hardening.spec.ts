@@ -25,6 +25,7 @@ test("survivor report works as the app role and stays out of reach of the Data A
 
   await page.goto("/register");
   await page.getByText("I am 18 years of age or older.").click();
+  await page.getByText("I was 18 or older.").click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Email address").fill(`hardening-${randomUUID()}@example.invalid`);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -36,10 +37,8 @@ test("survivor report works as the app role and stays out of reach of the Data A
 
   await page.getByLabel("Links where the content appears").fill(`https://www.instagram.com/p/asmita-synthetic-${randomUUID()}/`);
   await page.getByLabel(/I declare/).check();
-  await page.getByRole("button", { name: "Continue to review" }).click();
-  await expect(page).toHaveURL(/\/review-sign$/);
   const createResponse = page.waitForResponse((response) => response.url().endsWith("/api/cases/create"));
-  await page.getByRole("button", { name: "Create case and preview notice" }).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
   const created = await createResponse;
   expect(created.ok()).toBe(true);
   const { caseId } = (await created.json()) as { caseId: string };
