@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ConversationAgent } from "sarvam-conv-ai-sdk/browser";
+import { linkify } from "@/components/linkify";
 import { HELPLINE, VOICE_AGENT } from "@/lib/helpline";
 import type { TalkCopy } from "./talk-copy";
 
@@ -26,32 +27,6 @@ function isMicrophoneError(error: unknown) {
   return (
     error instanceof DOMException &&
     ["NotAllowedError", "NotFoundError", "NotReadableError", "SecurityError"].includes(error.name)
-  );
-}
-
-// Turns the first occurrence of `token` in a translated sentence into a link,
-// so the number stays tappable whatever the word order. If a translation ever
-// drops the number, the link is added after the sentence rather than lost.
-function linkify(text: string, token: string, href: string, className: string): ReactNode {
-  const at = text.indexOf(token);
-  if (at === -1) {
-    return (
-      <>
-        {text}{" "}
-        <a className={className} href={href}>
-          {token}
-        </a>
-      </>
-    );
-  }
-  return (
-    <>
-      {text.slice(0, at)}
-      <a className={className} href={href}>
-        {token}
-      </a>
-      {text.slice(at + token.length)}
-    </>
   );
 }
 

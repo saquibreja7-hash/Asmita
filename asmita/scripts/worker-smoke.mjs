@@ -28,6 +28,10 @@ const vars = {
   ENCRYPTION_KEY: randomBytes(32).toString("base64"),
   // Set on purpose: the production build must keep the provenance check off.
   ENABLE_PROVENANCE_CHECK: "true",
+  // Empty on purpose: the build copies .env.local into .dev.vars, and a
+  // developer's real Sarvam keys there would make the "no key" checks call Sarvam.
+  SARVAM_API_KEY: "",
+  SARVAM_CHAT_KEY: "",
 };
 
 // Refuse to start if something already answers on the port: the checks
@@ -128,6 +132,15 @@ try {
   const { token } = await csrf.json();
   const session = await fetch(sessionUrl, { headers: { cookie, "x-csrf-token": token } });
   if (session.status !== 503) throw new Error(`Voice session without a key returned ${session.status}, expected 503:\n${output.slice(-3000)}`);
+  // Home page chat: with no SARVAM_CHAT_KEY secret the route answers 503
+  // after its CSRF and rate-limit checks, without calling Sarvam.
+  const chat = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+    method: "POST",
+    headers: { cookie, "x-csrf-token": token, "content-type": "application/json" },
+    body: JSON.stringify({ locale: "en", messages: [{ role: "user", content: "hello" }] }),
+  });
+  if (chat.status !== 503) throw new Error(`Chat without a key returned ${chat.status}, expected 503:
+${output.slice(-3000)}`);
   const buckets = new pg.Client({ connectionString: databaseUrl });
   await buckets.connect();
   const globalKey = createHash("sha256").update("voice-session-global").digest("hex");
@@ -135,7 +148,7 @@ try {
   await buckets.end();
   if (counted.rows[0].n !== 1) throw new Error("The voice daily cap was not counted in Postgres");
 
-  console.log("Worker smoke passed: Prisma runs in workerd, each request gets its own connection, the provenance check is off, and voice headers and session limits work.");
+  console.log("Worker smoke passed: Prisma runs in workerd, each request gets its own connection, the provenance check is off, and voice headers, session limits and the chat route work.");
   exitCode = 0;
 } catch (err) {
   console.error(err);
