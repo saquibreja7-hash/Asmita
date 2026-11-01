@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
-import { hasDraft, isEligibleAdult, rememberEligibleAdult } from "@/lib/eligibility";
+import { forgetEligibility, hasDraft, isEligibleAdult, rememberEligibleAdult } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 
 type Step = "age" | "email" | "otp";
@@ -33,6 +33,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
 
   function continueFromAge() {
     if (ageConfirmed === "minor" || ageThen === "minor") {
+      forgetEligibility();
       router.push("/minor-support");
       return;
     }

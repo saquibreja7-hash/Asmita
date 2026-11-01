@@ -92,18 +92,32 @@ test("links can be added before the email code, and nothing reaches the server u
   await expect(page).toHaveURL(/\/(review-sign|case\/[^/]+\/confirmation)$/, { timeout: 30_000 });
 });
 
-test("someone under 18 when the content was made goes to the minor pathway", async ({ page }) => {
-  await page.goto("/eligibility");
-  await page.getByText("I am in the content").click();
-  await page.getByText(/^Yes - it shows me/).click();
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was under 18, or I am not sure.").click();
-  await page.getByRole("button", { name: "Continue" }).click();
+test("someone under 18 when the content was made goes to the minor pathway, even after answering as an adult", async ({ page }) => {
+  const answer = async (ageThen: string) => {
+    await page.goto("/eligibility");
+    await page.getByText("I am in the content").click();
+    await page.getByText(/^Yes - it shows me/).click();
+    await page.getByText("I am 18 years of age or older.").click();
+    await page.getByText(ageThen).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+  };
+
+  // First answered as an adult, with a link typed in...
+  await answer("I was 18 or older.");
+  await expect(page).toHaveURL(/\/submit$/);
+  await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
+  await page.getByText(/I declare that I am the person depicted/).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page).toHaveURL(/\/register$/);
+
+  // ...then as under 18 at the time: minor pathway, and the adult answers,
+  // the cookie and the typed link are all gone.
+  await answer("I was under 18, or I am not sure.");
   await expect(page).toHaveURL(/\/minor-support$/);
   await expect(page.locator("textarea")).toHaveCount(0);
-
-  // Without answering, the links page is not reachable.
-  await page.context().clearCookies();
+  expect(await page.evaluate(() => Object.keys(sessionStorage))).toEqual([]);
   await page.goto("/submit");
   await expect(page).toHaveURL(/\/start$/);
+  await page.goto("/register");
+  await expect(page.getByText("I am 18 years of age or older.")).toBeVisible();
 });
