@@ -25,6 +25,8 @@ const vars = {
   JWT_SECRET: randomBytes(32).toString("hex"),
   CSRF_SECRET: randomBytes(16).toString("hex"),
   ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+  // Set on purpose: the production build must keep the provenance check off.
+  ENABLE_PROVENANCE_CHECK: "true",
 };
 
 // Refuse to start if something already answers on the port: the checks
@@ -101,7 +103,12 @@ try {
   ]);
   await db.end();
   if (stored.rows[0].n !== 2) throw new Error(`Expected 2 stored delivery proofs, found ${stored.rows[0].n}`);
-  console.log("Worker smoke passed: Prisma runs in workerd and each request gets its own connection.");
+
+  // ADR 002 is not accepted, so the route that sends images to OpenAI stays
+  // closed in production even with the flag set.
+  const provenance = await fetch(`http://127.0.0.1:${port}/api/check-image`, { method: "POST" });
+  if (provenance.status !== 404) throw new Error(`/api/check-image returned ${provenance.status}, expected 404`);
+  console.log("Worker smoke passed: Prisma runs in workerd, each request gets its own connection, and the provenance check is off.");
   exitCode = 0;
 } catch (err) {
   console.error(err);

@@ -2,11 +2,12 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
+import { provenanceCheckEnabled } from "@/lib/dev-flags";
 import { ImageChecker } from "./ImageChecker";
 
 export default async function CheckImagePage() {
   const locale = await getLocale();
-  const deepCheckEnabled = process.env.ENABLE_PROVENANCE_CHECK === "true";
+  const deepCheckEnabled = provenanceCheckEnabled();
 
   return (
     <AppShell>
