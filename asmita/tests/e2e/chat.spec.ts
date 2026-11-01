@@ -38,7 +38,7 @@ test("survivor reads the chat notice first, and nothing is sent until they write
   await expect(chat.getByRole("link", { name: "+91 80654 80788" })).toHaveAttribute("href", "tel:+918065480788");
 });
 
-test("the chat route refuses links and images, and caps messages site-wide", async ({ request }) => {
+test("the chat route refuses links and images, routes under-18s, and caps messages site-wide", async ({ request }) => {
   const send = (content: string, token?: string) =>
     request.post("/api/chat", {
       headers: token ? { "x-csrf-token": token } : {},
@@ -50,14 +50,16 @@ test("the chat route refuses links and images, and caps messages site-wide", asy
   expect((await send(`data:image/png;base64,${"A".repeat(300)}`, token)).status()).toBe(400);
 
   // The daily cap is 3 in the E2E server and other tests may have spent some
-  // of it, so a 429 must arrive within 4 messages. Until then, a link gets
-  // the fixed reply without reaching the model.
+  // of it, so a 429 must arrive within 4 messages. Until then, a link and a
+  // stated age under 18 each get a fixed reply without reaching the model.
   const statuses: number[] = [];
   for (let i = 0; i < 4 && !statuses.includes(429); i += 1) {
-    const response = await send("see www.example.com/post", token);
+    const underAge = i % 2 === 1;
+    const response = await send(underAge ? "I am 15 and my photos were posted" : "see www.example.com/post", token);
     statuses.push(response.status());
     if (response.status() === 200) {
-      expect(((await response.json()) as { reply: string }).reply).toContain("meriasmita.org/start");
+      const { reply } = (await response.json()) as { reply: string };
+      expect(reply).toContain(underAge ? "CHILDLINE 1098" : "meriasmita.org/start");
     }
   }
   expect(statuses.at(-1)).toBe(429);

@@ -23,6 +23,26 @@ const LINK_REPLY = {
   hi: "कृपया यहाँ लिंक न भेजें। लिंक केवल meriasmita.org/start पर दिए गए फ़ॉर्म में ही जाएँ, इस चैट में नहीं। इससे आपकी सुरक्षा बनी रहती है। क्या मैं बताऊँ कि फ़ॉर्म कैसे काम करता है?",
 };
 
+// A person who says they are under 18 gets the minor pathway from here, not
+// from the model, and keeps getting it for the rest of the chat.
+const MINOR_REPLY = {
+  en: "Thank you for telling me. None of this is your fault. Because you are under 18, a special team helps with this: please call CHILDLINE 1098, free and open 24 hours, in many Indian languages. You can also use takeitdown.ncmec.org, which removes images without the image being sent to anyone. Is there one adult you trust, like a parent or a teacher, you could tell today?",
+  hi: "मुझे बताने के लिए धन्यवाद। इसमें आपकी कोई गलती नहीं है। 18 साल से कम उम्र होने की वजह से एक खास टीम इसमें मदद करती है: कृपया चाइल्डलाइन 1098 पर कॉल करें, यह मुफ़्त है, 24 घंटे खुली रहती है और कई भारतीय भाषाओं में बात करती है। आप takeitdown.ncmec.org का भी उपयोग कर सकते हैं, जो तस्वीर किसी को भेजे बिना उसे हटाने में मदद करता है। क्या कोई ऐसा बड़ा है जिस पर आप भरोसा करते हैं, जैसे माता-पिता या कोई टीचर, जिसे आप आज बता सकें?",
+};
+
+// A stated age under 18 ("I am 15", "16 years old", "मैं 15 साल", "main 16 saal").
+// Narrow on purpose: a missed case still reaches the model, whose instructions
+// carry the same pathway.
+const UNDER_18 = [
+  /\b(i am|i'm|im|my age is|aged?)\s*(1[0-7]|[5-9])(\s*(years?|yrs?)(\s*old)?)?\s*($|[,.!?;]|\band\b|\bbut\b)/i,
+  /\b(1[0-7]|[5-9])\s*(years?|yrs?)\s*old\b/i,
+  /(मैं|मेरी उम्र|उम्र)\s*(1[0-7]|[5-9])\s*(साल|वर्ष)/,
+  /\b(main|mai|meri umar|meri umr|umar|umr)\s*(1[0-7]|[5-9])\s*(saal|sal|varsh)\b/i,
+];
+function statesUnder18(text: string) {
+  return UNDER_18.some((pattern) => pattern.test(text));
+}
+
 // Sent instead of any reply that repeats the instructions.
 const PRIVATE_REPLY = {
   en: "I cannot share how I am set up. I am here to help with images or videos shared without consent. What would you like to know?",
@@ -106,7 +126,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
-  if (containsUrlLikeText(last.content)) {
+  const userTurns = messages.filter((m) => m.role === "user");
+  if (userTurns.some((m) => statesUnder18(m.content))) {
+    return NextResponse.json({ reply: MINOR_REPLY[locale] }, { headers: { "cache-control": "no-store" } });
+  }
+  // Every user turn, not only the last: the browser sends the history, so an
+  // earlier turn could carry a link the page never let through.
+  if (userTurns.some((m) => containsUrlLikeText(m.content))) {
     return NextResponse.json({ reply: LINK_REPLY[locale] }, { headers: { "cache-control": "no-store" } });
   }
 
