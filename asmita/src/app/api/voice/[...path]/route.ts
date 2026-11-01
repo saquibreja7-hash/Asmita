@@ -48,8 +48,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
   let ipLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
   let globalLimit = { allowed: false, remaining: 0 };
   try {
-    // Carrier-grade NAT puts many people behind one IP, so this is generous.
-    ipLimit = await checkRateLimitAsync(`voice-session-ip:${getClientIp(request)}`, 10, 60 * 60_000, { shared: true });
+    // Five calls an hour per IP: Sarvam credits are limited.
+    ipLimit = await checkRateLimitAsync(`voice-session-ip:${getClientIp(request)}`, 5, 60 * 60_000, { shared: true });
     // Only requests within their IP limit count towards the daily cap, so one
     // source cannot use up everyone's sessions.
     if (ipLimit.allowed) {

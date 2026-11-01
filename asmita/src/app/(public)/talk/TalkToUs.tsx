@@ -125,7 +125,7 @@ export function TalkToUs() {
               Sarvam, the company that runs the assistant, records each call and keeps a short summary of it. Asmita does
               not keep a recording or a transcript.
             </li>
-            <li>Do not share images, links or your full name on the call. The assistant never needs them.</li>
+            <li>Do not share images or links on the call. The assistant never needs them.</li>
             <li>
               If you are under 18, please call CHILDLINE <a className="link-underline font-medium" href="tel:1098">1098</a> instead.
             </li>
