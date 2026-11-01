@@ -94,7 +94,7 @@ Ordered by priority. M items are must-fix before launch; the first block is this
 
 ### Phase 4: before launch
 
-- [ ] External uptime monitor (UptimeRobot or Better Stack free tier) on `/` and `/api/health`, alerting by email or phone.
+- [x] External uptime monitor on `/` and `/api/health`, alerting by email and phone push. Done 2026-11-01 on Better Stack (free, 3-minute checks); public status page at https://status.meriasmita.org (Cloudflare CNAME `status` to `statuspage.betteruptime.com`, DNS only). The database itself is checked daily by the authenticated GitHub keepalive.
 - [ ] Ask counsel about bare PDQ values in outbound notices (hash annex, FORM_ONLY copy text), given PDQ inversion research.
 
 ## AWS transition (when credits arrive)
