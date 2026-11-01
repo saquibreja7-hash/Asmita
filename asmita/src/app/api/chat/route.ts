@@ -34,7 +34,9 @@ const MINOR_REPLY = {
 // Narrow on purpose: a missed case still reaches the model, whose instructions
 // carry the same pathway.
 const UNDER_18 = [
-  /\b(i am|i'm|im|my age is|aged?)\s*(1[0-7]|[5-9])(\s*(years?|yrs?)(\s*old)?)?\s*($|[,.!?;]|\band\b|\bbut\b)/i,
+  // "I am 17 so...", "I'm 15", "my age is 14": any number under 18 after these
+  // words, unless what follows shows it is not an age ("5 minutes", "9 months").
+  /\b(i am|i'm|im|my age is|aged?)\s*(1[0-7]|[5-9])(?!\d)(?![.,]\d)(?!\s*(minutes?|mins?|hours?|hrs?|days?|weeks?|months?|km|kms|kg|kgs|feet|ft|cm|rupees|rs|%|th|st|nd|rd|am|pm|o'clock)\b)/i,
   /\b(1[0-7]|[5-9])\s*(years?|yrs?)\s*old\b/i,
   /\b(just\s+)?turned\s*(1[0-7]|[5-9])\b/i,
   // A school student: "I'm in class 10", "I study in 9th standard", "class 11 student".
