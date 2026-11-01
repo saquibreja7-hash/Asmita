@@ -10,11 +10,22 @@ export type PlatformPattern = { name: string; domainPatterns: string[] };
 
 const blockedHosts = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
 
-function isPrivateIpv4(hostname: string) {
+// Loopback, private, link-local and carrier-grade NAT ranges. IPv6 literals
+// are refused outright: a real post is never addressed that way.
+function isPrivateAddress(hostname: string) {
+  if (hostname.startsWith("[")) return true;
   const parts = hostname.split(".").map(Number);
   if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) return false;
   const [a, b] = parts;
-  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
 }
 
 // People paste "instagram.com/p/abc" as often as the full link; anything with
@@ -33,7 +44,7 @@ export function checkLink(raw: string): LinkCheck {
   }
   if (!["http:", "https:"].includes(url.protocol)) return { ok: false, error: "blocked_scheme" };
   const hostname = url.hostname.toLowerCase();
-  if (blockedHosts.has(hostname) || isPrivateIpv4(hostname)) return { ok: false, error: "local_or_private_address" };
+  if (blockedHosts.has(hostname) || isPrivateAddress(hostname)) return { ok: false, error: "local_or_private_address" };
   if (!hostname.includes(".")) return { ok: false, error: "invalid_url" };
   return { ok: true, url, domain: hostname.replace(/^www\./, "") };
 }
