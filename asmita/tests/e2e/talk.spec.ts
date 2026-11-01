@@ -50,7 +50,7 @@ test("the voice notice reads in Hindi with the numbers still tappable", async ({
 });
 
 test("voice session starts are capped site-wide", async ({ request }) => {
-  const sessionUrl = `/api/voice/${VOICE_AGENT_PATH}?interaction_type=call&version=6`;
+  const sessionUrl = `/api/voice/${VOICE_AGENT_PATH}?interaction_type=call&version=7`;
   expect((await request.get(sessionUrl)).status()).toBe(403);
 
   const { token } = (await (await request.get("/api/csrf")).json()) as { token: string };

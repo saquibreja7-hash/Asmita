@@ -8,13 +8,14 @@ export const HELPLINE = {
 
 // The same Sarvam agent answers in the browser on /talk, pinned to the
 // committed version the phone line serves, so both say the same thing.
-// Version 6: no default caller name, voice on Sarvam TTS v4 (Simran). These
+// Version 7: no default caller name, voice on Sarvam TTS v4 (Simran), bound to
+// the asmita-helpline knowledge base. These
 // ids are not secret; the API key is (SARVAM_API_KEY, a Worker secret).
 export const VOICE_AGENT = {
   orgId: "01a03e5c-f137-750c-a7f6-3f79f4c3af72",
   workspaceId: "01a03e5c-f13c-7cba-8ecf-0decc2f61e58",
   appId: "Conversatio-9ebc9fc7-c519",
-  version: 6,
+  version: 7,
 } as const;
 
 // The path the browser SDK requests under its baseUrl to get a signed,
