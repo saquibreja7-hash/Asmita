@@ -74,7 +74,7 @@ Set secrets separately with `npx wrangler secret put NAME --name asmita-staging`
 * `RESEND_API_KEY`
 * `RESEND_WEBHOOK_SECRET`
 * `OPENAI_API_KEY` when the deeper image check is enabled
-* `SARVAM_API_KEY` for browser voice calls on `/talk` (production only; without it `/talk` shows the phone number instead). `VOICE_DAILY_SESSION_LIMIT` is an optional variable, default 100 sessions a day
+* `SARVAM_API_KEY` for browser voice calls on `/talk` (production only; without it `/talk` shows the phone number instead). `VOICE_DAILY_SESSION_LIMIT` is an optional variable, default 70 sessions a day
 * `ADMIN_EMAILS` and other admin settings
 
 Set non-secret production values through Wrangler environment variables. Required persistence settings are:

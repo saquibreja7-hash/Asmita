@@ -41,7 +41,7 @@ test("survivor sees the notice before any voice call, and nothing reaches Sarvam
 });
 
 test("voice session starts are capped site-wide", async ({ request }) => {
-  const sessionUrl = `/api/voice/${VOICE_AGENT_PATH}?interaction_type=call&version=4`;
+  const sessionUrl = `/api/voice/${VOICE_AGENT_PATH}?interaction_type=call&version=5`;
   expect((await request.get(sessionUrl)).status()).toBe(403);
 
   const { token } = (await (await request.get("/api/csrf")).json()) as { token: string };

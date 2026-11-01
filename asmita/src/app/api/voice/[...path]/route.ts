@@ -18,11 +18,11 @@ import { logSecurityEvent } from "@/lib/security-log";
 const SARVAM_API = "https://apps.sarvam.ai/api/app-runtime/";
 const ROUTE = "/api/voice";
 
-// Default 100 voice sessions a day across the whole site, so the Sarvam
+// Default 70 voice sessions a day across the whole site, so the Sarvam
 // credits cannot be drained; override with VOICE_DAILY_SESSION_LIMIT.
 function voiceDailyLimit() {
   const value = Number(process.env.VOICE_DAILY_SESSION_LIMIT);
-  return Number.isInteger(value) && value > 0 ? value : 100;
+  return Number.isInteger(value) && value > 0 ? value : 70;
 }
 
 function isSarvamSocketUrl(value: unknown): value is string {

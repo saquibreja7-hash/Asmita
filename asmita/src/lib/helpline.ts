@@ -6,14 +6,15 @@ export const HELPLINE = {
   tel: "+918065480788",
 } as const;
 
-// The same Sarvam agent answers in the browser on /talk. The web pins the
-// committed version the phone line serves, so both say the same thing. These
-// ids are not secret; the API key is (SARVAM_API_KEY, a Worker secret).
+// The same Sarvam agent answers in the browser on /talk, pinned to a
+// committed version. Version 5 is version 4 (what the phone line served on
+// 2026-11-01) with the default caller name "Manan" cleared. These ids are not
+// secret; the API key is (SARVAM_API_KEY, a Worker secret).
 export const VOICE_AGENT = {
   orgId: "01a03e5c-f137-750c-a7f6-3f79f4c3af72",
   workspaceId: "01a03e5c-f13c-7cba-8ecf-0decc2f61e58",
   appId: "Conversatio-9ebc9fc7-c519",
-  version: 4,
+  version: 5,
 } as const;
 
 // The path the browser SDK requests under its baseUrl to get a signed,
