@@ -35,7 +35,7 @@ Both URL takedown and image fingerprint (hash) submission are live and deployed.
 |---|---|---|
 | Hash upload (PDQ fingerprinting) | `ENABLE_HASH_UPLOAD=true` | Built, deployed (Worker vars in `wrangler.jsonc`) |
 | Platform API (StopNCII, I4C) | `ENABLE_PLATFORM_API=true` | Not yet built |
-| Provenance check | `ENABLE_PROVENANCE_CHECK=true` | Off in staging and production |
+| Provenance check | `ENABLE_PROVENANCE_CHECK=true` | Off; production builds force it off until ADR 002 is accepted |
 | Scheduled work | none | Cron Triggers plus database sweeps. BullMQ/Redis removed (2026-10-31) |
 
 ## Survivor Paths
@@ -109,7 +109,7 @@ Next.js 16 App Router + TypeScript, built with vinext and run on Cloudflare Work
 
 **Prisma on Workers:** on the Worker, `src/lib/db.ts` uses `@prisma/client/edge` (the query engine loads as a precompiled WebAssembly module; the Node build compiles it at runtime, which Workers forbid) and gives each request its own client via `src/lib/request-scope.ts` (Workers forbid reusing another request's connection). The E2E suite runs the Node dev server, so CI also runs `scripts/worker-smoke.mjs`, which drives the production bundle in workerd. Anything Worker-specific needs a check there.
 
-**Dual-backend pattern:** store, audit/persistence and email have a memory path (dev/test) and a real implementation (Prisma/Kysely, Resend) selected by env vars. Rate limiting is in-memory only. Production must use the database path (`case-ops.ts`), never `store.ts`.
+**Dual-backend pattern:** store, audit/persistence and email have a memory path (dev/test) and a real implementation (Prisma/Kysely, Resend) selected by env vars. Rate limiting uses Postgres counters with an in-memory fallback (see Rate limits). Production must use the database path (`case-ops.ts`), never `store.ts`.
 
 ## Next.js Note
 

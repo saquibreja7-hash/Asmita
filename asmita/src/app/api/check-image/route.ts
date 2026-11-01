@@ -4,13 +4,15 @@ import { getClientIp } from "@/lib/request-ip";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { sha256 } from "@/lib/hash";
 import { logSecurityEvent } from "@/lib/security-log";
+import { provenanceCheckEnabled } from "@/lib/dev-flags";
 
 // Server-side content-provenance check.
 //
 // WARNING: this route sends survivor images to a third party (OpenAI). ADR 002
 // is still PROPOSED and blocked on legal sign-off. Never set
 // ENABLE_PROVENANCE_CHECK=true in staging or production, and never widen what
-// this route sends, until ADR 002 is accepted by counsel.
+// this route sends, until ADR 002 is accepted by counsel. Production builds
+// keep it off regardless (provenanceCheckEnabled in src/lib/dev-flags.ts).
 //
 // This route forwards the image to OpenAI's content-provenance endpoint to read
 // C2PA credentials and the SynthID watermark. It is a documented exception to the
@@ -36,7 +38,7 @@ type OpenAiResult = {
 };
 
 export async function POST(request: Request) {
-  if (process.env.ENABLE_PROVENANCE_CHECK !== "true") {
+  if (!provenanceCheckEnabled()) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
