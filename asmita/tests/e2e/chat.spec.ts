@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // The E2E server has no SARVAM_CHAT_KEY, so a message that passes the limits
 // and the link guard ends with 503 and nothing reaches Sarvam.
 
-test("survivor reads the chat notice first, and nothing is sent until they write", async ({ page }) => {
+test("survivor writes in the hero, reads the notice, and nothing is sent until they continue", async ({ page }) => {
   const chatRequests: string[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -12,28 +12,33 @@ test("survivor reads the chat notice first, and nothing is sent until they write
 
   await page.goto("/");
   await expect(page.getByRole("img", { name: "Cloudflare" })).toBeVisible();
-  await page.getByRole("button", { name: /Chat with us/ }).click();
+  const ask = page.getByRole("textbox", { name: "Your message" });
 
+  // A link never leaves the browser.
+  await ask.fill("it is at instagram.com/p/abc");
+  await page.getByRole("button", { name: "Ask" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Please do not send links here");
+  expect(chatRequests).toEqual([]);
+
+  await ask.fill("Someone is threatening to post my photos");
+  await page.getByRole("button", { name: "Ask" }).click();
   const chat = page.getByRole("dialog", { name: "Chat with Asmita Saathi" });
   await expect(chat.getByText("You will chat with an AI assistant, not a person.", { exact: false })).toBeVisible();
   await expect(chat.getByText(/Do not send images or links/)).toBeVisible();
   await expect(chat.getByRole("link", { name: "1098" })).toHaveAttribute("href", "tel:1098");
   await expect(chat.getByRole("link", { name: "112" })).toHaveAttribute("href", "tel:112");
-  await chat.getByRole("button", { name: "Continue and start the chat" }).click();
-  await expect(chat.getByText(/I am Asmita Saathi, an AI assistant/)).toBeVisible();
   expect(chatRequests).toEqual([]);
 
-  // A link never leaves the browser.
-  const input = chat.getByRole("textbox", { name: "Type your message" });
-  await input.fill("it is at instagram.com/p/abc");
-  await chat.getByRole("button", { name: "Send" }).click();
-  await expect(chat.getByRole("alert")).toContainText("Please do not send links here");
+  // The close button is reachable and closes the chat without sending anything.
+  await chat.getByRole("button", { name: "Close chat" }).click();
+  await expect(chat).toBeHidden();
   expect(chatRequests).toEqual([]);
 
+  await page.getByRole("button", { name: "Ask" }).click();
   const reply = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/chat");
-  await input.fill("Someone is threatening to post my photos");
-  await chat.getByRole("button", { name: "Send" }).click();
+  await chat.getByRole("button", { name: "Continue and start the chat" }).click();
   expect([429, 503]).toContain((await reply).status());
+  await expect(chat.getByText("Someone is threatening to post my photos")).toBeVisible();
   await expect(chat.getByRole("alert")).toContainText(/call the helpline/);
   await expect(chat.getByRole("link", { name: "+91 80654 80788" })).toHaveAttribute("href", "tel:+918065480788");
 });

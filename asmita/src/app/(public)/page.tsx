@@ -139,81 +139,47 @@ export default async function HomePage() {
   return (
     <AppShell>
       <div className="page-canvas">
-        {/* HERO: what Asmita does on the left, every way to get help on the right. */}
+        {/* HERO: chat first. The message box opens the assistant; the chips below
+            are the other ways in. */}
         <section className="home-hero" aria-label={say("Introduction", "परिचय")}>
-          <div className="container relative z-[1] grid items-center gap-12 pb-14 pt-14 md:pb-20 md:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
-            <div>
-              <span className="pill">
-                <span className="dot" />
-                {say("Free and confidential, for India", "भारत के लिए नि:शुल्क और गोपनीय")}
-              </span>
-              <h1 className="mt-7 max-w-3xl text-[clamp(40px,6vw,72px)]">
-                {say("Take the image down. Keep the image private.", "तस्वीर हटाने की कार्रवाई करें। तस्वीर निजी रखें।")}
-              </h1>
-              <p className="font-size-large mt-6 max-w-xl text-[var(--color-graphite)]">
-                {say(
-                  "Private help to take down intimate images shared without consent. File a complaint in about ten minutes, or talk to our assistant first, any time of day.",
-                  "बिना सहमति के साझा की गई अंतरंग तस्वीरें हटाने के लिए निजी मदद। लगभग दस मिनट में शिकायत दर्ज कराएं, या दिन में किसी भी समय पहले हमारी सहायिका से बात करें।",
-                )}
-              </p>
-              <div className="mt-9 flex flex-wrap items-center gap-3">
-                <Link className="btn btn-primary btn-arrow" href="/start">
-                  {say("File a complaint", "शिकायत दर्ज करें")}
-                </Link>
-                <Link className="btn btn-secondary" href="/what-we-do">
-                  {say("How it works", "यह कैसे काम करता है")}
-                </Link>
-              </div>
-              <ul className="home-hero-trust mt-8">
-                <li>{say("Free, always", "मुफ़्त, हमेशा")}</li>
-                <li>{say("No ID or Aadhaar needed", "किसी आईडी या आधार की आवश्यकता नहीं")}</li>
-                <li>{say("Your photo never leaves your device", "आपकी फोटो कभी भी आपके डिवाइस से बाहर नहीं जाती")}</li>
-              </ul>
+          <div className="container relative z-[1] mx-auto max-w-3xl pb-10 pt-14 text-center md:pb-14 md:pt-20">
+            <span className="pill">
+              <span className="dot" />
+              {say("Free, private, 24/7 · for India", "मुफ़्त, निजी, 24/7 · भारत के लिए")}
+            </span>
+            <h1 className="mx-auto mt-7 max-w-3xl text-[clamp(38px,5.6vw,68px)]">
+              {say("Take the image down. Keep the image private.", "तस्वीर हटाने की कार्रवाई करें। तस्वीर निजी रखें।")}
+            </h1>
+            <p className="font-size-large mx-auto mt-5 max-w-xl text-[var(--color-graphite)]">
+              {say(
+                "Tell us what happened. Our assistant answers in any Indian language and helps you file a complaint.",
+                "हमें बताइए क्या हुआ। हमारी सहायिका किसी भी भारतीय भाषा में जवाब देती है और आपको शिकायत दर्ज कराने में मदद करती है।",
+              )}
+            </p>
+            <div className="mx-auto mt-8 max-w-2xl text-left">
+              <HomeChat copy={chatCopy} locale={locale} />
             </div>
-
-            <div className="home-hero-help">
-              <p className="eyebrow">{say("Get help right now", "अभी मदद प्राप्त करें")}</p>
-              <ul className="mt-4 space-y-3">
-                <li>
-                  <HomeChat copy={chatCopy} locale={locale} triggerClassName="home-help-tile">
-                    <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>
-                    <span className="min-w-0">
-                      <span className="home-help-title">{chatCopy["chat.open"]}</span>
-                      <span className="home-help-text">
-                        {say("Type to an AI assistant, in any Indian language.", "किसी भी भारतीय भाषा में ए.आई. सहायक से चैट करें।")}
-                      </span>
-                    </span>
-                  </HomeChat>
-                </li>
-                <li>
-                  {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
-                  <a className="home-help-tile" href="/talk">
-                    <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
-                    <span className="min-w-0">
-                      <span className="home-help-title">{say("Talk in your browser", "अपने ब्राउज़र में बात करें")}</span>
-                      <span className="home-help-text">
-                        {say("Speak to the same assistant without dialling.", "बिना डायल किए उसी सहायक से बात करें।")}
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a className="home-help-tile" href={`tel:${HELPLINE.tel}`}>
-                    <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg></span>
-                    <span className="min-w-0">
-                      <span className="home-help-title">{say("Call the 24/7 helpline", "24/7 हेल्पलाइन पर कॉल करें")}</span>
-                      <span className="home-help-text home-help-number">{HELPLINE.display}</span>
-                    </span>
-                  </a>
-                </li>
-              </ul>
-              <p className="mt-5 text-[14px] leading-[1.5] text-[var(--color-graphite)]">
-                {say(
-                  "In danger right now? Call 112. Under 18? Call CHILDLINE 1098.",
-                  "अभी खतरे में हैं? 112 पर कॉल करें। 18 साल से कम उम्र है? चाइल्डलाइन 1098 पर कॉल करें।",
-                )}
-              </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <Link className="btn btn-primary btn-arrow" href="/start">
+                {say("File a complaint", "शिकायत दर्ज करें")}
+              </Link>
+              {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
+              <a className="btn btn-secondary home-chip" href="/talk">
+                <svg aria-hidden viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+                {say("Talk in browser", "ब्राउज़र में बात करें")}
+              </a>
+              <a className="btn btn-secondary home-chip" href={`tel:${HELPLINE.tel}`}>
+                <svg aria-hidden viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>
+                <span className="sr-only">{say("Call the 24/7 helpline", "24/7 हेल्पलाइन पर कॉल करें")}: </span>
+                {HELPLINE.display}
+              </a>
             </div>
+            <p className="mt-5 text-[14px] leading-[1.5] text-[var(--color-graphite)]">
+              {say(
+                "In danger right now? Call 112. Under 18? Call CHILDLINE 1098.",
+                "अभी खतरे में हैं? 112 पर कॉल करें। 18 साल से कम उम्र है? चाइल्डलाइन 1098 पर कॉल करें।",
+              )}
+            </p>
           </div>
 
           <div className="container relative z-[1] pb-12 md:pb-16">
