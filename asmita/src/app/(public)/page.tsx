@@ -177,7 +177,7 @@ export default async function HomePage() {
                 </span>
                 <span className="min-w-0">
                   <span className="block text-[13px] uppercase tracking-[0.08em] text-[var(--color-graphite)]">
-                    {say("Prefer to talk? 24/7 helpline", "क्या आप बात करना पसंद करेंगी? 24/7 हेल्पलाइन")}
+                    {say("Prefer to talk? 24/7 helpline", "बात करना चाहें? 24/7 हेल्पलाइन")}
                   </span>
                   <span className="mt-0.5 block text-[22px] font-medium leading-tight text-[var(--color-off-black)]">
                     {HELPLINE.display}
