@@ -28,6 +28,14 @@ type Step =
   | "hash-signing"
   | "form-only-handoff";
 
+// When no notice is left to sign: a link on a platform that only takes its
+// own form needs the survivor to file that form, so they go to the handoff;
+// anything else waiting (a new site, a contact being checked) is ours to do.
+async function pathAfterNotices(caseId: string, preview: Response) {
+  const { error } = (await preview.json().catch(() => ({}))) as { error?: string };
+  return error === "form_only_platform" ? `/handoff/${caseId}` : `/case/${caseId}/confirmation`;
+}
+
 function CheckItem({ heading, detail }: { heading: string; detail: string }) {
   return (
     <div className="flex items-start gap-3">
@@ -59,6 +67,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
   const [signature, setSignature] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
+  const [signedCount, setSignedCount] = useState(0);
   const started = useRef(false);
   // Review and signing are one screen: the case is created as soon as the
   // draft is read, so the notice preview appears without another click.
@@ -167,8 +176,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         setPreviewUrl(`/api/cases/${newCaseId}/preview-notice`);
         setStep("sign");
       } else {
-        // No notice to sign yet (for example a new site): the case is saved.
-        router.push(`/case/${newCaseId}/confirmation`);
+        router.push(await pathAfterNotices(newCaseId, previewRes));
       }
     } catch {
       setError(t(locale, "review.error.generic"));
@@ -196,7 +204,19 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         setStep("sign");
         return;
       }
-      router.push(`/case/${caseId}/confirmation`);
+      // Each link has its own notice. If another is ready, sign it here too;
+      // the signature and confirmation are given again for every notice.
+      const next = await fetch(`/api/cases/${caseId}/preview-notice`);
+      if (next.ok) {
+        const count = signedCount + 1;
+        setSignedCount(count);
+        setSignature("");
+        setAgreed(false);
+        setPreviewUrl(`/api/cases/${caseId}/preview-notice?after=${count}`);
+        setStep("sign");
+        return;
+      }
+      router.push(await pathAfterNotices(caseId, next));
     } catch {
       setError(t(locale, "review.sign.error.timeout"));
       setStep("sign");
@@ -463,6 +483,12 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
             {t(locale, "review.sign.sub")}
           </p>
         </div>
+
+        {signedCount > 0 && !isHashSign && (
+          <p className="rounded-[16px] bg-[var(--teal-soft)] px-4 py-3 text-sm font-medium text-[var(--teal-dark)]" role="status">
+            {t(locale, "review.sign.nextNote")}
+          </p>
+        )}
 
         {draft && draft.urls.length > 0 && !isHashSign && (
           <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5">

@@ -58,8 +58,8 @@ test("registered adult can generate a fingerprint and submit it with a URL", asy
   const hashResult = await hashResponse;
   expect(hashResult.ok()).toBe(true);
   expect((await hashResult.json()).results[0].ok).toBe(true);
-  await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30_000 });
-  await page.getByRole("link", { name: "Open dashboard" }).click();
+  await expect(page).toHaveURL(/\/handoff\/[^/]+$/, { timeout: 30_000 });
+  await page.getByRole("link", { name: "Back to dashboard" }).click();
   await expect(page.getByText("Digital fingerprints")).toBeVisible();
 });
 
@@ -80,4 +80,12 @@ test("hash-only registration offers a platform handoff", async ({ page }) => {
   await page.getByRole("link", { name: /case dashboard/i }).click();
   await expect(page).toHaveURL(/\/case\/[^/]+$/);
   await expect(page.getByText("Digital fingerprints")).toBeVisible();
+});
+
+test("the fingerprint section is honest about what a fingerprint does and points to StopNCII", async ({ page }) => {
+  test.setTimeout(90_000);
+  await register(page);
+  await expect(page.getByText(/does not remove anything by itself/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open StopNCII.org" })).toHaveAttribute("href", "https://stopncii.org/");
+  await expect(page.getByText(/find and remove matching content proactively/)).toHaveCount(0);
 });

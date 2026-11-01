@@ -39,7 +39,13 @@
       "confirm.sub",
       "confirm.aside.*",
       "confirm.ref.body",
-      "confirm.next.*"
+      "confirm.next.*",
+      "submit.hash.sub",
+      "submit.hash.doneNote",
+      "submit.hash.stopncii.*",
+      "review.links.moreNote",
+      "review.sign.nextNote",
+      "case.sign.sub"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",

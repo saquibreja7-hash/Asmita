@@ -24,9 +24,10 @@ async function createCase(page: import("@playwright/test").Page) {
   expect((await createResponse).ok()).toBe(true);
 
   // Flow branches: if a notice preview exists, the sign form appears on the
-  // same screen; either way the survivor ends on the "done for now" page.
+  // same screen. The survivor then ends on "done for now", or on the
+  // platform's own form for a form-only platform such as Instagram.
   const signForm = page.getByLabel("Full name");
-  const donePage = page.waitForURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30_000 }).catch(() => {});
+  const donePage = page.waitForURL(/\/(case\/[^/]+\/confirmation|handoff\/[^/]+)$/, { timeout: 30_000 }).catch(() => {});
   if (await signForm.isVisible({ timeout: 5_000 }).catch(() => false)) {
     await signForm.fill("Test User");
     await page.getByLabel("Contact (email or phone)").fill("test@example.com");
@@ -34,9 +35,9 @@ async function createCase(page: import("@playwright/test").Page) {
     await page.getByRole("button", { name: "Sign and submit" }).click();
   }
   await donePage;
-  await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: "You are done for now." })).toBeVisible();
-  await page.getByRole("link", { name: "Open dashboard" }).click();
+  await expect(page).toHaveURL(/\/handoff\/[^/]+$/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Use the platform's own form." })).toBeVisible();
+  await page.getByRole("link", { name: "Back to dashboard" }).click();
   await expect(page).toHaveURL(/\/case\/[^/]+$/);
   await expect(page.getByText(/ASMITA-/).first()).toBeVisible();
 }
