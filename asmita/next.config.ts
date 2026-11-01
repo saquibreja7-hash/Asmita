@@ -6,13 +6,17 @@ const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 const isProd = process.env.NODE_ENV === "production";
 
-function csp(frameAncestors: "'none'" | "'self'") {
+// Only /talk passes the voice option (see headers below).
+function csp(frameAncestors: "'none'" | "'self'", { voice = false } = {}) {
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
+    // The Sarvam SDK loads its audio worklet from a blob: URL.
+    `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}${voice ? " blob:" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    "connect-src 'self'",
+    // The browser opens the signed voice WebSocket straight to Sarvam; the
+    // session route refuses any signed URL outside *.sarvam.ai.
+    `connect-src 'self'${voice ? " wss://*.sarvam.ai" : ""}`,
     "font-src 'self' data:",
     "object-src 'none'",
     `frame-ancestors ${frameAncestors}`,
@@ -53,6 +57,15 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },
+      // Browser voice calls with the helpline: the microphone and Sarvam's
+      // WebSocket are allowed on this page only.
+      {
+        source: "/talk",
+        headers: [
+          { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
+          { key: "Content-Security-Policy", value: csp("'none'", { voice: true }) },
+        ],
+      },
       // PDF previews are served into iframes on the sign pages — relax framing
       // headers for these routes only. All other security headers still apply.
       {

@@ -26,6 +26,10 @@ export default defineConfig({
       DEV_SKIP_ADMIN_MFA: "false",
       ADMIN_EMAILS: "e2e-new-admin@example.invalid",
       OTP_GLOBAL_HOURLY_LIMIT: "1000",
+      // No key, so no voice session reaches Sarvam; a low daily cap so
+      // talk.spec.ts can reach it.
+      SARVAM_API_KEY: "",
+      VOICE_DAILY_SESSION_LIMIT: "3",
       // next dev also loads .env.local; pin anything there that would change
       // behaviour or reach a real service, so local runs match CI.
       DEV_SKIP_LEGAL_REVIEW: "false",

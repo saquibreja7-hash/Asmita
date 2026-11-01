@@ -188,6 +188,10 @@ export default async function HomePage() {
                   </span>
                 </span>
               </a>
+              {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
+              <a className="btn btn-secondary mt-3" href="/talk">
+                Talk to us from your browser
+              </a>
             </div>
           </div>
 

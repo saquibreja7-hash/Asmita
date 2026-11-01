@@ -7,8 +7,9 @@
 //   npm run build:vinext && node scripts/prepare-production-wrangler.mjs
 //   E2E_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5433/asmita_e2e node scripts/worker-smoke.mjs
 import { spawn } from "node:child_process";
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
+import { VOICE_AGENT_PATH } from "../src/lib/helpline.ts";
 
 const databaseUrl = process.env.E2E_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5433/asmita_e2e";
 const target = new URL(databaseUrl);
@@ -108,7 +109,33 @@ try {
   // closed in production even with the flag set.
   const provenance = await fetch(`http://127.0.0.1:${port}/api/check-image`, { method: "POST" });
   if (provenance.status !== 404) throw new Error(`/api/check-image returned ${provenance.status}, expected 404`);
-  console.log("Worker smoke passed: Prisma runs in workerd, each request gets its own connection, and the provenance check is off.");
+  // Voice calls: /talk alone may use the microphone and reach Sarvam, and the
+  // session route needs a CSRF token, counts against the Postgres rate limit
+  // and, with no SARVAM_API_KEY secret, answers 503 without calling Sarvam.
+  const home = await fetch(`http://127.0.0.1:${port}/`);
+  const talk = await fetch(`http://127.0.0.1:${port}/talk`);
+  if (home.headers.get("permissions-policy")?.includes("microphone=(self)") || home.headers.get("content-security-policy")?.includes("sarvam.ai")) {
+    throw new Error("The home page allows the microphone or Sarvam; only /talk should");
+  }
+  if (!talk.headers.get("permissions-policy")?.includes("microphone=(self)") || !talk.headers.get("content-security-policy")?.includes("wss://*.sarvam.ai")) {
+    throw new Error(`/talk is missing its voice headers: ${talk.headers.get("permissions-policy")} | ${talk.headers.get("content-security-policy")}`);
+  }
+  const sessionUrl = `http://127.0.0.1:${port}/api/voice/${VOICE_AGENT_PATH}?interaction_type=call&version=4`;
+  const noCsrf = await fetch(sessionUrl);
+  if (noCsrf.status !== 403) throw new Error(`Voice session without CSRF returned ${noCsrf.status}, expected 403`);
+  const csrf = await fetch(`http://127.0.0.1:${port}/api/csrf`);
+  const cookie = csrf.headers.get("set-cookie")?.split(";")[0] ?? "";
+  const { token } = await csrf.json();
+  const session = await fetch(sessionUrl, { headers: { cookie, "x-csrf-token": token } });
+  if (session.status !== 503) throw new Error(`Voice session without a key returned ${session.status}, expected 503:\n${output.slice(-3000)}`);
+  const buckets = new pg.Client({ connectionString: databaseUrl });
+  await buckets.connect();
+  const globalKey = createHash("sha256").update("voice-session-global").digest("hex");
+  const counted = await buckets.query(`SELECT count(*)::int AS n FROM "RateLimitBucket" WHERE "key" = $1`, [globalKey]);
+  await buckets.end();
+  if (counted.rows[0].n !== 1) throw new Error("The voice daily cap was not counted in Postgres");
+
+  console.log("Worker smoke passed: Prisma runs in workerd, each request gets its own connection, the provenance check is off, and voice headers and session limits work.");
   exitCode = 0;
 } catch (err) {
   console.error(err);
