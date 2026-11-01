@@ -115,8 +115,7 @@ export function Footer({ locale }: { locale: Locale }) {
         <div className="site-footer-bottom-bar flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="site-footer-helpline !mt-0">
             <p className="site-footer-cl-label">
-              {/* Hindi label pending a native speaker. */}
-              Asmita helpline (24/7) ·{" "}
+              {isHi ? "अस्मिता हेल्पलाइन (24/7)" : "Asmita helpline (24/7)"} ·{" "}
               <a href={`tel:${HELPLINE.tel}`} className="font-medium text-[var(--color-off-black)]">
                 {HELPLINE.display}
               </a>

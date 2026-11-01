@@ -12,5 +12,17 @@
     "/case/[caseId]/sign - declaration is legally consequential, English only",
     "/review-sign - as above",
     "Platform-specific reporting notes in /resources - references English-language UIs"
-  ]
+  ],
+  "machineTranslated": {
+    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request",
+    "keys": [
+      "talk.*",
+      "privacy.s08.i5.*"
+    ],
+    "inline": [
+      "home helpline card, Talk to us button and Supported by label",
+      "about page Sarvam line",
+      "footer helpline label"
+    ]
+  }
 }

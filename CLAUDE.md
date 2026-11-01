@@ -25,7 +25,6 @@ These are not checklists — they are the reasoning to apply when making decisio
 **Never invent facts that get sent to platforms or survivors.**
 - Grievance Officer emails, phones and addresses come only from human-verified sources. If one is missing, use `<TO_BE_VERIFIED_BY_HUMAN>`; never guess.
 - Indian law citations come only from PRD Section 4 (`asmita/docs/archive/planning-2026-05/PRD_Asmita.md`) or the MeitY October 2025 NCII SOP. Anything else is tagged `[CITATION REQUIRED — verify with legal advisor]`.
-- Survivor-facing Hindi is written by a native speaker. You may add empty keys to `src/i18n/hi.json`, not machine-translated text (see `src/i18n/hi-review-status.json`).
 
 ## Current Feature State
 
