@@ -817,7 +817,6 @@
   "talk.end": "End call",
   "talk.again": "Start again",
   "talk.phone": "Prefer the phone? Call the same assistant on +91 80654 80788, any time of day.",
-  "chat.open": "Chat with us",
   "chat.title": "Chat with Asmita Saathi",
   "chat.close": "Close chat",
   "chat.notice.heading": "Before you start",
@@ -838,5 +837,8 @@
   "chat.error.unavailable": "The chat is not available right now. Please call the helpline instead.",
   "chat.phone": "Prefer to talk? Call the 24/7 helpline on +91 80654 80788.",
   "chat.greeting": "Namaste. I am Asmita Saathi, an AI assistant. You can write in Hindi, English or any Indian language. Tell me what happened, only as much as you are comfortable sharing.",
-  "chat.typing": "Asmita Saathi is typing"
+  "chat.typing": "Asmita Saathi is typing",
+  "chat.ask": "Ask",
+  "chat.askPlaceholder": "Someone shared my photos without consent…",
+  "chat.askLabel": "Your message"
 }
