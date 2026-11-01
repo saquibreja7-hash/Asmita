@@ -15,8 +15,8 @@ function csp(frameAncestors: "'none'" | "'self'", { voice = false } = {}) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     // The browser opens the signed voice WebSocket straight to Sarvam; the
-    // session route refuses any signed URL outside *.sarvam.ai.
-    `connect-src 'self'${voice ? " wss://*.sarvam.ai" : ""}`,
+    // session route refuses any signed URL on another host.
+    `connect-src 'self'${voice ? " wss://apps.sarvam.ai" : ""}`,
     "font-src 'self' data:",
     "object-src 'none'",
     `frame-ancestors ${frameAncestors}`,

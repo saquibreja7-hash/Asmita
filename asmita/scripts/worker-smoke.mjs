@@ -117,7 +117,7 @@ try {
   if (home.headers.get("permissions-policy")?.includes("microphone=(self)") || home.headers.get("content-security-policy")?.includes("sarvam.ai")) {
     throw new Error("The home page allows the microphone or Sarvam; only /talk should");
   }
-  if (!talk.headers.get("permissions-policy")?.includes("microphone=(self)") || !talk.headers.get("content-security-policy")?.includes("wss://*.sarvam.ai")) {
+  if (!talk.headers.get("permissions-policy")?.includes("microphone=(self)") || !talk.headers.get("content-security-policy")?.includes("wss://apps.sarvam.ai")) {
     throw new Error(`/talk is missing its voice headers: ${talk.headers.get("permissions-policy")} | ${talk.headers.get("content-security-policy")}`);
   }
   const sessionUrl = `http://127.0.0.1:${port}/api/voice/${VOICE_AGENT_PATH}?interaction_type=call&version=5`;

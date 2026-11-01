@@ -30,7 +30,7 @@ test("survivor sees the notice before any voice call, and nothing reaches Sarvam
 
   const talk = await page.request.get("/talk");
   expect(talk.headers()["permissions-policy"]).toContain("microphone=(self)");
-  expect(talk.headers()["content-security-policy"]).toContain("connect-src 'self' wss://*.sarvam.ai");
+  expect(talk.headers()["content-security-policy"]).toContain("connect-src 'self' wss://apps.sarvam.ai");
 
   const sessionStart = page.waitForResponse((response) => response.url().includes("/api/voice/"));
   await page.getByRole("button", { name: "Continue and start the call" }).click();

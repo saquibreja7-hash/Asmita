@@ -29,7 +29,7 @@ function isSarvamSocketUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
   try {
     const url = new URL(value);
-    return url.protocol === "wss:" && url.hostname.endsWith(".sarvam.ai");
+    return url.protocol === "wss:" && url.hostname === "apps.sarvam.ai";
   } catch {
     return false;
   }
