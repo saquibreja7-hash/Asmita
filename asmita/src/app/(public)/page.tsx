@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
+import { SupporterLogos } from "@/components/layout/Supporters";
+import { HELPLINE } from "@/lib/helpline";
 
 /*
  * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
@@ -166,6 +168,26 @@ export default async function HomePage() {
                   {say("How it works", "यह कैसे काम करता है")}
                 </Link>
               </div>
+              {/* Hindi copy pending a native speaker; the English shows until then. */}
+              <a
+                href={`tel:${HELPLINE.tel}`}
+                className="mt-8 flex max-w-xl items-center gap-4 rounded-2xl border border-[var(--color-ash)] bg-white/85 px-5 py-4 no-underline shadow-sm backdrop-blur transition-colors hover:border-[var(--color-graphite)]"
+              >
+                <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--color-off-black)] text-lg text-white">
+                  ☎
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[13px] uppercase tracking-[0.08em] text-[var(--color-graphite)]">
+                    Prefer to talk? 24/7 helpline
+                  </span>
+                  <span className="mt-0.5 block text-[22px] font-medium leading-tight text-[var(--color-off-black)]">
+                    {HELPLINE.display}
+                  </span>
+                  <span className="mt-1 block text-[14px] leading-[1.45] text-[var(--color-graphite)]">
+                    An AI assistant guides you step by step through filing your complaint, in any Indian language.
+                  </span>
+                </span>
+              </a>
             </div>
           </div>
 
@@ -346,6 +368,14 @@ export default async function HomePage() {
                 </details>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* SUPPORTERS */}
+        <section className="pb-16 md:pb-20" aria-labelledby="supporters-heading">
+          <div className="container flex flex-col items-center gap-6 text-center">
+            <p id="supporters-heading" className="eyebrow">Supported by</p>
+            <SupporterLogos className="justify-center" />
           </div>
         </section>
 
