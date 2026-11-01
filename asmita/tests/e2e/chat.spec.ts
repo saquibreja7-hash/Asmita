@@ -55,7 +55,7 @@ test("the chat route refuses links and images, routes under-18s, and caps messag
   const statuses: number[] = [];
   for (let i = 0; i < 4 && !statuses.includes(429); i += 1) {
     const underAge = i % 2 === 1;
-    const response = await send(underAge ? "I am 15 and my photos were posted" : "see www.example.com/post", token);
+    const response = await send(underAge ? "I am 17 so please help, my photos were posted" : "see www.example.com/post", token);
     statuses.push(response.status());
     if (response.status() === 200) {
       const { reply } = (await response.json()) as { reply: string };

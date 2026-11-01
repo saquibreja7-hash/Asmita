@@ -124,7 +124,7 @@ try {
   if (!talk.headers.get("permissions-policy")?.includes("microphone=(self)") || !talk.headers.get("content-security-policy")?.includes("wss://apps.sarvam.ai")) {
     throw new Error(`/talk is missing its voice headers: ${talk.headers.get("permissions-policy")} | ${talk.headers.get("content-security-policy")}`);
   }
-  const sessionUrl = `http://127.0.0.1:${port}/api/voice/${VOICE_AGENT_PATH}?interaction_type=call&version=6`;
+  const sessionUrl = `http://127.0.0.1:${port}/api/voice/${VOICE_AGENT_PATH}?interaction_type=call&version=7`;
   const noCsrf = await fetch(sessionUrl);
   if (noCsrf.status !== 403) throw new Error(`Voice session without CSRF returned ${noCsrf.status}, expected 403`);
   const csrf = await fetch(`http://127.0.0.1:${port}/api/csrf`);
