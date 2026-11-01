@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { linkify } from "@/components/linkify";
 import { containsUrlLikeText } from "@/lib/feedback";
@@ -55,6 +55,11 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
   const titleRef = useRef<HTMLHeadingElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const heroInputRef = useRef<HTMLInputElement>(null);
+  // Bumped when the chat closes, so a reply that arrives later is ignored and
+  // never reopens a chat the person dismissed.
+  const session = useRef(0);
+  // The last message that failed, offered again by "Start a new chat".
+  const failedText = useRef("");
 
   // Scroll only the message list, never the page behind the panel.
   useEffect(() => {
@@ -67,16 +72,22 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
     if (phase === "open") inputRef.current?.focus();
   }, [phase]);
 
+  const onEscape = useEffectEvent(() => close());
   useEffect(() => {
     if (phase === "closed") return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") onEscape();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [phase]);
 
   function close() {
+    session.current += 1;
+    // Once a chat has started, closing it clears the hero box too, so what was
+    // written does not stay on the page of a shared phone.
+    if (phase === "open" || phase === "error") setHeroDraft("");
+    failedText.current = "";
     setMessages([]);
     setDraft("");
     setPending("");
@@ -100,6 +111,14 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
     const next = [...history, { role: "user" as const, content: text }];
     setMessages(next);
     setWaiting(true);
+    const current = session.current;
+    const stillOpen = () => session.current === current;
+    const fail = (key: ErrorKey) => {
+      if (!stillOpen()) return;
+      failedText.current = text;
+      setError(key);
+      setPhase("error");
+    };
     try {
       if (!csrfToken.current) {
         csrfToken.current = ((await (await fetch("/api/csrf", { cache: "no-store" })).json()) as { token: string }).token;
@@ -110,20 +129,19 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
         body: JSON.stringify({ locale, messages: next.slice(-MAX_HISTORY) }),
       });
       if (!response.ok) {
-        setError(response.status === 429 ? "chat.error.busy" : "chat.error.unavailable");
-        setPhase("error");
+        fail(response.status === 429 ? "chat.error.busy" : "chat.error.unavailable");
         return;
       }
       const { reply } = (await response.json()) as { reply: string };
+      if (!stillOpen()) return;
       setMessages((current) => [...current, { role: "assistant", content: reply }]);
       // The hero box keeps what the person typed until it has gone through, so
       // a failed first send never makes them write it again.
       if (history.length === 0) setHeroDraft("");
     } catch {
-      setError("chat.error.unavailable");
-      setPhase("error");
+      fail("chat.error.unavailable");
     } finally {
-      setWaiting(false);
+      if (stillOpen()) setWaiting(false);
     }
   }
 
@@ -221,7 +239,7 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
               type="button"
               className="btn btn-secondary mt-3"
               onClick={() => {
-                setPending(heroDraft.trim());
+                setPending(failedText.current || heroDraft.trim());
                 setMessages([]);
                 setPhase("notice");
               }}
