@@ -838,7 +838,5 @@
   "chat.phone": "Prefer to talk? Call the 24/7 helpline on +91 80654 80788.",
   "chat.greeting": "Namaste. I am Asmita Saathi, an AI assistant. You can write in Hindi, English or any Indian language. Tell me what happened, only as much as you are comfortable sharing.",
   "chat.typing": "Asmita Saathi is typing",
-  "chat.ask": "Ask",
-  "chat.askPlaceholder": "Someone shared my photos without consent…",
-  "chat.askLabel": "Your message"
+  "chat.open": "Chat with us"
 }
