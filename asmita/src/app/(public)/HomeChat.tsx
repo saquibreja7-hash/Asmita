@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { linkify } from "@/components/linkify";
 import { containsUrlLikeText } from "@/lib/feedback";
@@ -8,10 +8,10 @@ import { HELPLINE } from "@/lib/helpline";
 import type { ChatCopy } from "./chat-copy";
 
 /*
- * The home page chat with the Asmita Saathi assistant. The hero's message box
- * opens it; whatever the person typed there is sent once they have read the
- * notice and tapped Continue. The conversation lives only in this component:
- * it is sent to /api/chat with each message and is gone when the chat closes.
+ * The home page chat with the Asmita Saathi assistant, opened from the "Chat
+ * with us" tile. The notice comes first; nothing is sent until the person
+ * continues and writes. The conversation lives only in this component: it is
+ * sent to /api/chat with each message and is gone when the chat closes.
  * Asmita stores none of it.
  *
  * The panel is rendered into <body>, not inside the hero: an ancestor with a
@@ -38,14 +38,22 @@ function checkDraft(text: string): WarningKey {
   return "";
 }
 
-export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi" }) {
+export function HomeChat({
+  copy,
+  locale,
+  triggerClassName,
+  children,
+}: {
+  copy: ChatCopy;
+  locale: "en" | "hi";
+  triggerClassName: string;
+  children: ReactNode;
+}) {
   // True in the browser, false while rendering on the server (no document for the portal).
   const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
   const [phase, setPhase] = useState<Phase>("closed");
   const [error, setError] = useState<ErrorKey>("chat.error.unavailable");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [heroDraft, setHeroDraft] = useState("");
-  const [heroWarning, setHeroWarning] = useState<WarningKey>("");
   const [pending, setPending] = useState("");
   const [draft, setDraft] = useState("");
   const [warning, setWarning] = useState<WarningKey>("");
@@ -54,7 +62,7 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
   const logRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const heroInputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   // Bumped when the chat closes, so a reply that arrives later is ignored and
   // never reopens a chat the person dismissed.
   const session = useRef(0);
@@ -84,27 +92,14 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
 
   function close() {
     session.current += 1;
-    // Once a chat has started, closing it clears the hero box too, so what was
-    // written does not stay on the page of a shared phone.
-    if (phase === "open" || phase === "error") setHeroDraft("");
     failedText.current = "";
     setMessages([]);
     setDraft("");
     setPending("");
     setWarning("");
+    setWaiting(false);
     setPhase("closed");
-    heroInputRef.current?.focus();
-  }
-
-  function openFromHero(event: FormEvent) {
-    event.preventDefault();
-    const text = heroDraft.trim();
-    const problem = checkDraft(text);
-    setHeroWarning(problem);
-    if (problem) return;
-    setPending(text);
-    setMessages([]);
-    setPhase("notice");
+    triggerRef.current?.focus();
   }
 
   async function sendText(text: string, history: Message[]) {
@@ -134,10 +129,7 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
       }
       const { reply } = (await response.json()) as { reply: string };
       if (!stillOpen()) return;
-      setMessages((current) => [...current, { role: "assistant", content: reply }]);
-      // The hero box keeps what the person typed until it has gone through, so
-      // a failed first send never makes them write it again.
-      if (history.length === 0) setHeroDraft("");
+      setMessages((all) => [...all, { role: "assistant", content: reply }]);
     } catch {
       fail("chat.error.unavailable");
     } finally {
@@ -168,12 +160,7 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
   const inlineLink = "link-underline font-medium";
 
   const panel = (
-    <section
-      role="dialog"
-      aria-modal="false"
-      aria-labelledby="home-chat-title"
-      className="home-chat-panel"
-    >
+    <section role="dialog" aria-modal="false" aria-labelledby="home-chat-title" className="home-chat-panel">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--hairline)] px-5 py-3">
         <h2 id="home-chat-title" ref={titleRef} tabIndex={-1} className="text-[17px] font-medium leading-tight text-[var(--foreground)] outline-none">
           {copy["chat.title"]}
@@ -239,7 +226,8 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
               type="button"
               className="btn btn-secondary mt-3"
               onClick={() => {
-                setPending(failedText.current || heroDraft.trim());
+                setPending(failedText.current);
+                failedText.current = "";
                 setMessages([]);
                 setPhase("notice");
               }}
@@ -292,35 +280,18 @@ export function HomeChat({ copy, locale }: { copy: ChatCopy; locale: "en" | "hi"
 
   return (
     <>
-      <form onSubmit={openFromHero} className="home-ask">
-        <svg aria-hidden className="shrink-0 text-[var(--color-brand-teal)]" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
-        </svg>
-        <label htmlFor="home-ask-input" className="sr-only">
-          {copy["chat.askLabel"]}
-        </label>
-        <input
-          id="home-ask-input"
-          ref={heroInputRef}
-          value={heroDraft}
-          onChange={(event) => {
-            setHeroDraft(event.target.value);
-            if (heroWarning) setHeroWarning("");
-          }}
-          maxLength={MAX_LENGTH}
-          placeholder={copy["chat.askPlaceholder"]}
-          autoComplete="off"
-          className="home-ask-input"
-        />
-        <button type="submit" className="btn btn-primary home-ask-button" aria-expanded={phase !== "closed"}>
-          {copy["chat.ask"]}
-        </button>
-      </form>
-      {heroWarning && (
-        <p role="alert" className="mt-2 text-sm text-[var(--danger)]">
-          {copy[heroWarning]}
-        </p>
-      )}
+      <button
+        ref={triggerRef}
+        type="button"
+        className={triggerClassName}
+        onClick={() => {
+          setMessages([]);
+          setPhase("notice");
+        }}
+        aria-expanded={phase !== "closed"}
+      >
+        {children}
+      </button>
       {mounted && phase !== "closed" && createPortal(panel, document.body)}
     </>
   );
