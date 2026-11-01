@@ -36,7 +36,13 @@ const MINOR_REPLY = {
 const UNDER_18 = [
   /\b(i am|i'm|im|my age is|aged?)\s*(1[0-7]|[5-9])(\s*(years?|yrs?)(\s*old)?)?\s*($|[,.!?;]|\band\b|\bbut\b)/i,
   /\b(1[0-7]|[5-9])\s*(years?|yrs?)\s*old\b/i,
+  /\b(just\s+)?turned\s*(1[0-7]|[5-9])\b/i,
+  // A school student: "I'm in class 10", "I study in 9th standard", "class 11 student".
+  /\b(i am|i'm|im|i study|i'm studying|studying)\s*(in\s*)?(class|std|standard|grade)\s*([5-9]|1[0-2])(th)?\b/i,
+  /\b(i am in|i'm in|im in|i study in|i'm studying in|studying in)\s*([5-9]|1[0-2])th\s*(class|std|standard|grade)\b/i,
+  /\b(class|std|standard|grade)\s*([5-9]|1[0-2])(th)?\s*(student|mein|me|main)\b/i,
   /(मैं|मेरी उम्र|उम्र)\s*(1[0-7]|[5-9])\s*(साल|वर्ष)/,
+  /(कक्षा|क्लास)\s*([5-9]|1[0-2])\s*(में|की|का)/,
   /\b(main|mai|meri umar|meri umr|umar|umr)\s*(1[0-7]|[5-9])\s*(saal|sal|varsh)\b/i,
 ];
 function statesUnder18(text: string) {
