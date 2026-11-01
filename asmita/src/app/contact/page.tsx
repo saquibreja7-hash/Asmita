@@ -56,6 +56,12 @@ export default function ContactPage() {
               </a>
               . An AI assistant helps you file a complaint step by step, in any Indian language.
             </p>
+            <div className="mt-6 flex justify-center">
+              {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
+              <a className="btn btn-secondary" href="/talk">
+                Talk to us from your browser
+              </a>
+            </div>
           </div>
         </section>
 

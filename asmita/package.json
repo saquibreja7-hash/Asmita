@@ -48,6 +48,7 @@
     "react-server-dom-webpack": "^19.3.0",
     "regenerator-runtime": "^0.14.1",
     "resend": "^6.12.3",
+    "sarvam-conv-ai-sdk": "0.0.42",
     "vinext": "1.4.0",
     "zod": "^4.4.3"
   },
@@ -91,7 +92,8 @@
     "mysql2": "^3.24.3",
     "qs": "^6.16.0",
     "puppeteer-core": "^25.10.0",
-    "@puppeteer/browsers": "^3.2.2"
+    "@puppeteer/browsers": "^3.2.2",
+    "speaker": "npm:empty-npm-package@1.0.0"
   },
   "type": "module"
 }
