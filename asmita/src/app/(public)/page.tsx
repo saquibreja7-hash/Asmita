@@ -3,6 +3,9 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { SupporterLogos } from "@/components/layout/Supporters";
 import { HELPLINE } from "@/lib/helpline";
+import { t } from "@/lib/i18n";
+import { CHAT_COPY_KEYS, type ChatCopy } from "./chat-copy";
+import { HomeChat } from "./HomeChat";
 
 /*
  * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
@@ -132,71 +135,93 @@ const hindi = {
 export default async function HomePage() {
   const locale = await getLocale();
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
+  const chatCopy = Object.fromEntries(CHAT_COPY_KEYS.map((key) => [key, t(locale, key)])) as ChatCopy;
   return (
     <AppShell>
       <div className="page-canvas">
-        {/* HERO: pure typographic, wash behind */}
-        <section className="hero hero-image" aria-label={say("Introduction", "परिचय")}>
-          <div className="hero-image-bg" aria-hidden>
-            <picture>
-              <source media="(max-width: 720px)" srcSet="/images/hero-bg-sm.webp" />
-              <img src="/images/hero-bg.webp" alt="" width={2400} height={1350} fetchPriority="high" decoding="async" />
-            </picture>
-            <span className="hero-image-tint" />
-            <span className="hero-image-fade" />
-          </div>
-          <div className="hero-content container">
-            <div className="hero-image-copy">
+        {/* HERO: what Asmita does on the left, every way to get help on the right. */}
+        <section className="home-hero" aria-label={say("Introduction", "परिचय")}>
+          <div className="container relative z-[1] grid items-center gap-12 pb-14 pt-14 md:pb-20 md:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+            <div>
               <span className="pill">
                 <span className="dot" />
                 {say("Free and confidential, for India", "भारत के लिए नि:शुल्क और गोपनीय")}
               </span>
-              <h1 className="mt-8 max-w-3xl text-[clamp(40px,6vw,76px)]">
+              <h1 className="mt-7 max-w-3xl text-[clamp(40px,6vw,72px)]">
                 {say("Take the image down. Keep the image private.", "तस्वीर हटाने की कार्रवाई करें। तस्वीर निजी रखें।")}
               </h1>
-              <p className="font-size-large mt-6 max-w-xl">
+              <p className="font-size-large mt-6 max-w-xl text-[var(--color-graphite)]">
                 {say(
-                  "A private path to prepare takedown notices for anyone in India facing non-consensual or AI-made intimate images. You can report a link or generate a fingerprint on your device.",
-                  "बिना सहमति साझा की गई या AI से बनाई गई निजी तस्वीरों के लिए, भारत में URL के ज़रिए गोपनीय रिपोर्ट और हटाने की सूचना तैयार करने का रास्ता। आपकी तस्वीर आपके फ़ोन से बाहर नहीं जाती।",
+                  "Private help to take down intimate images shared without consent. File a complaint in about ten minutes, or talk to our assistant first, any time of day.",
+                  "बिना सहमति के साझा की गई अंतरंग तस्वीरें हटाने के लिए निजी मदद। लगभग दस मिनट में शिकायत दर्ज कराएं, या दिन में किसी भी समय पहले हमारी सहायिका से बात करें।",
                 )}
               </p>
-              <div className="mt-10 flex flex-wrap items-center gap-3">
+              <div className="mt-9 flex flex-wrap items-center gap-3">
                 <Link className="btn btn-primary btn-arrow" href="/start">
-                  {say("Start a case", "मामला शुरू करें")}
+                  {say("File a complaint", "शिकायत दर्ज करें")}
                 </Link>
                 <Link className="btn btn-secondary" href="/what-we-do">
                   {say("How it works", "यह कैसे काम करता है")}
                 </Link>
               </div>
-              <a
-                href={`tel:${HELPLINE.tel}`}
-                className="mt-8 flex max-w-xl items-center gap-4 rounded-2xl border border-[var(--color-ash)] bg-white/85 px-5 py-4 no-underline shadow-sm backdrop-blur transition-colors hover:border-[var(--color-graphite)]"
-              >
-                <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--color-off-black)] text-lg text-white">
-                  ☎
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[13px] uppercase tracking-[0.08em] text-[var(--color-graphite)]">
-                    {say("Prefer to talk? 24/7 helpline", "बात करना चाहें? 24/7 हेल्पलाइन")}
-                  </span>
-                  <span className="mt-0.5 block text-[22px] font-medium leading-tight text-[var(--color-off-black)]">
-                    {HELPLINE.display}
-                  </span>
-                  <span className="mt-1 block text-[14px] leading-[1.45] text-[var(--color-graphite)]">
-                    {say(
-                      "An AI assistant guides you step by step through filing your complaint, in any Indian language.",
-                      "एक ए.आई. सहायक किसी भी भारतीय भाषा में आपकी शिकायत दर्ज करने में कदम-दर-कदम आपका मार्गदर्शन करती है।",
-                    )}
-                  </span>
-                </span>
-              </a>
-              {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
-              <a className="btn btn-secondary mt-3" href="/talk">
-                {say("Talk to us from your browser", "अपने ब्राउज़र से हमसे बात करें")}
-              </a>
+              <ul className="home-hero-trust mt-8">
+                <li>{say("Free, always", "मुफ़्त, हमेशा")}</li>
+                <li>{say("No ID or Aadhaar needed", "किसी आईडी या आधार की आवश्यकता नहीं")}</li>
+                <li>{say("Your photo never leaves your device", "आपकी फोटो कभी भी आपके डिवाइस से बाहर नहीं जाती")}</li>
+              </ul>
+            </div>
+
+            <div className="home-hero-help">
+              <p className="eyebrow">{say("Get help right now", "अभी मदद प्राप्त करें")}</p>
+              <ul className="mt-4 space-y-3">
+                <li>
+                  <HomeChat copy={chatCopy} locale={locale} triggerClassName="home-help-tile">
+                    <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>
+                    <span className="min-w-0">
+                      <span className="home-help-title">{chatCopy["chat.open"]}</span>
+                      <span className="home-help-text">
+                        {say("Type to an AI assistant, in any Indian language.", "किसी भी भारतीय भाषा में ए.आई. सहायक से चैट करें।")}
+                      </span>
+                    </span>
+                  </HomeChat>
+                </li>
+                <li>
+                  {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
+                  <a className="home-help-tile" href="/talk">
+                    <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+                    <span className="min-w-0">
+                      <span className="home-help-title">{say("Talk in your browser", "अपने ब्राउज़र में बात करें")}</span>
+                      <span className="home-help-text">
+                        {say("Speak to the same assistant without dialling.", "बिना डायल किए उसी सहायक से बात करें।")}
+                      </span>
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a className="home-help-tile" href={`tel:${HELPLINE.tel}`}>
+                    <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg></span>
+                    <span className="min-w-0">
+                      <span className="home-help-title">{say("Call the 24/7 helpline", "24/7 हेल्पलाइन पर कॉल करें")}</span>
+                      <span className="home-help-text home-help-number">{HELPLINE.display}</span>
+                    </span>
+                  </a>
+                </li>
+              </ul>
+              <p className="mt-5 text-[14px] leading-[1.5] text-[var(--color-graphite)]">
+                {say(
+                  "In danger right now? Call 112. Under 18? Call CHILDLINE 1098.",
+                  "अभी खतरे में हैं? 112 पर कॉल करें। 18 साल से कम उम्र है? चाइल्डलाइन 1098 पर कॉल करें।",
+                )}
+              </p>
             </div>
           </div>
 
+          <div className="container relative z-[1] pb-12 md:pb-16">
+            <div className="home-hero-supporters" aria-labelledby="supporters-heading">
+              <p id="supporters-heading" className="eyebrow">{say("Supported by", "के द्वारा समर्थित")}</p>
+              <SupporterLogos className="justify-center" eager />
+            </div>
+          </div>
         </section>
 
         {/* Pipeline diagram */}
@@ -374,14 +399,6 @@ export default async function HomePage() {
                 </details>
               ))}
             </div>
-          </div>
-        </section>
-
-        {/* SUPPORTERS */}
-        <section className="pb-16 md:pb-20" aria-labelledby="supporters-heading">
-          <div className="container flex flex-col items-center gap-6 text-center">
-            <p id="supporters-heading" className="eyebrow">{say("Supported by", "के द्वारा समर्थित")}</p>
-            <SupporterLogos className="justify-center" />
           </div>
         </section>
 

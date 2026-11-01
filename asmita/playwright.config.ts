@@ -30,6 +30,9 @@ export default defineConfig({
       // talk.spec.ts can reach it.
       SARVAM_API_KEY: "",
       VOICE_DAILY_SESSION_LIMIT: "3",
+      // No chat key either, and a low daily message cap so chat.spec.ts can reach it.
+      SARVAM_CHAT_KEY: "",
+      CHAT_DAILY_MESSAGE_LIMIT: "3",
       // next dev also loads .env.local; pin anything there that would change
       // behaviour or reach a real service, so local runs match CI.
       DEV_SKIP_LEGAL_REVIEW: "false",

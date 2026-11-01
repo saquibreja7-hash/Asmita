@@ -19,7 +19,7 @@ test("survivor sees the notice before any voice call, and nothing reaches Sarvam
   expect(home?.headers()["permissions-policy"]).toContain("microphone=()");
   expect(home?.headers()["content-security-policy"]).not.toContain("sarvam.ai");
 
-  await page.getByRole("link", { name: "Talk to us from your browser" }).click();
+  await page.getByRole("link", { name: /Talk in your browser/ }).click();
   await expect(page).toHaveURL(/\/talk$/);
   await expect(page.getByRole("heading", { name: "Before you start" })).toBeVisible();
   await expect(page.getByText("You will talk to an AI assistant, not a person.", { exact: false })).toBeVisible();
