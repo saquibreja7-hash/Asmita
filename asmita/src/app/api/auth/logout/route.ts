@@ -7,5 +7,6 @@ export async function POST(request: Request) {
   }
   const response = NextResponse.json({ success: true });
   response.cookies.set("asmita_session", "", { path: "/", maxAge: 0 });
+  response.cookies.set("asmita_eligible", "", { path: "/", maxAge: 0 });
   return response;
 }

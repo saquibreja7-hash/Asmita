@@ -16,6 +16,18 @@ export function rememberEligibleAdult() {
   document.cookie = `${ELIGIBLE_COOKIE}=1; Path=/; Max-Age=86400; SameSite=Lax${secure}`;
 }
 
+// Someone who answers as a minor, even after answering as an adult on this
+// device, loses the adult answers and anything they had typed.
+export function forgetEligibility() {
+  try {
+    sessionStorage.removeItem(ELIGIBLE_KEY);
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // Nothing was stored.
+  }
+  document.cookie = `${ELIGIBLE_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
 export function isEligibleAdult() {
   try {
     return sessionStorage.getItem(ELIGIBLE_KEY) === "adult";

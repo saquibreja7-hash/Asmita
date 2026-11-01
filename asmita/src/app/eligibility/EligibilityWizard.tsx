@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { rememberEligibleAdult } from "@/lib/eligibility";
+import { forgetEligibility, rememberEligibleAdult } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 
 type Stop = "other" | "content" | null;
@@ -23,6 +23,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
 
   function next() {
     if (ageNow === "minor" || ageThen === "minor") {
+      forgetEligibility();
       router.push("/minor-support");
       return;
     }
