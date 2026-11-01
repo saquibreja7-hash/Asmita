@@ -1,4 +1,5 @@
 import type { NoticeBasis, PlatformTier } from "@prisma/client";
+import { matchPlatform } from "@/lib/link-check";
 
 export type PlatformDirectoryEntry = {
   id: string;
@@ -222,13 +223,5 @@ export const platformDirectory: PlatformDirectoryEntry[] = [
 ];
 
 export function findPlatformByDomain(domain: string) {
-  const normalized = domain.toLowerCase().replace(/^www\./, "");
-  return (
-    platformDirectory.find((platform) =>
-      platform.domainPatterns.some((pattern) => {
-        const cleanPattern = pattern.replace(/^\*\./, "").replace(/^www\./, "");
-        return normalized === cleanPattern || normalized.endsWith(`.${cleanPattern}`);
-      }),
-    ) ?? null
-  );
+  return matchPlatform(domain, platformDirectory);
 }

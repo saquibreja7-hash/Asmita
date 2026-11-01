@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { computePdqHash, PDQ_CLIENT_VERSION } from "@/lib/pdq/pdq";
 import type { HashPickerPlatform } from "@/lib/hash-submission";
 import { t, type Locale } from "@/lib/i18n";
+import { checkLink, matchPlatform, type LinkCheckError, type PlatformPattern } from "@/lib/link-check";
 
 const MAX_HASH_FILES = 10;
 
@@ -38,16 +38,47 @@ async function hashImageFile(file: File): Promise<{ hash: string; quality: numbe
 }
 
 type Props = {
+  // Names and domains only, for naming the platform beside each link.
+  knownPlatforms: PlatformPattern[];
   enableHashUpload?: boolean;
   platforms?: HashPickerPlatform[];
   locale: Locale;
 };
 
-export function SubmitForm({ enableHashUpload = false, platforms = [], locale }: Props) {
+type LineCheck = { line: string; url?: string; platform?: string; problem?: LinkCheckError | "duplicate" };
+
+const LINK_PROBLEM_KEY = {
+  invalid_url: "submit.link.invalid",
+  blocked_scheme: "submit.link.invalid",
+  local_or_private_address: "submit.link.local",
+  duplicate: "submit.link.duplicate",
+} as const;
+
+// Checks every pasted line in the browser with the same rules the server uses,
+// so a mistake shows beside the line instead of on the review step, and
+// nothing is sent anywhere to check it.
+function checkLines(text: string, knownPlatforms: PlatformPattern[]): LineCheck[] {
+  const seen = new Set<string>();
+  return text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const checked = checkLink(line);
+      if (!checked.ok) return { line, problem: checked.error };
+      const url = checked.url.toString();
+      // www. and a trailing slash do not make a different link.
+      const key = checked.domain + checked.url.pathname.replace(/\/$/, "") + checked.url.search;
+      if (seen.has(key)) return { line, problem: "duplicate" as const };
+      seen.add(key);
+      return { line, url, platform: matchPlatform(checked.domain, knownPlatforms)?.name };
+    });
+}
+
+export function SubmitForm({ knownPlatforms, enableHashUpload = false, platforms = [], locale }: Props) {
   const router = useRouter();
   const [urls, setUrls] = useState("");
   const [declaration, setDeclaration] = useState(false);
-  const [detection, setDetection] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -60,14 +91,6 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
     const id = window.setTimeout(() => setHydrated(true), 0);
     return () => window.clearTimeout(id);
   }, []);
-
-  async function detect(value: string) {
-    const first = value.split(/\s+/).find(Boolean);
-    if (!first) { setDetection(""); return; }
-    const response = await fetch(`/api/platforms/detect?url=${encodeURIComponent(first)}`);
-    const data = (await response.json()) as { platformName?: string };
-    setDetection(data.platformName || "Unknown - will be reviewed");
-  }
 
   async function onSelectFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files ?? []).slice(0, MAX_HASH_FILES);
@@ -90,7 +113,9 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
   }
 
   const hashedFiles = hashFiles.filter((f) => f.status === "hashed" && f.hash);
-  const parsedUrls = urls.split(/\n+/).map((u) => u.trim()).filter(Boolean);
+  const lineChecks = checkLines(urls, knownPlatforms);
+  const parsedUrls = lineChecks.flatMap((c) => (c.url ? [c.url] : []));
+  const skippedLines = lineChecks.filter((c) => c.problem).length;
   const hashOnly = hashedFiles.length > 0 && parsedUrls.length === 0;
   const hasAnyContent = parsedUrls.length > 0 || hashedFiles.length > 0;
   const canSubmit = declaration && hasAnyContent && (!hashOnly || selectedPlatformIds.length > 0);
@@ -139,7 +164,6 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
     }
   }
 
-  const lineCount = parsedUrls.length;
   const lowQuality = hashFiles.some((f) => f.status === "hashed" && (f.quality ?? 100) < 50);
 
   return (
@@ -166,17 +190,29 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
         <textarea
           className="field min-h-36 font-mono text-[13px] leading-[1.7] bg-[var(--background)]"
           id="urls"
-          onChange={(e) => { setUrls(e.target.value); void detect(e.target.value); }}
+          onChange={(e) => setUrls(e.target.value)}
+          aria-describedby={lineChecks.length > 0 ? "url-checks" : undefined}
           value={urls}
           placeholder={"https://example.com/post/1234\nhttps://example.com/post/5678"}
           spellCheck={false}
         />
-        <div className="flex items-center justify-between text-xs">
-          <span className="muted">{lineCount} {lineCount === 1 ? t(locale, "submit.urls.linkSingular") : t(locale, "submit.urls.linkPlural")}</span>
-          {detection && (
-            <span className="font-medium text-[var(--teal)]">{t(locale, "submit.urls.detected")} {detection}</span>
-          )}
-        </div>
+        {lineChecks.length > 0 && (
+          <ul id="url-checks" className="space-y-1.5 text-xs" aria-live="polite">
+            {lineChecks.map((c, i) => (
+              <li key={`${c.line}-${i}`} className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--hairline)] px-3 py-2">
+                <span className="min-w-0 truncate font-mono text-[var(--foreground)]">{c.line}</span>
+                {c.problem ? (
+                  <span className="shrink-0 font-medium text-[var(--rose)]">{t(locale, LINK_PROBLEM_KEY[c.problem])}</span>
+                ) : (
+                  <span className="shrink-0 font-medium text-[var(--teal)]">{c.platform ?? t(locale, "submit.link.unknown")}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {skippedLines > 0 && parsedUrls.length > 0 && (
+          <p className="text-xs text-[var(--muted)]">{t(locale, "submit.link.skipNote")}</p>
+        )}
       </div>
 
       {/* Hash section */}
@@ -317,7 +353,19 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
         <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      {!canSubmit && (
+        <p className="text-right text-sm text-[var(--muted)]" role="status">
+          {t(
+            locale,
+            !hasAnyContent
+              ? "submit.hint.content"
+              : hashOnly && selectedPlatformIds.length === 0
+                ? "submit.hint.hashPlatform"
+                : "submit.hint.declaration",
+          )}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <button
           className="btn btn-primary"
           disabled={!hydrated || !canSubmit || submitting}
@@ -326,9 +374,6 @@ export function SubmitForm({ enableHashUpload = false, platforms = [], locale }:
         >
           {submitting ? t(locale, "submit.cta.saving") : t(locale, "submit.cta.review")}
         </button>
-        <Link className="btn btn-secondary" href="/resources">
-          {t(locale, "submit.cta.resources")}
-        </Link>
       </div>
 
     </div>

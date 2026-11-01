@@ -388,7 +388,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
             <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
           )}
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 sm:flex-row-reverse sm:justify-between">
             <button
               type="button"
               className="btn btn-primary"
@@ -533,7 +533,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
           <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
         )}
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 sm:flex-row-reverse sm:justify-between">
           <button
             type="button"
             className="btn btn-primary"
