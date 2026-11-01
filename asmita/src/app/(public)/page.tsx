@@ -6,7 +6,7 @@ import { HELPLINE } from "@/lib/helpline";
 
 /*
  * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
- * monospace for every functional string, pill buttons, hairline cards, one blue action.
+ * monospace for every functional string, pill buttons, hairline cards, one teal action.
  */
 
 const audiences = [
@@ -288,7 +288,7 @@ export default async function HomePage() {
               ))}
             </div>
 
-            {/* Elevated periwinkle card */}
+            {/* Elevated teal-mist card */}
             <div className="card card-elevated mt-4 grid gap-8 md:grid-cols-[1.1fr_1fr] md:items-center">
               <div className="wash-art" aria-hidden />
               <div className="relative z-[1]">

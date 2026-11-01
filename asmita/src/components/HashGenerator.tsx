@@ -110,7 +110,7 @@ export default function HashGenerator({ caseId }: { caseId: string }) {
         onClick={() => inputRef.current?.click()}
         className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-[24px] border border-dashed border-[var(--color-ash)] bg-[var(--color-parchment)] px-6 py-8 text-center transition-colors hover:border-[var(--color-off-black)]"
       >
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-periwinkle-mist)]">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-teal-mist)]">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
             <path d="M10 13V4M10 4l-3 3M10 4l3 3" stroke="var(--color-off-black)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M3 14v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" stroke="var(--color-off-black)" strokeWidth="1.5" strokeLinecap="round"/>

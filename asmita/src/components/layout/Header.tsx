@@ -44,7 +44,9 @@ export function Header({ locale }: { locale: Locale }) {
       <header className="site-header">
         <div className="container flex min-h-[72px] items-center justify-between gap-4 md:min-h-[80px]">
           <Link href="/" className="fade flex shrink-0 items-center gap-3" aria-label="Asmita home">
-            <span className="wordmark">Asmita</span>
+            {/* The logo: teal wordmark with the gold flame. A small static PNG; next/image adds nothing here. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/asmita-wordmark.png" alt="Asmita" width={485} height={145} className="brand-logo" />
           </Link>
 
           <nav className="hidden items-center lg:flex" aria-label="Primary">
