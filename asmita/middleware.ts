@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const guardedFlowRoutes = ["/submit", "/identity", "/delete-account"];
+// /submit is not listed: links can be added before the email code, and the
+// page gates itself on a session or the eligibility answers.
+const guardedFlowRoutes = ["/identity", "/delete-account"];
 
 const MAINTENANCE_COOKIE = "asmita_maint_bypass";
 

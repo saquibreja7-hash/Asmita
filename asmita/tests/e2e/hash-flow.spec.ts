@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 async function register(page: import("@playwright/test").Page) {
   await page.goto("/register");
   await page.getByText("I am 18 years of age or older.").click();
+  await page.getByText("I was 18 or older.").click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Email address").fill(`hash-${Date.now()}@example.org`);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -10,7 +11,7 @@ async function register(page: import("@playwright/test").Page) {
   const otp = (await (await otpResponse).json()) as { devOtp: string };
   await page.getByLabel("6-digit code").fill(otp.devOtp);
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/\/submit$/);
+  await expect(page).toHaveURL(/\/submit$/, { timeout: 30_000 });
 }
 
 async function syntheticPng(page: import("@playwright/test").Page): Promise<Buffer> {
@@ -50,16 +51,15 @@ test("registered adult can generate a fingerprint and submit it with a URL", asy
   });
   await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
   await page.getByLabel(/I declare/).check();
-  await page.getByRole("button", { name: "Continue to review" }).click();
-  await expect(page).toHaveURL(/\/review-sign$/);
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   const hashResponse = page.waitForResponse((r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()) && r.request().method() === "POST");
-  await page.getByRole("button", { name: "Create case and preview notice" }).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
   expect((await createResponse).ok()).toBe(true);
   const hashResult = await hashResponse;
   expect(hashResult.ok()).toBe(true);
   expect((await hashResult.json()).results[0].ok).toBe(true);
-  await expect(page).toHaveURL(/\/case\/[^/]+/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30_000 });
+  await page.getByRole("link", { name: "Open dashboard" }).click();
   await expect(page.getByText("Digital fingerprints")).toBeVisible();
 });
 
@@ -73,10 +73,8 @@ test("hash-only registration offers a platform handoff", async ({ page }) => {
   await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
   await page.getByRole("checkbox", { name: /Instagram \/ Meta/ }).check();
   await page.getByLabel(/I declare/).check();
-  await page.getByRole("button", { name: "Continue to review" }).click();
-  await expect(page).toHaveURL(/\/review-sign$/);
   const hashResponse = page.waitForResponse((r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()) && r.request().method() === "POST");
-  await page.getByRole("button", { name: "Create case and preview notice" }).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
   expect((await hashResponse).ok()).toBe(true);
   await expect(page.getByRole("link", { name: /Instagram \/ Meta/ })).toBeVisible();
   await page.getByRole("link", { name: /case dashboard/i }).click();

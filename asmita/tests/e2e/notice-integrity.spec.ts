@@ -10,6 +10,7 @@ import { withAdmin } from "./support/database";
 async function register(page: Page) {
   await page.goto("/register");
   await page.getByText("I am 18 years of age or older.").click();
+  await page.getByText("I was 18 or older.").click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Email address").fill(`integrity-${randomUUID()}@example.invalid`);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -48,13 +49,11 @@ async function reportWithFingerprint(page: Page, links: string[]) {
   });
   await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
   await page.getByLabel(/I declare/).check();
-  await page.getByRole("button", { name: "Continue to review" }).click();
-  await expect(page).toHaveURL(/\/review-sign$/);
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   const hashResponse = page.waitForResponse(
     (r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()) && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Create case and preview notice" }).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
   const created = await createResponse;
   expect(created.ok()).toBe(true);
   const { caseId } = (await created.json()) as { caseId: string };

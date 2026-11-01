@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 async function completeAdultRegistration(page: import("@playwright/test").Page, email: string) {
   await page.goto("/register");
   await page.getByText("I am 18 years of age or older.").click();
+  await page.getByText("I was 18 or older.").click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Email address").fill(email);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -18,25 +19,26 @@ async function createCase(page: import("@playwright/test").Page) {
   await page.getByLabel("Links where the content appears").fill("https://www.instagram.com/p/abc");
   await expect(page.locator("#url-checks").getByText("Instagram / Meta")).toBeVisible();
   await page.getByLabel(/I declare/).check();
-  await page.getByRole("button", { name: "Continue to review" }).click();
-  await expect(page).toHaveURL(/\/review-sign$/, { timeout: 15_000 });
   const createResponse = page.waitForResponse((response) => response.url().endsWith("/api/cases/create"));
-  await page.getByRole("button", { name: "Create case and preview notice" }).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
   expect((await createResponse).ok()).toBe(true);
 
-  // Flow branches: if notice preview succeeds, a sign step appears;
-  // otherwise the app redirects straight to the case dashboard.
+  // Flow branches: if a notice preview exists, the sign form appears on the
+  // same screen; either way the survivor ends on the "done for now" page.
   const signForm = page.getByLabel("Full name");
-  const casePage = page.waitForURL(/\/case\/[^/]+$/, { timeout: 30_000 }).catch(() => {});
+  const donePage = page.waitForURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30_000 }).catch(() => {});
   if (await signForm.isVisible({ timeout: 5_000 }).catch(() => false)) {
     await signForm.fill("Test User");
     await page.getByLabel("Contact (email or phone)").fill("test@example.com");
     await page.getByPlaceholder("Type your full name").fill("Test User");
     await page.getByRole("button", { name: "Sign and submit" }).click();
   }
-  await casePage;
-  await expect(page).toHaveURL(/\/case\/[^/]+/, { timeout: 15_000 });
-  await expect(page.getByText(/ASMITA-/)).toBeVisible();
+  await donePage;
+  await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "You are done for now." })).toBeVisible();
+  await page.getByRole("link", { name: "Open dashboard" }).click();
+  await expect(page).toHaveURL(/\/case\/[^/]+$/);
+  await expect(page.getByText(/ASMITA-/).first()).toBeVisible();
 }
 
 test("landing and minor-support entry render", async ({ page }) => {
