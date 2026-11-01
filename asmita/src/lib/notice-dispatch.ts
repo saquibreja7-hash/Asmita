@@ -4,10 +4,11 @@ import { sha256 } from "@/lib/hash";
 import { HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
 import { db } from "@/lib/db";
 
-// Vercel serverless functions are stateless: the in-memory idempotency maps
-// below reset on every cold start, which would allow the same notice to be
-// dispatched twice. Set NOTICE_DISPATCH_PERSISTENCE=database in production so
-// dedup is enforced against the Notice table instead.
+// Workers are stateless: the in-memory idempotency maps below reset with
+// every isolate, which would allow the same notice to be dispatched twice.
+// Set NOTICE_DISPATCH_PERSISTENCE=database in production so dedup is enforced
+// against the Notice table instead. The same key also goes to Resend, which
+// covers a send that succeeded but was never recorded.
 function databasePersistenceEnabled() {
   return process.env.NOTICE_DISPATCH_PERSISTENCE === "database";
 }
@@ -91,7 +92,7 @@ export async function dispatchTier2Notice(input: {
   const attachments = input.signedNoticePdf
     ? [{ filename: "notice.pdf", content: input.signedNoticePdf }]
     : undefined;
-  const sent = await sendNoticeDraft(input.recipientEmail, input.subject, input.body, attachments);
+  const sent = await sendNoticeDraft(input.recipientEmail, input.subject, input.body, attachments, `notice:${idempotencyKey}`);
   const messageId =
     "id" in sent && typeof sent.id === "string"
       ? sent.id
@@ -198,7 +199,7 @@ export async function dispatchEscalationFollowUp(input: {
     }
   }
 
-  const sent = await sendNoticeDraft(input.recipientEmail, input.subject, input.body);
+  const sent = await sendNoticeDraft(input.recipientEmail, input.subject, input.body, undefined, `follow-up:${idempotencyKey}`);
   const messageId =
     "id" in sent && typeof sent.id === "string"
       ? sent.id

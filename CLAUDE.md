@@ -67,6 +67,7 @@ Counters live in Postgres (`RateLimitBucket`, keys hashed) so every Worker isola
 
 - `/api/notices/dispatch` refuses a URL without `signedNoticePdf` (409 `signature_required`).
 - `src/lib/case-hash-annex.ts` is the single builder for the fingerprint annex. Preview and sign list every non-rejected fingerprint, and each signed document stores the exact ids it lists (`SubmittedUrl.signedHashSubmissionIds`, `Case.hashAdvisorySignedHashIds`). Dispatch sends exactly that set, and refuses (`fingerprints_pending_review`, `signed_fingerprints_changed`) until every listed fingerprint is approved, so the email always matches the signed PDF. Fingerprints added after signing are never sent under that signature. `NOTICE_SENT` audit entries record the fingerprint ids sent.
+- Every notice, follow-up and hash-advisory email carries a Resend idempotency key, so a retry never emails a platform twice; a retry whose earlier send reached Resend but was not recorded gets 409 `email_already_sent`. Dispatch is synchronous (no Queues, ADR 004).
 - `declarationSignedAt` records the first signature on a case; later signatures never move it, and dispatch does not depend on it.
 - `prisma/seed.ts` never sets `reviewedByLegal: true`: templates are created unreviewed, a re-seed keeps a human reviewer's decision, and changed legal text resets it to unreviewed.
 
@@ -99,7 +100,7 @@ Local dev uses memory-backed queues, rate limits, audit log, and email (no Postg
 Next.js 16 App Router + TypeScript, built with vinext and run on Cloudflare Workers. PostgreSQL through Kysely + `pg` at Worker runtime (Hyperdrive) and Prisma for schema, migrations and local Node. Resend + Zod.
 
 - `src/app/` — route groups: `(public)`, `(victim)`, `(admin)`, `(auth)`, `api/`
-- `src/lib/` — domain logic: case lifecycle (`case-ops.ts` = database, Kysely on the Worker via `worker-kysely.ts` and Prisma otherwise; `store.ts` = memory dev/test), notice generation/dispatch (`notice-*.ts`), hash submission/dispatch (`hash-submission.ts`, `hash-dispatch.ts`), escalation, audit, encryption, rate limiting, CSRF
+- `src/lib/` — domain logic: case lifecycle (`case-ops.ts` = database, Kysely on the Worker via `worker-kysely.ts` and Prisma otherwise; Kysely table types are generated from the Prisma schema into `src/generated/` on install, never hand-written or committed; `store.ts` = memory dev/test), notice generation/dispatch (`notice-*.ts`), hash submission/dispatch (`hash-submission.ts`, `hash-dispatch.ts`), escalation, audit, encryption, rate limiting, CSRF
 - `src/lib/auth/` — OTP login, JWT (jose), admin allowlist + MFA + permissions
 - `src/jobs/` — in-memory job arrays (not used for production delivery)
 - `src/cloudflare-worker.ts` — Worker entry, including Cron Trigger handlers

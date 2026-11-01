@@ -17,6 +17,8 @@ const productionConfig = {
   name: production.name,
   routes: production.routes,
   hyperdrive: production.hyperdrive,
+  // Runs the Worker next to the Mumbai database; each request makes several queries.
+  placement: production.placement,
   triggers: production.triggers,
   vars: production.vars,
 };

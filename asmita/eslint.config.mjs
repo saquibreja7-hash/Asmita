@@ -44,6 +44,7 @@ const eslintConfig = defineConfig([
     ".vinext/**",
     ".wrangler/**",
     "next-env.d.ts",
+    "src/generated/**",
     "test-results/**",
     "tests/lint/**",
     "docs/archive/**",

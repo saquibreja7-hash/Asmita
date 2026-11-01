@@ -3,6 +3,7 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { decryptField } from "@/lib/encryption";
 import { sendNoticeDraft } from "@/lib/email";
 import { writeAuditLog } from "@/lib/audit";
+import { sha256 } from "@/lib/hash";
 import { assertVerifiedNoticeRecipient } from "@/lib/notice-dispatch";
 import {
   assertNoticeBodySafe,
@@ -124,12 +125,15 @@ export async function dispatchHashAdvisories(input: {
       continue;
     }
 
+    // The body is identical on a retry, so Resend returns the first send
+    // instead of emailing the platform twice.
+    const idempotencyKey = sha256(`hash-advisory:${input.caseId}:${platformId}:${pendingSubmissions.map((s) => s.id).sort().join(",")}`);
     const sent = await sendNoticeDraft(platform.grievanceEmail, subject, emailBody, [
       {
         filename: `notice-${dbCase.referenceNumber}.pdf`,
         content: pdfBuffer,
       },
-    ]);
+    ], idempotencyKey);
     const messageId =
       "id" in sent && typeof sent.id === "string"
         ? sent.id
