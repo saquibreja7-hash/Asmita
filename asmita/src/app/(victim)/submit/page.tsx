@@ -4,6 +4,7 @@ import { FlowProgress } from "@/components/FlowProgress";
 import { listHashPickerPlatforms, type HashPickerPlatform } from "@/lib/hash-submission";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
+import { platformDirectory } from "@/lib/platforms";
 
 async function getPlatforms(): Promise<HashPickerPlatform[]> {
   try {
@@ -17,6 +18,8 @@ export default async function SubmitPage() {
   const locale = await getLocale();
   const enableHashUpload = process.env.ENABLE_HASH_UPLOAD === "true";
   const platforms = enableHashUpload ? await getPlatforms() : [];
+  // Names and domains only: grievance contacts stay on the server.
+  const knownPlatforms = platformDirectory.map(({ name, domainPatterns }) => ({ name, domainPatterns }));
 
   const asideItems: [string, string][] = [
     [t(locale, "submit.aside.item1.heading"), t(locale, "submit.aside.item1.detail")],
@@ -79,7 +82,7 @@ export default async function SubmitPage() {
                 {t(locale, "submit.form.sub")}
               </p>
               <div className="mt-10">
-                <SubmitForm enableHashUpload={enableHashUpload} platforms={platforms} locale={locale} />
+                <SubmitForm knownPlatforms={knownPlatforms} enableHashUpload={enableHashUpload} platforms={platforms} locale={locale} />
               </div>
             </div>
 

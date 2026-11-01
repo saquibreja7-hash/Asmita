@@ -7,18 +7,22 @@ import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submis
 import HashGenerator from "@/components/HashGenerator";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { getLocale } from "@/lib/get-locale";
-import { t } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 
-const URL_STATUS_LABELS_KEYS: Record<string, string> = {
-  PENDING_REVIEW: "Pending review",
-  NOTICE_QUEUED: "Notice queued",
-  NOTICE_SENT: "Notice sent",
-  RESOLVED: "Resolved",
-  ESCALATED: "Escalated",
-};
+// Wording that matches what has actually happened: "prepared" is not "sent",
+// and "sent" is not "removed".
+const URL_STATUS_KEYS = {
+  PENDING_REVIEW: "case.urlStatus.pendingReview",
+  NOTICE_QUEUED: "case.urlStatus.queued",
+  NOTICE_SENT: "case.urlStatus.sent",
+  RESOLVED: "case.urlStatus.resolved",
+  ESCALATED: "case.urlStatus.escalated",
+  REJECTED: "case.urlStatus.rejected",
+} as const;
 
-function StatusBadge({ status }: { status: string }) {
-  const label = URL_STATUS_LABELS_KEYS[status] ?? status.replaceAll("_", " ");
+function StatusBadge({ status, locale }: { status: string; locale: Locale }) {
+  const key = URL_STATUS_KEYS[status as keyof typeof URL_STATUS_KEYS];
+  const label = key ? t(locale, key) : status.replaceAll("_", " ");
   const color =
     status === "RESOLVED"
       ? "bg-[var(--teal-soft)] text-[var(--teal-dark)]"
@@ -172,18 +176,6 @@ export default async function CasePage({
                   <p className="px-2 font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
                     {t(locale, "case.tools.label")}
                   </p>
-                  {[
-                    { href: `/api/cases/${record.id}/export`, label: t(locale, "case.tools.downloadPdf") },
-                    { href: `/api/cases/${record.id}/audit-trail`, label: t(locale, "case.tools.auditTrail") },
-                  ].map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center gap-2 rounded-[12px] px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
                   <Link
                     href="/resources"
                     className="flex items-center gap-2 rounded-[12px] px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]"
@@ -268,7 +260,7 @@ export default async function CasePage({
                                 {url.domain}
                               </td>
                               <td className="px-5 py-3.5">
-                                <StatusBadge status={url.status} />
+                                <StatusBadge status={url.status} locale={locale} />
                               </td>
                             </tr>
                           ))}
@@ -316,7 +308,7 @@ export default async function CasePage({
                                 </td>
                                 <td className="px-5 py-3.5 tabular-nums">{submission.quality}/100</td>
                                 <td className="px-5 py-3.5">
-                                  <StatusBadge status={submission.status} />
+                                  <StatusBadge status={submission.status} locale={locale} />
                                 </td>
                               </tr>
                             ))}

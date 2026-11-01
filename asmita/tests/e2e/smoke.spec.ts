@@ -16,7 +16,7 @@ async function completeAdultRegistration(page: import("@playwright/test").Page, 
 
 async function createCase(page: import("@playwright/test").Page) {
   await page.getByLabel("Links where the content appears").fill("https://www.instagram.com/p/abc");
-  await expect(page.getByText(/Detected: Instagram/)).toBeVisible();
+  await expect(page.locator("#url-checks").getByText("Instagram / Meta")).toBeVisible();
   await page.getByLabel(/I declare/).check();
   await page.getByRole("button", { name: "Continue to review" }).click();
   await expect(page).toHaveURL(/\/review-sign$/, { timeout: 15_000 });
@@ -86,7 +86,7 @@ test("full adult flow creates a case and reaches confirmation", async ({ page },
   await createCase(page);
 });
 
-test("adult dashboard supports add URL, manual resolve, PDF export, and deletion request", async ({ page }, testInfo) => {
+test("adult dashboard supports add URL, manual resolve, and deletion request, with no broken tools", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await completeAdultRegistration(
     page,
@@ -108,11 +108,9 @@ test("adult dashboard supports add URL, manual resolve, PDF export, and deletion
   expect((await resolvedResponse).ok()).toBe(true);
   await expect(page.getByText(/Link added|Refresh to see/i)).toBeVisible();
 
-  const exportHref = await page.getByRole("link", { name: "Download case PDF" }).getAttribute("href");
-  expect(exportHref).toBeTruthy();
-  const pdfResponse = await page.request.get(exportHref!);
-  expect(pdfResponse.ok()).toBe(true);
-  expect(pdfResponse.headers()["content-type"]).toContain("application/pdf");
+  // The PDF and audit-trail downloads fail on Workers and were removed from the dashboard.
+  await expect(page.getByRole("link", { name: "Download case PDF" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "View audit trail" })).toHaveCount(0);
 
   await page.goto("/delete-account");
   await page.getByLabel("Type DELETE to continue").fill("DELETE");

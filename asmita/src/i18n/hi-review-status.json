@@ -18,7 +18,11 @@
     "keys": [
       "talk.*",
       "privacy.s08.i5.*",
-      "chat.*"
+      "chat.*",
+      "submit.link.*",
+      "submit.hint.*",
+      "case.urlStatus.*",
+      "submit.hash.platforms.sub"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
