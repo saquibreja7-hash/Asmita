@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { type Locale } from "@/lib/i18n";
+import { HELPLINE } from "@/lib/helpline";
 
 // Public uptime page (Better Stack), outside the app so it stays up when the site is down.
 export const STATUS_URL = "https://status.meriasmita.org";
@@ -114,6 +115,12 @@ export function Footer({ locale }: { locale: Locale }) {
         <div className="site-footer-bottom-bar flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="site-footer-helpline !mt-0">
             <p className="site-footer-cl-label">
+              {/* Hindi label pending a native speaker. */}
+              Asmita helpline (24/7) ·{" "}
+              <a href={`tel:${HELPLINE.tel}`} className="font-medium text-[var(--color-off-black)]">
+                {HELPLINE.display}
+              </a>
+              {" · "}
               {isHi ? "महिला हेल्पलाइन" : "Women's helpline"} ·{" "}
               <a href="tel:181" className="font-medium text-[var(--color-off-black)]">
                 181

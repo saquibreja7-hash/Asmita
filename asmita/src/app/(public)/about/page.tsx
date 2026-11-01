@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { SupporterLogos } from "@/components/layout/Supporters";
 import { getLocale } from "@/lib/get-locale";
 
 export const metadata: Metadata = {
@@ -127,6 +128,11 @@ export default async function AboutPage() {
                     "अस्मिता Cloudflare for Startups कार्यक्रम से समर्थित तकनीकी आधार पर चलती है। हटाने की प्रक्रिया IT Rules और बिना सहमति साझा की गई निजी तस्वीरों के लिए MeitY की प्रक्रिया पर आधारित है।",
                   )}
                 </p>
+                {/* Hindi copy pending a native speaker; the English shows until then. */}
+                <p className="mt-4 text-[16px] leading-[1.7] text-[var(--body)]">
+                  Our 24/7 voice helpline runs on Sarvam, which supports Asmita with credits.
+                </p>
+                <SupporterLogos className="mt-8" />
               </div>
             </div>
           </div>
