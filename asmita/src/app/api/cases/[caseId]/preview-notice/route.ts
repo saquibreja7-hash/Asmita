@@ -7,13 +7,7 @@ import { decryptField } from "@/lib/encryption";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
-
-function templateTypeForNoticeBasis(noticeBasis: string) {
-  if (noticeBasis === "IT_RULES_2021") return "IT_RULES_2021" as const;
-  if (noticeBasis === "DMCA") return "DMCA" as const;
-  if (noticeBasis === "IT_RULES_AND_DMCA") return "IT_RULES_AND_DMCA" as const;
-  return null;
-}
+import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
 
 export async function GET(
   req: NextRequest,
@@ -32,14 +26,18 @@ export async function GET(
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
 
+  // ?urlId= renders that link's notice; without it, the next link to sign.
+  const urlId = req.nextUrl.searchParams.get("urlId");
   const url = await db.submittedUrl.findFirst({
     where: {
       caseId,
+      ...(urlId ? { id: urlId } : {}),
       status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
       platformId: { not: null },
       signedNoticePdf: null,
       platform: {
         isActive: true,
+        noticeBasis: { in: [...SIGNABLE_NOTICE_BASES] },
         ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
       },
     },
@@ -49,7 +47,18 @@ export async function GET(
     orderBy: { submittedAt: "asc" },
   });
 
-  if (!url?.platform) return NextResponse.json({ error: "no_eligible_url" }, { status: 404 });
+  if (!url?.platform) {
+    // Nothing to sign, but a link on a form-only platform is waiting: the
+    // survivor files that platform's own form.
+    const formOnly = await db.submittedUrl.count({
+      where: {
+        caseId,
+        status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
+        platform: { noticeBasis: { notIn: [...SIGNABLE_NOTICE_BASES] } },
+      },
+    });
+    return NextResponse.json({ error: formOnly > 0 ? "form_only_platform" : "no_eligible_url" }, { status: 404 });
+  }
 
   const templateType = templateTypeForNoticeBasis(url.platform.noticeBasis);
   if (!templateType) return NextResponse.json({ error: "form_only_platform" }, { status: 404 });
@@ -94,6 +103,9 @@ export async function GET(
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="notice-preview-${record.referenceNumber}.pdf"`,
       "Cache-Control": "no-store",
+      // The review screen signs exactly this link, so the signature covers the
+      // notice the survivor read.
+      "X-Notice-Url-Id": url.id,
     },
   });
 }

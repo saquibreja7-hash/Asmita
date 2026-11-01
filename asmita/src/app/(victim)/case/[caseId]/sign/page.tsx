@@ -7,16 +7,10 @@ import { db } from "@/lib/db";
 import { SignNoticeForm } from "./SignNoticeForm";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
+import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
-}
-
-function templateTypeForNoticeBasis(noticeBasis: string) {
-  if (noticeBasis === "IT_RULES_2021") return "IT_RULES_2021" as const;
-  if (noticeBasis === "DMCA") return "DMCA" as const;
-  if (noticeBasis === "IT_RULES_AND_DMCA") return "IT_RULES_AND_DMCA" as const;
-  return null;
 }
 
 export default async function SignNoticePage({
@@ -43,6 +37,7 @@ export default async function SignNoticePage({
       signedNoticePdf: null,
       platform: {
         isActive: true,
+        noticeBasis: { in: [...SIGNABLE_NOTICE_BASES] },
         ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
       },
     },

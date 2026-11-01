@@ -282,3 +282,39 @@ test("each link gets its own notice, signed one after another on the review scre
   );
   expect(signedNotices.rowCount).toBe(2);
 });
+
+test("a form-only link listed first does not hide the notices that can be signed", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
+  test.setTimeout(180_000);
+  await markTemplateReviewed("IT_RULES_2021");
+  await register(page);
+  // Instagram takes reports only through its own form; WhatsApp gets an emailed notice.
+  await page.getByLabel("Links where the content appears").fill(
+    [`https://www.instagram.com/p/asmita-synthetic-${randomUUID()}`, `https://wa.me/asmita-synthetic-${randomUUID()}`].join("\n"),
+  );
+  await page.getByLabel(/I declare/).check();
+  const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  const { caseId } = (await (await createResponse).json()) as { caseId: string };
+
+  await page.getByLabel("Full name").fill("Synthetic Survivor");
+  await page.getByLabel("Contact (email or phone)").fill("survivor@example.invalid");
+  await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
+  await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
+  const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
+  await page.getByRole("button", { name: "Sign and submit" }).click();
+  expect((await signed).ok()).toBe(true);
+
+  // Then the Instagram form, with the notice text to paste.
+  await expect(page).toHaveURL(new RegExp(`/handoff/${caseId}$`), { timeout: 30_000 });
+  const rows = await withAdmin((db) =>
+    db.query(
+      'SELECT s.domain, s."signedNoticePdf" IS NOT NULL AS signed FROM "SubmittedUrl" s WHERE s."caseId" = $1 ORDER BY s.domain',
+      [caseId],
+    ),
+  );
+  expect(rows.rows).toEqual([
+    { domain: "instagram.com", signed: false },
+    { domain: "wa.me", signed: true },
+  ]);
+});

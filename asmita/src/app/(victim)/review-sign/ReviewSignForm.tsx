@@ -31,9 +31,15 @@ type Step =
 // When no notice is left to sign: a link on a platform that only takes its
 // own form needs the survivor to file that form, so they go to the handoff;
 // anything else waiting (a new site, a contact being checked) is ours to do.
+// Any other failure (a server error, say) shows the case page, which lists
+// what is still unsigned, rather than claiming the survivor is done.
 async function pathAfterNotices(caseId: string, preview: Response) {
   const { error } = (await preview.json().catch(() => ({}))) as { error?: string };
-  return error === "form_only_platform" ? `/handoff/${caseId}` : `/case/${caseId}/confirmation`;
+  if (error === "form_only_platform") return `/handoff/${caseId}`;
+  // Nothing ready to sign yet, or the notice text is still with the legal
+  // reviewer: both are ours to finish, and we email when it is time to sign.
+  if (error === "no_eligible_url" || error === "no_template") return `/case/${caseId}/confirmation`;
+  return `/case/${caseId}`;
 }
 
 function CheckItem({ heading, detail }: { heading: string; detail: string }) {
@@ -61,6 +67,8 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [caseId, setCaseId] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
+  // The link whose notice is on screen; signing sends it so the two match.
+  const [noticeUrlId, setNoticeUrlId] = useState("");
   const [pendingFormPlatforms, setPendingFormPlatforms] = useState<{ id: string; name: string; formUrl: string }[]>([]);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
@@ -172,8 +180,10 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       setCaseId(newCaseId);
 
       const previewRes = await fetch(`/api/cases/${newCaseId}/preview-notice`);
-      if (previewRes.ok) {
-        setPreviewUrl(`/api/cases/${newCaseId}/preview-notice`);
+      const firstUrlId = previewRes.headers.get("x-notice-url-id");
+      if (previewRes.ok && firstUrlId) {
+        setNoticeUrlId(firstUrlId);
+        setPreviewUrl(`/api/cases/${newCaseId}/preview-notice?urlId=${encodeURIComponent(firstUrlId)}`);
         setStep("sign");
       } else {
         router.push(await pathAfterNotices(newCaseId, previewRes));
@@ -192,7 +202,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       const res = await csrfFetch(`/api/cases/${caseId}/sign-notice`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
+        body: JSON.stringify({ urlId: noticeUrlId, name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -207,12 +217,13 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       // Each link has its own notice. If another is ready, sign it here too;
       // the signature and confirmation are given again for every notice.
       const next = await fetch(`/api/cases/${caseId}/preview-notice`);
-      if (next.ok) {
-        const count = signedCount + 1;
-        setSignedCount(count);
+      const nextUrlId = next.headers.get("x-notice-url-id");
+      if (next.ok && nextUrlId) {
+        setSignedCount(signedCount + 1);
         setSignature("");
         setAgreed(false);
-        setPreviewUrl(`/api/cases/${caseId}/preview-notice?after=${count}`);
+        setNoticeUrlId(nextUrlId);
+        setPreviewUrl(`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(nextUrlId)}`);
         setStep("sign");
         return;
       }
