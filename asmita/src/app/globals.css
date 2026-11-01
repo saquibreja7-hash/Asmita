@@ -5,7 +5,7 @@
  *
  * Canvas: warm parchment, never pure white.
  * Type:   serif headings at weight 400 only; monospace for body, nav, buttons, tags.
- * Color:  one accent (Lake Blue) reserved for the single primary action per screen.
+ * Color:  one accent (brand teal, from the logo) reserved for the single primary action per screen.
  *         Pastels (sky, mint, coral, gold) are decorative washes only.
  * Shape:  pill buttons (100px), soft-rect cards (40px), 1px Ash hairlines, no shadows.
  */
@@ -13,9 +13,9 @@
 :root {
   /* Palette */
   --color-parchment: #f6f3f1;
-  --color-lake-blue: #2b59d1;
-  --color-periwinkle-mist: #cfdaf5;
-  --color-sky-blue: #a0b5eb;
+  --color-brand-teal: #0a5e5a; /* the logo teal */
+  --color-teal-mist: #d4e9e6;
+  --color-teal-sky: #9fcac4;
   --color-mint: #a7fccd;
   --color-coral: #ff9473;
   --color-gold: #ecda98;
@@ -56,7 +56,7 @@
   --shadow-md: rgba(0, 0, 0, 0.1) 0px 0px 10px 0px;
 
   /* Legacy token names, remapped so existing markup inherits the new system */
-  --theme-color-1: var(--color-lake-blue);
+  --theme-color-1: var(--color-brand-teal);
   --theme-color-2: var(--color-off-black);
   --theme-color-3: var(--color-parchment);
 
@@ -68,8 +68,8 @@
   --heading: var(--color-off-black);
   --mint: var(--color-mint);
   --mint-soft: #e3fdef;
-  --purple: var(--color-lake-blue);
-  --purple-soft: var(--color-periwinkle-mist);
+  --purple: var(--color-brand-teal);
+  --purple-soft: var(--color-teal-mist);
   --peach: var(--color-gold);
   --warm-border: var(--color-ash);
 
@@ -83,13 +83,13 @@
   --hairline: var(--color-ash);
   --teal: var(--color-off-black);
   --teal-dark: var(--color-ink);
-  --teal-soft: var(--color-periwinkle-mist);
-  --accent: var(--color-lake-blue);
-  --accent-soft: var(--color-periwinkle-mist);
+  --teal-soft: var(--color-teal-mist);
+  --accent: var(--color-brand-teal);
+  --accent-soft: var(--color-teal-mist);
   --success: #176b42;
   --warning: #9a5b00;
   --danger: #b42318;
-  --saffron: var(--color-lake-blue);
+  --saffron: var(--color-brand-teal);
   --rose: var(--danger);
   --font-deva: "Noto Sans Devanagari";
   --radius: 16px;
@@ -188,12 +188,12 @@ button, input, textarea, select {
 }
 
 ::selection {
-  background: var(--color-periwinkle-mist);
+  background: var(--color-teal-mist);
   color: var(--color-off-black);
 }
 
 :where(a, button, input, textarea, select, summary):focus-visible {
-  outline: 2px solid var(--color-lake-blue);
+  outline: 2px solid var(--color-brand-teal);
   outline-offset: 3px;
   border-radius: 4px;
 }
@@ -289,16 +289,16 @@ html[lang="hi"] .btn {
   letter-spacing: 0;
 }
 
-/* Primary: the single Lake Blue fill per screen */
+/* Primary: the single brand teal fill per screen */
 .btn-primary {
-  background: var(--color-lake-blue);
+  background: var(--color-brand-teal);
   color: #ffffff;
-  border-color: var(--color-lake-blue);
+  border-color: var(--color-brand-teal);
 }
 
 .btn-primary:hover {
-  background: #2249ad;
-  border-color: #2249ad;
+  background: #084a47;
+  border-color: #084a47;
   color: #ffffff;
 }
 
@@ -500,7 +500,7 @@ textarea.input {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: var(--color-lake-blue);
+  background: var(--color-brand-teal);
   margin-right: 8px;
   vertical-align: middle;
 }
@@ -603,7 +603,7 @@ textarea.input {
 /* The one colored surface on the page */
 .card-elevated {
   border-color: transparent;
-  background: var(--color-periwinkle-mist);
+  background: var(--color-teal-mist);
   position: relative;
   overflow: hidden;
 }
@@ -988,13 +988,14 @@ textarea.input {
 .fade { transition: opacity 0.15s ease; }
 .fade:hover { opacity: 0.6; }
 
-.wordmark {
-  font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  color: var(--color-off-black);
+.brand-logo {
+  display: block;
+  height: 34px;
+  width: auto;
+}
+
+.brand-logo-footer {
+  height: 40px;
 }
 
 /* ── Phone refinements ────────────────────────────────────────── */
