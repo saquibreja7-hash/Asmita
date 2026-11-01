@@ -22,7 +22,7 @@ Constraints that drove the decision:
 Next.js 16 on vinext 1.4 (stable) -> Cloudflare Workers, placement hint aws:ap-south-1
   |- Hyperdrive (cache off, verify-full TLS, least-privilege role)
   |     -> Supabase Postgres, Mumbai (Free plan; AWS RDS Mumbai once credits arrive)
-  |- Queues (IDs only, idempotent sends) + Cron sweep        dispatch with retries
+  |- Idempotent sends (Resend idempotency keys) + Cron sweep  dispatch
   |- Rate Limiting binding (edge) + Postgres counters (exact)
   '- Evidence vault: Supabase Storage, Mumbai                only if ADR 002 passes
 Off Cloudflare: external uptime monitor
@@ -33,7 +33,7 @@ Future: hash bank (TypeScript matcher in Mumbai, envelope-encrypted,
 - **Next.js 16 on vinext.** vinext went stable with 1.0 on 2026-09-28 (the lockfile resolves 1.4.0) and is Cloudflare's documented default for Next.js on Workers.
 - **Supabase Postgres in Mumbai through Hyperdrive** stays the system of record.
 - **Prisma for schema and migrations, Kysely + `pg` at runtime,** with Kysely types generated from the Prisma schema.
-- **Queues** for dispatch. Delivery is at-least-once, so every send carries an idempotency key. Messages carry IDs only. The Cron database sweep stays as a backstop.
+- **Dispatch stays synchronous** (amended 2026-11-01). Notices go out when an admin clicks dispatch, at low volume, and the admin sees a failure at once. Every notice, follow-up and hash advisory send carries a Resend idempotency key (kept 24 hours), so a retry after a send that was never recorded cannot email the platform twice. The Cron database sweep sends escalation follow-ups. Queues were dropped for now: they add a second, Worker-only send path for no gain at this volume.
 - **Rate limiting in two layers:** the Workers binding at the edge (approximate, per location) and exact counters in Postgres for OTP, admin MFA, portal tokens and case creation.
 
 ### Supabase Free plan, including launch
@@ -51,6 +51,7 @@ Asmita launches on Supabase Free in Mumbai. When AWS credits arrive, the databas
 
 - **Framework:** another critical React Server Components advisory, or vinext stalling. Target then: React Router v8 framework mode (official Cloudflare guide, RSC opt-in). Review date: mid-2027.
 - **Database:** AWS credits arriving. Target then: RDS for PostgreSQL Mumbai.
+- **Queues:** the daily escalation sweep sends enough follow-ups to approach Worker limits, or sends start failing in ways admins cannot retry by hand. Target then: Cloudflare Queues carrying IDs only, with a dead-letter queue.
 
 ## Must-fix issues
 
@@ -58,7 +59,7 @@ Ordered by priority. M items are must-fix before launch; the first block is this
 
 ### Phase 1: this week (production security)
 
-- [ ] **M1. Supabase Data API exposure.** No migration enables row-level security, and the keepalive reads `/rest/v1/Platform` with the publishable key, so the Data API serves `public`. Check:
+- [x] **M1. Supabase Data API exposure.** No migration enables row-level security, and the keepalive reads `/rest/v1/Platform` with the publishable key, so the Data API serves `public`. Check:
   ```sql
   select c.relname, c.relrowsecurity as rls,
     has_table_privilege('anon', c.oid, 'SELECT') as anon_select,
@@ -67,11 +68,11 @@ Ordered by priority. M items are must-fix before launch; the first block is this
   where n.nspname = 'public' and c.relkind = 'r' order by 1;
   ```
   Fix: disable the Data API (the app does not use it), enable RLS on every table in a migration, and revoke `anon` and `authenticated` grants on `public`. Point the keepalive at the app's `/api/health` instead.
-- [ ] **M2. Least-privilege database role.** Hyperdrive connects as the `postgres` superuser. Create an app role with only the grants the app needs, and keep `postgres` for migrations.
-- [ ] **M3. Hyperdrive TLS.** Upgrade from `require` to `verify-full` with Supabase's CA certificate. (Caching is already disabled.)
-- [ ] **M5. Keep-active.** Make sure the daily cron touches the database, and point the keepalive workflow away from the Data API.
-- [ ] **M6. Legacy data in Singapore.** `asmita/.env.local` still points at the old Neon database in Singapore. If it holds real data, delete it and decommission the project.
-- [ ] **M7. Credential hygiene.** `asmita/.env.staging.local` holds production credentials. Rename it (for example `.env.production.local`) so nothing runs "staging" work against production.
+- [x] **M2. Least-privilege database role.** Hyperdrive connects as the `postgres` superuser. Create an app role with only the grants the app needs, and keep `postgres` for migrations.
+- [x] **M3. Hyperdrive TLS.** Upgrade from `require` to `verify-full` with Supabase's CA certificate. (Caching is already disabled.)
+- [x] **M5. Keep-active.** Make sure the daily cron touches the database, and point the keepalive workflow away from the Data API.
+- [x] **M6. Legacy data in Singapore.** `asmita/.env.local` still points at the old Neon database in Singapore. If it holds real data, delete it and decommission the project. Done: it held no data and the Neon project is deleted (2026-11-01).
+- [x] **M7. Credential hygiene.** `asmita/.env.staging.local` holds production credentials. Rename it (for example `.env.production.local`) so nothing runs "staging" work against production.
 
 ### Phase 2: next (issue #17 and rate limits)
 
@@ -86,10 +87,10 @@ Ordered by priority. M items are must-fix before launch; the first block is this
 
 ### Phase 3: then (reliability and maintainability)
 
-- [ ] Generate Kysely types from the Prisma schema with `prisma-kysely`; delete the hand-written types; fail CI on drift.
-- [ ] Pin `@vinext/cloudflare` to its stable release (currently 1.0.0-beta.8).
-- [ ] Move notice and hash-advisory dispatch to Queues with idempotent sends and a dead-letter queue; keep the Cron sweep as backstop.
-- [ ] Add the placement hint `aws:ap-south-1` to the production Worker.
+- [x] Generate Kysely types from the Prisma schema with `prisma-kysely`; delete the hand-written types; fail CI on drift. The types are generated into `src/generated/` on every install and never committed, so they cannot drift.
+- [x] Pin `@vinext/cloudflare` (1.3.0) and `vinext` (1.4.0) to exact stable releases.
+- [x] Idempotent dispatch instead of Queues: Resend idempotency keys on every notice, follow-up and hash-advisory send; a retry whose earlier attempt already reached Resend gets 409 `email_already_sent`.
+- [x] Run the production Worker in `aws:ap-south-1`, next to the database (`placement.region`).
 
 ### Phase 4: before launch
 
@@ -102,7 +103,7 @@ Keep the app on Workers and move the database to RDS for PostgreSQL in Mumbai (a
 
 ## Consequences
 
-- No rewrite now. Effort goes to hardening, the issue #17 fixes, rate limiting, Queues and the data-layer cleanup.
+- No rewrite now. Effort goes to hardening, the issue #17 fixes, rate limiting, idempotent dispatch and the data-layer cleanup.
 - Two vendors: Cloudflare for compute and edge, Supabase (or AWS) in Mumbai for data. This is the price of data residency.
 - The project launches on Supabase Free and moves to AWS when credits arrive.
 - The framework and hash-bank questions are deferred with explicit triggers, not dropped.

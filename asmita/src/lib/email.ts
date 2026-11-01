@@ -49,6 +49,9 @@ export async function sendNoticeDraft(
   subject: string,
   text: string,
   attachments?: { filename: string; content: Buffer }[],
+  // Resend keeps a key for 24 hours: a retry with the same key never sends a
+  // second email, so a crash between sending and recording cannot double-send.
+  idempotencyKey?: string,
 ) {
   if (!process.env.RESEND_API_KEY) {
     return { id: "dev-notice-message" };
@@ -59,7 +62,7 @@ export async function sendNoticeDraft(
     subject,
     text,
     ...(attachments?.length ? { attachments } : {}),
-  }));
+  }, idempotencyKey ? { idempotencyKey } : undefined));
 }
 
 export function createVictimConfirmationEmail(referenceNumber: string, dashboardUrl: string) {
@@ -268,7 +271,12 @@ export async function sendVictimConfirmation(to: string, referenceNumber: string
 }
 
 function assertEmailSent(result: unknown): EmailSendResult {
-  const response = result as { data?: { id?: string } | null; error?: { message?: string } | null };
+  const response = result as { data?: { id?: string } | null; error?: { name?: string; message?: string } | null };
+  // The same idempotency key with a different payload (or still in flight):
+  // an earlier attempt already sent, or is sending, this email.
+  if (response?.error?.name === "invalid_idempotent_request" || response?.error?.name === "concurrent_idempotent_requests") {
+    throw new Error("email_already_sent");
+  }
   if (response?.error) {
     throw new Error(`email_send_failed:${response.error.message || "unknown_resend_error"}`);
   }

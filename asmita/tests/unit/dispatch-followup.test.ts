@@ -55,6 +55,8 @@ describe("dispatchEscalationFollowUp", () => {
       "go@platform.com",
       "[Follow-up #1] takedown",
       "Dear GO, this is the same body the lawyers reviewed.",
+      undefined,
+      expect.stringMatching(/^follow-up:[0-9a-f]{64}$/),
     );
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({

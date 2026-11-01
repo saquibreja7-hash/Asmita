@@ -27,6 +27,9 @@
   "env": {
     "production": {
       "name": "asmita-production",
+      "placement": {
+        "region": "aws:ap-south-1"
+      },
       "routes": [
         {
           "pattern": "meriasmita.org/*",

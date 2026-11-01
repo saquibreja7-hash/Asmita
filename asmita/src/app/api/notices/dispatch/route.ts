@@ -160,14 +160,23 @@ export async function POST(request: Request) {
     ? Buffer.from(decryptField(submittedUrl.signedNoticePdf), "base64")
     : null;
 
-  const result = await dispatchTier2Notice({
-    caseId: parsed.data.caseId,
-    urlId: parsed.data.urlId,
-    recipientEmail: platform.grievanceEmail,
-    subject,
-    body,
-    signedNoticePdf,
-    fingerprintIds: signedAnnex.annex.hashSubmissionIds,
-  });
-  return NextResponse.json(result);
+  try {
+    const result = await dispatchTier2Notice({
+      caseId: parsed.data.caseId,
+      urlId: parsed.data.urlId,
+      recipientEmail: platform.grievanceEmail,
+      subject,
+      body,
+      signedNoticePdf,
+      fingerprintIds: signedAnnex.annex.hashSubmissionIds,
+    });
+    return NextResponse.json(result);
+  } catch (err) {
+    // An earlier attempt in the last 24 hours reached Resend but was not
+    // recorded. Sending again would email the platform twice.
+    if (err instanceof Error && err.message === "email_already_sent") {
+      return NextResponse.json({ error: "email_already_sent" }, { status: 409 });
+    }
+    throw err;
+  }
 }
