@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
+import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 
 type HashEntry = { hash: string; quality: number; clientVersion: string };
@@ -26,6 +27,20 @@ type Step =
   | "hash-sign"
   | "hash-signing"
   | "form-only-handoff";
+
+// When no notice is left to sign: a link on a platform that only takes its
+// own form needs the survivor to file that form, so they go to the handoff;
+// anything else waiting (a new site, a contact being checked) is ours to do.
+// Any other failure (a server error, say) shows the case page, which lists
+// what is still unsigned, rather than claiming the survivor is done.
+async function pathAfterNotices(caseId: string, preview: Response) {
+  const { error } = (await preview.json().catch(() => ({}))) as { error?: string };
+  if (error === "form_only_platform") return `/handoff/${caseId}`;
+  // Nothing ready to sign yet, or the notice text is still with the legal
+  // reviewer: both are ours to finish, and we email when it is time to sign.
+  if (error === "no_eligible_url" || error === "no_template") return `/case/${caseId}/confirmation`;
+  return `/case/${caseId}`;
+}
 
 function CheckItem({ heading, detail }: { heading: string; detail: string }) {
   return (
@@ -52,24 +67,36 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [caseId, setCaseId] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
+  // The link whose notice is on screen; signing sends it so the two match.
+  const [noticeUrlId, setNoticeUrlId] = useState("");
   const [pendingFormPlatforms, setPendingFormPlatforms] = useState<{ id: string; name: string; formUrl: string }[]>([]);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [signature, setSignature] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
+  const [signedCount, setSignedCount] = useState(0);
+  const started = useRef(false);
+  // Review and signing are one screen: the case is created as soon as the
+  // draft is read, so the notice preview appears without another click.
+  const startCase = useEffectEvent((d: Draft) => {
+    if (started.current) return;
+    started.current = true;
+    void createCase(d);
+  });
 
   useEffect(() => {
     const id = window.setTimeout(() => {
       try {
-        const raw = sessionStorage.getItem("asmita_submit_draft");
+        const raw = sessionStorage.getItem(DRAFT_KEY);
         if (!raw) { router.replace("/submit"); return; }
         const data = JSON.parse(raw) as Draft;
         if (!data.urls?.length && !data.hashes?.length) { router.replace("/submit"); return; }
         data.registrationKey ??= crypto.randomUUID();
-        sessionStorage.setItem("asmita_submit_draft", JSON.stringify(data));
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data));
         setDraft(data);
-        setStep("review");
+        setStep("creating");
+        startCase(data);
       } catch {
         router.replace("/submit");
       }
@@ -77,18 +104,27 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
     return () => window.clearTimeout(id);
   }, [router]);
 
-  async function createCase() {
-    if (!draft) return;
+  async function createCase(d: Draft) {
     setStep("creating");
     setError("");
     try {
+      const declared = await csrfFetch("/api/profile/declaration", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acknowledged: true, version: "v1.0-2026-05-12", language: locale }),
+      });
+      if (!declared.ok) {
+        setError(t(locale, "submit.declaration.error"));
+        setStep("review");
+        return;
+      }
       const createRes = await csrfFetch("/api/cases/create", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "Idempotency-Key": draft.registrationKey ?? crypto.randomUUID(),
+          "Idempotency-Key": d.registrationKey ?? crypto.randomUUID(),
         },
-        body: JSON.stringify({ urls: draft.urls, declaration: draft.declaration }),
+        body: JSON.stringify({ urls: d.urls, declaration: d.declaration }),
       });
       if (!createRes.ok) {
         const response = (await createRes.json().catch(() => ({}))) as { error?: string };
@@ -98,14 +134,14 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       }
       const { caseId: newCaseId } = (await createRes.json()) as { caseId: string };
 
-      if (draft.hashes.length > 0) {
+      if (d.hashes.length > 0) {
         const hashRes = await csrfFetch(`/api/cases/${newCaseId}/hashes`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            hashes: draft.hashes,
+            hashes: d.hashes,
             declaration: true,
-            platformIds: draft.platformIds,
+            platformIds: d.platformIds,
           }),
         });
         if (!hashRes.ok) {
@@ -115,21 +151,21 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         }
 
         // Hash-only path: no URLs
-        if (draft.urls.length === 0) {
-          if (draft.emailPlatformIds.length > 0) {
-            // Save form-only platforms to state before clearing draft (sessionStorage won't survive)
-            if (draft.formOnlyPlatforms.length > 0) {
-              setPendingFormPlatforms(draft.formOnlyPlatforms);
+        if (d.urls.length === 0) {
+          if (d.emailPlatformIds.length > 0) {
+            // Save form-only platforms to state before clearing d (sessionStorage won't survive)
+            if (d.formOnlyPlatforms.length > 0) {
+              setPendingFormPlatforms(d.formOnlyPlatforms);
             }
-            sessionStorage.removeItem("asmita_submit_draft");
+            sessionStorage.removeItem(DRAFT_KEY);
             setCaseId(newCaseId);
             setPreviewUrl(`/api/cases/${newCaseId}/preview-hash-advisory`);
             setStep("hash-sign");
           } else {
             // Form-only platforms only — show all of them inline
-            sessionStorage.removeItem("asmita_submit_draft");
-            if (draft.formOnlyPlatforms.length > 0) {
-              setPendingFormPlatforms(draft.formOnlyPlatforms);
+            sessionStorage.removeItem(DRAFT_KEY);
+            if (d.formOnlyPlatforms.length > 0) {
+              setPendingFormPlatforms(d.formOnlyPlatforms);
               setCaseId(newCaseId);
               setStep("form-only-handoff");
             } else {
@@ -140,15 +176,17 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         }
       }
 
-      sessionStorage.removeItem("asmita_submit_draft");
+      sessionStorage.removeItem(DRAFT_KEY);
       setCaseId(newCaseId);
 
       const previewRes = await fetch(`/api/cases/${newCaseId}/preview-notice`);
-      if (previewRes.ok) {
-        setPreviewUrl(`/api/cases/${newCaseId}/preview-notice`);
+      const firstUrlId = previewRes.headers.get("x-notice-url-id");
+      if (previewRes.ok && firstUrlId) {
+        setNoticeUrlId(firstUrlId);
+        setPreviewUrl(`/api/cases/${newCaseId}/preview-notice?urlId=${encodeURIComponent(firstUrlId)}`);
         setStep("sign");
       } else {
-        router.push(`/case/${newCaseId}`);
+        router.push(await pathAfterNotices(newCaseId, previewRes));
       }
     } catch {
       setError(t(locale, "review.error.generic"));
@@ -164,7 +202,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       const res = await csrfFetch(`/api/cases/${caseId}/sign-notice`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
+        body: JSON.stringify({ urlId: noticeUrlId, name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -176,7 +214,20 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         setStep("sign");
         return;
       }
-      router.push(`/case/${caseId}`);
+      // Each link has its own notice. If another is ready, sign it here too;
+      // the signature and confirmation are given again for every notice.
+      const next = await fetch(`/api/cases/${caseId}/preview-notice`);
+      const nextUrlId = next.headers.get("x-notice-url-id");
+      if (next.ok && nextUrlId) {
+        setSignedCount(signedCount + 1);
+        setSignature("");
+        setAgreed(false);
+        setNoticeUrlId(nextUrlId);
+        setPreviewUrl(`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(nextUrlId)}`);
+        setStep("sign");
+        return;
+      }
+      router.push(await pathAfterNotices(caseId, next));
     } catch {
       setError(t(locale, "review.sign.error.timeout"));
       setStep("sign");
@@ -211,7 +262,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       if (pendingFormPlatforms.length > 0) {
         setStep("form-only-handoff");
       } else {
-        router.push(`/case/${caseId}`);
+        router.push(`/case/${caseId}/confirmation`);
       }
     } catch {
       setError(t(locale, "review.sign.error.timeout"));
@@ -393,9 +444,13 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
               type="button"
               className="btn btn-primary"
               disabled={step === "creating"}
-              onClick={createCase}
+              onClick={() => {
+                if (!draft) return;
+                setStep("creating");
+                void createCase(draft);
+              }}
             >
-              {step === "creating" ? t(locale, "review.cta.creating") : t(locale, "review.cta.create")}
+              {step === "creating" ? t(locale, "review.cta.creating") : t(locale, "review.cta.retry")}
             </button>
             <a className="btn btn-secondary" href="/submit">
               {t(locale, "review.cta.back")}
@@ -439,6 +494,25 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
             {t(locale, "review.sign.sub")}
           </p>
         </div>
+
+        {signedCount > 0 && !isHashSign && (
+          <p className="rounded-[16px] bg-[var(--teal-soft)] px-4 py-3 text-sm font-medium text-[var(--teal-dark)]" role="status">
+            {t(locale, "review.sign.nextNote")}
+          </p>
+        )}
+
+        {draft && draft.urls.length > 0 && !isHashSign && (
+          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5">
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              {t(locale, "review.links.label")} ({draft.urls.length})
+            </p>
+            <ul className="mt-2 space-y-1">
+              {draft.urls.map((url) => (
+                <li key={url} className="break-all font-mono text-[13px] text-[var(--muted)]">{url}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div
           className="overflow-hidden rounded-[24px] border border-[var(--border)]"

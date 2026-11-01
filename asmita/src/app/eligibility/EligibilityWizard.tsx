@@ -3,143 +3,39 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { forgetEligibility, rememberEligibleAdult } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 
-type Step = "accept" | "who" | "intimate" | "stop_other" | "stop_content";
+type Stop = "other" | "content" | null;
 
-const PROGRESS: Record<Step, number | null> = {
-  accept: 0,
-  who: 1,
-  intimate: 2,
-  stop_other: null,
-  stop_content: null,
-};
-
+// Every eligibility question on one screen. Anyone who is under 18, or was
+// (or is not sure they were) when the content was made, goes to the minor
+// pathway before anything else is asked.
 export function EligibilityWizard({ locale }: { locale: Locale }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("accept");
   const [who, setWho] = useState<"myself" | "other" | "">("");
   const [intimate, setIntimate] = useState<"yes" | "no" | "">("");
+  const [ageNow, setAgeNow] = useState<"adult" | "minor" | "">("");
+  const [ageThen, setAgeThen] = useState<"adult" | "minor" | "">("");
+  const [stop, setStop] = useState<Stop>(null);
 
-  function back() {
-    if (step === "who") setStep("accept");
-    else if (step === "intimate") setStep("who");
-  }
+  const answered = Boolean(who && intimate && (ageNow === "minor" || (ageNow && ageThen)));
 
   function next() {
-    if (step === "accept") setStep("who");
-    else if (step === "who") {
-      if (who === "other") setStep("stop_other");
-      else setStep("intimate");
-    } else if (step === "intimate") {
-      if (intimate === "no") setStep("stop_content");
-      else router.push("/register");
+    if (ageNow === "minor" || ageThen === "minor") {
+      forgetEligibility();
+      router.push("/minor-support");
+      return;
     }
+    if (who === "other") return setStop("other");
+    if (intimate === "no") return setStop("content");
+    rememberEligibleAdult();
+    router.push("/submit");
   }
 
-  if (step === "accept") {
+  if (stop === "other") {
     return (
-      <WizardShell step={step} showBack={false} onBack={back} title={t(locale, "eligibility.step.accept.title")} locale={locale}>
-        <p className="muted mt-1 text-sm leading-[1.75]">
-          {t(locale, "eligibility.step.accept.sub")}
-        </p>
-
-        <div className="mt-8 grid gap-3 sm:grid-cols-2">
-          <InfoBox title={t(locale, "eligibility.canHelp.title")}>
-            <ul className="mt-3 space-y-2 text-sm leading-[1.65]">
-              <li>{t(locale, "eligibility.canHelp.item1")}</li>
-              <li>{t(locale, "eligibility.canHelp.item2")}</li>
-              <li>{t(locale, "eligibility.canHelp.item3")}</li>
-              <li>{t(locale, "eligibility.canHelp.item4")}</li>
-            </ul>
-          </InfoBox>
-          <InfoBox title={t(locale, "eligibility.cannotHelp.title")}>
-            <ul className="mt-3 space-y-2 text-sm leading-[1.65]">
-              <li>{t(locale, "eligibility.cannotHelp.item1")}</li>
-              <li>{t(locale, "eligibility.cannotHelp.item2")}</li>
-              <li>{t(locale, "eligibility.cannotHelp.item3")}</li>
-              <li>{t(locale, "eligibility.cannotHelp.item4")}</li>
-            </ul>
-          </InfoBox>
-        </div>
-
-        <div className="mt-5 rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4 text-sm leading-[1.7] text-[var(--muted)]">
-          <span className="font-medium text-[var(--foreground)]">{t(locale, "eligibility.limits.bold")}</span>{" "}
-          {t(locale, "eligibility.limits.rest")}
-        </div>
-
-        <div className="mt-8 flex justify-end">
-          <button className="btn btn-primary" onClick={next} type="button">
-            {t(locale, "eligibility.cta.continue")}
-          </button>
-        </div>
-      </WizardShell>
-    );
-  }
-
-  if (step === "who") {
-    return (
-      <WizardShell step={step} showBack onBack={back} title={t(locale, "eligibility.step.who.title")} locale={locale}>
-        <p className="muted mt-1 text-sm leading-[1.75]">
-          {t(locale, "eligibility.step.who.sub")}
-        </p>
-        <fieldset className="mt-6 space-y-3">
-          <legend className="sr-only">{t(locale, "eligibility.step.who.title")}</legend>
-          <ChoiceOption
-            label={t(locale, "eligibility.who.myself.label")}
-            sublabel={t(locale, "eligibility.who.myself.sub")}
-            checked={who === "myself"}
-            onSelect={() => setWho("myself")}
-          />
-          <ChoiceOption
-            label={t(locale, "eligibility.who.other.label")}
-            sublabel={t(locale, "eligibility.who.other.sub")}
-            checked={who === "other"}
-            onSelect={() => setWho("other")}
-          />
-        </fieldset>
-        <div className="mt-8 flex justify-end">
-          <button className="btn btn-primary" disabled={!who} onClick={next} type="button">
-            {t(locale, "eligibility.cta.continueBtn")}
-          </button>
-        </div>
-      </WizardShell>
-    );
-  }
-
-  if (step === "intimate") {
-    return (
-      <WizardShell step={step} showBack onBack={back} title={t(locale, "eligibility.step.intimate.title")} locale={locale}>
-        <p className="muted mt-1 text-sm leading-[1.75]">
-          {t(locale, "eligibility.step.intimate.sub")}
-        </p>
-        <fieldset className="mt-6 space-y-3">
-          <legend className="sr-only">{t(locale, "eligibility.step.intimate.title")}</legend>
-          <ChoiceOption
-            label={t(locale, "eligibility.intimate.yes.label")}
-            sublabel={t(locale, "eligibility.intimate.yes.sub")}
-            checked={intimate === "yes"}
-            onSelect={() => setIntimate("yes")}
-          />
-          <ChoiceOption
-            label={t(locale, "eligibility.intimate.no.label")}
-            sublabel={t(locale, "eligibility.intimate.no.sub")}
-            checked={intimate === "no"}
-            onSelect={() => setIntimate("no")}
-          />
-        </fieldset>
-        <div className="mt-8 flex justify-end">
-          <button className="btn btn-primary" disabled={!intimate} onClick={next} type="button">
-            {t(locale, "eligibility.cta.continueBtn")}
-          </button>
-        </div>
-      </WizardShell>
-    );
-  }
-
-  if (step === "stop_other") {
-    return (
-      <WizardShell step={step} showBack={false} onBack={back} title={t(locale, "eligibility.stop.other.title")} locale={locale}>
+      <WizardShell title={t(locale, "eligibility.stop.other.title")}>
         <p className="muted mt-1 text-sm leading-[1.75]">
           {t(locale, "eligibility.stop.other.sub1")}
         </p>
@@ -158,7 +54,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
           </ResourceLink>
         </div>
         <div className="mt-8 flex flex-wrap gap-3">
-          <button className="btn btn-secondary" onClick={() => setStep("who")} type="button">
+          <button className="btn btn-secondary" onClick={() => setStop(null)} type="button">
             {t(locale, "eligibility.stop.other.goBack")}
           </button>
           <Link className="btn btn-secondary" href="/">{t(locale, "eligibility.stop.other.returnHome")}</Link>
@@ -167,9 +63,9 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
     );
   }
 
-  if (step === "stop_content") {
+  if (stop === "content") {
     return (
-      <WizardShell step={step} showBack={false} onBack={back} title={t(locale, "eligibility.stop.content.title")} locale={locale}>
+      <WizardShell title={t(locale, "eligibility.stop.content.title")}>
         <p className="muted mt-1 text-sm leading-[1.75]">
           {t(locale, "eligibility.stop.content.sub")}
         </p>
@@ -185,7 +81,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
           </ResourceLink>
         </div>
         <div className="mt-8 flex flex-wrap gap-3">
-          <button className="btn btn-secondary" onClick={() => setStep("intimate")} type="button">
+          <button className="btn btn-secondary" onClick={() => setStop(null)} type="button">
             {t(locale, "eligibility.stop.other.goBack")}
           </button>
           <Link className="btn btn-secondary" href="/">{t(locale, "eligibility.stop.other.returnHome")}</Link>
@@ -194,97 +90,105 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
     );
   }
 
-  return null;
-}
-
-function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
-  const current = PROGRESS[step];
-  if (current === null) return <div className="hairline mb-8" />;
-  const labels = [
-    t(locale, "eligibility.progress.overview"),
-    t(locale, "eligibility.progress.whosDepicted"),
-    t(locale, "eligibility.progress.contentType"),
-  ];
   return (
-    <div className="mb-8">
-      <p className="text-xs font-medium text-[var(--foreground)] sm:hidden" aria-live="polite">
-        {current + 1}/{labels.length} · {labels[current]}
+    <WizardShell title={t(locale, "eligibility.single.title")}>
+      <p className="muted mt-1 text-sm leading-[1.75]">
+        {t(locale, "eligibility.single.sub")}
       </p>
-      <div className="mt-2 flex gap-1.5 sm:hidden" aria-hidden>
-        {labels.map((label, i) => (
-          <span key={label} className="h-1 flex-1 rounded-full" style={{
-            background: i <= current ? "var(--teal)" : "var(--hairline)",
-          }} />
-        ))}
+
+      <details className="mt-6 rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4">
+        <summary className="cursor-pointer text-sm font-medium text-[var(--foreground)]">
+          {t(locale, "eligibility.step.accept.title")}
+        </summary>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <InfoBox title={t(locale, "eligibility.canHelp.title")}>
+            <ul className="mt-3 space-y-2 text-sm leading-[1.65]">
+              <li>{t(locale, "eligibility.canHelp.item1")}</li>
+              <li>{t(locale, "eligibility.canHelp.item2")}</li>
+              <li>{t(locale, "eligibility.canHelp.item3")}</li>
+              <li>{t(locale, "eligibility.canHelp.item4")}</li>
+            </ul>
+          </InfoBox>
+          <InfoBox title={t(locale, "eligibility.cannotHelp.title")}>
+            <ul className="mt-3 space-y-2 text-sm leading-[1.65]">
+              <li>{t(locale, "eligibility.cannotHelp.item1")}</li>
+              <li>{t(locale, "eligibility.cannotHelp.item2")}</li>
+              <li>{t(locale, "eligibility.cannotHelp.item3")}</li>
+              <li>{t(locale, "eligibility.cannotHelp.item4")}</li>
+            </ul>
+          </InfoBox>
+        </div>
+        <p className="mt-3 text-sm leading-[1.7] text-[var(--muted)]">
+          <span className="font-medium text-[var(--foreground)]">{t(locale, "eligibility.limits.bold")}</span>{" "}
+          {t(locale, "eligibility.limits.rest")}
+        </p>
+      </details>
+
+      <Question title={t(locale, "eligibility.step.who.title")}>
+        <ChoiceOption
+          label={t(locale, "eligibility.who.myself.label")}
+          sublabel={t(locale, "eligibility.who.myself.sub")}
+          checked={who === "myself"}
+          onSelect={() => setWho("myself")}
+        />
+        <ChoiceOption
+          label={t(locale, "eligibility.who.other.label")}
+          sublabel={t(locale, "eligibility.who.other.sub")}
+          checked={who === "other"}
+          onSelect={() => setWho("other")}
+        />
+      </Question>
+
+      <Question title={t(locale, "eligibility.step.intimate.title")}>
+        <ChoiceOption
+          label={t(locale, "eligibility.intimate.yes.label")}
+          sublabel={t(locale, "eligibility.intimate.yes.sub")}
+          checked={intimate === "yes"}
+          onSelect={() => setIntimate("yes")}
+        />
+        <ChoiceOption
+          label={t(locale, "eligibility.intimate.no.label")}
+          sublabel={t(locale, "eligibility.intimate.no.sub")}
+          checked={intimate === "no"}
+          onSelect={() => setIntimate("no")}
+        />
+      </Question>
+
+      <Question title={t(locale, "eligibility.ageNow.title")}>
+        <ChoiceOption label={t(locale, "auth.ageAdult")} checked={ageNow === "adult"} onSelect={() => setAgeNow("adult")} />
+        <ChoiceOption label={t(locale, "auth.ageMinor")} checked={ageNow === "minor"} onSelect={() => setAgeNow("minor")} />
+      </Question>
+
+      {ageNow !== "minor" && (
+        <Question title={t(locale, "eligibility.ageThen.title")} sub={t(locale, "eligibility.ageThen.sub")}>
+          <ChoiceOption label={t(locale, "auth.ageThenAdult")} checked={ageThen === "adult"} onSelect={() => setAgeThen("adult")} />
+          <ChoiceOption label={t(locale, "auth.ageThenMinor")} checked={ageThen === "minor"} onSelect={() => setAgeThen("minor")} />
+        </Question>
+      )}
+
+      <div className="mt-8 flex justify-end">
+        <button className="btn btn-primary" disabled={!answered} onClick={next} type="button">
+          {t(locale, "eligibility.cta.continueBtn")}
+        </button>
       </div>
-      <div className="hidden items-center gap-2 sm:flex">
-        {labels.map((label, i) => (
-          <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
-            <div className="flex items-center gap-2">
-              <div
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-medium transition-colors ${
-                  i < current
-                    ? "bg-[var(--color-off-black)] text-[var(--color-parchment)]"
-                    : i === current
-                    ? "border-2 border-[var(--teal)] text-[var(--teal)]"
-                    : "border border-[var(--border)] text-[var(--muted)]"
-                }`}
-              >
-                {i < current ? (
-                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                    <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                ) : (
-                  i + 1
-                )}
-              </div>
-              <span className={`hidden text-[11px] sm:block ${i === current ? "font-medium text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
-                {label}
-              </span>
-            </div>
-            {i < labels.length - 1 && (
-              <div className="flex-1 h-px mx-1" style={{ background: i < current ? "var(--teal)" : "var(--hairline)" }} />
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
+    </WizardShell>
   );
 }
 
-function WizardShell({
-  step,
-  showBack,
-  onBack,
-  title,
-  children,
-  locale,
-}: {
-  step: Step;
-  showBack: boolean;
-  onBack: () => void;
-  title: string;
-  children: React.ReactNode;
-  locale: Locale;
-}) {
+function Question({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="mt-8 space-y-3">
+      <legend className="text-[17px] font-medium leading-[1.3] text-[var(--foreground)]">{title}</legend>
+      {sub && <p className="muted text-sm leading-[1.6]">{sub}</p>}
+      {children}
+    </fieldset>
+  );
+}
+
+function WizardShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <ProgressBar step={step} locale={locale} />
-      <div className="mt-8 flex items-start justify-between gap-4">
-        <h2 className="text-[26px] font-medium leading-[1.2] tracking-tight md:text-[32px]">
-          {title}
-        </h2>
-        {showBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="shrink-0 font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
-            aria-label="Go back to previous step"
-          >
-            {t(locale, "eligibility.back")}
-          </button>
-        )}
-      </div>
+      <h2 className="text-[26px] font-medium leading-[1.2] tracking-tight md:text-[32px]">{title}</h2>
       {children}
     </div>
   );
@@ -297,7 +201,7 @@ function ChoiceOption({
   onSelect,
 }: {
   label: string;
-  sublabel: string;
+  sublabel?: string;
   checked: boolean;
   onSelect: () => void;
 }) {
@@ -319,9 +223,11 @@ function ChoiceOption({
         <span className="block text-[15px] font-medium leading-[1.4] text-[var(--foreground)] md:text-[17px]">
           {label}
         </span>
-        <span className="mt-1 block text-sm leading-[1.6] text-[var(--muted)]">
-          {sublabel}
-        </span>
+        {sublabel && (
+          <span className="mt-1 block text-sm leading-[1.6] text-[var(--muted)]">
+            {sublabel}
+          </span>
+        )}
       </span>
     </label>
   );

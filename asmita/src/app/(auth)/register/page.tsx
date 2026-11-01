@@ -60,7 +60,7 @@ export default async function RegisterPage() {
 
             {/* RIGHT - form */}
             <div className="order-1 min-w-0 flex-1 md:order-2">
-              <FlowProgress step={2} locale={locale} />
+              <FlowProgress step={3} locale={locale} />
               <RegisterForm locale={locale} />
             </div>
 

@@ -1,4 +1,8 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
+import { requireSession } from "@/lib/auth/middleware";
+import { ELIGIBLE_COOKIE } from "@/lib/eligibility";
 import { SubmitForm } from "./SubmitForm";
 import { FlowProgress } from "@/components/FlowProgress";
 import { listHashPickerPlatforms, type HashPickerPlatform } from "@/lib/hash-submission";
@@ -15,6 +19,11 @@ async function getPlatforms(): Promise<HashPickerPlatform[]> {
 }
 
 export default async function SubmitPage() {
+  // Links can be added before the email code, but only after the eligibility
+  // questions. Nothing typed here reaches the server until there is a session.
+  const auth = await requireSession();
+  if (auth.ok && !auth.session.ageOver18) redirect("/minor-support");
+  if (!auth.ok && (await cookies()).get(ELIGIBLE_COOKIE)?.value !== "1") redirect("/start");
   const locale = await getLocale();
   const enableHashUpload = process.env.ENABLE_HASH_UPLOAD === "true";
   const platforms = enableHashUpload ? await getPlatforms() : [];
@@ -74,7 +83,7 @@ export default async function SubmitPage() {
 
             {/* RIGHT - form */}
             <div className="order-1 min-w-0 flex-1 md:order-2">
-              <FlowProgress step={3} locale={locale} />
+              <FlowProgress step={2} locale={locale} />
               <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
                 {t(locale, "submit.form.title")}
               </h1>
@@ -82,7 +91,7 @@ export default async function SubmitPage() {
                 {t(locale, "submit.form.sub")}
               </p>
               <div className="mt-10">
-                <SubmitForm knownPlatforms={knownPlatforms} enableHashUpload={enableHashUpload} platforms={platforms} locale={locale} />
+                <SubmitForm signedIn={auth.ok} knownPlatforms={knownPlatforms} enableHashUpload={enableHashUpload} platforms={platforms} locale={locale} />
               </div>
             </div>
 

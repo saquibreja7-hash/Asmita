@@ -10,6 +10,7 @@ import { withAdmin } from "./support/database";
 async function register(page: Page) {
   await page.goto("/register");
   await page.getByText("I am 18 years of age or older.").click();
+  await page.getByText("I was 18 or older.").click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Email address").fill(`integrity-${randomUUID()}@example.invalid`);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -48,13 +49,11 @@ async function reportWithFingerprint(page: Page, links: string[]) {
   });
   await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
   await page.getByLabel(/I declare/).check();
-  await page.getByRole("button", { name: "Continue to review" }).click();
-  await expect(page).toHaveURL(/\/review-sign$/);
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   const hashResponse = page.waitForResponse(
     (r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()) && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Create case and preview notice" }).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
   const created = await createResponse;
   expect(created.ok()).toBe(true);
   const { caseId } = (await created.json()) as { caseId: string };
@@ -248,4 +247,74 @@ test.describe("notice integrity", () => {
     );
     expect(dispatched).toEqual([fingerprintA]);
   });
+});
+
+test("each link gets its own notice, signed one after another on the review screen", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
+  test.setTimeout(180_000);
+  await markTemplateReviewed("IT_RULES_2021");
+  await register(page);
+  await page.getByLabel("Links where the content appears").fill(
+    [`https://www.whatsapp.com/channel/asmita-synthetic-${randomUUID()}`, `https://wa.me/asmita-synthetic-${randomUUID()}`].join("\n"),
+  );
+  await page.getByLabel(/I declare/).check();
+  const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  const { caseId } = (await (await createResponse).json()) as { caseId: string };
+
+  for (const round of [1, 2]) {
+    await page.getByLabel("Full name").fill("Synthetic Survivor");
+    await page.getByLabel("Contact (email or phone)").fill("survivor@example.invalid");
+    // The signature and the confirmation are given again for every notice.
+    await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
+    await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
+    const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
+    await page.getByRole("button", { name: "Sign and submit" }).click();
+    expect((await signed).ok()).toBe(true);
+    if (round === 1) {
+      await expect(page.getByText("Signed. Here is the notice for your next link.")).toBeVisible();
+      await expect(page.getByPlaceholder("Type your full name")).toHaveValue("");
+    }
+  }
+  await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30_000 });
+  const signedNotices = await withAdmin((db) =>
+    db.query('SELECT 1 FROM "SubmittedUrl" WHERE "caseId" = $1 AND "signedNoticePdf" IS NOT NULL', [caseId]),
+  );
+  expect(signedNotices.rowCount).toBe(2);
+});
+
+test("a form-only link listed first does not hide the notices that can be signed", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
+  test.setTimeout(180_000);
+  await markTemplateReviewed("IT_RULES_2021");
+  await register(page);
+  // Instagram takes reports only through its own form; WhatsApp gets an emailed notice.
+  await page.getByLabel("Links where the content appears").fill(
+    [`https://www.instagram.com/p/asmita-synthetic-${randomUUID()}`, `https://wa.me/asmita-synthetic-${randomUUID()}`].join("\n"),
+  );
+  await page.getByLabel(/I declare/).check();
+  const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  const { caseId } = (await (await createResponse).json()) as { caseId: string };
+
+  await page.getByLabel("Full name").fill("Synthetic Survivor");
+  await page.getByLabel("Contact (email or phone)").fill("survivor@example.invalid");
+  await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
+  await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
+  const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
+  await page.getByRole("button", { name: "Sign and submit" }).click();
+  expect((await signed).ok()).toBe(true);
+
+  // Then the Instagram form, with the notice text to paste.
+  await expect(page).toHaveURL(new RegExp(`/handoff/${caseId}$`), { timeout: 30_000 });
+  const rows = await withAdmin((db) =>
+    db.query(
+      'SELECT s.domain, s."signedNoticePdf" IS NOT NULL AS signed FROM "SubmittedUrl" s WHERE s."caseId" = $1 ORDER BY s.domain',
+      [caseId],
+    ),
+  );
+  expect(rows.rows).toEqual([
+    { domain: "instagram.com", signed: false },
+    { domain: "wa.me", signed: true },
+  ]);
 });

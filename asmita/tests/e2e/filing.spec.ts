@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 async function registerAdult(page: Page, email: string) {
   await page.goto("/register");
   await page.getByText("I am 18 years of age or older.").click();
+  await page.getByText("I was 18 or older.").click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Email address").fill(email);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -40,10 +41,83 @@ test("each pasted line is checked where it is typed, and only valid links reach 
   await expect(cta).toBeEnabled();
   expect(detectCalls).toEqual([]);
 
-  await cta.click();
-  await expect(page).toHaveURL(/\/review-sign$/);
-  await expect(page.getByText("Links (1)")).toBeVisible();
-  await expect(page.getByText(/Some links could not be accepted/)).toHaveCount(0);
   // No in-flow support button; it lives in the header and footer.
   await expect(page.getByRole("main").getByRole("link", { name: "Support resources" })).toHaveCount(0);
+
+  // The case is created on arrival at review, with only the valid link.
+  const created = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
+  await cta.click();
+  const response = await created;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON().urls).toEqual(["https://instagram.com/p/abc"]);
+  // Instagram takes reports through its own form, so there is nothing to sign
+  // yet: the survivor is sent to its form, with the notice text to paste.
+  await expect(page).toHaveURL(/\/handoff\/[^/]+$/, { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Use the platform's own form." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "You are done for now." })).toHaveCount(0);
+});
+
+test("links can be added before the email code, and nothing reaches the server until then", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const apiCalls: string[] = [];
+  page.on("request", (request) => {
+    // Only calls that could carry what the survivor typed.
+    if (/\/api\/(cases|profile|platforms|hashes)/.test(request.url())) apiCalls.push(new URL(request.url()).pathname);
+  });
+
+  await page.goto("/eligibility");
+  await page.getByText("I am in the content").click();
+  await page.getByText(/^Yes - it shows me/).click();
+  await page.getByText("I am 18 years of age or older.").click();
+  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(/\/submit$/);
+
+  await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
+  await page.getByText(/I declare that I am the person depicted/).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page).toHaveURL(/\/register$/);
+  expect(apiCalls).toEqual([]);
+
+  // The age questions were answered already: the email step comes first.
+  await expect(page.getByText("I am 18 years of age or older.")).toHaveCount(0);
+  await page.getByLabel("Email address").fill(`early-${Date.now()}-${testInfo.project.name}@early-${testInfo.workerIndex}.example.com`);
+  const otpResponse = page.waitForResponse("**/api/auth/request-otp");
+  await page.getByRole("button", { name: "Send verification code" }).click();
+  const { devOtp } = (await (await otpResponse).json()) as { devOtp: string };
+  await page.getByLabel("6-digit code").fill(devOtp);
+  const created = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
+  await page.getByRole("button", { name: "Continue" }).click();
+  expect((await created).request().postDataJSON().urls).toEqual(["https://www.youtube.com/watch?v=asmita-synthetic"]);
+  await expect(page).toHaveURL(/\/(review-sign|case\/[^/]+\/confirmation)$/, { timeout: 30_000 });
+});
+
+test("someone under 18 when the content was made goes to the minor pathway, even after answering as an adult", async ({ page }) => {
+  const answer = async (ageThen: string) => {
+    await page.goto("/eligibility");
+    await page.getByText("I am in the content").click();
+    await page.getByText(/^Yes - it shows me/).click();
+    await page.getByText("I am 18 years of age or older.").click();
+    await page.getByText(ageThen).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+  };
+
+  // First answered as an adult, with a link typed in...
+  await answer("I was 18 or older.");
+  await expect(page).toHaveURL(/\/submit$/);
+  await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
+  await page.getByText(/I declare that I am the person depicted/).click();
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page).toHaveURL(/\/register$/);
+
+  // ...then as under 18 at the time: minor pathway, and the adult answers,
+  // the cookie and the typed link are all gone.
+  await answer("I was under 18, or I am not sure.");
+  await expect(page).toHaveURL(/\/minor-support$/);
+  await expect(page.locator("textarea")).toHaveCount(0);
+  expect(await page.evaluate(() => Object.keys(sessionStorage))).toEqual([]);
+  await page.goto("/submit");
+  await expect(page).toHaveURL(/\/start$/);
+  await page.goto("/register");
+  await expect(page.getByText("I am 18 years of age or older.")).toBeVisible();
 });

@@ -113,6 +113,14 @@ try {
   // closed in production even with the flag set.
   const provenance = await fetch(`http://127.0.0.1:${port}/api/check-image`, { method: "POST" });
   if (provenance.status !== 404) throw new Error(`/api/check-image returned ${provenance.status}, expected 404`);
+  // Links can be added before the email code once the eligibility questions
+  // are answered; without them, /submit still sends people to /start.
+  const eligible = await fetch(`http://127.0.0.1:${port}/submit`, { headers: { cookie: "asmita_eligible=1" }, redirect: "manual" });
+  if (eligible.status !== 200) throw new Error(`/submit after eligibility returned ${eligible.status}, expected 200`);
+  const unanswered = await fetch(`http://127.0.0.1:${port}/submit`, { redirect: "manual" });
+  if (!(unanswered.status >= 300 && unanswered.status < 400 && unanswered.headers.get("location")?.endsWith("/start"))) {
+    throw new Error(`/submit without eligibility returned ${unanswered.status} ${unanswered.headers.get("location")}, expected a redirect to /start`);
+  }
   // Voice calls: /talk alone may use the microphone and reach Sarvam, and the
   // session route needs a CSRF token, counts against the Postgres rate limit
   // and, with no SARVAM_API_KEY secret, answers 503 without calling Sarvam.

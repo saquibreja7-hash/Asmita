@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { csrfFetch } from "@/lib/client-csrf";
 import { computePdqHash, PDQ_CLIENT_VERSION } from "@/lib/pdq/pdq";
 import type { HashPickerPlatform } from "@/lib/hash-submission";
+import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 import { checkLink, matchPlatform, type LinkCheckError, type PlatformPattern } from "@/lib/link-check";
 
@@ -38,6 +38,8 @@ async function hashImageFile(file: File): Promise<{ hash: string; quality: numbe
 }
 
 type Props = {
+  // Without a session the draft waits in this tab while the email is confirmed.
+  signedIn: boolean;
   // Names and domains only, for naming the platform beside each link.
   knownPlatforms: PlatformPattern[];
   enableHashUpload?: boolean;
@@ -75,7 +77,7 @@ function checkLines(text: string, knownPlatforms: PlatformPattern[]): LineCheck[
     });
 }
 
-export function SubmitForm({ knownPlatforms, enableHashUpload = false, platforms = [], locale }: Props) {
+export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false, platforms = [], locale }: Props) {
   const router = useRouter();
   const [urls, setUrls] = useState("");
   const [declaration, setDeclaration] = useState(false);
@@ -126,25 +128,17 @@ export function SubmitForm({ knownPlatforms, enableHashUpload = false, platforms
     );
   }
 
-  async function submit() {
+  // The declaration is logged on the review step, once there is a session.
+  function submit() {
     setError("");
     setSubmitting(true);
     try {
-      const declarationResponse = await csrfFetch("/api/profile/declaration", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ acknowledged: true, version: "v1.0-2026-05-12", language: locale }),
-      });
-      if (!declarationResponse.ok) {
-        setError(t(locale, "submit.declaration.error"));
-        return;
-      }
       const selectedPlatforms = hashOnly ? platforms.filter((p) => selectedPlatformIds.includes(p.id)) : [];
       const emailPlatformIds = selectedPlatforms.filter((p) => p.hasEmail).map((p) => p.id);
       const formOnlyPlatforms = selectedPlatforms
         .filter((p) => !p.hasEmail && p.formUrl)
         .map((p) => ({ id: p.id, name: p.name, formUrl: p.formUrl! }));
-      sessionStorage.setItem("asmita_submit_draft", JSON.stringify({
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
         urls: parsedUrls,
         hashes: hashedFiles.map((f) => ({
           hash: f.hash!,
@@ -156,7 +150,7 @@ export function SubmitForm({ knownPlatforms, enableHashUpload = false, platforms
         formOnlyPlatforms,
         declaration: true,
       }));
-      router.push("/review-sign");
+      router.push(signedIn ? "/review-sign" : "/register");
     } catch {
       setError(t(locale, "submit.error.generic"));
     } finally {
@@ -226,6 +220,17 @@ export function SubmitForm({ knownPlatforms, enableHashUpload = false, platforms
             </p>
             <p className="muted mt-1 text-sm leading-[1.6]">
               {t(locale, "submit.hash.sub")}
+            </p>
+            <p className="muted mt-2 text-sm leading-[1.6]">
+              {t(locale, "submit.hash.stopncii.text")}{" "}
+              <a
+                href="https://stopncii.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="link-underline text-[var(--foreground)]"
+              >
+                {t(locale, "submit.hash.stopncii.link")}
+              </a>
             </p>
           </div>
 

@@ -9,6 +9,7 @@ import { decryptField, encryptField } from "@/lib/encryption";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
+import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
 
 const FORBIDDEN_CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 
@@ -42,13 +43,6 @@ const URL_SELECT = {
   },
 };
 
-function templateTypeForNoticeBasis(noticeBasis: string) {
-  if (noticeBasis === "IT_RULES_2021") return "IT_RULES_2021" as const;
-  if (noticeBasis === "DMCA") return "DMCA" as const;
-  if (noticeBasis === "IT_RULES_AND_DMCA") return "IT_RULES_AND_DMCA" as const;
-  return null;
-}
-
 async function findUrl(
   caseId: string,
   userId: string,
@@ -69,7 +63,11 @@ async function findUrl(
       status: { in: allowedStatuses },
       platformId: { not: null },
       signedNoticePdf: null,
-      platform: { isActive: true, ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }) },
+      platform: {
+        isActive: true,
+        noticeBasis: { in: [...SIGNABLE_NOTICE_BASES] },
+        ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
+      },
     },
     select: URL_SELECT,
     orderBy: { submittedAt: "asc" },
