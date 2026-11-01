@@ -47,6 +47,15 @@ test("landing and minor-support entry render", async ({ page }) => {
   await expect(page.getByRole("link", { name: /Under 18/i }).first()).toBeVisible();
 });
 
+test("survivor can call the 24/7 helpline from the home page", async ({ page }) => {
+  await page.goto("/");
+  const call = page.getByRole("link", { name: /24\/7 helpline/i });
+  await expect(call).toBeVisible();
+  await expect(call).toHaveAttribute("href", "tel:+918065480788");
+  await expect(page.getByRole("img", { name: "Cloudflare" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Sarvam" })).toBeVisible();
+});
+
 test("FAQ page renders English and Hindi launch content", async ({ page }) => {
   await page.goto("/faq");
   await expect(page.getByRole("heading", { name: "Frequently asked questions" })).toBeVisible();

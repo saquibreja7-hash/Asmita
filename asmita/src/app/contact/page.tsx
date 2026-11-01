@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { STATUS_URL } from "@/components/layout/Footer";
+import { HELPLINE } from "@/lib/helpline";
 
 const channels = [
   {
@@ -47,6 +48,13 @@ export default function ContactPage() {
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               Pick the inbox that matches what you need. If you are not sure, use the first one.
+            </p>
+            <p className="mx-auto mt-5 max-w-lg text-base leading-[1.7] md:text-lg">
+              To talk now, call our 24/7 helpline{" "}
+              <a href={`tel:${HELPLINE.tel}`} className="link-underline font-medium text-[var(--foreground)]">
+                {HELPLINE.display}
+              </a>
+              . An AI assistant helps you file a complaint step by step, in any Indian language.
             </p>
           </div>
         </section>
