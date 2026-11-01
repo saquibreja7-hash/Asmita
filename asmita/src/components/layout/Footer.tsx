@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { type Locale } from "@/lib/i18n";
 
+// Public uptime page (Better Stack), outside the app so it stays up when the site is down.
+export const STATUS_URL = "https://status.meriasmita.org";
+
 export function Footer({ locale }: { locale: Locale }) {
   const isHi = locale === "hi";
 
@@ -31,6 +34,8 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/legal", label: "कानूनी" },
             { href: "/contact", label: "संपर्क" },
             { href: "/sitemap", label: "साइटमैप" },
+            // English until a native speaker supplies the Hindi label.
+            { href: STATUS_URL, label: "Status" },
           ],
         },
       ]
@@ -62,6 +67,7 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/privacy", label: "Privacy" },
             { href: "/contact", label: "Contact" },
             { href: "/sitemap", label: "Sitemap" },
+            { href: STATUS_URL, label: "Status" },
           ],
         },
       ];
@@ -93,7 +99,11 @@ export function Footer({ locale }: { locale: Locale }) {
               <ul className="site-footer-col-list">
                 {col.links.map((link) => (
                   <li key={link.href + link.label}>
-                    <Link href={link.href}>{link.label}</Link>
+                    {link.href.startsWith("https://") ? (
+                      <a href={link.href}>{link.label}</a>
+                    ) : (
+                      <Link href={link.href}>{link.label}</Link>
+                    )}
                   </li>
                 ))}
               </ul>

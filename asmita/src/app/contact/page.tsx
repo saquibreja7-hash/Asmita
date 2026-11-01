@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { STATUS_URL } from "@/components/layout/Footer";
 
 const channels = [
   {
@@ -121,6 +122,11 @@ export default function ContactPage() {
             <p className="muted mt-8 text-sm leading-[1.7]">
               Asmita is not an emergency service. If you are in immediate danger, call{" "}
               <a href="tel:112" className="link-underline text-[var(--foreground)]">112</a>.
+            </p>
+            <p className="muted mt-3 text-sm leading-[1.7]">
+              Site not loading, or a page failing? Check{" "}
+              <a href={STATUS_URL} className="link-underline text-[var(--foreground)]">status.meriasmita.org</a>{" "}
+              to see whether we already know about it.
             </p>
           </div>
         </section>
