@@ -40,6 +40,15 @@ test("survivor sees the notice before any voice call, and nothing reaches Sarvam
   expect(sarvamTraffic).toEqual([]);
 });
 
+test("the voice notice reads in Hindi with the numbers still tappable", async ({ page, context }) => {
+  await context.addCookies([{ name: "asmita_lang", value: "hi", url: "http://127.0.0.1:3001" }]);
+  await page.goto("/talk");
+  await expect(page.getByRole("heading", { name: "शुरू करने से पहले" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "1098" })).toHaveAttribute("href", "tel:1098");
+  await expect(page.getByRole("main").getByRole("link", { name: "112" })).toHaveAttribute("href", "tel:112");
+  await expect(page.getByRole("main").getByRole("link", { name: "+91 80654 80788" })).toHaveAttribute("href", "tel:+918065480788");
+});
+
 test("voice session starts are capped site-wide", async ({ request }) => {
   const sessionUrl = `/api/voice/${VOICE_AGENT_PATH}?interaction_type=call&version=6`;
   expect((await request.get(sessionUrl)).status()).toBe(403);

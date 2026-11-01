@@ -128,9 +128,8 @@ export default async function AboutPage() {
                     "अस्मिता Cloudflare for Startups कार्यक्रम से समर्थित तकनीकी आधार पर चलती है। हटाने की प्रक्रिया IT Rules और बिना सहमति साझा की गई निजी तस्वीरों के लिए MeitY की प्रक्रिया पर आधारित है।",
                   )}
                 </p>
-                {/* Hindi copy pending a native speaker; the English shows until then. */}
                 <p className="mt-4 text-[16px] leading-[1.7] text-[var(--body)]">
-                  Our 24/7 voice helpline runs on Sarvam, which supports Asmita with credits.
+                  {say("Our 24/7 voice helpline runs on Sarvam, which supports Asmita with credits.", "हमारी 24/7 वॉइस हेल्पलाइन सर्वम पर चलती है, जो अस्मिता को क्रेडिट के साथ सपोर्ट करती है।")}
                 </p>
                 <SupporterLogos className="mt-8" />
               </div>
