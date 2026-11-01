@@ -221,6 +221,17 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             <p className="muted mt-1 text-sm leading-[1.6]">
               {t(locale, "submit.hash.sub")}
             </p>
+            <p className="muted mt-2 text-sm leading-[1.6]">
+              {t(locale, "submit.hash.stopncii.text")}{" "}
+              <a
+                href="https://stopncii.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="link-underline text-[var(--foreground)]"
+              >
+                {t(locale, "submit.hash.stopncii.link")}
+              </a>
+            </p>
           </div>
 
           <input

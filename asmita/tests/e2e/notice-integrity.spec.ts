@@ -248,3 +248,37 @@ test.describe("notice integrity", () => {
     expect(dispatched).toEqual([fingerprintA]);
   });
 });
+
+test("each link gets its own notice, signed one after another on the review screen", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
+  test.setTimeout(180_000);
+  await markTemplateReviewed("IT_RULES_2021");
+  await register(page);
+  await page.getByLabel("Links where the content appears").fill(
+    [`https://www.whatsapp.com/channel/asmita-synthetic-${randomUUID()}`, `https://wa.me/asmita-synthetic-${randomUUID()}`].join("\n"),
+  );
+  await page.getByLabel(/I declare/).check();
+  const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  const { caseId } = (await (await createResponse).json()) as { caseId: string };
+
+  for (const round of [1, 2]) {
+    await page.getByLabel("Full name").fill("Synthetic Survivor");
+    await page.getByLabel("Contact (email or phone)").fill("survivor@example.invalid");
+    // The signature and the confirmation are given again for every notice.
+    await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
+    await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
+    const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
+    await page.getByRole("button", { name: "Sign and submit" }).click();
+    expect((await signed).ok()).toBe(true);
+    if (round === 1) {
+      await expect(page.getByText("Signed. Here is the notice for your next link.")).toBeVisible();
+      await expect(page.getByPlaceholder("Type your full name")).toHaveValue("");
+    }
+  }
+  await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30_000 });
+  const signedNotices = await withAdmin((db) =>
+    db.query('SELECT 1 FROM "SubmittedUrl" WHERE "caseId" = $1 AND "signedNoticePdf" IS NOT NULL', [caseId]),
+  );
+  expect(signedNotices.rowCount).toBe(2);
+});

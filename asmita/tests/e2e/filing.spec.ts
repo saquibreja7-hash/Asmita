@@ -51,10 +51,10 @@ test("each pasted line is checked where it is typed, and only valid links reach 
   expect(response.ok()).toBe(true);
   expect(response.request().postDataJSON().urls).toEqual(["https://instagram.com/p/abc"]);
   // Instagram takes reports through its own form, so there is nothing to sign
-  // yet: the survivor is told they are done for now.
-  await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30_000 });
-  await expect(page.getByRole("heading", { name: "You are done for now." })).toBeVisible();
-  await expect(page.getByText(/24-hour clock/)).toHaveCount(0);
+  // yet: the survivor is sent to its form, with the notice text to paste.
+  await expect(page).toHaveURL(/\/handoff\/[^/]+$/, { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Use the platform's own form." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "You are done for now." })).toHaveCount(0);
 });
 
 test("links can be added before the email code, and nothing reaches the server until then", async ({ page }, testInfo) => {
