@@ -168,7 +168,6 @@ export default async function HomePage() {
                   {say("How it works", "यह कैसे काम करता है")}
                 </Link>
               </div>
-              {/* Hindi copy pending a native speaker; the English shows until then. */}
               <a
                 href={`tel:${HELPLINE.tel}`}
                 className="mt-8 flex max-w-xl items-center gap-4 rounded-2xl border border-[var(--color-ash)] bg-white/85 px-5 py-4 no-underline shadow-sm backdrop-blur transition-colors hover:border-[var(--color-graphite)]"
@@ -178,19 +177,22 @@ export default async function HomePage() {
                 </span>
                 <span className="min-w-0">
                   <span className="block text-[13px] uppercase tracking-[0.08em] text-[var(--color-graphite)]">
-                    Prefer to talk? 24/7 helpline
+                    {say("Prefer to talk? 24/7 helpline", "क्या आप बात करना पसंद करेंगी? 24/7 हेल्पलाइन")}
                   </span>
                   <span className="mt-0.5 block text-[22px] font-medium leading-tight text-[var(--color-off-black)]">
                     {HELPLINE.display}
                   </span>
                   <span className="mt-1 block text-[14px] leading-[1.45] text-[var(--color-graphite)]">
-                    An AI assistant guides you step by step through filing your complaint, in any Indian language.
+                    {say(
+                      "An AI assistant guides you step by step through filing your complaint, in any Indian language.",
+                      "एक ए.आई. सहायक किसी भी भारतीय भाषा में आपकी शिकायत दर्ज करने में कदम-दर-कदम आपका मार्गदर्शन करती है।",
+                    )}
                   </span>
                 </span>
               </a>
               {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
               <a className="btn btn-secondary mt-3" href="/talk">
-                Talk to us from your browser
+                {say("Talk to us from your browser", "अपने ब्राउज़र से हमसे बात करें")}
               </a>
             </div>
           </div>
@@ -378,7 +380,7 @@ export default async function HomePage() {
         {/* SUPPORTERS */}
         <section className="pb-16 md:pb-20" aria-labelledby="supporters-heading">
           <div className="container flex flex-col items-center gap-6 text-center">
-            <p id="supporters-heading" className="eyebrow">Supported by</p>
+            <p id="supporters-heading" className="eyebrow">{say("Supported by", "के द्वारा समर्थित")}</p>
             <SupporterLogos className="justify-center" />
           </div>
         </section>
