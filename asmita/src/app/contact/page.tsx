@@ -1,3 +1,4 @@
+import { Illustration } from "@/components/Illustration";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { STATUS_URL } from "@/components/layout/Footer";
@@ -36,13 +37,10 @@ export default function ContactPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container pb-16 pt-20 text-center md:pb-20 md:pt-32">
+        <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              Contact
-            </span>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
+            <span className="eyebrow">Contact</span>
+            <h1 className="page-title mt-8">
               Reach the{" "}
               <em className="not-italic text-gradient">Asmita</em> team.
             </h1>
@@ -51,7 +49,7 @@ export default function ContactPage() {
             </p>
             <p className="mx-auto mt-5 max-w-lg text-base leading-[1.7] md:text-lg">
               To talk now, call our 24/7 helpline{" "}
-              <a href={`tel:${HELPLINE.tel}`} className="link-underline font-medium text-[var(--foreground)]">
+              <a href={`tel:${HELPLINE.tel}`} className="link-underline font-medium text-[var(--ink)]">
                 {HELPLINE.display}
               </a>
               . An AI assistant helps you file a complaint step by step, in any Indian language.
@@ -63,6 +61,7 @@ export default function ContactPage() {
               </a>
             </div>
           </div>
+          <Illustration name="page-contact" eager className="page-hero-art" />
         </section>
 
         <div className="container">
@@ -70,12 +69,12 @@ export default function ContactPage() {
         </div>
 
         {/* WARNING */}
-        <section className="container py-10 md:py-12">
+        <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-5" style={{ boxShadow: "var(--shadow-soft)" }}>
-              <p className="text-base leading-[1.75] text-[var(--foreground)]">
+            <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-6 py-5" style={{ boxShadow: "var(--shadow-soft)" }}>
+              <p className="text-base leading-[1.75] text-[var(--ink)]">
                 <span className="font-medium">Please do not email intimate images or videos.</span>{" "}
-                <span className="text-[var(--muted)]">Asmita only ever needs links as text, never the content itself.</span>
+                <span className="text-[var(--text-muted)]">Asmita only ever needs links as text, never the content itself.</span>
               </p>
             </div>
           </div>
@@ -86,19 +85,19 @@ export default function ContactPage() {
         </div>
 
         {/* CHANNELS */}
-        <section className="container py-14 md:py-20">
+        <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
             <span className="eyebrow mb-8 block">Write to us</span>
-            <div className="divide-y divide-[var(--hairline)]">
+            <div className="divide-y divide-[var(--line)]">
               {channels.map((c) => (
                 <div key={c.email} className="flex flex-col gap-3 py-8 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-12">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-[var(--foreground)] text-base md:text-[17px]">{c.title}</p>
+                    <p className="font-medium text-[var(--ink)] text-base md:text-[17px]">{c.title}</p>
                     <p className="muted mt-2 text-sm leading-[1.75] max-w-md">{c.body}</p>
                   </div>
                   <a
                     href={`mailto:${c.email}`}
-                    className="shrink-0 text-sm font-medium text-[var(--teal-dark)] underline decoration-[var(--teal-dark)]/30 underline-offset-4 transition-colors hover:decoration-[var(--teal-dark)] md:text-base"
+                    className="shrink-0 text-sm font-medium text-[var(--brand-strong)] underline decoration-[var(--brand-strong)]/30 underline-offset-4 transition-colors hover:decoration-[var(--brand-strong)] md:text-base"
                   >
                     {c.email}
                   </a>
@@ -113,7 +112,7 @@ export default function ContactPage() {
         </div>
 
         {/* RESPONSE TIMES */}
-        <section className="container py-14 md:py-20">
+        <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
             <span className="eyebrow mb-8 block">Response times</span>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -124,22 +123,22 @@ export default function ContactPage() {
               ].map((row) => (
                 <div
                   key={row.label}
-                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"
+                  className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-5"
                   style={{ boxShadow: "var(--shadow-soft)" }}
                 >
-                  <p className="font-medium text-[var(--foreground)] text-sm">{row.label}</p>
-                  <p className="mt-3 text-[22px] font-normal leading-[1.2] tracking-tight text-[var(--teal-dark)]">{row.time}</p>
+                  <p className="font-medium text-[var(--ink)] text-sm">{row.label}</p>
+                  <p className="mt-3 text-[22px] font-normal leading-[1.2] tracking-tight text-[var(--brand-strong)]">{row.time}</p>
                   <p className="muted mt-3 text-sm leading-[1.7]">{row.detail}</p>
                 </div>
               ))}
             </div>
             <p className="muted mt-8 text-sm leading-[1.7]">
               Asmita is not an emergency service. If you are in immediate danger, call{" "}
-              <a href="tel:112" className="link-underline text-[var(--foreground)]">112</a>.
+              <a href="tel:112" className="link-underline text-[var(--ink)]">112</a>.
             </p>
             <p className="muted mt-3 text-sm leading-[1.7]">
               Site not loading, or a page failing? Check{" "}
-              <a href={STATUS_URL} className="link-underline text-[var(--foreground)]">status.meriasmita.org</a>{" "}
+              <a href={STATUS_URL} className="link-underline text-[var(--ink)]">status.meriasmita.org</a>{" "}
               to see whether we already know about it.
             </p>
           </div>
@@ -150,9 +149,9 @@ export default function ContactPage() {
         </div>
 
         {/* CLOSING */}
-        <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-28">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
+            <h2 className="section-title">
               We will write back.
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">

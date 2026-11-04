@@ -81,10 +81,10 @@ export default function HashDispatchForm({
   }
 
   return (
-    <div className="rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)] p-6">
+    <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-6">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="grid gap-1.5">
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+          <span className="eyebrow">
             Case
           </span>
           <select
@@ -102,7 +102,7 @@ export default function HashDispatchForm({
         </label>
 
         <fieldset className="grid gap-1.5">
-          <legend className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+          <legend className="eyebrow">
             Target platforms (human-verified contacts only)
           </legend>
           {platforms.length === 0 ? (

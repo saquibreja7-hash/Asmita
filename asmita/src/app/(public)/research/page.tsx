@@ -40,10 +40,10 @@ export default async function ResearchPage() {
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("Research", "शोध")}</span>
-              <h1 className="font-display mt-5 text-[clamp(2.25rem,5.5vw,4rem)] font-medium leading-[1.06] text-[var(--heading)]">
+              <h1 className="page-title mt-5">
                 {say("Research and reporting", "शोध और रिपोर्ट")}
               </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say("We aim to study image-based abuse in India and share supported findings openly so people and institutions can act on them.", "हम भारत में तस्वीरों के ज़रिए दुर्व्यवहार को समझने और प्रमाणित निष्कर्ष खुले तौर पर साझा करने की योजना बना रहे हैं।")}
               </p>
             </div>
@@ -53,15 +53,15 @@ export default async function ResearchPage() {
         {/* HONEST EMPTY STATE */}
         <section className="zone-white section-pad" aria-label={say("Reports", "रिपोर्ट") }>
           <div className="container">
-            <div className="mx-auto max-w-3xl rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-8 text-center md:p-12">
-              <h2 className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]">
+            <div className="mx-auto max-w-3xl rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--surface-muted)] p-8 text-center md:p-12">
+              <h2 className="section-title">
                 {say("Our first reports are in progress", "पहली रिपोर्टों पर काम चल रहा है")}
               </h2>
-              <p className="mx-auto mt-4 max-w-xl text-[16px] leading-[1.65] text-[var(--body)]">
+              <p className="mx-auto mt-4 max-w-xl text-[16px] leading-[1.65] text-[var(--text)]">
                 {say("We are preparing the first reports. Supported findings will appear here when they are ready, free to read.", "पहली रिपोर्टें तैयार हो रही हैं। प्रमाणित निष्कर्ष तैयार होने पर यहाँ मुफ़्त पढ़ने के लिए उपलब्ध होंगे।")}
               </p>
               <div className="mt-7 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/contact">
+                <Link className="btn btn-primary btn-arrow !m-0" href="/contact">
                   {say("Ask about the research", "शोध के बारे में पूछें")}
                 </Link>
               </div>
@@ -72,14 +72,14 @@ export default async function ResearchPage() {
         {/* APPROACH */}
         <section className="transform-section" aria-labelledby="approach-heading">
           <div className="transform-content container section-pad">
-            <h2 id="approach-heading" className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]">
+            <h2 id="approach-heading" className="section-title">
               {say("How we will do research", "हम शोध कैसे करेंगे")}
             </h2>
             <div className="mt-10 grid gap-4 md:grid-cols-3">
               {approach.map((a, index) => (
-                <div key={a.title} className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-7 backdrop-blur-sm">
-                  <h3 className="text-[18px] font-medium text-[var(--heading)]">{say(a.title, approachHi[index].title)}</h3>
-                  <p className="mt-3 text-sm leading-[1.65] text-[var(--body)]">{say(a.body, approachHi[index].body)}</p>
+                <div key={a.title} className="rounded-[var(--radius-box)] surface-card p-7">
+                  <h3 className="text-[18px] font-medium text-[var(--ink)]">{say(a.title, approachHi[index].title)}</h3>
+                  <p className="mt-3 text-sm leading-[1.65] text-[var(--text)]">{say(a.body, approachHi[index].body)}</p>
                 </div>
               ))}
             </div>
@@ -89,11 +89,11 @@ export default async function ResearchPage() {
         <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
           <div className="zone-sunset-content container section-pad text-center">
             <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-medium leading-[1.14]">
+              <h2 className="section-title">
                 {say("Need help now?", "अभी मदद चाहिए?")}
               </h2>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/get-help">{say("Get help", "मदद लें")}</Link>
+                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">{say("Get help", "मदद लें")}</Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/issue">{say("Understand the issue", "समस्या को समझें")}</Link>
               </div>
             </div>

@@ -1,3 +1,4 @@
+import { Illustration } from "@/components/Illustration";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
@@ -38,19 +39,20 @@ export default async function AboutPage() {
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label={say("About Asmita", "अस्मिता के बारे में")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("About", "परिचय")}</span>
-              <h1 className="font-display mt-5 text-[clamp(2.25rem,5.5vw,4rem)] font-medium leading-[1.06] text-[var(--heading)]">
+              <h1 className="page-title mt-5">
                 {say("A response platform, not a bystander", "कार्रवाई में साथ देने वाला मंच")}
               </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say(
                   "Asmita helps people in India facing non-consensual or AI-made intimate images take action through URL-based reports, notice preparation, and connections to the right help.",
                   "अस्मिता भारत में बिना सहमति साझा की गई या AI से बनाई गई निजी तस्वीरों का सामना कर रहे लोगों को URL-आधारित रिपोर्ट, हटाने की सूचना और सही सहायता तक पहुँचने में मदद करती है।",
                 )}
               </p>
             </div>
+            <Illustration name="page-about" eager className="page-hero-art" />
           </div>
         </section>
 
@@ -59,10 +61,10 @@ export default async function AboutPage() {
           <div className="container">
             <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-2 lg:gap-16">
               <div>
-                <h2 id="who-heading" className="font-display text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-[1.16]">
+                <h2 id="who-heading" className="section-title">
                   {say("Who we are", "हम कौन हैं")}
                 </h2>
-                <p className="mt-5 text-[16px] leading-[1.7] text-[var(--body)]">
+                <p className="mt-5 text-[16px] leading-[1.7] text-[var(--text)]">
                   {say(
                     "Asmita is a technology-led platform that fights image-based abuse with working tools and plain-language knowledge. We are built by JAMSAQ Studio and run independently.",
                     "अस्मिता तस्वीरों से होने वाले उत्पीड़न के लिए व्यावहारिक साधन और सरल जानकारी देने वाला स्वतंत्र मंच है। इसे JAMSAQ Studio ने बनाया है।",
@@ -70,10 +72,10 @@ export default async function AboutPage() {
                 </p>
               </div>
               <div>
-                <h2 className="font-display text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-[1.16]">
+                <h2 className="section-title">
                   {say("What we are not", "हम क्या नहीं हैं")}
                 </h2>
-                <ul className="mt-5 space-y-2 text-[16px] leading-[1.7] text-[var(--body)]">
+                <ul className="mt-5 space-y-2 text-[16px] leading-[1.7] text-[var(--text)]">
                   <li>{say("Not a government body. We route you to official channels, but we are independent of them.", "हम सरकारी संस्था नहीं हैं। आधिकारिक रास्ते दिखाते हैं, पर उनसे स्वतंत्र हैं।")}</li>
                   <li>{say("Not a charity asking for donations.", "हम दान माँगने वाली संस्था नहीं हैं।")}</li>
                   <li>{say("Not a place your image is ever uploaded, stored, or seen.", "यहाँ आपकी निजी तस्वीर अपलोड, सहेजी या देखी नहीं जाती।")}</li>
@@ -87,14 +89,14 @@ export default async function AboutPage() {
         <section className="transform-section" aria-labelledby="principles-heading">
           <div className="transform-content container section-pad">
             <div className="mx-auto max-w-5xl">
-              <h2 id="principles-heading" className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]">
+              <h2 id="principles-heading" className="section-title">
                 {say("What guides the work", "हमारे काम के सिद्धांत")}
               </h2>
               <div className="mt-10 grid gap-4 md:grid-cols-3">
                 {principles.map((p, i) => (
-                  <div key={p.title} className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-7 backdrop-blur-sm">
-                    <h3 className="text-[18px] font-medium text-[var(--heading)]">{locale === "hi" ? hindiPrinciples[i].title : p.title}</h3>
-                    <p className="mt-3 text-sm leading-[1.65] text-[var(--body)]">{locale === "hi" ? hindiPrinciples[i].body : p.body}</p>
+                  <div key={p.title} className="rounded-[var(--radius-box)] surface-card p-7">
+                    <h3 className="text-[18px] font-medium text-[var(--ink)]">{locale === "hi" ? hindiPrinciples[i].title : p.title}</h3>
+                    <p className="mt-3 text-sm leading-[1.65] text-[var(--text)]">{locale === "hi" ? hindiPrinciples[i].body : p.body}</p>
                   </div>
                 ))}
               </div>
@@ -107,10 +109,10 @@ export default async function AboutPage() {
           <div className="container">
             <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-2 lg:gap-16">
               <div>
-                <h2 id="team-heading" className="font-display text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-[1.16]">
+                <h2 id="team-heading" className="section-title">
                   {say("Who is behind Asmita", "अस्मिता के पीछे कौन है")}
                 </h2>
-                <p className="mt-5 text-[16px] leading-[1.7] text-[var(--body)]">
+                <p className="mt-5 text-[16px] leading-[1.7] text-[var(--text)]">
                   {say(
                     "Asmita is built and run by JAMSAQ Studio, a small team building practical tools for real problems. We work with legal and support partners as the platform grows.",
                     "अस्मिता को JAMSAQ Studio बनाता और चलाता है। मंच के विकसित होने के साथ हम कानूनी और सहायता साझेदारों के साथ काम करते हैं।",
@@ -119,16 +121,16 @@ export default async function AboutPage() {
                 {/* TODO: add real team bios here once confirmed. Do not invent names. */}
               </div>
               <div>
-                <h2 className="font-display text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-[1.16]">
+                <h2 className="section-title">
                   {say("Partners and infrastructure", "साझेदार और तकनीकी आधार")}
                 </h2>
-                <p className="mt-5 text-[16px] leading-[1.7] text-[var(--body)]">
+                <p className="mt-5 text-[16px] leading-[1.7] text-[var(--text)]">
                   {say(
                     "Asmita runs on infrastructure supported by the Cloudflare for Startups program. Our takedown work is grounded in the IT Rules and the MeitY procedure for non-consensual intimate imagery.",
                     "अस्मिता Cloudflare for Startups कार्यक्रम से समर्थित तकनीकी आधार पर चलती है। हटाने की प्रक्रिया IT Rules और बिना सहमति साझा की गई निजी तस्वीरों के लिए MeitY की प्रक्रिया पर आधारित है।",
                   )}
                 </p>
-                <p className="mt-4 text-[16px] leading-[1.7] text-[var(--body)]">
+                <p className="mt-4 text-[16px] leading-[1.7] text-[var(--text)]">
                   {say("Our 24/7 voice helpline runs on Sarvam, which supports Asmita with credits.", "हमारी 24/7 वॉइस हेल्पलाइन सर्वम पर चलती है, जो अस्मिता को क्रेडिट के साथ सपोर्ट करती है।")}
                 </p>
                 <SupporterLogos className="mt-8" />
@@ -140,11 +142,11 @@ export default async function AboutPage() {
         <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
           <div className="zone-sunset-content container section-pad text-center">
             <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-medium leading-[1.14]">
+              <h2 className="section-title">
                 {say("Here to help you act.", "कार्रवाई में आपका साथ।")}
               </h2>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/get-help">{say("Get help", "मदद लें")}</Link>
+                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">{say("Get help", "मदद लें")}</Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/what-we-do">{say("What we do", "हम क्या करते हैं")}</Link>
               </div>
             </div>

@@ -63,7 +63,7 @@ export function EnrolMfa() {
   if (!enrolment) {
     return (
       <div className="card text-center">
-        <p className="text-[16px] leading-[1.5] text-[var(--color-graphite)]">
+        <p className="text-[16px] leading-[1.5] text-[var(--text)]">
           Generate a secret, scan it, then enter a code from your authenticator to finish setup.
           If this page closes before confirmation, you can sign in and generate a new secret.
         </p>
@@ -87,7 +87,7 @@ export function EnrolMfa() {
         <p className="mt-2 break-all font-mono text-sm tracking-widest select-all">
           {enrolment.secret.match(/.{1,4}/g)?.join(" ") ?? enrolment.secret}
         </p>
-        <p className="mt-3 text-xs text-[var(--color-graphite)]">
+        <p className="mt-3 text-xs text-[var(--text)]">
           Time-based, SHA1, 6 digits, 30 second period. This key is pending until you verify a code.
         </p>
       </div>

@@ -5,6 +5,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getIssueTopic, issueTopics } from "@/lib/issue-content";
 import { issueContentHi } from "@/lib/issue-content-hi";
 import { getLocale } from "@/lib/get-locale";
+import { ItemCards, SectionHeading } from "@/components/Reading";
+import { ReadingTime } from "@/components/ReadingTime";
 
 export function generateStaticParams() {
   return issueTopics.map((t) => ({ topic: t.slug }));
@@ -46,16 +48,17 @@ export default async function IssueTopicPage({
         <section className="hero" aria-label={content.term}>
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-5xl">
-              <p className="text-sm">
-                <Link href="/issue" className="text-link font-medium">
-                  {say("The issue", "समस्या को समझें")}
-                </Link>
-              </p>
-              <h1 className="font-display mt-4 max-w-3xl text-[clamp(2rem,5vw,3.5rem)] font-medium leading-[1.08] text-[var(--heading)]">
+              <Link href="/issue" className="eyebrow">
+                {say("The issue", "समस्या को समझें")}
+              </Link>
+              <h1 className="page-title mt-4 max-w-3xl">
                 {content.title}
               </h1>
-              <p className="font-size-large mt-6 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mt-6 max-w-2xl text-[var(--ink)]">
                 {content.definition}
+              </p>
+              <p className="eyebrow mt-6">
+                {content.term}<ReadingTime label={say("{n} min read", "{n} मिनट में पढ़ें")} />
               </p>
             </div>
           </div>
@@ -67,32 +70,22 @@ export default async function IssueTopicPage({
             <div className="mx-auto grid max-w-5xl gap-12 lg:grid-cols-[1.4fr_1fr]">
               {/* What it looks like */}
               <div>
-                <h2 className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]">
+                <SectionHeading icon="eyeOff">
                   {say("What it can look like", "यह कैसे दिख सकता है")}
-                </h2>
-                <ul className="mt-6 space-y-4">
-                  {content.looksLike.map((ex) => (
-                    <li
-                      key={ex}
-                      className="flex gap-3 text-[16px] leading-[1.6] text-[var(--body)]"
-                    >
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-off-black)]" aria-hidden />
-                      {ex}
-                    </li>
-                  ))}
-                </ul>
+                </SectionHeading>
+                <ItemCards items={content.looksLike.map((ex) => ({ body: ex }))} />
               </div>
 
               {/* What you can do */}
-              <aside className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-7 h-fit">
-                <h2 className="font-display text-[1.25rem] font-medium">
+              <aside className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 h-fit">
+                <SectionHeading icon="heart">
                   {say("What you can do", "आप क्या कर सकते हैं")}
-                </h2>
-                <p className="mt-4 text-[15px] leading-[1.65] text-[var(--body)]">
+                </SectionHeading>
+                <p className="mt-4 text-[15px] leading-[1.65] text-[var(--text)]">
                   {content.whatToDo}
                 </p>
                 <div className="mt-6 flex flex-col gap-3">
-                  <Link className="btn btn-midnight btn-arrow !m-0 !min-h-[44px] !text-[15px]" href="/get-help">
+                  <Link className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]" href="/get-help">
                     {say("Get help", "मदद लें")}
                   </Link>
                   <Link className="btn btn-secondary !m-0 !min-h-[44px] !text-[15px]" href="/glossary">
@@ -110,7 +103,7 @@ export default async function IssueTopicPage({
             <div className="mx-auto max-w-5xl">
               <h2
                 id="related-heading"
-                className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]"
+                className="section-title"
               >
                 {say("Read about other forms of abuse", "दुर्व्यवहार के अन्य प्रकार पढ़ें")}
               </h2>
@@ -119,19 +112,17 @@ export default async function IssueTopicPage({
                   <Link
                     key={t.slug}
                     href={`/issue/${t.slug}`}
-                    className="group flex flex-col rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm transition hover:bg-[var(--color-parchment)]"
+                    className="link-card group"
                   >
-                    <h3 className="text-[16px] font-medium leading-snug text-[var(--heading)]">
+                    <h3 className="link-card-title">
                       {locale === "hi" ? issueContentHi[t.slug as keyof typeof issueContentHi].term : t.term}
                     </h3>
-                    <p className="mt-2 flex-1 text-sm leading-[1.55] text-[var(--muted)]">
+                    <p className="mt-2 flex-1 text-[15px] leading-[1.6] text-[var(--text)]">
                       {locale === "hi" ? issueContentHi[t.slug as keyof typeof issueContentHi].short : t.short}
                     </p>
-                    <span className="mt-3 inline-block text-sm font-medium text-[var(--color-off-black)]">
-                      {say("Learn more", "और जानें")}{" "}
-                      <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
-                        →
-                      </span>
+                    <span className="link-card-more">
+                      {say("Learn more", "और जानें")}
+                      <span className="transition-transform group-hover:translate-x-0.5" aria-hidden>→</span>
                     </span>
                   </Link>
                 ))}

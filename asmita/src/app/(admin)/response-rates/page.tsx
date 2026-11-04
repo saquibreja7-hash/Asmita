@@ -10,18 +10,18 @@ export default function ResponseRatesPage() {
   return (
     <section>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Console · Response rates
         </p>
-        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+        <h1 className="page-title-sm mt-3">
           Platform response rates
         </h1>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Platform</Th>
               <Th>Notices sent</Th>
               <Th>Acks</Th>
@@ -35,7 +35,7 @@ export default function ResponseRatesPage() {
           <tbody>
             {rows.map((row) => (
               <tr
-                className="border-t border-[var(--hairline)]"
+                className="border-t border-[var(--line)]"
                 key={row.platformId}
               >
                 <td className="p-4 font-medium">{row.platformName}</td>
@@ -60,13 +60,13 @@ export default function ResponseRatesPage() {
         </table>
       </div>
 
-      <h2 className="font-display mt-14 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[28px]">
+      <h2 className="section-title mt-14">
         NGO vouching
       </h2>
-      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-4 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Partner</Th>
               <Th>Case</Th>
               <Th>Timestamp</Th>
@@ -77,18 +77,18 @@ export default function ResponseRatesPage() {
           <tbody>
             {vouches.map((row) => (
               <tr
-                className="border-t border-[var(--hairline)]"
+                className="border-t border-[var(--line)]"
                 key={`${row.partnerName}-${row.auditEventId}`}
               >
                 <td className="p-4 font-medium">{row.partnerName}</td>
                 <td className="font-mono p-4">{row.caseReference}</td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {new Date(row.vouchedAt).toLocaleString("en-IN", {
                     timeZone: "Asia/Kolkata",
                   })}
                 </td>
                 <td className="p-4">{row.rateLimitLift}</td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {row.auditEventId}
                 </td>
               </tr>
@@ -107,7 +107,7 @@ export default function ResponseRatesPage() {
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+    <th className="eyebrow p-4">
       {children}
     </th>
   );

@@ -1,3 +1,4 @@
+import { Illustration } from "@/components/Illustration";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
@@ -26,16 +27,17 @@ export default async function IssuePage() {
       <div className="page-canvas">
         {/* HERO */}
         <section className="hero" aria-label={say("The issue", "समस्या को समझें")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("The issue", "समस्या को समझें")}</span>
-              <h1 className="font-display mt-5 text-[clamp(2.25rem,5.5vw,4rem)] font-medium leading-[1.06] text-[var(--heading)]">
+              <h1 className="page-title mt-5">
                 {say("Understand what is happening", "समझें कि क्या हो रहा है")}
               </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say("Image-based abuse takes many forms. Knowing what you are dealing with is the first step to acting on it. Here is each one, in plain words.", "तस्वीरों के ज़रिए होने वाला दुर्व्यवहार कई रूप ले सकता है। अपनी स्थिति समझना अगला कदम चुनने में मदद करता है। हर रूप यहाँ सरल शब्दों में समझाया गया है।")}
               </p>
             </div>
+            <Illustration name="page-issue" eager className="page-hero-art" />
           </div>
         </section>
 
@@ -47,7 +49,7 @@ export default async function IssuePage() {
                 <h2 id="topics-heading" className="sr-only">
                   {say("Types of image-based abuse", "तस्वीरों के ज़रिए दुर्व्यवहार के प्रकार")}
                 </h2>
-                <p className="max-w-2xl text-lg leading-[1.6] text-[var(--body)]">
+                <p className="max-w-2xl text-lg leading-[1.6] text-[var(--text)]">
                   {say("Pick the one closest to your situation, or read them all.", "अपनी स्थिति से मिलता-जुलता विषय चुनें, या सभी पढ़ें।")}
                 </p>
                 <Link href="/glossary" className="text-link text-sm font-medium">
@@ -60,15 +62,15 @@ export default async function IssuePage() {
                   <Link
                     key={topic.slug}
                     href={`/issue/${topic.slug}`}
-                    className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                    className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
                   >
-                    <h3 className="text-[18px] font-medium leading-snug text-[var(--heading)]">
+                    <h3 className="text-[18px] font-medium leading-snug text-[var(--ink)]">
                       {say(topic.term, hindiTopics[index].term)}
                     </h3>
-                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
+                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
                       {say(topic.short, hindiTopics[index].short)}
                     </p>
-                    <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
+                    <span className="mt-4 inline-block text-sm font-medium text-[var(--ink)]">
                       {say("Learn more", "और जानें")}{" "}
                       <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
                         →
@@ -85,14 +87,14 @@ export default async function IssuePage() {
         <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
           <div className="zone-sunset-content container section-pad text-center">
             <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]">
+              <h2 className="section-title">
                 {say("Whatever form it takes, you can act on it.", "चाहे इसका रूप कुछ भी हो, आप कदम उठा सकते हैं।")}
               </h2>
-              <p className="mx-auto mt-5 max-w-lg text-lg leading-[1.65] text-[var(--body)]">
+              <p className="mx-auto mt-5 max-w-lg text-lg leading-[1.65] text-[var(--text)]">
                 {say("None of this is your fault, and none of it is something you have to sort out alone.", "इसमें आपकी कोई गलती नहीं है। आपको इससे अकेले नहीं निपटना होगा।")}
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/get-help">
+                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
                   {say("Get help", "मदद लें")}
                 </Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/glossary">

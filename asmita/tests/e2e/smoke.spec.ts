@@ -45,7 +45,7 @@ async function createCase(page: import("@playwright/test").Page) {
 test("landing and minor-support entry render", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Take the image down. Keep the image private./i }),
+    page.getByRole("heading", { name: /You are not alone\. Let's take it down\./i }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: /Under 18/i }).first()).toBeVisible();
 });
@@ -133,7 +133,7 @@ test("language toggle persists Hindi preference", async ({ page }) => {
   await page.getByRole("button", { name: "हिंदी" }).click();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "hi");
-  await expect(page.getByRole("heading", { name: "तस्वीर हटाने की कार्रवाई करें। तस्वीर निजी रखें।" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "आप अकेली नहीं हैं। आइए इसे हटवाएँ।" })).toBeVisible();
   await page.goto("/get-help");
   await expect(page.getByRole("heading", { name: "कुछ हुआ है। अब आप ये कदम उठा सकते हैं।" })).toBeVisible();
   await page.goto("/what-we-do");

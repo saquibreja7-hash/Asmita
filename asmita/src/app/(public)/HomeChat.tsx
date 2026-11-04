@@ -161,8 +161,8 @@ export function HomeChat({
 
   const panel = (
     <section role="dialog" aria-modal="false" aria-labelledby="home-chat-title" className="home-chat-panel">
-      <header className="flex items-center justify-between gap-3 border-b border-[var(--hairline)] px-5 py-3">
-        <h2 id="home-chat-title" ref={titleRef} tabIndex={-1} className="text-[17px] font-medium leading-tight text-[var(--foreground)] outline-none">
+      <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-3">
+        <h2 id="home-chat-title" ref={titleRef} tabIndex={-1} className="subsection-title leading-tight outline-none">
           {copy["chat.title"]}
         </h2>
         <button type="button" className="home-chat-close" onClick={close} aria-label={copy["chat.close"]}>
@@ -175,8 +175,8 @@ export function HomeChat({
       <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
         {phase === "notice" && (
           <div>
-            <p className="font-medium text-[var(--foreground)]">{copy["chat.notice.heading"]}</p>
-            <ul className="mt-3 space-y-2 text-sm leading-[1.6] text-[var(--foreground)]">
+            <p className="font-medium text-[var(--ink)]">{copy["chat.notice.heading"]}</p>
+            <ul className="mt-3 space-y-2 text-sm leading-[1.6] text-[var(--ink)]">
               <li>{copy["chat.notice.ai"]}</li>
               <li>{copy["chat.notice.logs"]}</li>
               <li>{copy["chat.notice.noImages"]}</li>
@@ -193,7 +193,7 @@ export function HomeChat({
           <ol role="log" aria-live="polite" className="space-y-3">
             <li>
               <span className="sr-only">{copy["chat.assistant"]}: </span>
-              <span className="inline-block max-w-[85%] whitespace-pre-wrap rounded-2xl bg-[var(--surface-muted)] px-4 py-2 text-sm leading-[1.55] text-[var(--foreground)]">
+              <span className="inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] bg-[var(--surface-muted)] px-4 py-2 text-sm leading-[1.55] text-[var(--ink)]">
                 {copy["chat.greeting"]}
               </span>
             </li>
@@ -201,8 +201,8 @@ export function HomeChat({
               <li key={i} className={m.role === "user" ? "text-right" : ""}>
                 <span className="sr-only">{m.role === "user" ? copy["chat.you"] : copy["chat.assistant"]}: </span>
                 <span
-                  className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-left text-sm leading-[1.55] text-[var(--foreground)] ${
-                    m.role === "user" ? "bg-[var(--accent-soft)]" : "bg-[var(--surface-muted)]"
+                  className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] px-4 py-2 text-left text-sm leading-[1.55] text-[var(--ink)] ${
+                    m.role === "user" ? "bg-[var(--brand-soft)]" : "bg-[var(--surface-muted)]"
                   }`}
                 >
                   {m.content}
@@ -210,7 +210,7 @@ export function HomeChat({
               </li>
             ))}
             {waiting && (
-              <li className="text-sm text-[var(--color-graphite)]" role="status">
+              <li className="text-sm text-[var(--text)]" role="status">
                 {copy["chat.typing"]}
               </li>
             )}
@@ -219,7 +219,7 @@ export function HomeChat({
 
         {phase === "error" && (
           <div className="mt-4">
-            <p role="alert" className="text-sm leading-[1.6] text-[var(--foreground)]">
+            <p role="alert" className="text-sm leading-[1.6] text-[var(--ink)]">
               {copy[error]}
             </p>
             <button
@@ -239,7 +239,7 @@ export function HomeChat({
       </div>
 
       {phase === "open" && (
-        <form onSubmit={send} className="border-t border-[var(--hairline)] px-5 py-3">
+        <form onSubmit={send} className="border-t border-[var(--line)] px-5 py-3">
           {warning && (
             <p role="alert" className="mb-2 text-sm text-[var(--danger)]">
               {copy[warning]}
@@ -263,7 +263,7 @@ export function HomeChat({
               maxLength={MAX_LENGTH}
               rows={2}
               placeholder={copy["chat.placeholder"]}
-              className="min-h-[44px] flex-1 resize-none rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
+              className="min-h-[44px] flex-1 resize-none rounded-[var(--radius-box)] border border-[var(--line)] bg-white px-3 py-2 text-sm"
             />
             <button type="submit" className="btn btn-primary" disabled={waiting}>
               {copy["chat.send"]}
@@ -272,8 +272,8 @@ export function HomeChat({
         </form>
       )}
 
-      <p className="muted border-t border-[var(--hairline)] px-5 py-3 text-xs leading-[1.6]">
-        {linkify(copy["chat.phone"], HELPLINE.display, `tel:${HELPLINE.tel}`, "link-underline font-medium text-[var(--foreground)]")}
+      <p className="muted border-t border-[var(--line)] px-5 py-3 text-xs leading-[1.6]">
+        {linkify(copy["chat.phone"], HELPLINE.display, `tel:${HELPLINE.tel}`, "link-underline font-medium text-[var(--ink)]")}
       </p>
     </section>
   );

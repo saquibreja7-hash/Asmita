@@ -29,10 +29,10 @@ export default async function WhoWeHelpPage() {
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("Who we help", "हम किसकी मदद करते हैं")}</span>
-              <h1 className="font-display mt-5 text-[clamp(2.25rem,5.5vw,4rem)] font-medium leading-[1.06] text-[var(--heading)]">
+              <h1 className="page-title mt-5">
                 {say("Wherever you are coming from", "आपकी स्थिति जो भी हो")}
               </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say("Image-based abuse touches survivors, the people around them, and the platforms that carry the content. Find the path that fits you.", "तस्वीरों के ज़रिए दुर्व्यवहार प्रभावित व्यक्ति, उनके करीबी लोगों और सामग्री दिखाने वाले प्लेटफ़ॉर्म से जुड़ा हो सकता है। अपने लिए सही रास्ता चुनें।")}
               </p>
             </div>
@@ -48,15 +48,15 @@ export default async function WhoWeHelpPage() {
                   <Link
                     key={a.slug}
                     href={`/who-we-help/${a.slug}`}
-                    className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                    className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
                   >
-                    <h2 className="text-[19px] font-medium leading-snug text-[var(--heading)]">
+                    <h2 className="subsection-title leading-snug">
                       {say(a.term, hindiAudiences[index].term)}
                     </h2>
-                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
+                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
                       {say(a.cardLine, hindiAudiences[index].cardLine)}
                     </p>
-                    <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
+                    <span className="mt-4 inline-block text-sm font-medium text-[var(--ink)]">
                       {say("Open", "देखें")}{" "}
                       <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
                         →
@@ -73,11 +73,11 @@ export default async function WhoWeHelpPage() {
         <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
           <div className="zone-sunset-content container section-pad text-center">
             <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-medium leading-[1.14]">
+              <h2 className="section-title">
                 {say("Not sure where you fit? Start here.", "समझ नहीं आ रहा कहाँ से शुरू करें? यहाँ आएँ।")}
               </h2>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/get-help">
+                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
                   {say("Get help", "मदद लें")}
                 </Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/issue">

@@ -69,10 +69,10 @@ export function AdminLoginForm() {
       }}
     >
       <div className="text-center">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           {step === "email" ? "Step 01 of 02" : "Step 02 of 02"}
         </p>
-        <h2 className="font-display mt-3 text-[24px] font-normal leading-[1.22] tracking-tight md:text-[32px] md:leading-[1.18]">
+        <h2 className="section-title mt-3">
           {step === "email" ? "Your admin email." : "Two codes, please."}
         </h2>
       </div>
@@ -133,7 +133,7 @@ export function AdminLoginForm() {
       )}
 
       {error && (
-        <p className="text-center text-sm font-medium text-[var(--rose)]">
+        <p className="text-center text-sm font-medium text-[var(--danger)]">
           {error}
         </p>
       )}
@@ -174,7 +174,7 @@ function Row({
     <div>
       <label
         htmlFor={htmlFor}
-        className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--foreground)]"
+        className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--ink)]"
       >
         {label}
       </label>

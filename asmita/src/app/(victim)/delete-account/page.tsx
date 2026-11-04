@@ -11,13 +11,10 @@ export default async function DeleteAccountPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container pb-12 pt-20 text-center md:pb-16 md:pt-32">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {t(locale, "delete.pill")}
-            </span>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[64px] md:leading-[1.06]">
+            <span className="eyebrow">{t(locale, "delete.pill")}</span>
+            <h1 className="page-title-sm mt-8">
               {t(locale, "delete.hero.title.1")}{" "}
               <em className="not-italic text-gradient">{t(locale, "delete.hero.title.em")}</em>
               {t(locale, "delete.hero.title.2")}
@@ -31,21 +28,21 @@ export default async function DeleteAccountPage() {
         {/* WHAT GETS DELETED */}
         <section className="container py-14 text-center md:py-20">
           <div className="mx-auto max-w-2xl">
-            <p className="font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
+            <p className="eyebrow">
               {t(locale, "delete.what.eyebrow")}
             </p>
-            <h2 className="font-display mt-4 text-[26px] font-normal leading-[1.2] tracking-tight md:text-[36px] md:leading-[1.18]">
+            <h2 className="section-title mt-4">
               {t(locale, "delete.what.title")}
             </h2>
             <ul className="muted mx-auto mt-8 max-w-md space-y-3 text-base leading-[1.75] md:text-lg">
               <li>
-                <span className="font-medium text-[var(--foreground)]">
+                <span className="font-medium text-[var(--ink)]">
                   {t(locale, "delete.what.item1.bold")}
                 </span>{" "}
                 {t(locale, "delete.what.item1.rest")}
               </li>
               <li>
-                <span className="font-medium text-[var(--foreground)]">
+                <span className="font-medium text-[var(--ink)]">
                   {t(locale, "delete.what.item2.bold")}
                 </span>{" "}
                 {t(locale, "delete.what.item2.rest")}
@@ -64,7 +61,7 @@ export default async function DeleteAccountPage() {
             <p className="mt-10 text-center">
               <Link
                 href="/contact"
-                className="link-underline text-sm text-[var(--foreground)]"
+                className="link-underline text-sm text-[var(--ink)]"
               >
                 {t(locale, "delete.form.cancelLink")}
               </Link>

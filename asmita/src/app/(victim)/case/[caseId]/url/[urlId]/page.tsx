@@ -20,13 +20,10 @@ export default async function UrlDetailPage({
     return (
       <AppShell>
         <div className="page-canvas">
-          <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
+          <section className="container page-hero text-center">
             <div className="mx-auto max-w-2xl">
-              <span className="pill">
-                <span className="dot" />
-                {t(locale, "urldetail.notAvailable.pill")}
-              </span>
-              <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px] md:leading-[1.06]">
+              <span className="eyebrow">{t(locale, "urldetail.notAvailable.pill")}</span>
+              <h1 className="page-title-sm mt-8">
                 {t(locale, "urldetail.notAvailable.title.1")}{" "}
                 <em className="not-italic text-gradient">{t(locale, "urldetail.notAvailable.title.em")}</em>
                 {t(locale, "urldetail.notAvailable.title.2")}
@@ -53,26 +50,23 @@ export default async function UrlDetailPage({
     <AppShell>
       <div className="page-canvas">
         {/* HEADER */}
-        <section className="container pb-10 pt-20 text-center md:pb-14 md:pt-32">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {t(locale, "urldetail.pill")}
-            </span>
-            <p className="font-mono mt-6 text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
+            <span className="eyebrow">{t(locale, "urldetail.pill")}</span>
+            <p className="eyebrow mt-6">
               {t(locale, "urldetail.case")} · {record.referenceNumber}
             </p>
-            <h1 className="font-display mt-4 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[52px] md:leading-[1.06]">
+            <h1 className="page-title-sm mt-4">
               {url.platformName}
             </h1>
-            <p className="font-mono mt-3 text-[14px] tracking-tight text-[var(--muted)] md:text-[16px]">
+            <p className="font-mono mt-3 text-[14px] tracking-tight text-[var(--text-muted)] md:text-[16px]">
               {url.domain}
             </p>
           </div>
         </section>
 
         {/* STATUS BLOCK */}
-        <section className="container py-10 md:py-14">
+        <section className="container section-pad">
           <div className="mx-auto max-w-2xl">
             <dl className="mx-auto grid max-w-md gap-6 text-center sm:grid-cols-2 sm:text-left">
               <Field label={t(locale, "urldetail.field.status")} value={url.status.replaceAll("_", " ")} />
@@ -89,7 +83,7 @@ export default async function UrlDetailPage({
         </section>
 
         {/* CLOSING */}
-        <section className="container pb-24 pt-12 text-center md:pb-32 md:pt-16">
+        <section className="container page-hero text-center">
           <div className="flex flex-wrap justify-center gap-3">
             <Link className="btn btn-primary" href={`/case/${record.id}`}>
               {t(locale, "urldetail.cta.dashboard")}
@@ -115,14 +109,14 @@ function Field({
 }) {
   return (
     <div>
-      <dt className="font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
+      <dt className="eyebrow">
         {label}
       </dt>
       <dd
         className={`mt-2 capitalize ${
           mono
-            ? "font-mono text-[14px] tracking-tight text-[var(--foreground)] normal-case"
-            : "font-display text-[20px] tracking-tight text-[var(--foreground)] md:text-[24px]"
+            ? "font-mono text-[14px] tracking-tight text-[var(--ink)] normal-case"
+            : "font-display text-[20px] tracking-tight text-[var(--ink)] md:text-[24px]"
         }`}
       >
         {value}

@@ -1,23 +1,27 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { Illustration } from "@/components/Illustration";
 import { getLocale } from "@/lib/get-locale";
 import { SupporterLogos } from "@/components/layout/Supporters";
 import { HELPLINE } from "@/lib/helpline";
 import { t } from "@/lib/i18n";
 import { CHAT_COPY_KEYS, type ChatCopy } from "./chat-copy";
 import { HomeChat } from "./HomeChat";
+import { AudiencePicker } from "./AudiencePicker";
 
 /*
  * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
  * monospace for every functional string, pill buttons, hairline cards, one teal action.
  */
 
-const audiences = [
-  { title: "Survivors", href: "/who-we-help/survivors" },
-  { title: "People helping someone", href: "/who-we-help/helping-someone" },
-  { title: "Parents and families", href: "/who-we-help/parents" },
-  { title: "Young people", href: "/who-we-help/young-people" },
-] as const;
+// Each audience can have its own scene, shown while its button is hovered.
+// Young people are under 18: their scene must never show a person.
+const audiences: { title: string; href: string; art?: string }[] = [
+  { title: "Survivors", href: "/who-we-help/survivors", art: "/images/illustrations/how-3-protect.webp" },
+  { title: "People helping someone", href: "/who-we-help/helping-someone", art: "/images/illustrations/audience-helping.webp" },
+  { title: "Parents and families", href: "/who-we-help/parents", art: "/images/illustrations/audience-parents.webp" },
+  { title: "Young people", href: "/who-we-help/young-people", art: "/images/illustrations/audience-young.webp" },
+];
 
 const pipeline = [
   { icon: "¶", label: "Links as text" },
@@ -139,28 +143,25 @@ export default async function HomePage() {
   return (
     <AppShell>
       <div className="page-canvas">
-        {/* HERO: what Asmita does on the left, every way to get help on the right. */}
+        {/* HERO: what Asmita does on the left, an illustration on the right. */}
         <section className="home-hero" aria-label={say("Introduction", "परिचय")}>
-          <div className="container relative z-[1] grid items-center gap-12 pb-14 pt-14 md:pb-20 md:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+          <div className="container relative z-[1] grid items-center gap-10 pb-14 pt-14 md:pb-20 md:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
             <div>
-              <span className="pill">
-                <span className="dot" />
-                {say("Free and confidential, for India", "भारत के लिए नि:शुल्क और गोपनीय")}
-              </span>
-              <h1 className="mt-7 max-w-3xl text-[clamp(40px,6vw,72px)]">
-                {say("Take the image down. Keep the image private.", "तस्वीर हटाने की कार्रवाई करें। तस्वीर निजी रखें।")}
+              <span className="eyebrow">{say("Free and confidential, for India", "भारत के लिए नि:शुल्क और गोपनीय")}</span>
+              <h1 className="hero-title mt-7 max-w-3xl">
+                {say("You are not alone. Let's take it down.", "आप अकेली नहीं हैं। आइए इसे हटवाएँ।")}
               </h1>
-              <p className="font-size-large mt-6 max-w-xl text-[var(--color-graphite)]">
+              <p className="font-size-large mt-6 max-w-xl text-[var(--text)]">
                 {say(
-                  "Private help to take down intimate images shared without consent. File a complaint in about ten minutes, or talk to our assistant first, any time of day.",
-                  "बिना सहमति के साझा की गई अंतरंग तस्वीरें हटाने के लिए निजी मदद। लगभग दस मिनट में शिकायत दर्ज कराएं, या दिन में किसी भी समय पहले हमारी सहायिका से बात करें।",
+                  "Asmita is a free takedown service for intimate images shared without consent. Share the links, sign the notice, and we handle the platforms. Your photos never leave your phone.",
+                  "अस्मिता बिना सहमति के साझा की गई अंतरंग तस्वीरों को हटवाने की मुफ़्त सेवा है। लिंक साझा करें, सूचना पर हस्ताक्षर करें, और प्लेटफ़ॉर्म से हम बात करेंगे। आपकी तस्वीरें कभी आपके फ़ोन से बाहर नहीं जातीं।",
                 )}
               </p>
               <div className="mt-9 flex flex-wrap items-center gap-3">
                 <Link className="btn btn-primary btn-arrow" href="/start">
                   {say("File a complaint", "शिकायत दर्ज करें")}
                 </Link>
-                <Link className="btn btn-secondary" href="/what-we-do">
+                <Link className="btn btn-secondary" href="/how-it-works">
                   {say("How it works", "यह कैसे काम करता है")}
                 </Link>
               </div>
@@ -171,56 +172,81 @@ export default async function HomePage() {
               </ul>
             </div>
 
-            <div className="home-hero-help">
+            <Illustration name="home-hero" eager className="mx-auto max-w-[380px] lg:max-w-[600px]" />
+          </div>
+        </section>
+
+        {/* GET HELP: every way to reach a person or the assistant, right under the hero. */}
+        <section className="container pt-10 md:pt-14" aria-labelledby="help-heading">
+          <div className="home-help-band grid gap-8 lg:grid-cols-[0.75fr_2fr] lg:items-center">
+            <div>
               <p className="eyebrow">{say("Get help right now", "अभी मदद प्राप्त करें")}</p>
-              <ul className="mt-4 space-y-3">
-                <li>
-                  <HomeChat copy={chatCopy} locale={locale} triggerClassName="home-help-tile">
-                    <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>
-                    <span className="min-w-0">
-                      <span className="home-help-title">{chatCopy["chat.open"]}</span>
-                      <span className="home-help-text">
-                        {say("Type to an AI assistant, in any Indian language.", "किसी भी भारतीय भाषा में ए.आई. सहायक से चैट करें।")}
+              <h2 id="help-heading" className="section-title mt-3">
+                {say("Talk to someone, any time.", "किसी से बात करें, कभी भी।")}
+              </h2>
+              <p className="mt-3 text-[15px] leading-[1.6] text-[var(--text)]">
+                {say("Free and private. Choose whatever feels easiest.", "मुफ़्त और निजी। जो आसान लगे, वह चुनें।")}
+              </p>
+            </div>
+            <div>
+                <ul className="grid gap-3 md:grid-cols-3">
+                  <li>
+                    <HomeChat copy={chatCopy} locale={locale} triggerClassName="home-help-tile">
+                      <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>
+                      <span className="min-w-0">
+                        <span className="home-help-title">{chatCopy["chat.open"]}</span>
+                        <span className="home-help-text">
+                          {say("Type to an AI assistant, in any Indian language.", "किसी भी भारतीय भाषा में ए.आई. सहायक से चैट करें।")}
+                        </span>
                       </span>
-                    </span>
-                  </HomeChat>
-                </li>
-                <li>
-                  {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
-                  <a className="home-help-tile" href="/talk">
-                    <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
-                    <span className="min-w-0">
-                      <span className="home-help-title">{say("Talk in your browser", "अपने ब्राउज़र में बात करें")}</span>
-                      <span className="home-help-text">
-                        {say("Speak to the same assistant without dialling.", "बिना डायल किए उसी सहायक से बात करें।")}
+                    </HomeChat>
+                  </li>
+                  <li>
+                    {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
+                    <a className="home-help-tile" href="/talk">
+                      <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+                      <span className="min-w-0">
+                        <span className="home-help-title">{say("Talk in your browser", "अपने ब्राउज़र में बात करें")}</span>
+                        <span className="home-help-text">
+                          {say("Speak to the same assistant without dialling.", "बिना डायल किए उसी सहायक से बात करें।")}
+                        </span>
                       </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a className="home-help-tile" href={`tel:${HELPLINE.tel}`}>
-                    <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg></span>
-                    <span className="min-w-0">
-                      <span className="home-help-title">{say("Call the 24/7 helpline", "24/7 हेल्पलाइन पर कॉल करें")}</span>
-                      <span className="home-help-text home-help-number">{HELPLINE.display}</span>
-                    </span>
-                  </a>
-                </li>
-              </ul>
-              <p className="mt-5 text-[14px] leading-[1.5] text-[var(--color-graphite)]">
-                {say(
-                  "In danger right now? Call 112. Under 18? Call CHILDLINE 1098.",
-                  "अभी खतरे में हैं? 112 पर कॉल करें। 18 साल से कम उम्र है? चाइल्डलाइन 1098 पर कॉल करें।",
-                )}
+                    </a>
+                  </li>
+                  <li>
+                    <a className="home-help-tile" href={`tel:${HELPLINE.tel}`}>
+                      <span aria-hidden className="home-help-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg></span>
+                      <span className="min-w-0">
+                        <span className="home-help-title">{say("Call the 24/7 helpline", "24/7 हेल्पलाइन पर कॉल करें")}</span>
+                        <span className="home-help-text home-help-number">{HELPLINE.display}</span>
+                      </span>
+                    </a>
+                  </li>
+                </ul>
+              <p className="mt-5 text-[14px] leading-[1.5] text-[var(--text)]">
+                {say("In danger right now? Call", "अभी खतरे में हैं?")}{" "}
+                <a className="link-underline font-medium text-[var(--ink)]" href="tel:112">112</a>
+                {say(". Under 18? Call CHILDLINE", " पर कॉल करें। 18 साल से कम उम्र है? चाइल्डलाइन")}{" "}
+                <a className="link-underline font-medium text-[var(--ink)]" href="tel:1098">1098</a>
+                {say(".", " पर कॉल करें।")}
               </p>
             </div>
           </div>
+        </section>
 
-          <div className="container relative z-[1] pb-12 md:pb-16">
-            <div className="home-hero-supporters" aria-labelledby="supporters-heading">
-              <p id="supporters-heading" className="eyebrow">{say("Supported by", "के द्वारा समर्थित")}</p>
-              <SupporterLogos className="justify-center" eager />
+        {/* SUPPORTERS: a full-width white strip so the partners stand out from the page. */}
+        <section className="supporters-strip mt-12 md:mt-16" aria-labelledby="supporters-heading">
+          <div className="container flex flex-col items-center gap-6 py-10 md:flex-row md:justify-center md:gap-12">
+            <div className="text-center md:text-left">
+              <p id="supporters-heading" className="eyebrow">
+                {say("Supported by", "के द्वारा समर्थित")}
+              </p>
+              <p className="mt-1 text-[14px] text-[var(--text)]">
+                {say("Technology partners who back this work", "इस काम में साथ देने वाले तकनीकी साझेदार")}
+              </p>
             </div>
+            <span className="hidden h-12 w-px bg-[var(--line)] md:block" aria-hidden />
+            <SupporterLogos className="supporters-strip-logos justify-center" eager />
           </div>
         </section>
 
@@ -255,10 +281,10 @@ export default async function HomePage() {
           <div className="container grid items-start gap-12 lg:grid-cols-[1.2fr_1fr] lg:gap-24">
             <div>
               <span className="eyebrow">{say("The issue", "समस्या")}</span>
-              <h2 id="issue-heading" className="mt-5 text-[clamp(32px,4vw,48px)]">
+              <h2 id="issue-heading" className="section-title mt-5">
                 {say("The internet makes it easier to harm people. The law gives you a way back.", "इंटरनेट पर नुकसान फैलना आसान है। कानून कार्रवाई का रास्ता देता है।")}
               </h2>
-              <p className="mt-6 max-w-xl text-[16px] leading-[1.5] text-[var(--color-graphite)] md:text-[18px]">
+              <p className="mt-6 max-w-xl text-[16px] leading-[1.5] text-[var(--text)] md:text-[18px]">
                 {say(
                   "Non-consensual intimate imagery, deepfakes, morphing, and sextortion spread fast across platforms and WhatsApp groups. Platforms must act on certain takedown notices within 24 hours under Indian law. We turn that right into one calm, reviewable flow.",
                   "बिना सहमति साझा की गई निजी तस्वीरें, डीपफ़ेक, बदली हुई तस्वीरें और धमकियाँ कई प्लेटफ़ॉर्म पर तेज़ी से फैल सकती हैं। भारतीय कानून के तहत कुछ हटाने की सूचनाओं पर प्लेटफ़ॉर्म को 24 घंटे में कार्रवाई करनी होती है। हम इस रास्ते को शांत और समझने योग्य चरणों में रखते हैं।",
@@ -293,7 +319,7 @@ export default async function HomePage() {
             <div className="flex flex-wrap items-end justify-between gap-6">
               <div>
                 <span className="eyebrow">{say("What we do", "हम क्या करते हैं")}</span>
-                <h2 id="features-heading" className="mt-5 text-[clamp(32px,4vw,48px)]">
+                <h2 id="features-heading" className="section-title mt-5">
                   {say("Tools for taking action on content", "सामग्री पर कार्रवाई के साधन")}
                 </h2>
               </div>
@@ -332,7 +358,7 @@ export default async function HomePage() {
                   )}
                 </p>
                 <div className="mt-8 flex flex-wrap gap-3">
-                  <Link href="/privacy" className="btn btn-midnight">
+                  <Link href="/privacy" className="btn btn-primary">
                     {say("Read the privacy promise", "निजता का वादा पढ़ें")}
                   </Link>
                 </div>
@@ -350,7 +376,7 @@ export default async function HomePage() {
         <section className="section-pad" aria-labelledby="audience-heading">
           <div className="container text-center">
             <span className="eyebrow">{say("Who we help", "हम किसकी मदद करते हैं")}</span>
-            <h2 id="audience-heading" className="mx-auto mt-5 max-w-3xl text-[clamp(32px,4vw,48px)]">
+            <h2 id="audience-heading" className="section-title mx-auto mt-5 max-w-3xl">
               {say("Everyone has a role to play", "हर व्यक्ति मदद कर सकता है")}
             </h2>
             <p className="font-size-large mx-auto mt-6 max-w-xl">
@@ -359,13 +385,14 @@ export default async function HomePage() {
                 "नुकसान को देखकर आगे बढ़ जाना ज़रूरी नहीं है। अपनी स्थिति के मुताबिक सहायता का रास्ता चुनें।",
               )}
             </p>
-            <div className="audience-pills mt-10">
-              {audiences.map((a, i) => (
-                <Link key={a.title} href={a.href} className="btn btn-secondary">
-                  {locale === "hi" ? hindi.audiences[i] : a.title}
-                </Link>
-              ))}
-            </div>
+            <AudiencePicker
+              defaultArt="/images/illustrations/who-we-help.webp"
+              audiences={audiences.map((a, i) => ({
+                label: locale === "hi" ? hindi.audiences[i] : a.title,
+                href: a.href,
+                art: a.art,
+              }))}
+            />
           </div>
         </section>
 
@@ -378,10 +405,10 @@ export default async function HomePage() {
           <div className="container grid gap-12 lg:grid-cols-[1fr_2fr] lg:gap-24">
             <div>
               <span className="eyebrow">{say("Questions", "सवाल")}</span>
-              <h2 id="faq-heading" className="mt-5 text-[clamp(32px,4vw,48px)]">
+              <h2 id="faq-heading" className="section-title mt-5">
                 {say("Honest answers first", "पहले स्पष्ट जवाब")}
               </h2>
-              <p className="mt-6 text-[16px] leading-[1.5] text-[var(--color-graphite)]">
+              <p className="mt-6 text-[16px] leading-[1.5] text-[var(--text)]">
                 {say(
                   "We say exactly what a notice can and cannot do. That honesty is the product.",
                   "हम साफ़ बताते हैं कि सूचना से क्या हो सकता है और क्या नहीं।",
@@ -391,7 +418,7 @@ export default async function HomePage() {
                 {say("Read the full FAQ", "सभी सवाल-जवाब पढ़ें")}
               </Link>
             </div>
-            <div className="border-t border-[var(--color-ash)]">
+            <div className="border-t border-[var(--line)]">
               {faqs.map((f, i) => (
                 <details key={f.q} className="faq-item">
                   <summary>{locale === "hi" ? hindi.faqs[i].q : f.q}</summary>
@@ -413,7 +440,7 @@ export default async function HomePage() {
             <div className="pledge-block">
               <p className="pledge-label">{say("The Asmita promise", "अस्मिता का वादा")}</p>
               <p className="pledge-quote">{say("You do not have to deal with this alone.", "आपको इसका सामना अकेले नहीं करना है।")}</p>
-              <p className="mt-6 text-[16px] leading-[1.5] text-[var(--color-graphite)]">
+              <p className="mt-6 text-[16px] leading-[1.5] text-[var(--text)]">
                 {say(
                   "Start a confidential report, or read how it works first. In your language, on your terms.",
                   "गोपनीय रिपोर्ट शुरू करें, या पहले प्रक्रिया समझें। अपनी भाषा में, अपनी गति से।",

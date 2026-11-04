@@ -2,20 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { t, type Locale } from "@/lib/i18n";
+import type { NavGroup } from "./nav-config";
+import { NavItemLink, isCurrent } from "./NavLinks";
 
-const links = [
-  { href: "/issue", en: "Issue", hi: "समस्या" },
-  { href: "/what-we-do", en: "What we do", hi: "हम क्या करते हैं" },
-  { href: "/check-image", key: "nav.checkImage" as const },
-  { href: "/resources", key: "nav.resources" as const },
-  { href: "/faq", key: "nav.faq" as const },
-  { href: "/privacy", key: "nav.privacy" as const },
-] as const;
-
-export function MobileMenu({ locale }: { locale: Locale }) {
+export function MobileMenu({ locale, groups }: { locale: Locale; groups: NavGroup[] }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!open) return;
@@ -50,26 +45,32 @@ export function MobileMenu({ locale }: { locale: Locale }) {
       {open && (
         <nav
           id="mobile-menu"
-          className="card absolute right-0 top-14 z-[60] grid w-72 gap-0 !p-4"
+          className="card absolute right-0 top-14 z-[60] max-h-[75vh] w-[min(320px,calc(100vw-40px))] overflow-y-auto !p-3"
           aria-label="Mobile"
         >
-          {links.map((link) => {
-            const label =
-              "key" in link ? t(locale, link.key) : locale === "hi" ? link.hi : link.en;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="nav-link border-b border-[var(--color-ash)] !px-2 last:border-0"
-                onClick={() => setOpen(false)}
-              >
-                {label}
-              </Link>
-            );
-          })}
+          {/* Each group folds open; the one holding the current page starts open. */}
+          {groups.map((group) => (
+            <details
+              key={group.href}
+              className="group border-b border-[var(--line)] last:border-0"
+              open={group.items.some((item) => isCurrent(pathname, item.href))}
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between px-2 py-3 text-[16px] font-semibold [&::-webkit-details-marker]:hidden">
+                {group.label}
+                <span className="text-[var(--text)] transition-transform group-open:rotate-180" aria-hidden>⌄</span>
+              </summary>
+              <ul className="m-0 list-none p-0 pb-2">
+                {group.items.map((item) => (
+                  <li key={item.href}>
+                    <NavItemLink item={item} className="nav-dropdown-link" onClick={() => setOpen(false)} />
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
           <Link
             href="/get-help"
-            className="btn btn-primary btn-arrow mt-4 w-full"
+            className="btn btn-primary btn-arrow mt-3 w-full"
             onClick={() => setOpen(false)}
           >
             {locale === "hi" ? "मदद लें" : "Get help"}

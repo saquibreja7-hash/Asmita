@@ -10,13 +10,10 @@ export default async function StartPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container pb-16 pt-20 text-center md:pb-20 md:pt-32">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {t(locale, "start.pill")}
-            </span>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
+            <span className="eyebrow">{t(locale, "start.pill")}</span>
+            <h1 className="page-title mt-8">
               {t(locale, "start.hero.title.1")}{" "}
               <em className="not-italic text-gradient">{t(locale, "start.hero.title.em")}</em> {t(locale, "start.hero.title.2")}
             </h1>
@@ -31,7 +28,7 @@ export default async function StartPage() {
         </div>
 
         {/* PATH CARD */}
-        <section className="container py-14 md:py-20">
+        <section className="container section-pad">
           <div className="mx-auto max-w-lg">
 
             <div className="card flex flex-col">
@@ -43,8 +40,8 @@ export default async function StartPage() {
               </Link>
             </div>
 
-            <p className="mt-5 text-center text-sm text-[var(--muted)]">
-              <Link href="/start/minor" className="link-underline text-[var(--muted)] hover:text-[var(--foreground)]">
+            <p className="mt-5 text-center text-sm text-[var(--text-muted)]">
+              <Link href="/start/minor" className="link-underline text-[var(--text-muted)] hover:text-[var(--ink)]">
                 {t(locale, "start.minor.link")}
               </Link>
             </p>
@@ -59,12 +56,12 @@ export default async function StartPage() {
         {/* SAFETY + CLOSING */}
         <section className="container py-12 text-center md:py-16">
           <div className="mx-auto max-w-xl space-y-5">
-            <p className="text-[18px] font-medium leading-[1.55] text-[var(--foreground)] md:text-[20px]">
+            <p className="text-[18px] font-medium leading-[1.55] text-[var(--ink)] md:text-[20px]">
               {t(locale, "start.danger")}{" "}
               <a
                 href="tel:112"
                 aria-label="Call emergency services 112"
-                className="link-underline text-[var(--foreground)]"
+                className="link-underline text-[var(--ink)]"
               >
                 {t(locale, "start.dangerCta")}
               </a>{" "}
@@ -72,11 +69,11 @@ export default async function StartPage() {
             </p>
             <p className="muted text-base leading-[1.75]">
               {t(locale, "start.readMore")}{" "}
-              <Link href="/how-it-works" className="link-underline text-[var(--foreground)]">
+              <Link href="/how-it-works" className="link-underline text-[var(--ink)]">
                 {t(locale, "start.howLink")}
               </Link>{" "}
               {t(locale, "start.or")}{" "}
-              <Link href="/privacy" className="link-underline text-[var(--foreground)]">
+              <Link href="/privacy" className="link-underline text-[var(--ink)]">
                 {t(locale, "start.privacyLink")}
               </Link>
               .

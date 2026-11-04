@@ -6,10 +6,10 @@ export default function TemplatesPage() {
   return (
     <section>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Console · Templates
         </p>
-        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+        <h1 className="page-title-sm mt-3">
           Notice templates
         </h1>
         <p className="muted mt-3 max-w-xl text-sm leading-[1.7]">
@@ -18,10 +18,10 @@ export default function TemplatesPage() {
         </p>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Template</Th>
               <Th>Version</Th>
               <Th>Language</Th>
@@ -33,7 +33,7 @@ export default function TemplatesPage() {
           <tbody>
             {rows.map((row) => (
               <tr
-                className="border-t border-[var(--hairline)] align-top"
+                className="border-t border-[var(--line)] align-top"
                 key={row.id}
               >
                 <td className="p-4">
@@ -44,11 +44,11 @@ export default function TemplatesPage() {
                 </td>
                 <td className="font-mono p-4 text-xs">{row.version}</td>
                 <td className="p-4">{row.language}</td>
-                <td className="p-4 text-[var(--rose)]">
+                <td className="p-4 text-[var(--danger)]">
                   {row.legalReviewStatus}
                 </td>
                 <td className="p-4">{row.active ? "Active" : "Blocked"}</td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {row.rollbackVersion}
                 </td>
               </tr>
@@ -62,7 +62,7 @@ export default function TemplatesPage() {
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+    <th className="eyebrow p-4">
       {children}
     </th>
   );

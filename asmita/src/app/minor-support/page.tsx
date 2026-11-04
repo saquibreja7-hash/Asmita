@@ -76,16 +76,13 @@ export default async function MinorSupportPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container pb-16 pt-20 text-center md:pb-20 md:pt-32">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {t(locale, "minor.pill")}
-            </span>
+            <span className="eyebrow">{t(locale, "minor.pill")}</span>
             <p className="muted mt-3 text-xs tracking-wide">
               {t(locale, "minor.langNote")} <span lang="hi">हिंदी</span>
             </p>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
+            <h1 className="page-title-sm mt-8">
               {t(locale, "minor.hero.title.1")}
               <br />
               <em className="not-italic text-gradient">{t(locale, "minor.hero.title.2")}</em>
@@ -101,9 +98,9 @@ export default async function MinorSupportPage() {
         </div>
 
         {/* VALIDATION */}
-        <section className="container py-14 md:py-20">
+        <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
-            <p className="font-display text-[20px] leading-[1.55] tracking-tight text-[var(--foreground)] md:text-[24px] md:leading-[1.5]">
+            <p className="font-display text-[20px] leading-[1.55] tracking-tight text-[var(--ink)] md:text-[24px] md:leading-[1.5]">
               {t(locale, "minor.validation")}
             </p>
           </div>
@@ -116,10 +113,10 @@ export default async function MinorSupportPage() {
         {/* RESOURCE GROUPS */}
         {groups.map((group, gi) => (
           <div key={group.eyebrow}>
-            <section className="container py-14 md:py-20">
+            <section className="container section-pad">
               <div className="mx-auto max-w-3xl">
                 <span className="eyebrow mb-3 block">{group.eyebrow}</span>
-                <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[30px]">
+                <h2 className="section-title">
                   {group.title}
                 </h2>
                 <p className="muted mt-2 text-sm leading-[1.7]">{group.subtitle}</p>
@@ -135,13 +132,13 @@ export default async function MinorSupportPage() {
                           ? `${item.name} - ${item.contact} (opens in new tab)`
                           : `${item.name} - call ${item.contact}`
                       }
-                      className="flex items-start justify-between gap-6 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-6 py-5 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
+                      className="flex items-start justify-between gap-6 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-6 py-5 transition-colors hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]"
                     >
                       <div>
-                        <p className="font-medium text-[var(--foreground)]">{item.name}</p>
+                        <p className="font-medium text-[var(--ink)]">{item.name}</p>
                         <p className="muted mt-1 text-sm leading-[1.65]">{item.description}</p>
                       </div>
-                      <span className="font-mono shrink-0 text-[15px] font-medium text-[var(--teal-dark)] md:text-[18px]">
+                      <span className="shrink-0 text-[15px] font-medium text-[var(--brand-strong)] md:text-[18px]">
                         {item.contact} {item.external ? "↗" : "→"}
                       </span>
                     </a>
@@ -162,10 +159,10 @@ export default async function MinorSupportPage() {
         </div>
 
         {/* WHY NOT ASMITA */}
-        <section className="container py-14 md:py-20">
+        <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
             <span className="eyebrow mb-4 block">{t(locale, "minor.whyNot.eyebrow")}</span>
-            <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
+            <h2 className="section-title">
               {t(locale, "minor.whyNot.title")}
             </h2>
             <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
@@ -179,9 +176,9 @@ export default async function MinorSupportPage() {
         </div>
 
         {/* CLOSING */}
-        <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-28">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
+            <h2 className="section-title">
               {t(locale, "minor.closing.title")}
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">

@@ -57,14 +57,14 @@ export function CaseDashboardActions({
 
   return (
     <div className="space-y-8">
-      <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[26px]">
+      <h2 className="subsection-title">
         {t(locale, "case.actions.title")}
       </h2>
 
       <div>
         <label
           htmlFor="additional-urls"
-          className="block text-sm font-medium text-[var(--foreground)]"
+          className="block text-sm font-medium text-[var(--ink)]"
         >
           {t(locale, "case.actions.label")}
         </label>
@@ -91,7 +91,7 @@ export function CaseDashboardActions({
 
           {firstUrlId && (
             <button
-              className="text-sm text-[var(--muted)] underline decoration-transparent underline-offset-4 transition-colors hover:text-[var(--foreground)] hover:decoration-current"
+              className="text-sm text-[var(--text-muted)] underline decoration-transparent underline-offset-4 transition-colors hover:text-[var(--ink)] hover:decoration-current"
               disabled={loading}
               onClick={markResolved}
               type="button"
@@ -105,7 +105,7 @@ export function CaseDashboardActions({
       {message && (
         <p
           aria-live="polite"
-          className={`text-sm font-medium ${messageOk ? "text-[var(--teal)]" : "text-[var(--rose)]"}`}
+          className={`text-sm font-medium ${messageOk ? "text-[var(--brand)]" : "text-[var(--danger)]"}`}
         >
           {message}
         </p>

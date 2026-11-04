@@ -13,7 +13,7 @@ export function AdminLogoutButton() {
 
   return (
     <button
-      className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+      className="text-sm text-[var(--text-muted)] hover:text-[var(--ink)] transition-colors"
       onClick={logout}
       type="button"
     >

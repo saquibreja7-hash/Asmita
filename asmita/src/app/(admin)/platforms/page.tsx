@@ -16,10 +16,10 @@ export default async function PlatformsPage() {
   return (
     <section>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Console · Platforms
         </p>
-        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+        <h1 className="page-title-sm mt-3">
           Platform database
         </h1>
       </div>
@@ -34,13 +34,13 @@ export default async function PlatformsPage() {
         and a tamper-evident audit log entry.
       </p>
 
-      <h2 className="font-display mt-12 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[28px]">
+      <h2 className="section-title mt-12">
         Verified contacts
       </h2>
-      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-4 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[980px] text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Platform</Th>
               <Th>Tier</Th>
               <Th>GO email</Th>
@@ -55,7 +55,7 @@ export default async function PlatformsPage() {
           <tbody>
             {rows.map((platform) => (
               <tr
-                className="border-t border-[var(--hairline)] align-top"
+                className="border-t border-[var(--line)] align-top"
                 key={platform.id}
               >
                 <td className="p-4 font-medium">
@@ -75,10 +75,10 @@ export default async function PlatformsPage() {
                   </div>
                 </td>
                 <td className="p-4 capitalize">{platform.tier.toLowerCase()}</td>
-                <td className="font-mono p-4 text-[var(--muted)]">
+                <td className="font-mono p-4 text-[var(--text-muted)]">
                   {platform.grievanceEmail ?? "(unset)"}
                 </td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {platform.formUrl ||
                     platform.apiEndpoint ||
                     "Not configured"}
@@ -97,11 +97,11 @@ export default async function PlatformsPage() {
                 </td>
                 <td className="p-4">
                   {platform.staleFlag ? (
-                    <span className="text-[var(--rose)]">
+                    <span className="text-[var(--danger)]">
                       {platform.staleReason}
                     </span>
                   ) : (
-                    <span className="text-[var(--muted)]">current</span>
+                    <span className="text-[var(--text-muted)]">current</span>
                   )}
                 </td>
                 <td className="p-4">
@@ -114,13 +114,13 @@ export default async function PlatformsPage() {
         </table>
       </div>
 
-      <h2 className="font-display mt-14 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[28px]">
+      <h2 className="section-title mt-14">
         Grievance Officer change history
       </h2>
-      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-4 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Platform</Th>
               <Th>Changed by</Th>
               <Th>Field</Th>
@@ -133,20 +133,20 @@ export default async function PlatformsPage() {
           <tbody>
             {history.map((row) => (
               <tr
-                className="border-t border-[var(--hairline)] align-top"
+                className="border-t border-[var(--line)] align-top"
                 key={row.id}
               >
                 <td className="p-4 font-medium">{row.platformName}</td>
                 <td className="font-mono p-4 text-xs">{row.changedBy}</td>
                 <td className="p-4">{row.field}</td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {row.previousValue}
                 </td>
                 <td className="font-mono p-4 text-xs">{row.newValue}</td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {row.sourceUrl}
                 </td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {new Date(row.changedAt).toLocaleString("en-IN", {
                     timeZone: "Asia/Kolkata",
                   })}
@@ -165,7 +165,7 @@ export default async function PlatformsPage() {
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+    <th className="eyebrow p-4">
       {children}
     </th>
   );
@@ -180,10 +180,10 @@ function Metric({
 }) {
   return (
     <div>
-      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+      <p className="eyebrow">
         {label}
       </p>
-      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--foreground)] tabular-nums">
+      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--ink)] tabular-nums">
         {value}
       </p>
     </div>

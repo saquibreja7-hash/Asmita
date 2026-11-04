@@ -19,11 +19,8 @@ export default async function SetupMfaPage() {
       <div className="page-canvas">
         <section className="container pb-10 pt-20 text-center md:pb-12 md:pt-28">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              Two-factor authentication
-            </span>
-            <h1 className="mt-8 text-[clamp(2rem,5vw,3.5rem)]">
+            <span className="eyebrow">Two-factor authentication</span>
+            <h1 className="page-title-sm mt-8">
               {enrolment ? "Your authenticator is enrolled" : "Set up your authenticator"}
             </h1>
           </div>
@@ -33,7 +30,7 @@ export default async function SetupMfaPage() {
           <div className="mx-auto max-w-md">
             {enrolment ? (
               <div className="card text-center">
-                <p className="text-[16px] leading-[1.5] text-[var(--color-graphite)]">
+                <p className="text-[16px] leading-[1.5] text-[var(--text)]">
                   Enrolled on{" "}
                   {enrolment.enrolledAt.toLocaleString("en-IN", {
                     timeZone: "Asia/Kolkata",

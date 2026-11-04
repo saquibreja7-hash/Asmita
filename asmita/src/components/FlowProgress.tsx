@@ -26,7 +26,7 @@ export function FlowProgress({ step, locale }: { step: 1 | 2 | 3 | 4; locale: Lo
           <span
             key={i}
             className="h-1 flex-1 rounded-full"
-            style={{ background: i < step ? "var(--color-off-black)" : "var(--color-ash)" }}
+            style={{ background: i < step ? "var(--ink)" : "var(--line)" }}
           />
         ))}
       </div>

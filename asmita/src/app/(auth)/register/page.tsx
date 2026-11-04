@@ -22,10 +22,7 @@ export default async function RegisterPage() {
             {/* LEFT - sticky context panel */}
             <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
               <div className="md:sticky md:top-28">
-                <span className="pill">
-                  <span className="dot" />
-                  {t(locale, "reg.pill")}
-                </span>
+                <span className="eyebrow">{t(locale, "reg.pill")}</span>
 
                 <p className="muted mt-6 text-sm leading-[1.75]">
                   {t(locale, "reg.aside.sub")}
@@ -35,13 +32,13 @@ export default async function RegisterPage() {
                   {asideItems.map(({ heading, detail }) => (
                     <div key={heading} className="flex items-start gap-3">
                       <span
-                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
+                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)]"
                         aria-hidden
                       >
                         <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
                           <path
                             d="M1 4l2.5 2.5L9 1"
-                            stroke="var(--teal)"
+                            stroke="var(--brand)"
                             strokeWidth="1.5"
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -49,7 +46,7 @@ export default async function RegisterPage() {
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--ink)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>

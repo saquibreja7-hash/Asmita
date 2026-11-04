@@ -22,10 +22,10 @@ export default async function HandoffPage({
     return (
       <AppShell>
         <div className="page-canvas">
-          <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
+          <section className="container page-hero text-center">
             <div className="mx-auto max-w-2xl">
-              <span className="pill"><span className="dot" />{t(locale, "handoff.notAvailable.pill")}</span>
-              <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px]">
+              <span className="eyebrow">{t(locale, "handoff.notAvailable.pill")}</span>
+              <h1 className="page-title-sm mt-8">
                 {t(locale, "handoff.notAvailable.title.1")}{" "}
                 <em className="not-italic text-gradient">{t(locale, "handoff.notAvailable.title.em")}</em>
                 {t(locale, "handoff.notAvailable.title.2")}
@@ -80,12 +80,9 @@ Please process this through your official content removal procedure.`;
             {/* LEFT - sticky context */}
             <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
               <div className="md:sticky md:top-28">
-                <span className="pill">
-                  <span className="dot" />
-                  {isHashOnlyPath ? t(locale, "handoff.hashPill") : t(locale, "handoff.pill")}
-                </span>
+                <span className="eyebrow">{isHashOnlyPath ? t(locale, "handoff.hashPill") : t(locale, "handoff.pill")}</span>
 
-                <p className="font-mono mt-4 text-[13px] text-[var(--muted)]">
+                <p className="font-mono mt-4 text-[13px] text-[var(--text-muted)]">
                   {record.referenceNumber}
                 </p>
 
@@ -101,15 +98,15 @@ Please process this through your official content removal procedure.`;
                   ].map(([heading, detail]) => (
                     <div key={heading as string} className="flex items-start gap-3">
                       <span
-                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
+                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)]"
                         aria-hidden
                       >
                         <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                          <path d="M1 4l2.5 2.5L9 1" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M1 4l2.5 2.5L9 1" stroke="var(--brand)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--ink)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>
@@ -130,7 +127,7 @@ Please process this through your official content removal procedure.`;
             {/* RIGHT - notice text + form links */}
             <div className="min-w-0 flex-1 flex flex-col gap-8">
               <div>
-                <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+                <h1 className="page-title-sm">
                   {isHashOnlyPath ? t(locale, "handoff.hashTitle") : t(locale, "handoff.title")}
                 </h1>
                 <p className="muted mt-2 text-sm leading-[1.75]">
@@ -142,7 +139,7 @@ Please process this through your official content removal procedure.`;
               <div className="flex flex-col">
                 <label
                   htmlFor="handoff-text"
-                  className="block text-sm font-medium text-[var(--foreground)]"
+                  className="block text-sm font-medium text-[var(--ink)]"
                 >
                   {t(locale, "handoff.notice.label")}
                 </label>
@@ -160,7 +157,7 @@ Please process this through your official content removal procedure.`;
 
               {/* Platform form links */}
               <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">
+                <p className="text-sm font-medium text-[var(--ink)]">
                   {t(locale, "handoff.form.label")}
                 </p>
                 {formLinks.length > 0 ? (
@@ -171,17 +168,17 @@ Please process this through your official content removal procedure.`;
                         href={link.formUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-between rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-5 py-4 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
+                        className="flex items-center justify-between rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-5 py-4 transition-colors hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]"
                       >
-                        <span className="font-medium text-[var(--foreground)]">{link.name}</span>
-                        <span className="font-mono text-sm text-[var(--teal-dark)]">
+                        <span className="font-medium text-[var(--ink)]">{link.name}</span>
+                        <span className="font-mono text-sm text-[var(--brand-strong)]">
                           {t(locale, "handoff.form.openForm")}
                         </span>
                       </a>
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-3 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-5 py-4">
+                  <div className="mt-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-5 py-4">
                     <p className="muted text-sm leading-[1.75]">
                       {t(locale, "handoff.form.noUrl")}
                     </p>

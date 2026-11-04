@@ -108,16 +108,16 @@ export default function HashGenerator({ caseId }: { caseId: string }) {
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-[24px] border border-dashed border-[var(--color-ash)] bg-[var(--color-parchment)] px-6 py-8 text-center transition-colors hover:border-[var(--color-off-black)]"
+        className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-[var(--radius-box)] border border-dashed border-[var(--line)] bg-[var(--card)] px-6 py-8 text-center transition-colors hover:border-[var(--ink)]"
       >
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-teal-mist)]">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand-soft)]">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
-            <path d="M10 13V4M10 4l-3 3M10 4l3 3" stroke="var(--color-off-black)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M3 14v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" stroke="var(--color-off-black)" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M10 13V4M10 4l-3 3M10 4l3 3" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M3 14v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
         </span>
         <span>
-          <span className="block text-sm font-medium text-[var(--color-off-black)]">Choose photos to fingerprint</span>
+          <span className="block text-sm font-medium text-[var(--ink)]">Choose photos to fingerprint</span>
           <span className="muted mt-0.5 block text-xs">Up to {MAX_FILES} images. They never leave this device.</span>
         </span>
       </button>
@@ -125,9 +125,9 @@ export default function HashGenerator({ caseId }: { caseId: string }) {
       {files.length > 0 && (
         <ul className="space-y-1 text-sm" aria-live="polite">
           {files.map((file, index) => (
-            <li key={`${file.name}-${index}`} className="flex items-center justify-between rounded-[16px] border border-[var(--color-ash)] px-4 py-2.5">
+            <li key={`${file.name}-${index}`} className="flex items-center justify-between rounded-[var(--radius-box)] border border-[var(--line)] px-4 py-2.5">
               <span className="truncate">{file.name}</span>
-              <span className={`ml-3 shrink-0 text-xs ${file.status === "error" ? "text-[var(--danger)]" : "text-[var(--color-graphite)]"}`}>
+              <span className={`ml-3 shrink-0 text-xs ${file.status === "error" ? "text-[var(--danger)]" : "text-[var(--text)]"}`}>
                 {file.status === "hashing" && "Creating fingerprint…"}
                 {file.status === "hashed" && `Fingerprint ready (quality ${file.quality}/100)`}
                 {file.status === "error" && "Could not process this image"}
@@ -150,7 +150,7 @@ export default function HashGenerator({ caseId }: { caseId: string }) {
             type="checkbox"
             checked={declaration}
             onChange={(event) => setDeclaration(event.target.checked)}
-            className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-off-black)]"
+            className="mt-1 h-4 w-4 shrink-0 accent-[var(--ink)]"
           />
           <span>
             I declare that I appear in this content (or I am the authorized reporter), that
@@ -164,7 +164,7 @@ export default function HashGenerator({ caseId }: { caseId: string }) {
         type="button"
         onClick={onSubmit}
         disabled={hashedCount === 0 || !declaration || submitState === "submitting"}
-        className="btn btn-midnight disabled:opacity-40"
+        className="btn btn-primary disabled:opacity-40"
       >
         {submitState === "submitting" ? "Submitting fingerprints…" : `Submit ${hashedCount} fingerprint${hashedCount === 1 ? "" : "s"}`}
       </button>

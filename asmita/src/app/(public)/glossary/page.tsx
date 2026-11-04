@@ -40,10 +40,10 @@ export default async function GlossaryPage() {
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("Glossary", "शब्दावली")}</span>
-              <h1 className="font-display mt-5 text-[clamp(2.25rem,5.5vw,4rem)] font-medium leading-[1.06] text-[var(--heading)]">
+              <h1 className="page-title mt-5">
                 {say("Words, in plain language", "शब्दों का सरल अर्थ")}
               </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say("The terms you will see on this site and in the law, explained without jargon. You do not need to know any of these to get help.", "इस वेबसाइट और संबंधित नियमों में आने वाले शब्द, सरल भाषा में। मदद लेने के लिए इन सभी शब्दों को जानना ज़रूरी नहीं है।")}
               </p>
             </div>
@@ -53,13 +53,13 @@ export default async function GlossaryPage() {
         {/* TERMS */}
         <section className="zone-white section-pad" aria-label={say("Terms", "शब्द")}>
           <div className="container">
-            <dl className="mx-auto max-w-3xl divide-y divide-[var(--hairline)]">
+            <dl className="mx-auto max-w-3xl divide-y divide-[var(--line)]">
               {glossary.map((entry, index) => (
                 <div key={entry.term} className="py-6">
-                  <dt className="font-display text-[1.15rem] font-medium text-[var(--heading)]">
+                  <dt className="font-display text-[1.15rem] font-medium text-[var(--ink)]">
                     {say(entry.term, hindiGlossary[index].term)}
                   </dt>
-                  <dd className="mt-2 text-[16px] leading-[1.65] text-[var(--body)]">
+                  <dd className="mt-2 text-[16px] leading-[1.65] text-[var(--text)]">
                     {say(entry.definition, hindiGlossary[index].definition)}
                   </dd>
                 </div>
@@ -72,11 +72,11 @@ export default async function GlossaryPage() {
         <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
           <div className="zone-sunset-content container section-pad text-center">
             <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-medium leading-[1.14]">
+              <h2 className="section-title">
                 {say("Ready when you are.", "जब आप तैयार हों।")}
               </h2>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/get-help">
+                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
                   {say("Get help", "मदद लें")}
                 </Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/issue">

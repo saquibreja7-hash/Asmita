@@ -119,11 +119,11 @@ export function TalkToUs({ copy }: { copy: TalkCopy }) {
   const inlineLink = "link-underline font-medium";
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 md:p-8" style={{ boxShadow: "var(--shadow-soft)" }}>
+    <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 md:p-8" style={{ boxShadow: "var(--shadow-soft)" }}>
       {phase === "notice" && (
         <div>
-          <h2 className="text-[22px] font-medium leading-tight text-[var(--foreground)]">{copy["talk.notice.heading"]}</h2>
-          <ul className="mt-5 space-y-3 text-base leading-[1.7] text-[var(--foreground)]">
+          <h2 className="subsection-title leading-tight">{copy["talk.notice.heading"]}</h2>
+          <ul className="mt-5 space-y-3 text-base leading-[1.7] text-[var(--ink)]">
             <li>{copy["talk.notice.ai"]}</li>
             <li>{copy["talk.notice.recording"]}</li>
             <li>{copy["talk.notice.noImages"]}</li>
@@ -141,11 +141,11 @@ export function TalkToUs({ copy }: { copy: TalkCopy }) {
 
       {phase !== "notice" && (
         <div>
-          <p role="status" aria-live="polite" className="text-[20px] font-medium leading-tight text-[var(--foreground)]">
+          <p role="status" aria-live="polite" className="text-[20px] font-medium leading-tight text-[var(--ink)]">
             {status ? copy[status] : ""}
           </p>
           {phase === "error" && (
-            <p role="alert" className="text-base leading-[1.7] text-[var(--foreground)]">
+            <p role="alert" className="text-base leading-[1.7] text-[var(--ink)]">
               {copy[error]}
             </p>
           )}
@@ -176,8 +176,8 @@ export function TalkToUs({ copy }: { copy: TalkCopy }) {
         </div>
       )}
 
-      <p className="muted mt-8 border-t border-[var(--hairline)] pt-5 text-sm leading-[1.7]">
-        {linkify(copy["talk.phone"], HELPLINE.display, `tel:${HELPLINE.tel}`, "link-underline font-medium text-[var(--foreground)]")}
+      <p className="muted mt-8 border-t border-[var(--line)] pt-5 text-sm leading-[1.7]">
+        {linkify(copy["talk.phone"], HELPLINE.display, `tel:${HELPLINE.tel}`, "link-underline font-medium text-[var(--ink)]")}
       </p>
     </div>
   );

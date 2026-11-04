@@ -20,10 +20,10 @@ export default async function AuditPage({
   return (
     <section>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Console · Audit
         </p>
-        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+        <h1 className="page-title-sm mt-3">
           Audit log
         </h1>
       </div>
@@ -60,10 +60,10 @@ export default async function AuditPage({
         </button>
       </form>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Seq</Th>
               <Th>Event</Th>
               <Th>Actor</Th>
@@ -75,18 +75,18 @@ export default async function AuditPage({
           <tbody>
             {rows.map((row) => (
               <tr
-                className="border-t border-[var(--hairline)]"
+                className="border-t border-[var(--line)]"
                 key={row.sequence}
               >
-                <td className="font-mono p-4 tabular-nums text-[var(--muted)]">
+                <td className="font-mono p-4 tabular-nums text-[var(--text-muted)]">
                   {row.sequence}
                 </td>
                 <td className="p-4 font-medium">{row.eventType}</td>
                 <td className="font-mono p-4 text-xs">{row.actorId}</td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {row.entityType}: {row.entityId}
                 </td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {new Date(row.createdAt).toLocaleString("en-IN", {
                     timeZone: "Asia/Kolkata",
                   })}
@@ -121,8 +121,8 @@ function ChainStatusBanner({
 }) {
   if ("unavailable" in validation) {
     return (
-      <div className="mt-8 rounded-[12px] border border-[var(--hairline)] bg-[var(--background)] p-4 text-sm">
-        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+      <div className="mt-8 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-4 text-sm">
+        <p className="eyebrow">
           Chain integrity
         </p>
         <p className="mt-2">Could not verify chain: {validation.error}</p>
@@ -131,8 +131,8 @@ function ChainStatusBanner({
   }
   if (validation.valid) {
     return (
-      <div className="mt-8 rounded-[12px] border border-[var(--accent)] bg-[var(--color-parchment)] p-4 text-sm">
-        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)]">
+      <div className="mt-8 rounded-[var(--radius-box)] border border-[var(--brand)] bg-[var(--page)] p-4 text-sm">
+        <p className="eyebrow text-[var(--brand)]">
           Chain integrity · OK
         </p>
         <p className="mt-2 tabular-nums">
@@ -143,15 +143,15 @@ function ChainStatusBanner({
   }
   const broken = validation.brokenAt;
   return (
-    <div className="mt-8 rounded-[12px] border border-[var(--rose)] bg-[var(--color-parchment)] p-4 text-sm">
-      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--rose)]">
+    <div className="mt-8 rounded-[var(--radius-box)] border border-[var(--danger)] bg-[var(--page)] p-4 text-sm">
+      <p className="eyebrow text-[var(--danger)]">
         Chain integrity · BROKEN
       </p>
       <p className="mt-2 tabular-nums">
         Validation failed at sequence #{broken?.sequence ?? "?"} ({broken?.reason}). Checked {validation.total} record(s) before the break.
       </p>
       {broken?.expected && broken?.actual ? (
-        <p className="font-mono mt-2 text-xs text-[var(--muted)]">
+        <p className="font-mono mt-2 text-xs text-[var(--text-muted)]">
           expected={broken.expected.slice(0, 20)}… actual={broken.actual.slice(0, 20)}…
         </p>
       ) : null}
@@ -172,7 +172,7 @@ function FilterField({
 }) {
   return (
     <label className="grid gap-1.5">
-      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+      <span className="eyebrow">
         {label}
       </span>
       {children}
@@ -182,7 +182,7 @@ function FilterField({
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+    <th className="eyebrow p-4">
       {children}
     </th>
   );

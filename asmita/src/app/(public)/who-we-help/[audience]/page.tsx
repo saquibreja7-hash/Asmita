@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { audiences, getAudience } from "@/lib/audience-content";
 import { audiencesHi } from "@/lib/audience-content-hi";
 import { getLocale } from "@/lib/get-locale";
+import { Callout } from "@/components/Reading";
 
 export function generateStaticParams() {
   return audiences.map((a) => ({ audience: a.slug }));
@@ -53,14 +54,14 @@ export default async function AudiencePage({
                 </Link>
               </p>
               <span className="eyebrow mt-4 inline-block">{data.term}</span>
-              <h1 className="font-display mt-3 text-[clamp(2rem,5vw,3.5rem)] font-medium leading-[1.08] text-[var(--heading)]">
+              <h1 className="page-title mt-3">
                 {data.title}
               </h1>
-              <p className="font-size-large mt-6 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mt-6 max-w-2xl text-[var(--ink)]">
                 {data.intro}
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href={data.cta.href}>
+                <Link className="btn btn-primary btn-arrow !m-0" href={data.cta.href}>
                   {data.cta.label}
                 </Link>
                 {data.secondary && (
@@ -78,13 +79,11 @@ export default async function AudiencePage({
           <div className="container">
             <div className="mx-auto max-w-5xl">
               {data.callout && (
-                <div className="mb-10 rounded-[var(--radius-lg)] border-l-4 border-[var(--coral)] bg-[var(--coral-soft)] p-6 md:p-7">
-                  <p className="font-display text-[1.05rem] font-medium text-[var(--heading)]">
-                    {data.callout.title}
-                  </p>
-                  <p className="mt-2 text-[15px] leading-[1.65] text-[var(--body)]">
-                    {data.callout.body}
-                  </p>
+                <div className="mb-10">
+                  <Callout icon="heart">
+                    <p className="font-semibold">{data.callout.title}</p>
+                    <p className="mt-1 font-normal text-[var(--text)]">{data.callout.body}</p>
+                  </Callout>
                 </div>
               )}
 
@@ -92,12 +91,12 @@ export default async function AudiencePage({
                 {data.points.map((p) => (
                   <div
                     key={p.title}
-                    className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)]"
+                    className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 shadow-[var(--shadow-sm)]"
                   >
-                    <h2 className="text-[17px] font-medium text-[var(--heading)]">
+                    <h2 className="subsection-title">
                       {p.title}
                     </h2>
-                    <p className="mt-2 text-sm leading-[1.65] text-[var(--body)]">
+                    <p className="mt-2 text-sm leading-[1.65] text-[var(--text)]">
                       {p.body}
                     </p>
                   </div>
@@ -112,7 +111,7 @@ export default async function AudiencePage({
           <div className="transform-content container section-pad">
             <h2
               id="others-heading"
-              className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]"
+              className="section-title"
             >
               {say("Coming from somewhere else?", "किसी और स्थिति के बारे में पढ़ना है?")}
             </h2>
@@ -121,19 +120,17 @@ export default async function AudiencePage({
                 <Link
                   key={a.slug}
                   href={`/who-we-help/${a.slug}`}
-                  className="group flex flex-col rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm transition hover:bg-[var(--color-parchment)]"
+                  className="link-card group"
                 >
-                  <h3 className="text-[16px] font-medium leading-snug text-[var(--heading)]">
+                  <h3 className="link-card-title">
                     {a.term}
                   </h3>
-                  <p className="mt-2 flex-1 text-sm leading-[1.55] text-[var(--muted)]">
+                  <p className="mt-2 flex-1 text-[15px] leading-[1.6] text-[var(--text)]">
                     {a.cardLine}
                   </p>
-                  <span className="mt-3 inline-block text-sm font-medium text-[var(--color-off-black)]">
-                    {say("Open", "देखें")}{" "}
-                    <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
-                      →
-                    </span>
+                  <span className="link-card-more">
+                    {say("Open", "देखें")}
+                    <span className="transition-transform group-hover:translate-x-0.5" aria-hidden>→</span>
                   </span>
                 </Link>
               ))}

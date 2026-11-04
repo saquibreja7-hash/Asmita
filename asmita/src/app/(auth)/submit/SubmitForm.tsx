@@ -87,6 +87,8 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
 
   const [hashFiles, setHashFiles] = useState<FileHashState[]>([]);
   const [selectedPlatformIds, setSelectedPlatformIds] = useState<string[]>([]);
+  // The fingerprint section is optional, so it starts folded away.
+  const [hashOpen, setHashOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -97,6 +99,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   async function onSelectFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files ?? []).slice(0, MAX_HASH_FILES);
     if (selected.length === 0) return;
+    setHashOpen(true);
     setHashFiles(selected.map((f) => ({ name: f.name, status: "hashing" as const })));
     const next: FileHashState[] = [];
     for (const file of selected) {
@@ -158,31 +161,28 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     }
   }
 
+  const shortNames = [...new Set(knownPlatforms.map((p) => p.name.split(" / ")[0]))];
+  const chipNames = shortNames.slice(0, 6);
+  const moreCount = shortNames.length - chipNames.length;
+
   const lowQuality = hashFiles.some((f) => f.status === "hashed" && (f.quality ?? 100) < 50);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
 
-      {/* URL section */}
-      <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[16px] bg-[var(--teal-soft)]">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="M6.5 9.5a3.535 3.535 0 0 0 5 0l2-2a3.536 3.536 0 0 0-5-5l-1.5 1.5" stroke="var(--teal)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M9.5 6.5a3.535 3.535 0 0 0-5 0l-2 2a3.536 3.536 0 0 0 5 5L9 12" stroke="var(--teal)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </span>
+      <div className="filing-card">
+      {/* Step 1: the links */}
+      <Step n={1}>
           <div>
-            <label htmlFor="urls" className="block text-sm font-medium text-[var(--foreground)]">
+            <label htmlFor="urls" className="block text-[18px] font-medium leading-[1.3] text-[var(--ink)]">
               {t(locale, "submit.urls.label")}
             </label>
-            <p className="muted text-xs leading-[1.5]">
+            <p className="muted mt-1 text-sm leading-[1.5]">
               {t(locale, "submit.urls.sub")}
             </p>
           </div>
-        </div>
         <textarea
-          className="field min-h-36 font-mono text-[13px] leading-[1.7] bg-[var(--background)]"
+          className="filing-input mt-4 min-h-32"
           id="urls"
           onChange={(e) => setUrls(e.target.value)}
           aria-describedby={lineChecks.length > 0 ? "url-checks" : undefined}
@@ -190,35 +190,92 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           placeholder={"https://example.com/post/1234\nhttps://example.com/post/5678"}
           spellCheck={false}
         />
+
         {lineChecks.length > 0 && (
-          <ul id="url-checks" className="space-y-1.5 text-xs" aria-live="polite">
+          <ul id="url-checks" className="mt-3 space-y-2 text-sm" aria-live="polite">
             {lineChecks.map((c, i) => (
-              <li key={`${c.line}-${i}`} className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--hairline)] px-3 py-2">
-                <span className="min-w-0 truncate font-mono text-[var(--foreground)]">{c.line}</span>
+              <li key={`${c.line}-${i}`} className="flex items-center gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-white px-3 py-2.5">
+                <span
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold text-white ${
+                    c.problem ? "bg-[var(--danger)]" : "bg-[var(--brand)]"
+                  }`}
+                  aria-hidden
+                >
+                  {c.problem ? "✕" : "✓"}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[var(--ink)]">{c.line}</span>
                 {c.problem ? (
-                  <span className="shrink-0 font-medium text-[var(--rose)]">{t(locale, LINK_PROBLEM_KEY[c.problem])}</span>
+                  <span className="shrink-0 font-medium text-[var(--danger)]">{t(locale, LINK_PROBLEM_KEY[c.problem])}</span>
                 ) : (
-                  <span className="shrink-0 font-medium text-[var(--teal)]">{c.platform ?? t(locale, "submit.link.unknown")}</span>
+                  <span className="shrink-0 rounded-full bg-[var(--brand-soft)] px-2.5 py-0.5 text-[13px] font-medium text-[var(--brand)]">
+                    {c.platform ?? t(locale, "submit.link.unknown")}
+                  </span>
                 )}
               </li>
             ))}
           </ul>
         )}
         {skippedLines > 0 && parsedUrls.length > 0 && (
-          <p className="text-xs text-[var(--muted)]">{t(locale, "submit.link.skipNote")}</p>
+          <p className="mt-2 text-xs text-[var(--text-muted)]">{t(locale, "submit.link.skipNote")}</p>
         )}
-      </div>
 
-      {/* Hash section */}
+        {/* Which platforms we recognise, by short name. */}
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <span className="text-[13px] text-[var(--text-muted)]">{t(locale, "submit.worksWith")}</span>
+          {chipNames.map((name) => (
+            <span key={name} className="rounded-full border border-[var(--line)] bg-white px-3 py-1 text-[13px] text-[var(--ink)]">
+              {name}
+            </span>
+          ))}
+          {moreCount > 0 && (
+            <span className="text-[13px] text-[var(--text-muted)]">+{moreCount} {t(locale, "submit.worksWith.more")}</span>
+          )}
+        </div>
+
+        <details className="group mt-4">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-[var(--brand)] [&::-webkit-details-marker]:hidden">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px]" aria-hidden>?</span>
+            {t(locale, "submit.howCopy.title")}
+          </summary>
+          <ol className="mt-3 space-y-2 text-sm leading-[1.5] text-[var(--text)]">
+            {(["submit.howCopy.1", "submit.howCopy.2", "submit.howCopy.3"] as const).map((key, i) => (
+              <li key={key} className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)] text-[12px] font-semibold text-[var(--brand)]">
+                  {i + 1}
+                </span>
+                <span className="pt-0.5">{t(locale, key)}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+
+      {/* Hash section: optional, folded until opened or a photo is chosen */}
       {enableHashUpload && (
-        <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5 space-y-5"
+        <details
+          className="group mt-5 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]"
+          open={hashOpen}
+          onToggle={(e) => setHashOpen(e.currentTarget.open)}
         >
+          <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)]" aria-hidden>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                <path d="M10 13V4M10 4l-3 3M10 4l3 3" stroke="var(--brand)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 14v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" stroke="var(--brand)" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[16px] font-medium text-[var(--ink)]">
+                {t(locale, "submit.hash.title")}{" "}
+                <span className="font-normal text-[var(--text-muted)]">{t(locale, "submit.hash.optional")}</span>
+              </span>
+              <span className="muted block text-sm">{t(locale, "submit.hash.fileHint")}</span>
+            </span>
+            <span className="text-[22px] leading-none text-[var(--text-muted)] transition-transform group-open:rotate-45" aria-hidden>+</span>
+          </summary>
+
+          <div className="space-y-5 border-t border-[var(--line)] px-5 pb-5 pt-4">
           <div>
-            <p className="text-sm font-medium text-[var(--foreground)]">
-              {t(locale, "submit.hash.title")}{" "}
-              <span className="font-normal text-[var(--muted)]">{t(locale, "submit.hash.optional")}</span>
-            </p>
-            <p className="muted mt-1 text-sm leading-[1.6]">
+            <p className="muted text-sm leading-[1.6]">
               {t(locale, "submit.hash.sub")}
             </p>
             <p className="muted mt-2 text-sm leading-[1.6]">
@@ -227,7 +284,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
                 href="https://stopncii.org/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="link-underline text-[var(--foreground)]"
+                className="link-underline text-[var(--ink)]"
               >
                 {t(locale, "submit.hash.stopncii.link")}
               </a>
@@ -247,18 +304,9 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-[24px] border border-dashed border-[var(--border)] bg-[var(--background)] px-6 py-8 text-center transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
+            className="btn btn-secondary w-full justify-center"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--teal-soft)]">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
-                <path d="M10 13V4M10 4l-3 3M10 4l3 3" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M3 14v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </span>
-            <span>
-              <span className="block text-sm font-medium text-[var(--foreground)]">{t(locale, "submit.hash.fileLabel")}</span>
-              <span className="muted mt-0.5 block text-xs">{t(locale, "submit.hash.fileHint")}</span>
-            </span>
+            {t(locale, "submit.hash.fileLabel")}
           </button>
 
           {hashFiles.length > 0 && (
@@ -266,13 +314,13 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
               {hashFiles.map((file, i) => (
                 <li
                   key={`${file.name}-${i}`}
-                  className="flex items-center justify-between rounded-[16px] border border-[var(--hairline)] px-3 py-2"
+                  className="flex items-center justify-between rounded-[var(--radius-box)] border border-[var(--line)] px-3 py-2"
                 >
-                  <span className="truncate text-[var(--foreground)]">{file.name}</span>
-                  <span className={`ml-2 shrink-0 text-xs font-mono ${
-                    file.status === "hashed" ? "text-[var(--teal)]"
-                    : file.status === "error" ? "text-[var(--rose)]"
-                    : "text-[var(--muted)]"
+                  <span className="truncate text-[var(--ink)]">{file.name}</span>
+                  <span className={`ml-2 shrink-0 text-xs ${
+                    file.status === "hashed" ? "text-[var(--brand)]"
+                    : file.status === "error" ? "text-[var(--danger)]"
+                    : "text-[var(--text-muted)]"
                   }`}>
                     {file.status === "hashing" && t(locale, "submit.hash.processing")}
                     {file.status === "hashed" && `${t(locale, "submit.hash.ready")} ${file.quality}${t(locale, "submit.hash.readySuffix")}`}
@@ -290,7 +338,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           )}
 
           {hashedFiles.length > 0 && hashFiles.every((f) => f.status !== "hashing") && (
-            <p className="text-sm leading-[1.6] font-medium text-[var(--teal)]">
+            <p className="text-sm leading-[1.6] font-medium text-[var(--brand)]">
               {t(locale, "submit.hash.doneNote")}
             </p>
           )}
@@ -303,7 +351,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
 
           {hashedFiles.length > 0 && parsedUrls.length === 0 && platforms.length > 0 && (
             <div>
-              <p className="block text-sm font-medium text-[var(--foreground)]">
+              <p className="block text-sm font-medium text-[var(--ink)]">
                 {t(locale, "submit.hash.platforms.title")}
               </p>
               <p className="muted mt-1 text-sm leading-[1.6]">
@@ -312,16 +360,16 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
               <ul className="mt-3 space-y-2">
                 {platforms.map((p) => (
                   <li key={p.id}>
-                    <label className="flex cursor-pointer items-center gap-3 rounded-[16px] border border-[var(--border)] bg-[var(--background)] px-4 py-3 hover:border-[var(--teal)] transition-colors">
+                    <label className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-4 py-3 hover:border-[var(--brand)] transition-colors">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 shrink-0 accent-[var(--teal)]"
+                        className="h-4 w-4 shrink-0 accent-[var(--brand)]"
                         checked={selectedPlatformIds.includes(p.id)}
                         onChange={() => togglePlatform(p.id)}
                       />
-                      <span className="flex-1 text-sm text-[var(--foreground)]">{p.name}</span>
+                      <span className="flex-1 text-sm text-[var(--ink)]">{p.name}</span>
                       {!p.hasEmail && (
-                        <span className="shrink-0 font-mono text-[11px] text-[var(--muted)]">{t(locale, "submit.hash.platforms.formNote")}</span>
+                        <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{t(locale, "submit.hash.platforms.formNote")}</span>
                       )}
                     </label>
                   </li>
@@ -337,29 +385,39 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
               )}
             </div>
           )}
-        </div>
+          </div>
+        </details>
       )}
 
-      {/* Declaration */}
-      <div className="hairline" />
-      <label className="flex cursor-pointer items-start gap-3">
-        <input
-          checked={declaration}
-          onChange={(e) => setDeclaration(e.target.checked)}
-          type="checkbox"
-          className="mt-1 h-4 w-4 shrink-0 accent-[var(--teal)]"
-        />
-        <span className="text-sm leading-[1.65] text-[var(--foreground)]">
-          {t(locale, "submit.declaration.text")}
-        </span>
-      </label>
+      </Step>
+
+      {/* Step 2: confirm it is you */}
+      <Step n={2} last>
+        <h2 className="subsection-title">{t(locale, "submit.confirm.title")}</h2>
+        <label
+          className={`mt-4 flex cursor-pointer items-start gap-3 rounded-[var(--radius-box)] border px-4 py-4 transition-colors ${
+            declaration ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-[var(--page)]"
+          }`}
+        >
+          <input
+            checked={declaration}
+            onChange={(e) => setDeclaration(e.target.checked)}
+            type="checkbox"
+            className="mt-1 h-5 w-5 shrink-0 accent-[var(--brand)]"
+          />
+          <span className="text-[15px] leading-[1.6] text-[var(--ink)]">
+            {t(locale, "submit.declaration.text")}
+          </span>
+        </label>
+      </Step>
+      </div>
 
       {error && (
-        <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
+        <p className="text-sm font-medium text-[var(--danger)]">{error}</p>
       )}
 
       {!canSubmit && (
-        <p className="text-right text-sm text-[var(--muted)]" role="status">
+        <p className="text-sm text-[var(--text-muted)]" role="status">
           {t(
             locale,
             !hasAnyContent
@@ -370,9 +428,9 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           )}
         </p>
       )}
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div>
         <button
-          className="btn btn-primary"
+          className="btn btn-primary btn-arrow w-full justify-center sm:w-auto"
           disabled={!hydrated || !canSubmit || submitting}
           onClick={submit}
           type="button"
@@ -382,5 +440,22 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
       </div>
 
     </div>
+  );
+}
+
+// A numbered step on a vertical line that runs down to the next step. On
+// phones the number sits above the step so the fields get the full width.
+function Step({ n, last = false, children }: { n: number; last?: boolean; children: React.ReactNode }) {
+  return (
+    <section className={`relative sm:grid sm:grid-cols-[32px_minmax(0,1fr)] sm:gap-x-4 ${last ? "" : "pb-8"}`}>
+      {!last && <span className="absolute bottom-0 left-[15.5px] top-10 hidden w-px bg-[var(--line)] sm:block" aria-hidden />}
+      <span
+        className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand)] text-[14px] font-semibold text-white sm:mb-0"
+        aria-hidden
+      >
+        {n}
+      </span>
+      <div className="min-w-0 sm:pt-1">{children}</div>
+    </section>
   );
 }

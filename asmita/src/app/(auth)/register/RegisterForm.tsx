@@ -91,7 +91,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
 
       {step === "age" && (
         <div className="mt-8">
-          <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+          <h2 className="section-title">
             {t(locale, "reg.age.title")}
           </h2>
           <p className="muted mt-2 text-sm leading-[1.75]">
@@ -99,62 +99,62 @@ export function RegisterForm({ locale }: { locale: Locale }) {
           </p>
           <div className="mt-6 space-y-3">
             <label
-              className={`flex cursor-pointer items-start gap-3 rounded-[24px] border p-4 transition-colors ${
+              className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-box)] border p-4 transition-colors ${
                 ageConfirmed === "adult"
-                  ? "border-[var(--teal)] bg-[var(--teal-soft)]"
-                  : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
+                  ? "border-[var(--brand)] bg-[var(--brand-soft)]"
+                  : "border-[var(--line)] bg-[var(--page)] hover:border-[var(--line)]"
               }`}
             >
               <input
                 type="radio"
                 checked={ageConfirmed === "adult"}
                 onChange={() => setAgeConfirmed("adult")}
-                className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
+                className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--brand)]"
               />
-              <span className="text-[15px] font-medium leading-[1.4] text-[var(--foreground)]">
+              <span className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
                 {t(locale, "auth.ageAdult")}
               </span>
             </label>
             <label
-              className={`flex cursor-pointer items-start gap-3 rounded-[24px] border p-4 transition-colors ${
+              className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-box)] border p-4 transition-colors ${
                 ageConfirmed === "minor"
-                  ? "border-[var(--teal)] bg-[var(--teal-soft)]"
-                  : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
+                  ? "border-[var(--brand)] bg-[var(--brand-soft)]"
+                  : "border-[var(--line)] bg-[var(--page)] hover:border-[var(--line)]"
               }`}
             >
               <input
                 type="radio"
                 checked={ageConfirmed === "minor"}
                 onChange={() => setAgeConfirmed("minor")}
-                className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
+                className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--brand)]"
               />
-              <span className="text-[15px] font-medium leading-[1.4] text-[var(--foreground)]">
+              <span className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
                 {t(locale, "auth.ageMinor")}
               </span>
             </label>
           </div>
           {ageConfirmed === "adult" && (
             <fieldset className="mt-8 space-y-3">
-              <legend className="text-[15px] font-medium leading-[1.4] text-[var(--foreground)]">
+              <legend className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
                 {t(locale, "eligibility.ageThen.title")}
               </legend>
               <p className="muted text-sm leading-[1.6]">{t(locale, "eligibility.ageThen.sub")}</p>
               {(["adult", "minor"] as const).map((value) => (
                 <label
                   key={value}
-                  className={`flex cursor-pointer items-start gap-3 rounded-[24px] border p-4 transition-colors ${
+                  className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-box)] border p-4 transition-colors ${
                     ageThen === value
-                      ? "border-[var(--teal)] bg-[var(--teal-soft)]"
-                      : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
+                      ? "border-[var(--brand)] bg-[var(--brand-soft)]"
+                      : "border-[var(--line)] bg-[var(--page)] hover:border-[var(--line)]"
                   }`}
                 >
                   <input
                     type="radio"
                     checked={ageThen === value}
                     onChange={() => setAgeThen(value)}
-                    className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
+                    className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--brand)]"
                   />
-                  <span className="text-[15px] font-medium leading-[1.4] text-[var(--foreground)]">
+                  <span className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
                     {t(locale, value === "adult" ? "auth.ageThenAdult" : "auth.ageThenMinor")}
                   </span>
                 </label>
@@ -174,13 +174,13 @@ export function RegisterForm({ locale }: { locale: Locale }) {
 
       {step === "email" && (
         <div className="mt-8">
-          <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+          <h2 className="section-title">
             {t(locale, "reg.email.title")}
           </h2>
           <p className="muted mt-2 text-sm leading-[1.75]">
             {t(locale, "reg.email.sub")}
           </p>
-          <p className="mt-3 rounded-[16px] bg-[var(--teal-soft)] px-4 py-3 text-sm leading-[1.6] text-[var(--teal-dark)]">
+          <p className="mt-3 rounded-[var(--radius-box)] bg-[var(--brand-soft)] px-4 py-3 text-sm leading-[1.6] text-[var(--brand-strong)]">
             {t(locale, "reg.email.safe")}
           </p>
           <form
@@ -190,7 +190,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-[var(--foreground)]"
+                className="block text-sm font-medium text-[var(--ink)]"
               >
                 {t(locale, "reg.email.label")}
               </label>
@@ -221,12 +221,12 @@ export function RegisterForm({ locale }: { locale: Locale }) {
 
       {step === "otp" && (
         <div className="mt-8">
-          <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+          <h2 className="section-title">
             {t(locale, "reg.otp.title")}
           </h2>
           <p className="muted mt-2 text-sm leading-[1.75]">
             {t(locale, "reg.otp.sub")}{" "}
-            <span className="font-mono text-[var(--foreground)]">{email}</span>.
+            <span className="text-[var(--ink)]">{email}</span>.
           </p>
           <form
             className="mt-8 space-y-4"
@@ -235,7 +235,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
             <div>
               <label
                 htmlFor="otp"
-                className="block text-sm font-medium text-[var(--foreground)]"
+                className="block text-sm font-medium text-[var(--ink)]"
               >
                 {t(locale, "reg.otp.label")}
               </label>
@@ -266,7 +266,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
               <button
                 type="button"
                 onClick={() => { setStep("email"); setOtp(""); setError(""); }}
-                className="link-underline text-[var(--foreground)]"
+                className="link-underline text-[var(--ink)]"
               >
                 {t(locale, "reg.otp.changeEmail")}
               </button>
@@ -284,13 +284,13 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
   const current = step === "age" ? 0 : step === "email" ? 1 : 2;
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium text-[var(--foreground)] sm:hidden" aria-live="polite">
+      <p className="text-xs font-medium text-[var(--ink)] sm:hidden" aria-live="polite">
         {current + 1}/{steps.length} · {steps[current]}
       </p>
       <div className="flex gap-1.5 sm:hidden" aria-hidden>
         {steps.map((label, i) => (
           <span key={label} className="h-1 flex-1 rounded-full" style={{
-            background: i <= current ? "var(--teal)" : "var(--hairline)",
+            background: i <= current ? "var(--brand)" : "var(--line)",
           }} />
         ))}
       </div>
@@ -301,10 +301,10 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
             <div
               className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-medium transition-colors ${
                 i < current
-                  ? "bg-[var(--color-off-black)] text-[var(--color-parchment)]"
+                  ? "bg-[var(--ink)] text-[var(--page)]"
                   : i === current
-                  ? "border-2 border-[var(--teal)] text-[var(--teal)]"
-                  : "border border-[var(--border)] text-[var(--muted)]"
+                  ? "border-2 border-[var(--brand)] text-[var(--brand)]"
+                  : "border border-[var(--line)] text-[var(--text-muted)]"
               }`}
             >
               {i < current ? (
@@ -315,12 +315,12 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
                 i + 1
               )}
             </div>
-            <span className={`hidden text-[11px] sm:block ${i === current ? "font-medium text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
+            <span className={`hidden text-[11px] sm:block ${i === current ? "font-medium text-[var(--ink)]" : "text-[var(--text-muted)]"}`}>
               {label}
             </span>
           </div>
           {i < steps.length - 1 && (
-            <div className="flex-1 h-px mx-1" style={{ background: i < current ? "var(--teal)" : "var(--hairline)" }} />
+            <div className="flex-1 h-px mx-1" style={{ background: i < current ? "var(--brand)" : "var(--line)" }} />
           )}
         </div>
       ))}
@@ -331,6 +331,6 @@ function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
 
 function FormError({ message }: { message: string }) {
   return (
-    <p className="text-sm font-medium text-[var(--rose)]">{message}</p>
+    <p className="text-sm font-medium text-[var(--danger)]">{message}</p>
   );
 }

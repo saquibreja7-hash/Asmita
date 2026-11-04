@@ -43,10 +43,10 @@ export default async function FlaggedPage({
   return (
     <section>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Console · Flagged
         </p>
-        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+        <h1 className="page-title-sm mt-3">
           Flagged review queue
         </h1>
       </div>
@@ -120,10 +120,10 @@ export default async function FlaggedPage({
         />
       </div>
 
-      <div className="mt-10 overflow-x-auto rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-10 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Case</Th>
               <Th>Platform</Th>
               <Th>Domain</Th>
@@ -136,12 +136,12 @@ export default async function FlaggedPage({
           <tbody>
             {rows.map((row) => (
               <tr
-                className="border-t border-[var(--hairline)]"
+                className="border-t border-[var(--line)]"
                 key={`${row.caseId}-${row.urlId}`}
               >
                 <td className="font-mono p-4">{row.referenceNumber}</td>
                 <td className="p-4">{row.platformName}</td>
-                <td className="font-mono p-4 text-[var(--muted)]">
+                <td className="font-mono p-4 text-[var(--text-muted)]">
                   {row.domain}
                 </td>
                 <td className="p-4">{row.reason}</td>
@@ -181,7 +181,7 @@ function FilterField({
 }) {
   return (
     <label className="grid gap-1.5">
-      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+      <span className="eyebrow">
         {label}
       </span>
       {children}
@@ -191,7 +191,7 @@ function FilterField({
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+    <th className="eyebrow p-4">
       {children}
     </th>
   );
@@ -206,10 +206,10 @@ function Metric({
 }) {
   return (
     <div>
-      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+      <p className="eyebrow">
         {label}
       </p>
-      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--foreground)] tabular-nums">
+      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--ink)] tabular-nums">
         {value}
       </p>
     </div>

@@ -5,16 +5,13 @@ export default function OfflinePage() {
     <AppShell>
       <div className="page-canvas">
         <section
-          className="container pb-24 pt-24 text-center md:pb-32 md:pt-40"
+          className="container page-hero text-center"
           role="alert"
           aria-live="polite"
         >
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              Offline
-            </span>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
+            <span className="eyebrow">Offline</span>
+            <h1 className="page-title mt-8">
               You appear to be{" "}
               <em className="not-italic text-gradient">offline</em>.
             </h1>
@@ -23,7 +20,7 @@ export default function OfflinePage() {
               should still be in this tab - avoid refreshing while you are
               offline.
             </p>
-            <p className="font-mono mt-10 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="eyebrow mt-10">
               Nothing has been lost · Reconnect to continue
             </p>
           </div>
