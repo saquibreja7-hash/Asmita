@@ -10,16 +10,13 @@ export default async function FeedbackPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container pb-12 pt-20 text-center md:pb-16 md:pt-32">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {say("Feedback", "प्रतिक्रिया")}
-            </span>
+            <span className="eyebrow">{say("Feedback", "प्रतिक्रिया")}</span>
             <p className="muted mt-3 text-xs tracking-wide">
               {say("Available in English and Hindi", "हिंदी और अंग्रेज़ी में उपलब्ध")}
             </p>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
+            <h1 className="page-title mt-8">
               {say("Tell us how Asmita treated you.", "बताएँ कि अस्मिता के साथ आपका अनुभव कैसा रहा।")}
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
@@ -31,19 +28,19 @@ export default async function FeedbackPage() {
         {/* WHAT NOT TO SEND - quiet trauma-informed line */}
         <section className="container py-10 text-center md:py-14">
           <div className="mx-auto max-w-2xl">
-            <p className="font-display text-[20px] leading-[1.5] tracking-tight text-[var(--foreground)] md:text-[24px] md:leading-[1.45]">
+            <p className="font-display text-[20px] leading-[1.5] tracking-tight text-[var(--ink)] md:text-[24px] md:leading-[1.45]">
               {say("Please do not paste intimate images, videos, or raw URLs here. This form is for service feedback only.", "कृपया यहाँ निजी तस्वीरें, वीडियो या URL न लिखें। यह फ़ॉर्म केवल सेवा पर प्रतिक्रिया के लिए है।")}
             </p>
           </div>
         </section>
 
         {/* THE FORM */}
-        <section className="container py-10 md:py-14">
+        <section className="container section-pad">
           <div className="mx-auto max-w-xl">
-            <p className="font-mono text-center text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="eyebrow text-center">
               {say("The form", "फ़ॉर्म")}
             </p>
-            <h2 className="font-display mt-4 text-center text-[28px] font-normal leading-[1.18] tracking-tight md:text-[40px] md:leading-[1.14]">
+            <h2 className="section-title mt-4 text-center">
               {say("Three questions, none required.", "तीन सवाल; कोई भी अनिवार्य नहीं।")}
             </h2>
             <FeedbackForm locale={locale} />
@@ -51,9 +48,9 @@ export default async function FeedbackPage() {
         </section>
 
         {/* CLOSING */}
-        <section className="container pb-24 pt-16 text-center md:pb-32 md:pt-24">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
+            <h2 className="section-title">
               {say("Thank you for taking the time.", "समय देने के लिए धन्यवाद।")}
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">

@@ -1,3 +1,4 @@
+import { Illustration } from "@/components/Illustration";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
@@ -60,19 +61,17 @@ export default async function FaqPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container pb-16 pt-20 text-center md:pb-20 md:pt-32">
+        <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {t(locale, "faq.hero.pill")}
-            </span>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
+            <span className="eyebrow">{t(locale, "faq.hero.pill")}</span>
+            <h1 className="page-title mt-8">
               {t(locale, "faq.hero.title")}
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               {t(locale, "faq.hero.sub")}
             </p>
           </div>
+          <Illustration name="page-faq" eager className="page-hero-art" />
         </section>
 
         <div className="container">
@@ -84,11 +83,11 @@ export default async function FaqPage() {
           <section key={section.eyebrow} className="container py-14 md:py-20">
             <div className="mx-auto max-w-3xl">
               <span className="eyebrow mb-3 block">{section.eyebrow}</span>
-              <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[30px]">
+              <h2 className="section-title">
                 {section.title}
               </h2>
 
-              <div className="mt-8 border-t border-[var(--color-ash)]">
+              <div className="mt-8 border-t border-[var(--line)]">
                 {section.items.map((faq) => (
                   <details key={faq.question} className="faq-item">
                     <summary>{faq.question}</summary>
@@ -111,9 +110,9 @@ export default async function FaqPage() {
         </div>
 
         {/* CLOSING */}
-        <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-28">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
+            <h2 className="section-title">
               {t(locale, "faq.closing.title")}
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">

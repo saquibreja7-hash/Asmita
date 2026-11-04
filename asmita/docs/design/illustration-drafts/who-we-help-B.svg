@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" fill="none">
+<g transform="translate(-4 0) scale(0.95)"><path stroke="none" fill="#d4e9e6" d="M38.400000000000006 167.4 C 18.23999999999998 59.400000000000006, 179.52 16.19999999999999, 280.32 27 C 421.44 37.8, 461.76 124.2, 421.44 189 C 381.12 248.4, 199.68 253.8, 119.04 237.6 C 58.56 226.8, 42.432000000000016 199.8, 38.400000000000006 167.4 Z"/>
+<path stroke="none" d="M40 236 H440" />
+<rect x="40" y="226" width="400" height="8" rx="4" fill="#ecda98" />
+<path fill="#242424" d="M81 122.7 C 72.8 56.4, 127.2 56.4, 119 122.7 L 113 122.7 C 110.2 87, 111.9 78.5, 100 77.65 C 88.1 78.5, 89.8 87, 87 122.7 Z"/>
+<rect stroke="none" x="94" y="100" width="12" height="14" rx="5" fill="#c98b62"/>
+<rect stroke="none" x="85" y="158" width="12" height="68" rx="5" fill="#3d5a73"/>
+<rect stroke="none" x="103" y="158" width="12" height="68" rx="5" fill="#3d5a73"/>
+<path stroke="none" fill="#9fcac4" d="M80 120 C 82 110, 118 110, 120 120 L 125 166 L 75 166 Z"/>
+<ellipse stroke="none" cx="90" cy="228" rx="9" ry="4" fill="#242424"/>
+<ellipse stroke="none" cx="110" cy="228" rx="9" ry="4" fill="#242424"/>
+<circle stroke="none" cx="100" cy="87" r="17" fill="#c98b62"/>
+<path fill="#242424" d="M82 89 C 80 59.8, 120 59.8, 118 89 C 110.2 76.8, 89.8 76.8, 82 89 Z"/>
+<rect stroke="none" x="190" y="88" width="12" height="14" rx="5" fill="#8a5a3b"/>
+<path stroke="none" fill="#ff9473" d="M176 108 C 178 98, 214 98, 216 108 L 218 146 L 226 214 L 166 214 L 174 146 Z"/>
+<path stroke="none" fill="#0a5e5a" d="M180 102 L 217 126 L 222 176 L 208 158 Z"/>
+<path stroke="#0a5e5a" stroke-width="5" d="M167 210 L 225 210"/>
+<ellipse stroke="none" cx="186" cy="216" rx="9" ry="4" fill="#242424"/>
+<ellipse stroke="none" cx="206" cy="216" rx="9" ry="4" fill="#242424"/>
+<circle stroke="none" cx="196" cy="75" r="17" fill="#8a5a3b"/>
+<path fill="#242424" d="M178 77 C 176 47.8, 216 47.8, 214 77 C 206.2 64.8, 185.8 64.8, 178 77 Z"/><circle fill="#242424" cx="196" cy="54" r="8.16"/>
+<rect stroke="none" x="282" y="104" width="12" height="14" rx="5" fill="#d9a27a"/>
+<rect stroke="none" x="273" y="162" width="12" height="68" rx="5" fill="#0a5e5a"/>
+<rect stroke="none" x="291" y="162" width="12" height="68" rx="5" fill="#0a5e5a"/>
+<path stroke="none" fill="#ecda98" d="M268 124 C 270 114, 306 114, 308 124 L 313 188 L 263 188 Z"/>
+<path stroke="none" fill="#ff9473" d="M269 120 C 282 132, 294 132, 307 120 L 309 130 C 294 142, 282 142, 267 130 Z"/>
+<ellipse stroke="none" cx="278" cy="232" rx="9" ry="4" fill="#242424"/>
+<ellipse stroke="none" cx="298" cy="232" rx="9" ry="4" fill="#242424"/>
+<circle stroke="none" cx="288" cy="91" r="17" fill="#d9a27a"/>
+<path fill="#242424" d="M268 102.9 C 262.5 62.1, 313.5 62.1, 308 102.9 L 302 102.9 C 299.9 84.2, 276.1 84.2, 274 102.9 Z"/>
+<rect stroke="none" x="374" y="96" width="12" height="14" rx="5" fill="#a86b45"/>
+<path stroke="none" fill="#0a5e5a" d="M360 116 C 362 106, 398 106, 400 116 L 402 154 L 410 222 L 350 222 L 358 154 Z"/>
+<path stroke="none" fill="#ecda98" d="M364 110 L 401 134 L 406 184 L 392 166 Z"/>
+<path stroke="#ecda98" stroke-width="5" d="M351 218 L 409 218"/>
+<ellipse stroke="none" cx="370" cy="224" rx="9" ry="4" fill="#242424"/>
+<ellipse stroke="none" cx="390" cy="224" rx="9" ry="4" fill="#242424"/>
+<circle stroke="none" cx="380" cy="83" r="17" fill="#a86b45"/>
+<path fill="#c9c4c0" d="M362 85 C 360 55.8, 400 55.8, 398 85 C 390.2 72.8, 369.8 72.8, 362 85 Z"/><circle fill="#c9c4c0" cx="380" cy="62" r="8.16"/>
+<path stroke="#c98b62" stroke-width="10" stroke-linecap="round" d="M80 120 C 79.2 150, 74.4 170, 72 170"/>
+<path stroke="#c98b62" stroke-width="10" stroke-linecap="round" d="M120 120 C 122.8 150, 139.6 170, 148 170"/>
+<path stroke="#8a5a3b" stroke-width="10" stroke-linecap="round" d="M176 108 C 173.2 138, 156.4 170, 148 170"/>
+<path stroke="#8a5a3b" stroke-width="10" stroke-linecap="round" d="M216 108 C 218.6 138, 234.2 174, 242 174"/>
+<path stroke="#d9a27a" stroke-width="10" stroke-linecap="round" d="M268 124 C 265.4 154, 249.8 174, 242 174"/>
+<path stroke="#d9a27a" stroke-width="10" stroke-linecap="round" d="M308 124 C 310.6 154, 326.2 174, 334 174"/>
+<path stroke="#a86b45" stroke-width="10" stroke-linecap="round" d="M360 116 C 357.4 146, 341.8 174, 334 174"/>
+<path stroke="#a86b45" stroke-width="10" stroke-linecap="round" d="M400 116 C 400.8 146, 405.6 166, 408 166"/></g>
+</svg>

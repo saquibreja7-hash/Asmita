@@ -1,8 +1,8 @@
 # Asmita Design System
 
-Status: draft for alignment
+Status: in use. Section 0 is what the code implements; sections 1 onward are the August 2026 draft and are kept for history.
 Owner: Saquib
-Last updated: 2026-08-05
+Last updated: 2026-11-04
 Builds on: `01-brand-brief.md`, `02-information-architecture.md`.
 
 Direction chosen: **clean modern platform** (white background, deep teal as the
@@ -11,6 +11,49 @@ single strong color, generous whitespace) with **modern neutral sans** typograph
 platform, not a charity. This is document 3 of 4. Values are concrete so document
 4 (page templates) can implement directly. Token names map to the existing
 `globals.css` variables where possible, so this is an evolution, not a rewrite.
+
+## 0. The system as built (November 2026)
+
+All values live in `src/app/globals.css`. Use these, not raw values.
+
+**Colour roles.** `--ink` (headings, main text), `--text` (body), `--text-muted`
+(hints), `--brand` (#0a5e5a: links, accents, primary buttons), `--brand-strong`
+(hover, brand text on tint), `--brand-soft` (teal mist: tinted panels), `--line`
+(borders), `--page` (parchment background), `--card` (white), plus `--danger`,
+`--warning`, `--success` and their `-soft` tints. Older names (`--teal`,
+`--heading`, `--body`, `--muted` and so on) are aliases kept for old markup;
+don't use them in new code.
+
+**Type.** Noto Sans for everything (Noto Sans Devanagari for Hindi), no italics
+anywhere. Headings are weight 600. Scale: `.hero-title` (home only),
+`.page-title`, `.page-title-sm` (case, filing and admin screens), `.section-title`,
+`.subsection-title`; card titles are plain `h3` at 20px. The system monospace is
+for codes, hashes, reference numbers and raw links only.
+
+**Labels.** One style, `.eyebrow`: 13px, 600, uppercase, 0.08em tracking, brand
+teal. Used above titles, for section labels and table heads.
+
+**Shape.** One corner radius, `--radius-box` (12px), for every box, card, panel,
+input and menu. Buttons, chips and step numbers stay fully round.
+
+**Layout.** Content max width 1280px; side margin `--gutter` grows from 20px to
+96px. Page headers use `.page-hero` spacing; sections use `.section-pad`.
+
+**Buttons.** Two only: `.btn-primary` (teal fill, one per screen) and
+`.btn-secondary` (outline, teal tint on hover). `.btn-arrow` adds an arrow.
+
+**Surfaces.** Three: the page (parchment), cards (white with a hairline), and
+tinted bands (`--brand-soft`: `.zone-sunset` closing bands, `.home-help-band`,
+`.filing-intro`).
+
+**Navigation.** Five groups (The issue, Who we help, Support, Resources, About),
+each opening a dropdown of every page in it; the group holding the open page is
+highlighted. Defined once in `src/components/layout/nav-config.ts` for both the
+desktop dropdowns and the phone menu.
+
+**Illustrations.** Line art from `public/images/illustrations/`, through the
+`Illustration` component. Prompts for new ones: `docs/design/illustration-drafts/image-prompts.md`.
+Never on question or signing screens; never a person on under-18 pages.
 
 ## 1. Color
 
@@ -58,16 +101,16 @@ Palette is disciplined: white surfaces, near-black ink, one strong brand color
 
 ## 2. Typography
 
-One typeface does everything: **Inter Tight** (weights 400, 500, 600, 700, 800).
-Hindi uses **Noto Sans Devanagari**. Optional **Geist Mono** for small technical
-labels (hash strings, reference numbers) only.
+One typeface does everything: **Noto Sans** (weights 400, 500, 600), chosen
+because it pairs with **Noto Sans Devanagari** for Hindi. The system monospace
+stack is used only for technical strings (hashes, reference numbers).
 
 ### Families
 
 ```
---font-sans:    "Inter Tight", "Noto Sans Devanagari", system-ui, sans-serif
+--font-sans:    "Noto Sans", "Noto Sans Devanagari", system-ui, sans-serif
 --font-display: same as sans (headings are weight + size, not a different face)
---font-mono:    "Geist Mono", ui-monospace, monospace
+--font-mono:    ui-monospace, SFMono-Regular, Menlo, Consolas, monospace
 ```
 
 ### Scale (rem, 16px base). Headings use clamp() for responsive hero.

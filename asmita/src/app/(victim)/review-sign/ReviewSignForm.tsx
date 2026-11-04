@@ -46,15 +46,15 @@ function CheckItem({ heading, detail }: { heading: string; detail: string }) {
   return (
     <div className="flex items-start gap-3">
       <span
-        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
+        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)]"
         aria-hidden
       >
         <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-          <path d="M1 4l2.5 2.5L9 1" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M1 4l2.5 2.5L9 1" stroke="var(--brand)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </span>
       <div>
-        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
+        <p className="text-sm font-medium text-[var(--ink)]">{heading}</p>
         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
       </div>
     </div>
@@ -285,7 +285,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
         <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
           <div className="md:sticky md:top-28">
-            <span className="pill"><span className="dot" />{t(locale, "review.formOnly.pill")}</span>
+            <span className="eyebrow">{t(locale, "review.formOnly.pill")}</span>
             <p className="muted mt-5 text-sm leading-[1.75]">
               {t(locale, "review.formOnly.sub")}
             </p>
@@ -299,7 +299,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
 
         <div className="order-1 min-w-0 flex-1 md:order-2 space-y-8">
           <div>
-            <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+            <h1 className="page-title-sm">
               {t(locale, "review.formOnly.title")}
             </h1>
             <p className="muted mt-2 text-sm leading-[1.75]">
@@ -314,13 +314,13 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
                 href={platform.formUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5 hover:border-[var(--teal)] transition-colors"
+                className="flex items-center justify-between rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-5 hover:border-[var(--brand)] transition-colors"
               >
                 <div>
-                  <p className="text-sm font-medium text-[var(--foreground)]">{platform.name}</p>
+                  <p className="text-sm font-medium text-[var(--ink)]">{platform.name}</p>
                   <p className="muted mt-0.5 text-xs">{t(locale, "review.formOnly.openForm")} {platform.name} →</p>
                 </div>
-                <svg className="ml-4 shrink-0 text-[var(--teal)]" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <svg className="ml-4 shrink-0 text-[var(--brand)]" width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path d="M5 10h10M10 5l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </a>
@@ -342,7 +342,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
       <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
         <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
           <div className="md:sticky md:top-28">
-            <span className="pill"><span className="dot" />{t(locale, "review.pill")}</span>
+            <span className="eyebrow">{t(locale, "review.pill")}</span>
             <p className="muted mt-5 text-sm leading-[1.75]">
               {t(locale, "review.aside.sub")}
             </p>
@@ -356,7 +356,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
 
         <div className="order-1 min-w-0 flex-1 md:order-2 space-y-8">
           <div>
-            <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+            <h1 className="page-title-sm">
               {t(locale, "review.title")}
             </h1>
             <p className="muted mt-2 text-sm leading-[1.75]">
@@ -366,14 +366,14 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
 
           {draft && draft.urls.length > 0 && (
             <div
-              className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6"
+              className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
             >
-              <p className="text-sm font-medium text-[var(--foreground)]">
+              <p className="text-sm font-medium text-[var(--ink)]">
                 {t(locale, "review.links.label")} ({draft.urls.length})
               </p>
               <ul className="mt-3 space-y-1.5">
                 {draft.urls.map((url, i) => (
-                  <li key={i} className="break-all font-mono text-[13px] text-[var(--muted)]">
+                  <li key={i} className="break-all font-mono text-[13px] text-[var(--text-muted)]">
                     {url}
                   </li>
                 ))}
@@ -388,29 +388,29 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
 
           {draft && draft.hashes.length > 0 && (
             <div
-              className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6"
+              className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
             >
               <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[16px] bg-[var(--teal-soft)]">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-box)] bg-[var(--brand-soft)]">
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                    <rect x="1" y="1" width="5" height="5" rx="1" stroke="var(--teal)" strokeWidth="1.2"/>
-                    <rect x="8" y="1" width="5" height="5" rx="1" stroke="var(--teal)" strokeWidth="1.2"/>
-                    <rect x="1" y="8" width="5" height="5" rx="1" stroke="var(--teal)" strokeWidth="1.2"/>
-                    <path d="M8 10.5h5M10.5 8v5" stroke="var(--teal)" strokeWidth="1.2" strokeLinecap="round"/>
+                    <rect x="1" y="1" width="5" height="5" rx="1" stroke="var(--brand)" strokeWidth="1.2"/>
+                    <rect x="8" y="1" width="5" height="5" rx="1" stroke="var(--brand)" strokeWidth="1.2"/>
+                    <rect x="1" y="8" width="5" height="5" rx="1" stroke="var(--brand)" strokeWidth="1.2"/>
+                    <path d="M8 10.5h5M10.5 8v5" stroke="var(--brand)" strokeWidth="1.2" strokeLinecap="round"/>
                   </svg>
                 </span>
-                <p className="text-sm font-medium text-[var(--foreground)]">
+                <p className="text-sm font-medium text-[var(--ink)]">
                   {t(locale, "review.fingerprints.label")}
-                  <span className="ml-1.5 inline-flex items-center rounded-full bg-[var(--teal-soft)] px-2 py-0.5 font-mono text-[11px] text-[var(--teal)]">{draft.hashes.length}</span>
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-[var(--brand-soft)] px-2 py-0.5 font-mono text-[11px] text-[var(--brand)]">{draft.hashes.length}</span>
                 </p>
               </div>
               <ul className="mt-4 space-y-2">
                 {draft.hashes.map((h, i) => {
                   const q = h.quality;
-                  const qColor = q >= 70 ? "text-[var(--success)] bg-[#dff5ea]" : q >= 50 ? "text-[var(--warning)] bg-[#f3ead0]" : "text-[var(--danger)] bg-[#f8e1de]";
+                  const qColor = q >= 70 ? "text-[var(--success)] bg-[var(--success-soft)]" : q >= 50 ? "text-[var(--warning)] bg-[var(--warning-soft)]" : "text-[var(--danger)] bg-[var(--danger-soft)]";
                   return (
-                    <li key={i} className="flex items-center justify-between rounded-[16px] border border-[var(--hairline)] px-3 py-2.5">
-                      <span className="font-mono text-[12px] text-[var(--muted)]">{h.hash.slice(0, 8)}&thinsp;&middot;&thinsp;{h.hash.slice(8, 16)}&thinsp;&middot;&thinsp;&hellip;</span>
+                    <li key={i} className="flex items-center justify-between rounded-[var(--radius-box)] border border-[var(--line)] px-3 py-2.5">
+                      <span className="font-mono text-[12px] text-[var(--text-muted)]">{h.hash.slice(0, 8)}&thinsp;&middot;&thinsp;{h.hash.slice(8, 16)}&thinsp;&middot;&thinsp;&hellip;</span>
                       <span className={`ml-3 shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] font-medium ${qColor}`}>{q}%</span>
                     </li>
                   );
@@ -419,13 +419,13 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
               {draft.platformIds.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {draft.emailPlatformIds.length > 0 && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] px-3 py-1 text-xs text-[var(--text-muted)]">
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M1 3l5 3.5L11 3M1 3h10v7H1V3z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
                       {draft.emailPlatformIds.length} {t(locale, "review.fingerprints.emailNote")}
                     </span>
                   )}
                   {draft.formOnlyPlatforms.length > 0 && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] px-3 py-1 text-xs text-[var(--text-muted)]">
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 2h8v8H2z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/><path d="M4 5h4M4 7h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
                       {draft.formOnlyPlatforms.length} {t(locale, "review.fingerprints.formNote")}
                     </span>
@@ -436,7 +436,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
           )}
 
           {error && (
-            <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
+            <p className="text-sm font-medium text-[var(--danger)]">{error}</p>
           )}
 
           <div className="flex flex-wrap items-center gap-3 sm:flex-row-reverse sm:justify-between">
@@ -470,10 +470,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
     <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
       <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
         <div className="md:sticky md:top-28">
-          <span className="pill">
-            <span className="dot" />
-            {isHashSign ? t(locale, "review.sign.hashPill") : t(locale, "review.sign.pill")}
-          </span>
+          <span className="eyebrow">{isHashSign ? t(locale, "review.sign.hashPill") : t(locale, "review.sign.pill")}</span>
           <p className="muted mt-5 text-sm leading-[1.75]">
             {isHashSign ? t(locale, "review.sign.aside.hashSub") : t(locale, "review.sign.aside.sub")}
           </p>
@@ -487,7 +484,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
 
       <div className="order-1 min-w-0 flex-1 md:order-2 space-y-8">
         <div>
-          <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+          <h1 className="page-title-sm">
             {isHashSign ? t(locale, "review.sign.hashTitle") : t(locale, "review.sign.title")}
           </h1>
           <p className="muted mt-2 text-sm leading-[1.75]">
@@ -496,29 +493,29 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         </div>
 
         {signedCount > 0 && !isHashSign && (
-          <p className="rounded-[16px] bg-[var(--teal-soft)] px-4 py-3 text-sm font-medium text-[var(--teal-dark)]" role="status">
+          <p className="rounded-[var(--radius-box)] bg-[var(--brand-soft)] px-4 py-3 text-sm font-medium text-[var(--brand-strong)]" role="status">
             {t(locale, "review.sign.nextNote")}
           </p>
         )}
 
         {draft && draft.urls.length > 0 && !isHashSign && (
-          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5">
-            <p className="text-sm font-medium text-[var(--foreground)]">
+          <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-5">
+            <p className="text-sm font-medium text-[var(--ink)]">
               {t(locale, "review.links.label")} ({draft.urls.length})
             </p>
             <ul className="mt-2 space-y-1">
               {draft.urls.map((url) => (
-                <li key={url} className="break-all font-mono text-[13px] text-[var(--muted)]">{url}</li>
+                <li key={url} className="break-all font-mono text-[13px] text-[var(--text-muted)]">{url}</li>
               ))}
             </ul>
           </div>
         )}
 
         <div
-          className="overflow-hidden rounded-[24px] border border-[var(--border)]"
+          className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)]"
         >
-          <div className="border-b border-[var(--hairline)] bg-[var(--surface)] px-5 py-3">
-            <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
+          <div className="border-b border-[var(--line)] bg-[var(--page)] px-5 py-3">
+            <p className="eyebrow">
               {isHashSign ? t(locale, "review.sign.hashPreviewLabel") : t(locale, "review.sign.previewLabel")}
             </p>
           </div>
@@ -531,12 +528,12 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         </div>
 
         <div
-          className="space-y-5 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6"
+          className="space-y-5 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
         >
-          <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "review.sign.details.title")}</p>
+          <p className="text-sm font-medium text-[var(--ink)]">{t(locale, "review.sign.details.title")}</p>
 
           <div>
-            <label htmlFor="rs-name" className="block text-sm font-medium text-[var(--foreground)]">
+            <label htmlFor="rs-name" className="block text-sm font-medium text-[var(--ink)]">
               {t(locale, "review.sign.name.label")}
             </label>
             <p className="muted mt-1 text-sm">{t(locale, "review.sign.name.sub")}</p>
@@ -553,7 +550,7 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
           </div>
 
           <div>
-            <label htmlFor="rs-contact" className="block text-sm font-medium text-[var(--foreground)]">
+            <label htmlFor="rs-contact" className="block text-sm font-medium text-[var(--ink)]">
               {t(locale, "review.sign.contact.label")}
             </label>
             <p className="muted mt-1 text-sm">{t(locale, "review.sign.contact.sub")}</p>
@@ -571,16 +568,16 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         </div>
 
         <div
-          className="space-y-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6"
+          className="space-y-4 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
         >
-          <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "review.sign.sig.title")}</p>
+          <p className="text-sm font-medium text-[var(--ink)]">{t(locale, "review.sign.sig.title")}</p>
           <p className="muted text-sm leading-[1.6]">
             {t(locale, "review.sign.sig.sub")}
           </p>
           <input
             id="rs-signature"
             type="text"
-            className="field font-display text-[18px] italic"
+            className="field font-display text-[18px]"
             placeholder={t(locale, "review.sign.sig.placeholder")}
             value={signature}
             onChange={(e) => setSignature(e.target.value)}
@@ -594,17 +591,17 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 shrink-0 accent-[var(--teal)]"
+            className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand)]"
             checked={agreed}
             onChange={(e) => setAgreed(e.target.checked)}
           />
-          <span className="text-sm leading-[1.65] text-[var(--foreground)]">
+          <span className="text-sm leading-[1.65] text-[var(--ink)]">
             {isHashSign ? t(locale, "review.sign.agree.hash") : t(locale, "review.sign.agree.notice")}
           </span>
         </label>
 
         {error && (
-          <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
+          <p className="text-sm font-medium text-[var(--danger)]">{error}</p>
         )}
 
         <div className="flex flex-wrap items-center gap-3 sm:flex-row-reverse sm:justify-between">

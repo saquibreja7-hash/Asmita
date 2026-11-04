@@ -10,10 +10,10 @@ export default async function HashQueuePage() {
   if (process.env.ENABLE_HASH_UPLOAD !== "true") {
     return (
       <section>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Console · Hash queue
         </p>
-        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+        <h1 className="page-title-sm mt-3">
           Hash review queue
         </h1>
         <p className="muted mt-6 max-w-xl text-sm leading-[1.7]">
@@ -35,10 +35,10 @@ export default async function HashQueuePage() {
   return (
     <section>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Console · Hash queue
         </p>
-        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+        <h1 className="page-title-sm mt-3">
           Hash review queue
         </h1>
         <p className="muted mt-6 max-w-2xl text-sm leading-[1.7]">
@@ -49,10 +49,10 @@ export default async function HashQueuePage() {
         </p>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Case</Th>
               <Th>Hash digest</Th>
               <Th>Quality</Th>
@@ -64,13 +64,13 @@ export default async function HashQueuePage() {
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr className="border-t border-[var(--hairline)]" key={row.id}>
+              <tr className="border-t border-[var(--line)]" key={row.id}>
                 <td className="font-mono p-4">{row.referenceNumber}</td>
-                <td className="font-mono p-4 text-[var(--muted)]">
+                <td className="font-mono p-4 text-[var(--text-muted)]">
                   {row.hashDigest.slice(0, 16)}…
                 </td>
                 <td className="p-4 tabular-nums">{row.quality}/100</td>
-                <td className="p-4">{row.requestedPlatformName ?? <span className="text-[var(--muted)]">-</span>}</td>
+                <td className="p-4">{row.requestedPlatformName ?? <span className="text-[var(--text-muted)]">-</span>}</td>
                 <td className="p-4">{row.flagReason ?? "-"}</td>
                 <td className="font-mono p-4 tabular-nums">
                   {Math.floor(row.ageMinutes / 60)}h {row.ageMinutes % 60}m
@@ -90,10 +90,10 @@ export default async function HashQueuePage() {
       </div>
 
       <div className="mt-14">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Advisory dispatch
         </p>
-        <h2 className="font-display mt-3 text-[24px] font-normal leading-[1.2] tracking-tight md:text-[32px]">
+        <h2 className="section-title mt-3">
           Send hash advisories to platforms
         </h2>
         <p className="muted mt-4 max-w-2xl text-sm leading-[1.7]">
@@ -112,7 +112,7 @@ export default async function HashQueuePage() {
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+    <th className="eyebrow p-4">
       {children}
     </th>
   );

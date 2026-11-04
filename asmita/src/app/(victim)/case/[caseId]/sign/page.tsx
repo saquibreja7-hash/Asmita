@@ -69,14 +69,11 @@ export default async function SignNoticePage({
             {/* LEFT - sticky context */}
             <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
               <div className="md:sticky md:top-28">
-                <span className="pill">
-                  <span className="dot" />
-                  {t(locale, "sign.pill")}
-                </span>
+                <span className="eyebrow">{t(locale, "sign.pill")}</span>
 
                 <p className="muted mt-5 text-sm leading-[1.75]">
                   {t(locale, "sign.aside.sub.prefix")}{" "}
-                  <span className="font-medium text-[var(--foreground)]">{url.platform.name}</span>{" "}
+                  <span className="font-medium text-[var(--ink)]">{url.platform.name}</span>{" "}
                   {t(locale, "sign.aside.sub.suffix")}
                 </p>
 
@@ -88,15 +85,15 @@ export default async function SignNoticePage({
                   ].map(([heading, detail]) => (
                     <div key={heading as string} className="flex items-start gap-3">
                       <span
-                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
+                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)]"
                         aria-hidden
                       >
                         <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                          <path d="M1 4l2.5 2.5L9 1" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M1 4l2.5 2.5L9 1" stroke="var(--brand)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--ink)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>
@@ -107,12 +104,12 @@ export default async function SignNoticePage({
 
             {/* RIGHT - form */}
             <div className="min-w-0 flex-1">
-              <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+              <h1 className="page-title-sm">
                 {t(locale, "sign.title")}
               </h1>
               <p className="muted mt-2 text-sm leading-[1.75]">
                 {t(locale, "sign.sub.prefix")}{" "}
-                <span className="font-medium text-[var(--foreground)]">{url.platform.name}</span>
+                <span className="font-medium text-[var(--ink)]">{url.platform.name}</span>
                 {t(locale, "sign.sub.suffix")}
               </p>
               <div className="mt-8">

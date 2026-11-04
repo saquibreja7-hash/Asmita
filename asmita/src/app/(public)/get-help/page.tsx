@@ -1,3 +1,4 @@
+import { Illustration } from "@/components/Illustration";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
@@ -127,39 +128,40 @@ export default async function GetHelpPage() {
       <div className="page-canvas">
         {/* HERO + safety first */}
         <section className="hero" aria-label={say("Get help", "मदद लें")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("Get help", "मदद लें")}</span>
-              <h1 className="font-display mt-5 text-[clamp(2.25rem,5.5vw,4rem)] font-medium leading-[1.06] text-[var(--heading)]">
+              <h1 className="page-title mt-5">
                 {say("Something happened. Here is what to do.", "कुछ हुआ है। अब आप ये कदम उठा सकते हैं।")}
               </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say(
                   "Free and confidential. Pick the situation that fits, or follow the four steps below. You can go at your own pace.",
                   "मदद नि:शुल्क और गोपनीय है। अपनी स्थिति चुनें या नीचे दिए चार चरण देखें। अपनी गति से आगे बढ़ें।",
                 )}
               </p>
             </div>
+            <Illustration name="page-get-help" eager className="page-hero-art" />
 
             {/* Emergency strip — safety before instructions */}
-            <div className="mx-auto mt-10 max-w-3xl rounded-[var(--radius-lg)] border border-[var(--warm-border)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm">
-              <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--heading)]">
+            <div className="mx-auto mt-10 max-w-3xl rounded-[var(--radius-box)] surface-card p-6">
+              <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--ink)]">
                 {say("If you need urgent help", "अगर तुरंत मदद चाहिए")}
               </p>
               <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-                <li className="text-[15px] leading-[1.5] text-[var(--body)]">
+                <li className="text-[15px] leading-[1.5] text-[var(--text)]">
                   <strong>{say("In immediate danger?", "तुरंत खतरा है?")}</strong> {say("Call", "कॉल करें")}{" "}
                   <a className="text-link" href="tel:112">112</a>.
                 </li>
-                <li className="text-[15px] leading-[1.5] text-[var(--body)]">
+                <li className="text-[15px] leading-[1.5] text-[var(--text)]">
                   <strong>{say("Women’s helpline:", "महिला हेल्पलाइन:")}</strong>{" "}
                   <a className="text-link" href="tel:181">181</a>. {say("If unavailable, call 112.", "नंबर उपलब्ध न हो तो 112 पर कॉल करें।")}
                 </li>
-                <li className="text-[15px] leading-[1.5] text-[var(--body)]">
+                <li className="text-[15px] leading-[1.5] text-[var(--text)]">
                   <strong>{say("Under 18:", "18 साल से कम:")}</strong> {say("Childline", "बाल हेल्पलाइन")}{" "}
                   <a className="text-link" href="tel:1098">1098</a>.
                 </li>
-                <li className="text-[15px] leading-[1.5] text-[var(--body)]">
+                <li className="text-[15px] leading-[1.5] text-[var(--text)]">
                   <strong>{say("Report cybercrime:", "साइबर अपराध रिपोर्ट करें:")}</strong>{" "}
                   <a className="text-link" href="https://cybercrime.gov.in" target="_blank" rel="noopener noreferrer">cybercrime.gov.in</a>{" "}
                   {say("or", "या")} <a className="text-link" href="tel:1930">1930</a>.
@@ -175,11 +177,11 @@ export default async function GetHelpPage() {
             <div className="mx-auto max-w-5xl">
               <h2
                 id="scenarios-heading"
-                className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]"
+                className="section-title"
               >
                 {say("Start with your situation", "अपनी स्थिति से शुरू करें")}
               </h2>
-              <p className="mt-4 max-w-2xl text-lg leading-[1.6] text-[var(--body)]">
+              <p className="mt-4 max-w-2xl text-lg leading-[1.6] text-[var(--text)]">
                 {say(
                   "Whatever is happening, there is a path. Choose the one that sounds closest to yours.",
                   "जो भी हुआ है, मदद का रास्ता है। अपनी स्थिति के सबसे करीब विकल्प चुनें।",
@@ -190,15 +192,15 @@ export default async function GetHelpPage() {
                   <Link
                     key={s.title}
                     href={s.href}
-                    className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                    className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
                   >
-                    <h3 className="text-[17px] font-medium leading-snug text-[var(--heading)]">
+                    <h3 className="text-[17px] font-medium leading-snug text-[var(--ink)]">
                       &ldquo;{locale === "hi" ? hindi.scenarios[i].title : s.title}&rdquo;
                     </h3>
-                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
+                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
                       {locale === "hi" ? hindi.scenarios[i].action : s.action}
                     </p>
-                    <span className="mt-4 inline-block text-sm font-medium text-[var(--color-off-black)]">
+                    <span className="mt-4 inline-block text-sm font-medium text-[var(--ink)]">
                       {say("What to do", "क्या करें")}{" "}
                       <span className="transition-transform group-hover:translate-x-0.5 inline-block" aria-hidden>
                         →
@@ -218,11 +220,11 @@ export default async function GetHelpPage() {
               <span className="eyebrow">{say("The four steps", "चार चरण")}</span>
               <h2
                 id="steps-heading"
-                className="font-display mt-4 text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]"
+                className="section-title mt-4"
               >
                 {say("What to do, step by step", "एक-एक चरण में क्या करें")}
               </h2>
-              <p className="mt-4 text-lg leading-[1.6] text-[var(--body)]">
+              <p className="mt-4 text-lg leading-[1.6] text-[var(--text)]">
                 {say(
                   "The same four steps work for a shared image, a threat, or blackmail. Do what you can, in order.",
                   "तस्वीर साझा होने, धमकी या ब्लैकमेल की स्थिति में ये चरण मदद कर सकते हैं। जितना संभव हो, क्रम से करें।",
@@ -233,15 +235,15 @@ export default async function GetHelpPage() {
               {steps.map((s, i) => (
                 <li
                   key={s.n}
-                  className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm"
+                  className="rounded-[var(--radius-box)] surface-card p-6"
                 >
-                  <span className="font-display text-[var(--color-off-black)] text-2xl font-medium">
+                  <span className="step-badge">
                     {s.n}
                   </span>
-                  <h3 className="mt-2 text-[18px] font-medium text-[var(--heading)]">
+                  <h3 className="mt-2 text-[18px] font-medium text-[var(--ink)]">
                     {locale === "hi" ? hindi.steps[i].title : s.title}
                   </h3>
-                  <p className="mt-2 text-sm leading-[1.65] text-[var(--body)]">
+                  <p className="mt-2 text-sm leading-[1.65] text-[var(--text)]">
                     {locale === "hi" ? hindi.steps[i].body : s.body}
                   </p>
                 </li>
@@ -256,24 +258,24 @@ export default async function GetHelpPage() {
             <div className="mx-auto max-w-5xl">
               <h2
                 id="tools-heading"
-                className="font-display text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]"
+                className="section-title"
               >
                 {say("The tools you can use now", "अभी उपलब्ध साधन")}
               </h2>
               <div className="mt-10 grid gap-8 md:grid-cols-3">
                 {tools.map((tool, i) => (
-                  <div key={tool.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)]">
-                    <p className="text-xs font-medium uppercase tracking-[-0.033em] text-[var(--color-off-black)]">
+                  <div key={tool.title} className="flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 shadow-[var(--shadow-sm)]">
+                    <p className="eyebrow text-[var(--ink)]">
                       {locale === "hi" ? hindi.tools[i].tag : tool.tag}
                     </p>
-                    <h3 className="mt-3 text-[19px] font-medium text-[var(--heading)]">
+                    <h3 className="mt-3 text-[19px] font-medium text-[var(--ink)]">
                       {locale === "hi" ? hindi.tools[i].title : tool.title}
                     </h3>
-                    <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--muted)]">
+                    <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--text-muted)]">
                       {locale === "hi" ? hindi.tools[i].body : tool.body}
                     </p>
                     <div className="mt-6">
-                      <Link href={tool.href} className="btn btn-midnight btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                      <Link href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
                         {locale === "hi" ? hindi.tools[i].cta : tool.cta}
                       </Link>
                     </div>
@@ -288,10 +290,10 @@ export default async function GetHelpPage() {
         <section className="zone-white section-pad !pt-0" aria-labelledby="honest-heading">
           <div className="container">
             <div className="mx-auto max-w-5xl">
-              <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-8 md:p-12">
+              <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--surface-muted)] p-8 md:p-12">
                 <h2
                   id="honest-heading"
-                  className="font-display text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-[1.15]"
+                  className="section-title"
                 >
                   {say("What a takedown can and cannot do", "हटाने की कार्रवाई से क्या हो सकता है और क्या नहीं")}
                 </h2>
@@ -300,7 +302,7 @@ export default async function GetHelpPage() {
                     <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--success)]">
                       {say("What it can do", "क्या संभव है")}
                     </p>
-                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--body)]">
+                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--text)]">
                       <li>{say("Get content removed from platforms that respond.", "कार्रवाई करने वाले प्लेटफ़ॉर्म से सामग्री हटवाई जा सकती है।")}</li>
                       <li>{say("Ask search engines to stop showing it in results.", "खोज परिणामों से सामग्री हटाने का अनुरोध किया जा सकता है।")}</li>
                       <li>{say("Track each reported link and submit a new link if content reappears.", "हर रिपोर्ट किए लिंक की स्थिति देखें; सामग्री दोबारा दिखे तो नया लिंक दें।")}</li>
@@ -310,7 +312,7 @@ export default async function GetHelpPage() {
                     <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--warning)]">
                       {say("What it cannot do", "क्या नहीं हो सकता")}
                     </p>
-                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--body)]">
+                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--text)]">
                       <li>{say("Erase content from the whole internet or private devices.", "पूरे इंटरनेट या निजी डिवाइस से सामग्री मिटाने की गारंटी नहीं है।")}</li>
                       <li>{say("Force a platform that ignores the law to act instantly.", "किसी प्लेटफ़ॉर्म से तुरंत कार्रवाई करवाने की गारंटी नहीं है।")}</li>
                       <li>{say("Promise a result. We tell you exactly where things stand.", "किसी परिणाम का वादा नहीं है; हम स्थिति साफ़ बताते हैं।")}</li>
@@ -326,17 +328,17 @@ export default async function GetHelpPage() {
         <section className="zone-sunset" aria-label={say("Get started", "शुरू करें")}>
           <div className="zone-sunset-content container section-pad text-center">
             <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[clamp(1.9rem,4.5vw,3rem)] font-medium leading-[1.12]">
+              <h2 className="section-title">
                 {say("You do not have to deal with this alone.", "आपको इसका सामना अकेले नहीं करना है।")}
               </h2>
-              <p className="mx-auto mt-5 max-w-lg text-lg leading-[1.65] text-[var(--body)]">
+              <p className="mx-auto mt-5 max-w-lg text-lg leading-[1.65] text-[var(--text)]">
                 {say(
                   "Start when you are ready. Every step is confidential, and you stay in control the whole way.",
                   "जब तैयार हों, तब शुरू करें। हर चरण गोपनीय है और फ़ैसला आपके हाथ में रहता है।",
                 )}
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/start">
+                <Link className="btn btn-primary btn-arrow !m-0" href="/start">
                   {say("Start a report", "रिपोर्ट शुरू करें")}
                 </Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/resources">

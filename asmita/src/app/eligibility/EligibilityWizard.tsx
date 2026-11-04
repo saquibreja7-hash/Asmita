@@ -1,251 +1,193 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { forgetEligibility, rememberEligibleAdult } from "@/lib/eligibility";
-import { t, type Locale } from "@/lib/i18n";
+import { t, type Locale, type MessageKey } from "@/lib/i18n";
 
 type Stop = "other" | "content" | null;
+type Outcome = "next" | "minor" | Stop;
 
-// Every eligibility question on one screen. Anyone who is under 18, or was
-// (or is not sure they were) when the content was made, goes to the minor
-// pathway before anything else is asked.
+type Question = {
+  title: MessageKey;
+  sub?: MessageKey;
+  options: { label: MessageKey; outcome: Outcome }[];
+};
+
+// One question per screen; tapping an answer moves on. Age comes first, so
+// anyone who is under 18, or was (or is not sure they were) when the content
+// was made, goes to the minor pathway before anything else is asked.
+const QUESTIONS: Question[] = [
+  {
+    title: "eligibility.ageNow.title",
+    sub: "eligibility.single.sub",
+    options: [
+      { label: "eligibility.ageNow.adult", outcome: "next" },
+      { label: "eligibility.ageNow.minor", outcome: "minor" },
+    ],
+  },
+  {
+    title: "eligibility.ageThen.title",
+    sub: "eligibility.ageThen.sub",
+    options: [
+      { label: "eligibility.ageThen.adult", outcome: "next" },
+      { label: "eligibility.ageThen.minor", outcome: "minor" },
+    ],
+  },
+  {
+    title: "eligibility.who.title",
+    options: [
+      { label: "eligibility.who.myself", outcome: "next" },
+      { label: "eligibility.who.other", outcome: "other" },
+    ],
+  },
+  {
+    title: "eligibility.intimate.title",
+    sub: "eligibility.intimate.sub",
+    options: [
+      { label: "eligibility.intimate.yes", outcome: "next" },
+      { label: "eligibility.intimate.no", outcome: "content" },
+    ],
+  },
+];
+
 export function EligibilityWizard({ locale }: { locale: Locale }) {
   const router = useRouter();
-  const [who, setWho] = useState<"myself" | "other" | "">("");
-  const [intimate, setIntimate] = useState<"yes" | "no" | "">("");
-  const [ageNow, setAgeNow] = useState<"adult" | "minor" | "">("");
-  const [ageThen, setAgeThen] = useState<"adult" | "minor" | "">("");
+  const [index, setIndex] = useState(0);
   const [stop, setStop] = useState<Stop>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
 
-  const answered = Boolean(who && intimate && (ageNow === "minor" || (ageNow && ageThen)));
+  // Move focus to each new question so screen readers announce it.
+  useEffect(() => {
+    if (index > 0 || stop) heading.current?.focus({ preventScroll: true });
+  }, [index, stop]);
 
-  function next() {
-    if (ageNow === "minor" || ageThen === "minor") {
+  function answer(outcome: Outcome) {
+    if (outcome === "minor") {
       forgetEligibility();
       router.push("/minor-support");
       return;
     }
-    if (who === "other") return setStop("other");
-    if (intimate === "no") return setStop("content");
+    if (outcome !== "next") return setStop(outcome);
+    if (index < QUESTIONS.length - 1) return setIndex(index + 1);
     rememberEligibleAdult();
     router.push("/submit");
   }
 
   if (stop === "other") {
     return (
-      <WizardShell title={t(locale, "eligibility.stop.other.title")}>
-        <p className="muted mt-1 text-sm leading-[1.75]">
-          {t(locale, "eligibility.stop.other.sub1")}
-        </p>
-        <p className="muted mt-3 text-sm leading-[1.75]">
-          {t(locale, "eligibility.stop.other.sub2")}
-        </p>
-        <div className="mt-6 space-y-3">
-          <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
-            {t(locale, "eligibility.stop.other.orgs")}
-          </p>
-          <ResourceLink name="iCall - Psychosocial Support" contact="9152987821" href="tel:9152987821">
-            {t(locale, "eligibility.stop.other.icall.body")}
-          </ResourceLink>
-          <ResourceLink name="National Cybercrime Portal" contact="cybercrime.gov.in" href="https://cybercrime.gov.in/" external>
-            {t(locale, "eligibility.stop.other.ncrp.body")}
-          </ResourceLink>
-        </div>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <button className="btn btn-secondary" onClick={() => setStop(null)} type="button">
-            {t(locale, "eligibility.stop.other.goBack")}
-          </button>
-          <Link className="btn btn-secondary" href="/">{t(locale, "eligibility.stop.other.returnHome")}</Link>
-        </div>
-      </WizardShell>
+      <StopScreen
+        locale={locale}
+        headingRef={heading}
+        title={t(locale, "eligibility.stop.other.title")}
+        onBack={() => setStop(null)}
+        orgsLabel={t(locale, "eligibility.stop.other.orgs")}
+        intro={
+          <>
+            <p className="muted mt-3 text-base leading-[1.7]">{t(locale, "eligibility.stop.other.sub1")}</p>
+            <p className="muted mt-3 text-base leading-[1.7]">{t(locale, "eligibility.stop.other.sub2")}</p>
+          </>
+        }
+      >
+        <ResourceLink name="iCall - Psychosocial Support" contact="9152987821" href="tel:9152987821">
+          {t(locale, "eligibility.stop.other.icall.body")}
+        </ResourceLink>
+        <ResourceLink name="National Cybercrime Portal" contact="cybercrime.gov.in" href="https://cybercrime.gov.in/" external>
+          {t(locale, "eligibility.stop.other.ncrp.body")}
+        </ResourceLink>
+      </StopScreen>
     );
   }
 
   if (stop === "content") {
     return (
-      <WizardShell title={t(locale, "eligibility.stop.content.title")}>
-        <p className="muted mt-1 text-sm leading-[1.75]">
-          {t(locale, "eligibility.stop.content.sub")}
-        </p>
-        <div className="mt-6 space-y-3">
-          <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
-            {t(locale, "eligibility.stop.content.orgs")}
-          </p>
-          <ResourceLink name="National Cybercrime Portal" contact="cybercrime.gov.in" href="https://cybercrime.gov.in/" external>
-            {t(locale, "eligibility.stop.content.ncrp.body")}
-          </ResourceLink>
-          <ResourceLink name="iCall - Psychosocial Support" contact="9152987821" href="tel:9152987821">
-            {t(locale, "eligibility.stop.content.icall.body")}
-          </ResourceLink>
-        </div>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <button className="btn btn-secondary" onClick={() => setStop(null)} type="button">
-            {t(locale, "eligibility.stop.other.goBack")}
-          </button>
-          <Link className="btn btn-secondary" href="/">{t(locale, "eligibility.stop.other.returnHome")}</Link>
-        </div>
-      </WizardShell>
+      <StopScreen
+        locale={locale}
+        headingRef={heading}
+        title={t(locale, "eligibility.stop.content.title")}
+        onBack={() => setStop(null)}
+        orgsLabel={t(locale, "eligibility.stop.content.orgs")}
+        intro={<p className="muted mt-3 text-base leading-[1.7]">{t(locale, "eligibility.stop.content.sub")}</p>}
+      >
+        <ResourceLink name="National Cybercrime Portal" contact="cybercrime.gov.in" href="https://cybercrime.gov.in/" external>
+          {t(locale, "eligibility.stop.content.ncrp.body")}
+        </ResourceLink>
+        <ResourceLink name="iCall - Psychosocial Support" contact="9152987821" href="tel:9152987821">
+          {t(locale, "eligibility.stop.content.icall.body")}
+        </ResourceLink>
+      </StopScreen>
     );
   }
 
-  return (
-    <WizardShell title={t(locale, "eligibility.single.title")}>
-      <p className="muted mt-1 text-sm leading-[1.75]">
-        {t(locale, "eligibility.single.sub")}
-      </p>
-
-      <details className="mt-6 rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4">
-        <summary className="cursor-pointer text-sm font-medium text-[var(--foreground)]">
-          {t(locale, "eligibility.step.accept.title")}
-        </summary>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <InfoBox title={t(locale, "eligibility.canHelp.title")}>
-            <ul className="mt-3 space-y-2 text-sm leading-[1.65]">
-              <li>{t(locale, "eligibility.canHelp.item1")}</li>
-              <li>{t(locale, "eligibility.canHelp.item2")}</li>
-              <li>{t(locale, "eligibility.canHelp.item3")}</li>
-              <li>{t(locale, "eligibility.canHelp.item4")}</li>
-            </ul>
-          </InfoBox>
-          <InfoBox title={t(locale, "eligibility.cannotHelp.title")}>
-            <ul className="mt-3 space-y-2 text-sm leading-[1.65]">
-              <li>{t(locale, "eligibility.cannotHelp.item1")}</li>
-              <li>{t(locale, "eligibility.cannotHelp.item2")}</li>
-              <li>{t(locale, "eligibility.cannotHelp.item3")}</li>
-              <li>{t(locale, "eligibility.cannotHelp.item4")}</li>
-            </ul>
-          </InfoBox>
-        </div>
-        <p className="mt-3 text-sm leading-[1.7] text-[var(--muted)]">
-          <span className="font-medium text-[var(--foreground)]">{t(locale, "eligibility.limits.bold")}</span>{" "}
-          {t(locale, "eligibility.limits.rest")}
-        </p>
-      </details>
-
-      <Question title={t(locale, "eligibility.step.who.title")}>
-        <ChoiceOption
-          label={t(locale, "eligibility.who.myself.label")}
-          sublabel={t(locale, "eligibility.who.myself.sub")}
-          checked={who === "myself"}
-          onSelect={() => setWho("myself")}
-        />
-        <ChoiceOption
-          label={t(locale, "eligibility.who.other.label")}
-          sublabel={t(locale, "eligibility.who.other.sub")}
-          checked={who === "other"}
-          onSelect={() => setWho("other")}
-        />
-      </Question>
-
-      <Question title={t(locale, "eligibility.step.intimate.title")}>
-        <ChoiceOption
-          label={t(locale, "eligibility.intimate.yes.label")}
-          sublabel={t(locale, "eligibility.intimate.yes.sub")}
-          checked={intimate === "yes"}
-          onSelect={() => setIntimate("yes")}
-        />
-        <ChoiceOption
-          label={t(locale, "eligibility.intimate.no.label")}
-          sublabel={t(locale, "eligibility.intimate.no.sub")}
-          checked={intimate === "no"}
-          onSelect={() => setIntimate("no")}
-        />
-      </Question>
-
-      <Question title={t(locale, "eligibility.ageNow.title")}>
-        <ChoiceOption label={t(locale, "auth.ageAdult")} checked={ageNow === "adult"} onSelect={() => setAgeNow("adult")} />
-        <ChoiceOption label={t(locale, "auth.ageMinor")} checked={ageNow === "minor"} onSelect={() => setAgeNow("minor")} />
-      </Question>
-
-      {ageNow !== "minor" && (
-        <Question title={t(locale, "eligibility.ageThen.title")} sub={t(locale, "eligibility.ageThen.sub")}>
-          <ChoiceOption label={t(locale, "auth.ageThenAdult")} checked={ageThen === "adult"} onSelect={() => setAgeThen("adult")} />
-          <ChoiceOption label={t(locale, "auth.ageThenMinor")} checked={ageThen === "minor"} onSelect={() => setAgeThen("minor")} />
-        </Question>
-      )}
-
-      <div className="mt-8 flex justify-end">
-        <button className="btn btn-primary" disabled={!answered} onClick={next} type="button">
-          {t(locale, "eligibility.cta.continueBtn")}
-        </button>
-      </div>
-    </WizardShell>
-  );
-}
-
-function Question({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
-  return (
-    <fieldset className="mt-8 space-y-3">
-      <legend className="text-[17px] font-medium leading-[1.3] text-[var(--foreground)]">{title}</legend>
-      {sub && <p className="muted text-sm leading-[1.6]">{sub}</p>}
-      {children}
-    </fieldset>
-  );
-}
-
-function WizardShell({ title, children }: { title: string; children: React.ReactNode }) {
+  const question = QUESTIONS[index];
   return (
     <div>
-      <h2 className="text-[26px] font-medium leading-[1.2] tracking-tight md:text-[32px]">{title}</h2>
-      {children}
+      <div className="flex items-center justify-between text-sm text-[var(--text-muted)]">
+        {index > 0 ? (
+          <button className="underline underline-offset-4" onClick={() => setIndex(index - 1)} type="button">
+            {t(locale, "eligibility.q.back")}
+          </button>
+        ) : (
+          <span />
+        )}
+        <span>
+          {t(locale, "eligibility.q.label")} {index + 1} / {QUESTIONS.length}
+        </span>
+      </div>
+
+      <h2 ref={heading} tabIndex={-1} className="section-title mt-6 outline-none">
+        {t(locale, question.title)}
+      </h2>
+      {question.sub && <p className="muted mt-3 text-base leading-[1.6]">{t(locale, question.sub)}</p>}
+
+      <div className="mt-8 grid gap-3">
+        {question.options.map((option) => (
+          <button
+            key={option.label}
+            className="min-h-[64px] w-full rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-5 py-4 text-left text-[18px] font-medium leading-[1.35] text-[var(--ink)] transition-colors hover:border-[var(--ink)] hover:bg-[var(--brand-soft)] focus-visible:border-[var(--ink)]"
+            onClick={() => answer(option.outcome)}
+            type="button"
+          >
+            {t(locale, option.label)}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
-function ChoiceOption({
-  label,
-  sublabel,
-  checked,
-  onSelect,
-}: {
-  label: string;
-  sublabel?: string;
-  checked: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <label
-      className={`flex cursor-pointer items-start gap-3 rounded-[24px] border p-4 text-left transition-colors ${
-        checked
-          ? "border-[var(--teal)] bg-[var(--teal-soft)]"
-          : "border-[var(--hairline)] bg-[var(--background)] hover:border-[var(--border)]"
-      }`}
-    >
-      <input
-        type="radio"
-        checked={checked}
-        onChange={onSelect}
-        className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--teal)]"
-      />
-      <span>
-        <span className="block text-[15px] font-medium leading-[1.4] text-[var(--foreground)] md:text-[17px]">
-          {label}
-        </span>
-        {sublabel && (
-          <span className="mt-1 block text-sm leading-[1.6] text-[var(--muted)]">
-            {sublabel}
-          </span>
-        )}
-      </span>
-    </label>
-  );
-}
-
-function InfoBox({
+function StopScreen({
+  locale,
+  headingRef,
   title,
+  intro,
+  orgsLabel,
+  onBack,
   children,
 }: {
+  locale: Locale;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
   title: string;
+  intro: React.ReactNode;
+  orgsLabel: string;
+  onBack: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4">
-      <p className="text-[14px] font-medium leading-[1.3] text-[var(--foreground)]">
+    <div>
+      <h2 ref={headingRef} tabIndex={-1} className="section-title outline-none">
         {title}
-      </p>
-      <div className="text-[var(--muted)]">{children}</div>
+      </h2>
+      {intro}
+      <p className="mt-8 text-sm font-medium text-[var(--text-muted)]">{orgsLabel}</p>
+      <div className="mt-3 space-y-3">{children}</div>
+      <div className="mt-8 flex flex-wrap gap-3">
+        <button className="btn btn-secondary" onClick={onBack} type="button">
+          {t(locale, "eligibility.stop.other.goBack")}
+        </button>
+        <Link className="btn btn-secondary" href="/">{t(locale, "eligibility.stop.other.returnHome")}</Link>
+      </div>
     </div>
   );
 }
@@ -264,15 +206,13 @@ function ResourceLink({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-[24px] border border-[var(--border)] bg-[var(--background)] p-4">
-      <p className="text-[15px] font-medium leading-[1.3] text-[var(--foreground)]">
-        {name}
-      </p>
+    <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-4">
+      <p className="text-[16px] font-medium leading-[1.3] text-[var(--ink)]">{name}</p>
       <a
         href={href}
         target={external ? "_blank" : undefined}
         rel={external ? "noopener noreferrer" : undefined}
-        className="mt-1 block font-mono text-[14px] text-[var(--teal-dark)] underline decoration-transparent underline-offset-4 transition-colors hover:decoration-[var(--teal-dark)]"
+        className="mt-1 block text-[15px] text-[var(--brand-strong)] underline underline-offset-4"
       >
         {contact}
         {external && <span className="sr-only"> (opens in new tab)</span>}

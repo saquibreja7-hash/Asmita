@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { IBM_Plex_Mono, Newsreader } from "next/font/google";
+import { Noto_Sans } from "next/font/google";
 import "@fontsource/noto-sans-devanagari/400.css";
-import "@fontsource/noto-sans-devanagari/700.css";
-import "@fontsource/noto-serif-devanagari/400.css";
+import "@fontsource/noto-sans-devanagari/500.css";
+import "@fontsource/noto-sans-devanagari/600.css";
 import "./globals.css";
 
 const siteUrl = new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://meriasmita.org");
@@ -12,22 +12,13 @@ const siteDescription =
   "Free, confidential support for Indian women reporting non-consensual intimate content.";
 
 /*
- * Editorial system (see DESIGN.md): serif for headings at weight 400 only,
- * monospace for every body and UI string.
- * Newsreader stands in for Untitled Serif; IBM Plex Mono for ABC Diatype Mono.
+ * One plain sans for everything (see docs/design/03-design-system.md).
+ * Noto Sans pairs with Noto Sans Devanagari, so English and Hindi match.
  */
-const serif = Newsreader({
-  variable: "--font-serif",
+const sans = Noto_Sans({
+  variable: "--font-ui",
   subsets: ["latin"],
-  weight: ["400"],
-  style: ["normal", "italic"],
-  display: "swap",
-});
-
-const mono = IBM_Plex_Mono({
-  variable: "--font-mono-ui",
-  subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["400", "500", "600"],
   display: "swap",
 });
 
@@ -81,7 +72,7 @@ export default async function RootLayout({
   return (
     <html
       lang={lang}
-      className={`${serif.variable} ${mono.variable} h-full antialiased`}
+      className={`${sans.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         {children}

@@ -25,10 +25,10 @@ export default async function DirectoryPage() {
                   {say("Resources", "संसाधन")}
                 </Link>
               </p>
-              <h1 className="font-display mt-4 text-[clamp(2.25rem,5.5vw,3.75rem)] font-medium leading-[1.06] text-[var(--heading)]">
+              <h1 className="page-title mt-4">
                 {say("Support directory", "सहायता सूची")}
               </h1>
-              <p className="font-size-large mt-5 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mt-5 max-w-2xl text-[var(--ink)]">
                 {say("Public helplines and support services in India. Availability and hours can change; check the linked service before relying on it.", "भारत की सार्वजनिक हेल्पलाइन और सहायता सेवाएँ। उपलब्धता और समय बदल सकते हैं; सेवा पर भरोसा करने से पहले उसका लिंक जाँचें।")}
               </p>
               <p className="eyebrow mt-6">
@@ -43,26 +43,26 @@ export default async function DirectoryPage() {
             <div className="mx-auto max-w-3xl space-y-12">
               {directory.map((group, groupIndex) => (
                 <div key={group.group}>
-                  <h2 className="font-display text-[clamp(1.2rem,2.5vw,1.6rem)] font-medium text-[var(--heading)]">
+                  <h2 className="subsection-title">
                     {say(group.group, directoryHi[groupIndex].group)}
                   </h2>
                   <ul className="mt-5 space-y-3">
                     {group.items.map((item, itemIndex) => (
                       <li
                         key={item.name}
-                        className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-6 shadow-[var(--shadow-sm)]"
+                        className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 shadow-[var(--shadow-sm)]"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="max-w-xl">
-                            <p className="text-[16px] font-medium text-[var(--heading)]">
+                            <p className="text-[16px] font-medium text-[var(--ink)]">
                               {say(item.name, directoryHi[groupIndex].items[itemIndex].name)}
                               {item.note && (
-                                <span className="ml-2 rounded-full bg-[var(--teal-soft)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-[-0.033em] text-[var(--heading)]">
+                                <span className="ml-2 rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[11px] font-medium uppercase tracking-[-0.033em] text-[var(--ink)]">
                                   {say(item.note, "note" in directoryHi[groupIndex].items[itemIndex] ? directoryHi[groupIndex].items[itemIndex].note : item.note)}
                                 </span>
                               )}
                             </p>
-                            <p className="mt-1.5 text-sm leading-[1.6] text-[var(--muted)]">
+                            <p className="mt-1.5 text-sm leading-[1.6] text-[var(--text-muted)]">
                               {say(item.what, directoryHi[groupIndex].items[itemIndex].what)}
                             </p>
                           </div>
@@ -70,7 +70,7 @@ export default async function DirectoryPage() {
                             {item.tel && (
                               <a
                                 href={`tel:${item.tel}`}
-                                className="btn btn-midnight !m-0 !min-h-[40px] !px-4 !text-[14px]"
+                                className="btn btn-primary !m-0 !min-h-[40px] !px-4 !text-[14px]"
                               >
                                 {say("Call", "कॉल करें")} {item.tel}
                               </a>
@@ -99,11 +99,11 @@ export default async function DirectoryPage() {
         <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
           <div className="zone-sunset-content container section-pad text-center">
             <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-medium leading-[1.14]">
+              <h2 className="section-title">
                 {say("Want help preparing a report?", "रिपोर्ट तैयार करने में मदद चाहिए?")}
               </h2>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/get-help">
+                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
                   {say("Get help", "मदद लें")}
                 </Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/resources/legal">

@@ -85,6 +85,8 @@ test("hash-only registration offers a platform handoff", async ({ page }) => {
 test("the fingerprint section is honest about what a fingerprint does and points to StopNCII", async ({ page }) => {
   test.setTimeout(90_000);
   await register(page);
+  // The section is optional and starts folded: open it as a survivor would.
+  await page.locator("summary").filter({ hasText: "Digital fingerprint" }).click();
   await expect(page.getByText(/does not remove anything by itself/)).toBeVisible();
   await expect(page.getByRole("link", { name: "Open StopNCII.org" })).toHaveAttribute("href", "https://stopncii.org/");
   await expect(page.getByText(/find and remove matching content proactively/)).toHaveCount(0);

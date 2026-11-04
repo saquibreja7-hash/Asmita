@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none" stroke="#242424" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+
+<path stroke="none" fill="#d4e9e6" d="M32 186 C 15.199999999999989 66, 149.6 18, 233.6 30 C 351.20000000000005 42, 384.8 138, 351.20000000000005 210 C 317.6 276, 166.4 282, 99.2 264 C 48.79999999999998 252, 35.360000000000014 222, 32 186 Z"/>
+<circle stroke="none" cx="236" cy="108" r="22" fill="#ff9473"/>
+<rect x="140" y="58" width="150" height="152" rx="6"/>
+<path d="M215 58 V210 M140 134 H290"/>
+<path fill="#0a5e5a" d="M290 56 C 312 100, 296 150, 314 210 L 290 210 Z"/>
+<path d="M140 58 C 128 108, 152 160, 126 210"/>
+<path stroke="#242424" stroke-width="2" fill="none" d="M166 92 q5 -5 10 0 q5 -5 10 0"/>
+<path stroke="#242424" stroke-width="2" fill="none" d="M188 116 q4 -4 8 0 q4 -4 8 0"/>
+<path d="M112 210 H318"/><path stroke-width="2" d="M120 219 H310"/>
+<path fill="#ff9473" d="M150 210 L154 186 H180 L184 210 Z"/>
+<path d="M167 186 V156"/>
+<path fill="#9fcac4" d="M167 172 C 160 156, 148 152, 140 156 C 146 166, 156 172, 167 172 Z"/>
+<path fill="#9fcac4" d="M167 164 C 172 148, 184 142, 194 144 C 190 156, 180 162, 167 164 Z"/>
+<path fill="#ecda98" d="M252 210 L247 180 H273 L268 210 Z"/>
+<path stroke-width="2" d="M248 189 H272"/>
+<path stroke-width="2" d="M255 172 c -4 -6 4 -10 0 -16 M265 172 c -4 -6 4 -10 0 -16"/>
+
+</svg>

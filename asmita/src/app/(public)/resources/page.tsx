@@ -1,3 +1,4 @@
+import { Illustration } from "@/components/Illustration";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
@@ -43,16 +44,17 @@ export default async function ResourcesPage() {
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label={say("Resources", "संसाधन")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("Resources", "संसाधन")}</span>
-              <h1 className="font-display mt-5 text-[clamp(2.25rem,5.5vw,4rem)] font-medium leading-[1.06] text-[var(--heading)]">
+              <h1 className="page-title mt-5">
                 {say("Practical help, in one place", "व्यावहारिक मदद, एक जगह")}
               </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say("Guides you can follow, people you can call, and a plain account of what the law gives you. Take what you need.", "काम की मार्गदर्शिकाएँ, सहायता के लिए संपर्क और अपने कानूनी अधिकारों की सरल जानकारी। जो आपके काम आए, उसे चुनें।")}
               </p>
             </div>
+            <Illustration name="page-resources" eager className="page-hero-art" />
           </div>
         </section>
 
@@ -64,15 +66,15 @@ export default async function ResourcesPage() {
                   <Link
                     key={s.title}
                     href={s.href}
-                    className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                    className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
                   >
-                    <h2 className="text-[19px] font-medium text-[var(--heading)]">
+                    <h2 className="subsection-title">
                       {say(s.title, hindiSections[index].title)}
                     </h2>
-                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--muted)]">
+                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
                       {say(s.body, hindiSections[index].body)}
                     </p>
-                    <span className="mt-5 inline-block text-sm font-medium text-[var(--color-off-black)]">
+                    <span className="mt-5 inline-block text-sm font-medium text-[var(--ink)]">
                       {say(s.cta, hindiSections[index].cta)}{" "}
                       <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
                         →
@@ -88,11 +90,11 @@ export default async function ResourcesPage() {
         <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
           <div className="zone-sunset-content container section-pad text-center">
             <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-medium leading-[1.14]">
+              <h2 className="section-title">
                 {say("Need to act now?", "अभी कदम उठाना है?")}
               </h2>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/get-help">
+                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
                   {say("Get help", "मदद लें")}
                 </Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/resources/directory">

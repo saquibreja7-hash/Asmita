@@ -50,10 +50,10 @@ export default async function InternalAnalyticsPage() {
   return (
     <section>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Console · Analytics · Internal only
         </p>
-        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+        <h1 className="page-title-sm mt-3">
           Analytics dashboard
         </h1>
         <p className="muted mt-3 max-w-2xl text-sm leading-[1.7]">
@@ -86,10 +86,10 @@ export default async function InternalAnalyticsPage() {
       </div>
 
       <section className="mt-14">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Beta KPI tracker
         </p>
-        <h2 className="font-display mt-3 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[28px]">
+        <h2 className="section-title mt-3">
           Pre-launch indicators.
         </h2>
         <div className="mt-6 grid gap-6 md:grid-cols-4">
@@ -112,17 +112,17 @@ function AnalyticsTable({
   labelKey: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
-      <h2 className="font-display border-b border-[var(--hairline)] p-4 text-[18px] tracking-tight">
+    <div className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <h2 className="subsection-title border-b border-[var(--line)] p-4">
         {title}
       </h2>
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-[var(--hairline)]">
-            <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+          <tr className="border-b border-[var(--line)]">
+            <th className="eyebrow p-4">
               Label
             </th>
-            <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+            <th className="eyebrow p-4">
               Count
             </th>
           </tr>
@@ -131,7 +131,7 @@ function AnalyticsTable({
           {rows.length ? (
             rows.map((row) => (
               <tr
-                className="border-t border-[var(--hairline)]"
+                className="border-t border-[var(--line)]"
                 key={String(row[labelKey])}
               >
                 <td className="p-4">{row[labelKey]}</td>
@@ -139,7 +139,7 @@ function AnalyticsTable({
               </tr>
             ))
           ) : (
-            <tr className="border-t border-[var(--hairline)]">
+            <tr className="border-t border-[var(--line)]">
               <td className="muted p-4" colSpan={2}>
                 No data yet.
               </td>
@@ -162,11 +162,11 @@ function Metric({
 }) {
   return (
     <div>
-      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+      <p className="eyebrow">
         {label}
       </p>
       <p
-        className={`font-display mt-2 leading-none tracking-tight text-[var(--foreground)] tabular-nums ${
+        className={`font-display mt-2 leading-none tracking-tight text-[var(--ink)] tabular-nums ${
           small ? "text-[26px]" : "text-[36px]"
         }`}
       >

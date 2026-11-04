@@ -53,9 +53,9 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
     <div className="space-y-8">
 
       {/* PDF Preview */}
-      <div className="overflow-hidden rounded-[24px] border border-[var(--border)]">
-        <div className="border-b border-[var(--hairline)] bg-[var(--surface)] px-5 py-3">
-          <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
+      <div className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)]">
+        <div className="border-b border-[var(--line)] bg-[var(--page)] px-5 py-3">
+          <p className="eyebrow">
             {t(locale, "sign.preview.label")} - {platformName}
           </p>
         </div>
@@ -68,11 +68,11 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       </div>
 
       {/* Survivor details */}
-      <div className="space-y-5 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6">
-        <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "sign.details.title")}</p>
+      <div className="space-y-5 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
+        <p className="text-sm font-medium text-[var(--ink)]">{t(locale, "sign.details.title")}</p>
 
         <div>
-          <label htmlFor="sign-name" className="block text-sm font-medium text-[var(--foreground)]">
+          <label htmlFor="sign-name" className="block text-sm font-medium text-[var(--ink)]">
             {t(locale, "sign.name.label")}
           </label>
           <p className="muted mt-1 text-sm">{t(locale, "sign.name.sub")}</p>
@@ -89,7 +89,7 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
         </div>
 
         <div>
-          <label htmlFor="sign-contact" className="block text-sm font-medium text-[var(--foreground)]">
+          <label htmlFor="sign-contact" className="block text-sm font-medium text-[var(--ink)]">
             {t(locale, "sign.contact.label")}
           </label>
           <p className="muted mt-1 text-sm">{t(locale, "sign.contact.sub")}</p>
@@ -107,15 +107,15 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       </div>
 
       {/* Signature */}
-      <div className="space-y-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6">
-        <p className="text-sm font-medium text-[var(--foreground)]">{t(locale, "sign.sig.title")}</p>
+      <div className="space-y-4 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
+        <p className="text-sm font-medium text-[var(--ink)]">{t(locale, "sign.sig.title")}</p>
         <p className="muted text-sm leading-[1.6]">
           {t(locale, "sign.sig.sub")}
         </p>
         <input
           id="sign-signature"
           type="text"
-          className="field font-display text-[18px] italic"
+          className="field font-display text-[18px]"
           placeholder={t(locale, "sign.sig.placeholder")}
           value={signature}
           onChange={(e) => setSignature(e.target.value)}
@@ -129,17 +129,17 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       <label className="flex cursor-pointer items-start gap-3">
         <input
           type="checkbox"
-          className="mt-1 h-4 w-4 shrink-0 accent-[var(--teal)]"
+          className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand)]"
           checked={agreed}
           onChange={(e) => setAgreed(e.target.checked)}
         />
-        <span className="text-sm leading-[1.65] text-[var(--foreground)]">
+        <span className="text-sm leading-[1.65] text-[var(--ink)]">
           {t(locale, "sign.agree.prefix")} {platformName} {t(locale, "sign.agree.suffix")}
         </span>
       </label>
 
       {error && (
-        <p className="text-sm font-medium text-[var(--rose)]">{error}</p>
+        <p className="text-sm font-medium text-[var(--danger)]">{error}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">

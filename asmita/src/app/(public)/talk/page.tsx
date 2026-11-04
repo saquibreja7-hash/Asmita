@@ -24,11 +24,8 @@ export default async function TalkPage() {
       <div className="page-canvas">
         <section className="container pb-24 pt-20 md:pb-32 md:pt-28">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {t(locale, "talk.pill")}
-            </span>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[60px] md:leading-[1.06]">
+            <span className="eyebrow">{t(locale, "talk.pill")}</span>
+            <h1 className="page-title mt-8">
               {t(locale, "talk.title")}
             </h1>
             <p className="muted mt-6 max-w-lg text-base leading-[1.7] md:text-lg">{t(locale, "talk.intro")}</p>

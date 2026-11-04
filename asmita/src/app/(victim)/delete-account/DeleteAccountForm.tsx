@@ -26,10 +26,10 @@ export function DeleteAccountForm({ locale }: { locale: Locale }) {
   if (done) {
     return (
       <div className="text-center">
-        <p className="font-mono text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
+        <p className="eyebrow">
           {t(locale, "delete.done.eyebrow")}
         </p>
-        <p className="font-display mt-4 text-[24px] leading-[1.3] tracking-tight text-[var(--foreground)] md:text-[32px]">
+        <p className="font-display mt-4 text-[24px] leading-[1.3] tracking-tight text-[var(--ink)] md:text-[32px]">
           {t(locale, "delete.done.title")}
         </p>
         <p className="muted mx-auto mt-5 max-w-md text-base leading-[1.75]">
@@ -41,10 +41,10 @@ export function DeleteAccountForm({ locale }: { locale: Locale }) {
 
   return (
     <form onSubmit={submit} className="space-y-6">
-      <p className="font-mono text-center text-[11px] uppercase tracking-[-0.033em] text-[var(--muted)]">
+      <p className="eyebrow text-center">
         {t(locale, "delete.form.eyebrow")}
       </p>
-      <h2 className="font-display -mt-2 text-center text-[24px] font-normal leading-[1.22] tracking-tight md:text-[32px] md:leading-[1.18]">
+      <h2 className="section-title -mt-2 text-center">
         {t(locale, "delete.form.title")}
       </h2>
 
@@ -69,7 +69,7 @@ export function DeleteAccountForm({ locale }: { locale: Locale }) {
       </div>
 
       {message && !done && (
-        <p className="text-center text-sm font-medium text-[var(--rose)]">
+        <p className="text-center text-sm font-medium text-[var(--danger)]">
           {message}
         </p>
       )}

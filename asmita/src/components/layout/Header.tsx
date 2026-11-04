@@ -1,24 +1,9 @@
 import Link from "next/link";
 import { LanguageToggle } from "@/components/layout/LanguageToggle";
 import { MobileMenu } from "@/components/layout/MobileMenu";
-import { t, type Locale } from "@/lib/i18n";
-
-type NavLink =
-  | { href: string; kind: "i18n"; key: Parameters<typeof t>[1] }
-  | { href: string; kind: "static"; en: string; hi: string };
-
-const navLinks: NavLink[] = [
-  { href: "/issue", kind: "static", en: "Issue", hi: "समस्या" },
-  { href: "/what-we-do", kind: "static", en: "What we do", hi: "हम क्या करते हैं" },
-  { href: "/check-image", kind: "i18n", key: "nav.checkImage" },
-  { href: "/resources", kind: "i18n", key: "nav.resources" },
-  { href: "/faq", kind: "i18n", key: "nav.faq" },
-];
-
-function labelFor(locale: Locale, link: NavLink): string {
-  if (link.kind === "static") return locale === "hi" ? link.hi : link.en;
-  return t(locale, link.key);
-}
+import { NavLinks } from "@/components/layout/NavLinks";
+import { navGroups } from "@/components/layout/nav-config";
+import type { Locale } from "@/lib/i18n";
 
 export function Header({ locale }: { locale: Locale }) {
   const isHi = locale === "hi";
@@ -50,15 +35,7 @@ export function Header({ locale }: { locale: Locale }) {
           </Link>
 
           <nav className="hidden items-center lg:flex" aria-label="Primary">
-            <ul className="m-0 flex list-none items-center p-0">
-              {navLinks.map((link) => (
-                <li key={link.href} className="m-0">
-                  <Link href={link.href} className="nav-link">
-                    {labelFor(locale, link)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <NavLinks groups={navGroups(locale)} />
             <div className="ml-4 flex items-center gap-3">
               <LanguageToggle initialLocale={locale} />
               <Link href="/get-help" className="btn btn-primary btn-arrow !min-h-[44px] !px-6">
@@ -69,7 +46,7 @@ export function Header({ locale }: { locale: Locale }) {
 
           <div className="flex items-center gap-2.5 lg:hidden">
             <LanguageToggle initialLocale={locale} />
-            <MobileMenu locale={locale} />
+            <MobileMenu locale={locale} groups={navGroups(locale)} />
           </div>
         </div>
       </header>

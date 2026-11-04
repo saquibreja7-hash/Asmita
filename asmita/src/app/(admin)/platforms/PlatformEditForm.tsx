@@ -90,7 +90,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
           reset();
           setOpen(true);
         }}
-        className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)] underline-offset-4 hover:underline"
+        className="eyebrow text-[var(--brand)] underline-offset-4 hover:underline"
       >
         Edit
       </button>
@@ -100,12 +100,12 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-4 grid gap-3 rounded-[12px] border border-[var(--hairline)] bg-[var(--background)] p-4 text-sm"
+      className="mt-4 grid gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-4 text-sm"
       aria-label={`Edit grievance officer details for ${platformName}`}
     >
       {FIELDS.map((field) => (
         <label key={field.key} className="grid gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
+          <span className="eyebrow">
             {field.label}
           </span>
           <input
@@ -113,13 +113,13 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
             type={field.type}
             defaultValue={current[field.key] ?? ""}
             placeholder={field.placeholder}
-            className="font-mono rounded border border-[var(--hairline)] bg-[var(--color-parchment)] px-3 py-2 text-xs"
+            className="font-mono rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] px-3 py-2 text-xs"
           />
         </label>
       ))}
 
       <label className="grid gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
+        <span className="eyebrow">
           Source URL (required)
         </span>
         <input
@@ -127,7 +127,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
           type="url"
           required
           placeholder="https://help.platform.com/grievance-officer"
-          className="font-mono rounded border border-[var(--hairline)] bg-[var(--color-parchment)] px-3 py-2 text-xs"
+          className="font-mono rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] px-3 py-2 text-xs"
         />
         <span className="muted text-xs">
           Link to the official public page where you verified these details (legal page, transparency report, etc.).
@@ -139,8 +139,8 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
         <span>Mark contact verified by human (sets last-verified timestamp)</span>
       </label>
 
-      {error ? <p className="text-xs text-[var(--rose)]">{error}</p> : null}
-      {success ? <p className="text-xs text-[var(--accent)]">{success}</p> : null}
+      {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
+      {success ? <p className="text-xs text-[var(--brand)]">{success}</p> : null}
 
       <div className="flex gap-3">
         <button

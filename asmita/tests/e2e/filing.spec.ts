@@ -14,6 +14,17 @@ async function registerAdult(page: Page, email: string) {
   await expect(page).toHaveURL(/\/submit$/, { timeout: 30_000 });
 }
 
+// One question per screen: each tap moves on. An under-18 answer leaves for
+// the minor pathway at once, so the later questions are only asked otherwise.
+async function answerEligibility(page: Page, ageThen: string) {
+  await page.goto("/eligibility");
+  await page.getByRole("button", { name: "18 or over", exact: true }).click();
+  await page.getByRole("button", { name: ageThen, exact: true }).click();
+  if (ageThen !== "18 or over") return;
+  await page.getByRole("button", { name: "Me", exact: true }).click();
+  await page.getByRole("button", { name: /^Me nude/ }).click();
+}
+
 test("each pasted line is checked where it is typed, and only valid links reach review", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const detectCalls: string[] = [];
@@ -65,12 +76,7 @@ test("links can be added before the email code, and nothing reaches the server u
     if (/\/api\/(cases|profile|platforms|hashes)/.test(request.url())) apiCalls.push(new URL(request.url()).pathname);
   });
 
-  await page.goto("/eligibility");
-  await page.getByText("I am in the content").click();
-  await page.getByText(/^Yes - it shows me/).click();
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await answerEligibility(page, "18 or over");
   await expect(page).toHaveURL(/\/submit$/);
 
   await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
@@ -93,17 +99,10 @@ test("links can be added before the email code, and nothing reaches the server u
 });
 
 test("someone under 18 when the content was made goes to the minor pathway, even after answering as an adult", async ({ page }) => {
-  const answer = async (ageThen: string) => {
-    await page.goto("/eligibility");
-    await page.getByText("I am in the content").click();
-    await page.getByText(/^Yes - it shows me/).click();
-    await page.getByText("I am 18 years of age or older.").click();
-    await page.getByText(ageThen).click();
-    await page.getByRole("button", { name: "Continue" }).click();
-  };
+  const answer = (ageThen: string) => answerEligibility(page, ageThen);
 
   // First answered as an adult, with a link typed in...
-  await answer("I was 18 or older.");
+  await answer("18 or over");
   await expect(page).toHaveURL(/\/submit$/);
   await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
   await page.getByText(/I declare that I am the person depicted/).click();
@@ -112,7 +111,7 @@ test("someone under 18 when the content was made goes to the minor pathway, even
 
   // ...then as under 18 at the time: minor pathway, and the adult answers,
   // the cookie and the typed link are all gone.
-  await answer("I was under 18, or I am not sure.");
+  await answer("Under 18, or not sure");
   await expect(page).toHaveURL(/\/minor-support$/);
   await expect(page.locator("textarea")).toHaveCount(0);
   expect(await page.evaluate(() => Object.keys(sessionStorage))).toEqual([]);

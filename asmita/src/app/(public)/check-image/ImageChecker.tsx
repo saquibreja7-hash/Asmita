@@ -79,7 +79,7 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
   return (
     <div className="mx-auto max-w-xl">
       {/* AGE GATE */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
+      <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
         <p className="font-display text-[18px] font-normal leading-snug tracking-tight">
           {t(locale, "check.age.title")}
         </p>
@@ -89,14 +89,14 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
             type="checkbox"
             checked={ageConfirmed}
             onChange={(e) => setAgeConfirmed(e.target.checked)}
-            className="mt-1 h-4 w-4 shrink-0 accent-[var(--teal)]"
+            className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand)]"
           />
-          <span className="text-sm leading-[1.6] text-[var(--foreground)]">
+          <span className="text-sm leading-[1.6] text-[var(--ink)]">
             {t(locale, "check.age.confirm")}
           </span>
         </label>
         <p className="mt-4 text-sm">
-          <Link href="/minor-support" className="link-underline text-[var(--muted)]">
+          <Link href="/minor-support" className="link-underline text-[var(--text-muted)]">
             {t(locale, "check.age.minorLink")}{" "}
             <span className="cta-arrow" aria-hidden>→</span>
           </Link>
@@ -115,8 +115,8 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
           aria-hidden={!ageConfirmed}
           tabIndex={ageConfirmed ? 0 : -1}
         />
-        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
-          <p className="font-medium text-[var(--foreground)]">{t(locale, "check.upload.label")}</p>
+        <div className="rounded-[var(--radius-box)] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
+          <p className="font-medium text-[var(--ink)]">{t(locale, "check.upload.label")}</p>
           <p className="muted mt-2 text-sm leading-[1.6]">{t(locale, "check.upload.hint")}</p>
           <button
             type="button"
@@ -143,7 +143,7 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
 
       {/* ERROR */}
       {status === "error" && (
-        <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6">
+        <div className="mt-6 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
           <p className="font-display text-[18px] leading-snug tracking-tight">{t(locale, "check.error.title")}</p>
           <p className="muted mt-3 text-sm leading-[1.7]">{t(locale, "check.error.body")}</p>
         </div>
@@ -154,16 +154,16 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
         <div className="mt-6">
           <span className="eyebrow mb-4 block">{t(locale, "check.result.title")}</span>
           <div
-            className="rounded-xl border p-6"
+            className="rounded-[var(--radius-box)] border p-6"
             style={{
-              borderColor: result.ai ? "var(--saffron)" : "var(--border)",
-              background: result.ai ? "color-mix(in srgb, var(--saffron) 8%, transparent)" : "var(--surface)",
+              borderColor: result.ai ? "var(--brand)" : "var(--line)",
+              background: result.ai ? "color-mix(in srgb, var(--brand) 8%, transparent)" : "var(--page)",
               boxShadow: "var(--shadow-soft)",
             }}
           >
             <p
               className="font-display text-[20px] font-normal leading-[1.3] tracking-tight"
-              style={{ color: result.ai ? "var(--saffron)" : "var(--foreground)" }}
+              style={{ color: result.ai ? "var(--brand)" : "var(--ink)" }}
             >
               {result.ai
                 ? t(locale, "check.result.aiFound.title")
@@ -176,7 +176,7 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
             </p>
 
             {result.ai && (result.tool || result.source || result.signer) && (
-              <dl className="mt-5 space-y-2 border-t border-[var(--hairline)] pt-4 text-sm">
+              <dl className="mt-5 space-y-2 border-t border-[var(--line)] pt-4 text-sm">
                 {result.tool && (
                   <div className="flex gap-3">
                     <dt className="muted w-28 shrink-0">{t(locale, "check.result.tool")}</dt>
@@ -201,7 +201,7 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
             {rawEntries.length > 0 && (
               <details className="mt-4">
                 <summary className="muted cursor-pointer text-xs">{t(locale, "check.result.rawLabel")}</summary>
-                <ul className="mt-2 space-y-1 font-mono text-[11px] text-[var(--muted)]">
+                <ul className="mt-2 space-y-1 font-mono text-[11px] text-[var(--text-muted)]">
                   {rawEntries.map(([k, v]) => (
                     <li key={k} className="break-all">
                       {k}: {v}
@@ -214,7 +214,7 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
 
           {/* DEEPER CHECK (opt-in, sends image to OpenAI). Off-by-default flag. */}
           {deepCheckEnabled && (
-          <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
+          <div className="mt-6 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
             <p className="font-display text-[18px] font-normal leading-snug tracking-tight">
               {t(locale, "check.deep.title")}
             </p>
@@ -228,9 +228,9 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
                     type="checkbox"
                     checked={deepConsent}
                     onChange={(e) => setDeepConsent(e.target.checked)}
-                    className="mt-1 h-4 w-4 shrink-0 accent-[var(--teal)]"
+                    className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand)]"
                   />
-                  <span className="text-sm leading-[1.6] text-[var(--foreground)]">
+                  <span className="text-sm leading-[1.6] text-[var(--ink)]">
                     {t(locale, "check.deep.consent")}
                   </span>
                 </label>
@@ -249,22 +249,22 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
               <p className="muted mt-4 text-sm">{t(locale, "check.deep.checking")}</p>
             )}
             {deepStatus === "error" && (
-              <p className="mt-4 text-sm text-[var(--rose)]">{t(locale, "check.deep.error")}</p>
+              <p className="mt-4 text-sm text-[var(--danger)]">{t(locale, "check.deep.error")}</p>
             )}
 
             {deepStatus === "done" && deepResult && (
               <div
-                className="mt-5 rounded-lg border p-5"
+                className="mt-5 rounded-[var(--radius-box)] border p-5"
                 style={{
-                  borderColor: deepResult.detected ? "var(--saffron)" : "var(--border)",
+                  borderColor: deepResult.detected ? "var(--brand)" : "var(--line)",
                   background: deepResult.detected
-                    ? "color-mix(in srgb, var(--saffron) 8%, transparent)"
+                    ? "color-mix(in srgb, var(--brand) 8%, transparent)"
                     : "transparent",
                 }}
               >
                 <p
                   className="font-display text-[17px] font-normal leading-snug tracking-tight"
-                  style={{ color: deepResult.detected ? "var(--saffron)" : "var(--foreground)" }}
+                  style={{ color: deepResult.detected ? "var(--brand)" : "var(--ink)" }}
                 >
                   {deepResult.detected
                     ? t(locale, "check.deep.result.detected.title")
@@ -276,7 +276,7 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
                     : t(locale, "check.deep.result.none.body")}
                 </p>
                 {deepResult.checks.length > 0 && (
-                  <ul className="mt-3 space-y-1 font-mono text-[11px] text-[var(--muted)]">
+                  <ul className="mt-3 space-y-1 font-mono text-[11px] text-[var(--text-muted)]">
                     {deepResult.checks.map((c) => (
                       <li key={c.type} className="break-all">
                         {c.type}: {c.detected ? "detected" : "not_detected"}

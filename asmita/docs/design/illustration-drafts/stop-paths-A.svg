@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none" stroke="#242424" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+
+<path stroke="none" fill="#d4e9e6" d="M32 186 C 15.199999999999989 66, 149.6 18, 233.6 30 C 351.20000000000005 42, 384.8 138, 351.20000000000005 210 C 317.6 276, 166.4 282, 99.2 264 C 48.79999999999998 252, 35.360000000000014 222, 32 186 Z"/>
+<path stroke="none" fill="#ecda98" d="M150 300 C 160 262 130 240 46 230 L 46 212 C 140 216 186 232 200 250 C 214 232 260 216 354 212 L 354 230 C 270 240 240 262 250 300 Z"/>
+<path stroke-width="4" d="M200 252 V78"/>
+<path fill="#0a5e5a" d="M200 92 H272 L286 106 L272 120 H200 Z"/>
+<path fill="#ff9473" d="M200 132 H128 L114 146 L128 160 H200 Z"/>
+<path fill="#9fcac4" d="M200 172 H264 L278 186 L264 200 H200 Z"/>
+<path fill="#9fcac4" d="M58 214 c -12 -22 22 -32 26 -12 c 10 -16 34 -2 24 14 Z"/>
+<path fill="#9fcac4" d="M300 210 c -10 -20 20 -28 24 -10 c 10 -14 30 -2 22 12 Z"/>
+<path stroke="#242424" stroke-width="2" fill="none" d="M94 86 q5 -5 10 0 q5 -5 10 0"/>
+<path stroke="#242424" stroke-width="2" fill="none" d="M118 70 q4 -4 8 0 q4 -4 8 0"/>
+<path stroke="#242424" stroke-width="2" fill="none" d="M300 60 q5 -5 10 0 q5 -5 10 0"/>
+
+</svg>

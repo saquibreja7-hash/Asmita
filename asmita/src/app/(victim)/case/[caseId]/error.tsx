@@ -6,15 +6,12 @@ export default function CaseDashboardError() {
   return (
     <div className="page-canvas">
       <section
-        className="container pb-24 pt-20 text-center md:pb-32 md:pt-32"
+        className="container page-hero text-center"
         role="alert"
       >
         <div className="mx-auto max-w-2xl">
-          <span className="pill">
-            <span className="dot" />
-            Dashboard error
-          </span>
-          <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px] md:leading-[1.06]">
+          <span className="eyebrow">Dashboard error</span>
+          <h1 className="page-title-sm mt-8">
             We could not load the
             <br />
             case <em className="not-italic text-gradient">dashboard</em>.

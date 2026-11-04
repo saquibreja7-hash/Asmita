@@ -1,3 +1,4 @@
+import { Illustration } from "@/components/Illustration";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
@@ -61,19 +62,20 @@ export default async function WhatWeDoPage() {
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label={say("What we do", "हम क्या करते हैं")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("What we do", "हम क्या करते हैं")}</span>
-              <h1 className="font-display mt-5 text-[clamp(2.25rem,5.5vw,4rem)] font-medium leading-[1.06] text-[var(--heading)]">
+              <h1 className="page-title mt-5">
                 {say("Tools for taking action on content", "सामग्री पर कार्रवाई के साधन")}
               </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--theme-color-2)]">
+              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say(
                   "Not just advice. Asmita is built to help you take real action, and built so your image never has to leave your device to do it.",
                   "अस्मिता आपको कार्रवाई के चरण समझने और आगे बढ़ने में मदद करती है। इसके लिए आपकी तस्वीर को आपके डिवाइस से बाहर जाने की ज़रूरत नहीं है।",
                 )}
               </p>
             </div>
+            <Illustration name="page-what-we-do" eager className="page-hero-art" />
           </div>
         </section>
 
@@ -83,12 +85,12 @@ export default async function WhatWeDoPage() {
             <div className="mx-auto max-w-5xl">
               <div className="grid gap-4 md:grid-cols-3">
                 {capabilities.map((c, i) => (
-                  <div key={c.title} className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--color-parchment)] p-7 shadow-[var(--shadow-sm)]">
-                    <span className="font-mono text-xs font-medium text-[var(--color-off-black)]">{c.n}</span>
-                    <h2 className="mt-4 text-[19px] font-medium text-[var(--heading)]">{locale === "hi" ? hindi.capabilities[i].title : c.title}</h2>
-                    <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--body)]">{locale === "hi" ? hindi.capabilities[i].body : c.body}</p>
+                  <div key={c.title} className="flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 shadow-[var(--shadow-sm)]">
+                    <span className="text-xs font-medium text-[var(--ink)]">{c.n}</span>
+                    <h2 className="subsection-title mt-4">{locale === "hi" ? hindi.capabilities[i].title : c.title}</h2>
+                    <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--text)]">{locale === "hi" ? hindi.capabilities[i].body : c.body}</p>
                     <div className="mt-6">
-                      <Link href={c.href} className="btn btn-midnight btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                      <Link href={c.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
                         {locale === "hi" ? hindi.capabilities[i].cta : c.cta}
                       </Link>
                     </div>
@@ -104,16 +106,16 @@ export default async function WhatWeDoPage() {
           <div className="transform-content container section-pad">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("How it fits together", "ये चरण कैसे जुड़ते हैं")}</span>
-              <h2 id="flow-heading" className="font-display mt-4 text-[clamp(1.75rem,4vw,2.75rem)] font-medium leading-[1.14]">
+              <h2 id="flow-heading" className="section-title mt-4">
                 {say("From a link to a takedown", "लिंक से हटाने की कार्रवाई तक")}
               </h2>
             </div>
             <ol className="mx-auto mt-10 grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {flow.map((f, i) => (
-                <li key={f.title} className="rounded-[var(--radius-lg)] bg-[var(--color-parchment)] p-6 backdrop-blur-sm">
-                  <span className="font-display text-2xl font-medium text-[var(--color-off-black)]">{i + 1}</span>
-                  <h3 className="mt-2 text-[16px] font-medium text-[var(--heading)]">{locale === "hi" ? hindi.flow[i].title : f.title}</h3>
-                  <p className="mt-2 text-sm leading-[1.6] text-[var(--body)]">{locale === "hi" ? hindi.flow[i].body : f.body}</p>
+                <li key={f.title} className="rounded-[var(--radius-box)] surface-card p-6">
+                  <span className="step-badge">{i + 1}</span>
+                  <h3 className="mt-2 text-[16px] font-medium text-[var(--ink)]">{locale === "hi" ? hindi.flow[i].title : f.title}</h3>
+                  <p className="mt-2 text-sm leading-[1.6] text-[var(--text)]">{locale === "hi" ? hindi.flow[i].body : f.body}</p>
                 </li>
               ))}
             </ol>
@@ -123,16 +125,16 @@ export default async function WhatWeDoPage() {
         {/* HONEST LIMITS */}
         <section className="zone-white section-pad" aria-labelledby="limits-heading">
           <div className="container">
-            <div className="mx-auto max-w-5xl rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-8 md:p-10">
-              <h2 id="limits-heading" className="font-display text-[clamp(1.4rem,3vw,2rem)] font-medium leading-[1.16]">
+            <div className="mx-auto max-w-5xl rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--surface-muted)] p-8 md:p-10">
+              <h2 id="limits-heading" className="section-title">
                 {say("What we will not do", "हम क्या नहीं करेंगे")}
               </h2>
-              <ul className="mt-5 space-y-3 text-[16px] leading-[1.6] text-[var(--body)]">
+              <ul className="mt-5 space-y-3 text-[16px] leading-[1.6] text-[var(--text)]">
                 <li>{say("We never fetch, preview, or store intimate content on our servers.", "हम अपने सर्वर पर निजी सामग्री खोलते, दिखाते या सहेजते नहीं हैं।")}</li>
                 <li>{say("We do not promise to erase content from the whole internet.", "हम पूरे इंटरनेट से सामग्री मिटाने का वादा नहीं करते।")}</li>
                 <li>{say("We do not put a minor’s image into the adult flow. That follows a separate, protected path.", "नाबालिग की तस्वीर वयस्क रिपोर्ट प्रक्रिया में नहीं जाती। उसके लिए अलग सुरक्षित रास्ता है।")}</li>
               </ul>
-              <p className="mt-5 text-sm leading-[1.6] text-[var(--muted)]">
+              <p className="mt-5 text-sm leading-[1.6] text-[var(--text-muted)]">
                 {say(
                   "Being honest about the limits is part of the tool. You always know exactly where things stand.",
                   "इन सीमाओं को साफ़ बताना ज़रूरी है, ताकि आपको हर चरण की स्थिति पता रहे।",
@@ -145,11 +147,11 @@ export default async function WhatWeDoPage() {
         <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
           <div className="zone-sunset-content container section-pad text-center">
             <div className="mx-auto max-w-2xl">
-              <h2 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-medium leading-[1.14]">
+              <h2 className="section-title">
                 {say("See it work for your situation.", "अपनी स्थिति के मुताबिक रास्ता देखें।")}
               </h2>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-midnight btn-arrow !m-0" href="/get-help">{say("Get help", "मदद लें")}</Link>
+                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">{say("Get help", "मदद लें")}</Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/about">{say("About Asmita", "अस्मिता के बारे में")}</Link>
               </div>
             </div>

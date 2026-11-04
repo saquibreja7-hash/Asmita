@@ -118,17 +118,17 @@ export function Footer({ locale }: { locale: Locale }) {
           <div className="site-footer-helpline !mt-0">
             <p className="site-footer-cl-label">
               {isHi ? "अस्मिता हेल्पलाइन (24/7)" : "Asmita helpline (24/7)"} ·{" "}
-              <a href={`tel:${HELPLINE.tel}`} className="font-medium text-[var(--color-off-black)]">
+              <a href={`tel:${HELPLINE.tel}`} className="font-medium text-[var(--ink)]">
                 {HELPLINE.display}
               </a>
               {" · "}
               {isHi ? "महिला हेल्पलाइन" : "Women's helpline"} ·{" "}
-              <a href="tel:181" className="font-medium text-[var(--color-off-black)]">
+              <a href="tel:181" className="font-medium text-[var(--ink)]">
                 181
               </a>
               {" · "}
               {isHi ? "आपातकाल" : "Emergency"}{" "}
-              <a href="tel:112" className="font-medium text-[var(--color-off-black)]">
+              <a href="tel:112" className="font-medium text-[var(--ink)]">
                 112
               </a>
             </p>

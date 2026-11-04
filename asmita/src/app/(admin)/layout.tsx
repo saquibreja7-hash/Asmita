@@ -39,13 +39,13 @@ export default async function AdminLayout({
             className="h-fit"
             aria-label="Admin navigation"
           >
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <p className="eyebrow">
               Admin
             </p>
             <nav className="mt-5 grid gap-2 text-sm leading-[1.8]">
               {adminLinks.map(([href, label]) => (
                 <Link
-                  className="link-underline text-[var(--foreground)]"
+                  className="link-underline text-[var(--ink)]"
                   href={href}
                   key={href}
                 >
@@ -53,7 +53,7 @@ export default async function AdminLayout({
                 </Link>
               ))}
             </nav>
-            <div className="mt-8 border-t border-[var(--hairline)] pt-6">
+            <div className="mt-8 border-t border-[var(--line)] pt-6">
               <AdminLogoutButton />
             </div>
           </aside>

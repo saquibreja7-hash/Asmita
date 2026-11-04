@@ -1,3 +1,4 @@
+import { Illustration } from "@/components/Illustration";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
@@ -71,13 +72,10 @@ export default async function HowItWorksPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container pb-16 pt-20 text-center md:pb-20 md:pt-32">
+        <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              {t(locale, "hiw.pill")}
-            </span>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
+            <span className="eyebrow">{t(locale, "hiw.pill")}</span>
+            <h1 className="page-title mt-8">
               {t(locale, "hiw.hero.title.1")}{" "}
               <em className="not-italic text-gradient">{t(locale, "hiw.hero.title.2")}</em>{" "}
               {t(locale, "hiw.hero.title.3")}
@@ -86,6 +84,7 @@ export default async function HowItWorksPage() {
               {t(locale, "hiw.hero.sub")}
             </p>
           </div>
+          <Illustration name="page-how-it-works" eager className="page-hero-art" />
         </section>
 
         <div className="container">
@@ -93,7 +92,7 @@ export default async function HowItWorksPage() {
         </div>
 
         {/* THE FLOW - numbered vertical steps */}
-        <section className="container py-20 md:py-28">
+        <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
             <span className="eyebrow mb-10 block">{t(locale, "hiw.flow.eyebrow")}</span>
             <ol className="relative space-y-0">
@@ -102,18 +101,18 @@ export default async function HowItWorksPage() {
                   {i < steps.length - 1 && (
                     <div
                       className="absolute left-[19px] top-10 bottom-0 w-px"
-                      style={{ background: "var(--hairline)" }}
+                      style={{ background: "var(--line)" }}
                       aria-hidden
                     />
                   )}
                   <div
-                    className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] font-mono text-[11px] font-medium tracking-widest text-[var(--teal)]"
+                    className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--page)] text-[11px] font-medium tracking-widest text-[var(--brand)]"
                     style={{ boxShadow: "var(--shadow-soft)" }}
                   >
                     {step.num}
                   </div>
                   <div className="pt-1">
-                    <h2 className="font-display text-[22px] font-normal leading-[1.2] tracking-tight md:text-[30px] md:leading-[1.18]">
+                    <h2 className="section-title">
                       {step.title}
                     </h2>
                     <p className="muted mt-3 max-w-lg text-base leading-[1.75] md:text-[17px]">
@@ -131,10 +130,10 @@ export default async function HowItWorksPage() {
         </div>
 
         {/* ROUTING - three-tier card grid */}
-        <section className="container py-20 md:py-28">
+        <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
             <span className="eyebrow mb-4 block">{t(locale, "hiw.routing.eyebrow")}</span>
-            <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
+            <h2 className="section-title">
               {t(locale, "hiw.routing.title")}
             </h2>
             <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
@@ -144,19 +143,19 @@ export default async function HowItWorksPage() {
               {tiers.map((tier) => (
                 <div
                   key={tier.label}
-                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
+                  className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
                   style={{ boxShadow: "var(--shadow-soft)" }}
                 >
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+                  <p className="eyebrow">
                     {tier.label}
                   </p>
                   <span
-                    className="mt-3 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--teal-soft)] text-[var(--teal)]"
+                    className="mt-3 inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-box)] bg-[var(--brand-soft)] text-[var(--brand)]"
                     aria-hidden
                   >
                     {tier.icon}
                   </span>
-                  <h3 className="font-display mt-2 text-[18px] font-normal leading-[1.25] tracking-tight md:text-[20px]">
+                  <h3 className="mt-2 text-[18px] leading-[1.25] md:text-[20px]">
                     {tier.title}
                   </h3>
                   <p className="muted mt-3 text-sm leading-[1.75]">{tier.body}</p>
@@ -171,10 +170,10 @@ export default async function HowItWorksPage() {
         </div>
 
         {/* ESCALATION - horizontal timeline */}
-        <section className="container py-20 md:py-28">
+        <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
             <span className="eyebrow mb-4 block">{t(locale, "hiw.escalation.eyebrow")}</span>
-            <h2 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[44px] md:leading-[1.14]">
+            <h2 className="section-title">
               {t(locale, "hiw.escalation.title")}
             </h2>
             <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
@@ -186,16 +185,16 @@ export default async function HowItWorksPage() {
                   key={item.day}
                   className="pt-5"
                   style={{
-                    borderTop: `2px solid ${i === 0 ? "var(--teal)" : i === 1 ? "var(--saffron)" : "var(--rose)"}`,
+                    borderTop: `2px solid ${i === 0 ? "var(--brand)" : i === 1 ? "var(--brand)" : "var(--danger)"}`,
                   }}
                 >
                   <p
-                    className="mb-4 font-mono text-[11px] font-medium uppercase tracking-[0.16em]"
-                    style={{ color: i === 0 ? "var(--teal)" : i === 1 ? "var(--saffron)" : "var(--rose)" }}
+                    className="eyebrow mb-4"
+                    style={{ color: i === 0 ? "var(--brand)" : i === 1 ? "var(--brand)" : "var(--danger)" }}
                   >
                     {item.day}
                   </p>
-                  <h3 className="font-display text-[18px] font-normal leading-[1.25] tracking-tight md:text-[20px]">
+                  <h3 className="text-[18px] leading-[1.25] md:text-[20px]">
                     {item.title}
                   </h3>
                   <p className="muted mt-3 text-sm leading-[1.75]">{item.body}</p>
@@ -210,9 +209,9 @@ export default async function HowItWorksPage() {
         </div>
 
         {/* CLOSING */}
-        <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-28">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <h2 className="font-display text-[32px] font-normal leading-[1.15] tracking-tight md:text-[52px] md:leading-[1.12]">
+            <h2 className="section-title">
               {t(locale, "hiw.closing.title")}
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">

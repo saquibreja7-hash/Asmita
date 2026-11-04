@@ -8,10 +8,10 @@ export default async function MilestonesPage() {
   return (
     <section>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+        <p className="eyebrow">
           Console · Milestones
         </p>
-        <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+        <h1 className="page-title-sm mt-3">
           100-case milestone
         </h1>
       </div>
@@ -25,26 +25,26 @@ export default async function MilestonesPage() {
 
       <div className="mt-10">
         <div className="flex items-end justify-between gap-4">
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+          <p className="eyebrow">
             Progress toward {stats.target} cases
           </p>
           <p className="font-display text-[24px] tabular-nums">
             {stats.progressPercent}%
           </p>
         </div>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--hairline)]">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--line)]">
           <div
             aria-label={`${stats.progressPercent}% of 100-case milestone`}
-            className="h-full bg-[var(--teal)] transition-[width] duration-500"
+            className="h-full bg-[var(--brand)] transition-[width] duration-500"
             style={{ width: `${stats.progressPercent}%` }}
           />
         </div>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Reference</Th>
               <Th>Status</Th>
               <Th>Submitted URLs</Th>
@@ -54,7 +54,7 @@ export default async function MilestonesPage() {
           <tbody>
             {records.map((record) => (
               <tr
-                className="border-t border-[var(--hairline)]"
+                className="border-t border-[var(--line)]"
                 key={record.id}
               >
                 <td className="font-mono p-4">{record.referenceNumber}</td>
@@ -62,7 +62,7 @@ export default async function MilestonesPage() {
                   {record.status.toLowerCase()}
                 </td>
                 <td className="p-4 tabular-nums">{record.urls.length}</td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {new Date(record.createdAt).toLocaleDateString("en-IN")}
                 </td>
               </tr>
@@ -79,7 +79,7 @@ export default async function MilestonesPage() {
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+    <th className="eyebrow p-4">
       {children}
     </th>
   );
@@ -94,10 +94,10 @@ function Metric({
 }) {
   return (
     <div>
-      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+      <p className="eyebrow">
         {label}
       </p>
-      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--foreground)] tabular-nums">
+      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--ink)] tabular-nums">
         {value}
       </p>
     </div>

@@ -19,13 +19,10 @@ export default async function ConfirmationPage({
     return (
       <AppShell>
         <div className="page-canvas">
-          <section className="container pb-24 pt-20 text-center md:pb-32 md:pt-32">
+          <section className="container page-hero text-center">
             <div className="mx-auto max-w-2xl">
-              <span className="pill">
-                <span className="dot" />
-                {t(locale, "confirm.notAvailable.pill")}
-              </span>
-              <h1 className="font-display mt-8 text-[36px] font-normal leading-[1.1] tracking-tight md:text-[56px] md:leading-[1.06]">
+              <span className="eyebrow">{t(locale, "confirm.notAvailable.pill")}</span>
+              <h1 className="page-title-sm mt-8">
                 {t(locale, "confirm.notAvailable.title.1")}{" "}
                 <em className="not-italic text-gradient">{t(locale, "confirm.notAvailable.title.em")}</em>
                 {t(locale, "confirm.notAvailable.title.2")}
@@ -54,12 +51,9 @@ export default async function ConfirmationPage({
             {/* LEFT - sticky sidebar */}
             <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
               <div className="md:sticky md:top-28">
-                <span className="pill">
-                  <span className="dot" />
-                  {t(locale, "confirm.pill")}
-                </span>
+                <span className="eyebrow">{t(locale, "confirm.pill")}</span>
 
-                <p className="font-mono mt-4 text-[13px] text-[var(--muted)]">
+                <p className="font-mono mt-4 text-[13px] text-[var(--text-muted)]">
                   {record.referenceNumber}
                 </p>
 
@@ -75,13 +69,13 @@ export default async function ConfirmationPage({
                   ].map(([heading, detail]) => (
                     <div key={heading as string} className="flex items-start gap-3">
                       <span
-                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
+                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)]"
                         aria-hidden
                       >
                         <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
                           <path
                             d="M1 4l2.5 2.5L9 1"
-                            stroke="var(--teal)"
+                            stroke="var(--brand)"
                             strokeWidth="1.5"
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -89,7 +83,7 @@ export default async function ConfirmationPage({
                         </svg>
                       </span>
                       <div>
-                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
+                        <p className="text-sm font-medium text-[var(--ink)]">{heading}</p>
                         <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
                       </div>
                     </div>
@@ -110,7 +104,7 @@ export default async function ConfirmationPage({
             {/* RIGHT - main content */}
             <div className="min-w-0 flex-1 space-y-10">
               <div>
-                <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+                <h1 className="page-title-sm">
                   {t(locale, "confirm.title")}
                 </h1>
                 <p className="muted mt-2 text-sm leading-[1.75]">
@@ -120,12 +114,12 @@ export default async function ConfirmationPage({
 
               {/* Reference number block */}
               <div
-                className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-8"
+                className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-8"
               >
-                <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
+                <p className="eyebrow">
                   {t(locale, "confirm.ref.eyebrow")}
                 </p>
-                <p className="font-mono mt-4 text-[32px] tracking-tight text-[var(--teal-dark)] md:text-[44px]">
+                <p className="font-mono mt-4 text-[32px] tracking-tight text-[var(--brand-strong)] md:text-[44px]">
                   {record.referenceNumber}
                 </p>
                 <p className="muted mt-4 text-sm leading-[1.75]">
@@ -135,12 +129,12 @@ export default async function ConfirmationPage({
 
               {/* What happens next */}
               <div
-                className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-8"
+                className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-8"
               >
-                <p className="font-mono text-[12px] uppercase tracking-[-0.033em] text-[var(--muted)]">
+                <p className="eyebrow">
                   {t(locale, "confirm.next.eyebrow")}
                 </p>
-                <h2 className="font-display mt-4 text-[22px] font-normal leading-[1.22] tracking-tight md:text-[26px]">
+                <h2 className="subsection-title mt-4">
                   {t(locale, "confirm.next.title")}
                 </h2>
                 <div className="mt-6 space-y-5">
@@ -150,7 +144,7 @@ export default async function ConfirmationPage({
                     [t(locale, "confirm.next.t3.time"), t(locale, "confirm.next.t3.detail")],
                   ].map(([time, detail]) => (
                     <div key={time as string} className="flex items-start gap-4">
-                      <span className="font-mono mt-0.5 shrink-0 text-[13px] font-medium text-[var(--teal-dark)] w-16">
+                      <span className="mt-0.5 shrink-0 text-[13px] font-medium text-[var(--brand-strong)] w-16">
                         {time}
                       </span>
                       <p className="muted text-sm leading-[1.65]">{detail}</p>

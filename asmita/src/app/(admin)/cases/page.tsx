@@ -85,10 +85,10 @@ export default async function AdminCasesPage({
         </button>
       </form>
 
-      <div className="mt-10 overflow-hidden rounded-[14px] border border-[var(--hairline)] bg-[var(--color-parchment)]">
+      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--hairline)]">
+            <tr className="border-b border-[var(--line)]">
               <Th>Reference</Th>
               <Th>Status</Th>
               <Th>Platforms</Th>
@@ -100,21 +100,21 @@ export default async function AdminCasesPage({
           <tbody>
             {rows.map((row) => (
               <tr
-                className="border-t border-[var(--hairline)]"
+                className="border-t border-[var(--line)]"
                 key={row.caseId}
               >
-                <td className="font-mono p-4 text-[var(--foreground)]">
+                <td className="font-mono p-4 text-[var(--ink)]">
                   {row.referenceNumber}
                 </td>
                 <td className="p-4 capitalize">{row.status.toLowerCase()}</td>
                 <td className="p-4">
                   {row.platforms.join(", ") || (
-                    <span className="text-[var(--muted)]">Unclassified</span>
+                    <span className="text-[var(--text-muted)]">Unclassified</span>
                   )}
                 </td>
                 <td className="p-4 tabular-nums">{row.reviewFlagCount}</td>
                 <td className="p-4 capitalize">{row.escalationState}</td>
-                <td className="font-mono p-4 text-xs text-[var(--muted)]">
+                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
                   {new Date(row.createdAt).toLocaleString("en-IN", {
                     timeZone: "Asia/Kolkata",
                   })}
@@ -146,10 +146,10 @@ export function AdminPageHeader({
 }) {
   return (
     <div>
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+      <p className="eyebrow">
         {label}
       </p>
-      <h1 className="font-display mt-3 text-[32px] font-normal leading-[1.1] tracking-tight md:text-[44px] md:leading-[1.08]">
+      <h1 className="page-title-sm mt-3">
         {title}
       </h1>
     </div>
@@ -167,7 +167,7 @@ function FilterField({
 }) {
   return (
     <label className="grid gap-1.5" htmlFor={name}>
-      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+      <span className="eyebrow">
         {label}
       </span>
       {children}
@@ -177,7 +177,7 @@ function FilterField({
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="font-mono p-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+    <th className="eyebrow p-4">
       {children}
     </th>
   );

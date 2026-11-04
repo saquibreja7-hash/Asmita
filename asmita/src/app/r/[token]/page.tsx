@@ -79,13 +79,13 @@ export default async function PortalPage({
 
   return (
     <main className="mx-auto max-w-lg px-6 py-16">
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+      <p className="eyebrow">
         Secure content portal
       </p>
-      <h1 className="font-display mt-3 text-[28px] font-normal leading-[1.15] tracking-tight">
+      <h1 className="page-title-sm mt-3">
         Enter access code to view reported URL
       </h1>
-      <p className="mt-4 text-sm leading-[1.7] text-[var(--muted)]">
+      <p className="mt-4 text-sm leading-[1.7] text-[var(--text-muted)]">
         This link was included in a takedown notice from Asmita. To view the
         reported URL, enter the one-time access code from that email.
       </p>
@@ -98,7 +98,7 @@ export default async function PortalPage({
           >
             Access code
           </label>
-          <p className="mt-1 text-xs text-[var(--muted)]">
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
             Format: XXXX-XXXX (from the notice email)
           </p>
           <input
@@ -114,17 +114,17 @@ export default async function PortalPage({
         </div>
 
         {error === "invalid" && (
-          <p className="text-sm font-medium text-[var(--rose)]">
+          <p className="text-sm font-medium text-[var(--danger)]">
             Incorrect access code. Please check the notice email and try again.
           </p>
         )}
         {error === "used" && (
-          <p className="text-sm font-medium text-[var(--rose)]">
+          <p className="text-sm font-medium text-[var(--danger)]">
             This link has already been accessed and is no longer active.
           </p>
         )}
         {error === "rate_limited" && (
-          <p className="text-sm font-medium text-[var(--rose)]">
+          <p className="text-sm font-medium text-[var(--danger)]">
             Too many attempts. Please wait 15 minutes before trying again.
           </p>
         )}
@@ -134,7 +134,7 @@ export default async function PortalPage({
         </button>
       </form>
 
-      <p className="mt-8 text-xs leading-[1.7] text-[var(--muted)]">
+      <p className="mt-8 text-xs leading-[1.7] text-[var(--text-muted)]">
         This link can only be accessed once. After the URL is viewed, it is
         permanently deactivated. If you have already opened it or need
         re-access, contact{" "}
@@ -150,20 +150,20 @@ export default async function PortalPage({
 function RevealedPage({ url }: { url: string }) {
   return (
     <main className="mx-auto max-w-lg px-6 py-16">
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+      <p className="eyebrow">
         Secure content portal
       </p>
-      <h1 className="font-display mt-3 text-[28px] font-normal leading-[1.15] tracking-tight">
+      <h1 className="page-title-sm mt-3">
         Reported URL
       </h1>
-      <p className="mt-4 text-sm leading-[1.7] text-[var(--muted)]">
+      <p className="mt-4 text-sm leading-[1.7] text-[var(--text-muted)]">
         The URL below identifies the content reported in the takedown notice.
         This link has now been deactivated - it cannot be accessed again.
       </p>
-      <div className="mt-6 rounded-[12px] border border-[var(--hairline)] bg-[var(--surface)] p-4">
+      <div className="mt-6 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-4">
         <p className="font-mono break-all text-sm leading-[1.7]">{url}</p>
       </div>
-      <p className="mt-6 text-xs leading-[1.7] text-[var(--muted)]">
+      <p className="mt-6 text-xs leading-[1.7] text-[var(--text-muted)]">
         Please take the requested action and use the case reference from the
         notice email in any correspondence. Do not reply quoting the original
         notice email.
@@ -175,17 +175,17 @@ function RevealedPage({ url }: { url: string }) {
 function AlreadyUsedPage() {
   return (
     <main className="mx-auto max-w-lg px-6 py-16">
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+      <p className="eyebrow">
         Secure content portal
       </p>
-      <h1 className="font-display mt-3 text-[28px] font-normal leading-[1.15] tracking-tight">
+      <h1 className="page-title-sm mt-3">
         This link has already been accessed
       </h1>
-      <p className="mt-4 text-sm leading-[1.7] text-[var(--muted)]">
+      <p className="mt-4 text-sm leading-[1.7] text-[var(--text-muted)]">
         For security, this portal link can only be opened once. It has already
         been used and is now permanently inactive.
       </p>
-      <p className="mt-4 text-sm leading-[1.7] text-[var(--muted)]">
+      <p className="mt-4 text-sm leading-[1.7] text-[var(--text-muted)]">
         If you need to view the reported URL again, contact{" "}
         <a href="mailto:notice@meriasmita.org" className="underline">
           notice@meriasmita.org
@@ -200,13 +200,13 @@ function AlreadyUsedPage() {
 function NotFoundPage() {
   return (
     <main className="mx-auto max-w-lg px-6 py-16">
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+      <p className="eyebrow">
         Secure content portal
       </p>
-      <h1 className="font-display mt-3 text-[28px] font-normal leading-[1.15] tracking-tight">
+      <h1 className="page-title-sm mt-3">
         Link not found
       </h1>
-      <p className="mt-4 text-sm leading-[1.7] text-[var(--muted)]">
+      <p className="mt-4 text-sm leading-[1.7] text-[var(--text-muted)]">
         This portal link does not exist or has been removed. If you received a
         notice from Asmita, please ensure you have copied the full link from
         the email.
@@ -221,7 +221,7 @@ function ErrorPage({ message }: { message: string }) {
       <p className="font-display mt-3 text-[28px] font-normal leading-[1.15] tracking-tight">
         Something went wrong
       </p>
-      <p className="mt-4 text-sm leading-[1.7] text-[var(--muted)]">{message}</p>
+      <p className="mt-4 text-sm leading-[1.7] text-[var(--text-muted)]">{message}</p>
     </main>
   );
 }

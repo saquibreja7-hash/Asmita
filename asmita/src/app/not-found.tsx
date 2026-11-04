@@ -5,13 +5,10 @@ export default function NotFound() {
   return (
     <AppShell>
       <div className="page-canvas">
-        <section className="container pb-24 pt-24 text-center md:pb-32 md:pt-40">
+        <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <span className="pill">
-              <span className="dot" />
-              Page not found · 404
-            </span>
-            <h1 className="font-display mt-8 text-[40px] font-normal leading-[1.08] tracking-tight md:text-[68px] md:leading-[1.06]">
+            <span className="eyebrow">Page not found · 404</span>
+            <h1 className="page-title mt-8">
               This page isn&rsquo;t{" "}
               <em className="not-italic text-gradient">here</em>.
             </h1>

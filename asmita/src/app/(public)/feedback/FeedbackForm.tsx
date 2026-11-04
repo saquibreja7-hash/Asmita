@@ -44,7 +44,7 @@ export function FeedbackForm({ locale }: { locale: Locale }) {
         aria-live="polite"
         aria-atomic="true"
       >
-        <p className="font-display text-[24px] leading-[1.4] tracking-tight text-[var(--foreground)] md:text-[32px] md:leading-[1.3]">
+        <p className="font-display text-[24px] leading-[1.4] tracking-tight text-[var(--ink)] md:text-[32px] md:leading-[1.3]">
           {say("Thank you. Your feedback was recorded.", "धन्यवाद। आपकी प्रतिक्रिया दर्ज हो गई है।")}
         </p>
         <p className="muted mt-4 text-base leading-[1.75]">
@@ -106,7 +106,7 @@ export function FeedbackForm({ locale }: { locale: Locale }) {
 
       {error && (
         <p
-          className="text-center text-sm font-medium text-[var(--rose)]"
+          className="text-center text-sm font-medium text-[var(--danger)]"
           role="alert"
           aria-live="assertive"
         >
@@ -145,7 +145,7 @@ function Row({
     <div>
       <label
         htmlFor={htmlFor}
-        className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--foreground)]"
+        className="font-display text-[18px] leading-[1.3] tracking-tight text-[var(--ink)]"
       >
         {label}
       </label>

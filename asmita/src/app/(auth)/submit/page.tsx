@@ -30,71 +30,31 @@ export default async function SubmitPage() {
   // Names and domains only: grievance contacts stay on the server.
   const knownPlatforms = platformDirectory.map(({ name, domainPatterns }) => ({ name, domainPatterns }));
 
-  const asideItems: [string, string][] = [
-    [t(locale, "submit.aside.item1.heading"), t(locale, "submit.aside.item1.detail")],
-    [t(locale, "submit.aside.item2.heading"), t(locale, "submit.aside.item2.detail")],
-    [t(locale, "submit.aside.item3.heading"), t(locale, "submit.aside.item3.detail")],
-  ];
-
   return (
     <AppShell>
       <div className="page-canvas">
-        <div className="container py-8 md:py-24">
-          <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
-
-            {/* LEFT - sticky context panel */}
-            <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
-              <div className="md:sticky md:top-28">
-                <span className="pill">
-                  <span className="dot" />
-                  {t(locale, "submit.pill")}
-                </span>
-
-                <p className="muted mt-6 text-sm leading-[1.75]">
-                  {t(locale, "submit.aside.sub")}
-                </p>
-
-                <div className="mt-8 space-y-4">
-                  {asideItems.map(([heading, detail]) => (
-                    <div key={heading} className="flex items-start gap-3">
-                      <span
-                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--teal-soft)]"
-                        aria-hidden
-                      >
-                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                          <path
-                            d="M1 4l2.5 2.5L9 1"
-                            stroke="var(--teal)"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </span>
-                      <div>
-                        <p className="text-sm font-medium text-[var(--foreground)]">{heading}</p>
-                        <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </aside>
-
-            {/* RIGHT - form */}
-            <div className="order-1 min-w-0 flex-1 md:order-2">
-              <FlowProgress step={2} locale={locale} />
-              <h1 className="font-display text-[28px] font-normal leading-[1.2] tracking-tight md:text-[36px]">
+        <div className="container py-8 md:py-20">
+          <div className="mx-auto max-w-xl">
+            <FlowProgress step={2} locale={locale} />
+            <div className="filing-intro">
+              <h1 className="page-title-sm">
                 {t(locale, "submit.form.title")}
               </h1>
-              <p className="muted mt-2 text-sm leading-[1.75]">
-                {t(locale, "submit.form.sub")}
+              <p className="mt-2 text-[15px] leading-[1.6] text-[var(--text)]">
+                {t(locale, "submit.reassure")}
               </p>
-              <div className="mt-10">
-                <SubmitForm signedIn={auth.ok} knownPlatforms={knownPlatforms} enableHashUpload={enableHashUpload} platforms={platforms} locale={locale} />
-              </div>
+              <ul className="mt-5 flex flex-wrap gap-2">
+                {(["submit.trust.1", "submit.trust.2", "submit.trust.3"] as const).map((key) => (
+                  <li key={key} className="flex items-center gap-2 rounded-full bg-white/70 px-3 py-1.5 text-[13px] text-[var(--ink)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" aria-hidden />
+                    {t(locale, key)}
+                  </li>
+                ))}
+              </ul>
             </div>
-
+            <div className="mt-6">
+              <SubmitForm signedIn={auth.ok} knownPlatforms={knownPlatforms} enableHashUpload={enableHashUpload} platforms={platforms} locale={locale} />
+            </div>
           </div>
         </div>
       </div>
