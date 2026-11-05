@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { ReviewSignForm } from "./ReviewSignForm";
 import { FlowProgress } from "@/components/FlowProgress";
+import { getVerifiedUserEmail } from "@/lib/case-ops";
 import { getLocale } from "@/lib/get-locale";
 
 export default async function ReviewSignPage() {
@@ -11,6 +12,7 @@ export default async function ReviewSignPage() {
     redirect("/register");
   }
   const locale = await getLocale();
+  const email = await getVerifiedUserEmail(auth.session.sub);
 
   return (
     <AppShell>
@@ -19,7 +21,7 @@ export default async function ReviewSignPage() {
           <div className="mx-auto max-w-5xl">
             <FlowProgress step={4} locale={locale} />
           </div>
-          <ReviewSignForm locale={locale} />
+          <ReviewSignForm locale={locale} email={email} />
         </div>
       </div>
     </AppShell>

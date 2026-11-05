@@ -1,0 +1,37 @@
+import { expect, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+
+test("unknown platform is reviewed and acknowledged without a notice signature", async ({ page }) => {
+  await page.goto("/eligibility");
+  await page.getByRole("button", { name: "18 or over" }).click();
+  await page.getByRole("button", { name: "18 or over" }).click();
+  await page.getByRole("button", { name: "Me", exact: true }).click();
+  await page.getByRole("button", { name: "Me nude, semi-nude, or in a sexual act" }).click();
+  await page.getByLabel("Links where the content appears").fill("https://example.invalid/synthetic-test");
+  await expect(page.getByText(/We don’t recognize this platform yet/)).toBeVisible();
+  await page.getByLabel(/I declare/).check();
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page).toHaveURL(/\/register$/);
+  await page.getByLabel("Email address").fill(`unknown-${randomUUID()}@example.invalid`);
+  const otpResponse = page.waitForResponse("**/api/auth/request-otp");
+  await page.getByRole("button", { name: "Send verification code" }).click();
+  const otp = await (await otpResponse).json();
+  expect(otp.devOtp).toMatch(/^\d{6}$/);
+  await page.getByLabel("6-digit code").fill(otp.devOtp);
+  let casesCreated = 0;
+  page.on("request", (request) => { if (request.url().endsWith("/api/cases/create")) casesCreated++; });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Request help with an unknown platform" })).toBeVisible();
+  expect(casesCreated).toBe(0);
+  await expect(page.getByText("https://example.invalid/synthetic-test", { exact: true })).toBeVisible();
+  await expect(page.getByText(/No complaint is sent at this step/)).toBeVisible();
+  await page.getByRole("button", { name: "Submit request for investigation" }).click();
+  await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "We’ve received your request." })).toBeVisible();
+  await expect(page.getByText(/No complaint has been sent to the unknown platform/)).toBeVisible();
+  await expect(page.getByText(/You do not need to sign a notice/)).toBeVisible();
+  await page.getByRole("link", { name: "Open dashboard" }).click();
+  await expect(page.getByText("Reporting route under review")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Review & sign notice/i })).toHaveCount(0);
+  expect(casesCreated).toBe(1);
+});

@@ -28,13 +28,16 @@ export default async function SubmitPage() {
   const enableHashUpload = process.env.ENABLE_HASH_UPLOAD === "true";
   const platforms = enableHashUpload ? await getPlatforms() : [];
   // Names and domains only: grievance contacts stay on the server.
-  const knownPlatforms = platformDirectory.map(({ name, domainPatterns }) => ({ name, domainPatterns }));
+  const knownPlatforms = platformDirectory.map(({ id, name, domainPatterns, noticeBasis, grievanceEmail, formUrl, lastContactVerifiedByHuman }) => ({
+    id, name, domainPatterns, formUrl: lastContactVerifiedByHuman && formUrl?.startsWith("https://") && (noticeBasis === "FORM_ONLY" || grievanceEmail === "<TO_BE_VERIFIED_BY_HUMAN>") ? formUrl : undefined,
+  }));
 
   return (
     <AppShell>
       <div className="page-canvas">
         <div className="container py-8 md:py-20">
           <div className="mx-auto max-w-xl">
+            <SubmitForm signedIn={auth.ok} knownPlatforms={knownPlatforms} enableHashUpload={enableHashUpload} platforms={platforms} locale={locale}>
             <FlowProgress step={2} locale={locale} />
             <div className="filing-intro">
               <h1 className="page-title-sm">
@@ -52,9 +55,7 @@ export default async function SubmitPage() {
                 ))}
               </ul>
             </div>
-            <div className="mt-6">
-              <SubmitForm signedIn={auth.ok} knownPlatforms={knownPlatforms} enableHashUpload={enableHashUpload} platforms={platforms} locale={locale} />
-            </div>
+            </SubmitForm>
           </div>
         </div>
       </div>

@@ -7,9 +7,10 @@ interface Props {
   caseId: string;
   urlId: string;
   status: string;
+  investigationOnly?: boolean;
 }
 
-export function ReviewActions({ caseId, urlId, status: rowStatus }: Props) {
+export function ReviewActions({ caseId, urlId, status: rowStatus, investigationOnly = false }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "approved" | "rejected" | "error">(
     rowStatus === "NOTICE_QUEUED" ? "approved" : rowStatus === "REJECTED" ? "rejected" : "idle",
   );
@@ -33,14 +34,15 @@ export function ReviewActions({ caseId, urlId, status: rowStatus }: Props) {
 
   return (
     <div className="flex gap-2">
-      <button
+      {!investigationOnly && <button
         className="btn btn-primary py-1 px-3 text-xs"
         disabled={status === "loading"}
         onClick={() => act("approve")}
         type="button"
       >
         Approve
-      </button>
+      </button>}
+      {investigationOnly && <span className="text-xs text-[var(--text-muted)]">Investigate reporting route</span>}
       <button
         className="btn btn-secondary py-1 px-3 text-xs"
         disabled={status === "loading"}

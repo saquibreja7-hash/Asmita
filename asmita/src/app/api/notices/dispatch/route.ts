@@ -10,9 +10,10 @@ import {
   assertNoticeBodySafe,
   assertNoticeSubjectSafe,
   renderNoticeTemplate,
+  hasRetiredPortalInstructions,
 } from "@/lib/notice-generator";
 import { buildSignedHashAnnex, voidSignaturesWithRejectedFingerprints } from "@/lib/case-hash-annex";
-import { createPortalToken } from "@/lib/url-portal";
+import { isUrlExpired } from "@/lib/url-retention";
 
 const schema = z.object({
   caseId: z.string().min(1),
@@ -59,6 +60,9 @@ export async function POST(request: Request) {
   if (!submittedUrl) {
     return NextResponse.json({ error: "url_not_found" }, { status: 404 });
   }
+  if (!submittedUrl.urlEncrypted || isUrlExpired(submittedUrl.submittedAt)) {
+    return NextResponse.json({ error: "url_expired" }, { status: 410 });
+  }
   if (submittedUrl.status !== "NOTICE_QUEUED") {
     return NextResponse.json({ error: "url_not_ready_for_dispatch" }, { status: 409 });
   }
@@ -94,6 +98,9 @@ export async function POST(request: Request) {
   if (!template) {
     return NextResponse.json({ error: "reviewed_template_required" }, { status: 409 });
   }
+  if (hasRetiredPortalInstructions(template.bodyTemplate)) {
+    return NextResponse.json({ error: "notice_template_requires_review" }, { status: 409 });
+  }
 
   // Exactly the fingerprints the signed PDF lists, and only once all of them
   // are approved, so the email never differs from what the survivor signed.
@@ -108,20 +115,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: signedAnnex.reason }, { status: 409 });
   }
 
-  // Generate a one-time portal token. The raw URL never appears in the email -
-  // only the portal link. The platform officer enters an access code to view it
-  // once; if they reply quoting the email, Asmita sees a spent token, not the URL.
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://meriasmita.org";
-  const { token, accessCode } = await createPortalToken(
-    submittedUrl.id,
-    submittedUrl.urlEncrypted,
-  );
-  const portalLink = `${baseUrl}/r/${token}`;
-
   const variables = {
     caseReference: submittedUrl.case.referenceNumber,
     platformName: platform.name,
-    url: portalLink,
+    url: "[Reported URL is in the attached signed notice]",
     // Same reference the signed PDF carries (see sign-notice), so the email
     // body and the attached declaration agree.
     declarationReference: submittedUrl.case.referenceNumber,
@@ -132,26 +129,6 @@ export async function POST(request: Request) {
   if (signedAnnex.annex.text) {
     body = `${body}\n\n${signedAnnex.annex.text}`;
   }
-
-  // Append access instructions. The portal link appears in the body above
-  // (via {{ url }}); the access code is listed here so the officer can enter it.
-  body = [
-    body,
-    "",
-    "---",
-    "SECURE URL ACCESS INSTRUCTIONS",
-    "",
-    "The URL of the reported content is accessible via the secure portal link",
-    "shown above in this notice. To view the URL, visit the link and enter the",
-    "following one-time access code:",
-    "",
-    `Access code: ${accessCode}`,
-    "",
-    "This link can be accessed only once. Once opened, it is permanently",
-    "deactivated. If you require re-access, contact notice@meriasmita.org",
-    "with the case reference number.",
-    "---",
-  ].join("\n");
 
   assertNoticeSubjectSafe(subject);
   assertNoticeBodySafe(body);

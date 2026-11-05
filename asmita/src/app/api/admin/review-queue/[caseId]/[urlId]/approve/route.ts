@@ -20,6 +20,6 @@ export async function POST(
     return NextResponse.json({ success: true, url });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "error";
-    return NextResponse.json({ error: msg }, { status: 404 });
+    return NextResponse.json({ error: msg }, { status: msg === "unknown_platform_requires_investigation" ? 409 : 404 });
   }
 }

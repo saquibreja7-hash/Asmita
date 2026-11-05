@@ -492,6 +492,7 @@ export async function reviewSubmittedUrl(input: {
   const db = await getPrismaDb();
   const url = await db.submittedUrl.findFirst({ where: { id: input.urlId, caseId: input.caseId } });
   if (!url) throw new Error("url_not_found");
+  if (input.decision === "approve" && !url.platformId) throw new Error("unknown_platform_requires_investigation");
 
   const updated = await db.submittedUrl.update({
     where: { id: input.urlId },
@@ -523,7 +524,7 @@ export async function vouchCase(
   if (!dbCase) throw new Error("case_not_found");
 
   await db.submittedUrl.updateMany({
-    where: { caseId, status: "PENDING_REVIEW" },
+    where: { caseId, status: "PENDING_REVIEW", platformId: { not: null } },
     data: { status: "NOTICE_QUEUED", flaggedForReview: false, flagReason: `ngo_vouched:${partnerName}` },
   });
 

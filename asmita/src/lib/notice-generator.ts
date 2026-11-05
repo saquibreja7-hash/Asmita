@@ -27,6 +27,12 @@ const MAX_RENDERED_LENGTH = 40_000;
 // rendering, or terminal output. Allows tab, LF, and CR.
 const FORBIDDEN_CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 
+// Old notices describe a portal that is no longer available. They must be
+// reviewed and signed again; silently rewriting an approved notice is unsafe.
+export function hasRetiredPortalInstructions(template: string) {
+  return /secure content locator|one[ -]time secure portal|secure portal link/i.test(template);
+}
+
 export function renderNoticeTemplate(
   template: string,
   variables: NoticeTemplateInput

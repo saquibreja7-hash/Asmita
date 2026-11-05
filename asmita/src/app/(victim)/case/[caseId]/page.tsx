@@ -8,6 +8,7 @@ import HashGenerator from "@/components/HashGenerator";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { getLocale } from "@/lib/get-locale";
 import { t, type Locale } from "@/lib/i18n";
+import { findPlatformByDomain } from "@/lib/platforms";
 
 // Wording that matches what has actually happened: "prepared" is not "sent",
 // and "sent" is not "removed".
@@ -20,9 +21,9 @@ const URL_STATUS_KEYS = {
   REJECTED: "case.urlStatus.rejected",
 } as const;
 
-function StatusBadge({ status, locale }: { status: string; locale: Locale }) {
+function StatusBadge({ status, locale, unknown = false }: { status: string; locale: Locale; unknown?: boolean }) {
   const key = URL_STATUS_KEYS[status as keyof typeof URL_STATUS_KEYS];
-  const label = key ? t(locale, key) : status.replaceAll("_", " ");
+  const label = unknown && status === "PENDING_REVIEW" ? (locale === "hi" ? "रिपोर्टिंग रास्ते की जाँच जारी" : "Reporting route under review") : key ? t(locale, key) : status.replaceAll("_", " ");
   const color =
     status === "RESOLVED"
       ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
@@ -55,7 +56,7 @@ export default async function CasePage({
   }
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
   const hasUnsignedQueuedUrl = record?.urls.some((u) =>
-    (u.status === "NOTICE_QUEUED" ||
+    Boolean(u.urlHash) && Boolean(findPlatformByDomain(u.domain)) && (u.status === "NOTICE_QUEUED" ||
       (skipLegalGate && u.status === "PENDING_REVIEW" && u.platformId)) &&
     !u.hasSignedNotice,
   ) ?? false;
@@ -257,7 +258,8 @@ export default async function CasePage({
                                 {url.domain}
                               </td>
                               <td className="px-5 py-3.5">
-                                <StatusBadge status={url.status} locale={locale} />
+                                <StatusBadge status={url.status} locale={locale} unknown={!findPlatformByDomain(url.domain)} />
+                                {!url.urlHash && <p className="muted mt-1 text-xs">{t(locale, "case.urlExpired")}</p>}
                               </td>
                             </tr>
                           ))}
