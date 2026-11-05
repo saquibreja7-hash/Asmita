@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
+import { findPlatformByDomain } from "@/lib/platforms";
 
 export default async function ConfirmationPage({
   params,
@@ -40,6 +41,21 @@ export default async function ConfirmationPage({
         </div>
       </AppShell>
     );
+  }
+
+  const unknownLinks = record.urls.filter((url) => !findPlatformByDomain(url.domain));
+  if (unknownLinks.length > 0) {
+    const hi = locale === "hi";
+    const mixed = unknownLinks.length < record.urls.length;
+    return <AppShell><div className="page-canvas"><div className="container py-16 md:py-24"><div className="mx-auto max-w-xl space-y-6">
+      <p className="eyebrow">{hi ? "अनुरोध प्राप्त हुआ" : "Request received"}</p>
+      <h1 className="page-title-sm">{hi ? "हमें आपका अनुरोध मिल गया है।" : "We’ve received your request."}</h1>
+      <p className="muted text-sm leading-[1.75]">{hi ? "हमारी टीम अनजान प्लेटफ़ॉर्म की सार्वजनिक रिपोर्टिंग जानकारी जाँचने और मदद का रास्ता ढूँढ़ने की कोशिश करेगी। हम प्लेटफ़ॉर्म से संपर्क या सामग्री हटने का वादा नहीं कर सकते।" : "Our team will try to find a reporting route for the unknown platform by checking its public reporting information. We cannot promise to contact the platform or secure removal."}</p>
+      <p className="muted text-sm leading-[1.75]">{hi ? "अनजान प्लेटफ़ॉर्म के लिए अभी कोई शिकायत नहीं भेजी गई है। इस अनुरोध के लिए नोटिस पर हस्ताक्षर की आवश्यकता नहीं है।" : "No complaint has been sent to the unknown platform. You do not need to sign a notice for this investigation request."}</p>
+      {mixed && <p className="muted text-sm">{hi ? "अन्य प्लेटफ़ॉर्म की स्थिति अपने डैशबोर्ड में देखें।" : "Check your dashboard for the status of your other platforms."}</p>}
+      <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"><p className="eyebrow">{t(locale, "confirm.ref.eyebrow")}</p><p className="font-mono mt-3 text-2xl text-[var(--brand-strong)]">{record.referenceNumber}</p><p className="muted mt-3 text-sm">{hi ? "रिपोर्टिंग का रास्ता जाँच के अधीन है। स्थिति देखने के लिए डैशबोर्ड पर लौट सकते हैं।" : "Reporting route under review. You can return to your dashboard to check the status."}</p></div>
+      <div className="flex flex-wrap gap-3"><Link className="btn btn-primary" href={`/case/${record.id}`}>{t(locale, "confirm.cta.dashboard")}</Link><Link className="btn btn-secondary" href="/resources">{t(locale, "confirm.cta.resources")}</Link></div>
+    </div></div></div></AppShell>;
   }
 
   return (

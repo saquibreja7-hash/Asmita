@@ -155,8 +155,8 @@ export default function TermsPage() {
           <ReadingSection id="how-a-case-works" icon="clipboard" title={title("how-a-case-works")}>
             <p>
               A case begins with age attestation and a digital declaration.
-              You then add URLs as text. The current flow does not accept image
-              fingerprints. Asmita identifies the
+              You then add URLs as text. You may also submit image fingerprints.
+              Asmita identifies the
               platform from each URL and prepares a takedown notice for you to
               review and sign. Real dispatch requires human verification of the
               platform contact, sender domain, and notice template. Where a
@@ -165,9 +165,9 @@ export default function TermsPage() {
               dashboard shows each platform, response window, and audit trail.
             </p>
             <p>
-              Notices are delivered via a secure link protected by a
-              one-time password. That link burns after it is opened once
-              and cannot be revisited or forwarded.
+              Notices are sent by email with the reported URL in the signed
+              PDF attachment. The email provider and recipient may retain
+              copies beyond Asmita&rsquo;s retention period.
             </p>
             <NextStep
               title="A full walkthrough"

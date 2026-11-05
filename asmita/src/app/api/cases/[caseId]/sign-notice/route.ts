@@ -6,10 +6,11 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireSession } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
 import { decryptField, encryptField } from "@/lib/encryption";
-import { renderNoticeTemplate } from "@/lib/notice-generator";
+import { hasRetiredPortalInstructions, renderNoticeTemplate } from "@/lib/notice-generator";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
 import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
+import { isUrlExpired, urlRetentionCutoff } from "@/lib/url-retention";
 
 const FORBIDDEN_CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 
@@ -27,6 +28,7 @@ type UrlRow = {
   id: string;
   status: string;
   urlEncrypted: string;
+  submittedAt: Date;
   signedNoticePdf: string | null;
   case: { referenceNumber: string; declarationSignedAt: Date | null };
   platform: { id: string; name: string; noticeBasis: string; isActive: boolean; lastContactVerifiedByHuman: boolean } | null;
@@ -36,6 +38,7 @@ const URL_SELECT = {
   id: true,
   status: true,
   urlEncrypted: true,
+  submittedAt: true,
   signedNoticePdf: true,
   case: { select: { referenceNumber: true, declarationSignedAt: true } },
   platform: {
@@ -63,6 +66,8 @@ async function findUrl(
       status: { in: allowedStatuses },
       platformId: { not: null },
       signedNoticePdf: null,
+      urlEncrypted: { not: "" },
+      submittedAt: { gt: urlRetentionCutoff() },
       platform: {
         isActive: true,
         noticeBasis: { in: [...SIGNABLE_NOTICE_BASES] },
@@ -105,6 +110,9 @@ export async function POST(
   if (!url) {
     return NextResponse.json({ error: "url_not_found" }, { status: 404 });
   }
+  if (!url.urlEncrypted || isUrlExpired(url.submittedAt)) {
+    return NextResponse.json({ error: "url_expired" }, { status: 410 });
+  }
 
   if (urlId && !allowedStatuses.includes(url.status as UrlStatus)) {
     return NextResponse.json({ error: "url_not_ready" }, { status: 409 });
@@ -135,6 +143,9 @@ export async function POST(
   if (!template) {
     return NextResponse.json({ error: "reviewed_template_required" }, { status: 409 });
   }
+  if (hasRetiredPortalInstructions(template.bodyTemplate)) {
+    return NextResponse.json({ error: "notice_template_requires_review" }, { status: 409 });
+  }
 
   const decryptedUrl = decryptField(url.urlEncrypted);
   const variables = {
@@ -164,10 +175,11 @@ export async function POST(
   });
 
   const encryptedPdf = encryptField(Buffer.from(pdfBytes).toString("base64"));
-  await db.submittedUrl.update({
-    where: { id: url.id },
+  const saved = await db.submittedUrl.updateMany({
+    where: { id: url.id, urlEncrypted: url.urlEncrypted, submittedAt: { gt: urlRetentionCutoff() } },
     data: { signedNoticePdf: encryptedPdf, signedHashSubmissionIds: annex.hashSubmissionIds },
   });
+  if (!saved.count) return NextResponse.json({ error: "url_expired" }, { status: 410 });
   // The declaration is signed here, by a signed document, never by a checkbox.
   await db.case.updateMany({
     where: { id: caseId, declarationSignedAt: null },

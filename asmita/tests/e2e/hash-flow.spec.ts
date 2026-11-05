@@ -42,7 +42,7 @@ test("AI check exposes an age-gated local image picker", async ({ page }) => {
 test("registered adult can generate a fingerprint and submit it with a URL", async ({ page }) => {
   test.setTimeout(120_000);
   await register(page);
-  await page.getByLabel("Links where the content appears").fill("https://www.instagram.com/p/synthetic-test");
+  await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic-test");
   const picker = page.locator('input[type="file"]');
   await expect(picker).toHaveCount(1);
   await picker.setInputFiles({
@@ -54,12 +54,13 @@ test("registered adult can generate a fingerprint and submit it with a URL", asy
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   const hashResponse = page.waitForResponse((r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()) && r.request().method() === "POST");
   await page.getByRole("button", { name: "Continue to review" }).click();
-  expect((await createResponse).ok()).toBe(true);
+  const created = await createResponse;
+  expect(created.ok()).toBe(true);
+  const { caseId } = await created.json();
   const hashResult = await hashResponse;
   expect(hashResult.ok()).toBe(true);
   expect((await hashResult.json()).results[0].ok).toBe(true);
-  await expect(page).toHaveURL(/\/handoff\/[^/]+$/, { timeout: 30_000 });
-  await page.getByRole("link", { name: "Back to dashboard" }).click();
+  await page.goto(`/case/${caseId}`);
   await expect(page.getByText("Digital fingerprints")).toBeVisible();
 });
 
@@ -73,13 +74,9 @@ test("hash-only registration offers a platform handoff", async ({ page }) => {
   await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
   await page.getByRole("checkbox", { name: /Instagram \/ Meta/ }).check();
   await page.getByLabel(/I declare/).check();
-  const hashResponse = page.waitForResponse((r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()) && r.request().method() === "POST");
   await page.getByRole("button", { name: "Continue to review" }).click();
-  expect((await hashResponse).ok()).toBe(true);
+  await expect(page.getByText("The fingerprint you created has not been sent to these platforms.")).toBeVisible();
   await expect(page.getByRole("link", { name: /Instagram \/ Meta/ })).toBeVisible();
-  await page.getByRole("link", { name: /case dashboard/i }).click();
-  await expect(page).toHaveURL(/\/case\/[^/]+$/);
-  await expect(page.getByText("Digital fingerprints")).toBeVisible();
 });
 
 test("the fingerprint section is honest about what a fingerprint does and points to StopNCII", async ({ page }) => {

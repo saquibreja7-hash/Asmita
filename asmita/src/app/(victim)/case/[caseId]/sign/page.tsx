@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
+import { urlRetentionCutoff } from "@/lib/url-retention";
 import { SignNoticeForm } from "./SignNoticeForm";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
@@ -35,6 +36,8 @@ export default async function SignNoticePage({
       status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
       platformId: { not: null },
       signedNoticePdf: null,
+      urlEncrypted: { not: "" },
+      submittedAt: { gt: urlRetentionCutoff() },
       platform: {
         isActive: true,
         noticeBasis: { in: [...SIGNABLE_NOTICE_BASES] },

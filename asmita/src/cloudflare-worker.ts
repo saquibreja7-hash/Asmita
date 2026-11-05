@@ -18,6 +18,7 @@ type WorkerScheduledController = {
 };
 
 const cronRoutes: Record<string, string> = {
+  "0 * * * *": "/api/cron/purge-expired-urls",
   "30 20 * * *": "/api/cron/sweep-due-jobs",
   "30 22 * * *": "/api/cron/maintenance",
 };

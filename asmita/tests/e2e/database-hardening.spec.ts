@@ -35,7 +35,7 @@ test("survivor report works as the app role and stays out of reach of the Data A
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL(/\/submit$/, { timeout: 30_000 });
 
-  await page.getByLabel("Links where the content appears").fill(`https://www.instagram.com/p/asmita-synthetic-${randomUUID()}/`);
+  await page.getByLabel("Links where the content appears").fill(`https://www.youtube.com/watch?v=asmita-synthetic-${randomUUID()}`);
   await page.getByLabel(/I declare/).check();
   const createResponse = page.waitForResponse((response) => response.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue to review" }).click();

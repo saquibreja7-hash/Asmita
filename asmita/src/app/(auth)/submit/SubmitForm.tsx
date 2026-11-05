@@ -7,6 +7,7 @@ import type { HashPickerPlatform } from "@/lib/hash-submission";
 import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 import { checkLink, matchPlatform, type LinkCheckError, type PlatformPattern } from "@/lib/link-check";
+import { FormHandoff } from "@/components/FormHandoff";
 
 const MAX_HASH_FILES = 10;
 
@@ -41,10 +42,11 @@ type Props = {
   // Without a session the draft waits in this tab while the email is confirmed.
   signedIn: boolean;
   // Names and domains only, for naming the platform beside each link.
-  knownPlatforms: PlatformPattern[];
+  knownPlatforms: (PlatformPattern & { id: string; formUrl?: string })[];
   enableHashUpload?: boolean;
   platforms?: HashPickerPlatform[];
   locale: Locale;
+  children: React.ReactNode;
 };
 
 type LineCheck = { line: string; url?: string; platform?: string; problem?: LinkCheckError | "duplicate" };
@@ -77,13 +79,15 @@ function checkLines(text: string, knownPlatforms: PlatformPattern[]): LineCheck[
     });
 }
 
-export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false, platforms = [], locale }: Props) {
+export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false, platforms = [], locale, children }: Props) {
   const router = useRouter();
   const [urls, setUrls] = useState("");
   const [declaration, setDeclaration] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [handoff, setHandoff] = useState<{ name: string; formUrl: string }[] | null>(null);
+  const [remainingDraft, setRemainingDraft] = useState<string | null>(null);
 
   const [hashFiles, setHashFiles] = useState<FileHashState[]>([]);
   const [selectedPlatformIds, setSelectedPlatformIds] = useState<string[]>([]);
@@ -137,28 +141,53 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     setSubmitting(true);
     try {
       const selectedPlatforms = hashOnly ? platforms.filter((p) => selectedPlatformIds.includes(p.id)) : [];
-      const emailPlatformIds = selectedPlatforms.filter((p) => p.hasEmail).map((p) => p.id);
-      const formOnlyPlatforms = selectedPlatforms
-        .filter((p) => !p.hasEmail && p.formUrl)
-        .map((p) => ({ id: p.id, name: p.name, formUrl: p.formUrl! }));
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
-        urls: parsedUrls,
-        hashes: hashedFiles.map((f) => ({
-          hash: f.hash!,
-          quality: f.quality ?? 0,
-          clientVersion: PDQ_CLIENT_VERSION,
-        })),
-        platformIds: hashOnly ? selectedPlatformIds : [],
-        emailPlatformIds,
-        formOnlyPlatforms,
+      const formLinks = new Map<string, { name: string; formUrl: string }>();
+      const remainingUrls = parsedUrls.filter((url) => {
+        const checked = checkLink(url);
+        const platform = checked.ok ? matchPlatform(checked.domain, knownPlatforms) : null;
+        if (!platform?.formUrl) return true;
+        formLinks.set(platform.id, { name: platform.name, formUrl: platform.formUrl });
+        return false;
+      });
+      const remainingPlatforms = selectedPlatforms.filter((platform) => {
+        // Only a URL in the human-verified directory may be offered as a handoff.
+        const verified = knownPlatforms.find((p) => p.formUrl && p.formUrl === platform.formUrl);
+        if (!verified?.formUrl) return true;
+        formLinks.set(verified.id, { name: verified.name, formUrl: verified.formUrl });
+        return false;
+      });
+      const hasRemaining = remainingUrls.length > 0 || (hashOnly && remainingPlatforms.length > 0);
+      const draft = hasRemaining ? JSON.stringify({
+        urls: remainingUrls,
+        hashes: hashedFiles.map((f) => ({ hash: f.hash!, quality: f.quality ?? 0, clientVersion: PDQ_CLIENT_VERSION })),
+        platformIds: hashOnly ? remainingPlatforms.map((p) => p.id) : [],
+        emailPlatformIds: remainingPlatforms.filter((p) => p.hasEmail).map((p) => p.id),
+        formOnlyPlatforms: [],
         declaration: true,
-      }));
-      router.push(signedIn ? "/review-sign" : "/register");
+      }) : null;
+      if (formLinks.size > 0) {
+        sessionStorage.removeItem(DRAFT_KEY);
+        setRemainingDraft(draft);
+        setHandoff([...formLinks.values()]);
+      } else if (draft) {
+        sessionStorage.setItem(DRAFT_KEY, draft);
+        router.push(signedIn ? "/review-sign" : "/register");
+      }
+
     } catch {
       setError(t(locale, "submit.error.generic"));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (handoff) {
+    return <FormHandoff locale={locale} links={handoff} fingerprintNotSent={hashedFiles.length > 0} onBack={() => setHandoff(null)} onContinue={remainingDraft ? () => {
+      try {
+        sessionStorage.setItem(DRAFT_KEY, remainingDraft);
+        router.push(signedIn ? "/review-sign" : "/register");
+      } catch { setError(t(locale, "submit.error.generic")); }
+    } : undefined} error={error} />;
   }
 
   const shortNames = [...new Set(knownPlatforms.map((p) => p.name.split(" / ")[0]))];
@@ -168,8 +197,9 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   const lowQuality = hashFiles.some((f) => f.status === "hashed" && (f.quality ?? 100) < 50);
 
   return (
-    <div className="space-y-6">
-
+    <div>
+      {children}
+      <div className="mt-6 space-y-6">
       <div className="filing-card">
       {/* Step 1: the links */}
       <Step n={1}>
@@ -215,6 +245,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             ))}
           </ul>
         )}
+        {lineChecks.some((c) => c.url && !c.platform) && <p className="mt-3 rounded-[var(--radius-box)] bg-[var(--brand-soft)] p-4 text-sm leading-[1.7] text-[var(--ink)]">{locale === "hi" ? "हम इस प्लेटफ़ॉर्म को अभी नहीं पहचानते। आप जाँच का अनुरोध कर सकते हैं; हम रिपोर्टिंग का सुरक्षित रास्ता खोजने की कोशिश करेंगे, लेकिन संपर्क या सामग्री हटने का वादा नहीं कर सकते।" : "We don’t recognize this platform yet. You can request an investigation. We’ll try to find a safe reporting route, but cannot promise to contact the platform or secure removal."}</p>}
         {skippedLines > 0 && parsedUrls.length > 0 && (
           <p className="mt-2 text-xs text-[var(--text-muted)]">{t(locale, "submit.link.skipNote")}</p>
         )}
@@ -278,17 +309,9 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             <p className="muted text-sm leading-[1.6]">
               {t(locale, "submit.hash.sub")}
             </p>
-            <p className="muted mt-2 text-sm leading-[1.6]">
-              {t(locale, "submit.hash.stopncii.text")}{" "}
-              <a
-                href="https://stopncii.org/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="link-underline text-[var(--ink)]"
-              >
-                {t(locale, "submit.hash.stopncii.link")}
-              </a>
-            </p>
+            <p className="muted mt-3 text-sm leading-[1.6]">{t(locale, "submit.hash.stopncii.text")}</p>
+            <a href="https://stopncii.org/" target="_blank" rel="noopener noreferrer" className="link-underline text-sm">{t(locale, "submit.hash.stopncii.link")}</a>
+
           </div>
 
           <input
@@ -439,6 +462,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
         </button>
       </div>
 
+      </div>
     </div>
   );
 }

@@ -72,7 +72,7 @@ export default async function UrlDetailPage({
               <Field label={t(locale, "urldetail.field.status")} value={url.status.replaceAll("_", " ")} />
               <Field
                 label={t(locale, "urldetail.field.hash")}
-                value={url.urlHash.slice(0, 16)}
+                value={url.urlHash ? url.urlHash.slice(0, 16) : t(locale, "case.urlExpired")}
                 mono
               />
             </dl>

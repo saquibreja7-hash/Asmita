@@ -20,10 +20,6 @@ vi.mock("@/lib/notice-dispatch", () => ({
   dispatchTier2Notice: vi.fn().mockResolvedValue({ dispatched: true, notice: { messageId: "msg-1" } }),
 }));
 
-vi.mock("@/lib/url-portal", () => ({
-  createPortalToken: vi.fn().mockResolvedValue({ token: "abc123token", accessCode: "TEST-1234" }),
-}));
-
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { dispatchTier2Notice } from "@/lib/notice-dispatch";
@@ -67,6 +63,7 @@ const dispatchableUrl = {
   id: "url-1",
   caseId: "case-1",
   urlEncrypted: "encrypted-url",
+  submittedAt: new Date(),
   domain: "example.com",
   status: "NOTICE_QUEUED",
   signedNoticePdf: "encrypted-signed-pdf",
@@ -176,13 +173,19 @@ describe("POST /api/notices/dispatch", () => {
         urlId: "url-1",
         recipientEmail: "go@example.com",
         subject: "Notice ASMITA-2026-00001",
-        // Body contains the portal link (not the raw URL) and the access code block.
-        body: expect.stringContaining("meriasmita.org/r/abc123token"),
+        body: expect.stringContaining("[Reported URL is in the attached signed notice]"),
         signedNoticePdf: expect.any(Buffer),
       }),
     );
     const calledBody = vi.mocked(dispatchTier2Notice).mock.calls[0][0].body;
-    expect(calledBody).toContain("Access code: TEST-1234");
+    expect(calledBody).not.toContain("/r/");
     expect(calledBody).not.toContain("https://example.com/reported");
+  });
+
+  it("blocks templates that still claim the URL is a secure portal", async () => {
+    vi.mocked(db.noticeTemplate.findFirst).mockResolvedValue({ ...reviewedTemplate, bodyTemplate: "Secure Content Locator: {{url}}" } as never);
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+    expect(res.status).toBe(409);
+    expect(dispatchTier2Notice).not.toHaveBeenCalled();
   });
 });

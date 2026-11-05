@@ -295,6 +295,7 @@ test("a form-only link listed first does not hide the notices that can be signed
   await page.getByLabel(/I declare/).check();
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue to review" }).click();
+  await page.getByRole("button", { name: "Continue with remaining reports" }).click();
   const { caseId } = (await (await createResponse).json()) as { caseId: string };
 
   await page.getByLabel("Full name").fill("Synthetic Survivor");
@@ -305,8 +306,7 @@ test("a form-only link listed first does not hide the notices that can be signed
   await page.getByRole("button", { name: "Sign and submit" }).click();
   expect((await signed).ok()).toBe(true);
 
-  // Then the Instagram form, with the notice text to paste.
-  await expect(page).toHaveURL(new RegExp(`/handoff/${caseId}$`), { timeout: 30_000 });
+  await expect(page).toHaveURL(new RegExp(`/case/${caseId}/confirmation$`), { timeout: 30_000 });
   const rows = await withAdmin((db) =>
     db.query(
       'SELECT s.domain, s."signedNoticePdf" IS NOT NULL AS signed FROM "SubmittedUrl" s WHERE s."caseId" = $1 ORDER BY s.domain',
@@ -314,7 +314,6 @@ test("a form-only link listed first does not hide the notices that can be signed
     ),
   );
   expect(rows.rows).toEqual([
-    { domain: "instagram.com", signed: false },
     { domain: "wa.me", signed: true },
   ]);
 });

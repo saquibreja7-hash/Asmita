@@ -4,7 +4,8 @@ import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/encryption";
-import { renderNoticeTemplate } from "@/lib/notice-generator";
+import { isUrlExpired, urlRetentionCutoff } from "@/lib/url-retention";
+import { hasRetiredPortalInstructions, renderNoticeTemplate } from "@/lib/notice-generator";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
 import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
@@ -35,6 +36,8 @@ export async function GET(
       status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
       platformId: { not: null },
       signedNoticePdf: null,
+      urlEncrypted: { not: "" },
+      submittedAt: { gt: urlRetentionCutoff() },
       platform: {
         isActive: true,
         noticeBasis: { in: [...SIGNABLE_NOTICE_BASES] },
@@ -73,7 +76,13 @@ export async function GET(
     orderBy: [{ platformId: "desc" }, { version: "desc" }],
   });
   if (!template) return NextResponse.json({ error: "no_template" }, { status: 404 });
+  if (hasRetiredPortalInstructions(template.bodyTemplate)) {
+    return NextResponse.json({ error: "notice_template_requires_review" }, { status: 409 });
+  }
 
+  if (!url.urlEncrypted || isUrlExpired(url.submittedAt)) {
+    return NextResponse.json({ error: "url_expired" }, { status: 410 });
+  }
   const decryptedUrl = decryptField(url.urlEncrypted);
   const variables = {
     caseReference: record.referenceNumber,

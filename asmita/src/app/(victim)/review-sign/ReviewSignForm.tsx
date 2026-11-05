@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
+import { FormHandoff } from "@/components/FormHandoff";
+import { platformDirectory } from "@/lib/platforms";
+import { checkLink, matchPlatform } from "@/lib/link-check";
 
 type HashEntry = { hash: string; quality: number; clientVersion: string };
 
@@ -61,7 +64,7 @@ function CheckItem({ heading, detail }: { heading: string; detail: string }) {
   );
 }
 
-export function ReviewSignForm({ locale }: { locale: Locale }) {
+export function ReviewSignForm({ locale, email }: { locale: Locale; email: string | null }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("loading");
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -95,8 +98,12 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
         data.registrationKey ??= crypto.randomUUID();
         sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data));
         setDraft(data);
-        setStep("creating");
-        startCase(data);
+        const hasUnknown = data.urls.some((url) => {
+          const parsed = checkLink(url);
+          return parsed.ok && !matchPlatform(parsed.domain, platformDirectory);
+        });
+        if (hasUnknown) setStep("review");
+        else { setStep("creating"); startCase(data); }
       } catch {
         router.replace("/submit");
       }
@@ -281,60 +288,31 @@ export function ReviewSignForm({ locale }: { locale: Locale }) {
   if (step === "loading") return null;
 
   if (step === "form-only-handoff") {
-    return (
-      <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
-        <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
-          <div className="md:sticky md:top-28">
-            <span className="eyebrow">{t(locale, "review.formOnly.pill")}</span>
-            <p className="muted mt-5 text-sm leading-[1.75]">
-              {t(locale, "review.formOnly.sub")}
-            </p>
-            <div className="mt-8 space-y-4">
-              <CheckItem heading={t(locale, "review.formOnly.aside.item1.heading")} detail={t(locale, "review.formOnly.aside.item1.detail")} />
-              <CheckItem heading={t(locale, "review.formOnly.aside.item2.heading")} detail={t(locale, "review.formOnly.aside.item2.detail")} />
-              <CheckItem heading={t(locale, "review.formOnly.aside.item3.heading")} detail={t(locale, "review.formOnly.aside.item3.detail")} />
-            </div>
-          </div>
-        </aside>
+    const links = pendingFormPlatforms.flatMap((pending) => {
+      const verified = platformDirectory.find((p) => p.lastContactVerifiedByHuman && p.formUrl?.startsWith("https://") && p.formUrl === pending.formUrl);
+      return verified?.formUrl ? [{ name: verified.name, formUrl: verified.formUrl }] : [];
+    });
+    return <div className="mx-auto max-w-xl"><FormHandoff locale={locale} links={links} /><a className="btn btn-primary mt-6" href={`/case/${caseId}`}>{t(locale, "review.formOnly.cta.dashboard")}</a></div>;
+  }
 
-        <div className="order-1 min-w-0 flex-1 md:order-2 space-y-8">
-          <div>
-            <h1 className="page-title-sm">
-              {t(locale, "review.formOnly.title")}
-            </h1>
-            <p className="muted mt-2 text-sm leading-[1.75]">
-              {pendingFormPlatforms.length} {t(locale, "review.formOnly.intro")}
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {pendingFormPlatforms.map((platform) => (
-              <a
-                key={platform.id}
-                href={platform.formUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-5 hover:border-[var(--brand)] transition-colors"
-              >
-                <div>
-                  <p className="text-sm font-medium text-[var(--ink)]">{platform.name}</p>
-                  <p className="muted mt-0.5 text-xs">{t(locale, "review.formOnly.openForm")} {platform.name} →</p>
-                </div>
-                <svg className="ml-4 shrink-0 text-[var(--brand)]" width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path d="M5 10h10M10 5l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </a>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <a className="btn btn-primary" href={`/case/${caseId}`}>
-              {t(locale, "review.formOnly.cta.dashboard")}
-            </a>
-          </div>
-        </div>
-      </div>
-    );
+  const unknownUrls = draft?.urls.filter((url) => {
+    const parsed = checkLink(url);
+    return parsed.ok && !matchPlatform(parsed.domain, platformDirectory);
+  }) ?? [];
+  if (draft && unknownUrls.length > 0 && (step === "review" || step === "creating")) {
+    const hi = locale === "hi";
+    const mixed = draft.urls.length > unknownUrls.length;
+    return <section className="mx-auto max-w-xl space-y-6" aria-labelledby="unknown-review-title">
+      <div><p className="eyebrow">{hi ? "अनुरोध की जाँच" : "Review your request"}</p><h1 id="unknown-review-title" className="page-title-sm mt-3">{hi ? "अनजान प्लेटफ़ॉर्म पर सहायता का अनुरोध" : "Request help with an unknown platform"}</h1>
+      <p className="muted mt-3 text-sm leading-[1.75]">{hi ? "हम इस प्लेटफ़ॉर्म को अभी नहीं पहचानते। हमारी टीम रिपोर्ट करने का सुरक्षित तरीका ढूँढ़ने की कोशिश करेगी। हम प्लेटफ़ॉर्म तक पहुँचने या सामग्री हटने का वादा नहीं कर सकते।" : "We don’t recognize this platform yet. Our team will try to find a safe reporting route. We cannot promise to reach the platform or have the content removed."}</p></div>
+      <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-5"><p className="font-medium">{hi ? "जाँच के लिए लिंक" : "Links for investigation"}</p><ul className="mt-3 space-y-2">{unknownUrls.map((url) => <li key={url} className="break-all font-mono text-sm">{url}</li>)}</ul></div>
+      {email && <p className="text-sm">{hi ? "आपका सत्यापित ईमेल:" : "Your verified email:"} <span className="break-all font-medium">{email}</span></p>}
+      <p className="muted text-sm leading-[1.75]">{hi ? "अनुरोध भेजने पर आप Asmita को सार्वजनिक रिपोर्टिंग जानकारी की जाँच करने की अनुमति देते हैं। हम इस प्रक्रिया में निजी सामग्री नहीं खोलेंगे या डाउनलोड नहीं करेंगे। अभी कोई शिकायत नहीं भेजी जाएगी।" : "By submitting, you ask Asmita to check public reporting information. We will not open or download the intimate content as part of this investigation. No complaint is sent at this step."}</p>
+      {mixed && <p className="muted text-sm">{hi ? "आपके अन्य लिंक भी केस में शामिल हैं। जहाँ नोटिस उपलब्ध होगा, आपको उसे अलग से देखने और हस्ताक्षर करने का विकल्प मिलेगा।" : "Your other links are included in the case. Where a notice is available, you can review and sign it separately."}</p>}
+      {draft.hashes.length > 0 && <p className="muted text-sm">{hi ? "आपके चुने हुए डिजिटल फ़िंगरप्रिंट भी केस में सहेजे जाएँगे।" : "The fingerprints you selected will also be saved with this case."}</p>}
+      {error && <p role="alert" className="text-sm text-[var(--danger)]">{error}</p>}
+      <div className="flex flex-wrap gap-3"><button type="button" className="btn btn-primary" disabled={step === "creating"} onClick={() => void createCase(draft)}>{step === "creating" ? (hi ? "भेज रहे हैं…" : "Submitting…") : (hi ? "जाँच का अनुरोध भेजें" : "Submit request for investigation")}</button><a className="btn btn-secondary" href="/submit">{hi ? "वापस जाएँ" : "Go back"}</a></div>
+    </section>;
   }
 
   if (step === "review" || step === "creating") {

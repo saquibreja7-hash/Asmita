@@ -5,7 +5,7 @@ import { feedbackRecords } from "@/lib/feedback";
 import { calculatePlatformResponseRates, type PlatformResponseSample } from "@/lib/response-rates";
 import { listAllCases } from "@/lib/case-ops";
 import { createReverificationQueue } from "@/lib/go-reverification";
-import { platformDirectory, HUMAN_VERIFICATION_REQUIRED, type PlatformDirectoryEntry } from "@/lib/platforms";
+import { platformDirectory, findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED, type PlatformDirectoryEntry } from "@/lib/platforms";
 import { deliveryEvents } from "@/lib/webhook-events";
 
 export type AdminCaseFilters = {
@@ -36,6 +36,7 @@ export type AdminUrlReviewRow = {
   domain: string;
   status: string;
   reason: string;
+  investigationOnly: boolean;
   ageMinutes: number;
   slaState: "within_sla" | "due_soon" | "breached";
 };
@@ -128,7 +129,8 @@ export async function listReviewQueueRows(now = new Date()): Promise<AdminUrlRev
           platformName: url.platformName,
           domain: url.domain,
           status: url.status,
-          reason: url.flagReason || "Needs human review before dispatch",
+          reason: !findPlatformByDomain(url.domain) ? "Unknown platform: investigate public reporting routes" : url.flagReason || "Needs human review before dispatch",
+          investigationOnly: !findPlatformByDomain(url.domain),
           ageMinutes,
           slaState: ageMinutes >= 240 ? "breached" : ageMinutes >= 180 ? "due_soon" : "within_sla",
         };

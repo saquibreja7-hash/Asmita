@@ -1,3 +1,10 @@
+# Superseded portal wording
+
+The portal-based locator and templates shown below are historical drafts, not
+approved current notice text. The URL portal has been retired. Replacement
+templates must be reviewed by a human legal reviewer before dispatch, and
+survivors must sign the replacement notice again.
+
 # LEGAL OPINION — NOTICE TEMPLATE REVIEW & REDRAFT
 
 **Matter**: Outbound NCII Takedown Notice Templates — All Template Types
