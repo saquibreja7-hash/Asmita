@@ -82,7 +82,7 @@ export function Footer({ locale }: { locale: Locale }) {
             <Link href="/" className="site-footer-logo-link" aria-label="Asmita home">
               {/* The logo: teal wordmark with the gold flame. A small static PNG; next/image adds nothing here. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/asmita-wordmark.png" alt="Asmita" width={485} height={145} className="brand-logo brand-logo-footer" />
+              <img src="/asmita-wordmark-v2.png" alt="Asmita" width={317} height={94} className="brand-logo brand-logo-footer" />
             </Link>
             {isHi ? (
               <p className="site-footer-desc site-footer-desc-hi hi">

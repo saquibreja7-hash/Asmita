@@ -31,7 +31,7 @@ export function Header({ locale }: { locale: Locale }) {
           <Link href="/" className="fade flex shrink-0 items-center gap-3" aria-label="Asmita home">
             {/* The logo: teal wordmark with the gold flame. A small static PNG; next/image adds nothing here. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/asmita-wordmark.png" alt="Asmita" width={485} height={145} className="brand-logo" />
+            <img src="/asmita-wordmark-v2.png" alt="Asmita" width={317} height={94} className="brand-logo" />
           </Link>
 
           <nav className="hidden items-center lg:flex" aria-label="Primary">
