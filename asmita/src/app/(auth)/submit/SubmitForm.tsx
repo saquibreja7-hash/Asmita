@@ -309,6 +309,8 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             <p className="muted text-sm leading-[1.6]">
               {t(locale, "submit.hash.sub")}
             </p>
+            <p className="muted mt-3 text-sm leading-[1.6]">{t(locale, "submit.hash.stopncii.text")}</p>
+            <a href="https://stopncii.org/" target="_blank" rel="noopener noreferrer" className="link-underline text-sm">{t(locale, "submit.hash.stopncii.link")}</a>
 
           </div>
 

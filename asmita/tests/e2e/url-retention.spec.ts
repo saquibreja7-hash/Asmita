@@ -9,7 +9,7 @@ test("the scheduled sweep removes old URL copies but keeps a recent URL and case
   const recentId = randomUUID();
   await withAdmin(async (db) => {
     await db.query('INSERT INTO "User" (id, "emailHash", "emailEncrypted", "ageOver18") VALUES ($1, $2, $3, true)', [userId, userId, "synthetic"]);
-    await db.query('INSERT INTO "Case" (id, "referenceNumber", "userId", "updatedAt") VALUES ($1, $2, $3, now())', [caseId, caseId, userId]);
+    await db.query('INSERT INTO "Case" (id, "referenceNumber", "userId", "updatedAt", "hashAdvisoryPlatformIds") VALUES ($1, $2, $3, now(), ARRAY[]::text[])', [caseId, caseId, userId]);
     for (const [id, age] of [[oldId, 31], [recentId, 1]] as const) {
       await db.query('INSERT INTO "SubmittedUrl" (id, "caseId", "urlEncrypted", "urlHash", domain, "signedNoticePdf", "submittedAt") VALUES ($1, $2, $3, $4, $5, $6, now() - $7::int * interval \'1 day\')', [id, caseId, "encrypted-synthetic", "synthetic-digest", "example.invalid", "synthetic-pdf", age]);
       await db.query('INSERT INTO "UrlPortalToken" (id, "urlId", token, "accessCodeHash") VALUES ($1, $2, $3, $4)', [randomUUID(), id, randomUUID(), "synthetic"]);

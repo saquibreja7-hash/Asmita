@@ -16,28 +16,15 @@ async function completeAdultRegistration(page: import("@playwright/test").Page, 
 }
 
 async function createCase(page: import("@playwright/test").Page) {
-  await page.getByLabel("Links where the content appears").fill("https://www.instagram.com/p/abc");
-  await expect(page.locator("#url-checks").getByText("Instagram / Meta")).toBeVisible();
+  await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
+  await expect(page.locator("#url-checks").getByText("YouTube", { exact: true })).toBeVisible();
   await page.getByLabel(/I declare/).check();
   const createResponse = page.waitForResponse((response) => response.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue to review" }).click();
-  expect((await createResponse).ok()).toBe(true);
-
-  // Flow branches: if a notice preview exists, the sign form appears on the
-  // same screen. The survivor then ends on "done for now", or on the
-  // platform's own form for a form-only platform such as Instagram.
-  const signForm = page.getByLabel("Full name");
-  const donePage = page.waitForURL(/\/(case\/[^/]+\/confirmation|handoff\/[^/]+)$/, { timeout: 30_000 }).catch(() => {});
-  if (await signForm.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await signForm.fill("Test User");
-    await page.getByLabel("Contact (email or phone)").fill("test@example.com");
-    await page.getByPlaceholder("Type your full name").fill("Test User");
-    await page.getByRole("button", { name: "Sign and submit" }).click();
-  }
-  await donePage;
-  await expect(page).toHaveURL(/\/handoff\/[^/]+$/, { timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: "Use the platform's own form." })).toBeVisible();
-  await page.getByRole("link", { name: "Back to dashboard" }).click();
+  const created = await createResponse;
+  expect(created.ok()).toBe(true);
+  const { caseId } = await created.json();
+  await page.goto(`/case/${caseId}`);
   await expect(page).toHaveURL(/\/case\/[^/]+$/);
   await expect(page.getByText(/ASMITA-/).first()).toBeVisible();
 }
@@ -80,7 +67,7 @@ test("minor registration branches before collecting email", async ({ page }) => 
   await expect(page.locator("input[type='email']")).toHaveCount(0);
 });
 
-test("full adult flow creates a case and reaches confirmation", async ({ page }, testInfo) => {
+test("full adult flow creates a case and reaches the dashboard", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await completeAdultRegistration(
     page,

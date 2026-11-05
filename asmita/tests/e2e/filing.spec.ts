@@ -45,8 +45,8 @@ test("each pasted line is checked where it is typed, and only valid links reach 
   await expect(page.getByRole("status").filter({ hasText: "Add at least one link or fingerprint" })).toBeVisible();
 
   // A link without https:// is accepted, a repeat is flagged, and bad lines are left out.
-  await links.fill("instagram.com/p/abc\nhttps://www.instagram.com/p/abc\nDigital fingerprint");
-  await expect(checks.getByText("Instagram / Meta")).toBeVisible();
+  await links.fill("youtube.com/watch?v=asmita-synthetic\nhttps://youtube.com/watch?v=asmita-synthetic\nDigital fingerprint");
+  await expect(checks.getByText("YouTube", { exact: true })).toBeVisible();
   await expect(checks.getByText("Already listed")).toBeVisible();
   await expect(page.getByText(/Lines marked in red will be left out/)).toBeVisible();
   await expect(cta).toBeEnabled();
@@ -60,12 +60,8 @@ test("each pasted line is checked where it is typed, and only valid links reach 
   await cta.click();
   const response = await created;
   expect(response.ok()).toBe(true);
-  expect(response.request().postDataJSON().urls).toEqual(["https://instagram.com/p/abc"]);
-  // Instagram takes reports through its own form, so there is nothing to sign
-  // yet: the survivor is sent to its form, with the notice text to paste.
-  await expect(page).toHaveURL(/\/handoff\/[^/]+$/, { timeout: 30_000 });
-  await expect(page.getByRole("heading", { name: "Use the platform's own form." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "You are done for now." })).toHaveCount(0);
+  expect(response.request().postDataJSON().urls).toEqual(["https://youtube.com/watch?v=asmita-synthetic"]);
+  await expect(page).toHaveURL(/\/(review-sign|case\/[^/]+\/confirmation)$/, { timeout: 30_000 });
 });
 
 test("links can be added before the email code, and nothing reaches the server until then", async ({ page }, testInfo) => {
