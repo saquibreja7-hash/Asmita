@@ -29,6 +29,7 @@ type Step =
   | "signing"
   | "hash-sign"
   | "hash-signing"
+  | "pending-submit"
   | "form-only-handoff";
 
 // When no notice is left to sign: a link on a platform that only takes its
@@ -80,8 +81,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
   const [error, setError] = useState("");
   const [signedCount, setSignedCount] = useState(0);
   const started = useRef(false);
-  // Review and signing are one screen: the case is created as soon as the
-  // draft is read, so the notice preview appears without another click.
   const startCase = useEffectEvent((d: Draft) => {
     if (started.current) return;
     started.current = true;
@@ -110,6 +109,14 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
     }, 0);
     return () => window.clearTimeout(id);
   }, [router]);
+
+  async function acknowledgeSubmission(id: string) {
+    try {
+      await csrfFetch(`/api/cases/${id}/acknowledge`, { method: "POST" });
+    } catch {
+      // The saved submission remains available in the dashboard if email fails.
+    }
+  }
 
   async function createCase(d: Draft) {
     setStep("creating");
@@ -162,6 +169,7 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
           if (d.emailPlatformIds.length > 0) {
             // Save form-only platforms to state before clearing d (sessionStorage won't survive)
             if (d.formOnlyPlatforms.length > 0) {
+              await acknowledgeSubmission(newCaseId);
               setPendingFormPlatforms(d.formOnlyPlatforms);
             }
             sessionStorage.removeItem(DRAFT_KEY);
@@ -176,6 +184,7 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
               setCaseId(newCaseId);
               setStep("form-only-handoff");
             } else {
+              await acknowledgeSubmission(newCaseId);
               router.push(`/case/${newCaseId}/confirmation`);
             }
           }
@@ -193,7 +202,17 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         setPreviewUrl(`/api/cases/${newCaseId}/preview-notice?urlId=${encodeURIComponent(firstUrlId)}`);
         setStep("sign");
       } else {
-        router.push(await pathAfterNotices(newCaseId, previewRes));
+        const destination = await pathAfterNotices(newCaseId, previewRes);
+        const hasUnknown = d.urls.some((url) => {
+          const parsed = checkLink(url);
+          return parsed.ok && !matchPlatform(parsed.domain, platformDirectory);
+        });
+        if (destination.endsWith("/confirmation") && !hasUnknown) {
+          setStep("pending-submit");
+        } else {
+          if (destination.endsWith("/confirmation") || destination.startsWith("/handoff/")) await acknowledgeSubmission(newCaseId);
+          router.push(destination);
+        }
       }
     } catch {
       setError(t(locale, "review.error.generic"));
@@ -234,7 +253,9 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         setStep("sign");
         return;
       }
-      router.push(await pathAfterNotices(caseId, next));
+      const destination = await pathAfterNotices(caseId, next);
+      if (destination.endsWith("/confirmation") || destination.startsWith("/handoff/")) await acknowledgeSubmission(caseId);
+      router.push(destination);
     } catch {
       setError(t(locale, "review.sign.error.timeout"));
       setStep("sign");
@@ -267,8 +288,10 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         return;
       }
       if (pendingFormPlatforms.length > 0) {
+        await acknowledgeSubmission(caseId);
         setStep("form-only-handoff");
       } else {
+        await acknowledgeSubmission(caseId);
         router.push(`/case/${caseId}/confirmation`);
       }
     } catch {
@@ -279,13 +302,24 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
 
   const canSign =
     name.trim().length > 0 &&
-    contact.trim().length > 0 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) &&
     signature.trim().length > 0 &&
     agreed &&
     step !== "signing" &&
     step !== "hash-signing";
 
   if (step === "loading") return null;
+
+  if (step === "pending-submit") {
+    const hi = locale === "hi";
+    return <section className="mx-auto max-w-xl space-y-6">
+      <h1 className="page-title-sm">{hi ? "अपना अनुरोध जाँचें" : "Review your request"}</h1>
+      <p className="muted text-sm leading-[1.75]">{hi ? "अभी हस्ताक्षर के लिए कोई नोटिस उपलब्ध नहीं है। आप अपना अनुरोध जाँच के लिए भेज सकते हैं।" : "There is no notice available to sign yet. You can submit your request for review."}</p>
+      {draft && draft.urls.length > 0 && <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-5"><p className="font-medium">{t(locale, "review.links.label")}</p><ul className="mt-3 space-y-2">{draft.urls.map((url) => <li key={url} className="break-all font-mono text-sm">{url}</li>)}</ul></div>}
+      <button type="button" className="btn btn-primary" onClick={async () => { setStep("creating"); await acknowledgeSubmission(caseId); router.push(`/case/${caseId}/confirmation`); }}>{hi ? "अनुरोध भेजें" : "Submit request"}</button>
+      <a className="btn btn-secondary" href={`/case/${caseId}`}>{hi ? "डैशबोर्ड पर जाएँ" : "Go to dashboard"}</a>
+    </section>;
+  }
 
   if (step === "form-only-handoff") {
     const links = pendingFormPlatforms.flatMap((pending) => {
@@ -505,18 +539,20 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
           />
         </div>
 
-        <div
-          className="space-y-5 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
-        >
-          <p className="text-sm font-medium text-[var(--ink)]">{t(locale, "review.sign.details.title")}</p>
-
+        <section aria-labelledby="review-details-title" className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
+          <div className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:px-7">
+            <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)] text-sm font-semibold text-[var(--brand-strong)]">1</span>
+            <h2 id="review-details-title" className="text-base font-semibold text-[var(--ink)]">{t(locale, "review.sign.details.title")}</h2>
+          </div>
+          <div className="space-y-6 p-5 sm:p-7">
           <div>
             <label htmlFor="rs-name" className="block text-sm font-medium text-[var(--ink)]">
               {t(locale, "review.sign.name.label")}
             </label>
-            <p className="muted mt-1 text-sm">{t(locale, "review.sign.name.sub")}</p>
+            <p id="rs-name-help" className="muted mt-1 text-sm">{t(locale, "review.sign.name.sub")}</p>
             <input
               id="rs-name"
+              aria-describedby="rs-name-help"
               type="text"
               className="field mt-2"
               placeholder={t(locale, "review.sign.name.placeholder")}
@@ -531,10 +567,12 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
             <label htmlFor="rs-contact" className="block text-sm font-medium text-[var(--ink)]">
               {t(locale, "review.sign.contact.label")}
             </label>
-            <p className="muted mt-1 text-sm">{t(locale, "review.sign.contact.sub")}</p>
+            <p id="rs-contact-help" className="muted mt-1 text-sm">{t(locale, "review.sign.contact.sub")}</p>
             <input
               id="rs-contact"
-              type="text"
+              aria-describedby="rs-contact-help"
+              type="email"
+              inputMode="email"
               className="field mt-2"
               placeholder={t(locale, "review.sign.contact.placeholder")}
               value={contact}
@@ -543,30 +581,34 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
               autoComplete="email"
             />
           </div>
-        </div>
+          </div>
+        </section>
 
-        <div
-          className="space-y-4 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
-        >
-          <p className="text-sm font-medium text-[var(--ink)]">{t(locale, "review.sign.sig.title")}</p>
-          <p className="muted text-sm leading-[1.6]">
+        <section aria-labelledby="review-signature-title" className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
+          <div className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:px-7">
+            <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)] text-sm font-semibold text-[var(--brand-strong)]">2</span>
+            <h2 id="review-signature-title" className="text-base font-semibold text-[var(--ink)]">{t(locale, "review.sign.sig.title")}</h2>
+          </div>
+          <div className="space-y-4 p-5 sm:p-7">
+          <p id="rs-signature-help" className="muted text-sm leading-[1.6]">
             {t(locale, "review.sign.sig.sub")}
           </p>
+          <label htmlFor="rs-signature" className="block text-sm font-medium text-[var(--ink)]">{t(locale, "review.sign.sig.placeholder")}</label>
           <input
             id="rs-signature"
+            aria-describedby="rs-signature-help"
             type="text"
-            className="field font-display text-[18px]"
+            className="field !mt-2 text-[18px]"
             placeholder={t(locale, "review.sign.sig.placeholder")}
             value={signature}
             onChange={(e) => setSignature(e.target.value)}
             maxLength={100}
             autoComplete="off"
           />
-        </div>
+          </div>
+        </section>
 
-        <div className="hairline" />
-
-        <label className="flex cursor-pointer items-start gap-3">
+        <label className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--brand-soft)] p-5 transition-colors hover:border-[var(--brand)] sm:p-6">
           <input
             type="checkbox"
             className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand)]"

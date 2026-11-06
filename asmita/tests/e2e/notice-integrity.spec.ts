@@ -101,8 +101,8 @@ const markTemplateReviewed = (templateType: string) =>
 
 async function signNextNotice(page: Page, caseId: string) {
   await page.goto(`/case/${caseId}/sign`);
-  await page.getByLabel("Full name").fill("Synthetic Survivor");
-  await page.getByLabel("Contact (email or phone)").fill("survivor@example.invalid");
+  await page.getByLabel("Full name", { exact: true }).fill("Synthetic Survivor");
+  await page.getByLabel("Email address").fill("survivor@example.invalid");
   await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
   await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
   const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
@@ -261,10 +261,14 @@ test("each link gets its own notice, signed one after another on the review scre
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue to review" }).click();
   const { caseId } = (await (await createResponse).json()) as { caseId: string };
+  const confirmations = async () => withAdmin(async (db) => (await db.query(
+    `SELECT 1 FROM audit_log WHERE "entityId" = $1 AND "eventType" = 'NOTICE_SENT' AND data->>'messageType' = 'victim_confirmation'`, [caseId],
+  )).rowCount);
+  expect(await confirmations()).toBe(0);
 
   for (const round of [1, 2]) {
-    await page.getByLabel("Full name").fill("Synthetic Survivor");
-    await page.getByLabel("Contact (email or phone)").fill("survivor@example.invalid");
+    await page.getByLabel("Full name", { exact: true }).fill("Synthetic Survivor");
+    await page.getByLabel("Email address").fill("survivor@example.invalid");
     // The signature and the confirmation are given again for every notice.
     await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
     await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
@@ -274,6 +278,7 @@ test("each link gets its own notice, signed one after another on the review scre
     if (round === 1) {
       await expect(page.getByText("Signed. Here is the notice for your next link.")).toBeVisible();
       await expect(page.getByPlaceholder("Type your full name")).toHaveValue("");
+      expect(await confirmations()).toBe(0);
     }
   }
   await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30_000 });
@@ -281,6 +286,7 @@ test("each link gets its own notice, signed one after another on the review scre
     db.query('SELECT 1 FROM "SubmittedUrl" WHERE "caseId" = $1 AND "signedNoticePdf" IS NOT NULL', [caseId]),
   );
   expect(signedNotices.rowCount).toBe(2);
+  expect(await confirmations()).toBe(1);
 });
 
 test("a form-only link listed first does not hide the notices that can be signed", async ({ page }, testInfo) => {
@@ -298,8 +304,8 @@ test("a form-only link listed first does not hide the notices that can be signed
   await page.getByRole("button", { name: "Continue with remaining reports" }).click();
   const { caseId } = (await (await createResponse).json()) as { caseId: string };
 
-  await page.getByLabel("Full name").fill("Synthetic Survivor");
-  await page.getByLabel("Contact (email or phone)").fill("survivor@example.invalid");
+  await page.getByLabel("Full name", { exact: true }).fill("Synthetic Survivor");
+  await page.getByLabel("Email address").fill("survivor@example.invalid");
   await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
   await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
   const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));

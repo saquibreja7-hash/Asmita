@@ -23,7 +23,7 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const canSubmit = name.trim() && contact.trim() && signature.trim() && agreed && !submitting;
+  const canSubmit = name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) && signature.trim() && agreed && !submitting;
 
   async function handleSubmit() {
     setError("");
@@ -41,6 +41,8 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
           : t(locale, "sign.error.generic"));
         return;
       }
+      // The endpoint waits until no other notice is ready to sign.
+      await csrfFetch(`/api/cases/${caseId}/acknowledge`, { method: "POST" }).catch(() => undefined);
       router.push(confirmationUrl);
     } catch {
       setError(t(locale, "sign.error.timeout"));
@@ -95,7 +97,8 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
           <p className="muted mt-1 text-sm">{t(locale, "sign.contact.sub")}</p>
           <input
             id="sign-contact"
-            type="text"
+            type="email"
+            inputMode="email"
             className="field mt-2"
             placeholder={t(locale, "sign.contact.placeholder")}
             value={contact}

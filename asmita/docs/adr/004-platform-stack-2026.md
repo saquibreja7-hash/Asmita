@@ -71,7 +71,7 @@ Ordered by priority. M items are must-fix before launch; the first block is this
 - [x] **M2. Least-privilege database role.** Hyperdrive connects as the `postgres` superuser. Create an app role with only the grants the app needs, and keep `postgres` for migrations.
 - [x] **M3. Hyperdrive TLS.** Upgrade from `require` to `verify-full` with Supabase's CA certificate. (Caching is already disabled.)
 - [x] **M5. Keep-active.** Make sure the daily cron touches the database, and point the keepalive workflow away from the Data API.
-- [x] **M6. Legacy data in Singapore.** `asmita/.env.local` still points at the old Neon database in Singapore. If it holds real data, delete it and decommission the project. Done: it held no data and the Neon project is deleted (2026-11-01).
+- [x] **M6. Legacy data in Singapore.** The former Neon project held no data and was deleted (2026-11-01). Production uses Supabase; local development uses a separate database as documented in `docs/infra/environments.md`.
 - [x] **M7. Credential hygiene.** `asmita/.env.staging.local` holds production credentials. Rename it (for example `.env.production.local`) so nothing runs "staging" work against production.
 
 ### Phase 2: next (issue #17 and rate limits)

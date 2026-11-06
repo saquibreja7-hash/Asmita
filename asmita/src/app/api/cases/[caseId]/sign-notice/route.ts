@@ -17,7 +17,7 @@ const FORBIDDEN_CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 const schema = z.object({
   urlId: z.string().min(1).optional(),
   name: z.string().min(1).max(100),
-  contact: z.string().min(1).max(200),
+  contact: z.string().trim().pipe(z.email().max(200)),
   signature: z.string().min(1).max(100),
 }).strict().refine(
   (d) => !FORBIDDEN_CONTROL.test(d.name) && !FORBIDDEN_CONTROL.test(d.contact) && !FORBIDDEN_CONTROL.test(d.signature),
@@ -31,7 +31,7 @@ type UrlRow = {
   submittedAt: Date;
   signedNoticePdf: string | null;
   case: { referenceNumber: string; declarationSignedAt: Date | null };
-  platform: { id: string; name: string; noticeBasis: string; isActive: boolean; lastContactVerifiedByHuman: boolean } | null;
+  platform: { id: string; name: string; noticeBasis: string; isActive: boolean; lastContactVerifiedByHuman: boolean; grievanceEmail: string | null } | null;
 };
 
 const URL_SELECT = {
@@ -42,7 +42,7 @@ const URL_SELECT = {
   signedNoticePdf: true,
   case: { select: { referenceNumber: true, declarationSignedAt: true } },
   platform: {
-    select: { id: true, name: true, noticeBasis: true, isActive: true, lastContactVerifiedByHuman: true },
+    select: { id: true, name: true, noticeBasis: true, isActive: true, lastContactVerifiedByHuman: true, grievanceEmail: true },
   },
 };
 
@@ -71,6 +71,7 @@ async function findUrl(
       platform: {
         isActive: true,
         noticeBasis: { in: [...SIGNABLE_NOTICE_BASES] },
+        grievanceEmail: { notIn: ["", "<TO_BE_VERIFIED_BY_HUMAN>"] },
         ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
       },
     },
@@ -118,7 +119,7 @@ export async function POST(
     return NextResponse.json({ error: "url_not_ready" }, { status: 409 });
   }
 
-  if (!url.platform?.isActive || (!skipLegalGate && url.platform.lastContactVerifiedByHuman !== true)) {
+  if (!url.platform?.isActive || !url.platform.grievanceEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(url.platform.grievanceEmail) || (!skipLegalGate && url.platform.lastContactVerifiedByHuman !== true)) {
     return NextResponse.json({ error: "platform_not_verified" }, { status: 409 });
   }
 
