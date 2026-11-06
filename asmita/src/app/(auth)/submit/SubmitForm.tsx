@@ -190,10 +190,6 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     } : undefined} error={error} />;
   }
 
-  const shortNames = [...new Set(knownPlatforms.map((p) => p.name.split(" / ")[0]))];
-  const chipNames = shortNames.slice(0, 6);
-  const moreCount = shortNames.length - chipNames.length;
-
   const lowQuality = hashFiles.some((f) => f.status === "hashed" && (f.quality ?? 100) < 50);
 
   return (
@@ -249,19 +245,6 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
         {skippedLines > 0 && parsedUrls.length > 0 && (
           <p className="mt-2 text-xs text-[var(--text-muted)]">{t(locale, "submit.link.skipNote")}</p>
         )}
-
-        {/* Which platforms we recognise, by short name. */}
-        <div className="mt-5 flex flex-wrap items-center gap-2">
-          <span className="text-[13px] text-[var(--text-muted)]">{t(locale, "submit.worksWith")}</span>
-          {chipNames.map((name) => (
-            <span key={name} className="rounded-full border border-[var(--line)] bg-white px-3 py-1 text-[13px] text-[var(--ink)]">
-              {name}
-            </span>
-          ))}
-          {moreCount > 0 && (
-            <span className="text-[13px] text-[var(--text-muted)]">+{moreCount} {t(locale, "submit.worksWith.more")}</span>
-          )}
-        </div>
 
         <details className="group mt-4">
           <summary className="inline-flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-[var(--brand)] [&::-webkit-details-marker]:hidden">

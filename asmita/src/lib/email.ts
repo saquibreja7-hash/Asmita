@@ -75,8 +75,8 @@ export function createVictimConfirmationEmail(referenceNumber: string, dashboard
   const html = renderEmailHtml({
     title: "Your case has been created.",
     paragraphs: [
-      "We have received your submission and your case is now active. You can check its progress at any time from your dashboard.",
-      "Keep your case reference safe â€” you may need it if you speak to a helpline or the police.",
+      "We have received your submission. You can check its progress from your dashboard.",
+      "Keep your case reference safe. You can use it if you contact us about your case.",
     ],
     highlight: referenceNumber,
     highlightLabel: "Case reference",
@@ -267,7 +267,7 @@ export async function sendVictimConfirmation(to: string, referenceNumber: string
     subject,
     text,
     html,
-  }));
+  }, { idempotencyKey: `case-confirmation/${referenceNumber}` }));
 }
 
 function assertEmailSent(result: unknown): EmailSendResult {

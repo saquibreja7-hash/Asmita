@@ -3,12 +3,10 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
-import { db } from "@/lib/db";
-import { urlRetentionCutoff } from "@/lib/url-retention";
+import { findSignableNotice } from "@/lib/signable-notice";
 import { SignNoticeForm } from "./SignNoticeForm";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
-import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -30,38 +28,8 @@ export default async function SignNoticePage({
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
 
-  const url = await db.submittedUrl.findFirst({
-    where: {
-      caseId,
-      status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
-      platformId: { not: null },
-      signedNoticePdf: null,
-      urlEncrypted: { not: "" },
-      submittedAt: { gt: urlRetentionCutoff() },
-      platform: {
-        isActive: true,
-        noticeBasis: { in: [...SIGNABLE_NOTICE_BASES] },
-        ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
-      },
-    },
-    include: { platform: { select: { id: true, name: true, noticeBasis: true } } },
-    orderBy: { submittedAt: "asc" },
-  });
-
-  if (!url?.platform) redirect(`/handoff/${caseId}`);
-  const templateType = templateTypeForNoticeBasis(url.platform.noticeBasis);
-  if (!templateType) redirect(`/handoff/${caseId}`);
-
-  const template = await db.noticeTemplate.findFirst({
-    where: {
-      templateType,
-      isActive: true,
-      ...(skipLegalGate ? {} : { reviewedByLegal: true }),
-      OR: [{ platformId: url.platform.id }, { platformId: null }],
-    },
-    orderBy: [{ platformId: "desc" }, { version: "desc" }],
-  });
-  if (!template) redirect(`/handoff/${caseId}`);
+  const url = await findSignableNotice(caseId, skipLegalGate);
+  if (!url?.platform) redirect(`/case/${caseId}`);
 
   return (
     <AppShell>
@@ -120,7 +88,7 @@ export default async function SignNoticePage({
                   caseId={caseId}
                   urlId={url.id}
                   platformName={url.platform.name}
-                  previewPdfUrl={`/api/cases/${caseId}/preview-notice`}
+                  previewPdfUrl={`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(url.id)}`}
                   confirmationUrl={`/case/${caseId}/confirmation`}
                   locale={locale}
                 />

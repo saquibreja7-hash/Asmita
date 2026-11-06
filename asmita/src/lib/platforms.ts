@@ -57,7 +57,7 @@ export const platformDirectory: PlatformDirectoryEntry[] = [
     tier: "TIER_1",
     noticeBasis: "IT_RULES_2021",
     grievanceEmail: "support-in@google.com",
-    formUrl: "https://support.google.com/youtube/answer/10728153",
+    formUrl: "https://support.google.com/youtube/contact/privacy_complaint",
     lastContactVerifiedByHuman: true,
     lastContactVerifiedAt: "2026-06-14",
   },

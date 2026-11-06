@@ -58,118 +58,52 @@ export default async function ConfirmationPage({
     </div></div></div></AppShell>;
   }
 
+  const hi = locale === "hi";
+  const nextSteps = hi ? [
+    { title: "सही संपर्क की जाँच", detail: "हम प्लेटफ़ॉर्म के उपलब्ध रिपोर्टिंग रास्ते और सही संपर्क की जाँच करते हैं। अनजान साइटों के लिए इसमें अधिक समय लग सकता है।" },
+    { title: "नोटिस भेजने से पहले", detail: "कोई भी नोटिस भेजने से पहले उसकी और प्लेटफ़ॉर्म के संपर्क की जाँच होती है। यदि आपके हस्ताक्षर की ज़रूरत हो, तो आप नोटिस डैशबोर्ड पर देख सकते हैं।" },
+    { title: "अपनी स्थिति देखें", detail: "अपने डैशबोर्ड पर केस की स्थिति और अगले कदम देखें। आप अपने केस के बारे में संपर्क करते समय यह संदर्भ संख्या इस्तेमाल कर सकते हैं।" },
+  ] : [
+    { title: "Checking the right contact", detail: "We check the available reporting route and the right contact for each platform. This can take longer for a site we do not yet know." },
+    { title: "Before a notice is sent", detail: "The notice and platform contact are checked before sending. If your signature is needed, you can review the notice in your dashboard." },
+    { title: "Keeping track", detail: "Your dashboard shows the case status and next steps. Use your reference number if you contact us about your case." },
+  ];
+
   return (
     <AppShell>
       <div className="page-canvas">
-        <div className="container py-16 md:py-24">
-          <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
+        <div className="container py-12 md:py-20">
+          <div className="mx-auto grid max-w-5xl gap-10 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:gap-16 lg:gap-20">
+            <div className="min-w-0 md:order-2">
+              <p className="eyebrow">{hi ? "केस सहेजा गया" : "CASE SAVED"}</p>
+              <h1 className="page-title-sm mt-4">{t(locale, "confirm.title")}</h1>
+              <p className="muted mt-3 max-w-md text-[15px] leading-[1.7]">{hi ? "आपका केस सुरक्षित है। आप जब चाहें इसकी स्थिति देख सकते हैं।" : "Your case is saved. You can return to check its status whenever you need to."}</p>
 
-            {/* LEFT - sticky sidebar */}
-            <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
-              <div className="md:sticky md:top-28">
-                <span className="eyebrow">{t(locale, "confirm.pill")}</span>
+              <section aria-labelledby="case-reference-title" className="mt-8 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-5 sm:p-6">
+                <h2 id="case-reference-title" className="eyebrow">{t(locale, "confirm.ref.eyebrow")}</h2>
+                <p className="font-mono mt-3 break-all text-xl tracking-tight text-[var(--brand-strong)] sm:text-2xl">{record.referenceNumber}</p>
+                <p className="muted mt-3 text-sm leading-[1.65]">{hi ? "इसे सुरक्षित रखें। हमारे ईमेल में आपके लिंक या तस्वीरें नहीं होतीं।" : "Keep this number safe. Our emails do not include your links or images."}</p>
+              </section>
 
-                <p className="font-mono mt-4 text-[13px] text-[var(--text-muted)]">
-                  {record.referenceNumber}
-                </p>
-
-                <p className="muted mt-5 text-sm leading-[1.75]">
-                  {t(locale, "confirm.aside.sub")}
-                </p>
-
-                <div className="mt-8 space-y-4">
-                  {[
-                    [t(locale, "confirm.aside.item1.heading"), t(locale, "confirm.aside.item1.detail")],
-                    [t(locale, "confirm.aside.item2.heading"), t(locale, "confirm.aside.item2.detail")],
-                    [t(locale, "confirm.aside.item3.heading"), t(locale, "confirm.aside.item3.detail")],
-                  ].map(([heading, detail]) => (
-                    <div key={heading as string} className="flex items-start gap-3">
-                      <span
-                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)]"
-                        aria-hidden
-                      >
-                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                          <path
-                            d="M1 4l2.5 2.5L9 1"
-                            stroke="var(--brand)"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </span>
-                      <div>
-                        <p className="text-sm font-medium text-[var(--ink)]">{heading}</p>
-                        <p className="muted mt-0.5 text-sm leading-[1.65]">{detail}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-8 space-y-2">
-                  <Link className="btn btn-primary w-full justify-center" href={`/case/${record.id}`}>
-                    {t(locale, "confirm.cta.dashboard")}
-                  </Link>
-                  <Link className="btn btn-secondary w-full justify-center" href="/resources">
-                    {t(locale, "confirm.cta.resources")}
-                  </Link>
-                </div>
-              </div>
-            </aside>
-
-            {/* RIGHT - main content */}
-            <div className="min-w-0 flex-1 space-y-10">
-              <div>
-                <h1 className="page-title-sm">
-                  {t(locale, "confirm.title")}
-                </h1>
-                <p className="muted mt-2 text-sm leading-[1.75]">
-                  {t(locale, "confirm.sub")}
-                </p>
-              </div>
-
-              {/* Reference number block */}
-              <div
-                className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-8"
-              >
-                <p className="eyebrow">
-                  {t(locale, "confirm.ref.eyebrow")}
-                </p>
-                <p className="font-mono mt-4 text-[32px] tracking-tight text-[var(--brand-strong)] md:text-[44px]">
-                  {record.referenceNumber}
-                </p>
-                <p className="muted mt-4 text-sm leading-[1.75]">
-                  {t(locale, "confirm.ref.body")}
-                </p>
-              </div>
-
-              {/* What happens next */}
-              <div
-                className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-8"
-              >
-                <p className="eyebrow">
-                  {t(locale, "confirm.next.eyebrow")}
-                </p>
-                <h2 className="subsection-title mt-4">
-                  {t(locale, "confirm.next.title")}
-                </h2>
-                <div className="mt-6 space-y-5">
-                  {[
-                    [t(locale, "confirm.next.t1.time"), t(locale, "confirm.next.t1.detail")],
-                    [t(locale, "confirm.next.t2.time"), t(locale, "confirm.next.t2.detail")],
-                    [t(locale, "confirm.next.t3.time"), t(locale, "confirm.next.t3.detail")],
-                  ].map(([time, detail]) => (
-                    <div key={time as string} className="flex items-start gap-4">
-                      <span className="mt-0.5 shrink-0 text-[13px] font-medium text-[var(--brand-strong)] w-16">
-                        {time}
-                      </span>
-                      <p className="muted text-sm leading-[1.65]">{detail}</p>
-                    </div>
-                  ))}
-                </div>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row md:flex-col lg:flex-row">
+                <Link className="btn btn-primary justify-center" href={`/case/${record.id}`}>{t(locale, "confirm.cta.dashboard")}</Link>
+                <Link className="btn btn-secondary justify-center" href="/resources">{t(locale, "confirm.cta.resources")}</Link>
               </div>
             </div>
 
+            <section aria-labelledby="case-next-title" className="min-w-0 border-t border-[var(--line)] pt-7 md:order-1 md:border-r md:border-t-0 md:pr-10 md:pt-0 lg:pr-14">
+              <p className="eyebrow">{hi ? "आगे का रास्ता" : "THE NEXT STEPS"}</p>
+              <h2 id="case-next-title" className="subsection-title mt-3">{hi ? "अब क्या होगा" : "What happens next"}</h2>
+              <ol className="mt-7 space-y-7">
+                {nextSteps.map((step, index) => (
+                  <li key={step.title} className="flex gap-4">
+                    <span aria-hidden="true" className="font-mono mt-0.5 w-7 shrink-0 text-sm text-[var(--brand-strong)]">{String(index + 1).padStart(2, "0")}</span>
+                    <div><h3 className="text-[15px] font-semibold text-[var(--ink)]">{step.title}</h3><p className="muted mt-1.5 text-sm leading-[1.7]">{step.detail}</p></div>
+                  </li>
+                ))}
+              </ol>
+              <p className="muted mt-8 border-t border-[var(--line)] pt-5 text-sm leading-[1.65]">{hi ? "सहायता चाहिए? सहायता संसाधन आपके लिए उपलब्ध हैं।" : "If you would like to talk to someone, support resources are available."}</p>
+            </section>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { forgetEligibility, hasDraft, isEligibleAdult, rememberEligibleAdult } from "@/lib/eligibility";
@@ -14,7 +14,9 @@ export function RegisterForm({ locale }: { locale: Locale }) {
   const [ageConfirmed, setAgeConfirmed] = useState<"adult" | "minor" | "">("");
   const [ageThen, setAgeThen] = useState<"adult" | "minor" | "">("");
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
+  const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(""));
+  const otp = otpDigits.join("");
+  const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -51,8 +53,9 @@ export function RegisterForm({ locale }: { locale: Locale }) {
         body: JSON.stringify({ email }),
       });
       if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        setError(`Error ${response.status}: ${body.error ?? "unknown"}`);
+        setError(response.status === 429
+          ? (locale === "hi" ? "बहुत अधिक अनुरोध हुए हैं। कृपया कुछ समय बाद दोबारा कोशिश करें।" : "Too many requests. Please wait a little and try again.")
+          : (locale === "hi" ? "हम अभी कोड नहीं भेज पा रहे हैं। कृपया कुछ समय बाद दोबारा कोशिश करें।" : "We couldn't send the code right now. Please try again in a little while."));
         return;
       }
       setStep("otp");
@@ -87,8 +90,6 @@ export function RegisterForm({ locale }: { locale: Locale }) {
 
   return (
     <div>
-      <ProgressBar step={step} locale={locale} />
-
       {step === "age" && (
         <div className="mt-8">
           <h2 className="section-title">
@@ -233,25 +234,43 @@ export function RegisterForm({ locale }: { locale: Locale }) {
             onSubmit={(e) => { e.preventDefault(); verify(); }}
           >
             <div>
-              <label
-                htmlFor="otp"
-                className="block text-sm font-medium text-[var(--ink)]"
-              >
+              <label htmlFor="otp-0" className="block text-sm font-medium text-[var(--ink)]">
                 {t(locale, "reg.otp.label")}
               </label>
-              <input
-                className="field mt-2 font-mono text-center text-2xl tracking-[0.4em]"
-                id="otp"
-                inputMode="numeric"
-                maxLength={6}
-                onChange={(e) =>
-                  setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
-                }
-                required
-                value={otp}
-                autoComplete="one-time-code"
-                placeholder="000000"
-              />
+              <div className="mt-2 flex gap-2" role="group" aria-label={locale === "hi" ? "सत्यापन कोड के अंक" : "Verification code digits"}>
+                {Array.from({ length: 6 }, (_, index) => (
+                  <input
+                    key={index}
+                    ref={(el) => { otpRefs.current[index] = el; }}
+                    id={`otp-${index}`}
+                    aria-label={index === 0 ? t(locale, "reg.otp.label") : (locale === "hi" ? `अंक ${index + 1}` : `Digit ${index + 1}`)}
+                    className="field min-w-0 flex-1 !px-1 text-center font-mono text-xl"
+                    type="text" inputMode="numeric" pattern="[0-9]*"
+                    autoComplete={index === 0 ? "one-time-code" : "off"}
+                    maxLength={index === 0 ? 6 : 1}
+                    value={otpDigits[index]}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "");
+                      if (digits.length > 1) { setOtpDigits(Array.from({ length: 6 }, (_, i) => digits[i] ?? "")); otpRefs.current[Math.min(digits.length, 6) - 1]?.focus(); return; }
+                      const parts = [...otpDigits];
+                      parts[index] = digits;
+                      setOtpDigits(parts);
+                      if (digits && index < 5) otpRefs.current[index + 1]?.focus();
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+                      if (digits) { setOtpDigits(Array.from({ length: 6 }, (_, i) => digits[i] ?? "")); otpRefs.current[Math.min(digits.length, 6) - 1]?.focus(); }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Backspace" && !otpDigits[index] && index > 0) otpRefs.current[index - 1]?.focus();
+                      if (e.key === "ArrowLeft" && index > 0) { e.preventDefault(); otpRefs.current[index - 1]?.focus(); }
+                      if (e.key === "ArrowRight" && index < 5) { e.preventDefault(); otpRefs.current[index + 1]?.focus(); }
+                    }}
+                  />
+                ))}
+              </div>
             </div>
             {error && <FormError message={error} />}
             <button
@@ -265,7 +284,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
               {t(locale, "reg.otp.wrongEmail")}{" "}
               <button
                 type="button"
-                onClick={() => { setStep("email"); setOtp(""); setError(""); }}
+                onClick={() => { setStep("email"); setOtpDigits(Array(6).fill("")); setError(""); }}
                 className="link-underline text-[var(--ink)]"
               >
                 {t(locale, "reg.otp.changeEmail")}
@@ -279,58 +298,8 @@ export function RegisterForm({ locale }: { locale: Locale }) {
   );
 }
 
-function ProgressBar({ step, locale }: { step: Step; locale: Locale }) {
-  const steps = [t(locale, "reg.progress.age"), t(locale, "reg.progress.email"), t(locale, "reg.progress.otp")];
-  const current = step === "age" ? 0 : step === "email" ? 1 : 2;
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-medium text-[var(--ink)] sm:hidden" aria-live="polite">
-        {current + 1}/{steps.length} · {steps[current]}
-      </p>
-      <div className="flex gap-1.5 sm:hidden" aria-hidden>
-        {steps.map((label, i) => (
-          <span key={label} className="h-1 flex-1 rounded-full" style={{
-            background: i <= current ? "var(--brand)" : "var(--line)",
-          }} />
-        ))}
-      </div>
-      <div className="hidden items-center gap-2 sm:flex">
-      {steps.map((label, i) => (
-        <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
-          <div className="flex items-center gap-2">
-            <div
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-medium transition-colors ${
-                i < current
-                  ? "bg-[var(--ink)] text-[var(--page)]"
-                  : i === current
-                  ? "border-2 border-[var(--brand)] text-[var(--brand)]"
-                  : "border border-[var(--line)] text-[var(--text-muted)]"
-              }`}
-            >
-              {i < current ? (
-                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                  <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              ) : (
-                i + 1
-              )}
-            </div>
-            <span className={`hidden text-[11px] sm:block ${i === current ? "font-medium text-[var(--ink)]" : "text-[var(--text-muted)]"}`}>
-              {label}
-            </span>
-          </div>
-          {i < steps.length - 1 && (
-            <div className="flex-1 h-px mx-1" style={{ background: i < current ? "var(--brand)" : "var(--line)" }} />
-          )}
-        </div>
-      ))}
-      </div>
-    </div>
-  );
-}
-
 function FormError({ message }: { message: string }) {
   return (
-    <p className="text-sm font-medium text-[var(--danger)]">{message}</p>
+    <p role="alert" className="text-sm font-medium text-[var(--danger)]">{message}</p>
   );
 }

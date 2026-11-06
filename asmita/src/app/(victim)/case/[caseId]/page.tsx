@@ -9,6 +9,7 @@ import { CaseDashboardActions } from "./CaseDashboardActions";
 import { getLocale } from "@/lib/get-locale";
 import { t, type Locale } from "@/lib/i18n";
 import { findPlatformByDomain } from "@/lib/platforms";
+import { findSignableNotice } from "@/lib/signable-notice";
 
 // Wording that matches what has actually happened: "prepared" is not "sent",
 // and "sent" is not "removed".
@@ -55,11 +56,7 @@ export default async function CasePage({
     hashSubmissions = await listHashesForCase(record.id);
   }
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
-  const hasUnsignedQueuedUrl = record?.urls.some((u) =>
-    Boolean(u.urlHash) && Boolean(findPlatformByDomain(u.domain)) && (u.status === "NOTICE_QUEUED" ||
-      (skipLegalGate && u.status === "PENDING_REVIEW" && u.platformId)) &&
-    !u.hasSignedNotice,
-  ) ?? false;
+  const hasUnsignedQueuedUrl = Boolean(record && (process.env.NODE_ENV === "production" || process.env.DATABASE_URL) && await findSignableNotice(record.id, skipLegalGate));
 
   if (!record) {
     return (

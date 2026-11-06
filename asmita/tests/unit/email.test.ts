@@ -18,6 +18,10 @@ describe("createVictimConfirmationEmail", () => {
     expect(email.text).toContain("https://asmita.test/case/case-1");
     expect(email.text).toContain("does not include any submitted URLs");
     expect(email.text).not.toContain("instagram.com");
+    expect(email.html).toContain("Keep your case reference safe.");
+    for (const part of [email.subject, email.text, email.html]) {
+      expect(part).not.toMatch(/police|â€”|�/i);
+    }
   });
 
   it("creates privacy-preserving lifecycle emails", () => {

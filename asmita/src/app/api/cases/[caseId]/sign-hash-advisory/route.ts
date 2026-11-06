@@ -27,7 +27,7 @@ const FORBIDDEN_CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 const schema = z
   .object({
     name: z.string().min(1).max(100),
-    contact: z.string().min(1).max(200),
+    contact: z.string().trim().pipe(z.email().max(200)),
     signature: z.string().min(1).max(100),
     platformIds: z.array(z.string().min(1)).min(1).max(20),
   })

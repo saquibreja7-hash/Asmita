@@ -4,11 +4,12 @@ import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/encryption";
-import { isUrlExpired, urlRetentionCutoff } from "@/lib/url-retention";
+import { isUrlExpired } from "@/lib/url-retention";
 import { hasRetiredPortalInstructions, renderNoticeTemplate } from "@/lib/notice-generator";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf } from "@/lib/notice-pdf";
 import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
+import { findSignableNotice } from "@/lib/signable-notice";
 
 export async function GET(
   req: NextRequest,
@@ -29,26 +30,7 @@ export async function GET(
 
   // ?urlId= renders that link's notice; without it, the next link to sign.
   const urlId = req.nextUrl.searchParams.get("urlId");
-  const url = await db.submittedUrl.findFirst({
-    where: {
-      caseId,
-      ...(urlId ? { id: urlId } : {}),
-      status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
-      platformId: { not: null },
-      signedNoticePdf: null,
-      urlEncrypted: { not: "" },
-      submittedAt: { gt: urlRetentionCutoff() },
-      platform: {
-        isActive: true,
-        noticeBasis: { in: [...SIGNABLE_NOTICE_BASES] },
-        ...(skipLegalGate ? {} : { lastContactVerifiedByHuman: true }),
-      },
-    },
-    include: {
-      platform: { select: { id: true, name: true, noticeBasis: true } },
-    },
-    orderBy: { submittedAt: "asc" },
-  });
+  const url = await findSignableNotice(caseId, skipLegalGate, urlId ?? undefined);
 
   if (!url?.platform) {
     // Nothing to sign, but a link on a form-only platform is waiting: the
