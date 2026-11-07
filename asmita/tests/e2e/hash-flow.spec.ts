@@ -88,3 +88,30 @@ test("the fingerprint section is honest about what a fingerprint does and points
   await expect(page.getByRole("link", { name: "Open StopNCII.org" })).toHaveAttribute("href", "https://stopncii.org/");
   await expect(page.getByText(/find and remove matching content proactively/)).toHaveCount(0);
 });
+
+test("hash-only survivor who does not know where the image is gets StopNCII guidance, nothing sent", async ({ page }) => {
+  test.setTimeout(120_000);
+  await register(page);
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "synthetic.png", mimeType: "image/png",
+    buffer: await syntheticPng(page),
+  });
+  await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
+  await page.getByLabel(/I declare/).check();
+  await expect(page.getByRole("button", { name: "Continue to review" })).toBeDisabled();
+  const unsure = page.getByRole("checkbox", { name: /I am not sure where it is/ });
+  await unsure.check();
+  // Choosing a platform clears "not sure", and the other way round.
+  await page.getByRole("checkbox", { name: /Instagram \/ Meta/ }).check();
+  await expect(unsure).not.toBeChecked();
+  await unsure.check();
+  await expect(page.getByRole("checkbox", { name: /Instagram \/ Meta/ })).not.toBeChecked();
+  let caseCreated = false;
+  page.on("request", (r) => { if (r.url().includes("/api/cases/")) caseCreated = true; });
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page.getByRole("heading", { name: "What you can do now" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Open StopNCII/ })).toHaveAttribute("href", "https://stopncii.org/");
+  expect(caseCreated).toBe(false);
+  await page.getByRole("button", { name: "Back to choose a platform" }).click();
+  await expect(unsure).toBeChecked();
+});
