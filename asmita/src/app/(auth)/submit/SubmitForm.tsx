@@ -8,6 +8,7 @@ import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 import { checkLink, matchPlatform, type LinkCheckError, type PlatformPattern } from "@/lib/link-check";
 import { FormHandoff } from "@/components/FormHandoff";
+import { UnsureHandoff } from "@/components/UnsureHandoff";
 
 const MAX_HASH_FILES = 10;
 
@@ -91,6 +92,9 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
 
   const [hashFiles, setHashFiles] = useState<FileHashState[]>([]);
   const [selectedPlatformIds, setSelectedPlatformIds] = useState<string[]>([]);
+  // "Not sure where it is, or not posted yet": never a dead end without a platform.
+  const [unsure, setUnsure] = useState(false);
+  const [showUnsure, setShowUnsure] = useState(false);
   // The fingerprint section is optional, so it starts folded away.
   const [hashOpen, setHashOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -127,17 +131,27 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   const skippedLines = lineChecks.filter((c) => c.problem).length;
   const hashOnly = hashedFiles.length > 0 && parsedUrls.length === 0;
   const hasAnyContent = parsedUrls.length > 0 || hashedFiles.length > 0;
-  const canSubmit = declaration && hasAnyContent && (!hashOnly || selectedPlatformIds.length > 0);
+  const canSubmit = declaration && hasAnyContent && (!hashOnly || selectedPlatformIds.length > 0 || unsure);
 
   function togglePlatform(id: string) {
+    setUnsure(false);
     setSelectedPlatformIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   }
 
+  function toggleUnsure() {
+    setSelectedPlatformIds([]);
+    setUnsure((prev) => !prev);
+  }
+
   // The declaration is logged on the review step, once there is a session.
   function submit() {
     setError("");
+    if (hashOnly && unsure) {
+      setShowUnsure(true);
+      return;
+    }
     setSubmitting(true);
     try {
       const selectedPlatforms = hashOnly ? platforms.filter((p) => selectedPlatformIds.includes(p.id)) : [];
@@ -179,6 +193,10 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (showUnsure) {
+    return <UnsureHandoff locale={locale} onBack={() => setShowUnsure(false)} />;
   }
 
   if (handoff) {
@@ -355,14 +373,16 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             </p>
           )}
 
-          {hashedFiles.length > 0 && parsedUrls.length === 0 && platforms.length > 0 && (
+          {hashedFiles.length > 0 && parsedUrls.length === 0 && (
             <div>
               <p className="block text-sm font-medium text-[var(--ink)]">
                 {t(locale, "submit.hash.platforms.title")}
               </p>
-              <p className="muted mt-1 text-sm leading-[1.6]">
-                {t(locale, "submit.hash.platforms.sub")}
-              </p>
+              {platforms.length > 0 && (
+                <p className="muted mt-1 text-sm leading-[1.6]">
+                  {t(locale, "submit.hash.platforms.sub")}
+                </p>
+              )}
               <ul className="mt-3 space-y-2">
                 {platforms.map((p) => (
                   <li key={p.id}>
@@ -380,6 +400,17 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
                     </label>
                   </li>
                 ))}
+                <li>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-4 py-3 hover:border-[var(--brand)] transition-colors">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 shrink-0 accent-[var(--brand)]"
+                      checked={unsure}
+                      onChange={toggleUnsure}
+                    />
+                    <span className="flex-1 text-sm text-[var(--ink)]">{t(locale, "submit.hash.platforms.unsure")}</span>
+                  </label>
+                </li>
               </ul>
               {selectedPlatformIds.some((id) => {
                 const p = platforms.find((pl) => pl.id === id);
@@ -428,7 +459,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             locale,
             !hasAnyContent
               ? "submit.hint.content"
-              : hashOnly && selectedPlatformIds.length === 0
+              : hashOnly && selectedPlatformIds.length === 0 && !unsure
                 ? "submit.hint.hashPlatform"
                 : "submit.hint.declaration",
           )}
