@@ -247,12 +247,9 @@ describe("runDueEscalationsFromDb — L1 follow-up", () => {
     expect(summary.fired).toHaveLength(0);
     expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_legal_review", level: 1 }]);
     expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
-    // Nothing is sent, and the skip is recorded once so the hourly sweep does
-    // not retry it (and log a failure) every hour.
-    expect(db.$transaction).toHaveBeenCalledOnce();
-    expect(db.escalation.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ level: 1, actionType: "skipped_blocked_legal_review" }),
-    });
+    // Nothing is sent and the level is not bumped: once legal review is done,
+    // the next sweep sends the follow-up.
+    expect(db.$transaction).not.toHaveBeenCalled();
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: "NOTICE_FAILED",
@@ -276,7 +273,8 @@ describe("runDueEscalationsFromDb — L1 follow-up", () => {
 
     expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_no_recipient", level: 1 }]);
     expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
-    expect(db.$transaction).toHaveBeenCalledOnce();
+    // Retried once the contact is verified.
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 
   it("blocks L1 send when no template is attached to the notice", async () => {

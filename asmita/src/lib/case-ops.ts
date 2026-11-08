@@ -539,13 +539,15 @@ export async function markPlatformFiled(caseId: string, userId: string, urlId: s
   const db = await getPrismaDb();
   const url = await db.submittedUrl.findFirst({
     where: { id: urlId, caseId, case: { userId } },
-    select: { id: true, platformFiledAt: true },
+    select: { id: true },
   });
   if (!url) throw new Error("url_not_found");
-  // The first filing date is the one the platform's clock runs from.
-  if (url.platformFiledAt) return;
-  await db.submittedUrl.update({ where: { id: url.id }, data: { platformFiledAt: filedAt } });
-  await writeAuditLog({ eventType: "PLATFORM_FORM_FILED", entityType: "SubmittedUrl", entityId: url.id, actorId: userId });
+  // The first filing date is the one the platform's clock runs from. One
+  // conditional update, so two quick taps cannot both record a filing.
+  const { count } = await db.submittedUrl.updateMany({ where: { id: url.id, platformFiledAt: null }, data: { platformFiledAt: filedAt } });
+  if (count === 1) {
+    await writeAuditLog({ eventType: "PLATFORM_FORM_FILED", entityType: "SubmittedUrl", entityId: url.id, actorId: userId });
+  }
 }
 
 export async function reviewSubmittedUrl(input: {

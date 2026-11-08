@@ -216,11 +216,11 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
 
       if (handlerResult.kind === "blocked") {
         summary.skipped.push({ noticeId: notice.id, reason: handlerResult.reason, level: dueLevel });
-        // A step that can never be sent (the platform follow-up when it cannot
-        // go, or a survivor who deleted her account) is skipped once and
-        // recorded, not retried and logged every hour. A decryption failure may
-        // be a passing configuration fault, so that one is retried.
-        if (dueLevel === 1 || handlerResult.reason === "blocked_no_user") {
+        // A step that can never be sent (the platform already answered, or the
+        // survivor deleted her account) is skipped once and recorded. Anything
+        // that can clear later (a contact verified, a template reviewed, a
+        // passing decryption fault) is retried on the next sweep.
+        if (handlerResult.reason === "blocked_platform_answered" || handlerResult.reason === "blocked_no_user") {
           await recordLevel(notice, dueLevel, `skipped_${handlerResult.reason}`, now);
         }
         continue;

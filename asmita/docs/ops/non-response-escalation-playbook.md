@@ -17,7 +17,7 @@ All times are calculated in UTC from the original notice's `sentAt` timestamp. T
 
 | Level | Time after sentAt | Action | System behavior |
 | --- | ---: | --- | --- |
-| 1 | 24 hours | Email follow-up | One follow-up to the grievance officer, resending the reviewed template. Skipped once (and recorded) if the platform already answered, the template is no longer reviewed, or the contact is not verified. |
+| 1 | 24 hours | Email follow-up | One follow-up to the grievance officer, resending the reviewed template. Skipped once (and recorded) if the platform already answered. Retried on later sweeps while the template is not reviewed or the contact not verified. |
 | 2 | 48 hours | Victim notification | Email the survivor that the platform has not removed it; the dashboard now offers a cybercrime.gov.in complaint. |
 | 3 | 7 days | Next steps | Email the survivor that she can appeal to the Grievance Appellate Committee and file a police complaint. Points at the dashboard; the PDF package cannot run on Workers yet. |
 
