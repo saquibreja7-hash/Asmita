@@ -759,8 +759,9 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
   };
   const work = deriveCaseWork(facts, gates, now);
 
-  // A sent link keeps the NOTICE_QUEUED status (dispatch records a Notice
-  // row but does not move the link on), so a sent notice is what counts.
+  // A sent notice is what counts, not the link's status: dispatch now moves
+  // the link to NOTICE_SENT, but links sent before that fix still read
+  // NOTICE_QUEUED until migration 20261109020000_sent_links_status runs.
   const sentUrlIds = new Set(originals.map((notice) => notice.urlId));
   const dispatchable = linkFacts.filter((link) => {
     const platform = link.platformId ? gates.platforms.get(link.platformId) : undefined;
