@@ -13,6 +13,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { PLATFORM_DEADLINE_HOURS } from "@/lib/escalation-ladder";
 import {
   deriveCaseWork,
   getAdminCaseDetail,
@@ -133,7 +134,8 @@ describe("deriveCaseWork", () => {
       now,
     );
     expect(work.nextAction).toBe("awaiting_reply");
-    expect(work.dueAt).toEqual(hoursAgo(6));
+    // Due at the platform's deadline, which has passed, so the complaint step is open.
+    expect(work.dueAt).toEqual(hoursAgo(30 - PLATFORM_DEADLINE_HOURS));
     expect(work.ladderStep).toBe(3);
   });
 
