@@ -550,6 +550,19 @@ export async function markPlatformFiled(caseId: string, userId: string, urlId: s
   }
 }
 
+/**
+ * A link waits for a human decision while it is pending review, or flagged
+ * after being queued. Anything else (sent, removed, rejected) is decided.
+ */
+export function isAwaitingReview(url: { status: string; flaggedForReview?: boolean | null }) {
+  return url.status === "PENDING_REVIEW" || (Boolean(url.flaggedForReview) && url.status === "NOTICE_QUEUED");
+}
+
+const AWAITING_REVIEW_WHERE = [
+  { status: "PENDING_REVIEW" as const },
+  { flaggedForReview: true, status: "NOTICE_QUEUED" as const },
+];
+
 export async function reviewSubmittedUrl(input: {
   caseId: string;
   urlId: string;
@@ -560,16 +573,22 @@ export async function reviewSubmittedUrl(input: {
   const db = await getPrismaDb();
   const url = await db.submittedUrl.findFirst({ where: { id: input.urlId, caseId: input.caseId } });
   if (!url) throw new Error("url_not_found");
+  if (!isAwaitingReview(url)) throw new Error("not_awaiting_review");
   if (input.decision === "approve" && !url.platformId) throw new Error("unknown_platform_requires_investigation");
 
-  const updated = await db.submittedUrl.update({
-    where: { id: input.urlId },
+  // The status guard is in the update itself, so two reviewers acting at once
+  // cannot both decide the link, and a sent, removed or rejected link is never
+  // put back in the queue.
+  const changed = await db.submittedUrl.updateMany({
+    where: { id: input.urlId, caseId: input.caseId, OR: AWAITING_REVIEW_WHERE },
     data: {
       status: input.decision === "approve" ? "NOTICE_QUEUED" : "REJECTED",
       flaggedForReview: false,
       flagReason: input.reason ?? null,
     },
   });
+  if (changed.count === 0) throw new Error("not_awaiting_review");
+  const updated = await db.submittedUrl.findUniqueOrThrow({ where: { id: input.urlId } });
 
   await writeAuditLog({
     eventType: input.decision === "approve" ? "URL_APPROVED" : "URL_REJECTED",

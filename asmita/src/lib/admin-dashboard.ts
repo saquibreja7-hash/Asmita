@@ -2,6 +2,7 @@ import { inMemoryAuditLog } from "@/lib/audit";
 import { calculateBetaMetrics, type BetaMetrics } from "@/lib/beta-metrics";
 import { db } from "@/lib/db";
 import { listAllCases, type DisplayCase } from "@/lib/case-ops";
+import { listFeedbackRatings } from "@/lib/feedback";
 import { createReverificationQueue } from "@/lib/go-reverification";
 import { platformDirectory, HUMAN_VERIFICATION_REQUIRED, type PlatformDirectoryEntry } from "@/lib/platforms";
 import type { DeliveryEvent } from "@/lib/webhook-events";
@@ -456,11 +457,12 @@ async function countFirPackagesPrepared(): Promise<number> {
 }
 
 export async function getInternalAnalytics(now = new Date()): Promise<InternalAnalytics> {
-  const [records, auditEventCounts, deliveryEvents, firPackagesPrepared] = await Promise.all([
+  const [records, auditEventCounts, deliveryEvents, firPackagesPrepared, feedback] = await Promise.all([
     listAllCases(),
     countAuditEvents(),
     loadRecentDeliveryEvents(now),
     countFirPackagesPrepared(),
+    listFeedbackRatings(),
   ]);
   const notices = await loadSentOriginalNotices(records);
   const delivered = await loadDeliveredMessageIds(
@@ -478,9 +480,8 @@ export async function getInternalAnalytics(now = new Date()): Promise<InternalAn
       acknowledgedAt: notice.responseReceivedAt?.toISOString(),
       removedAt: notice.removedAt?.toISOString(),
     })),
-    // Feedback is not stored in the database and nothing measures the
-    // scheduler, so the page does not show either; these inputs are empty.
-    feedback: [],
+    feedback,
+    // Nothing measures the scheduler, so the page does not show it.
     deliveryEvents,
     scheduler: { expectedRuns: 0, completedRuns: 0, duplicateRuns: 0, lagMinutes: 0 },
   });

@@ -46,4 +46,18 @@ describe("reviewSubmittedUrl", () => {
     expect(reviewed.flagReason).toBe("not_ncii");
     expect(inMemoryAuditLog.some((event) => event.eventType === "URL_REJECTED")).toBe(true);
   });
+
+  it("never re-decides a link that is no longer waiting for review", async () => {
+    const record = await createCase("user-1");
+    const [result] = await addUrlsToCase(record.id, ["https://instagram.com/p/abc"], {
+      flagReasons: ["known_public_or_news_domain"],
+    });
+    if (!result.ok) throw new Error("expected accepted URL");
+    await reviewSubmittedUrl({ caseId: record.id, urlId: result.url.id, decision: "reject", reason: "not_ncii" });
+
+    await expect(
+      reviewSubmittedUrl({ caseId: record.id, urlId: result.url.id, decision: "approve", reviewerId: "admin-1" }),
+    ).rejects.toThrow("not_awaiting_review");
+    expect(cases.get(record.id)?.urls[0].status).toBe("REJECTED");
+  });
 });

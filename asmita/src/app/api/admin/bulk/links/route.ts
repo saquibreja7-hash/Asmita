@@ -3,7 +3,7 @@ import { z } from "zod";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { db } from "@/lib/db";
-import { reviewSubmittedUrl } from "@/lib/case-ops";
+import { isAwaitingReview, reviewSubmittedUrl } from "@/lib/case-ops";
 import { writeAuditLog } from "@/lib/audit";
 
 // Approves or rejects up to 50 flagged links at once. Each link goes through
@@ -52,9 +52,7 @@ export async function POST(request: Request) {
       results.push({ urlId, ok: false, error: "url_not_found" });
       continue;
     }
-    const awaitingReview =
-      link.status === "PENDING_REVIEW" || (link.flaggedForReview && link.status === "NOTICE_QUEUED");
-    if (!awaitingReview) {
+    if (!isAwaitingReview(link)) {
       results.push({ urlId, ok: false, error: "not_awaiting_review" });
       continue;
     }

@@ -15,7 +15,8 @@ vi.mock("@/lib/audit", () => ({
   inMemoryAuditLog: [],
 }));
 
-vi.mock("@/lib/case-ops", () => ({
+vi.mock("@/lib/case-ops", async (original) => ({
+  isAwaitingReview: (await original<typeof import("@/lib/case-ops")>()).isAwaitingReview,
   reviewSubmittedUrl: vi.fn().mockResolvedValue({}),
 }));
 

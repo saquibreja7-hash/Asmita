@@ -20,6 +20,7 @@ export async function POST(
     return NextResponse.json({ success: true, url });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "error";
-    return NextResponse.json({ error: msg }, { status: msg === "unknown_platform_requires_investigation" ? 409 : 404 });
+    const conflict = msg === "unknown_platform_requires_investigation" || msg === "not_awaiting_review";
+    return NextResponse.json({ error: msg }, { status: conflict ? 409 : 404 });
   }
 }

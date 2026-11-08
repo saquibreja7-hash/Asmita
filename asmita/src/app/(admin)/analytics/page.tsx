@@ -39,6 +39,12 @@ export default async function InternalAnalyticsPage() {
     ],
     ["FIR packages prepared", analytics.firPackagesPrepared],
     [
+      "Survivor feedback",
+      analytics.betaMetrics.victimFeedbackCount
+        ? `${analytics.betaMetrics.victimFeedbackCount} ratings, average ${analytics.betaMetrics.averageVictimFeedbackRating} of 5`
+        : "None yet",
+    ],
+    [
       "Email deliverability, 30 days",
       analytics.betaMetrics.emailDeliverabilityHealthy
         ? "Healthy"
@@ -92,8 +98,8 @@ export default async function InternalAnalyticsPage() {
           Pre-launch indicators.
         </h2>
         <p className="muted mt-3 max-w-2xl text-sm leading-[1.7]">
-          Measured values only. Survivor feedback is not stored and nothing
-          measures the scheduler yet, so neither is shown.
+          Measured values only. Nothing measures the scheduler yet, so it is
+          not shown.
         </p>
         <div className="mt-6 grid gap-6 md:grid-cols-4">
           {betaStats.map(([label, value]) => (

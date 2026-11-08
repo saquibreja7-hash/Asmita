@@ -10,6 +10,7 @@ vi.mock("@/lib/db", () => ({
     auditLog: { findMany: vi.fn(), groupBy: vi.fn() },
     case: { findMany: vi.fn(), count: vi.fn() },
     emailDeliveryProof: { findMany: vi.fn() },
+    feedback: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
 
