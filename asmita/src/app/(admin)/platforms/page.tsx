@@ -3,10 +3,13 @@ import {
   listPlatformEditorRowsFromDb,
 } from "@/lib/admin-dashboard";
 import { PlatformEditForm } from "./PlatformEditForm";
+import { deniedFor } from "../page-permission";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformsPage() {
+  const denied = await deniedFor("platforms:edit");
+  if (denied) return denied;
   const [rows, history] = await Promise.all([
     listPlatformEditorRowsFromDb(),
     listGoChangeHistoryRowsFromDb(),

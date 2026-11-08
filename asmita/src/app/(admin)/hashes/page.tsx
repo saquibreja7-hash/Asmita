@@ -5,22 +5,23 @@ import {
 } from "@/lib/hash-submission";
 import HashReviewActions from "./HashReviewActions";
 import HashDispatchForm from "./HashDispatchForm";
+import { deniedFor } from "../page-permission";
 
 export default async function HashQueuePage() {
+  const denied = await deniedFor("cases:read");
+  if (denied) return denied;
   if (process.env.ENABLE_HASH_UPLOAD !== "true") {
     return (
       <section>
         <p className="eyebrow">
-          Console · Hash queue
+          Console · Fingerprints
         </p>
         <h1 className="page-title-sm mt-3">
-          Hash review queue
+          Fingerprint review queue
         </h1>
         <p className="muted mt-6 max-w-xl text-sm leading-[1.7]">
-          Phase 2 hash intake is disabled (<code>ENABLE_HASH_UPLOAD=false</code>). The
-          flag stays off until the rollout gates pass: PDQ reference-vector validation,
-          legal review of the HASH_ADVISORY template, and human-verified platform
-          contacts.
+          Fingerprint submission is switched off (<code>ENABLE_HASH_UPLOAD</code> is not
+          <code>true</code>), so there is nothing to review here.
         </p>
       </section>
     );
@@ -36,10 +37,10 @@ export default async function HashQueuePage() {
     <section>
       <div>
         <p className="eyebrow">
-          Console · Hash queue
+          Console · Fingerprints
         </p>
         <h1 className="page-title-sm mt-3">
-          Hash review queue
+          Fingerprint review queue
         </h1>
         <p className="muted mt-6 max-w-2xl text-sm leading-[1.7]">
           Every client-generated perceptual hash waits here for human review before any

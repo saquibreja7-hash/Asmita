@@ -127,6 +127,7 @@ enum AuditEventType {
   NOTICE_SIGNED
   URL_PORTAL_ACCESSED
   PLATFORM_FORM_FILED
+  URL_REVEALED
 }
 
 enum DeletionJobStatus {
@@ -185,6 +186,8 @@ model Case {
   hashSubmissions HashSubmission[]
 
   @@unique([userId, registrationKeyHash])
+  @@index([createdAt])
+  @@index([status, createdAt])
 }
 
 // Phase 2: client-generated perceptual hashes. The hash is the ONLY artifact
@@ -294,6 +297,8 @@ model SubmittedUrl {
   platform     Platform?        @relation(fields: [platformId], references: [id])
   notices      Notice[]
   portalTokens UrlPortalToken[]
+
+  @@index([caseId])
 }
 
 // One-time access tokens for URLs sent in notice emails. The raw URL never
@@ -354,6 +359,8 @@ model Notice {
   template       NoticeTemplate? @relation(fields: [templateId], references: [id])
   escalations    Escalation[]
   hashDispatches HashDispatch[]
+
+  @@index([urlId])
 }
 
 model EmailDeliveryProof {
@@ -452,15 +459,21 @@ model AdminMfaSecret {
 }
 
 model AdminAccessLog {
-  id        String   @id @default(uuid())
-  adminId   String?
-  action    String
-  ipHash    String?
-  userAgent String?
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  adminId    String?
+  action     String
+  // What the admin opened or revealed (a Case or SubmittedUrl id) and, for a
+  // reveal, the reason they gave. Never the URL itself.
+  entityType String?
+  entityId   String?
+  reason     String?
+  ipHash     String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
 
   @@index([adminId])
   @@index([createdAt])
+  @@index([entityId])
 }
 
 model NgoApiKey {
@@ -539,4 +552,16 @@ model AdminEnrolmentCode {
   expiresAt DateTime
   createdAt DateTime @default(now())
   createdBy String
+}
+
+// An admin's own saved filter of the case list (a query string), by name.
+model AdminSavedView {
+  id             String   @id @default(uuid())
+  ownerEmailHash String
+  name           String
+  query          String
+  createdAt      DateTime @default(now())
+
+  @@unique([ownerEmailHash, name])
+  @@index([ownerEmailHash])
 }

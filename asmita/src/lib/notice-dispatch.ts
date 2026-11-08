@@ -42,7 +42,7 @@ async function persistNotice(
   escalationLevel: number,
   link: { templateId?: string; followUpOf?: string } = {},
 ) {
-  await db.notice.create({
+  const create = db.notice.create({
     data: {
       urlId: notice.urlId,
       // The follow-up resends this reviewed template, so the sweep needs it.
@@ -57,6 +57,20 @@ async function persistNotice(
       escalationLevel,
     },
   });
+  if (link.followUpOf) {
+    await create;
+    return;
+  }
+  // The original notice moves its link from approved to sent, in the same
+  // transaction, so the survivor's dashboard and signing see it as sent. Only
+  // an approved link moves: a link removed in the meantime keeps its status.
+  await db.$transaction([
+    create,
+    db.submittedUrl.updateMany({
+      where: { id: notice.urlId, status: "NOTICE_QUEUED" },
+      data: { status: "NOTICE_SENT" },
+    }),
+  ]);
 }
 
 export type DispatchedNotice = {

@@ -1,7 +1,10 @@
 import { calculateCaseMilestone } from "@/lib/milestones";
 import { listAllCases } from "@/lib/case-ops";
+import { deniedFor } from "../page-permission";
 
 export default async function MilestonesPage() {
+  const denied = await deniedFor("metrics:read");
+  if (denied) return denied;
   const records = await listAllCases();
   const stats = calculateCaseMilestone(records);
 

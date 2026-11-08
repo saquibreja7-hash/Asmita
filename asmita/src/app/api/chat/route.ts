@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CHAT_SYSTEM_PROMPT, PROMPT_CANARY } from "@/lib/chat-knowledge";
 import { verifyCsrfRequest } from "@/lib/csrf";
-import { containsUrlLikeText } from "@/lib/feedback";
+import { containsUrlLikeText } from "@/lib/url-like-text";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 import { logSecurityEvent } from "@/lib/security-log";

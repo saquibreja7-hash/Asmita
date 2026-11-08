@@ -17,7 +17,8 @@ export async function POST(
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
-  const parsed = schema.safeParse(await request.json());
+  // The body is optional; an empty one used to throw before any check ran.
+  const parsed = schema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
@@ -33,6 +34,6 @@ export async function POST(
     return NextResponse.json({ success: true, url });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "error";
-    return NextResponse.json({ error: msg }, { status: 404 });
+    return NextResponse.json({ error: msg }, { status: msg === "not_awaiting_review" ? 409 : 404 });
   }
 }

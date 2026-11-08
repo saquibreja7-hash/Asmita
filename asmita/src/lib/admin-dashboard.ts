@@ -1,45 +1,11 @@
 import { inMemoryAuditLog } from "@/lib/audit";
 import { calculateBetaMetrics, type BetaMetrics } from "@/lib/beta-metrics";
 import { db } from "@/lib/db";
-import { feedbackRecords } from "@/lib/feedback";
-import { calculatePlatformResponseRates, type PlatformResponseSample } from "@/lib/response-rates";
-import { listAllCases } from "@/lib/case-ops";
+import { listAllCases, type DisplayCase } from "@/lib/case-ops";
+import { listFeedbackRatings } from "@/lib/feedback";
 import { createReverificationQueue } from "@/lib/go-reverification";
-import { platformDirectory, findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED, type PlatformDirectoryEntry } from "@/lib/platforms";
-import { deliveryEvents } from "@/lib/webhook-events";
-
-export type AdminCaseFilters = {
-  status?: string;
-  platform?: string;
-  review?: string;
-  escalation?: string;
-  from?: string;
-  to?: string;
-};
-
-export type AdminCaseRow = {
-  caseId: string;
-  referenceNumber: string;
-  status: string;
-  createdAt: string;
-  urlCount: number;
-  platforms: string[];
-  reviewFlagCount: number;
-  escalationState: "none" | "review" | "queued" | "resolved";
-};
-
-export type AdminUrlReviewRow = {
-  caseId: string;
-  referenceNumber: string;
-  urlId: string;
-  platformName: string;
-  domain: string;
-  status: string;
-  reason: string;
-  investigationOnly: boolean;
-  ageMinutes: number;
-  slaState: "within_sla" | "due_soon" | "breached";
-};
+import { platformDirectory, HUMAN_VERIFICATION_REQUIRED, type PlatformDirectoryEntry } from "@/lib/platforms";
+import type { DeliveryEvent } from "@/lib/webhook-events";
 
 export type GoChangeHistoryRow = {
   id: string;
@@ -56,8 +22,47 @@ export type NgoVouchingRow = {
   partnerName: string;
   caseReference: string;
   vouchedAt: string;
-  rateLimitLift: string;
-  auditEventId: string;
+  auditSequence: number;
+};
+
+export type NoticeTemplateRow = {
+  id: string;
+  templateType: string;
+  platformName: string | null;
+  subject: string;
+  version: number;
+  isActive: boolean;
+  reviewedByLegal: boolean;
+  reviewedAt: string | null;
+  reviewedByName: string | null;
+};
+
+export type PlatformResponseRow = {
+  platformId: string;
+  platformName: string;
+  noticesSent: number;
+  repliesRecorded: number;
+  removed: number;
+  noReplyRecorded: number;
+  medianReplyHours: number | null;
+};
+
+export type AuditLogFilters = { eventType?: string; actorId?: string; entityId?: string };
+
+export type AuditLogRow = {
+  sequence: number;
+  eventType: string;
+  actorId: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+  eventHash: string;
+};
+
+export type AuditLogPage = {
+  rows: AuditLogRow[];
+  // Pass as `before` to read the next (older) page; null on the last page.
+  nextBefore: number | null;
 };
 
 export type InternalAnalytics = {
@@ -71,72 +76,11 @@ export type InternalAnalytics = {
   platformCounts: Array<{ platformName: string; count: number }>;
   auditEventCounts: Array<{ eventType: string; count: number }>;
   betaMetrics: BetaMetrics;
+  // False until Asmita records platform replies (acknowledgements, removals).
+  repliesRecorded: boolean;
+  firPackagesPrepared: number;
   privacyNote: string;
 };
-
-export async function listAdminCaseRows(filters: AdminCaseFilters = {}): Promise<AdminCaseRow[]> {
-  const records = await listAllCases();
-  const fromTime = filters.from ? Date.parse(filters.from) : null;
-  const toTime = filters.to ? Date.parse(filters.to) : null;
-
-  return records
-    .map((record) => {
-      const platforms = Array.from(new Set(record.urls.map((url) => url.platformName)));
-      const reviewFlagCount = record.urls.filter((url) => url.flaggedForReview || url.status === "PENDING_REVIEW").length;
-      const hasQueued = record.urls.some((url) => url.status === "NOTICE_QUEUED");
-      const hasResolved = record.urls.some((url) => url.status === "REMOVED" || url.status === "REJECTED");
-      return {
-        caseId: record.id,
-        referenceNumber: record.referenceNumber,
-        status: record.status,
-        createdAt: record.createdAt,
-        urlCount: record.urls.length,
-        platforms,
-        reviewFlagCount,
-        escalationState: reviewFlagCount ? "review" : hasQueued ? "queued" : hasResolved ? "resolved" : "none",
-      } satisfies AdminCaseRow;
-    })
-    .filter((row) => {
-      const createdTime = Date.parse(row.createdAt);
-      const matchesStatus = !filters.status || filters.status === "all" || row.status === filters.status;
-      const matchesPlatform =
-        !filters.platform ||
-        filters.platform === "all" ||
-        row.platforms.some((platform) => platform.toLowerCase().includes(filters.platform!.toLowerCase()));
-      const matchesReview =
-        !filters.review ||
-        filters.review === "all" ||
-        (filters.review === "flagged" ? row.reviewFlagCount > 0 : row.reviewFlagCount === 0);
-      const matchesEscalation =
-        !filters.escalation || filters.escalation === "all" || row.escalationState === filters.escalation;
-      const matchesFrom = !fromTime || createdTime >= fromTime;
-      const matchesTo = !toTime || createdTime <= toTime + 24 * 60 * 60_000;
-      return matchesStatus && matchesPlatform && matchesReview && matchesEscalation && matchesFrom && matchesTo;
-    });
-}
-
-export async function listReviewQueueRows(now = new Date()): Promise<AdminUrlReviewRow[]> {
-  const records = await listAllCases();
-  return records.flatMap((record) =>
-    record.urls
-      .filter((url) => url.flaggedForReview || url.status === "PENDING_REVIEW")
-      .map((url) => {
-        const ageMinutes = Math.max(0, Math.floor((now.getTime() - Date.parse(record.createdAt)) / 60_000));
-        return {
-          caseId: record.id,
-          referenceNumber: record.referenceNumber,
-          urlId: url.id,
-          platformName: url.platformName,
-          domain: url.domain,
-          status: url.status,
-          reason: !findPlatformByDomain(url.domain) ? "Unknown platform: investigate public reporting routes" : url.flagReason || "Needs human review before dispatch",
-          investigationOnly: !findPlatformByDomain(url.domain),
-          ageMinutes,
-          slaState: ageMinutes >= 240 ? "breached" : ageMinutes >= 180 ? "due_soon" : "within_sla",
-        };
-      }),
-  );
-}
 
 export function listPlatformEditorRows() {
   const reverify = createReverificationQueue(platformDirectory);
@@ -263,136 +207,283 @@ export function listGoChangeHistoryRows(): GoChangeHistoryRow[] {
   ];
 }
 
-export function listTemplateEditorRows() {
-  return [
-    {
-      id: "it-rules-default",
-      version: "v1.0",
-      language: "English",
-      legalReviewStatus: "Reviewed",
-      active: true,
-      rollbackVersion: "None",
-      preview:
-        "Formal notice with case reference, literal URL list, statutory basis, and no victim name unless consent is recorded.",
-    },
-    {
-      id: "dmca-default",
-      version: "v1.0",
-      language: "English",
-      legalReviewStatus: "Reviewed",
-      active: true,
-      rollbackVersion: "None",
-      preview:
-        "DMCA-style notice with case reference, ownership declaration, literal URL list, and platform response instructions.",
-    },
-    {
-      id: "hindi-support",
-      version: "v1.0",
-      language: "Hindi",
-      legalReviewStatus: "Reviewed",
-      active: true,
-      rollbackVersion: "None",
-      preview: "Hindi notice with case reference, ownership declaration, and platform response instructions.",
-    },
-  ];
+// Local development without a database keeps everything in memory.
+function devNoDb() {
+  return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
 }
 
-export function listPlatformResponseDashboardRows() {
-  const samples: PlatformResponseSample[] = [
-    {
-      platformId: "instagram",
-      platformName: "Instagram / Meta",
-      noticeSentAt: daysAgo(1),
-      responseReceivedAt: daysAgo(1),
-      removedAt: daysAgo(1),
+export async function listNoticeTemplateRows(): Promise<NoticeTemplateRow[]> {
+  if (devNoDb()) return [];
+  const rows = await db.noticeTemplate.findMany({
+    orderBy: [{ templateType: "asc" }, { version: "desc" }],
+    select: {
+      id: true,
+      templateType: true,
+      subjectTemplate: true,
+      version: true,
+      isActive: true,
+      reviewedByLegal: true,
+      reviewedAt: true,
+      reviewedByName: true,
+      platform: { select: { name: true } },
     },
-    {
-      platformId: "pornhub",
-      platformName: "Pornhub",
-      noticeSentAt: daysAgo(2),
-    },
-    {
-      platformId: "telegram",
-      platformName: "Telegram",
-      noticeSentAt: daysAgo(3),
-      responseReceivedAt: daysAgo(2),
-    },
-  ];
-
-  return calculatePlatformResponseRates(samples).map((row) => ({
-    ...row,
-    removals: samples.filter((sample) => sample.platformId === row.platformId && sample.removedAt).length,
-    nonResponses: row.noticesSent - row.responded,
-    medianResponseHours: row.responded ? 18 : null,
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    templateType: row.templateType,
+    platformName: row.platform?.name ?? null,
+    subject: row.subjectTemplate,
+    version: row.version,
+    isActive: row.isActive,
+    reviewedByLegal: row.reviewedByLegal,
+    reviewedAt: row.reviewedAt?.toISOString() ?? null,
+    reviewedByName: row.reviewedByName,
   }));
 }
 
-export function listNgoVouchingRows(): NgoVouchingRow[] {
-  const rows = inMemoryAuditLog
-    .filter((event) => event.eventType === "NGO_VERIFIED")
-    .map((event) => ({
-      partnerName: String(event.data?.partnerName || event.actorId || "NGO partner"),
-      caseReference: String(event.data?.caseReference || event.entityId || "Case"),
-      vouchedAt: event.createdAt,
-      rateLimitLift: "Trusted NGO vouch applied",
-      auditEventId: String(event.sequence),
-    }));
-  if (rows.length) return rows;
-  return [
-    {
-      partnerName: "Awaiting signed NGO partner",
-      caseReference: "No production vouches yet",
-      vouchedAt: new Date().toISOString(),
-      rateLimitLift: "Shown after valid API key vouch",
-      auditEventId: "pending",
+type OriginalNoticeFact = {
+  caseId: string;
+  platformId: string;
+  platformName: string;
+  sentAt: Date;
+  messageId: string | null;
+  responseReceivedAt: Date | null;
+  removedAt: Date | null;
+  urlRemoved: boolean;
+};
+
+// Original notices only: follow-ups belong to the notice they follow. Link
+// facts (case, status, platform) come from the case list the console already
+// reads, so this never touches link records or their content.
+async function loadSentOriginalNotices(cases: DisplayCase[], since?: Date): Promise<OriginalNoticeFact[]> {
+  if (devNoDb()) return [];
+  const links = new Map(
+    cases.flatMap((record) => record.urls.map((url) => [url.id, { caseId: record.id, url }] as const)),
+  );
+  const rows = await db.notice.findMany({
+    where: { followUpOf: null, sentAt: since ? { gte: since } : { not: null } },
+    select: { urlId: true, sentAt: true, messageId: true, responseReceivedAt: true, removedAt: true },
+  });
+  return rows.flatMap((row) => {
+    const link = links.get(row.urlId);
+    if (!link) return [];
+    return [{
+      caseId: link.caseId,
+      platformId: link.url.platformId ?? "unknown",
+      platformName: link.url.platformName || "Unknown platform",
+      sentAt: row.sentAt as Date,
+      messageId: row.messageId,
+      responseReceivedAt: row.responseReceivedAt,
+      removedAt: row.removedAt,
+      urlRemoved: link.url.status === "REMOVED",
+    }];
+  });
+}
+
+/** Notices sent in the last 7 days, by platform. */
+export async function listPlatformResponseRows(now = new Date()): Promise<PlatformResponseRow[]> {
+  const notices = await loadSentOriginalNotices(
+    await listAllCases(),
+    new Date(now.getTime() - 7 * 24 * 60 * 60_000),
+  );
+  const byPlatform = new Map<string, OriginalNoticeFact[]>();
+  for (const notice of notices) {
+    byPlatform.set(notice.platformId, [...(byPlatform.get(notice.platformId) ?? []), notice]);
+  }
+  return Array.from(byPlatform.entries())
+    .map(([platformId, platformNotices]) => {
+      const replied = platformNotices.filter((notice) => notice.responseReceivedAt);
+      return {
+        platformId,
+        platformName: platformNotices[0].platformName,
+        noticesSent: platformNotices.length,
+        repliesRecorded: replied.length,
+        removed: platformNotices.filter((notice) => notice.removedAt || notice.urlRemoved).length,
+        noReplyRecorded: platformNotices.length - replied.length,
+        medianReplyHours: median(
+          replied.map((notice) => (notice.responseReceivedAt!.getTime() - notice.sentAt.getTime()) / 3_600_000),
+        ),
+      };
+    })
+    .sort((left, right) => right.noticesSent - left.noticesSent || left.platformName.localeCompare(right.platformName));
+}
+
+export async function listNgoVouchingRows(limit = 50): Promise<NgoVouchingRow[]> {
+  if (devNoDb()) {
+    return inMemoryAuditLog
+      .filter((event) => event.eventType === "NGO_VERIFIED")
+      .slice(-limit)
+      .reverse()
+      .map((event) => ({
+        partnerName: String(event.data?.partnerName ?? "Unknown partner"),
+        caseReference: event.entityId ?? "Unknown case",
+        vouchedAt: event.createdAt,
+        auditSequence: event.sequence,
+      }));
+  }
+  const events = await db.auditLog.findMany({
+    where: { eventType: "NGO_VERIFIED" },
+    orderBy: { sequence: "desc" },
+    take: limit,
+    select: { sequence: true, entityId: true, data: true, createdAt: true },
+  });
+  const caseIds = events.map((event) => event.entityId).filter((id): id is string => Boolean(id));
+  const cases = caseIds.length
+    ? await db.case.findMany({ where: { id: { in: caseIds } }, select: { id: true, referenceNumber: true } })
+    : [];
+  const references = new Map(cases.map((record) => [record.id, record.referenceNumber]));
+  return events.map((event) => {
+    const data = (event.data ?? {}) as Record<string, unknown>;
+    return {
+      partnerName: String(data.partnerName ?? "Unknown partner"),
+      caseReference: (event.entityId && references.get(event.entityId)) || "Unknown case",
+      vouchedAt: event.createdAt.toISOString(),
+      auditSequence: event.sequence,
+    };
+  });
+}
+
+/**
+ * Newest first, 50 per page. Filters match exactly: event type, actor id,
+ * entity id (the case, link or notice id).
+ */
+export async function listAuditLogPage(
+  filters: AuditLogFilters = {},
+  options: { before?: number; limit?: number } = {},
+): Promise<AuditLogPage> {
+  const limit = options.limit ?? 50;
+  const eventType = filters.eventType?.trim().toUpperCase() || undefined;
+  const actorId = filters.actorId?.trim() || undefined;
+  const entityId = filters.entityId?.trim() || undefined;
+  if (eventType && !/^[A-Z_]+$/.test(eventType)) return { rows: [], nextBefore: null };
+
+  let rows: AuditLogRow[];
+  if (devNoDb()) {
+    rows = inMemoryAuditLog
+      .filter((event) => !eventType || event.eventType === eventType)
+      .filter((event) => !actorId || event.actorId === actorId)
+      .filter((event) => !entityId || event.entityId === entityId)
+      .filter((event) => options.before === undefined || event.sequence < options.before)
+      .slice()
+      .reverse()
+      .slice(0, limit + 1)
+      .map((event) => toAuditRow({ ...event, createdAt: new Date(event.createdAt) }));
+  } else {
+    const records = await db.auditLog.findMany({
+      where: {
+        ...(eventType ? { eventType: eventType as never } : {}),
+        ...(actorId ? { actorId } : {}),
+        ...(entityId ? { entityId } : {}),
+        ...(options.before !== undefined ? { sequence: { lt: options.before } } : {}),
+      },
+      orderBy: { sequence: "desc" },
+      take: limit + 1,
+      select: {
+        sequence: true,
+        eventType: true,
+        actorId: true,
+        entityType: true,
+        entityId: true,
+        createdAt: true,
+        eventHash: true,
+      },
+    });
+    rows = records.map(toAuditRow);
+  }
+  const hasMore = rows.length > limit;
+  const page = rows.slice(0, limit);
+  return { rows: page, nextBefore: hasMore ? page[page.length - 1].sequence : null };
+}
+
+function toAuditRow(event: {
+  sequence: number;
+  eventType: string;
+  actorId?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
+  createdAt: Date;
+  eventHash: string;
+}): AuditLogRow {
+  return {
+    sequence: event.sequence,
+    eventType: event.eventType,
+    actorId: event.actorId || "system",
+    entityType: event.entityType || "unknown",
+    entityId: event.entityId || "unknown",
+    createdAt: event.createdAt.toISOString(),
+    eventHash: event.eventHash.slice(0, 16),
+  };
+}
+
+async function countAuditEvents(): Promise<Array<{ eventType: string; count: number }>> {
+  if (devNoDb()) {
+    return countBy(inMemoryAuditLog.map((event) => event.eventType)).map(([eventType, count]) => ({ eventType, count }));
+  }
+  const groups = await db.auditLog.groupBy({ by: ["eventType"], _count: { _all: true } });
+  return groups
+    .map((group) => ({ eventType: group.eventType, count: group._count._all }))
+    .sort((left, right) => right.count - left.count || left.eventType.localeCompare(right.eventType));
+}
+
+async function loadDeliveredMessageIds(messageIds: string[]): Promise<Set<string>> {
+  if (devNoDb() || !messageIds.length) return new Set();
+  const proofs = await db.emailDeliveryProof.findMany({
+    where: { messageId: { in: messageIds }, eventType: "delivered" },
+    select: { messageId: true },
+  });
+  return new Set(proofs.map((proof) => proof.messageId));
+}
+
+async function loadRecentDeliveryEvents(now: Date): Promise<DeliveryEvent[]> {
+  if (devNoDb()) return [];
+  const proofs = await db.emailDeliveryProof.findMany({
+    where: {
+      receivedAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60_000) },
+      eventType: { in: ["delivered", "bounced", "complained"] },
     },
-  ];
+    select: { messageId: true, eventType: true, platformId: true, receivedAt: true },
+  });
+  return proofs.map((proof) => ({
+    type: proof.eventType as DeliveryEvent["type"],
+    messageId: proof.messageId,
+    platformId: proof.platformId ?? undefined,
+    createdAt: proof.receivedAt.toISOString(),
+  }));
 }
 
-export function listAuditLogRows(filters: { eventType?: string; actorId?: string; entityId?: string } = {}) {
-  return inMemoryAuditLog
-    .filter((event) => !filters.eventType || filters.eventType === "all" || event.eventType === filters.eventType)
-    .filter((event) => !filters.actorId || event.actorId?.includes(filters.actorId))
-    .filter((event) => !filters.entityId || event.entityId?.includes(filters.entityId))
-    .slice()
-    .reverse()
-    .map((event) => ({
-      sequence: event.sequence,
-      eventType: event.eventType,
-      actorId: event.actorId || "system",
-      entityType: event.entityType || "unknown",
-      entityId: event.entityId || "unknown",
-      createdAt: event.createdAt,
-      eventHash: event.eventHash.slice(0, 16),
-    }));
+async function countFirPackagesPrepared(): Promise<number> {
+  if (devNoDb()) return 0;
+  return db.case.count({ where: { firPackageGeneratedAt: { not: null } } });
 }
 
-export async function getInternalAnalytics(): Promise<InternalAnalytics> {
-  const records = await listAllCases();
+export async function getInternalAnalytics(now = new Date()): Promise<InternalAnalytics> {
+  const [records, auditEventCounts, deliveryEvents, firPackagesPrepared, feedback] = await Promise.all([
+    listAllCases(),
+    countAuditEvents(),
+    loadRecentDeliveryEvents(now),
+    countFirPackagesPrepared(),
+    listFeedbackRatings(),
+  ]);
+  const notices = await loadSentOriginalNotices(records);
+  const delivered = await loadDeliveredMessageIds(
+    notices.map((notice) => notice.messageId).filter((id): id is string => Boolean(id)),
+  );
   const urls = records.flatMap((record) => record.urls);
   const betaMetrics = calculateBetaMetrics({
     cases: records.map((record) => ({ caseId: record.id, registeredAt: record.createdAt })),
-    notices: records.flatMap((record) =>
-      record.urls.map((url) => {
-        const noticeSentAt = url.status === "NOTICE_QUEUED" || url.status === "REMOVED" ? record.createdAt : undefined;
-        return {
-          caseId: record.id,
-          noticeSentAt,
-          deliveredAt: noticeSentAt,
-          acknowledgedAt: url.status === "REMOVED" ? addHours(record.createdAt, 12) : undefined,
-          removedAt: url.status === "REMOVED" ? addHours(record.createdAt, 24) : undefined,
-          legalPackageRequestedAt: url.status === "REJECTED" ? addHours(record.createdAt, 168) : undefined,
-        };
-      }),
-    ),
-    feedback: feedbackRecords.map((record) => ({ rating: record.rating })),
+    // Only measured times: sent, delivered (Resend webhook), reply and removal
+    // as recorded on the notice. Nothing is estimated.
+    notices: notices.map((notice) => ({
+      caseId: notice.caseId,
+      noticeSentAt: notice.sentAt.toISOString(),
+      deliveredAt: notice.messageId && delivered.has(notice.messageId) ? notice.sentAt.toISOString() : undefined,
+      acknowledgedAt: notice.responseReceivedAt?.toISOString(),
+      removedAt: notice.removedAt?.toISOString(),
+    })),
+    feedback,
+    // Nothing measures the scheduler, so the page does not show it.
     deliveryEvents,
-    scheduler: {
-      expectedRuns: Math.max(1, urls.length),
-      completedRuns: urls.length,
-      duplicateRuns: 0,
-      lagMinutes: 0,
-    },
+    scheduler: { expectedRuns: 0, completedRuns: 0, duplicateRuns: 0, lagMinutes: 0 },
   });
   return {
     totalCases: records.length,
@@ -403,11 +494,10 @@ export async function getInternalAnalytics(): Promise<InternalAnalytics> {
     averageUrlsPerCase: records.length ? Number((urls.length / records.length).toFixed(2)) : 0,
     urlStatusCounts: countBy(urls.map((url) => url.status)).map(([status, count]) => ({ status, count })),
     platformCounts: countBy(urls.map((url) => url.platformName)).map(([platformName, count]) => ({ platformName, count })),
-    auditEventCounts: countBy(inMemoryAuditLog.map((event) => event.eventType)).map(([eventType, count]) => ({
-      eventType,
-      count,
-    })),
+    auditEventCounts,
     betaMetrics,
+    repliesRecorded: notices.some((notice) => notice.responseReceivedAt || notice.removedAt),
+    firPackagesPrepared,
     privacyNote: "Aggregated operational analytics only; no submitted URL strings or victim PII are exposed.",
   };
 }
@@ -419,12 +509,12 @@ function canDispatchToPlatform(platform: PlatformDirectoryEntry) {
   return true;
 }
 
-function daysAgo(days: number) {
-  return new Date(Date.now() - days * 24 * 60 * 60_000).toISOString();
-}
-
-function addHours(timestamp: string, hours: number) {
-  return new Date(Date.parse(timestamp) + hours * 60 * 60_000).toISOString();
+function median(values: number[]) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  const value = sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+  return Number(value.toFixed(1));
 }
 
 function countBy(values: string[]) {

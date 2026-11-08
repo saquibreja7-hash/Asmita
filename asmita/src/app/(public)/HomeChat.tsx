@@ -3,7 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { linkify } from "@/components/linkify";
-import { containsUrlLikeText } from "@/lib/feedback";
+import { containsUrlLikeText } from "@/lib/url-like-text";
 import { HELPLINE } from "@/lib/helpline";
 import type { ChatCopy } from "./chat-copy";
 

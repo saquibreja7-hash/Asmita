@@ -1,11 +1,16 @@
-import { listReviewQueueRows } from "@/lib/admin-dashboard";
-import { ReviewActions } from "./ReviewActions";
+import { listFlaggedLinks } from "@/lib/admin-cases";
+import { FlaggedTable } from "./FlaggedTable";
+import { requireAdminPermission } from "@/lib/auth/require-admin";
+import { deniedFor } from "../page-permission";
 
 export default async function FlaggedPage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const denied = await deniedFor("cases:read");
+  if (denied) return denied;
+  const canReview = (await requireAdminPermission("cases:review")).ok;
   const params = (await searchParams) || {};
   const filters = {
     platform: single(params.platform),
@@ -14,7 +19,7 @@ export default async function FlaggedPage({
     status: single(params.status),
     accountAge: single(params.accountAge),
   };
-  const rows = (await listReviewQueueRows()).filter((row) => {
+  const rows = (await listFlaggedLinks()).filter((row) => {
     const platformMatch =
       !filters.platform ||
       row.platformName.toLowerCase().includes(filters.platform.toLowerCase());
@@ -120,50 +125,7 @@ export default async function FlaggedPage({
         />
       </div>
 
-      <div className="mt-10 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
-        <table className="w-full min-w-[900px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-[var(--line)]">
-              <Th>Case</Th>
-              <Th>Platform</Th>
-              <Th>Domain</Th>
-              <Th>Reason</Th>
-              <Th>Age</Th>
-              <Th>Status</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr
-                className="border-t border-[var(--line)]"
-                key={`${row.caseId}-${row.urlId}`}
-              >
-                <td className="font-mono p-4">{row.referenceNumber}</td>
-                <td className="p-4">{row.platformName}</td>
-                <td className="font-mono p-4 text-[var(--text-muted)]">
-                  {row.domain}
-                </td>
-                <td className="p-4">{row.reason}</td>
-                <td className="font-mono p-4 tabular-nums">
-                  {Math.floor(row.ageMinutes / 60)}h {row.ageMinutes % 60}m
-                </td>
-                <td className="p-4 capitalize">
-                  {row.slaState.replaceAll("_", " ")}
-                </td>
-                <td className="p-4">
-                  <ReviewActions caseId={row.caseId} urlId={row.urlId} status={row.status} investigationOnly={row.investigationOnly} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && (
-          <p className="muted p-6 text-center text-sm">
-            No flagged submissions in the queue.
-          </p>
-        )}
-      </div>
+      <FlaggedTable canReview={canReview} rows={rows} />
     </section>
   );
 }
@@ -186,14 +148,6 @@ function FilterField({
       </span>
       {children}
     </label>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="eyebrow p-4">
-      {children}
-    </th>
   );
 }
 

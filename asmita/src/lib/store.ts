@@ -253,6 +253,10 @@ export async function reviewSubmittedUrl(input: {
   if (!url) {
     throw new Error("url_not_found");
   }
+  // Same rule as the database path: only links still waiting are decided.
+  if (!(url.status === "PENDING_REVIEW" || (url.flaggedForReview && url.status === "NOTICE_QUEUED"))) {
+    throw new Error("not_awaiting_review");
+  }
 
   url.flaggedForReview = false;
   url.flagReason = input.reason;

@@ -1,6 +1,9 @@
 import { getInternalAnalytics } from "@/lib/admin-dashboard";
+import { deniedFor } from "../page-permission";
 
 export default async function InternalAnalyticsPage() {
+  const denied = await deniedFor("metrics:read");
+  if (denied) return denied;
   const analytics = await getInternalAnalytics();
   const stats: Array<[string, number | string]> = [
     ["Total cases", analytics.totalCases],
@@ -10,40 +13,42 @@ export default async function InternalAnalyticsPage() {
     ["Review queue", analytics.reviewQueueItems],
     ["Avg URLs / case", analytics.averageUrlsPerCase],
   ];
+  const sent = analytics.betaMetrics.noticesSent;
+  const notRecorded = "Not recorded yet";
   const betaStats: Array<[string, string | number]> = [
+    ["Notices sent", sent],
     [
-      "Notice delivery success",
-      formatPercent(analytics.betaMetrics.noticeDeliverySuccessRate),
+      "Notice delivery confirmed",
+      sent ? formatPercent(analytics.betaMetrics.noticeDeliverySuccessRate) : "-",
     ],
     [
       "Acknowledgment rate",
-      formatPercent(analytics.betaMetrics.acknowledgmentRate),
+      !analytics.repliesRecorded
+        ? notRecorded
+        : formatPercent(analytics.betaMetrics.acknowledgmentRate),
     ],
     [
       "Removal within 72h",
-      formatPercent(analytics.betaMetrics.removalWithin72hRate),
+      !analytics.repliesRecorded
+        ? notRecorded
+        : formatPercent(analytics.betaMetrics.removalWithin72hRate),
     ],
     [
       "Registration to notice",
       formatHours(analytics.betaMetrics.medianRegistrationToNoticeHours),
     ],
+    ["FIR packages prepared", analytics.firPackagesPrepared],
     [
-      "Legal package requests",
-      analytics.betaMetrics.legalPackageRequests,
+      "Survivor feedback",
+      analytics.betaMetrics.victimFeedbackCount
+        ? `${analytics.betaMetrics.victimFeedbackCount} ratings, average ${analytics.betaMetrics.averageVictimFeedbackRating} of 5`
+        : "None yet",
     ],
     [
-      "Victim feedback",
-      `${analytics.betaMetrics.victimFeedbackCount} / ${analytics.betaMetrics.averageVictimFeedbackRating}`,
-    ],
-    [
-      "Email deliverability",
+      "Email deliverability, 30 days",
       analytics.betaMetrics.emailDeliverabilityHealthy
         ? "Healthy"
         : "Needs review",
-    ],
-    [
-      "Scheduler correctness",
-      formatPercent(analytics.betaMetrics.schedulerCorrectnessRate),
     ],
   ];
 
@@ -92,6 +97,10 @@ export default async function InternalAnalyticsPage() {
         <h2 className="section-title mt-3">
           Pre-launch indicators.
         </h2>
+        <p className="muted mt-3 max-w-2xl text-sm leading-[1.7]">
+          Measured values only. Nothing measures the scheduler yet, so it is
+          not shown.
+        </p>
         <div className="mt-6 grid gap-6 md:grid-cols-4">
           {betaStats.map(([label, value]) => (
             <Metric key={label} label={label} value={value} small />

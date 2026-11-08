@@ -1,7 +1,13 @@
-import { listTemplateEditorRows } from "@/lib/admin-dashboard";
+import { listNoticeTemplateRows } from "@/lib/admin-dashboard";
+import { deniedFor } from "../page-permission";
 
-export default function TemplatesPage() {
-  const rows = listTemplateEditorRows();
+export const dynamic = "force-dynamic";
+
+export default async function TemplatesPage() {
+  const denied = await deniedFor("templates:edit");
+  if (denied) return denied;
+  const rows = await listNoticeTemplateRows();
+  const unreviewed = rows.filter((row) => row.isActive && !row.reviewedByLegal).length;
 
   return (
     <section>
@@ -13,21 +19,29 @@ export default function TemplatesPage() {
           Notice templates
         </h1>
         <p className="muted mt-3 max-w-xl text-sm leading-[1.7]">
-          Templates remain blocked from live dispatch until an authorised
-          legal role records the review metadata.
+          A template is sent only when it is active and a legal reviewer has
+          recorded a review. Only a human legal reviewer marks a template
+          reviewed; seeding and code never do.
         </p>
+        {rows.length > 0 && (
+          <p className="mt-4 text-sm">
+            {unreviewed === 0
+              ? "Every active template has a recorded legal review."
+              : `${unreviewed} active template${unreviewed === 1 ? "" : "s"} still need${unreviewed === 1 ? "s" : ""} legal review.`}
+          </p>
+        )}
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-10 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[860px] text-left text-sm">
+          <caption className="sr-only">Notice templates and their legal review status</caption>
           <thead>
             <tr className="border-b border-[var(--line)]">
               <Th>Template</Th>
+              <Th>Platform</Th>
               <Th>Version</Th>
-              <Th>Language</Th>
               <Th>Legal review</Th>
-              <Th>Activation</Th>
-              <Th>Rollback</Th>
+              <Th>Status</Th>
             </tr>
           </thead>
           <tbody>
@@ -37,32 +51,64 @@ export default function TemplatesPage() {
                 key={row.id}
               >
                 <td className="p-4">
-                  <p className="font-medium">{row.id}</p>
+                  <p className="font-mono text-xs font-medium">{row.templateType}</p>
                   <p className="muted mt-2 text-xs leading-[1.55]">
-                    {row.preview}
+                    {row.subject}
                   </p>
                 </td>
-                <td className="font-mono p-4 text-xs">{row.version}</td>
-                <td className="p-4">{row.language}</td>
-                <td className="p-4 text-[var(--danger)]">
-                  {row.legalReviewStatus}
+                <td className="p-4">
+                  {row.platformName ?? (
+                    <span className="text-[var(--text-muted)]">All platforms</span>
+                  )}
                 </td>
-                <td className="p-4">{row.active ? "Active" : "Blocked"}</td>
-                <td className="font-mono p-4 text-xs text-[var(--text-muted)]">
-                  {row.rollbackVersion}
+                <td className="font-mono p-4 text-xs tabular-nums">v{row.version}</td>
+                <td className="p-4">
+                  {row.reviewedByLegal ? (
+                    <>
+                      <p className="text-[var(--brand)]">Reviewed</p>
+                      <p className="muted mt-1 text-xs">
+                        {[row.reviewedByName, row.reviewedAt && formatDate(row.reviewedAt)]
+                          .filter(Boolean)
+                          .join(", ") || "No reviewer details recorded"}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[var(--danger)]">Not reviewed</p>
+                  )}
+                </td>
+                <td className="p-4">
+                  {!row.isActive
+                    ? "Inactive"
+                    : row.reviewedByLegal
+                      ? "Active, can be sent"
+                      : "Active, blocked until reviewed"}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {rows.length === 0 && (
+          <p className="muted p-6 text-center text-sm">
+            No templates in the database. Run the seed to create them.
+          </p>
+        )}
       </div>
     </section>
   );
 }
 
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="eyebrow p-4">
+    <th className="eyebrow p-4" scope="col">
       {children}
     </th>
   );
