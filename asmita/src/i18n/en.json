@@ -844,7 +844,7 @@
   "case.now.checking.sub": "Our team is checking where your notice should go. You do not need to do anything right now. We will email you when there is news.",
   "case.now.prepared.title": "Your notice is being prepared.",
   "case.now.prepared.sub": "It is checked before anything is sent to the platform. You do not need to do anything right now. We will email you if we need you, for example to sign.",
-  "case.now.sent.title": "Your notice has been sent.",
+  "case.now.sent.title": "A notice has been sent.",
   "case.now.sent.sub": "We are waiting for the platform to act, and we follow up if they do not. You do not need to do anything right now.",
   "case.now.removed.title": "Your links are marked as removed.",
   "case.now.removed.sub": "If the content appears again, add the new link below and we will prepare a notice.",
@@ -852,5 +852,8 @@
   "case.now.fingerprints.sub": "They go only to the platforms you chose. If you find a link to the content, add it below and we will prepare a notice.",
   "case.now.open.title": "Your case is open.",
   "case.now.open.sub": "Each link below shows where it stands. If you would like to talk to someone, help is available.",
-  "case.urlStatus.unresolved": "Not removed yet"
+  "case.urlStatus.unresolved": "Not removed yet",
+  "case.link.confirmRemoved": "Is it gone from this link? We will stop following up on it.",
+  "case.link.confirmYes": "Yes, it is removed",
+  "case.link.cancel": "Cancel"
 }

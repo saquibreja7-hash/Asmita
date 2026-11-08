@@ -101,9 +101,16 @@ test("adult dashboard supports add URL, manual resolve, and deletion request, wi
   const removedButtons = page.getByRole("button", { name: /^Mark as removed: YouTube/ });
   await expect(removedButtons).toHaveCount(2);
 
-  // Each link has its own button, and it marks only that link.
-  const resolvedResponse = page.waitForResponse((response) => response.url().includes("/mark-resolved"));
+  // Each link has its own button, it asks first, and it marks only that link.
+  let marked = false;
+  page.on("request", (r) => { if (r.url().includes("/mark-resolved")) marked = true; });
   await removedButtons.first().click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  expect(marked).toBe(false);
+  await expect(removedButtons).toHaveCount(2);
+  await removedButtons.first().click();
+  const resolvedResponse = page.waitForResponse((response) => response.url().includes("/mark-resolved"));
+  await page.getByRole("button", { name: /^Yes, it is removed: YouTube/ }).click();
   expect((await resolvedResponse).ok()).toBe(true);
   await expect(page.getByText("Removed", { exact: true })).toHaveCount(1);
   await expect(removedButtons).toHaveCount(1);
