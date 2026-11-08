@@ -16,11 +16,13 @@ export type AdminAccessEvent = {
 // Kept for local development without a database, and for tests.
 export const inMemoryAdminAccessLog: Array<AdminAccessEvent & { createdAt: string }> = [];
 
+// Cloudflare sets cf-connecting-ip itself; x-forwarded-for can be sent by the
+// client, so it is only a fallback (local development has no Cloudflare).
 function clientIp(headers: Headers) {
   return (
+    headers.get("cf-connecting-ip") ||
     headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     headers.get("x-real-ip") ||
-    headers.get("cf-connecting-ip") ||
     null
   );
 }
