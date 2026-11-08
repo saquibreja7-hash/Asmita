@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { DRAFT_KEY } from "@/lib/eligibility";
@@ -29,7 +29,6 @@ type Step =
   | "signing"
   | "hash-sign"
   | "hash-signing"
-  | "pending-submit"
   | "form-only-handoff";
 
 // When no notice is left to sign: a link on a platform that only takes its
@@ -80,12 +79,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [signedCount, setSignedCount] = useState(0);
-  const started = useRef(false);
-  const startCase = useEffectEvent((d: Draft) => {
-    if (started.current) return;
-    started.current = true;
-    void createCase(d);
-  });
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -97,12 +90,9 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         data.registrationKey ??= crypto.randomUUID();
         sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data));
         setDraft(data);
-        const hasUnknown = data.urls.some((url) => {
-          const parsed = checkLink(url);
-          return parsed.ok && !matchPlatform(parsed.domain, platformDirectory);
-        });
-        if (hasUnknown) setStep("review");
-        else { setStep("creating"); startCase(data); }
+        // The survivor checks the summary first; the case is created only
+        // when she chooses to continue.
+        setStep("review");
       } catch {
         router.replace("/submit");
       }
@@ -202,17 +192,11 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         setPreviewUrl(`/api/cases/${newCaseId}/preview-notice?urlId=${encodeURIComponent(firstUrlId)}`);
         setStep("sign");
       } else {
+        // Nothing to sign yet: she already confirmed on the review step, so
+        // go straight on to what happens next.
         const destination = await pathAfterNotices(newCaseId, previewRes);
-        const hasUnknown = d.urls.some((url) => {
-          const parsed = checkLink(url);
-          return parsed.ok && !matchPlatform(parsed.domain, platformDirectory);
-        });
-        if (destination.endsWith("/confirmation") && !hasUnknown) {
-          setStep("pending-submit");
-        } else {
-          if (destination.endsWith("/confirmation") || destination.startsWith("/handoff/")) await acknowledgeSubmission(newCaseId);
-          router.push(destination);
-        }
+        if (destination.endsWith("/confirmation") || destination.startsWith("/handoff/")) await acknowledgeSubmission(newCaseId);
+        router.push(destination);
       }
     } catch {
       setError(t(locale, "review.error.generic"));
@@ -309,17 +293,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
     step !== "hash-signing";
 
   if (step === "loading") return null;
-
-  if (step === "pending-submit") {
-    const hi = locale === "hi";
-    return <section className="mx-auto max-w-xl space-y-6">
-      <h1 className="page-title-sm">{hi ? "अपना अनुरोध जाँचें" : "Review your request"}</h1>
-      <p className="muted text-sm leading-[1.75]">{hi ? "अभी हस्ताक्षर के लिए कोई नोटिस उपलब्ध नहीं है। आप अपना अनुरोध जाँच के लिए भेज सकते हैं।" : "There is no notice available to sign yet. You can submit your request for review."}</p>
-      {draft && draft.urls.length > 0 && <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-5"><p className="font-medium">{t(locale, "review.links.label")}</p><ul className="mt-3 space-y-2">{draft.urls.map((url) => <li key={url} className="break-all font-mono text-sm">{url}</li>)}</ul></div>}
-      <button type="button" className="btn btn-primary" onClick={async () => { setStep("creating"); await acknowledgeSubmission(caseId); router.push(`/case/${caseId}/confirmation`); }}>{hi ? "अनुरोध भेजें" : "Submit request"}</button>
-      <a className="btn btn-secondary" href={`/case/${caseId}`}>{hi ? "डैशबोर्ड पर जाएँ" : "Go to dashboard"}</a>
-    </section>;
-  }
 
   if (step === "form-only-handoff") {
     const links = pendingFormPlatforms.flatMap((pending) => {
@@ -462,11 +435,13 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
                 void createCase(draft);
               }}
             >
-              {step === "creating" ? t(locale, "review.cta.creating") : t(locale, "review.cta.retry")}
+              {step === "creating" ? t(locale, "review.cta.creating") : t(locale, "review.cta.create")}
             </button>
-            <a className="btn btn-secondary" href="/submit">
-              {t(locale, "review.cta.back")}
-            </a>
+            {step === "creating" ? (
+              <span className="btn btn-secondary pointer-events-none opacity-50" aria-disabled="true">{t(locale, "review.cta.back")}</span>
+            ) : (
+              <a className="btn btn-secondary" href="/submit">{t(locale, "review.cta.back")}</a>
+            )}
           </div>
         </div>
       </div>

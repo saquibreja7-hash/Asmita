@@ -55,9 +55,11 @@ test("each pasted line is checked where it is typed, and only valid links reach 
   // No in-flow support button; it lives in the header and footer.
   await expect(page.getByRole("main").getByRole("link", { name: "Support resources" })).toHaveCount(0);
 
-  // The case is created on arrival at review, with only the valid link.
+  // The case is created only after review, with only the valid link.
   const created = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   await cta.click();
+  await expect(page.getByRole("heading", { name: "Review your submission." })).toBeVisible();
+  await page.getByRole("button", { name: "Create my case" }).click();
   const response = await created;
   expect(response.ok()).toBe(true);
   expect(response.request().postDataJSON().urls).toEqual(["https://youtube.com/watch?v=asmita-synthetic"]);
@@ -90,6 +92,7 @@ test("links can be added before the email code, and nothing reaches the server u
   await page.getByLabel("6-digit code").fill(devOtp);
   const created = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Create my case" }).click();
   expect((await created).request().postDataJSON().urls).toEqual(["https://www.youtube.com/watch?v=asmita-synthetic"]);
   await expect(page).toHaveURL(/\/(review-sign|case\/[^/]+\/confirmation)$/, { timeout: 30_000 });
 });

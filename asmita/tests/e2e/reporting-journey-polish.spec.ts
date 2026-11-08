@@ -47,6 +47,7 @@ test("a YouTube case without a verified contact does not offer signing or redire
   await page.getByLabel(/I declare/).check();
   const created = page.waitForResponse((res) => res.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue to review" }).click();
+  await page.getByRole("button", { name: "Create my case" }).click();
   const { caseId } = await (await created).json();
   await withAdmin(async (db) => {
     await db.query('UPDATE "SubmittedUrl" SET "platformId" = NULL WHERE "caseId" = $1', [caseId]);
