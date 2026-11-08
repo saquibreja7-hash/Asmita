@@ -146,6 +146,7 @@ export async function POST(request: Request) {
       body,
       signedNoticePdf,
       fingerprintIds: signedAnnex.annex.hashSubmissionIds,
+      templateId: template.id,
     });
     return NextResponse.json(result);
   } catch (err) {

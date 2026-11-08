@@ -23,7 +23,7 @@ Asmita uses three isolated environments. Never reuse production secrets in local
 - Worker: `asmita-production` on `meriasmita.org` and `www.meriasmita.org`.
 - Database: Supabase PostgreSQL, Mumbai, through Hyperdrive. Persistence for OTP, audit, security log, email proof and notice dispatch is `database`.
 - The former Neon database is retired. Local database settings do not change production; use the approved production migration environment, after verifying backup or point-in-time recovery readiness, for production migrations.
-- Scheduled work: Cron Triggers (`30 20 * * *`, `30 22 * * *`).
+- Scheduled work: Cron Triggers (`0 * * * *` URL purge, `15 * * * *` escalation sweep, `30 22 * * *` maintenance).
 - Secrets: `wrangler secret put` only, with rotation recorded in the incident log.
 - Email: Resend, with SPF, DKIM and DMARC verified before any real notice (see `docs/infra/email-dns.md`).
 - Required smoke checks: `/`, `/start`, `/research`, `/api/health`.

@@ -36,7 +36,11 @@ describe("escalation-engine", () => {
     });
 
     expect(results).toHaveLength(0);
-    expect(shouldStopFutureEscalation({ responseType: "ACKNOWLEDGED" })).toBe(true);
+    // An acknowledgement or refusal is not removal: the survivor still hears about her next steps.
+    expect(shouldStopFutureEscalation({ responseType: "ACKNOWLEDGED" })).toBe(false);
+    expect(shouldStopFutureEscalation({ responseType: "REJECTED" })).toBe(false);
+    expect(shouldStopFutureEscalation({ responseType: "REMOVED" })).toBe(true);
+    expect(shouldStopFutureEscalation({ urlStatus: "REMOVED" })).toBe(true);
     expect(shouldStopFutureEscalation({ manuallyResolvedAt: "2026-05-12T00:00:00.000Z" })).toBe(true);
   });
 });

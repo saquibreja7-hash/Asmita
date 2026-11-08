@@ -126,6 +126,7 @@ enum AuditEventType {
   HASH_DISPATCHED
   NOTICE_SIGNED
   URL_PORTAL_ACCESSED
+  PLATFORM_FORM_FILED
 }
 
 enum DeletionJobStatus {
@@ -285,6 +286,9 @@ model SubmittedUrl {
   signedNoticePdf  String?
   // Fingerprints listed in the signed notice; dispatch sends exactly these.
   signedHashSubmissionIds String[] @default([])
+  // When the survivor said she filed a form-only platform's own form. Starts
+  // the escalation ladder for links Asmita cannot email (docs/product/escalation-ladder.md).
+  platformFiledAt  DateTime?
 
   case         Case             @relation(fields: [caseId], references: [id])
   platform     Platform?        @relation(fields: [platformId], references: [id])
@@ -341,6 +345,9 @@ model Notice {
   responseType       ResponseType?
   removedAt          DateTime?
   escalationLevel    Int           @default(0)
+  // Set on follow-up emails: the original notice they follow. The escalation
+  // sweep only walks originals, so a follow-up never starts a ladder of its own.
+  followUpOf         String?
   createdAt          DateTime      @default(now())
 
   submittedUrl   SubmittedUrl    @relation(fields: [urlId], references: [id])

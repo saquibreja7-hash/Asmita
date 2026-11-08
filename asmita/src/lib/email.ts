@@ -115,34 +115,31 @@ export function createL2VictimNotificationEmail(
   dashboardUrl: string,
   locale: Locale = "en",
 ) {
-  // Locale is plumbed but Hindi copy is intentionally NOT drafted here.
-  // hi-review-status.json policy: trauma-informed survivor communication
-  // must be authored by a native Hindi speaker, not auto-translated. When
-  // a translated version lands, branch on locale to return it; until then
-  // every recipient gets the English text below.
+  // English only for now, like the other escalation emails.
   void locale;
+  const lines = [
+    "The platform has not removed the content in the time it is given after a notice.",
+    "Your dashboard now shows what you can do next, such as a complaint on the National Cybercrime Reporting Portal, and when each step opens.",
+    "If the content has already gone, mark it as removed on your dashboard and these updates will stop.",
+  ];
   return {
     subject: `Update on Asmita case ${referenceNumber}`,
     text: [
       "Hello,",
       "",
-      `For Asmita case ${referenceNumber}, we sent a notice to the platform 48 hours ago and have not yet received a response.`,
+      `An update on Asmita case ${referenceNumber}.`,
       "",
-      "Our team is now reviewing your case. If the platform still has not acted within five more days, we will help prepare a legal support package you can take to the police.",
-      "",
+      ...lines.flatMap((line) => [line, ""]),
       `Open your dashboard: ${dashboardUrl}`,
       "",
       "For privacy, this email contains no submitted URLs or personal information.",
     ].join("\n"),
     html: renderEmailHtml({
       title: "An update on your case.",
-      paragraphs: [
-        "We sent a notice to the platform 48 hours ago and have not yet received a response.",
-        "Our team is now reviewing your case. If the platform still has not acted within five more days, we will help prepare a legal support package you can take to the police.",
-      ],
+      paragraphs: lines,
       highlight: referenceNumber,
       highlightLabel: "Case reference",
-      cta: { label: "Open your dashboard", url: dashboardUrl },
+      cta: { label: "See your next steps", url: dashboardUrl },
       footerNotes: [PRIVACY_NOTE],
     }),
   };
@@ -153,6 +150,8 @@ export async function sendL2VictimNotification(
   referenceNumber: string,
   dashboardUrl: string,
   locale: Locale = "en",
+  // The escalation sweep runs hourly: the key stops a retry from emailing twice.
+  idempotencyKey?: string,
 ) {
   const { subject, text, html } = createL2VictimNotificationEmail(referenceNumber, dashboardUrl, locale);
   if (!process.env.RESEND_API_KEY) {
@@ -164,42 +163,42 @@ export async function sendL2VictimNotification(
     subject,
     text,
     html,
-  }));
+  }, idempotencyKey ? { idempotencyKey } : undefined));
 }
 
 export function createL3FirReadyEmail(
   referenceNumber: string,
   dashboardUrl: string,
-  pdfDownloadUrl: string,
   locale: Locale = "en",
 ) {
-  // Hindi copy intentionally not drafted here. See createL2VictimNotificationEmail.
+  // English only for now, like the other escalation emails.
   void locale;
+  const lines = [
+    "A week has passed and the content has not been marked as removed.",
+    // MeitY NCII SOP: with no response from the grievance officer in time, the
+    // complainant may appeal to the GAC (Rule 3A) or report on cybercrime.gov.in.
+    "You can now appeal to the Grievance Appellate Committee, the government body that hears appeals when a platform does not act, and report it on the National Cybercrime Reporting Portal. Your dashboard has the steps, the official links and the dates.",
+    "If the content has already gone, mark it as removed on your dashboard and these updates will stop.",
+  ];
   return {
-    subject: `Legal support package ready for Asmita case ${referenceNumber}`,
+    subject: `Next steps for Asmita case ${referenceNumber}`,
     text: [
       "Hello,",
       "",
-      `Seven days have passed since we sent the takedown notice for Asmita case ${referenceNumber} without resolution.`,
+      `An update on Asmita case ${referenceNumber}.`,
       "",
-      "Your legal support package is now ready. You can take this PDF to the police when filing a First Information Report (FIR), or to a lawyer.",
+      ...lines.flatMap((line) => [line, ""]),
+      `Open your dashboard: ${dashboardUrl}`,
       "",
-      `Download the PDF: ${pdfDownloadUrl}`,
-      `View your case dashboard: ${dashboardUrl}`,
-      "",
-      "The package summarizes case activity and does not include any intimate images or videos. For privacy, this email contains no submitted URLs.",
+      "For privacy, this email contains no submitted URLs or personal information.",
     ].join("\n"),
     html: renderEmailHtml({
-      title: "Your legal support package is ready.",
-      paragraphs: [
-        "Seven days have passed since we sent the takedown notice without resolution.",
-        "Your legal support package is now ready. You can take this PDF to the police when filing a First Information Report (FIR), or to a lawyer.",
-        "The package summarizes case activity and does not include any intimate images or videos.",
-      ],
+      title: "Your next steps are ready.",
+      paragraphs: lines,
       highlight: referenceNumber,
       highlightLabel: "Case reference",
-      cta: { label: "Download the PDF", url: pdfDownloadUrl },
-      footerNotes: [`Dashboard: ${dashboardUrl}`, PRIVACY_NOTE],
+      cta: { label: "See your next steps", url: dashboardUrl },
+      footerNotes: [PRIVACY_NOTE],
     }),
   };
 }
@@ -208,10 +207,10 @@ export async function sendL3FirReadyNotification(
   to: string,
   referenceNumber: string,
   dashboardUrl: string,
-  pdfDownloadUrl: string,
   locale: Locale = "en",
+  idempotencyKey?: string,
 ) {
-  const { subject, text, html } = createL3FirReadyEmail(referenceNumber, dashboardUrl, pdfDownloadUrl, locale);
+  const { subject, text, html } = createL3FirReadyEmail(referenceNumber, dashboardUrl, locale);
   if (!process.env.RESEND_API_KEY) {
     return { id: `dev-l3-${referenceNumber}` };
   }
@@ -221,7 +220,7 @@ export async function sendL3FirReadyNotification(
     subject,
     text,
     html,
-  }));
+  }, idempotencyKey ? { idempotencyKey } : undefined));
 }
 
 export function createLegalPackageReadyEmail(referenceNumber: string, dashboardUrl: string) {

@@ -7,9 +7,11 @@ import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submis
 import HashGenerator from "@/components/HashGenerator";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { MarkRemovedButton } from "./MarkRemovedButton";
+import { EscalationLadder } from "./EscalationLadder";
+import { PlatformFiledButton } from "./PlatformFiledButton";
 import { getLocale } from "@/lib/get-locale";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
-import { findPlatformByDomain } from "@/lib/platforms";
+import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
 import { findSignableNotice } from "@/lib/signable-notice";
 
 // Wording that matches what has actually happened: "prepared" is not "sent",
@@ -44,11 +46,13 @@ function StatusBadge({ status, locale, unknown = false }: { status: string; loca
 
 // One plain sentence about where the case stands, picked from the most
 // advanced link. Signing is handled separately, as the only call to action.
-type Standing = "removed" | "sent" | "prepared" | "checking" | "fingerprints" | "open";
-function standingOf(statuses: string[], fingerprintCount: number): Standing {
+type Standing = "removed" | "sent" | "filed" | "prepared" | "checking" | "fingerprints" | "open";
+function standingOf(urls: { status: string; platformFiledAt?: string | null }[], fingerprintCount: number): Standing {
+  const statuses = urls.map((url) => url.status);
   if (statuses.length === 0) return fingerprintCount > 0 ? "fingerprints" : "open";
   if (statuses.every((s) => s === "REMOVED")) return "removed";
   if (statuses.some((s) => s === "NOTICE_SENT" || s === "ESCALATED")) return "sent";
+  if (urls.some((url) => url.platformFiledAt && url.status !== "REMOVED" && url.status !== "REJECTED")) return "filed";
   if (statuses.includes("NOTICE_QUEUED")) return "prepared";
   if (statuses.includes("PENDING_REVIEW")) return "checking";
   return "open";
@@ -57,6 +61,7 @@ function standingOf(statuses: string[], fingerprintCount: number): Standing {
 const STANDING_KEYS: Record<Standing, readonly [MessageKey, MessageKey]> = {
   removed: ["case.now.removed.title", "case.now.removed.sub"],
   sent: ["case.now.sent.title", "case.now.sent.sub"],
+  filed: ["case.now.filed.title", "case.now.filed.sub"],
   prepared: ["case.now.prepared.title", "case.now.prepared.sub"],
   checking: ["case.now.checking.title", "case.now.checking.sub"],
   fingerprints: ["case.now.fingerprints.title", "case.now.fingerprints.sub"],
@@ -94,6 +99,10 @@ export default async function CasePage({
     hashSubmissions = await listHashesForCase(record.id);
   }
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
+  // The complaint and appeal drafts are legal text: a human legal reviewer
+  // turns them on (docs/product/escalation-ladder.md). Never set in wrangler.jsonc
+  // until that review is done.
+  const draftsEnabled = process.env.ESCALATION_DRAFTS_REVIEWED === "true" || skipLegalGate;
   const hasUnsignedQueuedUrl = Boolean(record && (process.env.NODE_ENV === "production" || process.env.DATABASE_URL) && await findSignableNotice(record.id, skipLegalGate));
 
   if (!record) {
@@ -145,7 +154,7 @@ export default async function CasePage({
     );
   }
 
-  const standing = standingOf(record.urls.map((url) => url.status), hashSubmissions.length);
+  const standing = standingOf(record.urls, hashSubmissions.length);
   const created = new Date(record.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 
   return (
@@ -187,7 +196,13 @@ export default async function CasePage({
                 <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.urls.empty")}</p>
               ) : (
                 <ul className="mt-4 divide-y divide-[var(--line)] overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
-                  {record.urls.map((url) => (
+                  {record.urls.map((url) => {
+                    const entry = findPlatformByDomain(url.domain);
+                    const live = url.status !== "REMOVED" && url.status !== "REJECTED";
+                    const startedAt = url.noticeSentAt ?? url.platformFiledAt ?? null;
+                    // Only a human-verified form is offered, as on the handoff page.
+                    const formUrl = entry?.grievanceEmail === HUMAN_VERIFICATION_REQUIRED && entry.lastContactVerifiedByHuman ? entry.formUrl : undefined;
+                    return (
                     <li key={url.id} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 py-4">
                       <div className="min-w-0">
                         <Link className="link-underline font-medium text-[var(--ink)]" href={`/case/${record.id}/url/${url.id}`}>
@@ -197,13 +212,30 @@ export default async function CasePage({
                         {!url.urlHash && <p className="muted mt-1 text-xs">{t(locale, "case.urlExpired")}</p>}
                       </div>
                       <div className="flex flex-col items-end gap-1.5">
-                        <StatusBadge status={url.status} locale={locale} unknown={!findPlatformByDomain(url.domain)} />
+                        {/* She filed the platform's own form: for her, it has been sent. */}
+                        <StatusBadge status={url.platformFiledAt && (url.status === "NOTICE_QUEUED" || url.status === "PENDING_REVIEW") ? "NOTICE_SENT" : url.status} locale={locale} unknown={!entry && !url.platformFiledAt} />
                         {url.status !== "REMOVED" && url.status !== "REJECTED" && (
                           <MarkRemovedButton caseId={record.id} urlId={url.id} platformName={url.platformName} locale={locale} />
                         )}
                       </div>
+                      {live && startedAt ? (
+                        <EscalationLadder
+                          locale={locale}
+                          platform={url.platformName}
+                          route={url.noticeSentAt ? "EMAIL" : "FORM"}
+                          startedAt={startedAt}
+                          status={url.status}
+                          responseType={url.responseType}
+                          responseAt={url.responseAt}
+                          reference={record.referenceNumber}
+                          draftsEnabled={draftsEnabled}
+                        />
+                      ) : live && formUrl ? (
+                        <PlatformFiledButton caseId={record.id} urlId={url.id} platform={url.platformName} formUrl={formUrl} locale={locale} />
+                      ) : null}
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
             </section>

@@ -89,6 +89,8 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   const [hydrated, setHydrated] = useState(false);
   const [handoff, setHandoff] = useState<{ name: string; formUrl: string }[] | null>(null);
   const [remainingDraft, setRemainingDraft] = useState<string | null>(null);
+  // The same draft with the form-only links kept in, if she opts to track them.
+  const [trackedDraft, setTrackedDraft] = useState<string | null>(null);
 
   const [hashFiles, setHashFiles] = useState<FileHashState[]>([]);
   const [selectedPlatformIds, setSelectedPlatformIds] = useState<string[]>([]);
@@ -171,17 +173,21 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
         return false;
       });
       const hasRemaining = remainingUrls.length > 0 || (hashOnly && remainingPlatforms.length > 0);
-      const draft = hasRemaining ? JSON.stringify({
-        urls: remainingUrls,
+      const buildDraft = (urls: string[]) => JSON.stringify({
+        urls,
         hashes: hashedFiles.map((f) => ({ hash: f.hash!, quality: f.quality ?? 0, clientVersion: PDQ_CLIENT_VERSION })),
         platformIds: hashOnly ? remainingPlatforms.map((p) => p.id) : [],
         emailPlatformIds: remainingPlatforms.filter((p) => p.hasEmail).map((p) => p.id),
         formOnlyPlatforms: [],
         declaration: true,
-      }) : null;
+      });
+      const draft = hasRemaining ? buildDraft(remainingUrls) : null;
       if (formLinks.size > 0) {
         sessionStorage.removeItem(DRAFT_KEY);
         setRemainingDraft(draft);
+        // Opting in keeps the form-only links in the case too, so they get a
+        // deadline and next steps (docs/product/escalation-ladder.md).
+        setTrackedDraft(parsedUrls.length > remainingUrls.length ? buildDraft(parsedUrls) : null);
         setHandoff([...formLinks.values()]);
       } else if (draft) {
         sessionStorage.setItem(DRAFT_KEY, draft);
@@ -200,9 +206,11 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   }
 
   if (handoff) {
-    return <FormHandoff locale={locale} links={handoff} fingerprintNotSent={hashedFiles.length > 0} onBack={() => setHandoff(null)} onContinue={remainingDraft ? () => {
+    return <FormHandoff locale={locale} links={handoff} fingerprintNotSent={hashedFiles.length > 0} onBack={() => setHandoff(null)} hasRemaining={Boolean(remainingDraft)} trackOption={Boolean(trackedDraft)} onContinue={remainingDraft || trackedDraft ? (track: boolean) => {
+      const next = track && trackedDraft ? trackedDraft : remainingDraft;
+      if (!next) return;
       try {
-        sessionStorage.setItem(DRAFT_KEY, remainingDraft);
+        sessionStorage.setItem(DRAFT_KEY, next);
         router.push(signedIn ? "/review-sign" : "/register");
       } catch { setError(t(locale, "submit.error.generic")); }
     } : undefined} error={error} />;

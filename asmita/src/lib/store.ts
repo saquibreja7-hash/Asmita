@@ -26,6 +26,7 @@ export type UrlRecord = {
   platformId: string | null;
   flaggedForReview?: boolean;
   flagReason?: string;
+  platformFiledAt?: string | null;
 };
 
 type StoreGlobals = {

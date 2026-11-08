@@ -2,7 +2,7 @@
 
 Status: operational draft, pending legal and NGO partner review.
 
-This playbook describes what Asmita does when a platform does not respond after a notice is sent. It mirrors `src/lib/escalation-engine.ts` and must be updated before changing escalation timings in code.
+This playbook describes what Asmita does when a platform does not respond after a notice is sent. It mirrors `src/lib/escalation-engine.ts` (the automated emails) and `src/lib/escalation-ladder.ts` (what the survivor sees), and must be updated before changing escalation timings in code. Product plan: `docs/product/escalation-ladder.md`.
 
 ## Scope
 
@@ -13,17 +13,21 @@ This playbook describes what Asmita does when a platform does not respond after 
 
 ## Timeline
 
-All times are calculated in UTC from the notice `sentAt` timestamp.
+All times are calculated in UTC from the original notice's `sentAt` timestamp. The sweep runs hourly (`15 * * * *`) and walks original notices only; follow-up rows carry `followUpOf` and are skipped.
 
 | Level | Time after sentAt | Action | System behavior |
 | --- | ---: | --- | --- |
-| 1 | 24 hours | Email follow-up | Queue one follow-up reminder for the same submitted URL and notice. |
-| 2 | 48 hours | Victim notification | Notify the victim that the platform has not responded and show next options in the dashboard. |
-| 3 | 7 days | FIR/legal package | Prepare the 7-day legal support PDF package for victim handoff. |
+| 1 | 24 hours | Email follow-up | One follow-up to the grievance officer, resending the reviewed template. Skipped once (and recorded) if the platform already answered or the notice has no template on record. Retried while the template is not reviewed or the contact not verified, which can only happen until the 48-hour step is due. |
+| 2 | 48 hours | Victim notification | Email the survivor that the platform has not removed it; the dashboard now offers a cybercrime.gov.in complaint. |
+| 3 | 7 days | Next steps | Email the survivor that she can appeal to the Grievance Appellate Committee and file a police complaint. Points at the dashboard; the PDF package cannot run on Workers yet. |
+
+A platform's acknowledgement or refusal does not stop levels 2 and 3: nothing has been removed. Only removal (marked by the survivor or recorded on the notice) or an Asmita rejection stops the ladder.
+
+Form-only platforms (Meta, X, LinkedIn) get no emails. If the survivor opted to keep the link in her case and says she filed the platform form (`SubmittedUrl.platformFiledAt`), the dashboard shows the same steps on the same timings.
 
 ## Idempotency
 
-Each escalation level is processed once per notice URL pair. A completed level must be recorded before later runs so retries do not duplicate victim notifications, follow-up emails, or PDF generation.
+Each escalation level is processed once per notice. A completed or skipped level is recorded before later runs. Every email carries a Resend idempotency key (`follow-up:…`, `l2:<noticeId>`, `l3:<noticeId>`), so a retry within 24 hours never sends twice.
 
 ## Manual Review Gates
 

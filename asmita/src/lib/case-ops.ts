@@ -24,7 +24,16 @@ export type DisplayUrl = {
   hasSignedNotice?: boolean;
   flaggedForReview?: boolean;
   flagReason?: string | null;
+  /** The escalation ladder's inputs (src/lib/escalation-ladder.ts). */
+  platformFiledAt?: string | null;
+  noticeSentAt?: string | null;
+  responseType?: string | null;
+  responseAt?: string | null;
 };
+
+type OriginalNotice = { sentAt: Date | string | null; responseType: string | null; responseReceivedAt: Date | string | null };
+
+const iso = (value: Date | string | null | undefined) => (value ? new Date(value).toISOString() : null);
 
 export type DisplayCase = {
   id: string;
@@ -44,7 +53,10 @@ function toDisplayUrl(url: {
   signedNoticePdf?: string | null;
   flaggedForReview: boolean;
   flagReason: string | null;
+  platformFiledAt?: Date | string | null;
+  notices?: OriginalNotice[];
 }): DisplayUrl {
+  const notice = url.notices?.[0];
   return {
     id: url.id,
     domain: url.domain,
@@ -55,6 +67,10 @@ function toDisplayUrl(url: {
     hasSignedNotice: url.signedNoticePdf != null,
     flaggedForReview: url.flaggedForReview,
     flagReason: url.flagReason,
+    platformFiledAt: iso(url.platformFiledAt),
+    noticeSentAt: iso(notice?.sentAt),
+    responseType: notice?.responseType ?? null,
+    responseAt: iso(notice?.responseReceivedAt),
   };
 }
 
@@ -73,6 +89,8 @@ function toDisplayCase(dbCase: {
     signedNoticePdf?: string | null;
     flaggedForReview: boolean;
     flagReason: string | null;
+    platformFiledAt?: Date | string | null;
+    notices?: OriginalNotice[];
   }>;
 }): DisplayCase {
   return {
@@ -360,12 +378,38 @@ export async function getCaseForUser(caseId: string, userId: string): Promise<Di
     const record = await workerDb.selectFrom("Case").selectAll().where("id", "=", caseId).where("userId", "=", userId).executeTakeFirst();
     if (!record) return null;
     const urls = await workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", caseId).orderBy("submittedAt", "asc").execute();
-    return toDisplayCase({ ...record, createdAt: new Date(record.createdAt), submittedUrls: urls.map((url) => ({ ...url, submittedAt: new Date(url.submittedAt) })) });
+    // The original notice per link (not its follow-ups) feeds the escalation ladder.
+    const notices = urls.length
+      ? await workerDb.selectFrom("Notice").select(["urlId", "sentAt", "responseType", "responseReceivedAt"])
+        .where("urlId", "in", urls.map((url) => url.id)).where("followUpOf", "is", null).where("sentAt", "is not", null)
+        .orderBy("sentAt", "asc").execute()
+      : [];
+    return toDisplayCase({
+      ...record,
+      createdAt: new Date(record.createdAt),
+      submittedUrls: urls.map((url) => ({
+        ...url,
+        submittedAt: new Date(url.submittedAt),
+        notices: notices.filter((notice) => notice.urlId === url.id),
+      })),
+    });
   }
   const db = await getPrismaDb();
   const dbCase = await db.case.findFirst({
     where: { id: caseId, userId },
-    include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
+    include: {
+      submittedUrls: {
+        orderBy: { submittedAt: "asc" },
+        include: {
+          notices: {
+            where: { followUpOf: null, sentAt: { not: null } },
+            orderBy: { sentAt: "asc" },
+            take: 1,
+            select: { sentAt: true, responseType: true, responseReceivedAt: true },
+          },
+        },
+      },
+    },
   });
   return dbCase ? toDisplayCase(dbCase) : null;
 }
@@ -480,6 +524,30 @@ export async function markUrlResolved(caseId: string, userId: string, urlId?: st
 
   await db.submittedUrl.update({ where: { id: url.id }, data: { status: "REMOVED" } });
   await writeAuditLog({ eventType: "CONTENT_REMOVED", entityType: "SubmittedUrl", entityId: url.id });
+}
+
+/** The survivor filed a form-only platform's own form: start that link's ladder. */
+export async function markPlatformFiled(caseId: string, userId: string, urlId: string, filedAt = new Date()): Promise<void> {
+  if (isDevNoDb()) {
+    const record = store.cases.get(caseId);
+    if (!record || record.userId !== userId) throw new Error("case_not_found");
+    const url = record.urls.find((item) => item.id === urlId);
+    if (!url) throw new Error("url_not_found");
+    url.platformFiledAt ??= filedAt.toISOString();
+    return;
+  }
+  const db = await getPrismaDb();
+  const url = await db.submittedUrl.findFirst({
+    where: { id: urlId, caseId, case: { userId } },
+    select: { id: true },
+  });
+  if (!url) throw new Error("url_not_found");
+  // The first filing date is the one the platform's clock runs from. One
+  // conditional update, so two quick taps cannot both record a filing.
+  const { count } = await db.submittedUrl.updateMany({ where: { id: url.id, platformFiledAt: null }, data: { platformFiledAt: filedAt } });
+  if (count === 1) {
+    await writeAuditLog({ eventType: "PLATFORM_FORM_FILED", entityType: "SubmittedUrl", entityId: url.id, actorId: userId });
+  }
 }
 
 export async function reviewSubmittedUrl(input: {
