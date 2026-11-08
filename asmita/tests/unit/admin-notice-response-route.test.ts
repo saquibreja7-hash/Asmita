@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   db: {
-    notice: { findUnique: vi.fn(), update: vi.fn((args: unknown) => ({ op: "notice.update", args })) },
-    submittedUrl: { update: vi.fn((args: unknown) => ({ op: "submittedUrl.update", args })) },
-    $transaction: vi.fn().mockResolvedValue([]),
+    notice: { findUnique: vi.fn(), updateMany: vi.fn((args: unknown) => ({ op: "notice.updateMany", args })) },
+    submittedUrl: { updateMany: vi.fn((args: unknown) => ({ op: "submittedUrl.updateMany", args })) },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -25,8 +25,8 @@ import { POST } from "@/app/api/admin/notices/[noticeId]/response/route";
 
 type Mock = ReturnType<typeof vi.fn>;
 const mocked = db as unknown as {
-  notice: { findUnique: Mock; update: Mock };
-  submittedUrl: { update: Mock };
+  notice: { findUnique: Mock; updateMany: Mock };
+  submittedUrl: { updateMany: Mock };
   $transaction: Mock;
 };
 
@@ -76,6 +76,7 @@ describe("POST /api/admin/notices/[noticeId]/response", () => {
   beforeEach(() => {
     vi.mocked(requireAdminPermission).mockResolvedValue(reviewer as never);
     mocked.notice.findUnique.mockResolvedValue(notice());
+    mocked.$transaction.mockResolvedValue([{ count: 1 }, { count: 1 }]);
   });
   afterEach(() => {
     vi.clearAllMocks();
@@ -98,13 +99,16 @@ describe("POST /api/admin/notices/[noticeId]/response", () => {
     const [ops] = mocked.$transaction.mock.calls[0];
     expect(ops).toEqual([
       {
-        op: "notice.update",
+        op: "notice.updateMany",
         args: {
-          where: { id: "n1" },
+          where: { id: "n1", removedAt: null },
           data: { responseType: "REMOVED", responseReceivedAt: new Date(receivedAt), removedAt: new Date(receivedAt) },
         },
       },
-      { op: "submittedUrl.update", args: { where: { id: "u1" }, data: { status: "REMOVED" } } },
+      {
+        op: "submittedUrl.updateMany",
+        args: { where: { id: "u1", status: { not: "REMOVED" } }, data: { status: "REMOVED" } },
+      },
     ]);
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ eventType: "CONTENT_REMOVED", entityId: "u1", actorId: "admin-1" }),
@@ -138,6 +142,16 @@ describe("POST /api/admin/notices/[noticeId]/response", () => {
     mocked.notice.findUnique.mockResolvedValueOnce(null);
     expect((await record({ responseType: "REMOVED" })).status).toBe(404);
     expect(mocked.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("records a removal only once when two admins record it at the same time", async () => {
+    // The other admin's removal landed first: the guarded update matches nothing.
+    mocked.$transaction.mockResolvedValueOnce([{ count: 0 }, { count: 0 }]);
+    const response = await record({ responseType: "REMOVED" });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "already_removed" });
+    expect(writeAuditLog).not.toHaveBeenCalled();
   });
 
   it("refuses a reply time before the notice or in the future", async () => {

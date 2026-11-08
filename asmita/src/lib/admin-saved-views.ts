@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { containsUrlLikeText } from "@/lib/url-like-text";
 
 // An admin's own named filters of the case list. Only the list's filter and
 // sort parameters are kept; never a case, a cursor or an open preview.
@@ -36,10 +37,15 @@ export async function listSavedViews(ownerEmailHash: string): Promise<SavedView[
 export async function createSavedView(
   ownerEmailHash: string,
   input: { name: string; query: string },
-): Promise<{ ok: true; view: SavedView } | { ok: false; error: "too_many_views" | "name_taken" | "empty_view" }> {
+): Promise<
+  { ok: true; view: SavedView } | { ok: false; error: "too_many_views" | "name_taken" | "empty_view" | "links_not_allowed" }
+> {
   const name = input.name.trim();
   const query = sanitiseViewQuery(input.query);
   if (!query) return { ok: false, error: "empty_view" };
+  // A view is stored text: keep pasted links (a survivor's URL) out of it.
+  const values = Array.from(new URLSearchParams(query).values());
+  if ([name, ...values].some((value) => containsUrlLikeText(value))) return { ok: false, error: "links_not_allowed" };
   const existing = await listSavedViews(ownerEmailHash);
   if (existing.length >= MAX_SAVED_VIEWS) return { ok: false, error: "too_many_views" };
   if (existing.some((view) => view.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "name_taken" };

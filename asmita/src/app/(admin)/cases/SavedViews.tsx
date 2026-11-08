@@ -10,6 +10,7 @@ const ERRORS: Record<string, string> = {
   name_taken: "You already have a view with that name.",
   too_many_views: "You have 20 saved views. Remove one first.",
   empty_view: "Choose a filter or sort before saving.",
+  links_not_allowed: "A view cannot contain a link. Remove it from the name or search.",
 };
 
 /** The admin's own saved filters: open, remove, or save the current one. */

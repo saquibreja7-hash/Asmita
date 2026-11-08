@@ -43,6 +43,20 @@ describe("saved views", () => {
     expect(await listSavedViews("owner-a")).toHaveLength(0);
   });
 
+  it("keeps pasted links out of the name and the search", async () => {
+    expect(await createSavedView("owner-d", { name: "https://example.invalid/post", query: "sort=newest" })).toEqual({
+      ok: false,
+      error: "links_not_allowed",
+    });
+    expect(await createSavedView("owner-d", { name: "Search", query: "q=www.example.invalid" })).toEqual({
+      ok: false,
+      error: "links_not_allowed",
+    });
+    expect(await createSavedView("owner-d", { name: "Dates", query: "from=2026-11-01&to=2026-11-08" })).toMatchObject({
+      ok: true,
+    });
+  });
+
   it(`stops at ${MAX_SAVED_VIEWS} views`, async () => {
     for (let index = 0; index < MAX_SAVED_VIEWS; index += 1) {
       await createSavedView("owner-c", { name: `View ${index}`, query: `q=${index}` });

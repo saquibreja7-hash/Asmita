@@ -59,13 +59,19 @@ export async function POST(request: Request, context: { params: Promise<{ notice
 
   const { responseType } = parsed.data;
   const removed = responseType === "REMOVED";
-  await db.$transaction([
-    db.notice.update({
-      where: { id: notice.id },
+  // The removal guard is in the updates themselves, so two admins recording
+  // at once cannot both record a removal; replies before it may still be
+  // changed (acknowledged, then removed).
+  const [noticeUpdate] = await db.$transaction([
+    db.notice.updateMany({
+      where: { id: notice.id, removedAt: null },
       data: { responseType, responseReceivedAt: receivedAt, ...(removed ? { removedAt: receivedAt } : {}) },
     }),
-    ...(removed ? [db.submittedUrl.update({ where: { id: notice.urlId }, data: { status: "REMOVED" } })] : []),
+    ...(removed
+      ? [db.submittedUrl.updateMany({ where: { id: notice.urlId, status: { not: "REMOVED" } }, data: { status: "REMOVED" } })]
+      : []),
   ]);
+  if (noticeUpdate.count === 0) return NextResponse.json({ error: "already_removed" }, { status: 409 });
 
   await writeAuditLog({
     eventType: removed ? "CONTENT_REMOVED" : "ADMIN_ACTION",
