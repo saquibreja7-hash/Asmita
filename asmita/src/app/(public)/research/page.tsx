@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
+import { Illustration } from "@/components/Illustration";
 
 export const metadata: Metadata = {
   title: "Research",
@@ -37,7 +38,7 @@ export default async function ResearchPage() {
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label={say("Research", "शोध")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("Research", "शोध")}</span>
               <h1 className="page-title mt-5">
@@ -47,6 +48,7 @@ export default async function ResearchPage() {
                 {say("We aim to study image-based abuse in India and share supported findings openly so people and institutions can act on them.", "हम भारत में तस्वीरों के ज़रिए दुर्व्यवहार को समझने और प्रमाणित निष्कर्ष खुले तौर पर साझा करने की योजना बना रहे हैं।")}
               </p>
             </div>
+            <Illustration name="page-research" eager className="page-hero-art" />
           </div>
         </section>
 

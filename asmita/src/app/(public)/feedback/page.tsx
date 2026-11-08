@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { FeedbackForm } from "@/app/(public)/feedback/FeedbackForm";
 import { getLocale } from "@/lib/get-locale";
+import { Illustration } from "@/components/Illustration";
 
 export default async function FeedbackPage() {
   const locale = await getLocale();
@@ -10,7 +11,7 @@ export default async function FeedbackPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container page-hero text-center">
+        <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
             <span className="eyebrow">{say("Feedback", "प्रतिक्रिया")}</span>
             <p className="muted mt-3 text-xs tracking-wide">
@@ -23,6 +24,7 @@ export default async function FeedbackPage() {
               {say("Tell the team what you want it to know about your experience. The form does not ask for your name or intimate content. A case reference is optional; case URLs are not accepted.", "अपने अनुभव के बारे में टीम को जो बताना चाहें, लिखें। फ़ॉर्म आपका नाम या निजी सामग्री नहीं माँगता। केस संदर्भ वैकल्पिक है; केस URL स्वीकार नहीं किए जाते।")}
             </p>
           </div>
+          <Illustration name="page-feedback" eager className="page-hero-art" />
         </section>
 
         {/* WHAT NOT TO SEND - quiet trauma-informed line */}

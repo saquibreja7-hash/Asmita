@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { audiences } from "@/lib/audience-content";
 import { getLocale } from "@/lib/get-locale";
+import { Illustration } from "@/components/Illustration";
 
 export const metadata: Metadata = {
   title: "Who we help",
@@ -26,7 +27,7 @@ export default async function WhoWeHelpPage() {
       <div className="page-canvas">
         {/* HERO */}
         <section className="hero" aria-label={say("Who we help", "हम किसकी मदद करते हैं")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("Who we help", "हम किसकी मदद करते हैं")}</span>
               <h1 className="page-title mt-5">
@@ -36,6 +37,7 @@ export default async function WhoWeHelpPage() {
                 {say("Image-based abuse touches survivors, the people around them, and the platforms that carry the content. Find the path that fits you.", "तस्वीरों के ज़रिए दुर्व्यवहार प्रभावित व्यक्ति, उनके करीबी लोगों और सामग्री दिखाने वाले प्लेटफ़ॉर्म से जुड़ा हो सकता है। अपने लिए सही रास्ता चुनें।")}
               </p>
             </div>
+            <Illustration name="who-we-help" eager className="page-hero-art" />
           </div>
         </section>
 

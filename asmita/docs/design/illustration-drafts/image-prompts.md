@@ -76,3 +76,66 @@ Scene: A woman at a desk writing a letter with a pen, a sealed envelope and a sm
 ## Estimated cost
 
 13 images at about $0.13 to $0.21 each comes to roughly $1.70 to $2.75 on OpenRouter. Keep at least $1.00 above what you need: OpenRouter refuses image requests once less than $1.00 of the key's limit remains.
+
+---
+
+# Round 2 (November 2026): the remaining pages
+
+Same model, same 4:3 ratio, same **style block** and the same rules as round 1.
+Save each PNG with the exact name below into `docs/design/illustration-drafts/ai/`.
+
+## Issue topics (one image per topic page, `/issue/...`)
+
+These pages describe harm, so every scene is symbolic and calm. Nobody is shown as a victim.
+
+### 14. `issue-ncii.png` (Intimate images shared without consent)
+Scene: A woman standing at an open window, calmly letting a few small paper birds fly out into the sky, a potted plant on the sill.
+
+### 15. `issue-deepfakes.png` (Deepfakes)
+Scene: A woman standing in a gallery with her hand on her chin, calmly comparing two identical picture frames on the wall. Each frame shows only simple abstract shapes (no face, no body); the shapes in one frame are slightly warped and wavy.
+
+### 16. `issue-morphing.png` (Morphed images)
+Scene: Close view of a table from above: two hands calmly fitting torn pieces of paper with abstract shapes back together, a pair of scissors and a glue stick beside them. No faces, no bodies on the paper.
+
+### 17. `issue-sextortion.png` (Threats and blackmail)
+Scene: A woman at a kitchen table placing her phone face down, turning towards a friend who is handing her a cup of chai. Both are calm; the friend's other hand rests on her arm.
+
+### 18. `issue-doxxing.png` (Personal details exposed)
+Scene: A woman at home in the evening drawing a curtain across a window, a warm table lamp glowing beside a sofa with a cushion.
+
+## Who we help: platforms and partners (`/who-we-help/platforms`)
+
+### 19. `audience-platforms.png`
+Scene: A woman and a man in office clothes sitting across a meeting table, both with laptops (blank screens), the woman sliding a neat folder across to him, both attentive and respectful.
+
+## Resources sub-pages
+
+### 20. `page-guides.png` (`/resources/guides`)
+Scene: A woman sitting cross-legged on a sofa ticking boxes on a clipboard checklist with a pencil. The checklist has only blank lines and small boxes, three of them ticked.
+
+### 21. `page-legal.png` (`/resources/legal`)
+Scene: Two women at a desk in a quiet office, one an advisor in a blazer pointing to a page in an open folder (blank lines only), the other listening and nodding. A small balance scale sits on the desk.
+
+### 22. `page-directory.png` (`/resources/directory`)
+Scene: A woman at a table looking at a large folded paper map with simple winding roads and a few small teal dots. The map shows no country outline and no place names.
+
+## Other pages
+
+### 23. `page-glossary.png` (`/glossary`)
+Scene: A large open book lying on a table, a woman's hand turning a page, a pencil and a small leaf beside it. The pages show only faint blank lines.
+
+### 24. `page-research.png` (`/research`)
+Scene: A woman at a desk studying a sheet with simple bar and line shapes (no numbers, no labels), a mug and a stack of papers beside her, thoughtful.
+
+### 25. `page-terms.png` (`/terms` and `/legal`)
+Scene: A woman sitting at a table calmly reading a single sheet of paper (blank lines only), a pen and a cup of tea beside her.
+
+### 26. `page-talk.png` (`/talk`, the voice helpline)
+Scene: A woman walking slowly through a park with wired earphones, talking and smiling slightly, trees and a bench behind her.
+
+### 27. `page-feedback.png` (`/feedback`)
+Scene: A woman dropping a small folded card into a simple wooden box with a slot, a plant on the shelf beside it.
+
+## Estimated cost (round 2)
+
+14 images at about $0.13 to $0.21 each comes to roughly $1.80 to $2.95. Keep $1.00 spare on the key, as before.

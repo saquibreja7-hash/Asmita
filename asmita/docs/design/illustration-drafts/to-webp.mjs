@@ -28,6 +28,23 @@ const MAP = {
   "page-about": "Warm Community Conversation.png",
   "page-privacy": "Serene Keeper of Secrets.png",
   "page-contact": "Serene Letter-Writing by the Window.png",
+  // Round 2 (November 2026). Where a scene came in two styles, the line-art
+  // one is used so it matches round 1.
+  "issue-ncii": "round2/Origami Birds at Sunrise.png",
+  "issue-deepfakes": "round2/Deepfake Art Gallery Comparison.png",
+  "issue-morphing": "round2/Repairing a Torn Landscape Illustration.png",
+  "issue-sextortion": "round2/Supportive Tea-Time Friendship.png",
+  "issue-doxxing": "round2/Closing Curtains in a Cozy Living Room.png",
+  "audience-platforms": "round2/A Warm Meeting of Minds.png",
+  "page-guides": "round2/Mindful Checklist in a Cozy Corner.png",
+  "page-legal": "round2/Indian Women’s Legal Consultation Illustration.png",
+  "page-directory": "round2/Woman Studying a Map at Home.png",
+  "page-glossary": "round2/Calm Reading with Teal and Coral Accents.png",
+  "page-research": "round2/Thoughtful Page Research at Desk.png",
+  "page-terms": "round2/Quiet Study with Tea and Plant.png",
+  "page-talk": "round2/Park Walk with a Friendly Helpline Call.png",
+  "page-feedback": "round2/Serene Ballot Box Garden Scene.png",
+  "start-journey": "round2/A Hopeful Journey Through Light.png",
 };
 
 // A corner can sit on part of the scene (an awning, a window), so take the

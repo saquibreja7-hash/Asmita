@@ -8,6 +8,7 @@ import { t } from "@/lib/i18n";
 import type { IconName } from "@/components/Icon";
 import { Callout, NextStep, ReadingSection } from "@/components/Reading";
 import { ReadingTime } from "@/components/ReadingTime";
+import { Illustration } from "@/components/Illustration";
 
 // One icon per right, in the order of legalSections.
 const ICONS: IconName[] = ["shieldCheck", "building", "alert", "refresh", "scale", "heart"];
@@ -25,7 +26,7 @@ export default async function LegalRightsPage() {
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label={say("Your legal rights", "आपके कानूनी अधिकार")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl">
               <Link href="/resources" className="eyebrow">
                 {say("Resources", "संसाधन")}
@@ -40,6 +41,7 @@ export default async function LegalRightsPage() {
                 {say("Not legal advice", "कानूनी सलाह नहीं")}<ReadingTime label={t(locale, "reading.minutes")} />
               </p>
             </div>
+            <Illustration name="page-legal" eager className="page-hero-art" />
           </div>
         </section>
 

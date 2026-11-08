@@ -7,6 +7,16 @@ import { issueContentHi } from "@/lib/issue-content-hi";
 import { getLocale } from "@/lib/get-locale";
 import { ItemCards, SectionHeading } from "@/components/Reading";
 import { ReadingTime } from "@/components/ReadingTime";
+import { Illustration, type IllustrationName } from "@/components/Illustration";
+
+// A topic added without its own image falls back to the main issue image.
+const TOPIC_ART: Record<string, IllustrationName> = {
+  ncii: "issue-ncii",
+  deepfakes: "issue-deepfakes",
+  morphing: "issue-morphing",
+  sextortion: "issue-sextortion",
+  doxxing: "issue-doxxing",
+};
 
 export function generateStaticParams() {
   return issueTopics.map((t) => ({ topic: t.slug }));
@@ -46,7 +56,7 @@ export default async function IssueTopicPage({
       <div className="page-canvas">
         {/* HERO */}
         <section className="hero" aria-label={content.term}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-5xl">
               <Link href="/issue" className="eyebrow">
                 {say("The issue", "समस्या को समझें")}
@@ -61,6 +71,7 @@ export default async function IssueTopicPage({
                 {content.term}<ReadingTime label={say("{n} min read", "{n} मिनट में पढ़ें")} />
               </p>
             </div>
+            <Illustration name={TOPIC_ART[data.slug] ?? "page-issue"} eager className="page-hero-art" />
           </div>
         </section>
 

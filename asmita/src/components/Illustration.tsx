@@ -9,7 +9,7 @@ const SIZES = {
   "done-relief": [720, 540, "webp"],
   "stop-paths": [720, 540, "webp"],
   "who-we-help": [960, 540, "webp"],
-  "start-support-B": [400, 300, "svg"],
+  "start-journey": [720, 540, "webp"],
   "page-issue": [720, 540, "webp"],
   "page-what-we-do": [720, 540, "webp"],
   "page-how-it-works": [720, 540, "webp"],
@@ -20,14 +20,33 @@ const SIZES = {
   "page-about": [720, 540, "webp"],
   "page-privacy": [720, 540, "webp"],
   "page-contact": [720, 540, "webp"],
+  "audience-helping": [720, 525, "webp"],
+  "audience-parents": [720, 525, "webp"],
+  "audience-young": [720, 263, "webp"],
+  "audience-platforms": [720, 540, "webp"],
+  "issue-ncii": [720, 540, "webp"],
+  "issue-deepfakes": [720, 540, "webp"],
+  "issue-morphing": [720, 540, "webp"],
+  "issue-sextortion": [720, 540, "webp"],
+  "issue-doxxing": [720, 540, "webp"],
+  "page-guides": [720, 540, "webp"],
+  "page-legal": [720, 540, "webp"],
+  "page-directory": [720, 540, "webp"],
+  "page-glossary": [720, 540, "webp"],
+  "page-research": [720, 540, "webp"],
+  "page-terms": [720, 540, "webp"],
+  "page-talk": [720, 540, "webp"],
+  "page-feedback": [720, 540, "webp"],
 } as const;
+
+export type IllustrationName = keyof typeof SIZES;
 
 export function Illustration({
   name,
   className = "",
   eager = false,
 }: {
-  name: keyof typeof SIZES;
+  name: IllustrationName;
   className?: string;
   eager?: boolean;
 }) {

@@ -8,6 +8,7 @@ import { t } from "@/lib/i18n";
 import type { IconName } from "@/components/Icon";
 import { Callout, NextStep, ReadingLayout, ReadingSection, StepList } from "@/components/Reading";
 import { ReadingTime } from "@/components/ReadingTime";
+import { Illustration } from "@/components/Illustration";
 
 const ICONS: IconName[] = ["lock", "clipboard", "alert"];
 
@@ -46,7 +47,7 @@ export default async function GuidesPage() {
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label={say("Practical guides", "व्यावहारिक मार्गदर्शिकाएँ")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl">
               <Link href="/resources" className="eyebrow">
                 {say("Resources", "संसाधन")}
@@ -61,6 +62,7 @@ export default async function GuidesPage() {
                 {say("3 guides", "3 मार्गदर्शिकाएँ")}<ReadingTime label={t(locale, "reading.minutes")} />
               </p>
             </div>
+            <Illustration name="page-guides" eager className="page-hero-art" />
           </div>
         </section>
 
