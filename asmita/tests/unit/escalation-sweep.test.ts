@@ -285,6 +285,8 @@ describe("runDueEscalationsFromDb — L1 follow-up", () => {
 
     expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_no_template", level: 1 }]);
     expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
+    // A notice with no template on record can never send it: skipped once.
+    expect(db.$transaction).toHaveBeenCalledOnce();
   });
 });
 

@@ -76,6 +76,8 @@ export function shouldStopFutureEscalation(input: {
     input.responseType === "REMOVED";
 }
 
+const PERMANENT_BLOCKS = new Set<SkipReason>(["blocked_platform_answered", "blocked_no_template", "blocked_no_user"]);
+
 /** The platform already answered, so a follow-up asking it to act adds nothing. */
 function platformAnswered(responseType: string | null) {
   return responseType === "ACKNOWLEDGED" || responseType === "REJECTED";
@@ -216,11 +218,13 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
 
       if (handlerResult.kind === "blocked") {
         summary.skipped.push({ noticeId: notice.id, reason: handlerResult.reason, level: dueLevel });
-        // A step that can never be sent (the platform already answered, or the
-        // survivor deleted her account) is skipped once and recorded. Anything
-        // that can clear later (a contact verified, a template reviewed, a
-        // passing decryption fault) is retried on the next sweep.
-        if (handlerResult.reason === "blocked_platform_answered" || handlerResult.reason === "blocked_no_user") {
+        // A step that can never be sent (the platform already answered, the
+        // notice has no template on record, or the survivor deleted her
+        // account) is skipped once and recorded. Anything that can clear later
+        // (a contact verified, a template reviewed, a passing decryption fault)
+        // is retried. Those retries are bounded: the follow-up is only due
+        // between 24 and 48 hours, after which the 48-hour step takes over.
+        if (PERMANENT_BLOCKS.has(handlerResult.reason)) {
           await recordLevel(notice, dueLevel, `skipped_${handlerResult.reason}`, now);
         }
         continue;

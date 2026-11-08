@@ -23,8 +23,13 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   const { caseId } = await context.params;
   try {
     await markPlatformFiled(caseId, auth.session.sub, parsed.data.urlId);
-  } catch {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (message === "url_not_found" || message === "case_not_found") {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    // A database fault is not "not found": let it show as a server error.
+    throw err;
   }
   return NextResponse.json({ success: true });
 }
