@@ -19,6 +19,7 @@ import {
   getAdminCaseDetail,
   listAdminCases,
   listFlaggedLinks,
+  parseReference,
   summariseQueues,
   type CaseFacts,
   type Gates,
@@ -358,6 +359,14 @@ describe("getAdminCaseDetail", () => {
       ]);
       mocked.auditLog.findMany.mockResolvedValue([]);
   }
+
+  it("treats a malformed or foreign reference as no case, without querying", async () => {
+    expect(parseReference("%E0%A4%A")).toBeNull();
+    expect(parseReference("not-a-reference")).toBeNull();
+    expect(parseReference("asmita-2026-abc%2Ddef")).toBe("ASMITA-2026-ABC-DEF");
+    expect(await getAdminCaseDetail("%", now)).toBeNull();
+    expect(mocked.case.findUnique).not.toHaveBeenCalled();
+  });
 
   it("returns null for an unknown reference", async () => {
     mocked.case.findUnique.mockResolvedValue(null);

@@ -38,7 +38,7 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
   }
   const { reference } = await params;
   const now = new Date();
-  const detail = await getAdminCaseDetail(decodeURIComponent(reference), now);
+  const detail = await getAdminCaseDetail(reference, now);
   if (!detail) notFound();
 
   await recordAdminAccess(

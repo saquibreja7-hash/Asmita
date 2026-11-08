@@ -11,7 +11,7 @@ export async function GET(request: Request, context: { params: Promise<{ referen
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status, headers: { "Cache-Control": "no-store" } });
 
   const { reference } = await context.params;
-  const detail = await getAdminCaseDetail(decodeURIComponent(reference));
+  const detail = await getAdminCaseDetail(reference);
   if (!detail) return NextResponse.json({ error: "case_not_found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
 
   await recordAdminAccess(

@@ -634,9 +634,25 @@ export type AdminCaseDetail = {
   timeline: Array<{ sequence: number; eventType: string; actorId: string; createdAt: string }>;
 };
 
+/**
+ * A case reference from a URL segment: decoded once, upper-cased, and only in
+ * the ASMITA-... shape. Anything else (including a malformed %-escape) is no
+ * case, so the page and API answer 404 rather than failing.
+ */
+export function parseReference(raw: string): string | null {
+  let value: string;
+  try {
+    value = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+  const reference = value.trim().toUpperCase();
+  return /^ASMITA-[A-Z0-9-]{4,32}$/.test(reference) ? reference : null;
+}
+
 export async function getAdminCaseDetail(reference: string, now = new Date()): Promise<AdminCaseDetail | null> {
-  const referenceNumber = reference.trim().toUpperCase();
-  if (devNoDb()) return null;
+  const referenceNumber = parseReference(reference);
+  if (!referenceNumber || devNoDb()) return null;
 
   const record = await db.case.findUnique({
     where: { referenceNumber },
