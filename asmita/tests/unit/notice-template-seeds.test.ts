@@ -18,16 +18,58 @@ const sampleVariables = {
   platformName: "ExamplePlatform Inc.",
   url: "https://example.com/abc/xyz",
   declarationReference: "DECL-2026-00042-XYZ",
+  originalSentAt: "8 November 2026 at 10:00 am IST",
+};
+
+const seed = (type: string) => {
+  const template = templateSeeds.find((t) => t.templateType === type);
+  if (!template) throw new Error(`missing seed ${type}`);
+  return template;
 };
 
 describe("notice template seeds", () => {
-  it("ships exactly four templates (IT_RULES_2021, DMCA, IT_RULES_AND_DMCA, HASH_ADVISORY)", () => {
+  it("ships the four notices plus the follow-up cover and the police complaint", () => {
     expect(templateSeeds.map((t) => t.templateType)).toEqual([
       "IT_RULES_2021",
       "DMCA",
       "IT_RULES_AND_DMCA",
       "HASH_ADVISORY",
+      "ESCALATION_L1",
+      "FIR_PACKAGE",
     ]);
+  });
+
+  it("Indian templates demand removal within two hours under Rule 3(2)(b), as amended in 2026", () => {
+    for (const type of ["IT_RULES_2021", "IT_RULES_AND_DMCA", "HASH_ADVISORY", "ESCALATION_L1"]) {
+      const body = seed(type).bodyTemplate;
+      expect(body).toContain("TWO (2) HOURS");
+      expect(body).toContain("Rule 3(2)(b)");
+      expect(body).not.toContain("TWENTY-FOUR (24) HOURS of receipt of this Notice");
+    }
+  });
+
+  it("never repeats citations the source check found wrong", () => {
+    for (const template of templateSeeds) {
+      // 3(1)(b)(iv) is the IP clause; Rule 4(4) has no 72-hour period; acknowledgement is Rule 3(2)(a)(i), not 4(1)(c).
+      expect(template.bodyTemplate).not.toContain("3(1)(b)(iv)");
+      expect(template.bodyTemplate).not.toContain("SEVENTY-TWO");
+      expect(template.bodyTemplate).not.toContain("Rule 4(1)(c)");
+    }
+  });
+
+  it("Indian complaints claim only what Asmita knows about the survivor", () => {
+    for (const type of ["IT_RULES_2021", "IT_RULES_AND_DMCA", "HASH_ADVISORY"]) {
+      const body = seed(type).bodyTemplate;
+      // Asmita holds a verified email and a self-declared age: no name, age proof or residency.
+      expect(body).not.toMatch(/verified adult/i);
+      expect(body).toContain("has declared that she is an adult");
+    }
+  });
+
+  it("the hash advisory asks for a search under the SOP and never says Rule 3(2)(b) requires one", () => {
+    const body = seed("HASH_ADVISORY").bodyTemplate;
+    expect(body).toContain("SEARCH its service for content matching the hashes in the Annex, as the MeitY NCII SOP asks");
+    expect(body).not.toMatch(/SEARCH[^\n]*as Rule 3\(2\)\(b\) requires/);
   });
 
   for (const template of templateSeeds) {
@@ -98,7 +140,9 @@ describe("notice template seeds", () => {
     const rendered = renderNoticeTemplate(advisory!.bodyTemplate, sampleVariables);
     expect(rendered).toContain("PDQ");
     expect(rendered.toLowerCase()).toContain("perceptual hash");
-    expect(rendered.toLowerCase()).toContain("cannot be reversed");
+    // PDQ hashes can be partly inverted, so the advisory must not call them irreversible.
+    expect(rendered.toLowerCase()).not.toContain("cannot be reversed");
+    expect(rendered.toLowerCase()).toContain("sensitive personal data");
     expect(rendered.toLowerCase()).toContain("annex");
     expect(advisory!.bodyTemplate).not.toContain("{{url}}");
     expect(advisory!.legalCitations.some((c) => c.includes("Rule 3(1)(b)"))).toBe(true);

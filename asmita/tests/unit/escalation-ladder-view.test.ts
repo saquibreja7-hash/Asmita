@@ -24,7 +24,7 @@ const render = (props: Partial<Parameters<typeof EscalationLadder>[0]> = {}) => 
 
 describe("EscalationLadder", () => {
   it("before the deadline shows the steps and dates, with no actions yet", () => {
-    const html = render();
+    const html = render({ now: at(1 / 24) }); // one hour in, inside the two-hour deadline
     expect(html).toContain("Notice sent to WhatsApp");
     expect(html).toContain("WhatsApp&#x27;s deadline to remove it");
     expect(html).toContain("Opens");

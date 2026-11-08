@@ -153,6 +153,30 @@ async function getPrismaDb(): Promise<PrismaClient> {
   return (await import("@/lib/db")).db;
 }
 
+type CoverTemplate = { bodyTemplate: string; subjectTemplate: string; reviewedByLegal: boolean };
+
+/** The active covering letter for the 24-hour follow-up (ESCALATION_L1). */
+async function loadFollowUpCover(): Promise<CoverTemplate | null> {
+  if (usesWorkerKysely()) {
+    const row = await getWorkerDb().selectFrom("NoticeTemplate")
+      .select(["bodyTemplate", "subjectTemplate", "reviewedByLegal"])
+      .where("templateType", "=", "ESCALATION_L1").where("isActive", "=", true)
+      .orderBy("version", "desc").limit(1).executeTakeFirst();
+    return row ?? null;
+  }
+  return (await getPrismaDb()).noticeTemplate.findFirst({
+    where: { templateType: "ESCALATION_L1", isActive: true },
+    orderBy: { version: "desc" },
+    select: { bodyTemplate: true, subjectTemplate: true, reviewedByLegal: true },
+  });
+}
+
+/** When the complaint was served, in India time, as the follow-up states it. */
+export function formatServedAt(sentAt: Date | null) {
+  if (!sentAt) return "";
+  return `${sentAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })} IST`;
+}
+
 export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<DueEscalationSummary> {
   const summary: DueEscalationSummary = { swept: 0, fired: [], skipped: [], errors: [] };
 
@@ -304,19 +328,31 @@ async function handleL1FollowUp(notice: CandidateNotice): Promise<HandlerResult>
     return { kind: "blocked", reason: "blocked_no_recipient" };
   }
 
+  // The covering letter is legal text of its own (ESCALATION_L1), so it needs
+  // the same human legal review as the complaint it follows.
+  const cover = await loadFollowUpCover();
+  if (!cover?.reviewedByLegal) {
+    await writeAuditLog({
+      eventType: "NOTICE_FAILED",
+      entityType: "Notice",
+      entityId: notice.id,
+      data: { reason: cover ? "follow_up_cover_not_legal_reviewed" : "follow_up_cover_missing", escalationLevel: 1 },
+    });
+    return { kind: "blocked", reason: "blocked_legal_review" };
+  }
+
   const variables = {
     platformName: platform.name,
     caseReference: notice.submittedUrl.case.referenceNumber,
     url: notice.submittedUrl.domain,
     declarationReference: notice.submittedUrl.case.referenceNumber,
+    originalSentAt: formatServedAt(notice.sentAt),
   };
 
-  // Body sent VERBATIM from the legally-reviewed template. Subject gets a
-  // bracket prefix only so the recipient can group it with the prior thread
-  // without changing any reviewed copy.
-  const body = renderNoticeTemplate(notice.template.bodyTemplate, variables);
-  const renderedSubject = renderNoticeTemplate(notice.template.subjectTemplate, variables);
-  const subject = `[Follow-up #1] ${renderedSubject}`;
+  // Covering letter, then the complaint's text from the same reviewed
+  // template, neither changed.
+  const body = `${renderNoticeTemplate(cover.bodyTemplate, variables)}\n\n${renderNoticeTemplate(notice.template.bodyTemplate, variables)}`;
+  const subject = renderNoticeTemplate(cover.subjectTemplate, variables);
   assertNoticeSubjectSafe(subject);
 
   await processEscalationJob(
