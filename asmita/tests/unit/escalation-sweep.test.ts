@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db", () => ({
   db: {
     notice: { findMany: vi.fn(), update: vi.fn() },
+    noticeTemplate: { findFirst: vi.fn() },
     escalation: { create: vi.fn() },
     case: { update: vi.fn() },
     $transaction: vi.fn(),
@@ -205,16 +206,23 @@ describe("runDueEscalationsFromDb", () => {
   });
 });
 
+const cover = {
+  bodyTemplate: "Follow-up to {{platformName}}: complaint {{caseReference}} served on {{originalSentAt}}.",
+  subjectTemplate: "Follow-up: {{caseReference}}",
+  reviewedByLegal: true,
+};
+
 describe("runDueEscalationsFromDb — L1 follow-up", () => {
   beforeEach(() => {
     vi.mocked(db.$transaction).mockImplementation(async () => []);
+    vi.mocked(db.noticeTemplate.findFirst).mockResolvedValue(cover as never);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it("dispatches a verbatim-body follow-up with a [Follow-up #1] subject prefix at 24h", async () => {
+  it("dispatches the reviewed covering letter followed by the original complaint text at 24h", async () => {
     vi.mocked(db.notice.findMany).mockResolvedValue([noticeRow()] as never);
     const now = new Date("2026-05-11T00:00:00.000Z"); // exactly 24h
 
@@ -227,13 +235,45 @@ describe("runDueEscalationsFromDb — L1 follow-up", () => {
         urlId: "url-1",
         level: 1,
         recipientEmail: "go@platform.com",
-        subject: "[Follow-up #1] Takedown for ASMITA-2026-00042",
+        subject: "Follow-up: ASMITA-2026-00042",
         body: expect.stringContaining("case ASMITA-2026-00042"),
       }),
     );
-    // Body must be rendered from the original template, not synthesized
+    // Cover first, then the complaint rendered from its own template, unchanged.
     const call = vi.mocked(dispatchEscalationFollowUp).mock.calls[0][0];
-    expect(call.body).toContain("Dear Platform Inc GO");
+    expect(call.body).toBe(
+      "Follow-up to Platform Inc: complaint ASMITA-2026-00042 served on 10 May 2026 at 5:30 am IST.\n\n" +
+        "Dear Platform Inc GO, takedown for case ASMITA-2026-00042 URL platform.com declaration ASMITA-2026-00042.",
+    );
+    expect(vi.mocked(db.noticeTemplate.findFirst).mock.calls[0][0]).toMatchObject({
+      where: { templateType: "ESCALATION_L1", isActive: true },
+    });
+  });
+
+  it("holds the follow-up until its covering letter is legally reviewed, and retries", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([noticeRow()] as never);
+    vi.mocked(db.noticeTemplate.findFirst).mockResolvedValue({ ...cover, reviewedByLegal: false } as never);
+
+    const summary = await runDueEscalationsFromDb(new Date("2026-05-11T00:00:00.000Z"));
+
+    expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_legal_review", level: 1 }]);
+    expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ reason: "follow_up_cover_not_legal_reviewed" }) }),
+    );
+  });
+
+  it("holds the follow-up when no covering letter exists", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([noticeRow()] as never);
+    vi.mocked(db.noticeTemplate.findFirst).mockResolvedValue(null as never);
+
+    const summary = await runDueEscalationsFromDb(new Date("2026-05-11T00:00:00.000Z"));
+
+    expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_legal_review", level: 1 }]);
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ reason: "follow_up_cover_missing" }) }),
+    );
   });
 
   it("blocks L1 send when the template is not legally reviewed and records NOTICE_FAILED", async () => {

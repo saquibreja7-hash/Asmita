@@ -16,7 +16,7 @@ a notice and then, in practice, stops.
 
 | Level | When | What |
 |---|---|---|
-| L1 | 24h after the notice | Re-sends the original notice body to the grievance officer with a "[Follow-up #1]" subject. Blocked unless the template is legally reviewed and the contact is human-verified |
+| L1 | 24h after the notice | Sends the `ESCALATION_L1` covering letter followed by the original notice text to the grievance officer. Blocked unless both templates are legally reviewed and the contact is human-verified |
 | L2 | 48h | Emails the survivor that there is no response yet |
 | L3 | 7 days | Emails the survivor that an "FIR package" is ready, linking `/api/cases/:id/export` |
 
@@ -43,7 +43,7 @@ One ladder per link. Every step is shown to the survivor with its date.
 | Step | Starts | Who acts | What Asmita does |
 |---|---|---|---|
 | 1. Notice sent | Dispatch, or the survivor saying she filed the platform form | Asmita | Unchanged |
-| 2. Platform deadline | 24h after step 1 (`PLATFORM_DEADLINE_HOURS`) | Asmita | Existing L1 follow-up to the grievance officer (email platforms only) |
+| 2. Platform deadline | 2h after step 1 (`PLATFORM_DEADLINE_HOURS`) | Asmita | L1 follow-up to the grievance officer at 24h (email platforms only) |
 | 3. Cybercrime complaint | The platform's deadline passed without removal, or it refused | Survivor | Dashboard links cybercrime.gov.in with a checklist (and prepared wording once legally reviewed). The 48h email tells her |
 | 4. GAC appeal | 7 days without removal (the grievance officer's resolution period), or a refusal | Survivor | Dashboard links gac.gov.in with a checklist and wording. The 7-day email tells her |
 
@@ -66,10 +66,10 @@ An acknowledgement or a refusal never stops the ladder; a refusal opens steps 3 
 
 ### Deadlines
 
-- Platform: 24 hours, because that is what the signed notice demands under
-  Rule 3(2)(b). PRD Section 4 records that the February 2026 amendment cut it
-  to 2 hours; moving to 2 needs the notice templates changed and re-reviewed
-  first, so the ladder never contradicts what the survivor signed.
+- Platform: 2 hours, under Rule 3(2)(b) as amended by G.S.R. 120(E) (in force
+  20 February 2026; PRD Section 4). The notice templates were redrafted to
+  demand 2 hours in November 2026 (`docs/legal/notice-redraft-2026-11.md`), so
+  the ladder matches what the survivor signs.
 - Grievance officer: 7 days to resolve (February 2026 amendment, PRD Section 4).
   After that, or after a refusal, the GAC appeal opens.
 - The GAC's own appeal window is not in PRD Section 4 or the SOP, so the site
@@ -96,5 +96,13 @@ An acknowledgement or a refusal never stops the ladder; a refusal opens steps 3 
    human legal review (or `DEV_SKIP_LEGAL_REVIEW` locally).
 
 Later: a Workers-safe FIR PDF; recording platform replies (`Notice.responseType`)
-from the notice inbox, so a refusal opens the appeal at once; moving the
-platform deadline to 2 hours together with the notice templates.
+from the notice inbox, so a refusal opens the appeal at once.
+
+## Notice redraft (November 2026)
+
+The templates were redrafted against the current IT Rules: 2-hour removal,
+corrected sub-rule numbers, and two new templates. `ESCALATION_L1` is the
+covering letter the 24h follow-up now sends ahead of the complaint's text; the
+follow-up is held until both are legally reviewed. `FIR_PACKAGE` is the
+survivor's own police complaint. Memo for counsel:
+`docs/legal/notice-redraft-2026-11.md`.
