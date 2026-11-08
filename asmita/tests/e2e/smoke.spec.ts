@@ -21,6 +21,7 @@ async function createCase(page: import("@playwright/test").Page) {
   await page.getByLabel(/I declare/).check();
   const createResponse = page.waitForResponse((response) => response.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue to review" }).click();
+  await page.getByRole("button", { name: "Create my case" }).click();
   const created = await createResponse;
   expect(created.ok()).toBe(true);
   const { caseId } = await created.json();
@@ -87,16 +88,32 @@ test("adult dashboard supports add URL, manual resolve, and deletion request, wi
   // createCase lands on the case dashboard directly
   await expect(page.getByText(/ASMITA-/).first()).toBeVisible();
 
+  // One plain status card instead of tables and stat boxes.
+  await expect(page.getByText("Where things stand")).toBeVisible();
+
+  // Adding a link is folded away until she needs it.
+  await page.getByText("Add another link").click();
   await page.getByLabel("Paste one URL per line").fill("https://www.youtube.com/watch?v=abc123");
   const addUrlResponse = page.waitForResponse((response) => response.url().includes("/api/cases/") && response.url().endsWith("/urls"));
   await page.getByRole("button", { name: "Add to case" }).click();
   expect((await addUrlResponse).ok()).toBe(true);
   await expect(page.getByText(/Link added/)).toBeVisible();
+  const removedButtons = page.getByRole("button", { name: /^Mark as removed: YouTube/ });
+  await expect(removedButtons).toHaveCount(2);
 
+  // Each link has its own button, it asks first, and it marks only that link.
+  let marked = false;
+  page.on("request", (r) => { if (r.url().includes("/mark-resolved")) marked = true; });
+  await removedButtons.first().click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  expect(marked).toBe(false);
+  await expect(removedButtons).toHaveCount(2);
+  await removedButtons.first().click();
   const resolvedResponse = page.waitForResponse((response) => response.url().includes("/mark-resolved"));
-  await page.getByRole("button", { name: "Mark first link resolved" }).click();
+  await page.getByRole("button", { name: /^Yes, it is removed: YouTube/ }).click();
   expect((await resolvedResponse).ok()).toBe(true);
-  await expect(page.getByText(/Link added|Refresh to see/i)).toBeVisible();
+  await expect(page.getByText("Removed", { exact: true })).toHaveCount(1);
+  await expect(removedButtons).toHaveCount(1);
 
   // The PDF and audit-trail downloads fail on Workers and were removed from the dashboard.
   await expect(page.getByRole("link", { name: "Download case PDF" })).toHaveCount(0);

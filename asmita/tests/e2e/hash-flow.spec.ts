@@ -54,6 +54,7 @@ test("registered adult can generate a fingerprint and submit it with a URL", asy
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   const hashResponse = page.waitForResponse((r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()) && r.request().method() === "POST");
   await page.getByRole("button", { name: "Continue to review" }).click();
+  await page.getByRole("button", { name: "Create my case" }).click();
   const created = await createResponse;
   expect(created.ok()).toBe(true);
   const { caseId } = await created.json();

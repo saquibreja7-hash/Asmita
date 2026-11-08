@@ -1,18 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale } from "@/lib/i18n";
 
-export function CaseDashboardActions({
-  caseId,
-  firstUrlId,
-  locale,
-}: {
-  caseId: string;
-  firstUrlId?: string;
-  locale: Locale;
-}) {
+export function CaseDashboardActions({ caseId, locale }: { caseId: string; locale: Locale }) {
+  const router = useRouter();
   const [urlText, setUrlText] = useState("");
   const [message, setMessage] = useState("");
   const [messageOk, setMessageOk] = useState(true);
@@ -21,92 +15,47 @@ export function CaseDashboardActions({
   async function addUrl() {
     setLoading(true);
     setMessage("");
-    const response = await csrfFetch(`/api/cases/${caseId}/urls`, {
-      method: "POST",
-      body: JSON.stringify({
-        urls: urlText.split(/\n+/).map((u) => u.trim()).filter(Boolean),
-        declaration: true,
-      }),
-    });
+    let ok = false;
+    try {
+      const response = await csrfFetch(`/api/cases/${caseId}/urls`, {
+        method: "POST",
+        body: JSON.stringify({
+          urls: urlText.split(/\n+/).map((u) => u.trim()).filter(Boolean),
+          declaration: true,
+        }),
+      });
+      ok = response.ok;
+    } catch {
+      ok = false;
+    }
     setLoading(false);
-    setMessageOk(response.ok);
-    setMessage(
-      response.ok
-        ? t(locale, "case.actions.added")
-        : t(locale, "case.actions.error")
-    );
-    if (response.ok) setUrlText("");
-  }
-
-  async function markResolved() {
-    if (!firstUrlId) return;
-    setLoading(true);
-    setMessage("");
-    const response = await csrfFetch(`/api/cases/${caseId}/mark-resolved`, {
-      method: "POST",
-      body: JSON.stringify({ urlId: firstUrlId }),
-    });
-    setLoading(false);
-    setMessageOk(response.ok);
-    setMessage(
-      response.ok
-        ? t(locale, "case.actions.added")
-        : t(locale, "case.actions.resolveError")
-    );
+    setMessageOk(ok);
+    setMessage(t(locale, ok ? "case.actions.added" : "case.actions.error"));
+    if (ok) {
+      setUrlText("");
+      router.refresh();
+    }
   }
 
   return (
-    <div className="space-y-8">
-      <h2 className="subsection-title">
-        {t(locale, "case.actions.title")}
-      </h2>
-
-      <div>
-        <label
-          htmlFor="additional-urls"
-          className="block text-sm font-medium text-[var(--ink)]"
-        >
-          {t(locale, "case.actions.label")}
-        </label>
-        <p className="muted mt-1 text-sm leading-[1.6]">
-          {t(locale, "case.actions.sub")}
-        </p>
-        <textarea
-          className="field mt-3 min-h-28 font-mono text-[13px] leading-[1.7]"
-          id="additional-urls"
-          onChange={(e) => setUrlText(e.target.value)}
-          placeholder="https://example.com/post/1234"
-          spellCheck={false}
-          value={urlText}
-        />
-        <div className="mt-4 flex flex-wrap items-center gap-4">
-          <button
-            className="btn btn-primary"
-            disabled={loading || !urlText.trim()}
-            onClick={addUrl}
-            type="button"
-          >
-            {loading ? t(locale, "case.actions.working") : t(locale, "case.actions.cta")}
-          </button>
-
-          {firstUrlId && (
-            <button
-              className="text-sm text-[var(--text-muted)] underline decoration-transparent underline-offset-4 transition-colors hover:text-[var(--ink)] hover:decoration-current"
-              disabled={loading}
-              onClick={markResolved}
-              type="button"
-            >
-              {t(locale, "case.actions.markResolved")}
-            </button>
-          )}
-        </div>
-      </div>
-
+    <div>
+      <label htmlFor="additional-urls" className="block text-sm font-medium text-[var(--ink)]">
+        {t(locale, "case.actions.label")}
+      </label>
+      <p className="muted mt-1 text-sm leading-[1.6]">{t(locale, "case.actions.sub")}</p>
+      <textarea
+        className="field mt-3 min-h-28 font-mono text-[13px] leading-[1.7]"
+        id="additional-urls"
+        onChange={(e) => setUrlText(e.target.value)}
+        placeholder="https://example.com/post/1234"
+        spellCheck={false}
+        value={urlText}
+      />
+      <button className="btn btn-primary mt-4" disabled={loading || !urlText.trim()} onClick={addUrl} type="button">
+        {loading ? t(locale, "case.actions.working") : t(locale, "case.actions.cta")}
+      </button>
       {message && (
-        <p
-          aria-live="polite"
-          className={`text-sm font-medium ${messageOk ? "text-[var(--brand)]" : "text-[var(--danger)]"}`}
-        >
+        <p aria-live="polite" className={`mt-3 text-sm font-medium ${messageOk ? "text-[var(--brand)]" : "text-[var(--danger)]"}`}>
           {message}
         </p>
       )}

@@ -39,6 +39,7 @@ test("survivor report works as the app role and stays out of reach of the Data A
   await page.getByLabel(/I declare/).check();
   const createResponse = page.waitForResponse((response) => response.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue to review" }).click();
+  await page.getByRole("button", { name: "Create my case" }).click();
   const created = await createResponse;
   expect(created.ok()).toBe(true);
   const { caseId } = (await created.json()) as { caseId: string };

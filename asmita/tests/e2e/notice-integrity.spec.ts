@@ -54,6 +54,7 @@ async function reportWithFingerprint(page: Page, links: string[]) {
     (r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()) && r.request().method() === "POST",
   );
   await page.getByRole("button", { name: "Continue to review" }).click();
+  await page.getByRole("button", { name: "Create my case" }).click();
   const created = await createResponse;
   expect(created.ok()).toBe(true);
   const { caseId } = (await created.json()) as { caseId: string };
@@ -260,6 +261,7 @@ test("each link gets its own notice, signed one after another on the review scre
   await page.getByLabel(/I declare/).check();
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue to review" }).click();
+  await page.getByRole("button", { name: "Create my case" }).click();
   const { caseId } = (await (await createResponse).json()) as { caseId: string };
   const confirmations = async () => withAdmin(async (db) => (await db.query(
     `SELECT 1 FROM audit_log WHERE "entityId" = $1 AND "eventType" = 'NOTICE_SENT' AND data->>'messageType' = 'victim_confirmation'`, [caseId],
@@ -302,6 +304,7 @@ test("a form-only link listed first does not hide the notices that can be signed
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
   await page.getByRole("button", { name: "Continue to review" }).click();
   await page.getByRole("button", { name: "Continue with remaining reports" }).click();
+  await page.getByRole("button", { name: "Create my case" }).click();
   const { caseId } = (await (await createResponse).json()) as { caseId: string };
 
   await page.getByLabel("Full name", { exact: true }).fill("Synthetic Survivor");
