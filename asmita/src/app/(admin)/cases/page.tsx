@@ -10,6 +10,9 @@ import {
   type CaseSort,
 } from "@/lib/admin-cases";
 import { AutoSubmitForm } from "./AutoSubmitForm";
+import { CaseTable, type CaseTableRow } from "./CaseTable";
+import { SavedViews } from "./SavedViews";
+import { listSavedViews, sanitiseViewQuery } from "@/lib/admin-saved-views";
 import {
   LADDER_STEP_LABELS,
   NEXT_ACTION_FILTER_LABELS,
@@ -79,7 +82,7 @@ export default async function AdminCasesPage({
     sort: (SORTS as readonly string[]).includes(sortParam ?? "") ? (sortParam as CaseSort) : "due",
   };
   const now = new Date();
-  const [page, platforms] = await Promise.all([
+  const [page, platforms, savedViews] = await Promise.all([
     listAdminCases(
       {
         statuses:
@@ -93,7 +96,15 @@ export default async function AdminCasesPage({
       { sort: params.sort, cursor: single(raw.cursor), now },
     ),
     listPlatformOptions(),
+    listSavedViews(auth.session.emailHash),
   ]);
+  // The current filters as a saved view would store them.
+  const currentQuery = sanitiseViewQuery(
+    new URLSearchParams(
+      Object.entries({ ...params, sort: params.sort === "due" ? "" : params.sort, status: params.status === "active" ? "" : params.status })
+        .filter((entry): entry is [string, string] => Boolean(entry[1])),
+    ).toString(),
+  );
 
   const activeFilters = [
     params.q && { key: "q", label: `Reference: ${params.q}` },
@@ -145,6 +156,7 @@ export default async function AdminCasesPage({
           );
         })}
       </nav>
+      <SavedViews currentQuery={currentQuery} views={savedViews} />
 
       <AutoSubmitForm className="mt-6 grid gap-4 md:grid-cols-4 lg:grid-cols-7">
         <Field label="Reference" name="q">
@@ -238,41 +250,24 @@ export default async function AdminCasesPage({
           : `Showing ${page.start} to ${end} of ${page.total} case${page.total === 1 ? "" : "s"}`}
       </p>
 
-      <div className="mt-3 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
-        {page.rows.length > 0 && (
-          <>
-            <table className="hidden w-full text-left text-sm md:table">
-              <caption className="sr-only">
-                Cases, sorted by {SORT_LABELS[params.sort].toLowerCase()}
-              </caption>
-              <thead>
-                <tr className="border-b border-[var(--line)]">
-                  <Th>Reference</Th>
-                  <Th>Next action</Th>
-                  <Th sorted={params.sort === "due"}>Due</Th>
-                  <Th>Links</Th>
-                  <Th>Step</Th>
-                  <Th>Platforms</Th>
-                  <Th sorted={params.sort === "newest" || params.sort === "oldest"} ascending={params.sort === "oldest"}>
-                    Age
-                  </Th>
-                </tr>
-              </thead>
-              <tbody>
-                {page.rows.map((row) => (
-                  <CaseRow key={row.caseId} now={now} row={row} />
-                ))}
-              </tbody>
-            </table>
-            <ul className="divide-y divide-[var(--line)] md:hidden">
-              {page.rows.map((row) => (
-                <CaseCard key={row.caseId} now={now} row={row} />
-              ))}
-            </ul>
-          </>
-        )}
-        {page.rows.length === 0 && (
-          <div className="p-6 text-center text-sm">
+      <div className="mt-3">
+        {page.rows.length > 0 ? (
+          <CaseTable
+            caption={`Cases, sorted by ${SORT_LABELS[params.sort].toLowerCase()}`}
+            initialPeek={single(raw.peek) ?? null}
+            rows={page.rows.map((row) => toTableRow(row, now))}
+            sortedBy={
+              params.sort === "due"
+                ? "due"
+                : params.sort === "oldest"
+                  ? "age-asc"
+                  : params.sort === "newest"
+                    ? "age-desc"
+                    : null
+            }
+          />
+        ) : (
+          <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-6 text-center text-sm">
             {activeFilters.length > 0 || params.nextAction ? (
               <>
                 <p className="muted">No cases match these filters.</p>
@@ -308,48 +303,20 @@ export default async function AdminCasesPage({
   );
 }
 
-function CaseRow({ row, now }: { row: AdminCaseListRow; now: Date }) {
+function toTableRow(row: AdminCaseListRow, now: Date): CaseTableRow {
   const due = dueText(row.nextAction, row.dueAt, now);
-  return (
-    <tr className="border-t border-[var(--line)]">
-      <td className="px-4 py-3">
-        <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`}>
-          {row.referenceNumber}
-        </Link>
-      </td>
-      <td className="px-4 py-3">{nextActionLabel(row.nextAction, row.actionCount)}</td>
-      <td className={`px-4 py-3 tabular-nums ${due.overdue ? "text-[var(--danger)]" : ""}`}>
-        {due.overdue && <span aria-hidden="true">! </span>}
-        {due.text}
-      </td>
-      <td className="px-4 py-3 tabular-nums">{row.linkCount}</td>
-      <td className="px-4 py-3">{stepText(row)}</td>
-      <td className="px-4 py-3">{platformText(row.platforms)}</td>
-      <td className="px-4 py-3 tabular-nums text-[var(--text-muted)]" title={formatIst(row.createdAt)}>
-        {shortDuration(now.getTime() - Date.parse(row.createdAt))}
-      </td>
-    </tr>
-  );
-}
-
-function CaseCard({ row, now }: { row: AdminCaseListRow; now: Date }) {
-  const due = dueText(row.nextAction, row.dueAt, now);
-  return (
-    <li className="grid gap-1 p-4 text-sm">
-      <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`}>
-        {row.referenceNumber}
-      </Link>
-      <p>{nextActionLabel(row.nextAction, row.actionCount)}</p>
-      <p className={due.overdue ? "text-[var(--danger)]" : "muted"}>
-        {due.overdue && <span aria-hidden="true">! </span>}
-        {due.text}
-      </p>
-      <p className="muted">
-        {row.linkCount} link{row.linkCount === 1 ? "" : "s"} · {platformText(row.platforms)} · {stepText(row)} ·{" "}
-        {shortDuration(now.getTime() - Date.parse(row.createdAt))} old
-      </p>
-    </li>
-  );
+  return {
+    caseId: row.caseId,
+    referenceNumber: row.referenceNumber,
+    action: nextActionLabel(row.nextAction, row.actionCount),
+    due: due.text,
+    overdue: due.overdue,
+    links: row.linkCount,
+    step: stepText(row),
+    platforms: platformText(row.platforms),
+    age: shortDuration(now.getTime() - Date.parse(row.createdAt)),
+    ageTitle: formatIst(row.createdAt),
+  };
 }
 
 function stepText(row: AdminCaseListRow) {
@@ -409,25 +376,5 @@ function Field({
       </span>
       {children}
     </label>
-  );
-}
-
-function Th({
-  children,
-  sorted,
-  ascending = true,
-}: {
-  children: React.ReactNode;
-  sorted?: boolean;
-  ascending?: boolean;
-}) {
-  return (
-    <th
-      aria-sort={sorted ? (ascending ? "ascending" : "descending") : undefined}
-      className="eyebrow px-4 py-3"
-      scope="col"
-    >
-      {children}
-    </th>
   );
 }

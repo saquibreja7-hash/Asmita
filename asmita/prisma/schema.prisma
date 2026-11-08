@@ -553,3 +553,15 @@ model AdminEnrolmentCode {
   createdAt DateTime @default(now())
   createdBy String
 }
+
+// An admin's own saved filter of the case list (a query string), by name.
+model AdminSavedView {
+  id             String   @id @default(uuid())
+  ownerEmailHash String
+  name           String
+  query          String
+  createdAt      DateTime @default(now())
+
+  @@unique([ownerEmailHash, name])
+  @@index([ownerEmailHash])
+}

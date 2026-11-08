@@ -1,6 +1,6 @@
 # Admin console redesign
 
-Status: recommendation, 8 November 2026. Phases 0, 1 and 2 are built on `feat/admin-console-phase-0` (9 November); Phases 3 and 4 are not started. Owner: Saquib.
+Status: recommendation, 8 November 2026. Phases 0 to 3 are built on `feat/admin-console-phase-0` (9 November); Phase 4 is not started. Owner: Saquib.
 
 ## In one paragraph
 
@@ -397,14 +397,11 @@ field, and switchable off in a small preferences menu (WCAG 2.1.4).
 | Key | Action |
 |---|---|
 | `j` / `k` | next / previous row (moves the panel if open) |
-| `x` | select row |
 | `Enter` or `Space` | peek |
-| `z` | undo the last approve, reject or assign. There is no un-approve API, so undo works by holding the request in the browser for 5 seconds before sending it |
 | `o` | open full page |
-| `Esc` | close panel, clear selection |
+| `Esc` | close panel |
 | `/` | focus reference search |
-| `a` / `r` | approve / reject the focused flagged link (reject opens the reason prompt) |
-| `g` then `h`, `c`, `q` | go to Needs action, Cases, Queues |
+| `g` then `h`, `c`, `q` | go to Needs action, Cases, Flagged links |
 | `?` | shortcut sheet |
 
 No single key sends anything outside Asmita.
@@ -568,19 +565,37 @@ What was built, and where it differs from the plan:
   and says so instead of failing later. Milestones needs `metrics:read`. A test
   keeps nav and page permissions in step.
 
-### Phase 3: speed (medium)
+### Phase 3: speed (built)
 
-- **Slide-over** with `?peek=`. Check the routing approach (intercepting or
-  parallel routes, or a client panel fed by `GET /api/admin/cases/[reference]`)
-  against `node_modules/next/dist/docs/` first, per `AGENTS.md`, and against the
-  vinext Worker build.
-- **Keyboard** shortcuts with the `?` sheet and an off switch.
-- **Bulk**: `POST /api/admin/bulk` with
-  `{ action: "approve_urls" | "reject_urls" | "approve_hashes" | "reject_hashes", ids, reason? }`,
-  maximum 50, per-item results, per-item audit plus one `ADMIN_BULK_ACTION`
-  event. Dispatch is not an accepted action.
-- **Saved views**: model `AdminSavedView { id, ownerEmailHash, name, query
-  Json, shared Boolean, createdAt }`; `GET/POST/DELETE /api/admin/views`.
+What was built, and where it differs from the plan:
+
+- **Preview panel** on the case list: a row click, Enter, Space or the
+  Preview button opens a non-modal side panel (full screen on a phone) fed by
+  `GET /api/admin/cases/[reference]` (`cases:read`, logged as a case view,
+  never cached). The URL carries `?peek=`, so a preview can be shared and
+  survives a reload. Focus moves into the panel; Esc closes it and returns
+  focus to the row. The panel is for quick review (approve or reject a
+  flagged link); sending, replies and reveals stay on the full case page.
+- **Keyboard**: j and k move between cases (and the preview), Enter or Space
+  previews, o opens the full page, / searches, g then h, c or q navigates, ?
+  shows the list. Shortcuts act only while focus is in the list or preview,
+  never while typing, and can be switched off (remembered in the browser).
+  No shortcut changes a case: the planned `a`, `r`, `x` and `z` keys were
+  dropped, so there is no undo delay to build.
+- **Bulk review** is for flagged links only, on the Flagged links page:
+  checkboxes, a sticky bar, Approve or Reject with a reason the survivor will
+  see, up to 50 at a time, through `POST /api/admin/bulk/links`. Each link
+  goes through the same review as its single buttons and gets its own audit
+  entry, plus one summary entry. Links no longer waiting for review are
+  skipped, never re-decided (the single review does not check that). Failures
+  are listed first and stay selected. Not on the case list, which selects
+  cases rather than links. **Fingerprints are not bulk-reviewable**: approving
+  one can email a platform at once when the survivor named it, and bulk sends
+  are ruled out.
+- **Saved views**: an admin's own named filters of the case list (migration
+  `20261109010000_admin_saved_views`, table `AdminSavedView`, up to 20 per
+  admin, filter and sort parameters only), through `GET/POST /api/admin/views`
+  and `DELETE /api/admin/views/[viewId]`. Shared views are not built.
 
 ### Phase 4: a team (when there is a second operator)
 
