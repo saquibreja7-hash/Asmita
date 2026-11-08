@@ -1,4 +1,5 @@
-import { listAuditLogRows } from "@/lib/admin-dashboard";
+import Link from "next/link";
+import { listAuditLogPage, type AuditLogPage } from "@/lib/admin-dashboard";
 import { validateAuditChainFromDb, type AuditChainValidation } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +15,18 @@ export default async function AuditPage({
     actorId: single(params.actorId),
     entityId: single(params.entityId),
   };
-  const rows = listAuditLogRows(filters);
-  const validation = await safeValidate();
+  const beforeParam = Number(single(params.before));
+  const before = Number.isInteger(beforeParam) && beforeParam > 0 ? beforeParam : undefined;
+  const [result, validation] = await Promise.all([safeList(filters, before), safeValidate()]);
+  const rows = "error" in result ? [] : result.rows;
+  const olderHref =
+    "error" in result || result.nextBefore === null
+      ? null
+      : `/admin/audit?${new URLSearchParams({
+          ...definedOnly(filters),
+          before: String(result.nextBefore),
+        }).toString()}`;
+  const newestHref = `/admin/audit?${new URLSearchParams(definedOnly(filters)).toString()}`;
 
   return (
     <section>
@@ -36,7 +47,7 @@ export default async function AuditPage({
             className="field"
             defaultValue={filters.eventType || ""}
             name="eventType"
-            placeholder="Any event"
+            placeholder="Any event, e.g. NOTICE_SENT"
           />
         </FilterField>
         <FilterField label="Actor">
@@ -44,7 +55,7 @@ export default async function AuditPage({
             className="field"
             defaultValue={filters.actorId || ""}
             name="actorId"
-            placeholder="Actor id"
+            placeholder="Exact actor id"
           />
         </FilterField>
         <FilterField label="Entity">
@@ -52,7 +63,7 @@ export default async function AuditPage({
             className="field"
             defaultValue={filters.entityId || ""}
             name="entityId"
-            placeholder="Entity id"
+            placeholder="Exact case, link or notice id"
           />
         </FilterField>
         <button className="btn btn-primary self-end" type="submit">
@@ -60,8 +71,9 @@ export default async function AuditPage({
         </button>
       </form>
 
-      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-10 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
         <table className="w-full min-w-[860px] text-left text-sm">
+          <caption className="sr-only">Audit events, newest first</caption>
           <thead>
             <tr className="border-b border-[var(--line)]">
               <Th>Seq</Th>
@@ -96,13 +108,50 @@ export default async function AuditPage({
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && (
-          <p className="muted p-6 text-center text-sm">
-            No audit events match these filters.
+        {"error" in result ? (
+          <p className="p-6 text-center text-sm text-[var(--danger)]" role="alert">
+            Could not load the audit log. Check the event type, then try again.
           </p>
-        )}
+        ) : rows.length === 0 ? (
+          <p className="muted p-6 text-center text-sm">
+            {before ? "No older audit events." : "No audit events match these filters."}
+          </p>
+        ) : null}
       </div>
+
+      {(before || olderHref) && (
+        <nav aria-label="Audit log pages" className="mt-6 flex gap-4 text-sm">
+          {before && (
+            <Link className="link-underline" href={newestHref}>
+              Newest events
+            </Link>
+          )}
+          {olderHref && (
+            <Link className="link-underline" href={olderHref}>
+              Older events
+            </Link>
+          )}
+        </nav>
+      )}
     </section>
+  );
+}
+
+async function safeList(
+  filters: { eventType?: string; actorId?: string; entityId?: string },
+  before: number | undefined,
+): Promise<AuditLogPage | { error: string }> {
+  try {
+    return await listAuditLogPage(filters, { before });
+  } catch (err) {
+    console.error("Audit log read failed", err);
+    return { error: "audit_read_failed" };
+  }
+}
+
+function definedOnly(values: Record<string, string | undefined>) {
+  return Object.fromEntries(
+    Object.entries(values).filter((entry): entry is [string, string] => Boolean(entry[1])),
   );
 }
 
@@ -182,7 +231,7 @@ function FilterField({
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="eyebrow p-4">
+    <th className="eyebrow p-4" scope="col">
       {children}
     </th>
   );

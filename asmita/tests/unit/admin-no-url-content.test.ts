@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 const adminFiles = [
   "src/app/(admin)/cases/page.tsx",
+  "src/app/(admin)/cases/[reference]/page.tsx",
+  "src/app/(admin)/cases/[reference]/SendNoticeButton.tsx",
   "src/app/(admin)/flagged/page.tsx",
   "src/app/(admin)/platforms/page.tsx",
   "src/app/(admin)/templates/page.tsx",
