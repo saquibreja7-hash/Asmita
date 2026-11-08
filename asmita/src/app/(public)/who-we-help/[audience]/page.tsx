@@ -6,6 +6,16 @@ import { audiences, getAudience } from "@/lib/audience-content";
 import { audiencesHi } from "@/lib/audience-content-hi";
 import { getLocale } from "@/lib/get-locale";
 import { Callout } from "@/components/Reading";
+import { Illustration, type IllustrationName } from "@/components/Illustration";
+
+// The young-people image has no people in it: that page is for under-18s.
+const AUDIENCE_ART: Record<string, IllustrationName> = {
+  survivors: "how-3-protect",
+  "helping-someone": "audience-helping",
+  parents: "audience-parents",
+  "young-people": "audience-young",
+  platforms: "audience-platforms",
+};
 
 export function generateStaticParams() {
   return audiences.map((a) => ({ audience: a.slug }));
@@ -46,7 +56,7 @@ export default async function AudiencePage({
       <div className="page-canvas">
         {/* HERO */}
         <section className="hero" aria-label={data.term}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-5xl">
               <p className="text-sm">
                 <Link href="/who-we-help" className="text-link font-medium">
@@ -71,6 +81,7 @@ export default async function AudiencePage({
                 )}
               </div>
             </div>
+            <Illustration name={AUDIENCE_ART[data.slug] ?? "who-we-help"} eager className="page-hero-art" />
           </div>
         </section>
 

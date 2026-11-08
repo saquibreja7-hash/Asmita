@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
+import { Illustration } from "@/components/Illustration";
 
 export default async function StartPage() {
   const locale = await getLocale();
@@ -10,7 +11,7 @@ export default async function StartPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container page-hero text-center">
+        <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
             <span className="eyebrow">{t(locale, "start.pill")}</span>
             <h1 className="page-title mt-8">
@@ -21,6 +22,7 @@ export default async function StartPage() {
               {t(locale, "start.hero.sub")}
             </p>
           </div>
+          <Illustration name="start-journey" eager className="page-hero-art" />
         </section>
 
         <div className="container">

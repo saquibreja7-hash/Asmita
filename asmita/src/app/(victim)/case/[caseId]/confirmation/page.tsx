@@ -5,6 +5,7 @@ import { getCaseForUser } from "@/lib/case-ops";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { findPlatformByDomain } from "@/lib/platforms";
+import { Illustration } from "@/components/Illustration";
 
 export default async function ConfirmationPage({
   params,
@@ -75,6 +76,7 @@ export default async function ConfirmationPage({
         <div className="container py-12 md:py-20">
           <div className="mx-auto grid max-w-5xl gap-10 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:gap-16 lg:gap-20">
             <div className="min-w-0 md:order-2">
+              <Illustration name="done-relief" eager className="mb-6 max-w-[240px]" />
               <p className="eyebrow">{hi ? "केस सहेजा गया" : "CASE SAVED"}</p>
               <h1 className="page-title-sm mt-4">{t(locale, "confirm.title")}</h1>
               <p className="muted mt-3 max-w-md text-[15px] leading-[1.7]">{hi ? "आपका केस सुरक्षित है। आप जब चाहें इसकी स्थिति देख सकते हैं।" : "Your case is saved. You can return to check its status whenever you need to."}</p>

@@ -2,6 +2,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { Callout, Fold, ItemCards, NextStep, ReadingLayout, ReadingSection, type TocItem } from "@/components/Reading";
 import { ReadingTime } from "@/components/ReadingTime";
+import { Illustration } from "@/components/Illustration";
 
 const toc: TocItem[] = [
   { id: "scope", title: "What these Terms cover" },
@@ -30,7 +31,7 @@ export default function TermsPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container page-hero text-center">
+        <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
             <span className="eyebrow">Terms of use</span>
             <h1 className="page-title mt-8">
@@ -48,6 +49,7 @@ export default function TermsPage() {
               review<ReadingTime label="{n} min read" />
             </p>
           </div>
+          <Illustration name="page-terms" eager className="page-hero-art" />
         </section>
 
         <div className="container">

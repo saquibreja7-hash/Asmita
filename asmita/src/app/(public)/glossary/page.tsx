@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { glossary } from "@/lib/issue-content";
 import { getLocale } from "@/lib/get-locale";
+import { Illustration } from "@/components/Illustration";
 
 export const metadata: Metadata = {
   title: "Glossary",
@@ -37,7 +38,7 @@ export default async function GlossaryPage() {
       <div className="page-canvas">
         {/* HERO */}
         <section className="hero" aria-label={say("Glossary", "शब्दावली")}>
-          <div className="hero-content container section-pad">
+          <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{say("Glossary", "शब्दावली")}</span>
               <h1 className="page-title mt-5">
@@ -47,6 +48,7 @@ export default async function GlossaryPage() {
                 {say("The terms you will see on this site and in the law, explained without jargon. You do not need to know any of these to get help.", "इस वेबसाइट और संबंधित नियमों में आने वाले शब्द, सरल भाषा में। मदद लेने के लिए इन सभी शब्दों को जानना ज़रूरी नहीं है।")}
               </p>
             </div>
+            <Illustration name="page-glossary" eager className="page-hero-art" />
           </div>
         </section>
 
