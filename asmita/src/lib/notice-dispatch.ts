@@ -13,13 +13,17 @@ function databasePersistenceEnabled() {
   return process.env.NOTICE_DISPATCH_PERSISTENCE === "database";
 }
 
+// The original notice and its follow-ups are told apart by followUpOf, not by
+// escalationLevel: the sweep raises the original's level as the ladder climbs.
 async function findPersistedNotice(
   urlId: string,
   recipientEmail: string,
-  escalationLevel: number,
+  followUpLevel: number | null,
 ): Promise<DispatchedNotice | null> {
   const existing = await db.notice.findFirst({
-    where: { urlId, recipientEmail, escalationLevel, sentAt: { not: null } },
+    where: followUpLevel === null
+      ? { urlId, recipientEmail, followUpOf: null, sentAt: { not: null } }
+      : { urlId, recipientEmail, followUpOf: { not: null }, escalationLevel: followUpLevel, sentAt: { not: null } },
   });
   if (!existing) return null;
   return {
@@ -33,10 +37,17 @@ async function findPersistedNotice(
   };
 }
 
-async function persistNotice(notice: DispatchedNotice, escalationLevel: number) {
+async function persistNotice(
+  notice: DispatchedNotice,
+  escalationLevel: number,
+  link: { templateId?: string; followUpOf?: string } = {},
+) {
   await db.notice.create({
     data: {
       urlId: notice.urlId,
+      // The follow-up resends this reviewed template, so the sweep needs it.
+      templateId: link.templateId ?? null,
+      followUpOf: link.followUpOf ?? null,
       routingTier: 2,
       method: "EMAIL",
       sentAt: new Date(notice.sentAt),
@@ -75,6 +86,7 @@ export async function dispatchTier2Notice(input: {
   signedNoticePdf?: Buffer | null;
   // Fingerprints in the annex; recorded in the audit log, never their values.
   fingerprintIds?: string[];
+  templateId?: string;
 }) {
   assertVerifiedNoticeRecipient(input.recipientEmail);
   const idempotencyKey = sha256(`${input.caseId}:${input.urlId}:${input.recipientEmail}`);
@@ -83,7 +95,7 @@ export async function dispatchTier2Notice(input: {
     return { dispatched: false, notice: existing };
   }
   if (databasePersistenceEnabled()) {
-    const persisted = await findPersistedNotice(input.urlId, input.recipientEmail, 0);
+    const persisted = await findPersistedNotice(input.urlId, input.recipientEmail, null);
     if (persisted) {
       return { dispatched: false, notice: persisted };
     }
@@ -111,7 +123,7 @@ export async function dispatchTier2Notice(input: {
   };
   dispatchedNotices.set(idempotencyKey, notice);
   if (databasePersistenceEnabled()) {
-    await persistNotice(notice, 0);
+    await persistNotice(notice, 0, { templateId: input.templateId });
   }
   await writeAuditLog({
     eventType: "NOTICE_SENT",
@@ -136,6 +148,8 @@ export async function dispatchEscalationFollowUp(input: {
   recipientEmail: string;
   subject: string;
   body: string;
+  /** The original notice this follows. */
+  noticeId: string;
 }) {
   assertVerifiedNoticeRecipient(input.recipientEmail);
   // Idempotency key includes level so each escalation tier has its own slot;
@@ -173,7 +187,7 @@ export async function dispatchEscalationFollowUp(input: {
   };
   dispatchedFollowUps.set(idempotencyKey, notice);
   if (databasePersistenceEnabled()) {
-    await persistNotice(notice, input.level);
+    await persistNotice(notice, input.level, { followUpOf: input.noticeId });
   }
   await writeAuditLog({
     eventType: "NOTICE_SENT",

@@ -35,6 +35,7 @@ describe("dispatchEscalationFollowUp", () => {
         recipientEmail: "<TO_BE_VERIFIED_BY_HUMAN>",
         subject: "[Follow-up #1] x",
         body: "y",
+      noticeId: "notice-1",
       }),
     ).rejects.toThrow("verified_recipient_required");
     expect(sendNoticeDraft).not.toHaveBeenCalled();
@@ -48,6 +49,7 @@ describe("dispatchEscalationFollowUp", () => {
       recipientEmail: "go@platform.com",
       subject: "[Follow-up #1] takedown",
       body: "Dear GO, this is the same body the lawyers reviewed.",
+      noticeId: "notice-1",
     });
 
     expect(result.dispatched).toBe(true);
@@ -74,6 +76,7 @@ describe("dispatchEscalationFollowUp", () => {
       recipientEmail: "go@platform.com",
       subject: "[Follow-up #1] takedown",
       body: "body",
+      noticeId: "notice-1",
     };
     const first = await dispatchEscalationFollowUp(args);
     const second = await dispatchEscalationFollowUp(args);
@@ -89,6 +92,7 @@ describe("dispatchEscalationFollowUp", () => {
       urlId: "url-1",
       recipientEmail: "go@platform.com",
       body: "body",
+      noticeId: "notice-1",
     };
     const l1 = await dispatchEscalationFollowUp({ ...baseArgs, level: 1, subject: "[Follow-up #1]" });
     const l2 = await dispatchEscalationFollowUp({ ...baseArgs, level: 2, subject: "[Follow-up #2]" });
@@ -110,6 +114,7 @@ describe("dispatchEscalationFollowUp", () => {
       recipientEmail: "go@platform.com",
       subject: "[Follow-up #1] takedown",
       body: "body",
+      noticeId: "notice-1",
     });
     expect(followUp.dispatched).toBe(true);
   });

@@ -154,15 +154,29 @@ describe("runDueEscalationsFromDb", () => {
     expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
   });
 
-  it("skips notices whose platform responded ACKNOWLEDGED", async () => {
+  it("does not chase a platform that acknowledged, but still tells the survivor her next steps", async () => {
     vi.mocked(db.notice.findMany).mockResolvedValue([
       noticeRow({ responseType: "ACKNOWLEDGED" }),
     ] as never);
-    const now = new Date("2026-05-20T00:00:00.000Z");
 
-    const summary = await runDueEscalationsFromDb(now);
+    // At 24h the platform follow-up is skipped once, not retried every hour.
+    const first = await runDueEscalationsFromDb(new Date("2026-05-11T00:00:00.000Z"));
+    expect(first.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_platform_answered", level: 1 }]);
+    expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
+    expect(db.$transaction).toHaveBeenCalledOnce();
 
-    expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "stopped" }]);
+    // At 48h the survivor email still goes out.
+    vi.mocked(db.notice.findMany).mockResolvedValue([
+      noticeRow({ responseType: "ACKNOWLEDGED", escalationLevel: 1 }),
+    ] as never);
+    const later = await runDueEscalationsFromDb(new Date("2026-05-12T01:00:00.000Z"));
+    expect(later.fired).toEqual([{ noticeId: "notice-1", level: 2, action: "victim_notification" }]);
+  });
+
+  it("only sweeps original notices, never their follow-up rows", async () => {
+    vi.mocked(db.notice.findMany).mockResolvedValue([] as never);
+    await runDueEscalationsFromDb(new Date("2026-05-20T00:00:00.000Z"));
+    expect(vi.mocked(db.notice.findMany).mock.calls[0][0]).toMatchObject({ where: { followUpOf: null } });
   });
 
   it("does nothing when no notices qualify", async () => {
@@ -233,9 +247,12 @@ describe("runDueEscalationsFromDb — L1 follow-up", () => {
     expect(summary.fired).toHaveLength(0);
     expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_legal_review", level: 1 }]);
     expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
-    // Critically: the level was NOT bumped. Next sweep will re-check once
-    // legal flips the flag.
-    expect(db.$transaction).not.toHaveBeenCalled();
+    // Nothing is sent, and the skip is recorded once so the hourly sweep does
+    // not retry it (and log a failure) every hour.
+    expect(db.$transaction).toHaveBeenCalledOnce();
+    expect(db.escalation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ level: 1, actionType: "skipped_blocked_legal_review" }),
+    });
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: "NOTICE_FAILED",
@@ -259,7 +276,7 @@ describe("runDueEscalationsFromDb — L1 follow-up", () => {
 
     expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_no_recipient", level: 1 }]);
     expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
-    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(db.$transaction).toHaveBeenCalledOnce();
   });
 
   it("blocks L1 send when no template is attached to the notice", async () => {
@@ -296,6 +313,7 @@ describe("runDueEscalationsFromDb — L2 victim notification", () => {
       "ASMITA-2026-00042",
       expect.stringContaining("/case/case-1"),
       "en",
+      "l2:notice-1",
     );
   });
 
@@ -320,6 +338,7 @@ describe("runDueEscalationsFromDb — L2 victim notification", () => {
       "ASMITA-2026-00042",
       expect.any(String),
       "hi",
+      "l2:notice-1",
     );
   });
 
@@ -338,7 +357,8 @@ describe("runDueEscalationsFromDb — L2 victim notification", () => {
 
     expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_no_user", level: 2 }]);
     expect(sendL2VictimNotification).not.toHaveBeenCalled();
-    expect(db.$transaction).not.toHaveBeenCalled();
+    // The account is gone: recorded once so the hourly sweep stops retrying.
+    expect(db.$transaction).toHaveBeenCalledOnce();
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: "NOTICE_FAILED",
@@ -389,8 +409,8 @@ describe("runDueEscalationsFromDb — L3 FIR ready", () => {
       "victim@example.com:iv:tag:ciphertext",
       "ASMITA-2026-00042",
       expect.stringContaining("/case/case-1"),
-      expect.stringContaining("/api/cases/case-1/export"),
       "en",
+      "l3:notice-1",
     );
     // Transaction must include the case.firPackageGeneratedAt update
     const txArg = vi.mocked(db.$transaction).mock.calls[0][0] as unknown as unknown[];
@@ -424,7 +444,8 @@ describe("runDueEscalationsFromDb — L3 FIR ready", () => {
 
     expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_no_user", level: 3 }]);
     expect(sendL3FirReadyNotification).not.toHaveBeenCalled();
-    expect(db.$transaction).not.toHaveBeenCalled();
+    // The account is gone: recorded once so the hourly sweep stops retrying.
+    expect(db.$transaction).toHaveBeenCalledOnce();
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: "NOTICE_FAILED",

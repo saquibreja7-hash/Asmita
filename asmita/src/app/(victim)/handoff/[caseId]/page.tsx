@@ -16,6 +16,6 @@ export default async function HandoffPage({ params }: { params: Promise<{ caseId
     return p?.lastContactVerifiedByHuman && p.formUrl && p.formUrl !== HUMAN_VERIFICATION_REQUIRED ? [[p.id, { name: p.name, formUrl: p.formUrl }] as const] : [];
   })).values()] : [];
   return <AppShell><div className="page-canvas"><div className="container py-16"><div className="mx-auto max-w-xl">
-    {record ? <><FormHandoff locale={locale} links={links} /><Link href={`/case/${record.id}`} className="link-underline mt-8 inline-block">{locale === "hi" ? "डैशबोर्ड पर वापस जाएँ" : "Back to dashboard"}</Link></> : <p>{locale === "hi" ? "यह केस उपलब्ध नहीं है।" : "This case is unavailable."}</p>}
+    {record ? <><FormHandoff locale={locale} links={links} tracked /><Link href={`/case/${record.id}`} className="link-underline mt-8 inline-block">{locale === "hi" ? "डैशबोर्ड पर वापस जाएँ" : "Back to dashboard"}</Link></> : <p>{locale === "hi" ? "यह केस उपलब्ध नहीं है।" : "This case is unavailable."}</p>}
   </div></div></div></AppShell>;
 }

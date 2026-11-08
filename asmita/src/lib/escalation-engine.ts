@@ -69,8 +69,16 @@ export function shouldStopFutureEscalation(input: {
   manuallyResolvedAt?: string;
 }) {
   if (input.manuallyResolvedAt) return true;
-  return ["ACKNOWLEDGED", "REMOVED", "REJECTED", "MANUALLY_RESOLVED"].includes(input.urlStatus || "") ||
-    ["ACKNOWLEDGED", "REMOVED", "REJECTED"].includes(input.responseType || "");
+  // Stop when the content is gone, or Asmita itself rejected the link. A
+  // platform that acknowledged or refused has not removed anything, so the
+  // survivor still hears about her next steps (docs/product/escalation-ladder.md).
+  return ["REMOVED", "REJECTED", "MANUALLY_RESOLVED"].includes(input.urlStatus || "") ||
+    input.responseType === "REMOVED";
+}
+
+/** The platform already answered, so a follow-up asking it to act adds nothing. */
+function platformAnswered(responseType: string | null) {
+  return responseType === "ACKNOWLEDGED" || responseType === "REJECTED";
 }
 
 export type SkipReason =
@@ -81,7 +89,8 @@ export type SkipReason =
   | "blocked_no_template"
   | "blocked_no_user"
   | "blocked_decrypt_failed"
-  | "blocked_audit_only";
+  | "blocked_audit_only"
+  | "blocked_platform_answered";
 
 export type DueEscalationSummary = {
   swept: number;
@@ -160,7 +169,9 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
         "c.id as caseIdValue", "c.referenceNumber", "usr.id as userId", "usr.emailEncrypted", "usr.preferredLocale",
         "t.bodyTemplate", "t.subjectTemplate", "t.reviewedByLegal",
       ])
-      .where("n.sentAt", "<=", cutoff).where("n.escalationLevel", "<", 3).where("n.removedAt", "is", null).execute())
+      .where("n.sentAt", "<=", cutoff).where("n.escalationLevel", "<", 3).where("n.removedAt", "is", null)
+      // Follow-ups are rows too; only the original notice climbs the ladder.
+      .where("n.followUpOf", "is", null).execute())
       .map((row) => ({
         id: row.noticeId, sentAt: row.sentAt, escalationLevel: row.escalationLevel, responseType: row.responseType, templateId: row.templateId,
         submittedUrl: {
@@ -171,7 +182,7 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
         template: row.bodyTemplate && row.subjectTemplate && row.reviewedByLegal != null ? { bodyTemplate: row.bodyTemplate, subjectTemplate: row.subjectTemplate, reviewedByLegal: row.reviewedByLegal } : null,
       }))
     : await (await getPrismaDb()).notice.findMany({
-      where: { sentAt: { not: null, lte: cutoff }, escalationLevel: { lt: 3 }, removedAt: null },
+      where: { sentAt: { not: null, lte: cutoff }, escalationLevel: { lt: 3 }, removedAt: null, followUpOf: null },
       select: candidateSelect,
     });
 
@@ -205,6 +216,13 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
 
       if (handlerResult.kind === "blocked") {
         summary.skipped.push({ noticeId: notice.id, reason: handlerResult.reason, level: dueLevel });
+        // A step that can never be sent (the platform follow-up when it cannot
+        // go, or a survivor who deleted her account) is skipped once and
+        // recorded, not retried and logged every hour. A decryption failure may
+        // be a passing configuration fault, so that one is retried.
+        if (dueLevel === 1 || handlerResult.reason === "blocked_no_user") {
+          await recordLevel(notice, dueLevel, `skipped_${handlerResult.reason}`, now);
+        }
         continue;
       }
 
@@ -213,33 +231,7 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
       // stays at the prior tier; next sweep will see the Escalation row
       // missing for this level and re-attempt, which dispatchEscalationFollowUp
       // dedupes on at the in-memory map.
-      if (usesWorkerKysely()) {
-        await getWorkerDb().transaction().execute(async (tx) => {
-          await tx.insertInto("Escalation").values({ id: randomUUID(), noticeId: notice.id, level: dueLevel, actionType: action, completedAt: now }).execute();
-          await tx.updateTable("Notice").set({ escalationLevel: dueLevel }).where("id", "=", notice.id).execute();
-          if (dueLevel === 3) await tx.updateTable("Case").set({ firPackageGeneratedAt: now, updatedAt: new Date() }).where("id", "=", notice.submittedUrl.case.id).execute();
-        });
-      } else {
-      const db = await getPrismaDb();
-      const txOps: Prisma.PrismaPromise<unknown>[] = [
-        db.escalation.create({
-          data: { noticeId: notice.id, level: dueLevel, actionType: action, completedAt: now },
-        }),
-        db.notice.update({
-          where: { id: notice.id },
-          data: { escalationLevel: dueLevel },
-        }),
-      ];
-      if (dueLevel === 3) {
-        txOps.push(
-          db.case.update({
-            where: { id: notice.submittedUrl.case.id },
-            data: { firPackageGeneratedAt: now },
-          }),
-        );
-      }
-      await db.$transaction(txOps);
-      }
+      await recordLevel(notice, dueLevel, action, now);
 
       summary.fired.push({ noticeId: notice.id, level: dueLevel, action });
     } catch (err) {
@@ -250,6 +242,26 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
   return summary;
 }
 
+async function recordLevel(notice: CandidateNotice, level: EscalationLevel, actionType: string, now: Date) {
+  if (usesWorkerKysely()) {
+    await getWorkerDb().transaction().execute(async (tx) => {
+      await tx.insertInto("Escalation").values({ id: randomUUID(), noticeId: notice.id, level, actionType, completedAt: now }).execute();
+      await tx.updateTable("Notice").set({ escalationLevel: level }).where("id", "=", notice.id).execute();
+      if (level === 3 && actionType === "fir_package") await tx.updateTable("Case").set({ firPackageGeneratedAt: now, updatedAt: new Date() }).where("id", "=", notice.submittedUrl.case.id).execute();
+    });
+    return;
+  }
+  const db = await getPrismaDb();
+  const txOps: Prisma.PrismaPromise<unknown>[] = [
+    db.escalation.create({ data: { noticeId: notice.id, level, actionType, completedAt: now } }),
+    db.notice.update({ where: { id: notice.id }, data: { escalationLevel: level } }),
+  ];
+  if (level === 3 && actionType === "fir_package") {
+    txOps.push(db.case.update({ where: { id: notice.submittedUrl.case.id }, data: { firPackageGeneratedAt: now } }));
+  }
+  await db.$transaction(txOps);
+}
+
 async function runLevelHandler(input: { notice: CandidateNotice; dueLevel: EscalationLevel }): Promise<HandlerResult> {
   const { notice, dueLevel } = input;
   if (dueLevel === 1) return handleL1FollowUp(notice);
@@ -258,6 +270,7 @@ async function runLevelHandler(input: { notice: CandidateNotice; dueLevel: Escal
 }
 
 async function handleL1FollowUp(notice: CandidateNotice): Promise<HandlerResult> {
+  if (platformAnswered(notice.responseType)) return { kind: "blocked", reason: "blocked_platform_answered" };
   if (!notice.template) {
     await writeAuditLog({
       eventType: "NOTICE_FAILED",
@@ -314,6 +327,7 @@ async function handleL1FollowUp(notice: CandidateNotice): Promise<HandlerResult>
     recipientEmail: platform.grievanceEmail,
     subject,
     body,
+    noticeId: notice.id,
   });
 
   return { kind: "fired" };
@@ -359,6 +373,7 @@ async function handleL2VictimNotification(notice: CandidateNotice): Promise<Hand
     notice.submittedUrl.case.referenceNumber,
     dashboardUrl,
     locale,
+    `l2:${notice.id}`,
   );
 
   return { kind: "fired" };
@@ -394,8 +409,9 @@ async function handleL3FirReady(notice: CandidateNotice): Promise<HandlerResult>
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://meriasmita.org";
   const cleanUrl = appUrl.replace(/\/+$/, "");
   const caseId = notice.submittedUrl.case.id;
+  // The PDF export cannot run on Workers yet, so the email points at the
+  // dashboard, which shows the complaint and appeal steps.
   const dashboardUrl = `${cleanUrl}/case/${caseId}`;
-  const pdfUrl = `${cleanUrl}/api/cases/${caseId}/export`;
 
   await processEscalationJob(
     { caseId: notice.submittedUrl.caseId, urlId: notice.submittedUrl.id },
@@ -406,8 +422,8 @@ async function handleL3FirReady(notice: CandidateNotice): Promise<HandlerResult>
     plaintextEmail,
     notice.submittedUrl.case.referenceNumber,
     dashboardUrl,
-    pdfUrl,
     locale,
+    `l3:${notice.id}`,
   );
 
   return { kind: "fired" };

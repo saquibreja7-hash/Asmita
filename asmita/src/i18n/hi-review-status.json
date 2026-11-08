@@ -45,7 +45,9 @@
       "submit.hash.stopncii.*",
       "review.links.moreNote",
       "review.sign.nextNote",
-      "case.sign.sub"
+      "case.sign.sub",
+      "ladder.*",
+      "case.now.filed.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
