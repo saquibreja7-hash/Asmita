@@ -2,10 +2,13 @@ import {
   listNgoVouchingRows,
   listPlatformResponseRows,
 } from "@/lib/admin-dashboard";
+import { deniedFor } from "../page-permission";
 
 export const dynamic = "force-dynamic";
 
 export default async function ResponseRatesPage() {
+  const denied = await deniedFor("metrics:read");
+  if (denied) return denied;
   const [rows, vouches] = await Promise.all([
     listPlatformResponseRows(),
     listNgoVouchingRows(),

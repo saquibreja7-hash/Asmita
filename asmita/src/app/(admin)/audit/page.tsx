@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listAuditLogPage, type AuditLogPage } from "@/lib/admin-dashboard";
 import { validateAuditChainFromDb, type AuditChainValidation } from "@/lib/audit";
+import { deniedFor } from "../page-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,8 @@ export default async function AuditPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const denied = await deniedFor("audit:read");
+  if (denied) return denied;
   const params = (await searchParams) || {};
   const filters = {
     eventType: single(params.eventType),

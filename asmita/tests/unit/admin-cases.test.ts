@@ -17,6 +17,8 @@ import {
   deriveCaseWork,
   getAdminCaseDetail,
   listAdminCases,
+  listFlaggedLinks,
+  summariseQueues,
   type CaseFacts,
   type Gates,
   type LinkFact,
@@ -143,6 +145,27 @@ describe("deriveCaseWork", () => {
     );
     expect(work.nextAction).toBe("awaiting_reply");
     expect(work.ladderStep).toBe(1);
+  });
+
+  it("reports a refused escalation step ahead of waiting for the reply", () => {
+    const work = deriveCaseWork(
+      facts({
+        links: [link({ status: "NOTICE_SENT", signed: true })],
+        notices: [
+          {
+            urlId: "l1",
+            sentAt: hoursAgo(30),
+            responseType: null,
+            responseReceivedAt: null,
+            removedAt: null,
+            ladderBlock: "template_not_legal_reviewed",
+          },
+        ],
+      }),
+      gates(),
+      now,
+    );
+    expect(work.nextAction).toBe("blocked_escalation");
   });
 
   it("has nothing to do once every link is removed or rejected", () => {
@@ -381,5 +404,124 @@ describe("getAdminCaseDetail", () => {
 
     expect(detail?.work.nextAction).toBe("awaiting_reply");
     expect(detail?.links[0]).toMatchObject({ noticeSent: true, dispatch: null, ladderStep: 1 });
+  });
+});
+
+describe("escalation blocks, queue summary and flagged links", () => {
+  beforeEach(() => {
+    vi.stubEnv("DATABASE_URL", "postgresql://localhost/test");
+    mocked.platform.findMany.mockResolvedValue([
+      {
+        id: "yt",
+        name: "YouTube",
+        noticeBasis: "IT_RULES_2021",
+        grievanceEmail: "grievance@youtube.test",
+        lastContactVerifiedByHuman: true,
+        lastContactVerifiedAt: hoursAgo(100),
+        isActive: true,
+      },
+    ]);
+    mocked.noticeTemplate.findMany.mockResolvedValue([{ templateType: "IT_RULES_2021", platformId: null }]);
+    mocked.hashSubmission.groupBy.mockResolvedValue([]);
+    mocked.case.findMany.mockResolvedValue(
+      ["c1", "c2", "c3"].map((id, index) => ({
+        id,
+        referenceNumber: `ASMITA-2026-${id.toUpperCase()}`,
+        status: "OPEN",
+        createdAt: hoursAgo(40 - index),
+        updatedAt: hoursAgo(1),
+        declarationSignedAt: hoursAgo(39),
+      })),
+    );
+    mocked.submittedUrl.findMany.mockImplementation(({ where }: { where: Record<string, unknown> }) =>
+      Promise.resolve(
+        where.signedNoticePdf
+          ? [{ id: "l1" }, { id: "l2" }, { id: "l3" }]
+          : ["1", "2", "3"].map((n) => ({
+              id: `l${n}`,
+              caseId: `c${n}`,
+              status: "NOTICE_QUEUED",
+              flaggedForReview: false,
+              submittedAt: hoursAgo(40),
+              platformId: "yt",
+              platformFiledAt: null,
+            })),
+      ),
+    );
+    mocked.notice.findMany.mockResolvedValue(
+      ["1", "2"].map((n) => ({
+        id: `n${n}`,
+        urlId: `l${n}`,
+        sentAt: hoursAgo(30),
+        escalationLevel: n === "1" ? 0 : 1,
+        responseType: null,
+        responseReceivedAt: null,
+        removedAt: null,
+      })),
+    );
+    // n1's L1 is refused now; n2's old L1 refusal was later sent (level 1 reached).
+    mocked.auditLog.findMany.mockResolvedValue([
+      { entityId: "n1", data: { reason: "template_not_legal_reviewed", escalationLevel: 1 } },
+      { entityId: "n2", data: { reason: "no_verified_recipient", escalationLevel: 1 } },
+    ]);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
+  });
+
+  it("treats a refusal as current only while its level is above the level reached", async () => {
+    const page = await listAdminCases({}, { now });
+    const byCase = new Map(page.rows.map((row) => [row.caseId, row.nextAction]));
+    expect(byCase.get("c1")).toBe("blocked_escalation");
+    expect(byCase.get("c2")).toBe("awaiting_reply");
+    expect(byCase.get("c3")).toBe("send_notice");
+    expect(mocked.auditLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { eventType: "NOTICE_FAILED", entityType: "Notice", entityId: { in: ["n1", "n2"] } },
+      }),
+    );
+    expect((await listAdminCases({ nextAction: "blocked" }, { now })).rows.map((row) => row.caseId)).toEqual(["c1"]);
+  });
+
+  it("counts open cases per queue and lists operator work first", async () => {
+    const summary = await summariseQueues(now);
+    const count = (kind: string) => summary.queues.find((queue) => queue.kind === kind)?.count;
+    expect(count("blocked_escalation")).toBe(1);
+    expect(count("awaiting_reply")).toBe(1);
+    expect(count("send_notice")).toBe(1);
+    expect(summary.queues.find((queue) => queue.kind === "send_notice")?.overdue).toBe(1);
+    // Awaiting a platform is not operator work.
+    expect(summary.actionable).toBe(2);
+    expect(summary.dueNext.map((row) => row.caseId).sort()).toEqual(["c1", "c3"]);
+    expect(mocked.case.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { status: { in: ["OPEN", "PARTIALLY_RESOLVED", "ESCALATED"] } } }),
+    );
+  });
+
+  it("lists flagged links without loading link content", async () => {
+    mocked.submittedUrl.findMany.mockResolvedValue([
+      {
+        id: "l9",
+        domain: "unknown-site.example",
+        status: "PENDING_REVIEW",
+        flagReason: null,
+        platform: null,
+        case: { id: "c9", referenceNumber: "ASMITA-2026-FLAGGD", createdAt: hoursAgo(5) },
+      },
+    ]);
+    const rows = await listFlaggedLinks(now);
+    expect(rows).toEqual([
+      expect.objectContaining({
+        urlId: "l9",
+        referenceNumber: "ASMITA-2026-FLAGGD",
+        investigationOnly: true,
+        slaState: "breached",
+        platformName: "Unknown platform",
+      }),
+    ]);
+    const [args] = mocked.submittedUrl.findMany.mock.calls[0];
+    expect(args.select).not.toHaveProperty("urlEncrypted");
+    expect(args.select).not.toHaveProperty("signedNoticePdf");
   });
 });

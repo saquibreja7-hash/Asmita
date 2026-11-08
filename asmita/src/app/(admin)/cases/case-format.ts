@@ -14,6 +14,8 @@ export function nextActionLabel(kind: NextActionKind, count: number) {
       return "Blocked: legal review";
     case "blocked_contact":
       return "Blocked: no verified contact";
+    case "blocked_escalation":
+      return "Blocked: escalation step";
     case "awaiting_reply":
       return "Awaiting platform reply";
     case "waiting_on_survivor":
@@ -29,6 +31,7 @@ export const NEXT_ACTION_FILTER_LABELS: Record<NextActionKind, string> = {
   send_notice: "Send notice",
   blocked_legal_review: "Blocked: legal review",
   blocked_contact: "Blocked: no verified contact",
+  blocked_escalation: "Blocked: escalation step",
   awaiting_reply: "Awaiting platform reply",
   waiting_on_survivor: "Waiting on survivor",
   none: "Nothing to do",
@@ -91,3 +94,21 @@ export function formatIst(value: string | Date) {
     minute: "2-digit",
   });
 }
+
+/** Why the hourly sweep could not send a ladder step (escalation-engine.ts). */
+export const LADDER_BLOCK_LABELS: Record<string, string> = {
+  no_template: "The original notice has no template to resend.",
+  template_not_legal_reviewed: "The notice template is not legally reviewed.",
+  no_verified_recipient: "The platform has no human-verified contact.",
+  follow_up_cover_not_legal_reviewed: "The follow-up letter is not legally reviewed.",
+  follow_up_cover_missing: "There is no follow-up letter template.",
+  user_missing: "The survivor's account no longer exists.",
+  email_decrypt_failed: "The survivor's email address could not be read.",
+};
+
+export const REPLY_LABELS: Record<string, string> = {
+  ACKNOWLEDGED: "Acknowledged",
+  REMOVED: "Removed",
+  REJECTED: "Refused",
+  NO_RESPONSE: "No response",
+};

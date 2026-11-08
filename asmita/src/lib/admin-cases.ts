@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { listAllCases } from "@/lib/case-ops";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { buildLadder } from "@/lib/escalation-ladder";
-import { HUMAN_VERIFICATION_REQUIRED, platformDirectory } from "@/lib/platforms";
+import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED, platformDirectory } from "@/lib/platforms";
 import { isUrlExpired } from "@/lib/url-retention";
 
 export const REVIEW_SLA_HOURS = 4;
@@ -26,6 +26,7 @@ export const NEXT_ACTIONS = [
   "send_notice",
   "blocked_legal_review",
   "blocked_contact",
+  "blocked_escalation",
   "awaiting_reply",
   "waiting_on_survivor",
   "none",
@@ -58,6 +59,8 @@ export type NoticeFact = {
   responseType: string | null;
   responseReceivedAt: Date | null;
   removedAt: Date | null;
+  /** Why the hourly sweep could not send this notice's next ladder step. */
+  ladderBlock?: string | null;
 };
 
 export type CaseFacts = {
@@ -147,6 +150,7 @@ export function deriveCaseWork(facts: CaseFacts, gates: Gates, now: Date): CaseW
       });
       const current = ladder ? ladder.steps.findIndex((step) => step.state === "current") + 1 : 0;
       if (current > 0) ladderStep = Math.max(ladderStep ?? 0, current);
+      if (notice?.ladderBlock) add("blocked_escalation", null);
       if (!notice?.responseReceivedAt) {
         add("awaiting_reply", ladder?.steps.find((step) => step.key === "deadline")?.at ?? null);
       }
@@ -286,7 +290,14 @@ export async function listAdminCases(
         linkCount: fact.links.length,
       }),
     )
-    .filter((row) => !filters.nextAction || filters.nextAction === "all" || row.nextAction === filters.nextAction)
+    .filter(
+      (row) =>
+        !filters.nextAction ||
+        filters.nextAction === "all" ||
+        row.nextAction === filters.nextAction ||
+        // "blocked" covers every gate that stops a step.
+        (filters.nextAction === "blocked" && row.nextAction.startsWith("blocked_")),
+    )
     .map((row) => ({ row, key: sortTuple(row, sort) }))
     .sort((left, right) => compareTuples(left.key, right.key));
 
@@ -432,7 +443,15 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
     db.notice.findMany({
       where: { followUpOf: null, sentAt: { not: null }, submittedUrl: { case: where } },
       orderBy: { sentAt: "asc" },
-      select: { urlId: true, sentAt: true, responseType: true, responseReceivedAt: true, removedAt: true },
+      select: {
+        id: true,
+        urlId: true,
+        sentAt: true,
+        escalationLevel: true,
+        responseType: true,
+        responseReceivedAt: true,
+        removedAt: true,
+      },
     }),
     db.hashSubmission.groupBy({
       by: ["caseId"],
@@ -443,6 +462,7 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
   ]);
 
   const signedIds = new Set(signed.map((row) => row.id));
+  const blocks = await loadLadderBlocks(notices);
   const linksByCase = new Map<string, LinkFact[]>();
   const caseOfLink = new Map<string, string>();
   for (const link of links) {
@@ -476,6 +496,7 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
         responseType: notice.responseType,
         responseReceivedAt: notice.responseReceivedAt,
         removedAt: notice.removedAt,
+        ladderBlock: blocks.get(notice.id) ?? null,
       },
     ]);
   }
@@ -576,6 +597,16 @@ export type AdminCaseLink = {
     reviewedByName: string | null;
   };
   ladderStep: number | null;
+  /** The original notice a platform reply is recorded against. */
+  reply: null | {
+    noticeId: string;
+    sentAt: string;
+    responseType: string | null;
+    responseReceivedAt: string | null;
+    removed: boolean;
+  };
+  /** Why the hourly sweep could not send the next ladder step, if it could not. */
+  ladderBlock: string | null;
 };
 
 export type AdminCaseFingerprint = {
@@ -687,6 +718,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
     signed: signedIds.has(link.id),
   }));
   const originals = notices.filter((notice) => !notice.followUpOf && notice.sentAt);
+  const blocks = await loadLadderBlocks(originals);
   const pending = hashes.filter((hash) => hash.status === "PENDING_REVIEW");
   const facts: CaseFacts = {
     id: record.id,
@@ -704,6 +736,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
         responseType: notice.responseType,
         responseReceivedAt: notice.responseReceivedAt,
         removedAt: notice.removedAt,
+        ladderBlock: blocks.get(notice.id) ?? null,
       })),
     pendingFingerprints: pending.length,
     oldestPendingFingerprint: pending[0]?.submittedAt ?? null,
@@ -795,6 +828,19 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
               }
             : null,
         ladderStep: current > 0 ? current : null,
+        reply: (() => {
+          const original = originals.find((notice) => notice.urlId === link.id);
+          return original
+            ? {
+                noticeId: original.id,
+                sentAt: (original.sentAt as Date).toISOString(),
+                responseType: original.responseType,
+                responseReceivedAt: original.responseReceivedAt?.toISOString() ?? null,
+                removed: Boolean(original.removedAt) || link.status === "REMOVED",
+              }
+            : null;
+        })(),
+        ladderBlock: fact?.ladderBlock ?? null,
       };
     }),
     fingerprints: hashes.map((hash) => ({
@@ -848,4 +894,175 @@ export async function listPlatformOptions(): Promise<Array<{ id: string; name: s
   return Array.from(gates.platforms.values())
     .map((platform) => ({ id: platform.id, name: platform.name }))
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/**
+ * The ladder steps the hourly sweep refused, per original notice. The sweep
+ * records each refusal as a NOTICE_FAILED audit entry with the level it
+ * tried; a refusal is current while that level is still above the level the
+ * notice reached. Removed notices have nothing left to block.
+ */
+async function loadLadderBlocks(
+  notices: Array<{ id: string; escalationLevel: number; removedAt: Date | null }>,
+): Promise<Map<string, string>> {
+  const open = notices.filter((notice) => !notice.removedAt && notice.escalationLevel < 3);
+  if (devNoDb() || !open.length) return new Map();
+  const failures = await db.auditLog.findMany({
+    where: { eventType: "NOTICE_FAILED", entityType: "Notice", entityId: { in: open.map((notice) => notice.id) } },
+    orderBy: { sequence: "desc" },
+    select: { entityId: true, data: true },
+  });
+  const levels = new Map(open.map((notice) => [notice.id, notice.escalationLevel]));
+  const blocks = new Map<string, string>();
+  for (const failure of failures) {
+    if (!failure.entityId || blocks.has(failure.entityId)) continue;
+    const data = (failure.data ?? {}) as { reason?: unknown; escalationLevel?: unknown };
+    const level = typeof data.escalationLevel === "number" ? data.escalationLevel : null;
+    const reached = levels.get(failure.entityId) ?? 0;
+    // Newest entry per notice decides; an older failure for a level since sent is history.
+    blocks.set(failure.entityId, level !== null && level > reached ? String(data.reason ?? "unknown") : "");
+  }
+  for (const [id, reason] of blocks) if (!reason) blocks.delete(id);
+  return blocks;
+}
+
+export type QueueSummary = {
+  kind: NextActionKind;
+  count: number;
+  /** Cases whose due time has passed. */
+  overdue: number;
+  oldestDueAt: Date | null;
+};
+
+const ACTIVE_STATUSES = ["OPEN", "PARTIALLY_RESOLVED", "ESCALATED"];
+
+/** Open cases counted by next action, plus the ten most urgent. */
+export async function summariseQueues(now = new Date()): Promise<{
+  queues: QueueSummary[];
+  dueNext: AdminCaseListRow[];
+  actionable: number;
+}> {
+  const all = await listAdminCases({ statuses: ACTIVE_STATUSES }, { limit: Number.MAX_SAFE_INTEGER, now });
+  const queues = NEXT_ACTIONS.map((kind) => {
+    const rows = all.rows.filter((row) => row.nextAction === kind);
+    const dues = rows.map((row) => row.dueAt?.getTime()).filter((value): value is number => value !== undefined);
+    return {
+      kind,
+      count: rows.length,
+      overdue: dues.filter((due) => due < now.getTime()).length,
+      oldestDueAt: dues.length ? new Date(Math.min(...dues)) : null,
+    };
+  });
+  const operatorWork = all.rows.filter((row) => OPERATOR_ACTIONS.has(row.nextAction));
+  return { queues, dueNext: operatorWork.slice(0, 10), actionable: operatorWork.length };
+}
+
+/** Next actions that wait on an operator, not on the survivor or a platform. */
+export const OPERATOR_ACTIONS = new Set<NextActionKind>([
+  "review_links",
+  "review_fingerprints",
+  "send_notice",
+  "blocked_legal_review",
+  "blocked_contact",
+  "blocked_escalation",
+]);
+
+let actionableCache: { at: number; count: number } | null = null;
+
+/** Open cases waiting on an operator, cached for 30 seconds for the nav. */
+export async function countActionableCases(now = new Date()): Promise<number> {
+  if (actionableCache && now.getTime() - actionableCache.at < 30_000) return actionableCache.count;
+  const { actionable } = await summariseQueues(now);
+  actionableCache = { at: now.getTime(), count: actionable };
+  return actionable;
+}
+
+export type AdminUrlReviewRow = {
+  caseId: string;
+  referenceNumber: string;
+  urlId: string;
+  platformName: string;
+  domain: string;
+  status: string;
+  reason: string;
+  investigationOnly: boolean;
+  ageMinutes: number;
+  slaState: "within_sla" | "due_soon" | "breached";
+};
+
+/**
+ * Links waiting for a human decision, oldest case first. Named columns only:
+ * the flagged queue never loads the encrypted link or the signed PDF.
+ */
+export async function listFlaggedLinks(now = new Date()): Promise<AdminUrlReviewRow[]> {
+  const toRow = (input: {
+    caseId: string;
+    referenceNumber: string;
+    caseCreatedAt: Date;
+    urlId: string;
+    platformName: string;
+    domain: string;
+    status: string;
+    flagReason: string | null;
+  }): AdminUrlReviewRow => {
+    const ageMinutes = Math.max(0, Math.floor((now.getTime() - input.caseCreatedAt.getTime()) / 60_000));
+    const known = Boolean(findPlatformByDomain(input.domain));
+    return {
+      caseId: input.caseId,
+      referenceNumber: input.referenceNumber,
+      urlId: input.urlId,
+      platformName: input.platformName,
+      domain: input.domain,
+      status: input.status,
+      reason: !known
+        ? "Unknown platform: investigate public reporting routes"
+        : input.flagReason || "Needs human review before dispatch",
+      investigationOnly: !known,
+      ageMinutes,
+      slaState: ageMinutes >= 240 ? "breached" : ageMinutes >= 180 ? "due_soon" : "within_sla",
+    };
+  };
+
+  if (devNoDb()) {
+    return (await listAllCases()).flatMap((record) =>
+      record.urls
+        .filter((url) => url.flaggedForReview || url.status === "PENDING_REVIEW")
+        .map((url) =>
+          toRow({
+            caseId: record.id,
+            referenceNumber: record.referenceNumber,
+            caseCreatedAt: new Date(record.createdAt),
+            urlId: url.id,
+            platformName: url.platformName,
+            domain: url.domain,
+            status: url.status,
+            flagReason: url.flagReason ?? null,
+          }),
+        ),
+    );
+  }
+  const links = await db.submittedUrl.findMany({
+    where: { OR: [{ status: "PENDING_REVIEW" }, { flaggedForReview: true }] },
+    orderBy: { submittedAt: "asc" },
+    select: {
+      id: true,
+      domain: true,
+      status: true,
+      flagReason: true,
+      platform: { select: { name: true } },
+      case: { select: { id: true, referenceNumber: true, createdAt: true } },
+    },
+  });
+  return links.map((link) =>
+    toRow({
+      caseId: link.case.id,
+      referenceNumber: link.case.referenceNumber,
+      caseCreatedAt: link.case.createdAt,
+      urlId: link.id,
+      platformName: link.platform?.name ?? findPlatformByDomain(link.domain)?.name ?? "Unknown platform",
+      domain: link.domain,
+      status: link.status,
+      flagReason: link.flagReason,
+    }),
+  );
 }

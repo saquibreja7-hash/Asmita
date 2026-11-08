@@ -36,7 +36,7 @@ const VIEWS: Array<{ label: string; params: Record<string, string> }> = [
   { label: "Needs review", params: { nextAction: "review_links" } },
   { label: "Ready to send", params: { nextAction: "send_notice" } },
   { label: "Awaiting reply", params: { nextAction: "awaiting_reply" } },
-  { label: "Blocked", params: { nextAction: "blocked_contact" } },
+  { label: "Blocked", params: { nextAction: "blocked" } },
   { label: "Resolved", params: { status: "RESOLVED", sort: "updated" } },
 ];
 
@@ -71,7 +71,7 @@ export default async function AdminCasesPage({
     q: single(raw.q) ?? "",
     status: single(raw.status) ?? "active",
     platform: single(raw.platform) ?? "",
-    nextAction: (NEXT_ACTIONS as readonly string[]).includes(single(raw.nextAction) ?? "")
+    nextAction: [...NEXT_ACTIONS, "blocked"].includes(single(raw.nextAction) ?? "")
       ? single(raw.nextAction)!
       : "",
     from: single(raw.from) ?? "",
@@ -107,7 +107,11 @@ export default async function AdminCasesPage({
     },
     params.nextAction && {
       key: "nextAction",
-      label: `Next action: ${NEXT_ACTION_FILTER_LABELS[params.nextAction as keyof typeof NEXT_ACTION_FILTER_LABELS]}`,
+      label: `Next action: ${
+        params.nextAction === "blocked"
+          ? "Blocked (any)"
+          : NEXT_ACTION_FILTER_LABELS[params.nextAction as keyof typeof NEXT_ACTION_FILTER_LABELS]
+      }`,
     },
     params.from && { key: "from", label: `From ${params.from}` },
     params.to && { key: "to", label: `To ${params.to}` },
@@ -176,6 +180,7 @@ export default async function AdminCasesPage({
         <Field label="Next action" name="nextAction">
           <select className="field" defaultValue={params.nextAction} id="nextAction" name="nextAction">
             <option value="">Any</option>
+            <option value="blocked">Blocked (any)</option>
             {NEXT_ACTIONS.map((kind) => (
               <option key={kind} value={kind}>
                 {NEXT_ACTION_FILTER_LABELS[kind]}

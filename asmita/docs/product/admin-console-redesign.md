@@ -1,6 +1,6 @@
 # Admin console redesign
 
-Status: recommendation, 8 November 2026. Phases 0 and 1 are built on `feat/admin-console-phase-0` (9 November); later phases are not started. Owner: Saquib.
+Status: recommendation, 8 November 2026. Phases 0, 1 and 2 are built on `feat/admin-console-phase-0` (9 November); Phases 3 and 4 are not started. Owner: Saquib.
 
 ## In one paragraph
 
@@ -530,27 +530,43 @@ What was built, and where it differs from the plan:
   sweep read it.
 - `listAdminCaseRows` is gone.
 
-### Phase 2: Needs action and the missing queues (medium)
+### Phase 2: Needs action and the missing queues (built)
 
-- **Data**: record ladder blocks where they happen. Add `blockedReason` and
-  `blockedAt` to `Escalation` (or one `ladderBlockedReason` on `Notice`),
-  written by the sweep instead of only an audit entry, and cleared when the
-  sweep later succeeds.
-- **API**: `GET /api/admin/queues/counts` returning count, oldest age and
-  past-SLA count per queue, filtered by the caller's permissions, cached for 30
-  seconds. `POST /api/admin/notices/[noticeId]/response` with
-  `{ responseType, receivedAt, note? }` (`cases:review`), setting
-  `responseType`, `responseReceivedAt`, `removedAt` and the link's status, and
-  writing an audit event. This closes job 5 and makes the ladder's stop
-  condition work without the survivor.
-- **UI**: Needs action home; nav counts; Queues pages for Ready to send,
-  Blocked steps and Awaiting reply; Flagged and Fingerprints rebuilt on the
-  same list component with keyset pagination; the hash dispatch form moves into
-  the case page. Hash queue drops the "Phase 2" copy.
-- **Permissions in the UI**: the layout passes the role's permission list to
-  the client; nav and actions hide or disable with a reason ("Needs case review
-  permission") instead of failing after the click. The layout also starts
-  checking `cases:read` for case pages.
+What was built, and where it differs from the plan:
+
+- **No migration.** Recorded replies use the existing audit events
+  (`CONTENT_REMOVED` for a removal, `ADMIN_ACTION` otherwise).
+- **Blocked steps without touching the engine.** Instead of new columns
+  written by the sweep, the console reads the `NOTICE_FAILED` entries the
+  sweep already writes (reason and level). A refusal counts while its level is
+  above the level the notice reached, so a step sent later clears it. New next
+  action: "Blocked: escalation step", with the reason on the case page.
+- **Record reply**: `POST /api/admin/notices/[noticeId]/response`
+  (`cases:review`) with `ACKNOWLEDGED`, `REMOVED` or `REJECTED` and the time it
+  arrived (not before the notice, not in the future). Original notices only. A
+  removal sets the notice's `removedAt` and the link's status to removed, which
+  stops the ladder, the same as the survivor's own "mark removed"; it cannot be
+  recorded twice. An acknowledgement or refusal stops the 24-hour follow-up, as
+  the engine already does. The case's own status is not changed.
+- **Needs action home** at `/admin`: tiles for links and fingerprints to review,
+  ready to send, blocked (by reason), awaiting reply, platform contacts and
+  templates to review, each with overdue and oldest, then the ten most urgent
+  cases. Tiles open the matching case list view; "Blocked" is now one view over
+  all three blocked reasons. Counts are per case (its first next action), so a
+  tile and its list always agree.
+- **No counts API.** Pages are server-rendered; the nav shows one count (open
+  cases waiting on an operator), cached for 30 seconds per Worker isolate.
+- **Queues stay views.** Ready to send, Blocked and Awaiting reply are case list
+  views rather than separate pages. Flagged links and Fingerprints keep their
+  pages; Flagged now reads named columns only (it used to load every case with
+  its encrypted links and PDFs). Neither is paginated yet; both are bounded by
+  the review backlog.
+- **Hash advisory on the case page** when the case has approved fingerprints;
+  the Fingerprints page keeps its form too.
+- **Roles in the UI**: the nav is grouped (Work, Directory, Insight, Oversight)
+  and shows only what the role can open; every page checks the same permission
+  and says so instead of failing later. Milestones needs `metrics:read`. A test
+  keeps nav and page permissions in step.
 
 ### Phase 3: speed (medium)
 

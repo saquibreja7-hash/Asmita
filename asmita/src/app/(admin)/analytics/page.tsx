@@ -1,6 +1,9 @@
 import { getInternalAnalytics } from "@/lib/admin-dashboard";
+import { deniedFor } from "../page-permission";
 
 export default async function InternalAnalyticsPage() {
+  const denied = await deniedFor("metrics:read");
+  if (denied) return denied;
   const analytics = await getInternalAnalytics();
   const stats: Array<[string, number | string]> = [
     ["Total cases", analytics.totalCases],

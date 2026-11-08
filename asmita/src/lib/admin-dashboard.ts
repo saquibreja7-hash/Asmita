@@ -3,21 +3,8 @@ import { calculateBetaMetrics, type BetaMetrics } from "@/lib/beta-metrics";
 import { db } from "@/lib/db";
 import { listAllCases, type DisplayCase } from "@/lib/case-ops";
 import { createReverificationQueue } from "@/lib/go-reverification";
-import { platformDirectory, findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED, type PlatformDirectoryEntry } from "@/lib/platforms";
+import { platformDirectory, HUMAN_VERIFICATION_REQUIRED, type PlatformDirectoryEntry } from "@/lib/platforms";
 import type { DeliveryEvent } from "@/lib/webhook-events";
-
-export type AdminUrlReviewRow = {
-  caseId: string;
-  referenceNumber: string;
-  urlId: string;
-  platformName: string;
-  domain: string;
-  status: string;
-  reason: string;
-  investigationOnly: boolean;
-  ageMinutes: number;
-  slaState: "within_sla" | "due_soon" | "breached";
-};
 
 export type GoChangeHistoryRow = {
   id: string;
@@ -93,29 +80,6 @@ export type InternalAnalytics = {
   firPackagesPrepared: number;
   privacyNote: string;
 };
-
-export async function listReviewQueueRows(now = new Date()): Promise<AdminUrlReviewRow[]> {
-  const records = await listAllCases();
-  return records.flatMap((record) =>
-    record.urls
-      .filter((url) => url.flaggedForReview || url.status === "PENDING_REVIEW")
-      .map((url) => {
-        const ageMinutes = Math.max(0, Math.floor((now.getTime() - Date.parse(record.createdAt)) / 60_000));
-        return {
-          caseId: record.id,
-          referenceNumber: record.referenceNumber,
-          urlId: url.id,
-          platformName: url.platformName,
-          domain: url.domain,
-          status: url.status,
-          reason: !findPlatformByDomain(url.domain) ? "Unknown platform: investigate public reporting routes" : url.flagReason || "Needs human review before dispatch",
-          investigationOnly: !findPlatformByDomain(url.domain),
-          ageMinutes,
-          slaState: ageMinutes >= 240 ? "breached" : ageMinutes >= 180 ? "due_soon" : "within_sla",
-        };
-      }),
-  );
-}
 
 export function listPlatformEditorRows() {
   const reverify = createReverificationQueue(platformDirectory);

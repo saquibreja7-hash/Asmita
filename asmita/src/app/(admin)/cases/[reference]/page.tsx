@@ -7,15 +7,20 @@ import { getAdminCaseDetail, type AdminCaseLink } from "@/lib/admin-cases";
 import { recordAdminAccess } from "@/lib/admin-access-log";
 import { ReviewActions } from "../../flagged/ReviewActions";
 import HashReviewActions from "../../hashes/HashReviewActions";
+import HashDispatchForm from "../../hashes/HashDispatchForm";
+import { listDispatchableHashCases, listVerifiedDispatchPlatforms } from "@/lib/hash-submission";
 import { AdminPageHeader } from "../page";
 import {
+  LADDER_BLOCK_LABELS,
   LADDER_STEP_LABELS,
   LINK_STATUS_LABELS,
+  REPLY_LABELS,
   STATUS_LABELS,
   dueText,
   formatIst,
   nextActionLabel,
 } from "../case-format";
+import { RecordReplyButton } from "./RecordReplyButton";
 import { RevealLink } from "./RevealLink";
 import { SendNoticeButton } from "./SendNoticeButton";
 
@@ -44,6 +49,11 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
   const canReview = hasAdminPermission(auth.session.adminRole ?? "SUPER_ADMIN", "cases:review");
   const hashesEnabled = process.env.ENABLE_HASH_UPLOAD === "true";
   const due = dueText(detail.work.nextAction, detail.work.dueAt, now);
+  const [advisoryCases, advisoryPlatforms] =
+    canReview && hashesEnabled && detail.fingerprints.some((hash) => hash.status === "APPROVED")
+      ? await Promise.all([listDispatchableHashCases(), listVerifiedDispatchPlatforms()])
+      : [[], []];
+  const advisoryCase = advisoryCases.filter((entry) => entry.caseId === detail.caseId);
 
   return (
     <section>
@@ -136,6 +146,19 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
         </div>
       )}
 
+      {advisoryCase.length > 0 && (
+        <>
+          <h3 className="subsection-title mt-8">Send hash advisory</h3>
+          <p className="muted mt-2 max-w-2xl text-sm leading-[1.7]">
+            One email per platform with the reviewed advisory and the approved fingerprints. It
+            refuses to send without legal review and a human-verified contact, and never sends twice.
+          </p>
+          <div className="mt-4">
+            <HashDispatchForm cases={advisoryCase} platforms={advisoryPlatforms} />
+          </div>
+        </>
+      )}
+
       <h2 className="section-title mt-12">Timeline</h2>
       {detail.timeline.length === 0 ? (
         <p className="muted mt-3 text-sm">No recorded events.</p>
@@ -208,13 +231,24 @@ function LinkCard({
             <li key={notice.id}>
               {notice.followUp ? `Follow-up (level ${notice.escalationLevel})` : "Notice"}{" "}
               {notice.sentAt ? `sent ${formatIst(notice.sentAt)}` : "not sent"}
-              {notice.responseType && `, platform replied: ${notice.responseType.toLowerCase().replaceAll("_", " ")}`}
             </li>
           ))}
         </ul>
       )}
       {link.platformFiledAt && (
         <p className="mt-2 text-xs">Survivor filed the platform form {formatIst(link.platformFiledAt)}.</p>
+      )}
+      {link.reply?.responseType && link.reply.responseReceivedAt && (
+        <p className="mt-2 text-xs">
+          Platform reply: {REPLY_LABELS[link.reply.responseType] ?? link.reply.responseType},{" "}
+          {formatIst(link.reply.responseReceivedAt)}.
+        </p>
+      )}
+      {link.ladderBlock && (
+        <p className="mt-2 text-xs text-[var(--danger)]">
+          <span aria-hidden="true">! </span>
+          The next escalation step is blocked: {LADDER_BLOCK_LABELS[link.ladderBlock] ?? link.ladderBlock}
+        </p>
       )}
 
       {canReview && (
@@ -234,6 +268,9 @@ function LinkCard({
               templateLabel={`${link.dispatch.templateType} v${link.dispatch.templateVersion}`}
               urlId={link.id}
             />
+          )}
+          {link.reply && !link.reply.removed && (
+            <RecordReplyButton noticeId={link.reply.noticeId} platformName={link.platformName} />
           )}
           {link.retained ? <RevealLink urlId={link.id} /> : <p className="muted text-xs">Link deleted after 30 days.</p>}
         </div>

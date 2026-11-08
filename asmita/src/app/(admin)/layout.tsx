@@ -4,18 +4,9 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { AdminLogoutButton } from "./AdminLogoutButton";
 import AdminLoginPage from "@/app/admin/login/page";
 import SetupMfaPage from "@/app/admin/setup-mfa/page";
-
-const adminLinks: Array<[string, string]> = [
-  ["/admin/cases", "Cases"],
-  ["/admin/queue", "Flagged"],
-  ["/admin/hashes", "Hash queue"],
-  ["/admin/platforms", "Platforms"],
-  ["/admin/templates", "Templates"],
-  ["/admin/metrics", "Response rates"],
-  ["/admin/analytics", "Analytics"],
-  ["/admin/milestones", "Milestones"],
-  ["/admin/audit", "Audit"],
-];
+import { hasAdminPermission } from "@/lib/auth/admin-permissions";
+import { countActionableCases } from "@/lib/admin-cases";
+import { ADMIN_NAV } from "./admin-nav";
 
 export default async function AdminLayout({
   children,
@@ -31,6 +22,16 @@ export default async function AdminLayout({
     return <AdminLoginPage />;
   }
 
+  // Sessions minted before sub-roles existed are founders (require-admin.ts).
+  const role = auth.session.adminRole ?? "SUPER_ADMIN";
+  const groups = ADMIN_NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.permission || hasAdminPermission(role, item.permission)),
+  })).filter((group) => group.items.length > 0);
+  const actionable = hasAdminPermission(role, "cases:read")
+    ? await countActionableCases().catch(() => null)
+    : null;
+
   return (
     <AppShell>
       <div className="page-canvas">
@@ -42,15 +43,26 @@ export default async function AdminLayout({
             <p className="eyebrow">
               Admin
             </p>
-            <nav className="mt-5 grid gap-2 text-sm leading-[1.8]">
-              {adminLinks.map(([href, label]) => (
-                <Link
-                  className="link-underline text-[var(--ink)]"
-                  href={href}
-                  key={href}
-                >
-                  {label}
-                </Link>
+            <nav className="mt-5 grid gap-5 text-sm leading-[1.8]">
+              {groups.map((group) => (
+                <div className="grid gap-2" key={group.heading ?? "home"}>
+                  {group.heading && <p className="muted text-xs">{group.heading}</p>}
+                  {group.items.map((item) => (
+                    <Link
+                      className="link-underline text-[var(--ink)]"
+                      href={item.href}
+                      key={item.href}
+                    >
+                      {item.label}
+                      {item.href === "/admin" && actionable ? (
+                        <span className="ml-2 rounded-full bg-[var(--ink)] px-2 text-xs text-[var(--page)] tabular-nums">
+                          {actionable}
+                          <span className="sr-only"> cases waiting</span>
+                        </span>
+                      ) : null}
+                    </Link>
+                  ))}
+                </div>
               ))}
             </nav>
             <div className="mt-8 border-t border-[var(--line)] pt-6">

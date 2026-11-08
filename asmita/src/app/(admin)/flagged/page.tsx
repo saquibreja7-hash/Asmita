@@ -1,11 +1,14 @@
-import { listReviewQueueRows } from "@/lib/admin-dashboard";
+import { listFlaggedLinks } from "@/lib/admin-cases";
 import { ReviewActions } from "./ReviewActions";
+import { deniedFor } from "../page-permission";
 
 export default async function FlaggedPage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const denied = await deniedFor("cases:read");
+  if (denied) return denied;
   const params = (await searchParams) || {};
   const filters = {
     platform: single(params.platform),
@@ -14,7 +17,7 @@ export default async function FlaggedPage({
     status: single(params.status),
     accountAge: single(params.accountAge),
   };
-  const rows = (await listReviewQueueRows()).filter((row) => {
+  const rows = (await listFlaggedLinks()).filter((row) => {
     const platformMatch =
       !filters.platform ||
       row.platformName.toLowerCase().includes(filters.platform.toLowerCase());

@@ -1,8 +1,11 @@
 import { listNoticeTemplateRows } from "@/lib/admin-dashboard";
+import { deniedFor } from "../page-permission";
 
 export const dynamic = "force-dynamic";
 
 export default async function TemplatesPage() {
+  const denied = await deniedFor("templates:edit");
+  if (denied) return denied;
   const rows = await listNoticeTemplateRows();
   const unreviewed = rows.filter((row) => row.isActive && !row.reviewedByLegal).length;
 
