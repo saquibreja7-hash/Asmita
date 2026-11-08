@@ -519,7 +519,7 @@ export const templateSeeds = [
       "",
       "1.  On {{originalSentAt}}, Asmita (meriasmita.org) served on {{platformName}}, at this address and on behalf of the Complainant, the complaint set out below (Asmita Case Reference {{caseReference}}; content hosted on {{url}}).",
       "",
-      "2.  Rule 3(2)(b) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, as amended in 2026, required {{platformName}} to take all reasonable and practicable measures to remove or disable access to the content within TWO (2) HOURS of receipt of that complaint. Rule 3(2)(a)(i) required it to be acknowledged within TWENTY-FOUR (24) HOURS " + CITE + ". Asmita has not received an acknowledgement or a confirmation of removal.",
+      "2.  Rule 3(2)(b) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, as amended in 2026, required {{platformName}} to take all reasonable and practicable measures to remove or disable access to the content within TWO (2) HOURS of receipt of that complaint. Rule 3(2)(a)(i) required it to be acknowledged within TWENTY-FOUR (24) HOURS " + CITE + ". Asmita has no record of an acknowledgement or a confirmation of removal.",
       "",
       "3.  If {{platformName}} has already removed or disabled access to the content, please confirm it by reply to Notice@meriasmita.org quoting the case reference, and no further action is needed on this follow-up.",
       "",
