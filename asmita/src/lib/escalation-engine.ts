@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { decryptField } from "@/lib/encryption";
 import { dispatchEscalationFollowUp } from "@/lib/notice-dispatch";
 import { renderNoticeTemplate, assertNoticeSubjectSafe } from "@/lib/notice-generator";
+import { templateDigest } from "@/lib/signed-template";
 import {
   sendL2VictimNotification,
   sendL3FirReadyNotification,
@@ -92,7 +93,8 @@ export type SkipReason =
   | "blocked_no_user"
   | "blocked_decrypt_failed"
   | "blocked_audit_only"
-  | "blocked_platform_answered";
+  | "blocked_platform_answered"
+  | "blocked_template_changed";
 
 export type DueEscalationSummary = {
   swept: number;
@@ -117,6 +119,7 @@ const candidateSelect = {
       caseId: true,
       status: true,
       domain: true,
+      signedTemplateDigest: true,
       platform: { select: { name: true, grievanceEmail: true, lastContactVerifiedByHuman: true } },
       case: {
         select: {
@@ -143,6 +146,8 @@ type CandidateNotice = {
     caseId: string;
     status: string;
     domain: string;
+    /** Digest of the template text signed and sent; null for notices signed before pinning. */
+    signedTemplateDigest?: string | null;
     platform: { name: string; grievanceEmail: string | null; lastContactVerifiedByHuman: boolean } | null;
     case: { id: string; referenceNumber: string; user: { id: string; emailEncrypted: string; preferredLocale: string | null } | null };
   };
@@ -190,7 +195,7 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
       .leftJoin("NoticeTemplate as t", "t.id", "n.templateId")
       .select([
         "n.id as noticeId", "n.sentAt", "n.escalationLevel", "n.responseType", "n.templateId",
-        "u.id as urlId", "u.caseId", "u.status as urlStatus", "u.domain",
+        "u.id as urlId", "u.caseId", "u.status as urlStatus", "u.domain", "u.signedTemplateDigest",
         "p.name as platformName", "p.grievanceEmail", "p.lastContactVerifiedByHuman",
         "c.id as caseIdValue", "c.referenceNumber", "usr.id as userId", "usr.emailEncrypted", "usr.preferredLocale",
         "t.bodyTemplate", "t.subjectTemplate", "t.reviewedByLegal",
@@ -201,7 +206,7 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
       .map((row) => ({
         id: row.noticeId, sentAt: row.sentAt, escalationLevel: row.escalationLevel, responseType: row.responseType, templateId: row.templateId,
         submittedUrl: {
-          id: row.urlId, caseId: row.caseId, status: row.urlStatus, domain: row.domain,
+          id: row.urlId, caseId: row.caseId, status: row.urlStatus, domain: row.domain, signedTemplateDigest: row.signedTemplateDigest,
           platform: row.platformName ? { name: row.platformName, grievanceEmail: row.grievanceEmail, lastContactVerifiedByHuman: row.lastContactVerifiedByHuman ?? false } : null,
           case: { id: row.caseIdValue, referenceNumber: row.referenceNumber, user: row.userId && row.emailEncrypted ? { id: row.userId, emailEncrypted: row.emailEncrypted, preferredLocale: row.preferredLocale } : null },
         },
@@ -316,6 +321,24 @@ async function handleL1FollowUp(notice: CandidateNotice): Promise<HandlerResult>
       data: { reason: "template_not_legal_reviewed", escalationLevel: 1 },
     });
     return { kind: "blocked", reason: "blocked_legal_review" };
+  }
+  // The follow-up restates the complaint's text from this template. If the
+  // template was edited in place since the survivor signed it (the seed can
+  // do that), the restated text would differ from what was served, and the
+  // covering letter says it is that text. Hold the follow-up instead and
+  // record why, so the case page shows the blocked step. Retried like the
+  // other holds: it clears only if the signed text is restored, and the
+  // 48-hour step takes over after a day. Notices signed before pinning have
+  // no digest to compare and are unchanged.
+  const signedDigest = notice.submittedUrl.signedTemplateDigest;
+  if (signedDigest && templateDigest(notice.template) !== signedDigest) {
+    await writeAuditLog({
+      eventType: "NOTICE_FAILED",
+      entityType: "Notice",
+      entityId: notice.id,
+      data: { reason: "template_changed_since_sent", escalationLevel: 1 },
+    });
+    return { kind: "blocked", reason: "blocked_template_changed" };
   }
   const platform = notice.submittedUrl.platform;
   if (!platform?.grievanceEmail || !platform.lastContactVerifiedByHuman) {

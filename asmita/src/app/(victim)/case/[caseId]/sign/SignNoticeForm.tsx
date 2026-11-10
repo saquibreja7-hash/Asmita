@@ -4,17 +4,20 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale } from "@/lib/i18n";
+import { isPdfSafeText } from "@/lib/pdf-text";
 
 interface Props {
   caseId: string;
   urlId: string;
+  /** Names the template text the preview shows; signing sends it back. */
+  templateRef: string;
   platformName: string;
   previewPdfUrl: string;
   confirmationUrl: string;
   locale: Locale;
 }
 
-export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, confirmationUrl, locale }: Props) {
+export function SignNoticeForm({ caseId, urlId, templateRef, platformName, previewPdfUrl, confirmationUrl, locale }: Props) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
@@ -23,7 +26,10 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const canSubmit = name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) && signature.trim() && agreed && !submitting;
+  // The notice PDF shows Latin letters only; say so before signing.
+  const nameUnsupported = !isPdfSafeText(name.trim().normalize("NFC"));
+  const signatureUnsupported = !isPdfSafeText(signature.trim().normalize("NFC"));
+  const canSubmit = name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) && signature.trim() && !nameUnsupported && !signatureUnsupported && agreed && !submitting;
 
   async function handleSubmit() {
     setError("");
@@ -32,13 +38,25 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
       const res = await csrfFetch(`/api/cases/${caseId}/sign-notice`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ urlId, name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
+        body: JSON.stringify({ urlId, templateRef, name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (data.error === "notice_changed_since_preview") {
+          // Reload the page so the preview shows the current text, and ask
+          // for a fresh review and confirmation. The typed details are kept.
+          setAgreed(false);
+          setError(t(locale, "sign.error.noticeChanged"));
+          router.refresh();
+          return;
+        }
         setError(data.error === "already_signed"
           ? t(locale, "sign.error.alreadySigned")
-          : t(locale, "sign.error.generic"));
+          : data.error === "name_script_unsupported"
+            ? t(locale, "sign.error.nameScript")
+            : data.error === "notice_pdf_failed"
+              ? t(locale, "sign.error.pdf")
+              : t(locale, "sign.error.generic"));
         return;
       }
       // The endpoint waits until no other notice is ready to sign.
@@ -87,7 +105,11 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
             onChange={(e) => setName(e.target.value)}
             maxLength={100}
             autoComplete="name"
+            aria-invalid={nameUnsupported || undefined}
           />
+          {nameUnsupported && (
+            <p role="alert" className="mt-2 text-sm font-medium text-[var(--danger)]">{t(locale, "sign.error.nameScript")}</p>
+          )}
         </div>
 
         <div>
@@ -124,7 +146,11 @@ export function SignNoticeForm({ caseId, urlId, platformName, previewPdfUrl, con
           onChange={(e) => setSignature(e.target.value)}
           maxLength={100}
           autoComplete="off"
+          aria-invalid={signatureUnsupported || undefined}
         />
+        {signatureUnsupported && !nameUnsupported && (
+          <p role="alert" className="text-sm font-medium text-[var(--danger)]">{t(locale, "sign.error.nameScript")}</p>
+        )}
       </div>
 
       {/* Declaration */}

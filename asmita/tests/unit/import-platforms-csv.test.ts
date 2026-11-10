@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { NoticeBasis, PlatformTier } from "@prisma/client";
 import {
+  CSV_IMPORT_MARKER,
+  contactChangeData,
+  isVerifiedFlag,
   nullOrTrim,
   parseCsv,
   parseDomainPatterns,
   parseNoticeBasis,
   parseTier,
+  planPlatformUpdate,
   splitCsvLine,
 } from "../../scripts/import-platforms-csv";
 
@@ -99,5 +103,88 @@ describe("import-platforms-csv helpers", () => {
     it("drops empty segments", () => {
       expect(parseDomainPatterns(";a.com;;;b.com;")).toEqual(["a.com", "b.com"]);
     });
+  });
+});
+
+describe("import-platforms-csv verification", () => {
+  it("a contact change withdraws verification and records a non-admin marker", () => {
+    const now = new Date("2026-11-10T00:00:00.000Z");
+    expect(contactChangeData(now)).toEqual({
+      lastContactVerifiedByHuman: false,
+      lastContactVerifiedAt: null,
+      contactChangedBy: "csv-import",
+      contactChangedAt: now,
+    });
+    expect(CSV_IMPORT_MARKER).not.toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("recognises a mark_verified value so it can be warned about and ignored", () => {
+    expect(isVerifiedFlag("true")).toBe(true);
+    expect(isVerifiedFlag("YES")).toBe(true);
+    expect(isVerifiedFlag("false")).toBe(false);
+    expect(isVerifiedFlag(undefined)).toBe(false);
+  });
+});
+
+describe("import-platforms-csv planPlatformUpdate", () => {
+  const existing = {
+    tier: PlatformTier.TIER_1,
+    noticeBasis: NoticeBasis.IT_RULES_2021,
+    domainPatterns: ["a.example", "b.example"],
+    grievanceEmail: "go@platform.example",
+    grievanceName: null,
+    grievanceAddress: null,
+    formUrl: null,
+    apiEndpoint: null,
+  };
+  const incoming = {
+    tier: PlatformTier.TIER_1,
+    noticeBasis: NoticeBasis.IT_RULES_2021,
+    domainPatterns: ["a.example", "b.example"],
+    fields: {
+      grievanceEmail: "go@platform.example",
+      grievanceName: null,
+      grievanceAddress: null,
+      formUrl: null,
+      apiEndpoint: null,
+    },
+  };
+
+  it("reports nothing for an identical row, whatever the domain order", () => {
+    const plan = planPlatformUpdate(existing, { ...incoming, domainPatterns: ["b.example", "a.example"] });
+    expect(plan.contactDiffs).toEqual([]);
+    expect(plan.otherDiffs).toEqual([]);
+    expect(plan.updateData).toEqual({});
+  });
+
+  it("applies a tier, basis or domain change on its own, without touching verification", () => {
+    const plan = planPlatformUpdate(existing, {
+      ...incoming,
+      tier: PlatformTier.TIER_2,
+      noticeBasis: NoticeBasis.DMCA,
+      domainPatterns: ["a.example", "c.example"],
+    });
+    expect(plan.contactDiffs).toEqual([]);
+    expect(plan.otherDiffs.map((diff) => diff.field)).toEqual(["tier", "noticeBasis", "domainPatterns"]);
+    expect(plan.otherDiffs[0]).toEqual({ field: "tier", oldValue: "TIER_1", newValue: "TIER_2" });
+    expect(plan.updateData).toEqual({
+      tier: PlatformTier.TIER_2,
+      noticeBasis: NoticeBasis.DMCA,
+      domainPatterns: ["a.example", "c.example"],
+    });
+    expect(plan.updateData).not.toHaveProperty("lastContactVerifiedByHuman");
+    expect(plan.updateData).not.toHaveProperty("contactChangedBy");
+  });
+
+  it("reports a contact change separately so the caller can withdraw verification", () => {
+    const plan = planPlatformUpdate(existing, {
+      ...incoming,
+      fields: { ...incoming.fields, grievanceEmail: "new@platform.example" },
+    });
+    expect(plan.contactDiffs).toEqual([
+      { field: "grievanceEmail", oldValue: "go@platform.example", newValue: "new@platform.example" },
+    ]);
+    expect(plan.otherDiffs).toEqual([]);
+    expect(plan.updateData).toEqual({ grievanceEmail: "new@platform.example" });
   });
 });

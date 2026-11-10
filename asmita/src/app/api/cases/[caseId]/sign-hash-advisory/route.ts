@@ -8,7 +8,9 @@ import { db } from "@/lib/db";
 import { encryptField } from "@/lib/encryption";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
-import { generateNoticePdf } from "@/lib/notice-pdf";
+import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
+import { isPdfSafeText } from "@/lib/pdf-text";
+import { templateDigest, templateRef } from "@/lib/signed-template";
 import { dispatchHashAdvisories } from "@/lib/hash-dispatch";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -30,6 +32,8 @@ const schema = z
     contact: z.string().trim().pipe(z.email().max(200)),
     signature: z.string().min(1).max(100),
     platformIds: z.array(z.string().min(1)).min(1).max(20),
+    // The reference preview-hash-advisory returned for the text on screen.
+    templateRef: z.string().min(1).max(200),
   })
   .strict()
   .refine(
@@ -72,7 +76,14 @@ export async function POST(
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
 
-  const { name, contact, signature, platformIds } = parsed.data;
+  const { contact, platformIds } = parsed.data;
+  // NFC so an accented Latin name typed as letter plus accent is still drawable.
+  const name = parsed.data.name.normalize("NFC");
+  const signature = parsed.data.signature.normalize("NFC");
+  // The PDF font draws Latin letters only. Ask before signing, never transliterate.
+  if (!isPdfSafeText(name) || !isPdfSafeText(signature)) {
+    return NextResponse.json({ error: "name_script_unsupported" }, { status: 400 });
+  }
 
   const dbCase = await db.case.findUnique({
     where: { id: caseId },
@@ -104,6 +115,10 @@ export async function POST(
   if (!template) {
     return NextResponse.json({ error: "template_missing" }, { status: 409 });
   }
+  // The survivor signs only the text they previewed.
+  if (templateRef(template) !== parsed.data.templateRef) {
+    return NextResponse.json({ error: "notice_changed_since_preview" }, { status: 409 });
+  }
 
   // Render with the same variables as preview-hash-advisory so the signed PDF
   // content is byte-identical to what the survivor previewed.
@@ -115,16 +130,22 @@ export async function POST(
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
   const noticeBody = `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex.text}`;
 
-  const pdfBytes = await generateNoticePdf({
-    platformName: "Grievance Officer(s) / Trust and Safety Teams",
-    caseReference: record.referenceNumber,
-    noticeSubject: subject,
-    noticeBody,
-    date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
-    survivorName: name,
-    survivorContact: contact,
-    signature,
-  });
+  let pdfBytes: Buffer;
+  try {
+    pdfBytes = await generateNoticePdf({
+      platformName: "Grievance Officer(s) / Trust and Safety Teams",
+      caseReference: record.referenceNumber,
+      noticeSubject: subject,
+      noticeBody,
+      date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
+      survivorName: name,
+      survivorContact: contact,
+      signature,
+    });
+  } catch (err) {
+    const error = noticePdfErrorCode(err);
+    return NextResponse.json({ error }, { status: error === "name_script_unsupported" ? 400 : 409 });
+  }
 
   const encryptedPdf = encryptField(Buffer.from(pdfBytes).toString("base64"));
 
@@ -136,6 +157,9 @@ export async function POST(
       signedHashAdvisoryPdf: encryptedPdf,
       hashAdvisoryPlatformIds: platformIds,
       hashAdvisorySignedHashIds: annex.hashSubmissionIds,
+      // Pinned so dispatch emails the template text that was signed.
+      hashAdvisorySignedTemplateId: template.id,
+      hashAdvisorySignedTemplateDigest: templateDigest(template),
       ...(dbCase.declarationSignedAt ? {} : { declarationSignedAt: new Date() }),
     },
   });

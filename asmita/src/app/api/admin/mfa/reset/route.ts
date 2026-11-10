@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
-import { isAdminEmail } from "@/lib/auth/admin-allowlist";
+import { resolveAdminRole } from "@/lib/auth/admin-allowlist";
 import { resetAdminMfa } from "@/lib/auth/admin-mfa-store";
 import { issueAdminEnrolmentCode } from "@/lib/auth/admin-enrolment";
 import { hashEmail } from "@/lib/hash";
@@ -26,8 +26,21 @@ export async function POST(request: Request) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success || !isAdminEmail(parsed.data.email)) {
+  if (!parsed.success) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
+  }
+
+  // An allowlisted email with no valid role can never sign in, so an
+  // enrolment code for it would be useless. The caller is a SUPER_ADMIN, so
+  // the specific reason is safe to return.
+  const role = resolveAdminRole(parsed.data.email);
+  if (!role.ok) {
+    return NextResponse.json({
+      error: role.reason === "not_allowlisted" ? "not_an_admin" : "admin_role_invalid",
+      message: role.reason === "not_allowlisted"
+        ? "That email is not on the admin list (ADMIN_EMAILS). Add it there first."
+        : "That email is on the admin list but has no valid role (ADMIN_ROLES). It could not sign in, so no code was issued.",
+    }, { status: 400 });
   }
 
   const targetHash = hashEmail(parsed.data.email);

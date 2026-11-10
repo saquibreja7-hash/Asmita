@@ -72,12 +72,32 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Fails closed: a review that crashed, was skipped or left no readable
+      # verdict must not count as a pass. Only a CRITICAL finding (Verdict:
+      # BLOCK) is a merge-blocking finding; warnings never are.
       - name: Enforce severity threshold
         run: |
           out=/home/runner/work/_temp/claude-execution-output.json
-          if jq -r '.[] | select(.type=="result") | .result' "$out" 2>/dev/null | grep -q 'Verdict:.*BLOCK'; then
+          if [ ! -s "$out" ]; then
+            echo "::error::AI review output is missing or empty ($out). The review did not complete, so the gate fails. Re-run the job."
+            exit 1
+          fi
+          if ! jq -e 'type == "array" and any(.[]; .type == "result")' "$out" >/dev/null 2>&1; then
+            echo "::error::AI review output is unparseable or has no result entry. The gate fails. Re-run the job."
+            exit 1
+          fi
+          if [ "$(jq -r '[.[] | select(.type == "result")] | last | .is_error // false' "$out")" = "true" ]; then
+            echo "::error::AI review ended with an error result. The gate fails. Re-run the job."
+            exit 1
+          fi
+          result=$(jq -r '[.[] | select(.type == "result")] | last | .result // ""' "$out")
+          if printf '%s' "$result" | grep -q 'Verdict:.*BLOCK'; then
             echo "::error::AI review verdict is BLOCK. Merge blocked."
             exit 1
-          else
-            echo "AI review verdict: PASS (no explicit BLOCK found)"
           fi
+          if printf '%s' "$result" | grep -q 'Verdict:.*PASS'; then
+            echo "AI review verdict: PASS"
+            exit 0
+          fi
+          echo "::error::AI review output has no 'Verdict: PASS' or 'Verdict: BLOCK' line. The gate fails. Re-run the job."
+          exit 1

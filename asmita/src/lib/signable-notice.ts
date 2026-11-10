@@ -3,7 +3,10 @@ import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-
 import { hasRetiredPortalInstructions } from "@/lib/notice-generator";
 import { urlRetentionCutoff } from "@/lib/url-retention";
 
-/** Find an unsigned notice that can actually be previewed and signed. */
+/**
+ * Find an unsigned notice that can actually be previewed and signed, with the
+ * template it would be previewed and signed with.
+ */
 export async function findSignableNotice(caseId: string, skipLegalGate: boolean, urlId?: string) {
   const urls = await db.submittedUrl.findMany({
     where: {
@@ -28,7 +31,7 @@ export async function findSignableNotice(caseId: string, skipLegalGate: boolean,
       where: { templateType, isActive: true, ...(skipLegalGate ? {} : { reviewedByLegal: true }), OR: [{ platformId: url.platform.id }, { platformId: null }] },
       orderBy: [{ platformId: "desc" }, { version: "desc" }],
     });
-    if (template && !hasRetiredPortalInstructions(template.bodyTemplate)) return url;
+    if (template && !hasRetiredPortalInstructions(template.bodyTemplate)) return { ...url, template };
   }
   return null;
 }

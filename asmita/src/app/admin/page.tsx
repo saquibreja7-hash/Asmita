@@ -21,7 +21,7 @@ type Tile = {
 export default async function NeedsActionPage() {
   const auth = await requireAdmin();
   if (!auth.ok) return null;
-  const role = auth.session.adminRole ?? "SUPER_ADMIN";
+  const role = auth.session.adminRole;
   const can = (permission: Parameters<typeof hasAdminPermission>[1]) => hasAdminPermission(role, permission);
   const now = new Date();
 

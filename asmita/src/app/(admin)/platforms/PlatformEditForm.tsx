@@ -14,6 +14,13 @@ type Props = {
     formUrl: string | null;
     apiEndpoint: string | null;
   };
+  verified: boolean;
+  // When the contact was last changed in the console (null if never); sent
+  // back on verify so a contact changed since the page loaded is refused.
+  contactChangedAt: string | null;
+  // True when the signed-in admin made the last contact change. They cannot
+  // verify it; a second admin has to.
+  changedByViewer: boolean;
 };
 
 const FIELDS = [
@@ -24,9 +31,9 @@ const FIELDS = [
   { key: "apiEndpoint", label: "API endpoint", type: "url", placeholder: "https://api.example.com/takedown" },
 ] as const;
 
-export function PlatformEditForm({ platformId, platformName, current }: Props) {
+export function PlatformEditForm({ platformId, platformName, current, verified, contactChangedAt, changedByViewer }: Props) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"closed" | "edit" | "verify">("closed");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -45,7 +52,6 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
       setError("Source URL is required so future auditors can verify this change.");
       return;
     }
-    const markVerified = formData.get("markVerified") === "on";
 
     const fields: Record<string, string | null> = {};
     for (const field of FIELDS) {
@@ -57,8 +63,8 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
       fields[field.key] = value === "" ? null : value;
     }
 
-    if (Object.keys(fields).length === 0 && !markVerified) {
-      setError("No changes detected and 'mark verified' not selected - nothing to save.");
+    if (Object.keys(fields).length === 0) {
+      setError("No changes detected, nothing to save.");
       return;
     }
 
@@ -66,7 +72,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
       try {
         const res = await csrfFetch(`/api/admin/platforms/${platformId}`, {
           method: "POST",
-          body: JSON.stringify({ sourceUrl, markVerified, fields }),
+          body: JSON.stringify({ sourceUrl, fields }),
         });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -74,7 +80,8 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
           return;
         }
         const result = await res.json();
-        setSuccess(`Saved. ${result.changed ?? 0} field(s) changed${result.markVerified ? "; re-verification timestamp updated" : ""}.`);
+        setSuccess(`Saved. ${result.changed ?? 0} field(s) changed. The contact is unverified until a second admin verifies it.`);
+        setMode("closed");
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "network_error");
@@ -82,18 +89,125 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
     });
   }
 
-  if (!open) {
+  async function handleVerify(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    reset();
+    const sourceUrl = String(new FormData(event.currentTarget).get("sourceUrl") || "").trim();
+    if (!sourceUrl) {
+      setError("Source URL is required so future auditors can see what you checked.");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const res = await csrfFetch(`/api/admin/platforms/${platformId}/verify`, {
+          method: "POST",
+          body: JSON.stringify({ sourceUrl, contactChangedAt }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setError(
+            body.error === "second_admin_required"
+              ? "You made the last change to this contact, so a different admin has to verify it."
+              : body.error === "contact_changed"
+                ? "This contact changed after the page loaded. Reload and check it again."
+                : body.error || `Verification failed (${res.status})`,
+          );
+          return;
+        }
+        setSuccess("Contact marked verified.");
+        setMode("closed");
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "network_error");
+      }
+    });
+  }
+
+  const messages = (
+    <>
+      {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
+      {success ? <p className="text-xs text-[var(--brand)]">{success}</p> : null}
+    </>
+  );
+
+  if (mode === "closed") {
     return (
-      <button
-        type="button"
-        onClick={() => {
-          reset();
-          setOpen(true);
-        }}
-        className="eyebrow text-[var(--brand)] underline-offset-4 hover:underline"
+      <div className="grid gap-2">
+        <div className="flex gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              reset();
+              setMode("edit");
+            }}
+            className="eyebrow text-[var(--brand)] underline-offset-4 hover:underline"
+          >
+            Edit
+          </button>
+          {changedByViewer ? null : (
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                setMode("verify");
+              }}
+              className="eyebrow text-[var(--brand)] underline-offset-4 hover:underline"
+            >
+              Verify
+            </button>
+          )}
+        </div>
+        {changedByViewer && !verified ? (
+          <p className="muted text-xs">You changed this contact. A second admin has to verify it.</p>
+        ) : null}
+        {messages}
+      </div>
+    );
+  }
+
+  if (mode === "verify") {
+    return (
+      <form
+        onSubmit={handleVerify}
+        className="mt-4 grid gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-4 text-sm"
+        aria-label={`Verify grievance officer details for ${platformName}`}
       >
-        Edit
-      </button>
+        <label className="grid gap-1">
+          <span className="eyebrow">
+            Source URL (required)
+          </span>
+          <input
+            name="sourceUrl"
+            type="url"
+            required
+            placeholder="https://help.platform.com/grievance-officer"
+            className="font-mono rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] px-3 py-2 text-xs"
+          />
+          <span className="muted text-xs">
+            Check every contact detail for this platform against its official public page, then link that page here.
+          </span>
+        </label>
+
+        {messages}
+
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={pending}
+            className="btn btn-primary text-xs disabled:opacity-60"
+          >
+            {pending ? "Saving…" : "Mark contact verified"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("closed")}
+            className="btn btn-secondary text-xs"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
     );
   }
 
@@ -134,13 +248,11 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
         </span>
       </label>
 
-      <label className="flex items-center gap-2 text-xs">
-        <input type="checkbox" name="markVerified" />
-        <span>Mark contact verified by human (sets last-verified timestamp)</span>
-      </label>
+      <p className="muted text-xs">
+        Saving a change marks this contact unverified. A second admin then has to verify it before notices go there.
+      </p>
 
-      {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
-      {success ? <p className="text-xs text-[var(--brand)]">{success}</p> : null}
+      {messages}
 
       <div className="flex gap-3">
         <button
@@ -152,7 +264,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={() => setMode("closed")}
           className="btn btn-secondary text-xs"
         >
           Cancel

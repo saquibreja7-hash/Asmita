@@ -15,6 +15,9 @@ const builtConfig = JSON.parse(await readFile(builtConfigPath, "utf8"));
 const productionConfig = {
   ...builtConfig,
   name: production.name,
+  // Serve only the custom domain, where the zone WAF and rate limits apply, not a *.workers.dev hostname.
+  workers_dev: production.workers_dev,
+  preview_urls: production.preview_urls,
   routes: production.routes,
   hyperdrive: production.hyperdrive,
   // Runs the Worker next to the Mumbai database; each request makes several queries.

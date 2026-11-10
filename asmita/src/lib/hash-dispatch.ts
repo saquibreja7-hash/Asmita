@@ -11,12 +11,14 @@ import {
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
 import { buildSignedHashAnnex, voidSignaturesWithRejectedFingerprints } from "@/lib/case-hash-annex";
+import { loadSignedTemplate, voidHashAdvisoryForChangedTemplate } from "@/lib/signed-template";
 
 // Dispatches the signed hash advisory to each target email platform.
 // Hard gates, in order:
 //   1. ENABLE_HASH_UPLOAD must be on (checked by callers' routes).
 //   2. Case must have a signedHashAdvisoryPdf - survivor must have reviewed and signed.
-//   3. The HASH_ADVISORY template must be human-legally reviewed (or DEV bypass).
+//   3. The HASH_ADVISORY template must be human-legally reviewed (or DEV bypass),
+//      and must be the template the advisory was signed against.
 //   4. Only the fingerprints the signed advisory lists are dispatched, and only
 //      once every one of them is APPROVED (admin-reviewed).
 //   5. Recipients must be human-verified platform contacts.
@@ -44,6 +46,8 @@ export async function dispatchHashAdvisories(input: {
       referenceNumber: true,
       signedHashAdvisoryPdf: true,
       hashAdvisorySignedHashIds: true,
+      hashAdvisorySignedTemplateId: true,
+      hashAdvisorySignedTemplateDigest: true,
     },
   });
   if (!dbCase) throw new Error("case_not_found");
@@ -66,14 +70,39 @@ export async function dispatchHashAdvisories(input: {
   const submissions = signed.annex.hashSubmissionIds.map((id) => ({ id }));
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
-  const template = await db.noticeTemplate.findFirst({
-    where: {
-      templateType: "HASH_ADVISORY",
-      isActive: true,
-      ...(skipLegalGate ? {} : { reviewedByLegal: true }),
-    },
-    orderBy: { version: "desc" },
-  });
+  let template;
+  if (dbCase.hashAdvisorySignedTemplateId) {
+    // The email body comes from the template the survivor signed, never a
+    // newer one, so it matches the attached PDF.
+    const pinned = await loadSignedTemplate(
+      { id: dbCase.hashAdvisorySignedTemplateId, digest: dbCase.hashAdvisorySignedTemplateDigest },
+      { templateType: "HASH_ADVISORY" },
+      skipLegalGate,
+    );
+    if (!pinned.ok) {
+      if (pinned.reason === "signed_template_changed") {
+        await voidHashAdvisoryForChangedTemplate({
+          caseId: input.caseId,
+          signedHashAdvisoryPdf: dbCase.signedHashAdvisoryPdf,
+          signedHashIds: dbCase.hashAdvisorySignedHashIds,
+          actorId: input.actorId,
+        });
+      }
+      throw new Error(pinned.reason);
+    }
+    template = pinned.template;
+  } else {
+    // Signed before templates were pinned: keep the selection those
+    // signatures were made under.
+    template = await db.noticeTemplate.findFirst({
+      where: {
+        templateType: "HASH_ADVISORY",
+        isActive: true,
+        ...(skipLegalGate ? {} : { reviewedByLegal: true }),
+      },
+      orderBy: { version: "desc" },
+    });
+  }
   if (!template) throw new Error("hash_advisory_template_missing");
 
   // Render the notice body ONCE. The HASH_ADVISORY template is platform-agnostic;

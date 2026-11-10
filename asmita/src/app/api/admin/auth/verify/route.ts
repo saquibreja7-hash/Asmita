@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { z } from "zod";
-import { createAdminIdentity, getAdminRole, isAdminEmail } from "@/lib/auth/admin-allowlist";
+import { createAdminIdentity, resolveAdminRole } from "@/lib/auth/admin-allowlist";
 import { verifyAdminTotp } from "@/lib/auth/admin-mfa";
 import { getAdminMfaSecret, touchAdminMfa } from "@/lib/auth/admin-mfa-store";
 import { consumeAdminEnrolmentCode } from "@/lib/auth/admin-enrolment";
@@ -26,17 +26,30 @@ export async function POST(request: Request) {
   }
 
   const parsed = schema.safeParse(await request.json());
-  if (!parsed.success || !isAdminEmail(parsed.data.email)) {
-    await logSecurityEvent({ event: "admin_denied", route: "/api/admin/auth/verify" });
-    return NextResponse.json({ error: "admin_not_allowed" }, { status: 403 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
-
+  // A non-admin gets the same 401 and the same rate limit as a wrong code, so
+  // the response does not show whether an address is an admin.
+  const access = resolveAdminRole(parsed.data.email);
   const admin = createAdminIdentity(parsed.data.email);
   const attempts = await checkRateLimitAsync(`admin-verify:${admin.emailHash}`, 5, 15 * 60_000);
   if (!attempts.allowed) {
     await logSecurityEvent({ event: "rate_limit_exceeded", actorHash: admin.emailHash, route: "/api/admin/auth/verify" });
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
+  if (!access.ok) {
+    // An allowlisted email without a valid ADMIN_ROLES entry is a
+    // misconfiguration: record its hash and reason so operators can see it.
+    const misconfigured = access.reason !== "not_allowlisted";
+    await logSecurityEvent({
+      event: "admin_denied",
+      route: "/api/admin/auth/verify",
+      ...(misconfigured ? { actorHash: admin.emailHash, reason: access.reason } : {}),
+    });
+    return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+  }
+
   const otpOk = await verifyOtp(parsed.data.email, parsed.data.otp);
   const skipMfa = devFlagEnabled("DEV_SKIP_ADMIN_MFA");
   // Enrolled admins must use their own authenticator. An admin who has not
@@ -65,7 +78,7 @@ export async function POST(request: Request) {
   const session = await signAdminSession({
     sub: admin.id,
     emailHash: admin.emailHash,
-    adminRole: getAdminRole(parsed.data.email),
+    adminRole: access.role,
     mfaComplete: enrolled || skipMfa,
   });
   await writeAuditLog({

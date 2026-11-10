@@ -8,7 +8,9 @@ import { db } from "@/lib/db";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { hasRetiredPortalInstructions, renderNoticeTemplate } from "@/lib/notice-generator";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
-import { generateNoticePdf } from "@/lib/notice-pdf";
+import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
+import { isPdfSafeText } from "@/lib/pdf-text";
+import { templateDigest, templateRef } from "@/lib/signed-template";
 import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
 import { isUrlExpired, urlRetentionCutoff } from "@/lib/url-retention";
 
@@ -19,6 +21,9 @@ const schema = z.object({
   name: z.string().min(1).max(100),
   contact: z.string().trim().pipe(z.email().max(200)),
   signature: z.string().min(1).max(100),
+  // The reference preview-notice returned for the text on screen. Required:
+  // every signing form is in this repo and sends it.
+  templateRef: z.string().min(1).max(200),
 }).strict().refine(
   (d) => !FORBIDDEN_CONTROL.test(d.name) && !FORBIDDEN_CONTROL.test(d.contact) && !FORBIDDEN_CONTROL.test(d.signature),
   { message: "invalid_characters" },
@@ -101,7 +106,14 @@ export async function POST(
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
 
-  const { urlId, name, contact, signature } = parsed.data;
+  const { urlId, contact } = parsed.data;
+  // NFC so an accented Latin name typed as letter plus accent is still drawable.
+  const name = parsed.data.name.normalize("NFC");
+  const signature = parsed.data.signature.normalize("NFC");
+  // The PDF font draws Latin letters only. Ask before signing, never transliterate.
+  if (!isPdfSafeText(name) || !isPdfSafeText(signature)) {
+    return NextResponse.json({ error: "name_script_unsupported" }, { status: 400 });
+  }
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
   const allowedStatuses: UrlStatus[] = skipLegalGate
     ? ["NOTICE_QUEUED", "PENDING_REVIEW"]
@@ -147,6 +159,11 @@ export async function POST(
   if (hasRetiredPortalInstructions(template.bodyTemplate)) {
     return NextResponse.json({ error: "notice_template_requires_review" }, { status: 409 });
   }
+  // The survivor signs only the text they previewed. If another template
+  // became current since, they review the new text first.
+  if (templateRef(template) !== parsed.data.templateRef) {
+    return NextResponse.json({ error: "notice_changed_since_preview" }, { status: 409 });
+  }
 
   const decryptedUrl = decryptField(url.urlEncrypted);
   const variables = {
@@ -164,21 +181,33 @@ export async function POST(
     ? `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex.text}`
     : renderNoticeTemplate(template.bodyTemplate, variables);
 
-  const pdfBytes = await generateNoticePdf({
-    platformName: url.platform.name,
-    caseReference: url.case.referenceNumber,
-    noticeSubject: subject,
-    noticeBody: body,
-    date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
-    survivorName: name,
-    survivorContact: contact,
-    signature,
-  });
+  let pdfBytes: Buffer;
+  try {
+    pdfBytes = await generateNoticePdf({
+      platformName: url.platform.name,
+      caseReference: url.case.referenceNumber,
+      noticeSubject: subject,
+      noticeBody: body,
+      date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
+      survivorName: name,
+      survivorContact: contact,
+      signature,
+    });
+  } catch (err) {
+    const error = noticePdfErrorCode(err);
+    return NextResponse.json({ error }, { status: error === "name_script_unsupported" ? 400 : 409 });
+  }
 
   const encryptedPdf = encryptField(Buffer.from(pdfBytes).toString("base64"));
+  // The template the survivor signed is pinned, so dispatch emails the same text.
   const saved = await db.submittedUrl.updateMany({
     where: { id: url.id, urlEncrypted: url.urlEncrypted, submittedAt: { gt: urlRetentionCutoff() } },
-    data: { signedNoticePdf: encryptedPdf, signedHashSubmissionIds: annex.hashSubmissionIds },
+    data: {
+      signedNoticePdf: encryptedPdf,
+      signedHashSubmissionIds: annex.hashSubmissionIds,
+      signedTemplateId: template.id,
+      signedTemplateDigest: templateDigest(template),
+    },
   });
   if (!saved.count) return NextResponse.json({ error: "url_expired" }, { status: 410 });
   // The declaration is signed here, by a signed document, never by a checkbox.

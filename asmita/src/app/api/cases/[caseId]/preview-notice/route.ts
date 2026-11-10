@@ -7,9 +7,10 @@ import { decryptField } from "@/lib/encryption";
 import { isUrlExpired } from "@/lib/url-retention";
 import { hasRetiredPortalInstructions, renderNoticeTemplate } from "@/lib/notice-generator";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
-import { generateNoticePdf } from "@/lib/notice-pdf";
+import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
 import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
 import { findSignableNotice } from "@/lib/signable-notice";
+import { TEMPLATE_REF_HEADER, templateRef } from "@/lib/signed-template";
 
 export async function GET(
   req: NextRequest,
@@ -48,18 +49,19 @@ export async function GET(
   const templateType = templateTypeForNoticeBasis(url.platform.noticeBasis);
   if (!templateType) return NextResponse.json({ error: "form_only_platform" }, { status: 404 });
 
-  const template = await db.noticeTemplate.findFirst({
-    where: {
-      templateType,
-      isActive: true,
-      ...(skipLegalGate ? {} : { reviewedByLegal: true }),
-      OR: [{ platformId: url.platform.id }, { platformId: null }],
-    },
-    orderBy: [{ platformId: "desc" }, { version: "desc" }],
-  });
-  if (!template) return NextResponse.json({ error: "no_template" }, { status: 404 });
+  // The template findSignableNotice chose (same selection as signing), so the
+  // reference returned below names exactly the text rendered here.
+  const template = url.template;
   if (hasRetiredPortalInstructions(template.bodyTemplate)) {
     return NextResponse.json({ error: "notice_template_requires_review" }, { status: 409 });
+  }
+  // ?templateRef= asks for the text the review screen already holds a
+  // reference to. If another template is current now, show nothing rather
+  // than different text under that reference.
+  const ref = templateRef(template);
+  const expectedRef = req.nextUrl.searchParams.get("templateRef");
+  if (expectedRef !== null && expectedRef !== ref) {
+    return NextResponse.json({ error: "notice_changed_since_preview" }, { status: 409 });
   }
 
   if (!url.urlEncrypted || isUrlExpired(url.submittedAt)) {
@@ -79,13 +81,18 @@ export async function GET(
     ? `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex.text}`
     : renderNoticeTemplate(template.bodyTemplate, variables);
 
-  const pdfBytes = await generateNoticePdf({
-    platformName: url.platform.name,
-    caseReference: record.referenceNumber,
-    noticeSubject: subject,
-    noticeBody: body,
-    date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
-  });
+  let pdfBytes: Buffer;
+  try {
+    pdfBytes = await generateNoticePdf({
+      platformName: url.platform.name,
+      caseReference: record.referenceNumber,
+      noticeSubject: subject,
+      noticeBody: body,
+      date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
+    });
+  } catch (err) {
+    return NextResponse.json({ error: noticePdfErrorCode(err) }, { status: 409 });
+  }
 
   // Copy into an exact-sized buffer: Buffer.buffer may be Node's shared 8KB
   // pool with a non-zero offset, which serves garbage bytes around the PDF.
@@ -97,6 +104,8 @@ export async function GET(
       // The review screen signs exactly this link, so the signature covers the
       // notice the survivor read.
       "X-Notice-Url-Id": url.id,
+      // Sent back when signing; signing refuses if the template changed since.
+      [TEMPLATE_REF_HEADER]: ref,
     },
   });
 }

@@ -1,4 +1,5 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
+import type { DB } from "@/generated/kysely-types";
 import { generateCaseReference } from "@/lib/case-reference";
 import { encryptField, decryptField } from "@/lib/encryption";
 import { hashEmail } from "@/lib/hash";
@@ -7,8 +8,9 @@ import { findPlatformByDomain } from "@/lib/platforms";
 import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import { logSecurityEvent } from "@/lib/security-log";
 import { randomUUID } from "node:crypto";
-import { sql } from "kysely";
+import { sql, type Transaction } from "kysely";
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -122,7 +124,8 @@ export async function upsertVerifiedUser(
 
   if (isDevNoDb()) {
     const memStore = devUserStore();
-    if (!memStore.has(emailHash)) {
+    // A memory hard delete drops the user from store.ts; register them again.
+    if (!memStore.has(emailHash) || store.getUserStatus(memStore.get(emailHash)!.id) === "gone") {
       const id = `dev-user-${emailHash.slice(0, 8)}`;
       memStore.set(emailHash, { id, emailHash });
       // Also register in store.ts so getVerifiedUserEmail can decrypt it.
@@ -161,12 +164,18 @@ export async function getVerifiedUserEmail(userId: string): Promise<string | nul
   return user ? decryptField(user.emailEncrypted) : null;
 }
 
-export async function isUserDeactivated(userId: string): Promise<boolean> {
-  if (isDevNoDb()) return false;
-  if (usesWorkerKysely()) return Boolean((await getWorkerDb().selectFrom("User").select("deactivatedAt").where("id", "=", userId).executeTakeFirst())?.deactivatedAt);
-  const db = await getPrismaDb();
-  const user = await db.user.findUnique({ where: { id: userId }, select: { deactivatedAt: true } });
-  return Boolean(user?.deactivatedAt);
+/**
+ * Whether a survivor session's account may still act: "deactivated" once
+ * deletion is requested, "gone" when the account does not exist or a hard
+ * delete has tombstoned it (emailHash "deleted:<id>").
+ */
+export async function getSessionUserStatus(userId: string): Promise<"active" | "deactivated" | "gone"> {
+  if (isDevNoDb()) return store.getUserStatus(userId);
+  const user = usesWorkerKysely()
+    ? await getWorkerDb().selectFrom("User").select(["emailHash", "deactivatedAt"]).where("id", "=", userId).executeTakeFirst()
+    : await (await getPrismaDb()).user.findUnique({ where: { id: userId }, select: { emailHash: true, deactivatedAt: true } });
+  if (!user || user.emailHash.startsWith("deleted:")) return "gone";
+  return user.deactivatedAt ? "deactivated" : "active";
 }
 
 export async function createCase(userId: string): Promise<{ id: string; referenceNumber: string }> {
@@ -643,72 +652,256 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
   return { deactivatedAt: deactivatedAt.toISOString(), hardDeleteAfter: hardDeleteAfter.toISOString() };
 }
 
-export async function hardDeleteDueUsers(now = new Date()): Promise<string[]> {
-  if (usesWorkerKysely()) {
-    const workerDb = getWorkerDb();
-    const dueJobs = await workerDb.selectFrom("DeletionJob as j")
-      .innerJoin("Case as c", "c.id", "j.caseId")
-      .select(["j.id as jobId", "c.id as caseId", "c.userId"])
-      .where("j.status", "=", "SCHEDULED")
-      .where("j.scheduledAt", "<=", now)
-      .execute();
-    const deletedUserIds: string[] = [];
-    for (const job of dueJobs) {
-      try {
-        await workerDb.transaction().execute(async (tx) => {
-          await tx.deleteFrom("SubmittedUrl").where("caseId", "=", job.caseId).execute();
-          await tx.updateTable("Case").set({ status: "CLOSED", updatedAt: new Date() }).where("id", "=", job.caseId).execute();
-          await tx.updateTable("User").set({ emailEncrypted: "deleted", emailHash: `deleted:${job.userId}`, deactivatedAt: null }).where("id", "=", job.userId).execute();
-          await tx.updateTable("DeletionJob").set({ status: "COMPLETED", completedAt: new Date() }).where("id", "=", job.jobId).execute();
-        });
-        await writeAuditLog({ eventType: "CASE_HARD_DELETED", entityType: "User", entityId: job.userId, data: { retained: "audit_metadata_only" } });
-        if (!deletedUserIds.includes(job.userId)) deletedUserIds.push(job.userId);
-      } catch (error) {
-        await workerDb.updateTable("DeletionJob").set({ status: "FAILED", error: String(error) }).where("id", "=", job.jobId).execute();
-      }
-    }
-    return deletedUserIds;
-  }
-  const db = await getPrismaDb();
-  const dueJobs = await db.deletionJob.findMany({
-    where: { status: "SCHEDULED", scheduledAt: { lte: now } },
-    include: { case: { select: { id: true, userId: true } } },
+// What a hard delete leaves behind, recorded in the CASE_HARD_DELETED audit
+// entry. Everything else about the survivor and their cases is deleted or cleared.
+export const HARD_DELETE_RETAINED = {
+  user: "id, role, verification flags, declared age and created date; no email or email hash",
+  case: "id, reference number, status CLOSED, NGO-verified flag and created/updated dates",
+  deletionJob: "id, case id, dates and status",
+  adminAccessLog: "which admin opened which case or link, and when; the reason text is cleared",
+  auditLog: "earlier entries are append-only and unchanged",
+} as const;
+
+// A failed deletion is marked FAILED and retried by every later sweep until it
+// succeeds. FAILED rows are what countFailedDeletionJobs reports.
+const OPEN_DELETION_STATUSES = ["SCHEDULED", "FAILED"] as const;
+
+export type HardDeleteCounts = {
+  cases: number;
+  links: number;
+  notices: number;
+  escalations: number;
+  fingerprints: number;
+  fingerprintDispatches: number;
+  deliveryProofs: number;
+  feedback: number;
+  sessions: number;
+  otpCodes: number;
+};
+
+function emptyHardDeleteCounts(cases: number): HardDeleteCounts {
+  return {
+    cases, links: 0, notices: 0, escalations: 0, fingerprints: 0,
+    fingerprintDispatches: 0, deliveryProofs: 0, feedback: 0, sessions: 0, otpCodes: 0,
+  };
+}
+
+/** A short, PII-free label for a failed deletion: an error code and constraint, never a message. */
+function deletionErrorCode(err: unknown): string {
+  const e = err as { code?: unknown; constraint?: unknown; meta?: { constraint?: unknown } } | null;
+  const parts = [e?.code, e?.constraint ?? e?.meta?.constraint]
+    .filter((part): part is string => typeof part === "string" && /^[\w.:-]{1,80}$/.test(part));
+  if (parts.length) return parts.join(" ");
+  return err instanceof Error && /^\w{1,40}$/.test(err.name) ? err.name : "unknown_error";
+}
+
+function messageIdsFromAudit(rows: Array<{ data: unknown }>): string[] {
+  return rows.flatMap(({ data }) => {
+    const messageId = (data as { messageId?: unknown } | null)?.messageId;
+    return typeof messageId === "string" && messageId ? [messageId] : [];
   });
+}
+
+/**
+ * Erases one user and every case they own inside the caller's transaction.
+ * Rows that carry the survivor's content or contact are deleted children
+ * first (every foreign key here is RESTRICT); the User and Case rows stay as
+ * cleared tombstones so deletion jobs and the append-only audit log still
+ * point at something.
+ */
+async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Date): Promise<HardDeleteCounts> {
+  const caseRows = await tx.selectFrom("Case").select(["id", "referenceNumber"]).where("userId", "=", userId).forUpdate().execute();
+  const caseIds = caseRows.map((row) => row.id);
+  const user = await tx.selectFrom("User").select("emailHash").where("id", "=", userId).executeTakeFirst();
+  const counts = emptyHardDeleteCounts(caseIds.length);
+  const deleted = (result: Array<{ numDeletedRows: bigint }>) => Number(result[0]?.numDeletedRows ?? 0);
+
+  if (caseIds.length) {
+    const urlIds = (await tx.selectFrom("SubmittedUrl").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
+    const notices = urlIds.length
+      ? await tx.selectFrom("Notice").select(["id", "messageId"]).where("urlId", "in", urlIds).execute()
+      : [];
+    const noticeIds = notices.map((n) => n.id);
+    const hashIds = (await tx.selectFrom("HashSubmission").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
+    // Hash advisories have no Notice row; their message ids are only in the audit log.
+    const advisoryAudit = await tx.selectFrom("audit_log").select("data")
+      .where("eventType", "=", "HASH_DISPATCHED").where("entityId", "in", caseIds).execute();
+    const messageIds = [
+      ...notices.flatMap((n) => (n.messageId ? [n.messageId] : [])),
+      ...messageIdsFromAudit(advisoryAudit),
+    ];
+
+    if (messageIds.length) {
+      counts.deliveryProofs = deleted(await tx.deleteFrom("EmailDeliveryProof").where("messageId", "in", messageIds).execute());
+    }
+    if (hashIds.length || noticeIds.length) {
+      counts.fingerprintDispatches = deleted(await tx.deleteFrom("HashDispatch").where((eb) => eb.or([
+        ...(hashIds.length ? [eb("hashSubmissionId", "in", hashIds)] : []),
+        ...(noticeIds.length ? [eb("noticeId", "in", noticeIds)] : []),
+      ])).execute());
+    }
+    if (noticeIds.length) {
+      counts.escalations = deleted(await tx.deleteFrom("Escalation").where("noticeId", "in", noticeIds).execute());
+      counts.notices = deleted(await tx.deleteFrom("Notice").where("id", "in", noticeIds).execute());
+    }
+    if (urlIds.length) {
+      await tx.deleteFrom("UrlPortalToken").where("urlId", "in", urlIds).execute();
+      counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
+    }
+    if (hashIds.length) {
+      counts.fingerprints = deleted(await tx.deleteFrom("HashSubmission").where("id", "in", hashIds).execute());
+    }
+    counts.feedback = deleted(await tx.deleteFrom("Feedback").where((eb) => eb.or([
+      eb("caseId", "in", caseIds),
+      eb("caseReference", "in", caseRows.map((row) => row.referenceNumber)),
+    ])).execute());
+    await tx.updateTable("AdminAccessLog").set({ reason: null }).where("entityId", "in", [...caseIds, ...urlIds]).execute();
+    await tx.updateTable("Case").set({
+      status: "CLOSED", registrationKeyHash: null, state: null, city: null, ngoVerifierId: null,
+      declarationSignedAt: null, declarationIpHash: null, firPackageGeneratedAt: null,
+      signedHashAdvisoryPdf: null, hashAdvisoryPlatformIds: [], hashAdvisorySignedHashIds: [], updatedAt: now,
+    }).where("id", "in", caseIds).execute();
+    await tx.updateTable("DeletionJob").set({ status: "COMPLETED", completedAt: now, error: null })
+      .where("caseId", "in", caseIds).where("status", "in", [...OPEN_DELETION_STATUSES]).execute();
+  }
+
+  counts.sessions = deleted(await tx.deleteFrom("SessionToken").where("userId", "=", userId).execute());
+  if (user && !user.emailHash.startsWith("deleted:")) {
+    counts.otpCodes = deleted(await tx.deleteFrom("OtpToken").where("emailHash", "=", user.emailHash).execute());
+  }
+  await tx.updateTable("User").set({
+    emailEncrypted: "deleted", emailHash: `deleted:${userId}`, deactivatedAt: null, preferredLocale: null, lastActiveAt: null,
+  }).where("id", "=", userId).execute();
+  return counts;
+}
+
+/** The Prisma (Node) twin of eraseUserWithKysely; keep the two in step. */
+async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string, now: Date): Promise<HardDeleteCounts> {
+  const caseRows = await tx.case.findMany({ where: { userId }, select: { id: true, referenceNumber: true } });
+  const caseIds = caseRows.map((row) => row.id);
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { emailHash: true } });
+  const counts = emptyHardDeleteCounts(caseIds.length);
+
+  if (caseIds.length) {
+    const urlIds = (await tx.submittedUrl.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
+    const notices = await tx.notice.findMany({ where: { urlId: { in: urlIds } }, select: { id: true, messageId: true } });
+    const noticeIds = notices.map((n) => n.id);
+    const hashIds = (await tx.hashSubmission.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
+    // Hash advisories have no Notice row; their message ids are only in the audit log.
+    const advisoryAudit = await tx.auditLog.findMany({
+      where: { eventType: "HASH_DISPATCHED", entityId: { in: caseIds } }, select: { data: true },
+    });
+    const messageIds = [
+      ...notices.flatMap((n) => (n.messageId ? [n.messageId] : [])),
+      ...messageIdsFromAudit(advisoryAudit),
+    ];
+
+    counts.deliveryProofs = (await tx.emailDeliveryProof.deleteMany({ where: { messageId: { in: messageIds } } })).count;
+    counts.fingerprintDispatches = (await tx.hashDispatch.deleteMany({
+      where: { OR: [{ hashSubmissionId: { in: hashIds } }, { noticeId: { in: noticeIds } }] },
+    })).count;
+    counts.escalations = (await tx.escalation.deleteMany({ where: { noticeId: { in: noticeIds } } })).count;
+    counts.notices = (await tx.notice.deleteMany({ where: { id: { in: noticeIds } } })).count;
+    await tx.urlPortalToken.deleteMany({ where: { urlId: { in: urlIds } } });
+    counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
+    counts.fingerprints = (await tx.hashSubmission.deleteMany({ where: { id: { in: hashIds } } })).count;
+    counts.feedback = (await tx.feedback.deleteMany({
+      where: { OR: [{ caseId: { in: caseIds } }, { caseReference: { in: caseRows.map((row) => row.referenceNumber) } }] },
+    })).count;
+    await tx.adminAccessLog.updateMany({ where: { entityId: { in: [...caseIds, ...urlIds] } }, data: { reason: null } });
+    await tx.case.updateMany({
+      where: { id: { in: caseIds } },
+      data: {
+        status: "CLOSED", registrationKeyHash: null, state: null, city: null, ngoVerifierId: null,
+        declarationSignedAt: null, declarationIpHash: null, firPackageGeneratedAt: null,
+        signedHashAdvisoryPdf: null, hashAdvisoryPlatformIds: [], hashAdvisorySignedHashIds: [], updatedAt: now,
+      },
+    });
+    await tx.deletionJob.updateMany({
+      where: { caseId: { in: caseIds }, status: { in: [...OPEN_DELETION_STATUSES] } },
+      data: { status: "COMPLETED", completedAt: now, error: null },
+    });
+  }
+
+  counts.sessions = (await tx.sessionToken.deleteMany({ where: { userId } })).count;
+  if (user && !user.emailHash.startsWith("deleted:")) {
+    counts.otpCodes = (await tx.otpToken.deleteMany({ where: { emailHash: user.emailHash } })).count;
+  }
+  await tx.user.update({
+    where: { id: userId },
+    data: { emailEncrypted: "deleted", emailHash: `deleted:${userId}`, deactivatedAt: null, preferredLocale: null, lastActiveAt: null },
+  });
+  return counts;
+}
+
+/**
+ * Hard-deletes every user with a deletion due. Each user is erased in one
+ * transaction, so a failure leaves nothing half-deleted; that user's jobs are
+ * then marked FAILED (with an error code, never PII), logged, and retried on
+ * every later sweep until they succeed.
+ */
+export async function hardDeleteDueUsers(now = new Date()): Promise<string[]> {
+  if (isDevNoDb()) return store.hardDeleteDueUsers(now);
+
+  const kysely = usesWorkerKysely();
+  const dueJobs = kysely
+    ? await getWorkerDb().selectFrom("DeletionJob as j")
+      .innerJoin("Case as c", "c.id", "j.caseId")
+      .select(["j.id as jobId", "c.userId"])
+      .where("j.status", "in", [...OPEN_DELETION_STATUSES])
+      .where("j.scheduledAt", "<=", now)
+      .execute()
+    : (await (await getPrismaDb()).deletionJob.findMany({
+      where: { status: { in: [...OPEN_DELETION_STATUSES] }, scheduledAt: { lte: now } },
+      select: { id: true, case: { select: { userId: true } } },
+    })).map((job) => ({ jobId: job.id, userId: job.case.userId }));
+
+  const jobsByUser = new Map<string, string[]>();
+  for (const job of dueJobs) jobsByUser.set(job.userId, [...(jobsByUser.get(job.userId) ?? []), job.jobId]);
 
   const deletedUserIds: string[] = [];
-
-  for (const job of dueJobs) {
-    const userId = job.case.userId;
+  for (const [userId, jobIds] of jobsByUser) {
     try {
-      await db.submittedUrl.deleteMany({ where: { caseId: job.case.id } });
-      await db.case.update({ where: { id: job.case.id }, data: { status: "CLOSED" } });
-      await db.user.update({
-        where: { id: userId },
-        data: {
-          emailEncrypted: "deleted",
-          emailHash: `deleted:${userId}`,
-          deactivatedAt: null,
-        },
-      });
-      await db.deletionJob.update({
-        where: { id: job.id },
-        data: { status: "COMPLETED", completedAt: new Date() },
-      });
-
+      const counts = kysely
+        ? await getWorkerDb().transaction().execute((tx) => eraseUserWithKysely(tx, userId, now))
+        : await (await getPrismaDb()).$transaction((tx) => eraseUserWithPrisma(tx, userId, now));
       await writeAuditLog({
         eventType: "CASE_HARD_DELETED",
         entityType: "User",
         entityId: userId,
-        data: { retained: "audit_metadata_only" },
+        data: { removed: counts, retained: HARD_DELETE_RETAINED },
       });
-
-      if (!deletedUserIds.includes(userId)) deletedUserIds.push(userId);
+      deletedUserIds.push(userId);
     } catch (err) {
-      await db.deletionJob.update({ where: { id: job.id }, data: { status: "FAILED", error: String(err) } });
+      const error = deletionErrorCode(err);
+      try {
+        if (kysely) {
+          await getWorkerDb().updateTable("DeletionJob").set({ status: "FAILED", error })
+            .where("id", "in", jobIds).where("status", "in", [...OPEN_DELETION_STATUSES]).execute();
+        } else {
+          await (await getPrismaDb()).deletionJob.updateMany({
+            where: { id: { in: jobIds }, status: { in: [...OPEN_DELETION_STATUSES] } },
+            data: { status: "FAILED", error },
+          });
+        }
+      } finally {
+        await logSecurityEvent({ event: "account_deletion_failed", route: "cron:sweep-due-jobs", reason: error });
+      }
     }
   }
-
   return deletedUserIds;
+}
+
+/** Deletions whose last attempt failed and that wait for the next sweep. */
+export async function countFailedDeletionJobs(): Promise<number> {
+  if (isDevNoDb()) return 0;
+  if (usesWorkerKysely()) {
+    const row = await getWorkerDb().selectFrom("DeletionJob")
+      .select((eb) => eb.fn.countAll<string>().as("count"))
+      .where("status", "=", "FAILED").executeTakeFirst();
+    return Number(row?.count ?? 0);
+  }
+  return (await getPrismaDb()).deletionJob.count({ where: { status: "FAILED" } });
 }
 
 export async function listAllCases(): Promise<DisplayCase[]> {

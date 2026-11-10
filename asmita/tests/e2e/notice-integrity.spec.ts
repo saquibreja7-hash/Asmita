@@ -215,11 +215,17 @@ test.describe("notice integrity", () => {
     );
 
     await markTemplateReviewed("HASH_ADVISORY");
+    // Signing sends back the reference of the text the preview showed.
+    const preview = await page.request.get(`/api/cases/${caseId}/preview-hash-advisory`);
+    expect(preview.ok(), await preview.text()).toBe(true);
+    const templateRef = preview.headers()["x-notice-template-ref"];
+    expect(templateRef).toBeTruthy();
     const signed = await post(page.request, `/api/cases/${caseId}/sign-hash-advisory`, {
       name: "Synthetic Survivor",
       contact: "survivor@example.invalid",
       signature: "Synthetic Survivor",
       platformIds: [whatsapp],
+      templateRef,
     });
     expect(signed.ok(), await signed.text()).toBe(true);
     await addFingerprint(page, caseId);

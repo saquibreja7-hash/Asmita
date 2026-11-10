@@ -7,12 +7,14 @@ vi.mock("@/lib/db", () => ({
     notice: { findMany: vi.fn() },
     hashSubmission: { groupBy: vi.fn(), findMany: vi.fn() },
     platform: { findMany: vi.fn() },
-    noticeTemplate: { findMany: vi.fn(), findFirst: vi.fn() },
+    noticeTemplate: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
+    hashDispatch: { count: vi.fn() },
     auditLog: { findMany: vi.fn() },
   },
 }));
 
 import { db } from "@/lib/db";
+import { templateDigest } from "@/lib/signed-template";
 import { PLATFORM_DEADLINE_HOURS } from "@/lib/escalation-ladder";
 import {
   deriveCaseWork,
@@ -415,6 +417,96 @@ describe("getAdminCaseDetail", () => {
 
     expect(detail?.work.nextAction).toBe("awaiting_reply");
     expect(detail?.links[0]).toMatchObject({ noticeSent: true, dispatch: null, ladderStep: 1 });
+  });
+
+  describe("a signature pinned to the template it was signed with", () => {
+    const pinnedTemplate = {
+      id: "t-signed",
+      platformId: null,
+      templateType: "IT_RULES_2021",
+      subjectTemplate: "Notice {{caseReference}}",
+      bodyTemplate: "Signed text {{url}}",
+      version: 2,
+      isActive: true,
+      reviewedByLegal: true,
+      reviewedAt: hoursAgo(72),
+      reviewedByName: "Earlier Reviewer",
+    };
+
+    function pinLink(digest = templateDigest(pinnedTemplate)) {
+      const rows = mocked.submittedUrl.findMany.getMockImplementation() as (args: unknown) => Promise<unknown>;
+      mocked.submittedUrl.findMany.mockImplementation((args: { where: Record<string, unknown> }) =>
+        args.where.signedNoticePdf
+          ? Promise.resolve([{ id: "l1", signedTemplateId: "t-signed", signedTemplateDigest: digest }])
+          : rows(args),
+      );
+    }
+
+    it("labels Send notice with the pinned template, not the newest one", async () => {
+      mockSignedYoutubeCase();
+      pinLink();
+      mocked.noticeTemplate.findUnique.mockResolvedValue(pinnedTemplate);
+
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+
+      expect(detail?.links[0]).toMatchObject({
+        dispatch: { templateVersion: 2, reviewedByName: "Earlier Reviewer", pinned: true },
+        dispatchRefusal: null,
+      });
+      expect(mocked.noticeTemplate.findUnique).toHaveBeenCalledWith({ where: { id: "t-signed" } });
+      // The newest-template lookup is only for links signed before pinning.
+      expect(mocked.noticeTemplate.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("shows the refusal instead of Send notice when the signed template was withdrawn", async () => {
+      mockSignedYoutubeCase();
+      pinLink();
+      mocked.noticeTemplate.findUnique.mockResolvedValue({ ...pinnedTemplate, isActive: false });
+
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+
+      expect(detail?.links[0]).toMatchObject({ dispatch: null, dispatchRefusal: "signed_template_not_dispatchable" });
+    });
+
+    it("shows the refusal when the signed text was edited in place", async () => {
+      mockSignedYoutubeCase();
+      pinLink("digest-of-other-text");
+      mocked.noticeTemplate.findUnique.mockResolvedValue(pinnedTemplate);
+
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+
+      expect(detail?.links[0]).toMatchObject({ dispatch: null, dispatchRefusal: "signed_template_changed" });
+    });
+
+    it("reports a refused hash advisory and whether any platform received it", async () => {
+      mockSignedYoutubeCase();
+      const advisory = { ...pinnedTemplate, id: "advisory-1", templateType: "HASH_ADVISORY" };
+      mocked.case.findUnique.mockResolvedValue({
+        id: "c1",
+        referenceNumber: "ASMITA-2026-AAAAAA",
+        status: "OPEN",
+        createdAt: hoursAgo(12),
+        updatedAt: hoursAgo(1),
+        declarationSignedAt: hoursAgo(2),
+        ngoVerified: false,
+        hashAdvisorySignedHashIds: ["h1"],
+        hashAdvisorySignedTemplateId: "advisory-1",
+        hashAdvisorySignedTemplateDigest: templateDigest(advisory),
+      });
+      mocked.noticeTemplate.findUnique.mockResolvedValue({ ...advisory, reviewedByLegal: false });
+      mocked.hashDispatch.count.mockResolvedValue(0);
+
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+
+      expect(detail?.hashAdvisoryRefusal).toEqual({ reason: "signed_template_not_dispatchable", sent: false });
+    });
+
+    it("has no advisory refusal when the advisory is not signed", async () => {
+      mockSignedYoutubeCase();
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+      expect(detail?.hashAdvisoryRefusal).toBeNull();
+      expect(mocked.hashDispatch.count).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -1,29 +1,53 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getAdminRole } from "@/lib/auth/admin-allowlist";
+import { resolveAdminRole, resolveAdminRoleByHash } from "@/lib/auth/admin-allowlist";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
+import { hashEmail } from "@/lib/hash";
 
-const ORIGINAL = process.env.ADMIN_ROLES;
+const ORIGINAL = { ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_ROLES: process.env.ADMIN_ROLES };
 
 afterEach(() => {
-  process.env.ADMIN_ROLES = ORIGINAL;
+  for (const [name, value] of Object.entries(ORIGINAL)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
 });
 
-describe("getAdminRole", () => {
-  it("defaults to SUPER_ADMIN when no mapping exists", () => {
+describe("resolveAdminRole", () => {
+  it("reads the configured role, case-insensitive on email", () => {
+    process.env.ADMIN_EMAILS = "legal@example.org, Reviewer@Example.org";
+    process.env.ADMIN_ROLES = "legal@example.org=LEGAL_ADVISOR, Reviewer@Example.org=CASE_REVIEWER";
+    expect(resolveAdminRole("LEGAL@example.org")).toEqual({ ok: true, role: "LEGAL_ADVISOR" });
+    expect(resolveAdminRole("reviewer@example.org")).toEqual({ ok: true, role: "CASE_REVIEWER" });
+  });
+
+  it("refuses an allowlisted email with no role instead of defaulting to SUPER_ADMIN", () => {
+    process.env.ADMIN_EMAILS = "founder@example.org";
     process.env.ADMIN_ROLES = "";
-    expect(getAdminRole("founder@example.org")).toBe("SUPER_ADMIN");
+    expect(resolveAdminRole("founder@example.org")).toEqual({ ok: false, reason: "role_missing" });
+    process.env.ADMIN_ROLES = "founder@example.org=";
+    expect(resolveAdminRole("founder@example.org")).toEqual({ ok: false, reason: "role_missing" });
   });
 
-  it("reads the configured sub-role, case-insensitive on email", () => {
-    process.env.ADMIN_ROLES =
-      "legal@example.org=LEGAL_ADVISOR, Reviewer@Example.org=CASE_REVIEWER";
-    expect(getAdminRole("LEGAL@example.org")).toBe("LEGAL_ADVISOR");
-    expect(getAdminRole("reviewer@example.org")).toBe("CASE_REVIEWER");
+  it("refuses unknown or misspelled role names", () => {
+    process.env.ADMIN_EMAILS = "x@example.org";
+    for (const role of ["GOD_MODE", "SUPERADMIN", "super_admin"]) {
+      process.env.ADMIN_ROLES = `x@example.org=${role}`;
+      expect(resolveAdminRole("x@example.org")).toEqual({ ok: false, reason: "role_unknown" });
+    }
   });
 
-  it("ignores unknown role names instead of granting them", () => {
-    process.env.ADMIN_ROLES = "x@example.org=GOD_MODE";
-    expect(getAdminRole("x@example.org")).toBe("SUPER_ADMIN");
+  it("refuses a role for an email that is not in ADMIN_EMAILS", () => {
+    process.env.ADMIN_EMAILS = "a@example.org";
+    process.env.ADMIN_ROLES = "b@example.org=SUPER_ADMIN";
+    expect(resolveAdminRole("b@example.org")).toEqual({ ok: false, reason: "not_allowlisted" });
+  });
+
+  it("matches a session's email hash without the raw email", () => {
+    process.env.ADMIN_EMAILS = " Founder@Example.org ";
+    process.env.ADMIN_ROLES = "founder@example.org=SUPER_ADMIN";
+    expect(resolveAdminRoleByHash(hashEmail("founder@example.org"))).toEqual({ ok: true, role: "SUPER_ADMIN" });
+    expect(resolveAdminRoleByHash("")).toEqual({ ok: false, reason: "not_allowlisted" });
+    expect(resolveAdminRoleByHash("founder@example.org")).toEqual({ ok: false, reason: "not_allowlisted" });
   });
 });
 

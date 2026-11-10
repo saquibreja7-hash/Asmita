@@ -12,14 +12,20 @@ import { enrolAdminMfa, getAdminMfaSecret, resetAdminMfa } from "@/lib/auth/admi
 import { generateTotp } from "@/lib/auth/admin-mfa";
 import { createCsrfPair } from "@/lib/csrf";
 import { POST as confirmMfa } from "@/app/api/admin/mfa/confirm/route";
+import { hashEmail } from "@/lib/hash";
 
-const ADMIN_HASH = "synthetic-admin-hash-for-tests";
+const ADMIN_EMAIL = "mfa-admin@example.invalid";
+const ADMIN_HASH = hashEmail(ADMIN_EMAIL);
 
 describe("admin MFA enrollment", () => {
   const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalAdminEmails = process.env.ADMIN_EMAILS;
+  const originalAdminRoles = process.env.ADMIN_ROLES;
 
   beforeEach(async () => {
     delete process.env.DATABASE_URL;
+    process.env.ADMIN_EMAILS = ADMIN_EMAIL;
+    process.env.ADMIN_ROLES = `${ADMIN_EMAIL}=SUPER_ADMIN`;
     await resetAdminMfa(ADMIN_HASH);
     authCookie.token = await signAdminSession({
       sub: "synthetic-admin", emailHash: ADMIN_HASH,
@@ -29,6 +35,10 @@ describe("admin MFA enrollment", () => {
 
   afterEach(async () => {
     await resetAdminMfa(ADMIN_HASH);
+    for (const [name, value] of [["ADMIN_EMAILS", originalAdminEmails], ["ADMIN_ROLES", originalAdminRoles]] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
     if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = originalDatabaseUrl;
   });

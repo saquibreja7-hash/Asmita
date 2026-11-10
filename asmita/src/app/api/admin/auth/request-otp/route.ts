@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createOtpForEmail } from "@/lib/auth/otp";
-import { isAdminEmail } from "@/lib/auth/admin-allowlist";
+import { resolveAdminRole } from "@/lib/auth/admin-allowlist";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { sendOtp } from "@/lib/email";
 import { hashEmail } from "@/lib/hash";
@@ -18,11 +18,13 @@ export async function POST(request: Request) {
   }
 
   const parsed = schema.safeParse(await request.json());
-  if (!parsed.success || !isAdminEmail(parsed.data.email)) {
-    await logSecurityEvent({ event: "admin_denied", route: "/api/admin/auth/request-otp" });
-    return NextResponse.json({ error: "admin_not_allowed" }, { status: 403 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
-
+  // Whether this address is an admin must not show in the response: the same
+  // rate limits apply to every address, and a non-admin gets the same success
+  // reply, with no code stored or sent.
+  const access = resolveAdminRole(parsed.data.email);
   const emailHash = hashEmail(parsed.data.email);
   const devBypass = process.env.NODE_ENV !== "production" && Boolean(process.env.DEV_OTP_CODE);
   if (!devBypass) {
@@ -44,6 +46,18 @@ export async function POST(request: Request) {
       await logSecurityEvent({ event: "rate_limit_exceeded", actorHash: emailHash, route: "/api/admin/auth/request-otp" });
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }
+  }
+
+  if (!access.ok) {
+    // An allowlisted email without a valid ADMIN_ROLES entry is a
+    // misconfiguration: record its hash and reason so operators can see it.
+    const misconfigured = access.reason !== "not_allowlisted";
+    await logSecurityEvent({
+      event: "admin_denied",
+      route: "/api/admin/auth/request-otp",
+      ...(misconfigured ? { actorHash: emailHash, reason: access.reason } : {}),
+    });
+    return NextResponse.json({ success: true });
   }
 
   let otp: Awaited<ReturnType<typeof createOtpForEmail>>;

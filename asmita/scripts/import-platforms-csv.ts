@@ -5,13 +5,17 @@
  *
  * Refuses to run without --confirm. Prints the target DATABASE_URL host
  * before touching anything so you can confirm you are not pointed at prod
- * by mistake. Every changed field is recorded into PlatformGoHistory and a
+ * by mistake. Every changed field (contact, tier, notice basis, domain
+ * patterns) is recorded into PlatformGoHistory and a
  * GO_DATABASE_CHANGED audit-log entry, with actorId = csv-import:<username>.
  *
- * Rows are matched by `name` (case-insensitive). Rows with `mark_verified=true`
- * MUST have at least one of grievance_email, form_url, or api_endpoint, plus a
- * source_url — otherwise the row is rejected. Placeholder rows
- * (mark_verified=false) are upserted but do not flip the verified flag.
+ * Rows are matched by `name` (case-insensitive).
+ *
+ * This script never verifies a contact. Verification is a separate step by a
+ * second person in the admin console. A new or changed contact field is
+ * written unverified (verification withdrawn, contactChangedBy = "csv-import",
+ * contactChangedAt = now), exactly as an admin console edit does, so any admin
+ * can then verify it. A `mark_verified` column is ignored with a warning.
  */
 import { readFile } from "node:fs/promises";
 import { userInfo } from "node:os";
@@ -48,6 +52,24 @@ type CsvRow = {
   source_url: string;
   mark_verified: string;
 };
+
+// Not an admin email hash, so the verify route's same-person check never
+// blocks an admin from verifying an imported contact.
+export const CSV_IMPORT_MARKER = "csv-import";
+
+/** Stored with any contact change: verification withdrawn, change recorded. */
+export function contactChangeData(now: Date) {
+  return {
+    lastContactVerifiedByHuman: false,
+    lastContactVerifiedAt: null,
+    contactChangedBy: CSV_IMPORT_MARKER,
+    contactChangedAt: now,
+  };
+}
+
+export function isVerifiedFlag(value: string | undefined): boolean {
+  return /^(true|1|yes)$/i.test(value ?? "");
+}
 
 type Args = { file: string; confirm: boolean };
 
@@ -128,6 +150,62 @@ export function parseDomainPatterns(value: string): string[] {
     .filter(Boolean);
 }
 
+type FieldDiff = { field: string; oldValue: string | null; newValue: string | null };
+
+type ExistingPlatform = {
+  tier: PlatformTier;
+  noticeBasis: NoticeBasis;
+  domainPatterns: string[];
+} & Record<TrackedField, string | null>;
+
+type IncomingPlatform = {
+  tier: PlatformTier;
+  noticeBasis: NoticeBasis;
+  domainPatterns: string[];
+  fields: Record<TrackedField, string | null>;
+};
+
+/**
+ * What an import row changes on an existing platform. Contact changes (the
+ * tracked fields) withdraw verification. Tier, notice basis and domain
+ * patterns apply on their own and never touch verification.
+ */
+export function planPlatformUpdate(existing: ExistingPlatform, incoming: IncomingPlatform) {
+  const contactDiffs: Array<FieldDiff & { field: TrackedField }> = [];
+  const otherDiffs: FieldDiff[] = [];
+  const updateData: Prisma.PlatformUpdateInput = {};
+
+  for (const field of TRACKED_FIELDS) {
+    const current = existing[field] ?? null;
+    if (incoming.fields[field] === current) continue;
+    contactDiffs.push({ field, oldValue: current, newValue: incoming.fields[field] });
+    updateData[field] = incoming.fields[field];
+  }
+  if (existing.tier !== incoming.tier) {
+    otherDiffs.push({ field: "tier", oldValue: existing.tier, newValue: incoming.tier });
+    updateData.tier = incoming.tier;
+  }
+  if (existing.noticeBasis !== incoming.noticeBasis) {
+    otherDiffs.push({ field: "noticeBasis", oldValue: existing.noticeBasis, newValue: incoming.noticeBasis });
+    updateData.noticeBasis = incoming.noticeBasis;
+  }
+  const sameDomains =
+    [...existing.domainPatterns].sort().join("|") === [...incoming.domainPatterns].sort().join("|");
+  if (!sameDomains) {
+    otherDiffs.push({
+      field: "domainPatterns",
+      oldValue: existing.domainPatterns.join(";"),
+      newValue: incoming.domainPatterns.join(";"),
+    });
+    updateData.domainPatterns = incoming.domainPatterns;
+  }
+  return { contactDiffs, otherDiffs, updateData };
+}
+
+function hasContact(fields: Record<TrackedField, string | null>): boolean {
+  return TRACKED_FIELDS.some((field) => fields[field] !== null);
+}
+
 function dbHostFromUrl(url: string): string {
   try {
     return new URL(url).host;
@@ -191,7 +269,11 @@ async function main() {
         continue;
       }
 
-      const markVerified = /^(true|1|yes)$/i.test(row.mark_verified || "");
+      if (isVerifiedFlag(row.mark_verified)) {
+        console.warn(
+          `  Warning: row ${rowNumber} [${row.name}] has mark_verified set; ignored. Verify the contact in the admin console.`,
+        );
+      }
       const sourceUrl = nullOrTrim(row.source_url);
       const fields = {
         grievanceEmail: nullOrTrim(row.grievance_email),
@@ -200,17 +282,6 @@ async function main() {
         formUrl: nullOrTrim(row.form_url),
         apiEndpoint: nullOrTrim(row.api_endpoint),
       } satisfies Record<TrackedField, string | null>;
-
-      if (markVerified) {
-        if (!fields.grievanceEmail && !fields.formUrl && !fields.apiEndpoint) {
-          rejected.push({ row: rowNumber, name: row.name, reason: "verified_row_needs_contact" });
-          continue;
-        }
-        if (!sourceUrl) {
-          rejected.push({ row: rowNumber, name: row.name, reason: "verified_row_needs_source_url" });
-          continue;
-        }
-      }
 
       const existing = await prisma.platform.findFirst({
         where: { name: { equals: row.name, mode: "insensitive" } },
@@ -228,8 +299,9 @@ async function main() {
             grievanceAddress: fields.grievanceAddress,
             formUrl: fields.formUrl,
             apiEndpoint: fields.apiEndpoint,
-            lastContactVerifiedAt: markVerified ? new Date() : null,
-            lastContactVerifiedByHuman: markVerified,
+            ...(hasContact(fields)
+              ? contactChangeData(new Date())
+              : { lastContactVerifiedAt: null, lastContactVerifiedByHuman: false }),
           },
         });
 
@@ -262,7 +334,6 @@ async function main() {
             platformName: row.name,
             operation: "create",
             sourceUrl,
-            markVerified,
             changes,
           },
         });
@@ -271,46 +342,37 @@ async function main() {
         continue;
       }
 
-      const diffs: Array<{ field: TrackedField; oldValue: string | null; newValue: string | null }> = [];
-      const updateData: Prisma.PlatformUpdateInput = {
-        domainPatterns: parseDomainPatterns(row.domain_patterns),
+      const { contactDiffs, otherDiffs, updateData } = planPlatformUpdate(existing, {
         tier,
         noticeBasis: basis,
-      };
+        domainPatterns: parseDomainPatterns(row.domain_patterns),
+        fields,
+      });
+      const diffs: FieldDiff[] = [...contactDiffs, ...otherDiffs];
 
-      for (const field of TRACKED_FIELDS) {
-        const incoming = fields[field];
-        const current = (existing[field] ?? null) as string | null;
-        if (incoming === current) continue;
-        diffs.push({ field, oldValue: current, newValue: incoming });
-        updateData[field] = incoming;
-      }
-
-      if (markVerified) {
-        updateData.lastContactVerifiedAt = new Date();
-        updateData.lastContactVerifiedByHuman = true;
-      }
-
-      if (diffs.length === 0 && !markVerified) {
+      if (diffs.length === 0) {
         unchanged += 1;
         continue;
       }
 
+      // Only a contact change withdraws verification.
+      if (contactDiffs.length > 0) {
+        Object.assign(updateData, contactChangeData(new Date()));
+      }
+
       await prisma.platform.update({ where: { id: existing.id }, data: updateData });
 
-      if (diffs.length > 0) {
-        await prisma.platformGoHistory.createMany({
-          data: diffs.map((diff) => ({
-            platformId: existing.id,
-            fieldName: diff.field,
-            oldValue: diff.oldValue,
-            newValue: diff.newValue,
-            sourceUrl,
-            verifiedBy: actorId,
-            changedById: actorId,
-          })),
-        });
-      }
+      await prisma.platformGoHistory.createMany({
+        data: diffs.map((diff) => ({
+          platformId: existing.id,
+          fieldName: diff.field,
+          oldValue: diff.oldValue,
+          newValue: diff.newValue,
+          sourceUrl,
+          verifiedBy: actorId,
+          changedById: actorId,
+        })),
+      });
 
       await writeAuditLog({
         eventType: "GO_DATABASE_CHANGED",
@@ -321,7 +383,7 @@ async function main() {
           platformName: row.name,
           operation: "update",
           sourceUrl,
-          markVerified,
+          verificationWithdrawn: contactDiffs.length > 0 && existing.lastContactVerifiedByHuman,
           changes: diffs.map((diff) => ({
             field: diff.field,
             previousValue: diff.oldValue,

@@ -45,14 +45,14 @@ export async function signSession(claims: SessionClaims) {
 }
 
 export async function signAdminSession(
-  claims: Omit<SessionClaims, "role" | "ageOver18" | "namespace"> & { adminRole?: AdminRole; mfaComplete: boolean },
+  claims: Omit<SessionClaims, "role" | "ageOver18" | "namespace"> & { adminRole: AdminRole; mfaComplete: boolean },
 ) {
   return new SignJWT({
     role: "ADMIN",
     ageOver18: true,
     emailHash: claims.emailHash,
     namespace: "admin",
-    adminRole: claims.adminRole ?? "SUPER_ADMIN",
+    adminRole: claims.adminRole,
     mfaComplete: claims.mfaComplete,
   })
     .setProtectedHeader({ alg: "HS256" })

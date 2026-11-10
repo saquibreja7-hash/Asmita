@@ -22,8 +22,8 @@ export default async function AdminLayout({
     return <AdminLoginPage />;
   }
 
-  // Sessions minted before sub-roles existed are founders (require-admin.ts).
-  const role = auth.session.adminRole ?? "SUPER_ADMIN";
+  // The role as configured now (require-admin.ts), not as signed in.
+  const role = auth.session.adminRole;
   const groups = ADMIN_NAV.map((group) => ({
     ...group,
     items: group.items.filter((item) => !item.permission || hasAdminPermission(role, item.permission)),

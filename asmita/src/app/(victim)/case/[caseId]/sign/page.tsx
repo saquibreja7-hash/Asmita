@@ -4,6 +4,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { findSignableNotice } from "@/lib/signable-notice";
+import { templateRef } from "@/lib/signed-template";
+import { findVoidedSignatures } from "@/lib/voided-signatures";
 import { SignNoticeForm } from "./SignNoticeForm";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
@@ -30,6 +32,11 @@ export default async function SignNoticePage({
 
   const url = await findSignableNotice(caseId, skipLegalGate);
   if (!url?.platform) redirect(`/case/${caseId}`);
+  // The preview below shows exactly this template, and signing refuses if
+  // another one became current in between.
+  const ref = templateRef(url.template);
+  // This link was signed before and the signature was voided: say why.
+  const resign = (await findVoidedSignatures(caseId)).urlIds.includes(url.id);
 
   return (
     <AppShell>
@@ -83,12 +90,18 @@ export default async function SignNoticePage({
                 <span className="font-medium text-[var(--ink)]">{url.platform.name}</span>
                 {t(locale, "sign.sub.suffix")}
               </p>
+              {resign && (
+                <p className="mt-6 rounded-[var(--radius-box)] bg-[var(--brand-soft)] px-4 py-3 text-sm leading-[1.65] text-[var(--brand-strong)]" role="status">
+                  {t(locale, "sign.voided.note")}
+                </p>
+              )}
               <div className="mt-8">
                 <SignNoticeForm
                   caseId={caseId}
                   urlId={url.id}
+                  templateRef={ref}
                   platformName={url.platform.name}
-                  previewPdfUrl={`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(url.id)}`}
+                  previewPdfUrl={`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(url.id)}&templateRef=${encodeURIComponent(ref)}`}
                   confirmationUrl={`/case/${caseId}/confirmation`}
                   locale={locale}
                 />

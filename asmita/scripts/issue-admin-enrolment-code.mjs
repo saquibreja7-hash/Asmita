@@ -5,7 +5,8 @@
 //   DATABASE_URL=<owner connection> node scripts/issue-admin-enrolment-code.mjs admin@example.org
 //
 // Optional PGSSLROOTCERT=<path to Supabase CA> verifies TLS fully. The email
-// must also be in the Worker's ADMIN_EMAILS allowlist. The code is printed once
+// must also be in the Worker's ADMIN_EMAILS allowlist with a role in
+// ADMIN_ROLES (e.g. admin@example.org=SUPER_ADMIN). The code is printed once
 // and expires in 24 hours; hand it over out of band.
 import { createHash, randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";

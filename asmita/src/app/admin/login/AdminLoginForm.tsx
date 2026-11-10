@@ -19,8 +19,12 @@ export function AdminLoginForm() {
         method: "POST",
         body: JSON.stringify({ email }),
       });
+      if (response.status === 429) {
+        setError("Too many requests. Please wait a while and try again.");
+        return;
+      }
       if (!response.ok) {
-        setError("This admin email cannot receive a code right now.");
+        setError("We could not send a code right now. Please try again shortly.");
         return;
       }
       setStep("verify");
@@ -79,7 +83,7 @@ export function AdminLoginForm() {
 
       <Row
         label="Admin email"
-        hint="We will send a 6-digit code to this address."
+        hint="If this address belongs to an admin, we will send it a 6-digit code."
         htmlFor="admin-email"
       >
         <input
@@ -98,7 +102,7 @@ export function AdminLoginForm() {
         <>
           <Row
             label="Email code"
-            hint="The 6-digit code we just sent to your inbox."
+            hint="The 6-digit code sent to your inbox, if this address belongs to an admin."
             htmlFor="admin-otp"
           >
             <input

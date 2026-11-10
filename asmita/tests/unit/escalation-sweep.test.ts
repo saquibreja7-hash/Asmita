@@ -39,6 +39,7 @@ import { dispatchEscalationFollowUp } from "@/lib/notice-dispatch";
 import { decryptField } from "@/lib/encryption";
 import { sendL2VictimNotification, sendL3FirReadyNotification } from "@/lib/email";
 import { runDueEscalationsFromDb } from "@/lib/escalation-engine";
+import { templateDigest } from "@/lib/signed-template";
 
 type NoticeRow = {
   id: string;
@@ -51,6 +52,7 @@ type NoticeRow = {
     caseId: string;
     status: string;
     domain: string;
+    signedTemplateDigest?: string | null;
     platform: {
       name: string;
       grievanceEmail: string | null;
@@ -315,6 +317,42 @@ describe("runDueEscalationsFromDb — L1 follow-up", () => {
     expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
     // Retried once the contact is verified.
     expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("holds the follow-up, visibly, when the template text changed since it was signed and sent", async () => {
+    const sent = noticeRow();
+    vi.mocked(db.notice.findMany).mockResolvedValue([
+      noticeRow({
+        submittedUrl: { ...sent.submittedUrl, signedTemplateDigest: templateDigest({ ...sent.template!, bodyTemplate: "The text that was served" }) },
+      }),
+    ] as never);
+
+    const summary = await runDueEscalationsFromDb(new Date("2026-05-11T00:00:00.000Z"));
+
+    expect(summary.skipped).toEqual([{ noticeId: "notice-1", reason: "blocked_template_changed", level: 1 }]);
+    expect(summary.errors).toHaveLength(0);
+    expect(dispatchEscalationFollowUp).not.toHaveBeenCalled();
+    // Not marked done: the case page shows the held step (NOTICE_FAILED, level 1).
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "NOTICE_FAILED",
+        entityId: "notice-1",
+        data: { reason: "template_changed_since_sent", escalationLevel: 1 },
+      }),
+    );
+  });
+
+  it("sends the follow-up when the template text is still the text that was signed", async () => {
+    const sent = noticeRow();
+    vi.mocked(db.notice.findMany).mockResolvedValue([
+      noticeRow({ submittedUrl: { ...sent.submittedUrl, signedTemplateDigest: templateDigest(sent.template!) } }),
+    ] as never);
+
+    const summary = await runDueEscalationsFromDb(new Date("2026-05-11T00:00:00.000Z"));
+
+    expect(summary.fired).toEqual([{ noticeId: "notice-1", level: 1, action: "email_follow_up" }]);
+    expect(dispatchEscalationFollowUp).toHaveBeenCalledOnce();
   });
 
   it("blocks L1 send when no template is attached to the notice", async () => {

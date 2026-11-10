@@ -119,6 +119,7 @@ enum AuditEventType {
   CASE_DELETION_REQUESTED
   CASE_HARD_DELETED
   GO_DATABASE_CHANGED
+  GO_CONTACT_VERIFIED
   TEMPLATE_ACTIVATED
   HASH_SUBMITTED
   HASH_APPROVED
@@ -175,6 +176,10 @@ model Case {
   hashAdvisoryPlatformIds String[]  @default([])
   // Fingerprints listed in the signed hash advisory; dispatch sends exactly these.
   hashAdvisorySignedHashIds String[] @default([])
+  // The HASH_ADVISORY template the advisory was signed against, and a digest
+  // of its text. Dispatch emails exactly this template (src/lib/signed-template.ts).
+  hashAdvisorySignedTemplateId     String?
+  hashAdvisorySignedTemplateDigest String?
   createdAt               DateTime   @default(now())
   updatedAt               DateTime   @updatedAt
 
@@ -247,6 +252,10 @@ model Platform {
   responseRate7d             Float?
   lastContactVerifiedAt      DateTime?
   lastContactVerifiedByHuman Boolean      @default(false)
+  // Email hash of the admin who last changed the contact fields; a different
+  // admin must verify the change.
+  contactChangedBy           String?
+  contactChangedAt           DateTime?
   isActive                   Boolean      @default(true)
   createdAt                  DateTime     @default(now())
   updatedAt                  DateTime     @updatedAt
@@ -289,6 +298,10 @@ model SubmittedUrl {
   signedNoticePdf  String?
   // Fingerprints listed in the signed notice; dispatch sends exactly these.
   signedHashSubmissionIds String[] @default([])
+  // The template the notice was signed against, and a digest of its text.
+  // Dispatch emails exactly this template (src/lib/signed-template.ts).
+  signedTemplateId     String?
+  signedTemplateDigest String?
   // When the survivor said she filed a form-only platform's own form. Starts
   // the escalation ladder for links Asmita cannot email (docs/product/escalation-ladder.md).
   platformFiledAt  DateTime?

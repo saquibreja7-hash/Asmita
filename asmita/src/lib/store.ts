@@ -191,6 +191,12 @@ export function getVerifiedUserEmail(userId: string) {
   return decryptField(user.emailEncrypted);
 }
 
+export function getUserStatus(userId: string): "active" | "deactivated" | "gone" {
+  assertDevOrTest();
+  if (!users.has(userId)) return "gone";
+  return deactivatedUsers.has(userId) ? "deactivated" : "active";
+}
+
 export function deactivateUser(userId: string) {
   assertDevOrTest();
   const deactivatedAt = new Date();
@@ -211,9 +217,18 @@ export async function hardDeleteDueUsers(now = new Date()) {
       continue;
     }
 
+    // Same outcome as the database path (case-ops.ts): the user's links,
+    // fingerprints, signed PDFs and contact are gone. Memory keeps no tombstones.
     users.delete(userId);
+    let caseCount = 0;
+    let links = 0;
+    let fingerprints = 0;
     for (const [caseId, record] of cases.entries()) {
       if (record.userId === userId) {
+        caseCount += 1;
+        links += record.urls.length;
+        fingerprints += globalThis.__asmitaHashStore?.get(caseId)?.length ?? 0;
+        globalThis.__asmitaHashStore?.delete(caseId);
         cases.delete(caseId);
       }
     }
@@ -223,7 +238,7 @@ export async function hardDeleteDueUsers(now = new Date()) {
       eventType: "CASE_HARD_DELETED",
       entityType: "User",
       entityId: userId,
-      data: { retained: "audit_metadata_only" },
+      data: { removed: { cases: caseCount, links, fingerprints }, retained: { auditLog: "earlier entries are append-only and unchanged" } },
     });
   }
   return deletedUserIds;

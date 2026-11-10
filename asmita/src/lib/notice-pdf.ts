@@ -1,4 +1,5 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { isPdfSafeText } from "@/lib/pdf-text";
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -58,7 +59,53 @@ export interface NoticePdfInput {
   signature?: string;
 }
 
-export async function generateNoticePdf(input: NoticePdfInput): Promise<Buffer> {
+/**
+ * A field holds text the PDF font cannot draw. Carries the field's name only,
+ * never its text, so it is safe to log.
+ */
+export class NoticePdfTextError extends Error {
+  constructor(readonly field: string) {
+    super(`notice_pdf_unsupported_text:${field}`);
+    this.name = "NoticePdfTextError";
+  }
+}
+
+// Checked before anything is drawn, so pdf-lib never throws midway with the
+// offending character (a piece of the survivor's text) in its message.
+function assertDrawable(input: NoticePdfInput) {
+  const fields: Array<[string, string | undefined]> = [
+    ["platformName", input.platformName],
+    ["caseReference", input.caseReference],
+    ["noticeSubject", input.noticeSubject],
+    ["date", input.date],
+    ["survivorName", input.survivorName],
+    ["survivorContact", input.survivorContact],
+    ["signature", input.signature],
+  ];
+  for (const [field, value] of fields) {
+    if (value !== undefined && !isPdfSafeText(value)) throw new NoticePdfTextError(field);
+  }
+  // The body is the only multi-line field; wrapText splits it on "\n".
+  if (!input.noticeBody.split("\n").every(isPdfSafeText)) throw new NoticePdfTextError("noticeBody");
+}
+
+/**
+ * Turns a failed PDF build into the error code a signing or preview route
+ * returns. The survivor's name and signature are checked before the build, so
+ * a failure here is normally the template or platform text, which the
+ * survivor cannot fix. Logs the field name only, never any text.
+ */
+export function noticePdfErrorCode(err: unknown): "name_script_unsupported" | "notice_pdf_failed" {
+  const field = err instanceof NoticePdfTextError ? err.field : null;
+  console.error("Notice PDF could not be built", { field, error: err instanceof Error ? err.name : "unknown" });
+  return field === "survivorName" || field === "signature" ? "name_script_unsupported" : "notice_pdf_failed";
+}
+
+export async function generateNoticePdf(rawInput: NoticePdfInput): Promise<Buffer> {
+  // Line endings are layout, not content: a template saved with CRLF draws the
+  // same as one saved with LF.
+  const input = { ...rawInput, noticeBody: rawInput.noticeBody.replace(/\r\n?/g, "\n") };
+  assertDrawable(input);
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
