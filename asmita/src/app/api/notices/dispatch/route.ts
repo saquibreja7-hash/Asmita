@@ -5,7 +5,13 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/encryption";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
-import { dispatchTier2Notice } from "@/lib/notice-dispatch";
+import { dispatchTier2Notice, dispatchTier1ApiNotice } from "@/lib/notice-dispatch";
+import {
+  getTier1ApiConfigFromEnv,
+  platformApiTokenFor,
+  routeTier1OrFallback,
+} from "@/lib/tier1-api-client";
+import type { PlatformApiFingerprint } from "@/lib/platform-api";
 import {
   assertNoticeBodySafe,
   assertNoticeSubjectSafe,
@@ -49,8 +55,10 @@ export async function POST(request: Request) {
         select: {
           id: true,
           name: true,
+          tier: true,
           noticeBasis: true,
           grievanceEmail: true,
+          apiEndpoint: true,
           lastContactVerifiedByHuman: true,
           isActive: true,
         },
@@ -76,7 +84,22 @@ export async function POST(request: Request) {
   if (!platform?.isActive) {
     return NextResponse.json({ error: "platform_not_dispatchable" }, { status: 409 });
   }
-  if (!platform.grievanceEmail || !platform.lastContactVerifiedByHuman) {
+
+  // Channel: the platform API only when the deployment switch, the admin-set
+  // endpoint, the enabled list and a token all exist (each a human act);
+  // otherwise the email path with its human-verified contact gate.
+  const tier1Config = getTier1ApiConfigFromEnv();
+  const channel = routeTier1OrFallback(
+    {
+      id: platform.id,
+      tier: platform.tier,
+      apiEndpoint: platform.apiEndpoint,
+      grievanceEmail: platform.grievanceEmail,
+    },
+    tier1Config,
+  );
+  const emailAvailable = Boolean(platform.grievanceEmail) && platform.lastContactVerifiedByHuman;
+  if (channel.method === "FORM_HANDOFF" || (channel.method === "EMAIL" && !platform.lastContactVerifiedByHuman)) {
     return NextResponse.json({ error: "verified_platform_contact_required" }, { status: 409 });
   }
 
@@ -103,7 +126,7 @@ export async function POST(request: Request) {
   }
 
   // Exactly the fingerprints the signed PDF lists, and only once all of them
-  // are approved, so the email never differs from what the survivor signed.
+  // are approved, so the notice never differs from what the survivor signed.
   // Checked before the portal token is created so a refusal leaves no trace.
   const signedAnnex = await buildSignedHashAnnex(submittedUrl.signedHashSubmissionIds);
   if (!signedAnnex.ok) {
@@ -119,7 +142,7 @@ export async function POST(request: Request) {
     caseReference: submittedUrl.case.referenceNumber,
     platformName: platform.name,
     url: "[Reported URL is in the attached signed notice]",
-    // Same reference the signed PDF carries (see sign-notice), so the email
+    // Same reference the signed PDF carries (see sign-notice), so the notice
     // body and the attached declaration agree.
     declarationReference: submittedUrl.case.referenceNumber,
   };
@@ -136,19 +159,87 @@ export async function POST(request: Request) {
   const signedNoticePdf = submittedUrl.signedNoticePdf
     ? Buffer.from(decryptField(submittedUrl.signedNoticePdf), "base64")
     : null;
+  const fingerprintIds = signedAnnex.annex.hashSubmissionIds;
+
+  // ─── Tier 1 platform API channel ──────────────────────────────────────
+  // Same signed package as the email below; only the transport differs. On a
+  // send failure we fall back to the email path when a verified contact exists.
+  let fellBackFromApi: number | "network_error" | "timeout" | null = null;
+  if (channel.method === "API") {
+    let fingerprints: PlatformApiFingerprint[] = [];
+    if (fingerprintIds.length > 0) {
+      const rows = await db.hashSubmission.findMany({
+        where: { id: { in: fingerprintIds } },
+        select: { hashEncrypted: true, quality: true },
+      });
+      fingerprints = rows.map((row) => ({
+        algorithm: "PDQ",
+        digest: decryptField(row.hashEncrypted),
+        quality: row.quality,
+      }));
+    }
+    const accessToken = platformApiTokenFor(tier1Config, platform.id);
+    if (!accessToken) {
+      return NextResponse.json({ error: "platform_api_not_configured" }, { status: 409 });
+    }
+    const result = await dispatchTier1ApiNotice({
+      caseId: parsed.data.caseId,
+      urlId: parsed.data.urlId,
+      caseReference: submittedUrl.case.referenceNumber,
+      platform: {
+        id: platform.id,
+        name: platform.name,
+        noticeBasis: platform.noticeBasis,
+        grievanceEmail: platform.grievanceEmail,
+      },
+      endpoint: channel.endpoint,
+      accessToken,
+      subject,
+      body,
+      fingerprints,
+      fingerprintIds,
+      signedNoticePdf,
+      templateId: template.id,
+      actorId: auth.session.sub,
+    });
+    if (result.dispatched) {
+      return NextResponse.json({
+        dispatched: true,
+        transport: "platform_api",
+        notice: result.notice,
+        referenceId: result.referenceId ?? null,
+      });
+    }
+    if (result.reason === "already_dispatched") {
+      return NextResponse.json({
+        dispatched: false,
+        transport: "platform_api",
+        reason: "already_dispatched",
+      });
+    }
+    // api_send_failed: fall back to the email channel below when possible.
+    fellBackFromApi = result.status;
+    if (!emailAvailable) {
+      return NextResponse.json({ error: "platform_api_failed" }, { status: 502 });
+    }
+  }
 
   try {
     const result = await dispatchTier2Notice({
       caseId: parsed.data.caseId,
       urlId: parsed.data.urlId,
-      recipientEmail: platform.grievanceEmail,
+      recipientEmail: platform.grievanceEmail as string,
       subject,
       body,
       signedNoticePdf,
-      fingerprintIds: signedAnnex.annex.hashSubmissionIds,
+      fingerprintIds,
       templateId: template.id,
     });
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      transport: "email",
+      ...(fellBackFromApi !== null ? { fellBackFromPlatformApi: fellBackFromApi } : {}),
+    });
   } catch (err) {
     // An earlier attempt in the last 24 hours reached Resend but was not
     // recorded. Sending again would email the platform twice.

@@ -6,6 +6,16 @@ import { writeAuditLog } from "@/lib/audit";
 import { sha256 } from "@/lib/hash";
 import { assertVerifiedNoticeRecipient } from "@/lib/notice-dispatch";
 import {
+  getTier1ApiConfigFromEnv,
+  platformApiTokenFor,
+  routeTier1OrFallback,
+} from "@/lib/tier1-api-client";
+import {
+  buildPlatformApiPayload,
+  recordPlatformApiAttempt,
+  sendNoticeToPlatformApi,
+} from "@/lib/platform-api";
+import {
   assertNoticeBodySafe,
   assertNoticeSubjectSafe,
   renderNoticeTemplate,
@@ -98,6 +108,108 @@ export async function dispatchHashAdvisories(input: {
       results.push({ platformId, dispatched: false, reason: "platform_not_found" });
       continue;
     }
+
+    const pendingSubmissions = [];
+    for (const submission of submissions) {
+      const existing = await db.hashDispatch.findUnique({
+        where: { hashSubmissionId_platformId: { hashSubmissionId: submission.id, platformId } },
+      });
+      if (!existing) pendingSubmissions.push(submission);
+    }
+    if (pendingSubmissions.length === 0) {
+      results.push({ platformId, dispatched: false, reason: "already_dispatched" });
+      continue;
+    }
+
+    // ─── Tier 1 platform API channel ───────────────────────────────────
+    // Same signed advisory package as the email below; only the transport
+    // differs. A send failure falls through to the email gates.
+    const tier1Config = getTier1ApiConfigFromEnv();
+    const channel = routeTier1OrFallback(platform, tier1Config);
+    if (channel.method === "API") {
+      const accessToken = platformApiTokenFor(tier1Config, platform.id);
+      if (accessToken) {
+        const rows = await db.hashSubmission.findMany({
+          where: { id: { in: pendingSubmissions.map((s) => s.id) } },
+          select: { hashEncrypted: true, quality: true },
+        });
+        const fingerprintValues = rows.map((row) => ({
+          algorithm: "PDQ" as const,
+          digest: decryptField(row.hashEncrypted),
+          quality: row.quality,
+        }));
+        const payload = buildPlatformApiPayload({
+          kind: "HASH_ADVISORY",
+          caseReference: dbCase.referenceNumber,
+          noticeBasis: platform.noticeBasis,
+          subject,
+          body: emailBody,
+          fingerprints: fingerprintValues,
+          signedNoticePdf: pdfBuffer,
+          idempotencyKey: sha256(
+            `hash-advisory-api:${input.caseId}:${platformId}:${pendingSubmissions.map((s) => s.id).sort().join(",")}`,
+          ),
+        });
+        const result = await sendNoticeToPlatformApi({
+          endpoint: channel.endpoint,
+          accessToken,
+          payload,
+        });
+        recordPlatformApiAttempt({
+          platformId: platform.id,
+          result,
+          fallbackReason: result.ok ? undefined : "api_send_failed",
+        });
+        if (result.ok) {
+          await db.hashDispatch.createMany({
+            data: pendingSubmissions.map((s) => ({ hashSubmissionId: s.id, platformId })),
+            skipDuplicates: true,
+          });
+          await db.hashSubmission.updateMany({
+            where: { id: { in: pendingSubmissions.map((s) => s.id) }, status: "APPROVED" },
+            data: { status: "DISPATCHED" },
+          });
+          await writeAuditLog({
+            eventType: "HASH_DISPATCHED",
+            entityType: "Case",
+            entityId: input.caseId,
+            actorId: input.actorId,
+            data: {
+              platformId,
+              platformName: platform.name,
+              transport: "platform_api",
+              apiStatus: result.status,
+              referenceId: result.referenceId ?? null,
+              hashCount: pendingSubmissions.length,
+              templateVersion: template.version,
+            },
+          });
+          results.push({
+            platformId,
+            dispatched: true,
+            messageId: result.referenceId ?? `platform-api-${platformId.slice(0, 8)}`,
+            hashCount: pendingSubmissions.length,
+          });
+          continue;
+        }
+        // entityType Case (not Notice): advisory fallbacks never read as
+        // escalation-ladder blocks.
+        await writeAuditLog({
+          eventType: "NOTICE_FAILED",
+          entityType: "Case",
+          entityId: input.caseId,
+          actorId: input.actorId,
+          data: {
+            transport: "platform_api",
+            kind: "hash_advisory",
+            reason: result.status,
+            fellBackTo: "email",
+          },
+        });
+        // Fall through to the email channel.
+      }
+    }
+
     if (!platform.lastContactVerifiedByHuman) {
       results.push({ platformId, dispatched: false, reason: "contact_not_human_verified" });
       continue;
@@ -110,18 +222,6 @@ export async function dispatchHashAdvisories(input: {
       assertVerifiedNoticeRecipient(platform.grievanceEmail);
     } catch {
       results.push({ platformId, dispatched: false, reason: "verified_recipient_required" });
-      continue;
-    }
-
-    const pendingSubmissions = [];
-    for (const submission of submissions) {
-      const existing = await db.hashDispatch.findUnique({
-        where: { hashSubmissionId_platformId: { hashSubmissionId: submission.id, platformId } },
-      });
-      if (!existing) pendingSubmissions.push(submission);
-    }
-    if (pendingSubmissions.length === 0) {
-      results.push({ platformId, dispatched: false, reason: "already_dispatched" });
       continue;
     }
 

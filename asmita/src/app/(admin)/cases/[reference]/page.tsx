@@ -260,6 +260,7 @@ function LinkCard({
               fingerprintCount={link.signedFingerprintIds.length}
               platformName={link.platformName}
               recipient={link.dispatch.recipient}
+              transport={link.dispatch.transport}
               reviewLabel={
                 link.dispatch.reviewedAt
                   ? `Reviewed ${formatIst(link.dispatch.reviewedAt)}${link.dispatch.reviewedByName ? ` by ${link.dispatch.reviewedByName}` : ""}`
