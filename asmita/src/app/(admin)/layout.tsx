@@ -1,7 +1,7 @@
-import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import "./admin.css";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { AdminLogoutButton } from "./AdminLogoutButton";
+import { AdminNav } from "./AdminNav";
 import AdminLoginPage from "@/app/admin/login/page";
 import SetupMfaPage from "@/app/admin/setup-mfa/page";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
@@ -33,45 +33,12 @@ export default async function AdminLayout({
     : null;
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        <div className="container grid gap-10 py-10 md:grid-cols-[220px_1fr] md:py-14">
-          <aside
-            className="h-fit"
-            aria-label="Admin navigation"
-          >
-            <p className="eyebrow">
-              Admin
-            </p>
-            <nav className="mt-5 grid gap-5 text-sm leading-[1.8]">
-              {groups.map((group) => (
-                <div className="grid gap-2" key={group.heading ?? "home"}>
-                  {group.heading && <p className="muted text-xs">{group.heading}</p>}
-                  {group.items.map((item) => (
-                    <Link
-                      className="link-underline text-[var(--ink)]"
-                      href={item.href}
-                      key={item.href}
-                    >
-                      {item.label}
-                      {item.href === "/admin" && actionable ? (
-                        <span className="ml-2 rounded-full bg-[var(--ink)] px-2 text-xs text-[var(--page)] tabular-nums">
-                          {actionable}
-                          <span className="sr-only"> cases waiting</span>
-                        </span>
-                      ) : null}
-                    </Link>
-                  ))}
-                </div>
-              ))}
-            </nav>
-            <div className="mt-8 border-t border-[var(--line)] pt-6">
-              <AdminLogoutButton />
-            </div>
-          </aside>
-          <div className="min-w-0 overflow-x-auto">{children}</div>
-        </div>
-      </div>
-    </AppShell>
+    // The console has its own shell: no public header, banner or footer.
+    <div className="admin a-shell">
+      <AdminNav actionable={actionable} groups={groups}>
+        <AdminLogoutButton />
+      </AdminNav>
+      <main className="a-main">{children}</main>
+    </div>
   );
 }

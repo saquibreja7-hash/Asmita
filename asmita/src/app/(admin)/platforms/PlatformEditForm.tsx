@@ -100,7 +100,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-4 grid gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-4 text-sm"
+      className="mt-4 grid gap-3 a-card p-4 text-sm"
       aria-label={`Edit grievance officer details for ${platformName}`}
     >
       {FIELDS.map((field) => (
@@ -113,7 +113,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
             type={field.type}
             defaultValue={current[field.key] ?? ""}
             placeholder={field.placeholder}
-            className="font-mono rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] px-3 py-2 text-xs"
+            className="font-mono a-card px-3 py-2 text-xs"
           />
         </label>
       ))}
@@ -127,7 +127,7 @@ export function PlatformEditForm({ platformId, platformName, current }: Props) {
           type="url"
           required
           placeholder="https://help.platform.com/grievance-officer"
-          className="font-mono rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] px-3 py-2 text-xs"
+          className="font-mono a-card px-3 py-2 text-xs"
         />
         <span className="muted text-xs">
           Link to the official public page where you verified these details (legal page, transparency report, etc.).

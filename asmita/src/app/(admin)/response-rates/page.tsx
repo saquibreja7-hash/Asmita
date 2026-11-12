@@ -21,23 +21,23 @@ export default async function ResponseRatesPage() {
         <p className="eyebrow">
           Console · Response rates
         </p>
-        <h1 className="page-title-sm mt-3">
+        <h1 className="mt-3">
           Platform response rates
         </h1>
-        <p className="muted mt-3 max-w-2xl text-sm leading-[1.7]">
+        <p className="muted mt-3 max-w-2xl text-sm">
           Notices sent in the last 7 days, follow-ups not counted. Removed
           counts links the survivor marked removed or the notice recorded as
           removed.
         </p>
         {!anyReplyRecorded && (
-          <p className="mt-4 max-w-2xl text-sm leading-[1.7]">
+          <p className="mt-4 max-w-2xl text-sm">
             Asmita does not record platform replies yet, so replies read zero
             and response rates are not shown.
           </p>
         )}
       </div>
 
-      <div className="mt-10 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-6 overflow-x-auto a-card">
         <table className="w-full min-w-[760px] text-left text-sm">
           <caption className="sr-only">Notices and replies by platform, last 7 days</caption>
           <thead>
@@ -75,14 +75,14 @@ export default async function ResponseRatesPage() {
         )}
       </div>
 
-      <h2 className="section-title mt-14">
+      <h2 className="mt-8">
         NGO vouching
       </h2>
-      <p className="muted mt-3 max-w-2xl text-sm leading-[1.7]">
+      <p className="muted mt-3 max-w-2xl text-sm">
         A vouch from a partner NGO moves the case&apos;s pending links on known
         platforms straight to the notice queue, without manual review.
       </p>
-      <div className="mt-4 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-4 overflow-x-auto a-card">
         <table className="w-full min-w-[640px] text-left text-sm">
           <caption className="sr-only">NGO vouches, newest first</caption>
           <thead>

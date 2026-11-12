@@ -63,7 +63,7 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
 
       <div className="mt-6">
         <p className="eyebrow">Console · Case</p>
-        <h1 className="page-title-sm mt-3 font-mono">{detail.referenceNumber}</h1>
+        <h1 className="mt-3 font-mono">{detail.referenceNumber}</h1>
       </div>
 
       <dl className="mt-6 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -82,8 +82,8 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
         <Fact label="NGO vouched">{detail.ngoVerified ? "Yes" : "No"}</Fact>
       </dl>
 
-      <h2 className="section-title mt-12">Links</h2>
-      <p className="muted mt-2 max-w-2xl text-sm leading-[1.7]">
+      <h2 className="mt-8">Links</h2>
+      <p className="muted mt-2 max-w-2xl text-sm">
         Links are hidden. Revealing one asks for a reason and is recorded.
       </p>
       <ul className="mt-4 grid gap-4">
@@ -99,11 +99,11 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
         {detail.links.length === 0 && <li className="muted text-sm">No links on this case.</li>}
       </ul>
 
-      <h2 className="section-title mt-12">Fingerprints</h2>
+      <h2 className="mt-8">Fingerprints</h2>
       {detail.fingerprints.length === 0 ? (
         <p className="muted mt-3 text-sm">No fingerprints on this case.</p>
       ) : (
-        <div className="mt-4 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+        <div className="mt-4 overflow-x-auto a-card">
           <table className="w-full min-w-[640px] text-left text-sm">
             <caption className="sr-only">Fingerprints on this case</caption>
             <thead>
@@ -148,8 +148,8 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
 
       {advisoryCase.length > 0 && (
         <>
-          <h3 className="subsection-title mt-8">Send hash advisory</h3>
-          <p className="muted mt-2 max-w-2xl text-sm leading-[1.7]">
+          <h3 className="mt-8">Send hash advisory</h3>
+          <p className="muted mt-2 max-w-2xl text-sm">
             One email per platform with the reviewed advisory and the approved fingerprints. It
             refuses to send without legal review and a human-verified contact, and never sends twice.
           </p>
@@ -159,7 +159,7 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
         </>
       )}
 
-      <h2 className="section-title mt-12">Timeline</h2>
+      <h2 className="mt-8">Timeline</h2>
       {detail.timeline.length === 0 ? (
         <p className="muted mt-3 text-sm">No recorded events.</p>
       ) : (
@@ -190,7 +190,7 @@ function LinkCard({
 }) {
   const needsReview = link.status === "PENDING_REVIEW" || (link.flaggedForReview && link.status !== "REJECTED");
   return (
-    <li className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-4 text-sm">
+    <li className="a-card p-4 text-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p>
           <span className="muted">Link {index}</span>{" "}

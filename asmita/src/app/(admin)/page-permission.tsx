@@ -24,7 +24,7 @@ export async function deniedFor(permission: AdminPermission): Promise<React.Reac
   return (
     <section>
       <p className="eyebrow">Console</p>
-      <h1 className="page-title-sm mt-3">Not available</h1>
+      <h1 className="mt-3">Not available</h1>
       <p className="muted mt-6 text-sm">Your admin role cannot {NEEDS[permission]}.</p>
     </section>
   );

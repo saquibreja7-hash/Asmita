@@ -51,12 +51,12 @@ export default async function FlaggedPage({
         <p className="eyebrow">
           Console · Flagged
         </p>
-        <h1 className="page-title-sm mt-3">
+        <h1 className="mt-3">
           Flagged review queue
         </h1>
       </div>
 
-      <form className="mt-10 grid gap-4 md:grid-cols-5">
+      <form className="a-card mt-6 grid grid-cols-2 gap-3 p-4 md:grid-cols-3 xl:grid-cols-6">
         <FilterField label="Platform">
           <input
             className="field"
@@ -107,12 +107,12 @@ export default async function FlaggedPage({
             <option value="older">1 hour or more</option>
           </select>
         </FilterField>
-        <button className="btn btn-primary md:col-span-5" type="submit">
+        <button className="btn btn-primary self-end justify-self-start" type="submit">
           Apply filters
         </button>
       </form>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         <Metric label="Open review items" value={rows.length} />
         <Metric label="SLA target" value="4h" />
         <Metric
@@ -142,7 +142,7 @@ function FilterField({
   children: React.ReactNode;
 }) {
   return (
-    <label className="grid gap-1.5">
+    <label className="grid gap-1">
       <span className="eyebrow">
         {label}
       </span>
@@ -163,7 +163,7 @@ function Metric({
       <p className="eyebrow">
         {label}
       </p>
-      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--ink)] tabular-nums">
+      <p className="a-stat-value mt-2">
         {value}
       </p>
     </div>
