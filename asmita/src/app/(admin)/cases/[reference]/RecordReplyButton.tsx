@@ -75,11 +75,11 @@ export function RecordReplyButton({ noticeId, platformName }: { noticeId: string
       </button>
       <dialog
         aria-labelledby={titleId}
-        className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-6 text-[var(--ink)] backdrop:bg-black/40"
+        className="m-auto w-[min(32rem,calc(100vw-2rem))] a-card p-6 text-[var(--ink)]"
         ref={dialogRef}
       >
         <form onSubmit={save}>
-          <h2 className="subsection-title" id={titleId}>
+          <h2 id={titleId}>
             Record {platformName}&apos;s reply
           </h2>
           <fieldset className="mt-4 grid gap-3">
@@ -101,7 +101,7 @@ export function RecordReplyButton({ noticeId, platformName }: { noticeId: string
               </label>
             ))}
           </fieldset>
-          <label className="mt-4 grid gap-1.5 text-sm" htmlFor={`reply-at-${noticeId}`}>
+          <label className="mt-4 grid gap-1 text-sm" htmlFor={`reply-at-${noticeId}`}>
             <span className="eyebrow">When did the reply arrive?</span>
             <input
               className="field"

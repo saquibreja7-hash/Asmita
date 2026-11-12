@@ -129,28 +129,34 @@ export default async function AdminCasesPage({
   ].filter((filter): filter is { key: keyof Params; label: string } => Boolean(filter));
 
   const end = page.start + page.rows.length - 1;
+  const moreFilters = [
+    params.status !== "active",
+    params.platform,
+    params.nextAction,
+    params.from,
+    params.to,
+    params.sort !== "due",
+  ].filter(Boolean).length;
 
   return (
     <section>
-      <AdminPageHeader label="Console · Cases" title="Cases" />
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1>Cases</h1>
+        <p className="muted tabular-nums" aria-live="polite">
+          {page.total === 0
+            ? "No cases"
+            : `Showing ${page.start} to ${end} of ${page.total} case${page.total === 1 ? "" : "s"}`}
+        </p>
+      </div>
 
-      <nav aria-label="Case views" className="mt-8 flex flex-wrap gap-2">
+      <nav aria-label="Case views" className="mt-4 flex flex-wrap gap-2">
         {VIEWS.map((view) => {
           const current =
             Object.entries(view.params).every(([key, value]) => params[key as keyof Params] === value) &&
             (view.params.nextAction ?? "") === params.nextAction &&
             (view.params.status ?? "active") === params.status;
           return (
-            <Link
-              aria-current={current ? "page" : undefined}
-              className={`rounded-full border px-3 py-1 text-sm ${
-                current
-                  ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--page)]"
-                  : "border-[var(--line)] text-[var(--ink)]"
-              }`}
-              href={href(view.params)}
-              key={view.label}
-            >
+            <Link aria-current={current ? "page" : undefined} className="a-chip" href={href(view.params)} key={view.label}>
               {view.label}
             </Link>
           );
@@ -158,82 +164,89 @@ export default async function AdminCasesPage({
       </nav>
       <SavedViews currentQuery={currentQuery} views={savedViews} />
 
-      <AutoSubmitForm className="mt-6 grid gap-4 md:grid-cols-4 lg:grid-cols-7">
-        <Field label="Reference" name="q">
-          <input
-            className="field font-mono"
-            defaultValue={params.q}
-            id="q"
-            name="q"
-            placeholder="e.g. SQWGCD"
-          />
-        </Field>
-        <Field label="Status" name="status">
-          <select className="field" defaultValue={params.status} id="status" name="status">
-            <option value="active">Open (any)</option>
-            <option value="all">Any</option>
-            {CASE_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Platform" name="platform">
-          <select className="field" defaultValue={params.platform} id="platform" name="platform">
-            <option value="">Any</option>
-            {platforms.map((platform) => (
-              <option key={platform.id} value={platform.id}>
-                {platform.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Next action" name="nextAction">
-          <select className="field" defaultValue={params.nextAction} id="nextAction" name="nextAction">
-            <option value="">Any</option>
-            <option value="blocked">Blocked (any)</option>
-            {NEXT_ACTIONS.map((kind) => (
-              <option key={kind} value={kind}>
-                {NEXT_ACTION_FILTER_LABELS[kind]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Created from" name="from">
-          <input className="field" defaultValue={params.from} id="from" name="from" type="date" />
-        </Field>
-        <Field label="Created to" name="to">
-          <input className="field" defaultValue={params.to} id="to" name="to" type="date" />
-        </Field>
-        <Field label="Sort" name="sort">
-          <select className="field" defaultValue={params.sort} id="sort" name="sort">
-            {SORTS.map((sort) => (
-              <option key={sort} value={sort}>
-                {SORT_LABELS[sort]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <div className="flex items-end gap-4 md:col-span-4 lg:col-span-7">
+      <AutoSubmitForm className="a-card mt-4 grid gap-3 p-4">
+        <div className="flex items-end gap-3">
+          <div className="min-w-0 flex-1 md:max-w-xs">
+            <Field label="Reference" name="q">
+              <input
+                className="field font-mono"
+                defaultValue={params.q}
+                id="q"
+                name="q"
+                placeholder="e.g. SQWGCD"
+              />
+            </Field>
+          </div>
           <button className="btn btn-primary" type="submit">
             Apply
           </button>
           {activeFilters.length > 0 && (
-            <Link className="link-underline text-sm" href="/admin/cases">
+            <Link className="link-underline py-2" href="/admin/cases">
               Reset filters
             </Link>
           )}
         </div>
+        <details className="a-more" open={moreFilters > 0}>
+          <summary>More filters{moreFilters > 0 ? ` (${moreFilters} on)` : ""}</summary>
+          <div className="mt-3 grid grid-cols-2 gap-3 md:mt-0 md:grid-cols-3 xl:grid-cols-6">
+            <Field label="Status" name="status">
+              <select className="field" defaultValue={params.status} id="status" name="status">
+                <option value="active">Open (any)</option>
+                <option value="all">Any</option>
+                {CASE_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Platform" name="platform">
+              <select className="field" defaultValue={params.platform} id="platform" name="platform">
+                <option value="">Any</option>
+                {platforms.map((platform) => (
+                  <option key={platform.id} value={platform.id}>
+                    {platform.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Next action" name="nextAction">
+              <select className="field" defaultValue={params.nextAction} id="nextAction" name="nextAction">
+                <option value="">Any</option>
+                <option value="blocked">Blocked (any)</option>
+                {NEXT_ACTIONS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {NEXT_ACTION_FILTER_LABELS[kind]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Created from" name="from">
+              <input className="field" defaultValue={params.from} id="from" name="from" type="date" />
+            </Field>
+            <Field label="Created to" name="to">
+              <input className="field" defaultValue={params.to} id="to" name="to" type="date" />
+            </Field>
+            <Field label="Sort" name="sort">
+              <select className="field" defaultValue={params.sort} id="sort" name="sort">
+                {SORTS.map((sort) => (
+                  <option key={sort} value={sort}>
+                    {SORT_LABELS[sort]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </details>
       </AutoSubmitForm>
 
       {activeFilters.length > 0 && (
-        <ul aria-label="Active filters" className="mt-4 flex flex-wrap gap-2 text-sm">
+        <ul aria-label="Active filters" className="mt-3 flex flex-wrap gap-2">
           {activeFilters.map((filter) => (
             <li key={filter.key}>
               <Link
                 aria-label={`Remove filter ${filter.label}`}
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-3 py-1"
+                className="a-chip"
                 href={href({ ...params, sort: params.sort === "due" ? "" : params.sort, [filter.key]: "" })}
               >
                 {filter.label}
@@ -244,13 +257,7 @@ export default async function AdminCasesPage({
         </ul>
       )}
 
-      <p className="muted mt-8 text-sm tabular-nums" aria-live="polite">
-        {page.total === 0
-          ? "No cases"
-          : `Showing ${page.start} to ${end} of ${page.total} case${page.total === 1 ? "" : "s"}`}
-      </p>
-
-      <div className="mt-3">
+      <div className="mt-4">
         {page.rows.length > 0 ? (
           <CaseTable
             caption={`Cases, sorted by ${SORT_LABELS[params.sort].toLowerCase()}`}
@@ -267,7 +274,7 @@ export default async function AdminCasesPage({
             }
           />
         ) : (
-          <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-6 text-center text-sm">
+          <div className="a-card p-6 text-center">
             {activeFilters.length > 0 || params.nextAction ? (
               <>
                 <p className="muted">No cases match these filters.</p>
@@ -283,7 +290,7 @@ export default async function AdminCasesPage({
       </div>
 
       {(single(raw.cursor) || page.nextCursor) && (
-        <nav aria-label="Case list pages" className="mt-6 flex gap-6 text-sm">
+        <nav aria-label="Case list pages" className="mt-4 flex gap-6">
           {single(raw.cursor) && (
             <Link className="link-underline" href={href({ ...params, sort: params.sort === "due" ? "" : params.sort })}>
               First page
@@ -350,12 +357,8 @@ export function AdminPageHeader({
 }) {
   return (
     <div>
-      <p className="eyebrow">
-        {label}
-      </p>
-      <h1 className="page-title-sm mt-3">
-        {title}
-      </h1>
+      <p className="eyebrow">{label}</p>
+      <h1 className="mt-1">{title}</h1>
     </div>
   );
 }
@@ -370,7 +373,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="grid gap-1.5" htmlFor={name}>
+    <label className="grid gap-1" htmlFor={name}>
       <span className="eyebrow">
         {label}
       </span>

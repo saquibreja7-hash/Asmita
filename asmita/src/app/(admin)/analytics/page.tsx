@@ -58,21 +58,21 @@ export default async function InternalAnalyticsPage() {
         <p className="eyebrow">
           Console · Analytics · Internal only
         </p>
-        <h1 className="page-title-sm mt-3">
+        <h1 className="mt-3">
           Analytics dashboard
         </h1>
-        <p className="muted mt-3 max-w-2xl text-sm leading-[1.7]">
+        <p className="muted mt-3 max-w-2xl text-sm">
           {analytics.privacyNote}
         </p>
       </div>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-3">
+      <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3">
         {stats.map(([label, value]) => (
           <Metric key={label} label={label} value={value} />
         ))}
       </div>
 
-      <div className="mt-12 grid gap-8 lg:grid-cols-3">
+      <div className="mt-8 grid gap-8 lg:grid-cols-3">
         <AnalyticsTable
           title="URL status mix"
           rows={analytics.urlStatusCounts}
@@ -90,18 +90,18 @@ export default async function InternalAnalyticsPage() {
         />
       </div>
 
-      <section className="mt-14">
+      <section className="mt-8">
         <p className="eyebrow">
           Beta KPI tracker
         </p>
-        <h2 className="section-title mt-3">
+        <h2 className="mt-3">
           Pre-launch indicators.
         </h2>
-        <p className="muted mt-3 max-w-2xl text-sm leading-[1.7]">
+        <p className="muted mt-3 max-w-2xl text-sm">
           Measured values only. Nothing measures the scheduler yet, so it is
           not shown.
         </p>
-        <div className="mt-6 grid gap-6 md:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
           {betaStats.map(([label, value]) => (
             <Metric key={label} label={label} value={value} small />
           ))}
@@ -121,8 +121,8 @@ function AnalyticsTable({
   labelKey: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
-      <h2 className="subsection-title border-b border-[var(--line)] p-4">
+    <div className="overflow-hidden a-card">
+      <h2 className="border-b border-[var(--line)] p-4">
         {title}
       </h2>
       <table className="w-full text-left text-sm">
@@ -175,8 +175,8 @@ function Metric({
         {label}
       </p>
       <p
-        className={`font-display mt-2 leading-none tracking-tight text-[var(--ink)] tabular-nums ${
-          small ? "text-[26px]" : "text-[36px]"
+        className={`mt-2 font-semibold tabular-nums ${
+          small ? "text-xl" : "a-stat-value"
         }`}
       >
         {value}

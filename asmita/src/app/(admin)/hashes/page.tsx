@@ -16,10 +16,10 @@ export default async function HashQueuePage() {
         <p className="eyebrow">
           Console · Fingerprints
         </p>
-        <h1 className="page-title-sm mt-3">
+        <h1 className="mt-3">
           Fingerprint review queue
         </h1>
-        <p className="muted mt-6 max-w-xl text-sm leading-[1.7]">
+        <p className="muted mt-6 max-w-xl text-sm">
           Fingerprint submission is switched off (<code>ENABLE_HASH_UPLOAD</code> is not
           <code>true</code>), so there is nothing to review here.
         </p>
@@ -39,10 +39,10 @@ export default async function HashQueuePage() {
         <p className="eyebrow">
           Console · Fingerprints
         </p>
-        <h1 className="page-title-sm mt-3">
+        <h1 className="mt-3">
           Fingerprint review queue
         </h1>
-        <p className="muted mt-6 max-w-2xl text-sm leading-[1.7]">
+        <p className="muted mt-6 max-w-2xl text-sm">
           Every client-generated perceptual hash waits here for human review before any
           advisory is dispatched. You are reviewing metadata only - the image never
           existed on our systems. Check account reputation, submission volume, quality
@@ -50,7 +50,7 @@ export default async function HashQueuePage() {
         </p>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-6 overflow-hidden a-card">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--line)]">
@@ -90,14 +90,14 @@ export default async function HashQueuePage() {
         )}
       </div>
 
-      <div className="mt-14">
+      <div className="mt-8">
         <p className="eyebrow">
           Advisory dispatch
         </p>
-        <h2 className="section-title mt-3">
+        <h2 className="mt-3">
           Send hash advisories to platforms
         </h2>
-        <p className="muted mt-4 max-w-2xl text-sm leading-[1.7]">
+        <p className="muted mt-4 max-w-2xl text-sm">
           One email per platform: the legally reviewed HASH_ADVISORY notice plus the
           hash annex for all approved hashes on the case. Dispatch refuses to run
           unless the template has legal sign-off and the contact is human-verified.

@@ -177,9 +177,14 @@ export function CaseTable({
           : undefined;
 
   return (
-    <div className={peek ? "md:pr-[min(34rem,45vw)]" : undefined}>
-      <div className="mb-2 flex justify-end">
-        <button className="link-underline text-xs" onClick={() => setHelpOpen((open) => !open)} type="button">
+    <div>
+      <div className="mb-2 hidden justify-end md:flex">
+        <button
+          aria-expanded={helpOpen}
+          className="link-underline text-xs"
+          onClick={() => setHelpOpen((open) => !open)}
+          type="button"
+        >
           Keyboard shortcuts
         </button>
       </div>
@@ -188,20 +193,22 @@ export function CaseTable({
       )}
 
       <div
-        className="overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]"
+        className="a-card overflow-x-auto"
         ref={containerRef}
       >
-        <table className="hidden w-full text-left text-sm md:table">
+        <table className="a-table hidden md:table" data-compact={Boolean(peek)}>
           <caption className="sr-only">{caption}</caption>
           <thead>
-            <tr className="border-b border-[var(--line)]">
+            <tr>
               <Th>Reference</Th>
               <Th>Next action</Th>
               <Th sort={ariaSort("due")}>Due</Th>
-              <Th>Links</Th>
-              <Th>Step</Th>
-              <Th>Platforms</Th>
-              <Th sort={ariaSort("age")}>Age</Th>
+              <Th extra>Links</Th>
+              <Th extra>Step</Th>
+              <Th extra>Platforms</Th>
+              <Th extra sort={ariaSort("age")}>
+                Age
+              </Th>
               <Th>
                 <span className="sr-only">Preview</span>
               </Th>
@@ -210,9 +217,8 @@ export function CaseTable({
           <tbody>
             {rows.map((row, index) => (
               <tr
-                className={`cursor-pointer border-t border-[var(--line)] outline-none focus-visible:bg-[var(--line)] ${
-                  peek === row.referenceNumber ? "bg-[var(--line)]" : ""
-                }`}
+                className="cursor-pointer outline-none"
+                data-selected={peek === row.referenceNumber}
                 key={row.caseId}
                 onClick={(event) => {
                   if ((event.target as HTMLElement).closest("a,button")) return;
@@ -232,23 +238,23 @@ export function CaseTable({
                 }}
                 tabIndex={index === active ? 0 : -1}
               >
-                <td className="px-4 py-3">
+                <td className="a-nowrap">
                   <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`} tabIndex={-1}>
                     {row.referenceNumber}
                   </Link>
                 </td>
-                <td className="px-4 py-3">{row.action}</td>
-                <td className={`px-4 py-3 tabular-nums ${row.overdue ? "text-[var(--danger)]" : ""}`}>
+                <td className="font-medium">{row.action}</td>
+                <td className={`a-nowrap tabular-nums ${row.overdue ? "font-semibold text-[var(--danger)]" : ""}`}>
                   {row.overdue && <span aria-hidden="true">! </span>}
                   {row.due}
                 </td>
-                <td className="px-4 py-3 tabular-nums">{row.links}</td>
-                <td className="px-4 py-3">{row.step}</td>
-                <td className="px-4 py-3">{row.platforms}</td>
-                <td className="px-4 py-3 tabular-nums text-[var(--text-muted)]" title={row.ageTitle}>
+                <td className="a-extra tabular-nums">{row.links}</td>
+                <td className="a-extra a-nowrap">{row.step}</td>
+                <td className="a-extra">{row.platforms}</td>
+                <td className="a-extra a-nowrap tabular-nums text-[var(--text-muted)]" title={row.ageTitle}>
                   {row.age}
                 </td>
-                <td className="px-4 py-3">
+                <td className="a-nowrap text-right">
                   <button className="link-underline text-xs" onClick={() => openPeek(index)} tabIndex={-1} type="button">
                     Preview
                   </button>
@@ -260,7 +266,7 @@ export function CaseTable({
 
         <ul className="divide-y divide-[var(--line)] md:hidden">
           {rows.map((row, index) => (
-            <li className="grid gap-1 p-4 text-sm" key={row.caseId}>
+            <li className="grid gap-1 p-4" key={row.caseId}>
               <div className="flex items-baseline justify-between gap-2">
                 <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`}>
                   {row.referenceNumber}
@@ -269,13 +275,15 @@ export function CaseTable({
                   Preview
                 </button>
               </div>
-              <p>{row.action}</p>
-              <p className={row.overdue ? "text-[var(--danger)]" : "muted"}>
+              <p className="font-medium">{row.action}</p>
+              <p className={row.overdue ? "font-semibold text-[var(--danger)]" : "muted"}>
                 {row.overdue && <span aria-hidden="true">! </span>}
                 {row.due}
               </p>
-              <p className="muted">
-                {row.links} link{row.links === 1 ? "" : "s"} · {row.platforms} · {row.step} · {row.age} old
+              <p className="muted text-xs">
+                {[`${row.links} link${row.links === 1 ? "" : "s"}`, row.platforms, row.step, `${row.age} old`]
+                  .filter((part) => part !== "-")
+                  .join(" · ")}
               </p>
             </li>
           ))}
@@ -308,10 +316,10 @@ function ShortcutHelp({
   return (
     <section
       aria-label="Keyboard shortcuts"
-      className="mb-4 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-4 text-sm"
+      className="a-card mb-4 p-4"
     >
       <div className="flex items-baseline justify-between gap-4">
-        <h2 className="subsection-title">Keyboard shortcuts</h2>
+        <h2 className="text-base">Keyboard shortcuts</h2>
         <button className="link-underline text-xs" onClick={onClose} type="button">
           Close
         </button>
@@ -335,9 +343,18 @@ function ShortcutHelp({
   );
 }
 
-function Th({ children, sort }: { children: React.ReactNode; sort?: "ascending" | "descending" }) {
+function Th({
+  children,
+  sort,
+  extra,
+}: {
+  children: React.ReactNode;
+  sort?: "ascending" | "descending";
+  /** A column that gives way while the preview panel is open. */
+  extra?: boolean;
+}) {
   return (
-    <th aria-sort={sort} className="eyebrow px-4 py-3" scope="col">
+    <th aria-sort={sort} className={extra ? "eyebrow a-extra" : "eyebrow"} scope="col">
       {children}
     </th>
   );

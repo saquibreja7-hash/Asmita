@@ -56,13 +56,11 @@ export function SavedViews({ views, currentQuery }: { views: SavedView[]; curren
   if (views.length === 0 && !currentQuery) return null;
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+    <div className="mt-2 flex flex-wrap items-center gap-2">
       {views.length > 0 && <span className="muted text-xs">My views:</span>}
       {views.map((view) => (
         <span
-          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${
-            view.query === currentQuery ? "border-[var(--ink)]" : "border-[var(--line)]"
-          }`}
+          className="a-chip"
           key={view.id}
         >
           <Link aria-current={view.query === currentQuery ? "page" : undefined} href={`/admin/cases?${view.query}`}>
@@ -90,7 +88,7 @@ export function SavedViews({ views, currentQuery }: { views: SavedView[]; curren
           </label>
           <input
             autoFocus
-            className="field py-1 text-sm"
+            className="field"
             id="saved-view-name"
             maxLength={60}
             onChange={(event) => setName(event.target.value)}
@@ -98,7 +96,7 @@ export function SavedViews({ views, currentQuery }: { views: SavedView[]; curren
             required
             value={name}
           />
-          <button className="btn btn-primary px-3 py-1 text-xs" disabled={busy || !name.trim()} type="submit">
+          <button className="btn btn-primary" disabled={busy || !name.trim()} type="submit">
             Save
           </button>
           <button className="link-underline text-xs" onClick={() => setNaming(false)} type="button">

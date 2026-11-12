@@ -15,10 +15,10 @@ export default async function TemplatesPage() {
         <p className="eyebrow">
           Console · Templates
         </p>
-        <h1 className="page-title-sm mt-3">
+        <h1 className="mt-3">
           Notice templates
         </h1>
-        <p className="muted mt-3 max-w-xl text-sm leading-[1.7]">
+        <p className="muted mt-3 max-w-xl text-sm">
           A template is sent only when it is active and a legal reviewer has
           recorded a review. Only a human legal reviewer marks a template
           reviewed; seeding and code never do.
@@ -32,7 +32,7 @@ export default async function TemplatesPage() {
         )}
       </div>
 
-      <div className="mt-10 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-6 overflow-x-auto a-card">
         <table className="w-full min-w-[860px] text-left text-sm">
           <caption className="sr-only">Notice templates and their legal review status</caption>
           <thead>
@@ -52,7 +52,7 @@ export default async function TemplatesPage() {
               >
                 <td className="p-4">
                   <p className="font-mono text-xs font-medium">{row.templateType}</p>
-                  <p className="muted mt-2 text-xs leading-[1.55]">
+                  <p className="muted mt-2 text-xs">
                     {row.subject}
                   </p>
                 </td>

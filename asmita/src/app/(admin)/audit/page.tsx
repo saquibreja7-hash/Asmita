@@ -37,14 +37,14 @@ export default async function AuditPage({
         <p className="eyebrow">
           Console · Audit
         </p>
-        <h1 className="page-title-sm mt-3">
+        <h1 className="mt-3">
           Audit log
         </h1>
       </div>
 
       <ChainStatusBanner validation={validation} />
 
-      <form className="mt-10 grid gap-4 md:grid-cols-4">
+      <form className="a-card mt-6 grid gap-3 p-4 md:grid-cols-4">
         <FilterField label="Event">
           <input
             className="field"
@@ -69,12 +69,12 @@ export default async function AuditPage({
             placeholder="Exact case, link or notice id"
           />
         </FilterField>
-        <button className="btn btn-primary self-end" type="submit">
+        <button className="btn btn-primary self-end justify-self-start" type="submit">
           Filter
         </button>
       </form>
 
-      <div className="mt-10 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-6 overflow-x-auto a-card">
         <table className="w-full min-w-[860px] text-left text-sm">
           <caption className="sr-only">Audit events, newest first</caption>
           <thead>
@@ -173,7 +173,7 @@ function ChainStatusBanner({
 }) {
   if ("unavailable" in validation) {
     return (
-      <div className="mt-8 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-4 text-sm">
+      <div className="mt-8 a-card p-4 text-sm">
         <p className="eyebrow">
           Chain integrity
         </p>
@@ -223,7 +223,7 @@ function FilterField({
   children: React.ReactNode;
 }) {
   return (
-    <label className="grid gap-1.5">
+    <label className="grid gap-1">
       <span className="eyebrow">
         {label}
       </span>
