@@ -39,6 +39,7 @@ const youtube: PlatformFact = {
   name: "YouTube",
   noticeBasis: "IT_RULES_2021",
   emailReady: true,
+  apiReady: false,
   grievanceEmail: "grievance@youtube.test",
   lastContactVerifiedAt: hoursAgo(100),
 };

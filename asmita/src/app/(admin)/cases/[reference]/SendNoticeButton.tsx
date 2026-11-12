@@ -16,6 +16,9 @@ const ERRORS: Record<string, string> = {
   fingerprints_pending_review: "Fingerprints in the signed notice still need review.",
   signed_fingerprints_changed: "A fingerprint in the signed notice was rejected. The survivor must sign again.",
   email_already_sent: "This notice was already emailed. Nothing was sent again.",
+  platform_api_failed: "The platform API rejected the notice and no verified email contact exists.",
+  platform_api_ambiguous: "The platform API failed ambiguously (timeout, network or 5xx). Nothing was emailed. Retry to re-send the same idempotent request.",
+  platform_api_not_configured: "The platform API channel lost its token. Nothing was sent.",
   permission_denied: "Your admin role cannot send notices.",
 };
 
@@ -24,6 +27,7 @@ type Props = {
   urlId: string;
   platformName: string;
   recipient: string;
+  transport: "api" | "email";
   templateLabel: string;
   reviewLabel: string;
   fingerprintCount: number;
@@ -82,10 +86,13 @@ export function SendNoticeButton(props: Props) {
           Send notice to {props.platformName}
         </h2>
         <p className="mt-3 text-sm">
-          This emails a legal notice in the survivor&apos;s name, with the PDF they signed attached. It
-          cannot be unsent.
+          {props.transport === "api"
+            ? "This sends a legal notice in the survivor's name to the platform's reporting API, with the PDF they signed included. It cannot be unsent."
+            : "This emails a legal notice in the survivor's name, with the PDF they signed attached. It cannot be unsent."}
         </p>
         <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+          <dt className="muted">Channel</dt>
+          <dd>{props.transport === "api" ? "Platform API" : "Email"}</dd>
           <dt className="muted">Recipient</dt>
           <dd className="font-mono break-all">{props.recipient}</dd>
           <dt className="muted">Template</dt>

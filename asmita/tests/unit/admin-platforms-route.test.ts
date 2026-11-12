@@ -211,4 +211,71 @@ describe("POST /api/admin/platforms/[platformId]", () => {
     expect(db.$transaction).toHaveBeenCalledOnce();
     expect(writeAuditLog).toHaveBeenCalled();
   });
+
+  it("changing the API endpoint resets the human-verification gate", async () => {
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
+    vi.mocked(db.platform.findUnique).mockResolvedValue({
+      id: "p-1",
+      name: "Example",
+      grievanceEmail: "go@example.com",
+      grievanceName: null,
+      grievanceAddress: null,
+      formUrl: null,
+      apiEndpoint: null,
+      lastContactVerifiedByHuman: true,
+    } as never);
+
+    const res = await POST(
+      csrfPost("p-1", {
+        sourceUrl: "https://platform.com/partner-api",
+        markVerified: false,
+        fields: { apiEndpoint: "https://api.partner.example/removals" },
+      }),
+      makeParams("p-1"),
+    );
+    expect(res.status).toBe(200);
+    expect(db.platform.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "p-1" },
+        data: expect.objectContaining({
+          apiEndpoint: "https://api.partner.example/removals",
+          lastContactVerifiedByHuman: false,
+          lastContactVerifiedAt: null,
+        }),
+      }),
+    );
+  });
+
+  it("marking verified while changing the API endpoint keeps the gate open", async () => {
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
+    vi.mocked(db.platform.findUnique).mockResolvedValue({
+      id: "p-1",
+      name: "Example",
+      grievanceEmail: "go@example.com",
+      grievanceName: null,
+      grievanceAddress: null,
+      formUrl: null,
+      apiEndpoint: null,
+      lastContactVerifiedByHuman: false,
+    } as never);
+
+    const res = await POST(
+      csrfPost("p-1", {
+        sourceUrl: "https://platform.com/partner-api",
+        markVerified: true,
+        fields: { apiEndpoint: "https://api.partner.example/removals" },
+      }),
+      makeParams("p-1"),
+    );
+    expect(res.status).toBe(200);
+    expect(db.platform.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "p-1" },
+        data: expect.objectContaining({
+          apiEndpoint: "https://api.partner.example/removals",
+          lastContactVerifiedByHuman: true,
+        }),
+      }),
+    );
+  });
 });

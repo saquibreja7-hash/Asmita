@@ -77,6 +77,13 @@ export async function POST(
   if (markVerified) {
     updateData.lastContactVerifiedAt = new Date();
     updateData.lastContactVerifiedByHuman = true;
+  } else if (diffs.some((diff) => diff.field === "apiEndpoint")) {
+    // A new API endpoint is a new recipient of signed notices and survivor
+    // fingerprints. Platform-edit rights alone must never redirect them:
+    // the change resets the human-verification gate, and a human must
+    // re-verify (with a source URL) before the platform can dispatch again.
+    updateData.lastContactVerifiedAt = null;
+    updateData.lastContactVerifiedByHuman = false;
   }
 
   await db.$transaction([

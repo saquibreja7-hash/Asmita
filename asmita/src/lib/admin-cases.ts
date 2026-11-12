@@ -13,6 +13,7 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { buildLadder } from "@/lib/escalation-ladder";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED, platformDirectory } from "@/lib/platforms";
 import { isUrlExpired } from "@/lib/url-retention";
+import { getTier1ApiConfigFromEnv, platformApiTokenFor } from "@/lib/tier1-api-client";
 
 export const REVIEW_SLA_HOURS = 4;
 // Assumed until agreed (open question 1 in the redesign doc).
@@ -83,9 +84,32 @@ export type PlatformFact = {
   noticeBasis: string;
   /** Asmita can email it: active, a grievance email, verified by a human. */
   emailReady: boolean;
+  /**
+   * A fully configured Tier 1 API channel exists: the deployment switch, an
+   * admin-set endpoint, the enabled-platform list and a token all present.
+   */
+  apiReady: boolean;
   grievanceEmail: string | null;
   lastContactVerifiedAt: Date | null;
 };
+
+/** Whether the platform API channel would dispatch for this platform. */
+function apiReadyFact(platform: {
+  id: string;
+  tier: string;
+  apiEndpoint?: string | null;
+  lastContactVerifiedByHuman?: boolean | null;
+}): boolean {
+  const config = getTier1ApiConfigFromEnv();
+  return (
+    config.enabled &&
+    platform.tier === "TIER_1" &&
+    Boolean(platform.apiEndpoint) &&
+    Boolean(platform.lastContactVerifiedByHuman) &&
+    config.enabledPlatformIds.includes(platform.id) &&
+    Boolean(platformApiTokenFor(config, platform.id))
+  );
+}
 
 export type Gates = {
   platforms: Map<string, PlatformFact>;
@@ -165,7 +189,7 @@ export function deriveCaseWork(facts: CaseFacts, gates: Gates, now: Date): CaseW
       add("waiting_on_survivor", null);
     } else if (!link.signed) {
       add("waiting_on_survivor", null);
-    } else if (!platform || !platform.emailReady) {
+    } else if (!platform || !(platform.emailReady || platform.apiReady)) {
       add("blocked_contact", null);
     } else if (!gates.hasReviewedTemplate(templateType!, platform.id)) {
       add("blocked_legal_review", null);
@@ -355,6 +379,12 @@ async function loadGates(): Promise<Gates> {
           name: entry.name,
           noticeBasis: entry.noticeBasis,
           emailReady: entry.lastContactVerifiedByHuman && entry.grievanceEmail !== HUMAN_VERIFICATION_REQUIRED,
+          apiReady: apiReadyFact({
+            id: entry.id,
+            tier: entry.tier,
+            apiEndpoint: entry.apiEndpoint,
+            lastContactVerifiedByHuman: entry.lastContactVerifiedByHuman,
+          }),
           grievanceEmail: entry.grievanceEmail === HUMAN_VERIFICATION_REQUIRED ? null : entry.grievanceEmail,
           lastContactVerifiedAt: entry.lastContactVerifiedAt ? new Date(entry.lastContactVerifiedAt) : null,
         },
@@ -368,6 +398,8 @@ async function loadGates(): Promise<Gates> {
         id: true,
         name: true,
         noticeBasis: true,
+        tier: true,
+        apiEndpoint: true,
         grievanceEmail: true,
         lastContactVerifiedByHuman: true,
         lastContactVerifiedAt: true,
@@ -393,6 +425,7 @@ async function loadGates(): Promise<Gates> {
               platform.grievanceEmail !== HUMAN_VERIFICATION_REQUIRED &&
               platform.lastContactVerifiedByHuman,
           ),
+          apiReady: platform.isActive && apiReadyFact(platform),
           grievanceEmail: platform.grievanceEmail,
           lastContactVerifiedAt: platform.lastContactVerifiedAt,
         },
@@ -591,6 +624,8 @@ export type AdminCaseLink = {
   /** What Send notice would use; null when the link cannot be sent. */
   dispatch: null | {
     recipient: string;
+    /** Which channel the notice would take: the platform API or email. */
+    transport: "api" | "email";
     templateType: string;
     templateVersion: number;
     reviewedAt: string | null;
@@ -768,7 +803,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
       link.status === "NOTICE_QUEUED" &&
       !sentUrlIds.has(link.id) &&
       link.signed &&
-      platform?.emailReady &&
+      (platform?.emailReady || platform?.apiReady) &&
       EMAIL_NOTICE_TYPES[platform.noticeBasis]
     );
   });
@@ -834,9 +869,10 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
           responseType: notice.responseType,
         })),
         dispatch:
-          canSend && template && platform?.grievanceEmail
+          canSend && template && (platform?.grievanceEmail || platform?.apiReady)
             ? {
-                recipient: platform.grievanceEmail,
+                recipient: platform?.grievanceEmail ?? "Platform API (partner endpoint)",
+                transport: platform?.apiReady ? "api" : "email",
                 templateType: template.templateType,
                 templateVersion: template.version,
                 reviewedAt: template.reviewedAt?.toISOString() ?? null,
