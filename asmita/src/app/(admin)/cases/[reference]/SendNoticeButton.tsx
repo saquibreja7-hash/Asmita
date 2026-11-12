@@ -17,6 +17,7 @@ const ERRORS: Record<string, string> = {
   signed_fingerprints_changed: "A fingerprint in the signed notice was rejected. The survivor must sign again.",
   email_already_sent: "This notice was already emailed. Nothing was sent again.",
   platform_api_failed: "The platform API rejected the notice and no verified email contact exists.",
+  platform_api_ambiguous: "The platform API failed ambiguously (timeout, network or 5xx). Nothing was emailed. Retry to re-send the same idempotent request.",
   platform_api_not_configured: "The platform API channel lost its token. Nothing was sent.",
   permission_denied: "Your admin role cannot send notices.",
 };

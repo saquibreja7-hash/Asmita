@@ -94,12 +94,18 @@ export type PlatformFact = {
 };
 
 /** Whether the platform API channel would dispatch for this platform. */
-function apiReadyFact(platform: { id: string; tier: string; apiEndpoint?: string | null }): boolean {
+function apiReadyFact(platform: {
+  id: string;
+  tier: string;
+  apiEndpoint?: string | null;
+  lastContactVerifiedByHuman?: boolean | null;
+}): boolean {
   const config = getTier1ApiConfigFromEnv();
   return (
     config.enabled &&
     platform.tier === "TIER_1" &&
     Boolean(platform.apiEndpoint) &&
+    Boolean(platform.lastContactVerifiedByHuman) &&
     config.enabledPlatformIds.includes(platform.id) &&
     Boolean(platformApiTokenFor(config, platform.id))
   );
@@ -373,7 +379,12 @@ async function loadGates(): Promise<Gates> {
           name: entry.name,
           noticeBasis: entry.noticeBasis,
           emailReady: entry.lastContactVerifiedByHuman && entry.grievanceEmail !== HUMAN_VERIFICATION_REQUIRED,
-          apiReady: apiReadyFact({ id: entry.id, tier: entry.tier, apiEndpoint: entry.apiEndpoint }),
+          apiReady: apiReadyFact({
+            id: entry.id,
+            tier: entry.tier,
+            apiEndpoint: entry.apiEndpoint,
+            lastContactVerifiedByHuman: entry.lastContactVerifiedByHuman,
+          }),
           grievanceEmail: entry.grievanceEmail === HUMAN_VERIFICATION_REQUIRED ? null : entry.grievanceEmail,
           lastContactVerifiedAt: entry.lastContactVerifiedAt ? new Date(entry.lastContactVerifiedAt) : null,
         },

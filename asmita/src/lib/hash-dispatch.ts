@@ -127,6 +127,12 @@ export async function dispatchHashAdvisories(input: {
     const tier1Config = getTier1ApiConfigFromEnv();
     const channel = routeTier1OrFallback(platform, tier1Config);
     if (channel.method === "API") {
+      // Same human-verification gate as email: survivor fingerprints and the
+      // signed advisory never go to an endpoint a human has not verified.
+      if (!platform.lastContactVerifiedByHuman) {
+        results.push({ platformId, dispatched: false, reason: "contact_not_human_verified" });
+        continue;
+      }
       const accessToken = platformApiTokenFor(tier1Config, platform.id);
       if (accessToken) {
         const rows = await db.hashSubmission.findMany({
@@ -192,8 +198,16 @@ export async function dispatchHashAdvisories(input: {
           });
           continue;
         }
+        // A 4xx is a definite rejection: the platform received the advisory
+        // and did not process it, so the email channel may take over. A
+        // timeout, network error or 5xx is ambiguous — the partner may have
+        // processed it — and a second channel would deliver the advisory
+        // twice. Ambiguous outcomes never auto-fall-back; the admin retries
+        // later (the partner-side Idempotency-Key makes that safe).
         // entityType Case (not Notice): advisory fallbacks never read as
         // escalation-ladder blocks.
+        const definiteRejection =
+          typeof result.status === "number" && result.status >= 400 && result.status < 500;
         await writeAuditLog({
           eventType: "NOTICE_FAILED",
           entityType: "Case",
@@ -203,9 +217,13 @@ export async function dispatchHashAdvisories(input: {
             transport: "platform_api",
             kind: "hash_advisory",
             reason: result.status,
-            fellBackTo: "email",
+            fellBackTo: definiteRejection ? "email" : "none",
           },
         });
+        if (!definiteRejection) {
+          results.push({ platformId, dispatched: false, reason: "api_send_ambiguous" });
+          continue;
+        }
         // Fall through to the email channel.
       }
     }

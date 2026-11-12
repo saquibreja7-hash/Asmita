@@ -14,6 +14,7 @@ const directoryPlatform = {
   tier: "TIER_1",
   grievanceEmail: "verified@example.com",
   apiEndpoint: "https://api.example.com/removals",
+  lastContactVerifiedByHuman: true,
 };
 
 const dbPlatformRow = {
@@ -21,6 +22,7 @@ const dbPlatformRow = {
   tier: "TIER_1",
   grievanceEmail: null,
   apiEndpoint: "https://api.partner.example/takedown",
+  lastContactVerifiedByHuman: true,
 };
 
 const enabled = { enabled: true, enabledPlatformIds: ["youtube", "x-twitter"], accessToken: "token" };
@@ -76,6 +78,15 @@ describe("routeTier1OrFallback", () => {
         { enabled: true, enabledPlatformIds: [] },
       ),
     ).toMatchObject({ method: "FORM_HANDOFF", tier: 3 });
+  });
+
+  it("does not route to the API when the contact is not human-verified", () => {
+    expect(
+      routeTier1OrFallback({ ...dbPlatformRow, lastContactVerifiedByHuman: false }, enabled),
+    ).toMatchObject({ method: "FORM_HANDOFF", tier: 3 });
+    expect(
+      routeTier1OrFallback({ ...directoryPlatform, lastContactVerifiedByHuman: false }, enabled),
+    ).toMatchObject({ method: "EMAIL", tier: 2 });
   });
 
   it("does not route non-Tier-1 platforms to the API", () => {

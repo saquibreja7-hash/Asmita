@@ -33,22 +33,35 @@ while the switch is off.
 2. **Fingerprint values, not digests.** The payload carries the real PDQ
    strings, decrypted from `hashEncrypted` at dispatch time — the same values
    the annex text lists. The sha256 `hashDigest` (dedup key) never leaves.
-3. **Four human acts to enable.** A platform dispatches via API only when ALL
+3. **Five human acts to enable.** A platform dispatches via API only when ALL
    hold: `ENABLE_PLATFORM_API=true`, an admin-set `apiEndpoint` on the
-   platform row, the id in `TIER1_API_ENABLED_PLATFORMS`, and a token
-   (`TIER1_API_TOKEN_<ID>` or the shared fallback). Each is deliberate.
+   platform row, the id in `TIER1_API_ENABLED_PLATFORMS`, a token
+   (`TIER1_API_TOKEN_<ID>` or the shared fallback), and
+   `lastContactVerifiedByHuman=true` — the same human contact-verification
+   gate as email, because the API channel carries the same signed package
+   and survivor fingerprints. The admin platform editor **resets that flag
+   whenever `apiEndpoint` changes** (unless the same request records
+   `markVerified` with a source URL), so platform-edit rights alone can
+   never redirect notices or fingerprints to a new endpoint.
 4. **Idempotency, three layers.** (a) `Idempotency-Key` header so the partner
    can dedupe; (b) the `Notice` table (`method: "API"`) blocks re-dispatch in
    database-persistence mode; (c) the in-memory map covers dev/isolate
    restarts. Hash advisories keep the `HashDispatch` unique
    `(hashSubmissionId, platformId)` constraint on top.
-5. **Audit trail.** Success: `NOTICE_SENT` / `HASH_DISPATCHED` with
+5. **No double delivery.** A 4xx from the platform is a definite rejection —
+   the email channel may take over when a verified contact exists. A timeout,
+   network error or 5xx is *ambiguous* (the partner may have processed the
+   request), so no second channel fires: the admin retries — the same
+   Idempotency-Key makes the retry safe — or confirms with the partner
+   before emailing. One notice, one channel, unless delivery is proven not
+   to have happened.
+6. **Audit trail.** Success: `NOTICE_SENT` / `HASH_DISPATCHED` with
    `transport: "platform_api"`, status, and the partner's `referenceId`.
    Failure: `NOTICE_FAILED` with `transport` and reason, written against
    `SubmittedUrl` / `Case` — never entity type `Notice`, so escalation-ladder
    block detection (which filters `entityType: "Notice"`) is unaffected.
-6. **Transport failures never throw.** Non-2xx, network error and timeout all
-   resolve to `{ ok: false }` and fall back; timeouts via `AbortController`
+7. **Transport failures never throw.** Non-2xx, network error and timeout all
+   resolve to `{ ok: false }`; timeouts via `AbortController`
    (`TIER1_API_TIMEOUT_MS`, default 10s).
 
 ## Configuration
@@ -90,8 +103,12 @@ Idempotency-Key: <sha256-derived key>
 
 Expected response: any 2xx. Optional JSON body `{ "referenceId": "…" }` (or
 `{ "id": "…" }`) is stored as `Notice.messageId` for reply correlation.
-Everything else (3xx/4xx/5xx, timeout, network error) is a failure → email
-fallback if available, else the caller sees `platform_api_failed` (502).
+
+Failure semantics: a 4xx is a definite rejection — the caller may fall back
+to the email channel when a verified contact exists. A 5xx, timeout or
+network error is ambiguous — the platform may have processed the request —
+and **never** triggers an automatic second channel; the admin retries (the
+same `Idempotency-Key` makes that safe) or confirms before emailing.
 
 Known limitation: platforms whose `noticeBasis` is `FORM_ONLY` (Meta, X,
 LinkedIn) have no notice template today, so API dispatch returns
@@ -105,7 +122,7 @@ before any code task.
 
 | Condition | Channel |
 |---|---|
-| Switch on + TIER_1 + endpoint + enabled id + token | **API** |
+| Switch on + TIER_1 + human-verified contact + endpoint + enabled id + token | **API** |
 | Verified grievance email, API not fully configured | **EMAIL** (reason: `platform_api_disabled` / `api_not_configured` / `not_tier_1`) |
 | Neither | **FORM_HANDOFF** |
 
@@ -146,7 +163,10 @@ partner is a deliberate act with a signed agreement behind it.
 
 1. Signed partner agreement (PRD Feature 2.2/2.3 gate).
 2. Partner endpoint + token verified; token stored as a Worker secret.
-3. Platform row updated through the admin GO editor (`apiEndpoint`).
+3. Platform row updated through the admin GO editor (`apiEndpoint`). Changing
+   the endpoint resets `lastContactVerifiedByHuman`, so record
+   `markVerified` with a source URL in the same or a following edit — a
+   human verifies the *endpoint* before anything is dispatched to it.
 4. The platform's notice basis has an active, legally reviewed template
    (`reviewedByLegal: true`).
 5. Staging dispatch exercised with a synthetic case, including the email

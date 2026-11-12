@@ -32,6 +32,13 @@ export type Tier1RoutingPlatform = {
   tier: string;
   apiEndpoint?: string | null;
   grievanceEmail?: string | null;
+  /**
+   * The human contact-verification gate. The API channel carries the same
+   * signed package and survivor fingerprints as email, so the same
+   * "a human verified this platform's contact surface" rule applies; the
+   * admin platform editor resets it whenever apiEndpoint changes.
+   */
+  lastContactVerifiedByHuman?: boolean | null;
 };
 
 export type Tier1RoutingResult =
@@ -79,6 +86,7 @@ export function routeTier1OrFallback(
   const apiConfigured =
     config.enabled &&
     platform.tier === "TIER_1" &&
+    Boolean(platform.lastContactVerifiedByHuman) &&
     endpoint &&
     token &&
     config.enabledPlatformIds.includes(platform.id);

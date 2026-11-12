@@ -239,7 +239,30 @@ describe("POST /api/notices/dispatch", () => {
     );
   });
 
-  it("falls back to email when the API send fails and a verified contact exists", async () => {
+  it("falls back to email when the API rejects with a 4xx and a verified contact exists", async () => {
+    enablePlatformApi();
+    vi.mocked(db.submittedUrl.findFirst).mockResolvedValue({
+      ...dispatchableUrl,
+      platform: {
+        ...dispatchableUrl.platform,
+        tier: "TIER_1",
+        apiEndpoint: "https://api.partner.example/removals",
+      },
+    } as never);
+    vi.mocked(dispatchTier1ApiNotice).mockResolvedValue({
+      dispatched: false,
+      reason: "api_send_failed",
+      status: 422,
+    } as never);
+
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ transport: "email", fellBackFromPlatformApi: 422 });
+    expect(dispatchTier2Notice).toHaveBeenCalledTimes(1);
+  });
+
+  it("never emails after an ambiguous API failure (5xx, timeout, network)", async () => {
     enablePlatformApi();
     vi.mocked(db.submittedUrl.findFirst).mockResolvedValue({
       ...dispatchableUrl,
@@ -257,12 +280,14 @@ describe("POST /api/notices/dispatch", () => {
 
     const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ transport: "email", fellBackFromPlatformApi: 503 });
-    expect(dispatchTier2Notice).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: "platform_api_ambiguous", status: 503 });
+    // A verified email contact exists, but the platform may have processed the
+    // API request before the failure, so a second channel would double-send.
+    expect(dispatchTier2Notice).not.toHaveBeenCalled();
   });
 
-  it("returns 502 when the API fails and no verified email contact exists", async () => {
+  it("returns 502 when the API rejects with a 4xx and no verified email contact exists", async () => {
     enablePlatformApi();
     vi.mocked(db.submittedUrl.findFirst).mockResolvedValue({
       ...dispatchableUrl,
@@ -276,7 +301,7 @@ describe("POST /api/notices/dispatch", () => {
     vi.mocked(dispatchTier1ApiNotice).mockResolvedValue({
       dispatched: false,
       reason: "api_send_failed",
-      status: "timeout",
+      status: 422,
     } as never);
 
     const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));

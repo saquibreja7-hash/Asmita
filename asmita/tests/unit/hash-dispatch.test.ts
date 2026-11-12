@@ -127,11 +127,11 @@ describe("dispatchHashAdvisories", () => {
     );
   });
 
-  it("falls back to the email channel when the API send fails", async () => {
+  it("falls back to the email channel when the API rejects the advisory with a 4xx", async () => {
     process.env.ENABLE_PLATFORM_API = "true";
     process.env.TIER1_API_ENABLED_PLATFORMS = "platform-1";
     process.env.TIER1_API_ACCESS_TOKEN = "partner-token";
-    vi.mocked(sendNoticeToPlatformApi).mockResolvedValue({ ok: false, status: 500 });
+    vi.mocked(sendNoticeToPlatformApi).mockResolvedValue({ ok: false, status: 400 });
 
     const results = await dispatchHashAdvisories({ caseId: "case-1", platformIds: ["platform-1"] });
 
@@ -145,8 +145,33 @@ describe("dispatchHashAdvisories", () => {
         data: expect.objectContaining({
           transport: "platform_api",
           kind: "hash_advisory",
-          reason: 500,
+          reason: 400,
           fellBackTo: "email",
+        }),
+      }),
+    );
+  });
+
+  it("never emails after an ambiguous advisory API failure (5xx, timeout, network)", async () => {
+    process.env.ENABLE_PLATFORM_API = "true";
+    process.env.TIER1_API_ENABLED_PLATFORMS = "platform-1";
+    process.env.TIER1_API_ACCESS_TOKEN = "partner-token";
+    vi.mocked(sendNoticeToPlatformApi).mockResolvedValue({ ok: false, status: 503 });
+
+    const results = await dispatchHashAdvisories({ caseId: "case-1", platformIds: ["platform-1"] });
+
+    // The partner may have processed the advisory before the failure, so a
+    // second channel would deliver it twice. Nothing is emailed.
+    expect(results).toEqual([{ platformId: "platform-1", dispatched: false, reason: "api_send_ambiguous" }]);
+    expect(sendNoticeDraft).not.toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "NOTICE_FAILED",
+        data: expect.objectContaining({
+          transport: "platform_api",
+          kind: "hash_advisory",
+          reason: 503,
+          fellBackTo: "none",
         }),
       }),
     );

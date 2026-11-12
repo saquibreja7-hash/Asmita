@@ -95,6 +95,7 @@ export async function POST(request: Request) {
       tier: platform.tier,
       apiEndpoint: platform.apiEndpoint,
       grievanceEmail: platform.grievanceEmail,
+      lastContactVerifiedByHuman: platform.lastContactVerifiedByHuman,
     },
     tier1Config,
   );
@@ -166,6 +167,12 @@ export async function POST(request: Request) {
   // send failure we fall back to the email path when a verified contact exists.
   let fellBackFromApi: number | "network_error" | "timeout" | null = null;
   if (channel.method === "API") {
+    // Defence in depth beyond routeTier1OrFallback: the API channel carries
+    // the same signed package and survivor fingerprints as email, so the
+    // human contact-verification gate applies to it identically.
+    if (!platform.lastContactVerifiedByHuman) {
+      return NextResponse.json({ error: "verified_platform_contact_required" }, { status: 409 });
+    }
     let fingerprints: PlatformApiFingerprint[] = [];
     if (fingerprintIds.length > 0) {
       const rows = await db.hashSubmission.findMany({
@@ -217,7 +224,21 @@ export async function POST(request: Request) {
         reason: "already_dispatched",
       });
     }
-    // api_send_failed: fall back to the email channel below when possible.
+    // api_send_failed: a 4xx is a definite rejection — the platform received
+    // the request and did not process it — so the email channel may take
+    // over. A timeout, network error or 5xx is ambiguous: the partner may
+    // have processed the notice before the connection failed, and sending a
+    // second channel would deliver the same signed notice twice. Ambiguous
+    // outcomes never auto-fall-back; the admin retries (the partner-side
+    // Idempotency-Key makes that safe) or confirms before emailing.
+    const definiteRejection =
+      typeof result.status === "number" && result.status >= 400 && result.status < 500;
+    if (!definiteRejection) {
+      return NextResponse.json(
+        { error: "platform_api_ambiguous", status: result.status },
+        { status: 502 },
+      );
+    }
     fellBackFromApi = result.status;
     if (!emailAvailable) {
       return NextResponse.json({ error: "platform_api_failed" }, { status: 502 });
