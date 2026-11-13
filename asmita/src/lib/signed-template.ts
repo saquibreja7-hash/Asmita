@@ -30,20 +30,25 @@ export function templateDigest(template: TemplateText): string {
 }
 
 /*
- * What the survivor previewed: the template's id and the digest of its text.
- * The preview returns it (header TEMPLATE_REF_HEADER), the signing form sends
- * it back, and signing refuses (409 notice_changed_since_preview) when the
- * template it would sign now has a different reference, so the survivor never
- * signs text they did not read.
+ * What the survivor previewed: the template's id, the digest of its text, and
+ * a digest of the fingerprint ids the preview's annex listed. The preview
+ * returns it (header TEMPLATE_REF_HEADER), the signing form sends it back, and
+ * signing refuses (409 notice_changed_since_preview) when what it would sign
+ * now has a different reference, so the survivor never signs text or
+ * fingerprints they did not see. A fingerprint added or rejected between
+ * preview and sign changes the reference.
  *
  * It is not secret and needs no signature: the server only compares it with
- * the reference of the template it selects itself. A forged or stale value can
- * only cause a refusal, never select a template.
+ * the reference of what it would sign itself. A forged or stale value can only
+ * cause a refusal, never select a template or a fingerprint. The fingerprint
+ * part is a one-way digest of random ids the client never sees, so it reveals
+ * nothing beyond what the preview PDF already shows.
  */
 export const TEMPLATE_REF_HEADER = "X-Notice-Template-Ref";
 
-export function templateRef(template: TemplateText & { id: string }): string {
-  return `${template.id}.${templateDigest(template)}`;
+export function templateRef(template: TemplateText & { id: string }, hashSubmissionIds: readonly string[]): string {
+  const fingerprints = sha256(`fingerprints\u0000${[...hashSubmissionIds].sort().join(",")}`);
+  return `${template.id}.${templateDigest(template)}.${fingerprints}`;
 }
 
 export type SignedTemplateRefusal = "signed_template_changed" | "signed_template_not_dispatchable";
@@ -61,12 +66,24 @@ type VoidContext =
   | { trigger?: "template_changed"; reason?: undefined }
   | { trigger: "admin"; reason: AdminVoidReason };
 
-export async function loadSignedTemplate(
-  pin: { id: string; digest: string | null },
+type TemplateCheckInput = TemplateText & {
+  templateType: string;
+  platformId: string | null;
+  isActive: boolean;
+  reviewedByLegal: boolean;
+};
+
+/**
+ * The pure part of loadSignedTemplate, so a caller that already holds the
+ * template rows (the admin queue) reaches the same verdict without a query
+ * per signature.
+ */
+export function checkSignedTemplate<T extends TemplateCheckInput>(
+  template: T | null | undefined,
+  pin: { digest: string | null },
   expected: { templateType: string; platformId?: string },
   skipLegalGate: boolean,
 ) {
-  const template = await db.noticeTemplate.findUnique({ where: { id: pin.id } });
   if (
     !template ||
     template.templateType !== expected.templateType ||
@@ -79,6 +96,15 @@ export async function loadSignedTemplate(
     return { ok: false as const, reason: "signed_template_not_dispatchable" as SignedTemplateRefusal };
   }
   return { ok: true as const, template };
+}
+
+export async function loadSignedTemplate(
+  pin: { id: string; digest: string | null },
+  expected: { templateType: string; platformId?: string },
+  skipLegalGate: boolean,
+) {
+  const template = await db.noticeTemplate.findUnique({ where: { id: pin.id } });
+  return checkSignedTemplate(template, pin, expected, skipLegalGate);
 }
 
 function voidAuditData(context: VoidContext, urlIds: string[], hashAdvisory: boolean) {

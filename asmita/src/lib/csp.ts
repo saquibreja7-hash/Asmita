@@ -1,8 +1,8 @@
 // Content-Security-Policy for every response. next.config.ts sets the
 // nonce-less policy (API routes, and pages under `next dev`); the Worker entry
 // (src/cloudflare-worker.ts) replaces it on pages with one carrying a
-// per-request nonce. The root middleware.ts is not used for this: with the app
-// in src/, Next and vinext only look for src/middleware.ts or src/proxy.ts.
+// per-request nonce. There is no middleware file; the CSP is set only in these
+// two places.
 
 export type CspOptions = {
   frameAncestors?: "'none'" | "'self'";

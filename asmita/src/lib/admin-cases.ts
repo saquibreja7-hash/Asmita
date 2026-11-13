@@ -13,7 +13,7 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { buildLadder } from "@/lib/escalation-ladder";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED, platformDirectory } from "@/lib/platforms";
 import { isUrlExpired } from "@/lib/url-retention";
-import { loadSignedTemplate, type SignedTemplateRefusal } from "@/lib/signed-template";
+import { checkSignedTemplate, loadSignedTemplate, type SignedTemplateRefusal } from "@/lib/signed-template";
 
 export const REVIEW_SLA_HOURS = 4;
 // Assumed until agreed (open question 1 in the redesign doc).
@@ -52,6 +52,8 @@ export type LinkFact = {
   platformId: string | null;
   platformFiledAt: Date | null;
   signed: boolean;
+  /** Dispatch would refuse this link's signature because of the template it was signed with. */
+  templateRefusal?: SignedTemplateRefusal | null;
 };
 
 export type NoticeFact = {
@@ -168,7 +170,9 @@ export function deriveCaseWork(facts: CaseFacts, gates: Gates, now: Date): CaseW
       add("waiting_on_survivor", null);
     } else if (!platform || !platform.emailReady) {
       add("blocked_contact", null);
-    } else if (!gates.hasReviewedTemplate(templateType!, platform.id)) {
+    } else if (link.templateRefusal || !gates.hasReviewedTemplate(templateType!, platform.id)) {
+      // Either the signed template is changed, inactive or no longer reviewed
+      // (dispatch refuses it), or no reviewed template exists at all.
       add("blocked_legal_review", null);
     } else {
       // No per-link signing time is stored; the case's first signature is the
@@ -439,7 +443,7 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
     }),
     db.submittedUrl.findMany({
       where: { case: where, signedNoticePdf: { not: null } },
-      select: { id: true },
+      select: { id: true, signedTemplateId: true, signedTemplateDigest: true },
     }),
     db.notice.findMany({
       where: { followUpOf: null, sentAt: { not: null }, submittedUrl: { case: where } },
@@ -463,6 +467,12 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
   ]);
 
   const signedIds = new Set(signed.map((row) => row.id));
+  // One extra query for the whole list: the distinct pinned templates.
+  const refusals = await loadTemplateRefusals(
+    links.filter((link) => signedIds.has(link.id)),
+    new Map(signed.map((row) => [row.id, row])),
+    gates.platforms,
+  );
   const blocks = await loadLadderBlocks(notices);
   const linksByCase = new Map<string, LinkFact[]>();
   const caseOfLink = new Map<string, string>();
@@ -478,6 +488,7 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
         platformId: link.platformId,
         platformFiledAt: link.platformFiledAt,
         signed: signedIds.has(link.id),
+        templateRefusal: refusals.get(link.id) ?? null,
       },
     ]);
   }
@@ -766,7 +777,6 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
     pendingFingerprints: pending.length,
     oldestPendingFingerprint: pending[0]?.submittedAt ?? null,
   };
-  const work = deriveCaseWork(facts, gates, now);
 
   // A sent link keeps the NOTICE_QUEUED status (dispatch records a Notice
   // row but does not move the link on), so a sent notice is what counts.
@@ -794,6 +804,18 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
     dispatchable.filter((link) => !pins.has(link.id)).map((link) => gates.platforms.get(link.platformId!)!),
   );
   const hashAdvisoryRefusal = await loadHashAdvisoryRefusal(record);
+  // Same verdict the links below show, so the case's next action agrees with them.
+  const work = deriveCaseWork(
+    {
+      ...facts,
+      links: linkFacts.map((link) => {
+        const pinned = pinnedTemplates.get(link.id);
+        return pinned && !pinned.ok ? { ...link, templateRefusal: pinned.reason } : link;
+      }),
+    },
+    gates,
+    now,
+  );
 
   const entityIds = [
     record.id,
@@ -951,6 +973,39 @@ async function loadPinnedTemplates(
       skipLegal,
     );
     result.set(link.id, loaded.ok ? { ok: true, template: loaded.template } : { ok: false, reason: loaded.reason });
+  }
+  return result;
+}
+
+// The queue's version of loadPinnedTemplates: the same verdict (checkSignedTemplate)
+// for every signed link, from one query for the distinct pinned templates
+// instead of one per link. Links signed before pinning have no pin and no refusal.
+async function loadTemplateRefusals(
+  links: Array<{ id: string; platformId: string | null }>,
+  pins: Map<string, { signedTemplateId: string | null; signedTemplateDigest: string | null }>,
+  platforms: Map<string, PlatformFact>,
+) {
+  const result = new Map<string, SignedTemplateRefusal>();
+  const ids = Array.from(
+    new Set(links.map((link) => pins.get(link.id)?.signedTemplateId).filter((id): id is string => Boolean(id))),
+  );
+  if (ids.length === 0) return result;
+  const skipLegal = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
+  const templates = new Map(
+    (await db.noticeTemplate.findMany({ where: { id: { in: ids } } })).map((template) => [template.id, template]),
+  );
+  for (const link of links) {
+    const pin = pins.get(link.id);
+    const platform = link.platformId ? platforms.get(link.platformId) : undefined;
+    const templateType = platform ? EMAIL_NOTICE_TYPES[platform.noticeBasis] : undefined;
+    if (!pin?.signedTemplateId || !platform || !templateType) continue;
+    const checked = checkSignedTemplate(
+      templates.get(pin.signedTemplateId),
+      { digest: pin.signedTemplateDigest },
+      { templateType, platformId: platform.id },
+      skipLegal,
+    );
+    if (!checked.ok) result.set(link.id, checked.reason);
   }
   return result;
 }

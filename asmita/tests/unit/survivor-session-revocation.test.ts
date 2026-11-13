@@ -73,6 +73,20 @@ describe("requireSession on the memory store", () => {
     await expect(requireSession()).resolves.toEqual({ ok: false, status: 401, error: "unauthorized" });
   });
 
+  it("signing in again before the hard delete cancels the deletion and the session works", async () => {
+    const user = await upsertVerifiedUser("survivor-c@example.invalid", true);
+    await deactivateUser(user.id);
+    await sessionFor(user.id);
+    await expect(requireSession()).resolves.toMatchObject({ ok: false, error: "account_deactivated" });
+
+    const again = await upsertVerifiedUser("survivor-c@example.invalid", true);
+    expect(again.id).toBe(user.id);
+    await expect(requireSession()).resolves.toMatchObject({ ok: true, session: { sub: user.id } });
+    // The cancelled deletion is not carried out by a later sweep.
+    expect(await hardDeleteDueUsers(new Date(Date.now() + 31 * 24 * 60 * 60 * 1000))).not.toContain(user.id);
+    await expect(requireSession()).resolves.toMatchObject({ ok: true });
+  });
+
   it("refuses a validly signed session for an account that never existed", async () => {
     await sessionFor("no-such-user");
     await expect(requireSession()).resolves.toEqual({ ok: false, status: 401, error: "unauthorized" });

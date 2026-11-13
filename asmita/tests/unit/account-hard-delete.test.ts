@@ -29,8 +29,11 @@ const fake = vi.hoisted(() => {
   function matches(row: Row, where: Where = {}): boolean {
     return Object.entries(where).every(([key, condition]) => {
       if (key === "OR") return (condition as Where[]).some((part) => matches(row, part));
+      // Relation filter, e.g. deletionJob where { case: { userId } }.
+      if (key === "case") return matches(tables.case.find((c) => c.id === row.caseId)!, condition as Where);
       if (condition && typeof condition === "object" && !Array.isArray(condition) && !(condition instanceof Date)) {
-        const c = condition as { in?: unknown[]; lte?: Date };
+        const c = condition as { in?: unknown[]; lte?: Date; not?: null };
+        if ("not" in c) return row[key] !== c.not;
         if (c.in) return c.in.includes(row[key]);
         if (c.lte) return (row[key] as Date).getTime() <= c.lte.getTime();
         throw new Error(`unsupported condition on ${key}`);
@@ -82,6 +85,13 @@ const fake = vi.hoisted(() => {
         if (!row) throw Object.assign(new Error("not found"), { code: "P2025" });
         return Object.assign(row, data);
       },
+      upsert: async ({ where, create, update }: { where: Where; create: Row; update: Row }) => {
+        const row = rows().find((r) => matches(r, where));
+        if (row) return Object.assign(row, update);
+        const made = { id: `new-${rows().length + 1}`, deactivatedAt: null, ...create };
+        rows().push(made);
+        return made;
+      },
       deleteMany: async ({ where }: { where: Where }) => {
         maybeFail(table);
         const doomed = rows().filter((r) => matches(r, where));
@@ -126,7 +136,8 @@ vi.mock("@/lib/db", () => ({ db: fake.client }));
 
 import { inMemoryAuditLog } from "@/lib/audit";
 import { securityEvents } from "@/lib/security-log";
-import { countFailedDeletionJobs, hardDeleteDueUsers, HARD_DELETE_RETAINED } from "@/lib/case-ops";
+import { countFailedDeletionJobs, hardDeleteDueUsers, HARD_DELETE_RETAINED, upsertVerifiedUser } from "@/lib/case-ops";
+import { hashEmail } from "@/lib/hash";
 
 const due = new Date("2026-12-01T00:00:00Z");
 const now = new Date("2026-12-01T01:00:00Z");
@@ -143,6 +154,7 @@ function seed() {
         id: "c1", referenceNumber: "ASM-TEST-0001", userId: "u1", status: "OPEN", registrationKeyHash: "reg-hash",
         state: "Placeholder State", city: "Placeholder City", ngoVerifierId: "ngo-1", declarationSignedAt: due,
         declarationIpHash: "ip-hash", firPackageGeneratedAt: due, signedHashAdvisoryPdf: "enc:advisory-pdf",
+        hashAdvisorySignedTemplateId: "t1", hashAdvisorySignedTemplateDigest: "d1",
         hashAdvisoryPlatformIds: ["p1"], hashAdvisorySignedHashIds: ["h1", "h2"],
       },
       {
@@ -224,8 +236,9 @@ describe("hardDeleteDueUsers (database path)", () => {
     expect(rowsFor("notice", (r) => r.urlId === "url1")).toEqual([]);
     expect(fake.tables.escalation).toEqual([]);
     expect(fake.tables.urlPortalToken).toEqual([]);
-    expect(rowsFor("hashSubmission", (r) => r.caseId === "c1")).toEqual([]);
-    expect(fake.tables.hashDispatch).toEqual([]);
+    // Fingerprints are kept, encrypted, with their dispatch records; a dispatch no longer points at a deleted notice.
+    expect(rowsFor("hashSubmission", (r) => r.caseId === "c1").map((r) => r.id)).toEqual(["h1", "h2"]);
+    expect(fake.tables.hashDispatch.map((r) => [r.id, r.hashSubmissionId, r.noticeId])).toEqual([["d1", "h1", null], ["d2", "h2", null]]);
     expect(fake.tables.emailDeliveryProof.map((r) => r.id)).toEqual(["proof4"]);
     expect(fake.tables.feedback.map((r) => r.id)).toEqual(["f2"]);
     expect(fake.tables.sessionToken.map((r) => r.id)).toEqual(["s2"]);
@@ -239,6 +252,7 @@ describe("hardDeleteDueUsers (database path)", () => {
       id: "c1", referenceNumber: "ASM-TEST-0001", userId: "u1", status: "CLOSED", registrationKeyHash: null,
       state: null, city: null, ngoVerifierId: null, declarationSignedAt: null, declarationIpHash: null,
       firPackageGeneratedAt: null, signedHashAdvisoryPdf: null, hashAdvisoryPlatformIds: [], hashAdvisorySignedHashIds: [],
+      hashAdvisorySignedTemplateId: null, hashAdvisorySignedTemplateDigest: null,
     });
     expect(fake.tables.user.find((u) => u.id === "u1")).toMatchObject({
       emailHash: "deleted:u1", emailEncrypted: "deleted", preferredLocale: null, lastActiveAt: null, deactivatedAt: null,
@@ -255,8 +269,7 @@ describe("hardDeleteDueUsers (database path)", () => {
     // Nothing that was the survivor's remains anywhere in the fake database.
     const serialized = JSON.stringify(fake.tables);
     for (const secret of [
-      "email-hash-u1", "enc:email-u1", "enc:link-1", "link-hash-1", "enc:notice-pdf-1", "enc:fingerprint-1",
-      "digest-1", "enc:advisory-pdf", "Placeholder State", "Placeholder City", "reg-hash", "ip-hash",
+      "email-hash-u1", "enc:email-u1", "enc:link-1", "link-hash-1", "enc:notice-pdf-1", "enc:advisory-pdf", "Placeholder State", "Placeholder City", "reg-hash", "ip-hash",
       "enc:comment", "placeholder reveal reason", "msg-notice-1", "msg-followup-1",
     ]) {
       expect(serialized).not.toContain(secret);
@@ -272,13 +285,15 @@ describe("hardDeleteDueUsers (database path)", () => {
       entityId: "u1",
       data: {
         removed: {
-          cases: 1, links: 2, notices: 2, escalations: 1, fingerprints: 2, fingerprintDispatches: 2,
+          cases: 1, links: 2, notices: 2, escalations: 1,
           deliveryProofs: 3, feedback: 1, sessions: 1, otpCodes: 1,
         },
         retained: HARD_DELETE_RETAINED,
       },
     });
     expect(JSON.stringify(entries[0].data)).not.toContain("audit_metadata_only");
+    expect(entries[0].data).not.toHaveProperty("removed.fingerprints");
+    expect(HARD_DELETE_RETAINED.fingerprints).toContain("kept");
   });
 
   it("rolls back a failed deletion, marks it FAILED without PII, and retries it on the next sweep", async () => {
@@ -288,6 +303,7 @@ describe("hardDeleteDueUsers (database path)", () => {
     // Nothing was half-deleted.
     expect(rowsFor("submittedUrl", (r) => r.caseId === "c1")).toHaveLength(2);
     expect(rowsFor("hashSubmission", (r) => r.caseId === "c1")).toHaveLength(2);
+    expect(fake.tables.hashDispatch.find((r) => r.id === "d2")).toMatchObject({ noticeId: "n1" });
     expect(fake.tables.user.find((u) => u.id === "u1")).toMatchObject({ emailHash: "email-hash-u1" });
     const job = fake.tables.deletionJob.find((j) => j.id === "j1")!;
     expect(job).toMatchObject({ status: "FAILED", error: "P1017" });
@@ -306,5 +322,44 @@ describe("hardDeleteDueUsers (database path)", () => {
     fake.tables.deletionJob[0].status = "CANCELLED";
     expect(await hardDeleteDueUsers(now)).toEqual([]);
     expect(rowsFor("submittedUrl", (r) => r.caseId === "c1")).toHaveLength(2);
+  });
+
+  it("skips a user whose deletion was cancelled after the due jobs were read", async () => {
+    // Job still SCHEDULED, but the survivor's sign-in cleared deactivatedAt: erasure must not run.
+    fake.tables.user.find((u) => u.id === "u1")!.deactivatedAt = null;
+    expect(await hardDeleteDueUsers(now)).toEqual([]);
+    expect(rowsFor("submittedUrl", (r) => r.caseId === "c1")).toHaveLength(2);
+    expect(fake.tables.user.find((u) => u.id === "u1")).toMatchObject({ emailHash: "email-hash-u1" });
+    expect(inMemoryAuditLog.some((e) => e.eventType === "CASE_HARD_DELETED")).toBe(false);
+  });
+
+  it("signing in during the pending period clears deactivation, cancels the job and audits it", async () => {
+    fake.tables.user.find((u) => u.id === "u1")!.emailHash = hashEmail("survivor-signin@example.invalid");
+    const user = await upsertVerifiedUser("survivor-signin@example.invalid", true);
+    expect(user.id).toBe("u1");
+    expect(fake.tables.user.find((u) => u.id === "u1")!.deactivatedAt).toBeNull();
+    expect(fake.tables.deletionJob.find((j) => j.id === "j1")).toMatchObject({ status: "CANCELLED" });
+    expect(fake.tables.deletionJob.find((j) => j.id === "j2")).toMatchObject({ status: "SCHEDULED" });
+    expect(inMemoryAuditLog.filter((e) => (e.data as { action?: string } | undefined)?.action === "account_deletion_cancelled_by_signin"))
+      .toEqual([expect.objectContaining({ entityType: "User", entityId: "u1", data: { action: "account_deletion_cancelled_by_signin", cancelledJobs: 1 } })]);
+
+    // The sweep that was about to erase this account now leaves it alone.
+    expect(await hardDeleteDueUsers(now)).toEqual([]);
+    expect(rowsFor("submittedUrl", (r) => r.caseId === "c1")).toHaveLength(2);
+  });
+
+  it("signing in with an account that is not pending deletion changes nothing and writes no audit entry", async () => {
+    const user = await upsertVerifiedUser("survivor-new@example.invalid", true);
+    expect(user.id).not.toBe("u1");
+    expect(fake.tables.deletionJob.map((j) => j.status)).toEqual(["SCHEDULED", "SCHEDULED"]);
+    expect(inMemoryAuditLog.some((e) => (e.data as { action?: string } | undefined)?.action === "account_deletion_cancelled_by_signin")).toBe(false);
+  });
+
+  it("after the hard delete has run, signing in with the same email creates a fresh account", async () => {
+    fake.tables.user.find((u) => u.id === "u1")!.emailHash = hashEmail("survivor-gone@example.invalid");
+    expect(await hardDeleteDueUsers(now)).toEqual(["u1"]);
+    const user = await upsertVerifiedUser("survivor-gone@example.invalid", true);
+    expect(user.id).not.toBe("u1");
+    expect(fake.tables.user.find((u) => u.id === "u1")).toMatchObject({ emailHash: "deleted:u1" });
   });
 });

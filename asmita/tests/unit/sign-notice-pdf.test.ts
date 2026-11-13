@@ -76,7 +76,7 @@ function signRequest(body: Record<string, unknown>) {
   return new Request("https://asmita.test/api/cases/case-1/sign-notice", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ urlId: "url-1", contact: "person@example.invalid", templateRef: templateRef(template), ...body }),
+    body: JSON.stringify({ urlId: "url-1", contact: "person@example.invalid", templateRef: templateRef(template, ["hash-1"]), ...body }),
   });
 }
 
@@ -131,7 +131,7 @@ describe("sign-notice and the notice PDF font", () => {
     const undrawable = { ...template, bodyTemplate: "Fee ₹500 for {{platformName}}" };
     mocks.templateFindFirst.mockResolvedValue(undrawable);
     const res = await signNotice(
-      signRequest({ name: "Example Person", signature: "Example Person", templateRef: templateRef(undrawable) }),
+      signRequest({ name: "Example Person", signature: "Example Person", templateRef: templateRef(undrawable, ["hash-1"]) }),
       params,
     );
     expect(res.status).toBe(409);
@@ -141,7 +141,7 @@ describe("sign-notice and the notice PDF font", () => {
   });
 
   it("refuses to sign when another template became current after the preview", async () => {
-    const previewed = templateRef(template);
+    const previewed = templateRef(template, ["hash-1"]);
     mocks.templateFindFirst.mockResolvedValue({ ...template, id: "template-2", version: 2 });
     const res = await signNotice(signRequest({ name: "Example Person", signature: "Example Person", templateRef: previewed }), params);
     expect(res.status).toBe(409);
@@ -187,14 +187,14 @@ describe("sign-hash-advisory and the notice PDF font", () => {
     vi.stubEnv("DATABASE_URL", "postgresql://localhost/test");
     vi.stubEnv("DEV_SKIP_LEGAL_REVIEW", "");
     mocks.caseFindUnique.mockReset().mockResolvedValue({ signedHashAdvisoryPdf: null, declarationSignedAt: null });
-    mocks.caseUpdate.mockReset().mockResolvedValue({});
+    mocks.caseUpdateMany.mockReset().mockResolvedValue({ count: 1 });
     mocks.templateFindFirst.mockReset().mockResolvedValue(advisoryTemplate);
   });
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  const advisoryRequest = (name: string, ref = templateRef(advisoryTemplate)) =>
+  const advisoryRequest = (name: string, ref = templateRef(advisoryTemplate, ["hash-1"])) =>
     new Request("https://asmita.test/api/cases/case-1/sign-hash-advisory", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -202,25 +202,25 @@ describe("sign-hash-advisory and the notice PDF font", () => {
     });
 
   it("refuses to sign when the advisory template changed after the preview", async () => {
-    const previewed = templateRef(advisoryTemplate);
+    const previewed = templateRef(advisoryTemplate, ["hash-1"]);
     mocks.templateFindFirst.mockResolvedValue({ ...advisoryTemplate, id: "advisory-2", version: 2 });
     const res = await signAdvisory(advisoryRequest("Example Person", previewed), params);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: "notice_changed_since_preview" });
-    expect(mocks.caseUpdate).not.toHaveBeenCalled();
+    expect(mocks.caseUpdateMany).not.toHaveBeenCalled();
   });
 
   it("asks for Latin letters when the name is in Devanagari", async () => {
     const res = await signAdvisory(advisoryRequest(DEVANAGARI_NAME), params);
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "name_script_unsupported" });
-    expect(mocks.caseUpdate).not.toHaveBeenCalled();
+    expect(mocks.caseUpdateMany).not.toHaveBeenCalled();
   });
 
   it("signs a Latin name and pins the advisory template", async () => {
     const res = await signAdvisory(advisoryRequest("Example Person"), params);
     expect(res.status).toBe(200);
-    expect(mocks.caseUpdate).toHaveBeenCalledWith(
+    expect(mocks.caseUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           hashAdvisorySignedTemplateId: "advisory-1",

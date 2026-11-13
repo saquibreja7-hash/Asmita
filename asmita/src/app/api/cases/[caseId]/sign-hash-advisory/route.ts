@@ -11,6 +11,7 @@ import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
 import { isPdfSafeText } from "@/lib/pdf-text";
 import { templateDigest, templateRef } from "@/lib/signed-template";
+import { findHashAdvisoryTemplate } from "@/lib/signable-notice";
 import { dispatchHashAdvisories } from "@/lib/hash-dispatch";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -104,19 +105,12 @@ export async function POST(
   }
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
-  const template = await db.noticeTemplate.findFirst({
-    where: {
-      templateType: "HASH_ADVISORY",
-      isActive: true,
-      ...(skipLegalGate ? {} : { reviewedByLegal: true }),
-    },
-    orderBy: { version: "desc" },
-  });
+  const template = await findHashAdvisoryTemplate(skipLegalGate);
   if (!template) {
     return NextResponse.json({ error: "template_missing" }, { status: 409 });
   }
-  // The survivor signs only the text they previewed.
-  if (templateRef(template) !== parsed.data.templateRef) {
+  // The survivor signs only the text and fingerprints they previewed.
+  if (templateRef(template, annex.hashSubmissionIds) !== parsed.data.templateRef) {
     return NextResponse.json({ error: "notice_changed_since_preview" }, { status: 409 });
   }
 
@@ -151,8 +145,10 @@ export async function POST(
 
   // declarationSignedAt records the first signature on the case; a later
   // signature never moves it.
-  await db.case.update({
-    where: { id: caseId },
+  // Only while still unsigned, so two submissions (a double click, or the
+  // case page and the creation flow open at once) never overwrite a signature.
+  const saved = await db.case.updateMany({
+    where: { id: caseId, signedHashAdvisoryPdf: null },
     data: {
       signedHashAdvisoryPdf: encryptedPdf,
       hashAdvisoryPlatformIds: platformIds,
@@ -163,6 +159,9 @@ export async function POST(
       ...(dbCase.declarationSignedAt ? {} : { declarationSignedAt: new Date() }),
     },
   });
+  if (saved.count === 0) {
+    return NextResponse.json({ error: "already_signed" }, { status: 409 });
+  }
 
   await writeAuditLog({
     eventType: "NOTICE_SIGNED",

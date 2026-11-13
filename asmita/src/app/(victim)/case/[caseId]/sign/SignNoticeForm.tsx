@@ -6,18 +6,25 @@ import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale } from "@/lib/i18n";
 import { isPdfSafeText } from "@/lib/pdf-text";
 
-interface Props {
+/*
+ * One link's takedown notice (urlId + platformName), or the case's fingerprint
+ * advisory (hashAdvisoryPlatformIds: the platforms already chosen for it,
+ * sent unchanged, so signing again never changes who receives it).
+ */
+type Props = {
   caseId: string;
-  urlId: string;
-  /** Names the template text the preview shows; signing sends it back. */
+  /** Names the template text and fingerprints the preview shows; signing sends it back. */
   templateRef: string;
-  platformName: string;
   previewPdfUrl: string;
   confirmationUrl: string;
   locale: Locale;
-}
+} & (
+  | { urlId: string; platformName: string; hashAdvisoryPlatformIds?: undefined }
+  | { hashAdvisoryPlatformIds: string[]; urlId?: undefined; platformName?: undefined }
+);
 
-export function SignNoticeForm({ caseId, urlId, templateRef, platformName, previewPdfUrl, confirmationUrl, locale }: Props) {
+export function SignNoticeForm({ caseId, urlId, templateRef, platformName, hashAdvisoryPlatformIds, previewPdfUrl, confirmationUrl, locale }: Props) {
+  const advisory = hashAdvisoryPlatformIds !== undefined;
   const router = useRouter();
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
@@ -35,10 +42,11 @@ export function SignNoticeForm({ caseId, urlId, templateRef, platformName, previ
     setError("");
     setSubmitting(true);
     try {
-      const res = await csrfFetch(`/api/cases/${caseId}/sign-notice`, {
+      const details = { templateRef, name: name.trim(), contact: contact.trim(), signature: signature.trim() };
+      const res = await csrfFetch(`/api/cases/${caseId}/${advisory ? "sign-hash-advisory" : "sign-notice"}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ urlId, templateRef, name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
+        body: JSON.stringify(advisory ? { ...details, platformIds: hashAdvisoryPlatformIds } : { urlId, ...details }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -76,14 +84,14 @@ export function SignNoticeForm({ caseId, urlId, templateRef, platformName, previ
       <div className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)]">
         <div className="border-b border-[var(--line)] bg-[var(--page)] px-5 py-3">
           <p className="eyebrow">
-            {t(locale, "sign.preview.label")} - {platformName}
+            {advisory ? t(locale, "review.sign.hashPreviewLabel") : `${t(locale, "sign.preview.label")} - ${platformName}`}
           </p>
         </div>
         <iframe
           src={previewPdfUrl}
           className="w-full"
           style={{ height: "520px", border: "none" }}
-          title={t(locale, "sign.preview.label")}
+          title={advisory ? t(locale, "review.sign.hashPreviewLabel") : t(locale, "sign.preview.label")}
         />
       </div>
 
@@ -163,7 +171,7 @@ export function SignNoticeForm({ caseId, urlId, templateRef, platformName, previ
           onChange={(e) => setAgreed(e.target.checked)}
         />
         <span className="text-sm leading-[1.65] text-[var(--ink)]">
-          {t(locale, "sign.agree.prefix")} {platformName} {t(locale, "sign.agree.suffix")}
+          {advisory ? t(locale, "review.sign.agree.hash") : `${t(locale, "sign.agree.prefix")} ${platformName} ${t(locale, "sign.agree.suffix")}`}
         </span>
       </label>
 
@@ -180,7 +188,8 @@ export function SignNoticeForm({ caseId, urlId, templateRef, platformName, previ
         >
           {submitting ? t(locale, "sign.cta.signing") : t(locale, "sign.cta.sign")}
         </button>
-        <a className="btn btn-secondary" href={confirmationUrl}>
+        {/* Skipping the advisory leaves it unsigned, so back to the case page, where it is still offered. */}
+        <a className="btn btn-secondary" href={advisory ? `/case/${caseId}` : confirmationUrl}>
           {t(locale, "sign.cta.skip")}
         </a>
       </div>

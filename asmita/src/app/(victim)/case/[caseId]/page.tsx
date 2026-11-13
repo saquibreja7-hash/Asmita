@@ -4,7 +4,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
-import HashGenerator from "@/components/HashGenerator";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { MarkRemovedButton } from "./MarkRemovedButton";
 import { EscalationLadder } from "./EscalationLadder";
@@ -12,7 +11,7 @@ import { PlatformFiledButton } from "./PlatformFiledButton";
 import { getLocale } from "@/lib/get-locale";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
-import { findSignableNotice } from "@/lib/signable-notice";
+import { findSignableHashAdvisory, findSignableNotice } from "@/lib/signable-notice";
 import { findVoidedSignatures } from "@/lib/voided-signatures";
 
 // Wording that matches what has actually happened: "prepared" is not "sent",
@@ -108,6 +107,9 @@ export default async function CasePage({
   // A signature voided since it was given: say why the sign step is back.
   const voided = record && usesDatabase ? await findVoidedSignatures(record.id) : { urlIds: [], hashAdvisory: false };
   const resign = hasUnsignedQueuedUrl && voided.urlIds.length > 0;
+  // The fingerprint advisory can be signed here when it is unsigned (never
+  // signed, or voided) and nothing was sent under an advisory yet.
+  const canSignAdvisory = Boolean(record && usesDatabase && hashUploadEnabled && await findSignableHashAdvisory(record.id, skipLegalGate));
 
   if (!record) {
     return (
@@ -171,10 +173,13 @@ export default async function CasePage({
               </section>
             )}
 
-            {voided.hashAdvisory && (
+            {(voided.hashAdvisory || canSignAdvisory) && (
               <section aria-labelledby="case-advisory-voided-title" className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6" role="status">
-                <h2 id="case-advisory-voided-title" className="subsection-title">{t(locale, "case.voided.advisory.title")}</h2>
-                <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.voided.advisory.sub")}</p>
+                <h2 id="case-advisory-voided-title" className="subsection-title">{t(locale, voided.hashAdvisory ? "case.voided.advisory.title" : "case.advisory.sign.title")}</h2>
+                <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, voided.hashAdvisory ? "case.voided.advisory.sub" : "case.advisory.sign.sub")}</p>
+                {canSignAdvisory && (
+                  <Link className="btn btn-primary mt-5" href={`/case/${caseId}/sign?notice=advisory`}>{t(locale, "case.advisory.sign.cta")}</Link>
+                )}
               </section>
             )}
 
@@ -246,12 +251,6 @@ export default async function CasePage({
               <FoldedSection id="actions" title={t(locale, "case.actions.title")} hint={t(locale, "case.actions.hint")}>
                 <CaseDashboardActions caseId={record.id} locale={locale} />
               </FoldedSection>
-              {hashUploadEnabled && (
-                <FoldedSection id="add-fingerprint" title={t(locale, "case.fingerprints.add")} hint={t(locale, "case.fingerprints.hint")}>
-                  <p className="muted mb-4 text-sm leading-[1.75]">{t(locale, "case.fingerprints.sub")}</p>
-                  <HashGenerator caseId={record.id} />
-                </FoldedSection>
-              )}
             </div>
 
             <nav aria-label={t(locale, "case.more.label")} className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[var(--line)] pt-6 text-sm">

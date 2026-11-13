@@ -209,6 +209,12 @@ export function deactivateUser(userId: string) {
   return deactivatedUsers.get(userId)!;
 }
 
+/** Signing in during the pending period cancels a deletion. True if one was pending. */
+export function cancelUserDeletion(userId: string) {
+  assertDevOrTest();
+  return deactivatedUsers.delete(userId);
+}
+
 export async function hardDeleteDueUsers(now = new Date()) {
   assertDevOrTest();
   const deletedUserIds: string[] = [];
@@ -218,17 +224,15 @@ export async function hardDeleteDueUsers(now = new Date()) {
     }
 
     // Same outcome as the database path (case-ops.ts): the user's links,
-    // fingerprints, signed PDFs and contact are gone. Memory keeps no tombstones.
+    // signed PDFs and contact are gone; fingerprints are kept (the hash store
+    // is left alone). Memory keeps no tombstones.
     users.delete(userId);
     let caseCount = 0;
     let links = 0;
-    let fingerprints = 0;
     for (const [caseId, record] of cases.entries()) {
       if (record.userId === userId) {
         caseCount += 1;
         links += record.urls.length;
-        fingerprints += globalThis.__asmitaHashStore?.get(caseId)?.length ?? 0;
-        globalThis.__asmitaHashStore?.delete(caseId);
         cases.delete(caseId);
       }
     }
@@ -238,7 +242,7 @@ export async function hardDeleteDueUsers(now = new Date()) {
       eventType: "CASE_HARD_DELETED",
       entityType: "User",
       entityId: userId,
-      data: { removed: { cases: caseCount, links, fingerprints }, retained: { auditLog: "earlier entries are append-only and unchanged" } },
+      data: { removed: { cases: caseCount, links }, retained: { fingerprints: "kept so platforms can keep blocking matching images", auditLog: "earlier entries are append-only and unchanged" } },
     });
   }
   return deletedUserIds;

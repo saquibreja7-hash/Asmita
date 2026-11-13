@@ -27,6 +27,7 @@ export async function purgeExpiredUrls(now = new Date()): Promise<number> {
       await tx.deleteFrom("UrlPortalToken").where("urlId", "in", ids).execute();
       await tx.updateTable("SubmittedUrl").set({
         urlEncrypted: "", urlHash: "", signedNoticePdf: null, signedHashSubmissionIds: [],
+        signedTemplateId: null, signedTemplateDigest: null,
       }).where("id", "in", ids).execute();
       return ids.length;
     });
@@ -41,7 +42,10 @@ export async function purgeExpiredUrls(now = new Date()): Promise<number> {
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: ids } } });
     const result = await tx.submittedUrl.updateMany({
       where: { id: { in: ids }, submittedAt: { lte: cutoff } },
-      data: { urlEncrypted: "", urlHash: "", signedNoticePdf: null, signedHashSubmissionIds: [] },
+      data: {
+        urlEncrypted: "", urlHash: "", signedNoticePdf: null, signedHashSubmissionIds: [],
+        signedTemplateId: null, signedTemplateDigest: null,
+      },
     });
     return result.count;
   });

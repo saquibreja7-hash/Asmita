@@ -131,26 +131,65 @@ export async function upsertVerifiedUser(
       // Also register in store.ts so getVerifiedUserEmail can decrypt it.
       store.rememberVerifiedUser({ id, emailHash, emailEncrypted: encryptField(email) });
     }
-    return memStore.get(emailHash)!;
+    const devUser = memStore.get(emailHash)!;
+    if (store.cancelUserDeletion(devUser.id)) await auditDeletionCancelled(devUser.id, 1);
+    return devUser;
   }
 
   const emailEncrypted = encryptField(email);
+  // Signing in during the pending period cancels the deletion. The upsert and
+  // the cancellation share one transaction: the upsert row-locks the user, and
+  // erasure re-checks deactivatedAt under its own lock, so a sweep running at
+  // the same moment either finished first (the tombstoned row no longer matches
+  // this email, so a fresh account is created) or sees the cancellation and skips.
   if (usesWorkerKysely()) {
-    const user = await getWorkerDb().insertInto("User").values({
-      id: randomUUID(), emailHash, emailEncrypted, ageOver18, emailVerified: true, role: "VICTIM",
-    }).onConflict((conflict) => conflict.column("emailHash").doUpdateSet({ emailEncrypted, lastActiveAt: new Date() }))
-      .returning(["id", "emailHash"]).executeTakeFirst();
-    if (!user) throw new Error("user_upsert_failed");
+    const { user, cancelledJobs } = await getWorkerDb().transaction().execute(async (tx) => {
+      const row = await tx.insertInto("User").values({
+        id: randomUUID(), emailHash, emailEncrypted, ageOver18, emailVerified: true, role: "VICTIM",
+      }).onConflict((conflict) => conflict.column("emailHash").doUpdateSet({ emailEncrypted, lastActiveAt: new Date() }))
+        .returning(["id", "emailHash"]).executeTakeFirst();
+      if (!row) throw new Error("user_upsert_failed");
+      const reactivated = await tx.updateTable("User").set({ deactivatedAt: null })
+        .where("id", "=", row.id).where("deactivatedAt", "is not", null).returning("id").executeTakeFirst();
+      if (!reactivated) return { user: row, cancelledJobs: null };
+      const jobs = await tx.updateTable("DeletionJob").set({ status: "CANCELLED" })
+        .where("caseId", "in", tx.selectFrom("Case").select("id").where("userId", "=", row.id))
+        .where("status", "in", [...OPEN_DELETION_STATUSES]).returning("id").execute();
+      return { user: row, cancelledJobs: jobs.length };
+    });
+    if (cancelledJobs !== null) await auditDeletionCancelled(user.id, cancelledJobs);
     return user;
   }
   const db = await getPrismaDb();
-  const user = await db.user.upsert({
-    where: { emailHash },
-    create: { emailHash, emailEncrypted, ageOver18, emailVerified: true, role: "VICTIM" },
-    update: { emailEncrypted, lastActiveAt: new Date() },
-    select: { id: true, emailHash: true },
+  const { user, cancelledJobs } = await db.$transaction(async (tx) => {
+    const row = await tx.user.upsert({
+      where: { emailHash },
+      create: { emailHash, emailEncrypted, ageOver18, emailVerified: true, role: "VICTIM" },
+      update: { emailEncrypted, lastActiveAt: new Date() },
+      select: { id: true, emailHash: true },
+    });
+    const reactivated = await tx.user.updateMany({
+      where: { id: row.id, deactivatedAt: { not: null } }, data: { deactivatedAt: null },
+    });
+    if (reactivated.count === 0) return { user: row, cancelledJobs: null };
+    const jobs = await tx.deletionJob.updateMany({
+      where: { case: { userId: row.id }, status: { in: [...OPEN_DELETION_STATUSES] } },
+      data: { status: "CANCELLED" },
+    });
+    return { user: row, cancelledJobs: jobs.count };
   });
+  if (cancelledJobs !== null) await auditDeletionCancelled(user.id, cancelledJobs);
   return user;
+}
+
+/** Records that a pending deletion was cancelled by signing in. No PII: the user id and a count only. */
+async function auditDeletionCancelled(userId: string, cancelledJobs: number) {
+  await writeAuditLog({
+    eventType: "ADMIN_ACTION",
+    entityType: "User",
+    entityId: userId,
+    data: { action: "account_deletion_cancelled_by_signin", cancelledJobs },
+  });
 }
 
 export async function getVerifiedUserEmail(userId: string): Promise<string | null> {
@@ -657,6 +696,7 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
 export const HARD_DELETE_RETAINED = {
   user: "id, role, verification flags, declared age and created date; no email or email hash",
   case: "id, reference number, status CLOSED, NGO-verified flag and created/updated dates",
+  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice)",
   deletionJob: "id, case id, dates and status",
   adminAccessLog: "which admin opened which case or link, and when; the reason text is cleared",
   auditLog: "earlier entries are append-only and unchanged",
@@ -671,8 +711,6 @@ export type HardDeleteCounts = {
   links: number;
   notices: number;
   escalations: number;
-  fingerprints: number;
-  fingerprintDispatches: number;
   deliveryProofs: number;
   feedback: number;
   sessions: number;
@@ -681,8 +719,7 @@ export type HardDeleteCounts = {
 
 function emptyHardDeleteCounts(cases: number): HardDeleteCounts {
   return {
-    cases, links: 0, notices: 0, escalations: 0, fingerprints: 0,
-    fingerprintDispatches: 0, deliveryProofs: 0, feedback: 0, sessions: 0, otpCodes: 0,
+    cases, links: 0, notices: 0, escalations: 0, deliveryProofs: 0, feedback: 0, sessions: 0, otpCodes: 0,
   };
 }
 
@@ -709,7 +746,13 @@ function messageIdsFromAudit(rows: Array<{ data: unknown }>): string[] {
  * cleared tombstones so deletion jobs and the append-only audit log still
  * point at something.
  */
-async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Date): Promise<HardDeleteCounts> {
+async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Date): Promise<HardDeleteCounts | null> {
+  // Lock the user row and re-check the deletion is still pending. Signing in
+  // clears deactivatedAt under the same row lock (upsertVerifiedUser), so
+  // whichever transaction takes the lock first wins and the other sees its result.
+  const pending = await tx.selectFrom("User").select("id").where("id", "=", userId)
+    .where("deactivatedAt", "is not", null).forUpdate().executeTakeFirst();
+  if (!pending) return null;
   const caseRows = await tx.selectFrom("Case").select(["id", "referenceNumber"]).where("userId", "=", userId).forUpdate().execute();
   const caseIds = caseRows.map((row) => row.id);
   const user = await tx.selectFrom("User").select("emailHash").where("id", "=", userId).executeTakeFirst();
@@ -722,7 +765,7 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
       ? await tx.selectFrom("Notice").select(["id", "messageId"]).where("urlId", "in", urlIds).execute()
       : [];
     const noticeIds = notices.map((n) => n.id);
-    const hashIds = (await tx.selectFrom("HashSubmission").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
+    // Fingerprints (HashSubmission) and their dispatch records are kept, so platforms can keep blocking.
     // Hash advisories have no Notice row; their message ids are only in the audit log.
     const advisoryAudit = await tx.selectFrom("audit_log").select("data")
       .where("eventType", "=", "HASH_DISPATCHED").where("entityId", "in", caseIds).execute();
@@ -734,22 +777,15 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
     if (messageIds.length) {
       counts.deliveryProofs = deleted(await tx.deleteFrom("EmailDeliveryProof").where("messageId", "in", messageIds).execute());
     }
-    if (hashIds.length || noticeIds.length) {
-      counts.fingerprintDispatches = deleted(await tx.deleteFrom("HashDispatch").where((eb) => eb.or([
-        ...(hashIds.length ? [eb("hashSubmissionId", "in", hashIds)] : []),
-        ...(noticeIds.length ? [eb("noticeId", "in", noticeIds)] : []),
-      ])).execute());
-    }
     if (noticeIds.length) {
+      // A kept dispatch must not point at a notice that is about to be deleted.
+      await tx.updateTable("HashDispatch").set({ noticeId: null }).where("noticeId", "in", noticeIds).execute();
       counts.escalations = deleted(await tx.deleteFrom("Escalation").where("noticeId", "in", noticeIds).execute());
       counts.notices = deleted(await tx.deleteFrom("Notice").where("id", "in", noticeIds).execute());
     }
     if (urlIds.length) {
       await tx.deleteFrom("UrlPortalToken").where("urlId", "in", urlIds).execute();
       counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
-    }
-    if (hashIds.length) {
-      counts.fingerprints = deleted(await tx.deleteFrom("HashSubmission").where("id", "in", hashIds).execute());
     }
     counts.feedback = deleted(await tx.deleteFrom("Feedback").where((eb) => eb.or([
       eb("caseId", "in", caseIds),
@@ -759,7 +795,8 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
     await tx.updateTable("Case").set({
       status: "CLOSED", registrationKeyHash: null, state: null, city: null, ngoVerifierId: null,
       declarationSignedAt: null, declarationIpHash: null, firPackageGeneratedAt: null,
-      signedHashAdvisoryPdf: null, hashAdvisoryPlatformIds: [], hashAdvisorySignedHashIds: [], updatedAt: now,
+      signedHashAdvisoryPdf: null, hashAdvisoryPlatformIds: [], hashAdvisorySignedHashIds: [],
+      hashAdvisorySignedTemplateId: null, hashAdvisorySignedTemplateDigest: null, updatedAt: now,
     }).where("id", "in", caseIds).execute();
     await tx.updateTable("DeletionJob").set({ status: "COMPLETED", completedAt: now, error: null })
       .where("caseId", "in", caseIds).where("status", "in", [...OPEN_DELETION_STATUSES]).execute();
@@ -776,7 +813,12 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
 }
 
 /** The Prisma (Node) twin of eraseUserWithKysely; keep the two in step. */
-async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string, now: Date): Promise<HardDeleteCounts> {
+async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string, now: Date): Promise<HardDeleteCounts | null> {
+  // Claim the user row (the UPDATE takes the row lock) only while the deletion
+  // is still pending; signing in clears deactivatedAt under the same lock, so
+  // whichever transaction goes first wins. Erasure clears the column below anyway.
+  const claimed = await tx.user.updateMany({ where: { id: userId, deactivatedAt: { not: null } }, data: { deactivatedAt: now } });
+  if (claimed.count === 0) return null;
   const caseRows = await tx.case.findMany({ where: { userId }, select: { id: true, referenceNumber: true } });
   const caseIds = caseRows.map((row) => row.id);
   const user = await tx.user.findUnique({ where: { id: userId }, select: { emailHash: true } });
@@ -786,7 +828,7 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     const urlIds = (await tx.submittedUrl.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
     const notices = await tx.notice.findMany({ where: { urlId: { in: urlIds } }, select: { id: true, messageId: true } });
     const noticeIds = notices.map((n) => n.id);
-    const hashIds = (await tx.hashSubmission.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
+    // Fingerprints (HashSubmission) and their dispatch records are kept, so platforms can keep blocking.
     // Hash advisories have no Notice row; their message ids are only in the audit log.
     const advisoryAudit = await tx.auditLog.findMany({
       where: { eventType: "HASH_DISPATCHED", entityId: { in: caseIds } }, select: { data: true },
@@ -797,14 +839,12 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     ];
 
     counts.deliveryProofs = (await tx.emailDeliveryProof.deleteMany({ where: { messageId: { in: messageIds } } })).count;
-    counts.fingerprintDispatches = (await tx.hashDispatch.deleteMany({
-      where: { OR: [{ hashSubmissionId: { in: hashIds } }, { noticeId: { in: noticeIds } }] },
-    })).count;
+    // A kept dispatch must not point at a notice that is about to be deleted.
+    await tx.hashDispatch.updateMany({ where: { noticeId: { in: noticeIds } }, data: { noticeId: null } });
     counts.escalations = (await tx.escalation.deleteMany({ where: { noticeId: { in: noticeIds } } })).count;
     counts.notices = (await tx.notice.deleteMany({ where: { id: { in: noticeIds } } })).count;
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: urlIds } } });
     counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
-    counts.fingerprints = (await tx.hashSubmission.deleteMany({ where: { id: { in: hashIds } } })).count;
     counts.feedback = (await tx.feedback.deleteMany({
       where: { OR: [{ caseId: { in: caseIds } }, { caseReference: { in: caseRows.map((row) => row.referenceNumber) } }] },
     })).count;
@@ -814,7 +854,8 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
       data: {
         status: "CLOSED", registrationKeyHash: null, state: null, city: null, ngoVerifierId: null,
         declarationSignedAt: null, declarationIpHash: null, firPackageGeneratedAt: null,
-        signedHashAdvisoryPdf: null, hashAdvisoryPlatformIds: [], hashAdvisorySignedHashIds: [], updatedAt: now,
+        signedHashAdvisoryPdf: null, hashAdvisoryPlatformIds: [], hashAdvisorySignedHashIds: [],
+        hashAdvisorySignedTemplateId: null, hashAdvisorySignedTemplateDigest: null, updatedAt: now,
       },
     });
     await tx.deletionJob.updateMany({
@@ -835,7 +876,8 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
 }
 
 /**
- * Hard-deletes every user with a deletion due. Each user is erased in one
+ * Hard-deletes every user with a deletion due (cancelled jobs are never
+ * selected, and a user whose deletion was cancelled meanwhile is skipped). Each user is erased in one
  * transaction, so a failure leaves nothing half-deleted; that user's jobs are
  * then marked FAILED (with an error code, never PII), logged, and retried on
  * every later sweep until they succeed.
@@ -865,6 +907,8 @@ export async function hardDeleteDueUsers(now = new Date()): Promise<string[]> {
       const counts = kysely
         ? await getWorkerDb().transaction().execute((tx) => eraseUserWithKysely(tx, userId, now))
         : await (await getPrismaDb()).$transaction((tx) => eraseUserWithPrisma(tx, userId, now));
+      // null: the survivor signed in and cancelled the deletion after the due jobs were read.
+      if (!counts) continue;
       await writeAuditLog({
         eventType: "CASE_HARD_DELETED",
         entityType: "User",

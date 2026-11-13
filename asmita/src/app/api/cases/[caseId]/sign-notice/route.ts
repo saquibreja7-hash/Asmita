@@ -159,9 +159,13 @@ export async function POST(
   if (hasRetiredPortalInstructions(template.bodyTemplate)) {
     return NextResponse.json({ error: "notice_template_requires_review" }, { status: 409 });
   }
-  // The survivor signs only the text they previewed. If another template
-  // became current since, they review the new text first.
-  if (templateRef(template) !== parsed.data.templateRef) {
+  // The signed document lists every fingerprint on the case. Their ids are
+  // stored with it, and dispatch sends exactly those.
+  const annex = await buildHashAnnexForSigning(caseId);
+  // The survivor signs only what they previewed. If another template became
+  // current, or a fingerprint was added or rejected, since the preview, they
+  // review the new notice first.
+  if (templateRef(template, annex.hashSubmissionIds) !== parsed.data.templateRef) {
     return NextResponse.json({ error: "notice_changed_since_preview" }, { status: 409 });
   }
 
@@ -174,9 +178,6 @@ export async function POST(
   };
 
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
-  // The signed document lists every fingerprint on the case. Their ids are
-  // stored with it, and dispatch sends exactly those.
-  const annex = await buildHashAnnexForSigning(caseId);
   const body = annex.text
     ? `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex.text}`
     : renderNoticeTemplate(template.bodyTemplate, variables);

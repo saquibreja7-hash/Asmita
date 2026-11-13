@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({ signable: vi.fn(), templateFindFirst: vi.fn() 
 
 vi.mock("@/lib/auth/middleware", () => ({ requireSession: async () => ({ ok: true, session: { sub: "user-1" } }) }));
 vi.mock("@/lib/case-ops", () => ({ getCaseForUser: async () => ({ id: "case-1", referenceNumber: "ASMITA-2026-00001" }) }));
-vi.mock("@/lib/signable-notice", () => ({ findSignableNotice: mocks.signable }));
+vi.mock("@/lib/signable-notice", () => ({ findSignableNotice: mocks.signable, findHashAdvisoryTemplate: () => mocks.templateFindFirst() }));
 vi.mock("@/lib/case-hash-annex", () => ({ buildHashAnnexForSigning: async () => ({ text: "Annex", hashSubmissionIds: ["hash-1"] }) }));
 vi.mock("@/lib/encryption", () => ({ decryptField: () => "https://example.com/reported" }));
 vi.mock("@/lib/notice-pdf", () => ({ generateNoticePdf: async () => Buffer.from("%PDF"), noticePdfErrorCode: () => "notice_pdf_failed" }));
@@ -46,12 +46,12 @@ describe("preview template reference", () => {
   it("returns the reference of the notice template it rendered", async () => {
     const res = await previewNotice(new NextRequest("https://asmita.test/api/cases/case-1/preview-notice"), params);
     expect(res.status).toBe(200);
-    expect(res.headers.get("X-Notice-Template-Ref")).toBe(templateRef(template));
+    expect(res.headers.get("X-Notice-Template-Ref")).toBe(templateRef(template, ["hash-1"]));
   });
 
   it("renders a held reference that still matches, and refuses one that does not", async () => {
     const base = "https://asmita.test/api/cases/case-1/preview-notice?urlId=url-1&templateRef=";
-    const ok = await previewNotice(new NextRequest(base + encodeURIComponent(templateRef(template))), params);
+    const ok = await previewNotice(new NextRequest(base + encodeURIComponent(templateRef(template, ["hash-1"]))), params);
     expect(ok.status).toBe(200);
     const stale = await previewNotice(new NextRequest(base + encodeURIComponent("template-0.old")), params);
     expect(stale.status).toBe(409);
@@ -61,7 +61,7 @@ describe("preview template reference", () => {
   it("does the same for the hash advisory", async () => {
     const base = "https://asmita.test/api/cases/case-1/preview-hash-advisory";
     const first = await previewAdvisory(new NextRequest(base), params);
-    expect(first.headers.get("X-Notice-Template-Ref")).toBe(templateRef(advisory));
+    expect(first.headers.get("X-Notice-Template-Ref")).toBe(templateRef(advisory, ["hash-1"]));
     const stale = await previewAdvisory(new NextRequest(`${base}?templateRef=${encodeURIComponent("advisory-0.old")}`), params);
     expect(stale.status).toBe(409);
     expect(await stale.json()).toEqual({ error: "notice_changed_since_preview" });

@@ -3,12 +3,13 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
-import { findSignableNotice } from "@/lib/signable-notice";
+import { findSignableHashAdvisory, findSignableNotice } from "@/lib/signable-notice";
+import { signableHashIds } from "@/lib/case-hash-annex";
 import { templateRef } from "@/lib/signed-template";
 import { findVoidedSignatures } from "@/lib/voided-signatures";
 import { SignNoticeForm } from "./SignNoticeForm";
 import { getLocale } from "@/lib/get-locale";
-import { t } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -16,8 +17,10 @@ function isDevNoDb() {
 
 export default async function SignNoticePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ caseId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { caseId } = await params;
   const locale = await getLocale();
@@ -30,14 +33,75 @@ export default async function SignNoticePage({
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
 
+  // ?notice=advisory signs the case's fingerprint advisory (never signed, or
+  // voided) with the same form and the same sign-hash-advisory call as the
+  // case-creation flow.
+  if ((await searchParams).notice === "advisory") {
+    const advisory = await findSignableHashAdvisory(caseId, skipLegalGate);
+    if (!advisory) redirect(`/case/${caseId}`);
+    const ref = templateRef(advisory.template, advisory.hashIds);
+    const resign = (await findVoidedSignatures(caseId)).hashAdvisory;
+    return (
+      <SignPageLayout
+        locale={locale}
+        pill={t(locale, "review.sign.hashPill")}
+        aside={<>{t(locale, "review.sign.aside.hashSub")}</>}
+        title={t(locale, "review.sign.hashTitle")}
+        sub={<>{t(locale, "review.sign.sub")}</>}
+        resign={resign}
+      >
+        <SignNoticeForm
+          caseId={caseId}
+          hashAdvisoryPlatformIds={advisory.platformIds}
+          templateRef={ref}
+          previewPdfUrl={`/api/cases/${caseId}/preview-hash-advisory?templateRef=${encodeURIComponent(ref)}`}
+          confirmationUrl={`/case/${caseId}/confirmation`}
+          locale={locale}
+        />
+      </SignPageLayout>
+    );
+  }
+
   const url = await findSignableNotice(caseId, skipLegalGate);
   if (!url?.platform) redirect(`/case/${caseId}`);
-  // The preview below shows exactly this template, and signing refuses if
-  // another one became current in between.
-  const ref = templateRef(url.template);
+  // The preview below shows exactly this template and these fingerprints, and
+  // signing refuses if either changed in between.
+  const ref = templateRef(url.template, await signableHashIds(caseId));
   // This link was signed before and the signature was voided: say why.
   const resign = (await findVoidedSignatures(caseId)).urlIds.includes(url.id);
+  const platformName = <span className="font-medium text-[var(--ink)]">{url.platform.name}</span>;
 
+  return (
+    <SignPageLayout
+      locale={locale}
+      pill={t(locale, "sign.pill")}
+      aside={<>{t(locale, "sign.aside.sub.prefix")}{" "}{platformName}{" "}{t(locale, "sign.aside.sub.suffix")}</>}
+      title={t(locale, "sign.title")}
+      sub={<>{t(locale, "sign.sub.prefix")}{" "}{platformName}{t(locale, "sign.sub.suffix")}</>}
+      resign={resign}
+    >
+      <SignNoticeForm
+        caseId={caseId}
+        urlId={url.id}
+        templateRef={ref}
+        platformName={url.platform.name}
+        previewPdfUrl={`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(url.id)}&templateRef=${encodeURIComponent(ref)}`}
+        confirmationUrl={`/case/${caseId}/confirmation`}
+        locale={locale}
+      />
+    </SignPageLayout>
+  );
+}
+
+function SignPageLayout({ locale, pill, aside, title, sub, resign, children }: {
+  locale: Locale;
+  pill: string;
+  aside: React.ReactNode;
+  title: string;
+  sub: React.ReactNode;
+  resign: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <AppShell>
       <div className="page-canvas">
@@ -47,13 +111,9 @@ export default async function SignNoticePage({
             {/* LEFT - sticky context */}
             <aside className="mb-12 md:mb-0 md:w-64 md:shrink-0">
               <div className="md:sticky md:top-28">
-                <span className="eyebrow">{t(locale, "sign.pill")}</span>
+                <span className="eyebrow">{pill}</span>
 
-                <p className="muted mt-5 text-sm leading-[1.75]">
-                  {t(locale, "sign.aside.sub.prefix")}{" "}
-                  <span className="font-medium text-[var(--ink)]">{url.platform.name}</span>{" "}
-                  {t(locale, "sign.aside.sub.suffix")}
-                </p>
+                <p className="muted mt-5 text-sm leading-[1.75]">{aside}</p>
 
                 <div className="mt-8 space-y-4">
                   {[
@@ -82,30 +142,14 @@ export default async function SignNoticePage({
 
             {/* RIGHT - form */}
             <div className="min-w-0 flex-1">
-              <h1 className="page-title-sm">
-                {t(locale, "sign.title")}
-              </h1>
-              <p className="muted mt-2 text-sm leading-[1.75]">
-                {t(locale, "sign.sub.prefix")}{" "}
-                <span className="font-medium text-[var(--ink)]">{url.platform.name}</span>
-                {t(locale, "sign.sub.suffix")}
-              </p>
+              <h1 className="page-title-sm">{title}</h1>
+              <p className="muted mt-2 text-sm leading-[1.75]">{sub}</p>
               {resign && (
                 <p className="mt-6 rounded-[var(--radius-box)] bg-[var(--brand-soft)] px-4 py-3 text-sm leading-[1.65] text-[var(--brand-strong)]" role="status">
                   {t(locale, "sign.voided.note")}
                 </p>
               )}
-              <div className="mt-8">
-                <SignNoticeForm
-                  caseId={caseId}
-                  urlId={url.id}
-                  templateRef={ref}
-                  platformName={url.platform.name}
-                  previewPdfUrl={`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(url.id)}&templateRef=${encodeURIComponent(ref)}`}
-                  confirmationUrl={`/case/${caseId}/confirmation`}
-                  locale={locale}
-                />
-              </div>
+              <div className="mt-8">{children}</div>
             </div>
 
           </div>

@@ -23,7 +23,8 @@ import { loadSignedTemplate, voidHashAdvisoryForChangedTemplate } from "@/lib/si
 //      once every one of them is APPROVED (admin-reviewed).
 //   5. Recipients must be human-verified platform contacts.
 //   6. Idempotent per (hashSubmission, platform) via the HashDispatch unique
-//      constraint - re-runs never double-send.
+//      constraint - re-runs never double-send, and a re-run after one platform
+//      failed sends only to the platforms not yet sent.
 //
 // Integrity: the notice body is rendered ONCE from the platform-agnostic
 // HASH_ADVISORY template and is identical for every email platform. The signed
@@ -154,44 +155,50 @@ export async function dispatchHashAdvisories(input: {
       continue;
     }
 
-    // The body is identical on a retry, so Resend returns the first send
-    // instead of emailing the platform twice.
-    const idempotencyKey = sha256(`hash-advisory:${input.caseId}:${platformId}:${pendingSubmissions.map((s) => s.id).sort().join(",")}`);
-    const sent = await sendNoticeDraft(platform.grievanceEmail, subject, emailBody, [
-      {
-        filename: `notice-${dbCase.referenceNumber}.pdf`,
-        content: pdfBuffer,
-      },
-    ], idempotencyKey);
-    const messageId =
-      "id" in sent && typeof sent.id === "string"
-        ? sent.id
-        : "data" in sent && sent.data?.id
-          ? sent.data.id
-          : `hash-advisory-${input.caseId.slice(0, 8)}-${platformId.slice(0, 8)}`;
+    // One platform failing must not stop the others; a retry sends only to
+    // the platforms with no HashDispatch row yet.
+    try {
+      // The body is identical on a retry, so Resend returns the first send
+      // instead of emailing the platform twice.
+      const idempotencyKey = sha256(`hash-advisory:${input.caseId}:${platformId}:${pendingSubmissions.map((s) => s.id).sort().join(",")}`);
+      const sent = await sendNoticeDraft(platform.grievanceEmail, subject, emailBody, [
+        {
+          filename: `notice-${dbCase.referenceNumber}.pdf`,
+          content: pdfBuffer,
+        },
+      ], idempotencyKey);
+      const messageId =
+        "id" in sent && typeof sent.id === "string"
+          ? sent.id
+          : "data" in sent && sent.data?.id
+            ? sent.data.id
+            : `hash-advisory-${input.caseId.slice(0, 8)}-${platformId.slice(0, 8)}`;
 
-    await db.hashDispatch.createMany({
-      data: pendingSubmissions.map((s) => ({ hashSubmissionId: s.id, platformId })),
-      skipDuplicates: true,
-    });
-    await db.hashSubmission.updateMany({
-      where: { id: { in: pendingSubmissions.map((s) => s.id) }, status: "APPROVED" },
-      data: { status: "DISPATCHED" },
-    });
-    await writeAuditLog({
-      eventType: "HASH_DISPATCHED",
-      entityType: "Case",
-      entityId: input.caseId,
-      actorId: input.actorId,
-      data: {
-        platformId,
-        platformName: platform.name,
-        messageId,
-        hashCount: pendingSubmissions.length,
-        templateVersion: template.version,
-      },
-    });
-    results.push({ platformId, dispatched: true, messageId, hashCount: pendingSubmissions.length });
+      await db.hashDispatch.createMany({
+        data: pendingSubmissions.map((s) => ({ hashSubmissionId: s.id, platformId })),
+        skipDuplicates: true,
+      });
+      await db.hashSubmission.updateMany({
+        where: { id: { in: pendingSubmissions.map((s) => s.id) }, status: "APPROVED" },
+        data: { status: "DISPATCHED" },
+      });
+      await writeAuditLog({
+        eventType: "HASH_DISPATCHED",
+        entityType: "Case",
+        entityId: input.caseId,
+        actorId: input.actorId,
+        data: {
+          platformId,
+          platformName: platform.name,
+          messageId,
+          hashCount: pendingSubmissions.length,
+          templateVersion: template.version,
+        },
+      });
+      results.push({ platformId, dispatched: true, messageId, hashCount: pendingSubmissions.length });
+    } catch {
+      results.push({ platformId, dispatched: false, reason: "send_failed" });
+    }
   }
 
   return results;

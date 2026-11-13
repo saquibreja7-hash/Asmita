@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
-import { db } from "@/lib/db";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
+import { findHashAdvisoryTemplate } from "@/lib/signable-notice";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
 import { TEMPLATE_REF_HEADER, templateRef } from "@/lib/signed-template";
@@ -43,19 +43,13 @@ export async function GET(
   }
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
-  const template = await db.noticeTemplate.findFirst({
-    where: {
-      templateType: "HASH_ADVISORY",
-      isActive: true,
-      ...(skipLegalGate ? {} : { reviewedByLegal: true }),
-    },
-    orderBy: { version: "desc" },
-  });
+  const template = await findHashAdvisoryTemplate(skipLegalGate);
   if (!template) {
     return NextResponse.json({ error: "template_missing" }, { status: 409 });
   }
-  // As in preview-notice: a held reference must still name the current text.
-  const ref = templateRef(template);
+  // As in preview-notice: a held reference must still name the current text
+  // and the same fingerprints.
+  const ref = templateRef(template, annex.hashSubmissionIds);
   const expectedRef = req.nextUrl.searchParams.get("templateRef");
   if (expectedRef !== null && expectedRef !== ref) {
     return NextResponse.json({ error: "notice_changed_since_preview" }, { status: 409 });
@@ -90,7 +84,8 @@ export async function GET(
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="hash-advisory-preview-${record.referenceNumber}.pdf"`,
       "Cache-Control": "no-store",
-      // Sent back when signing; signing refuses if the template changed since.
+      // Sent back when signing; signing refuses if the template or the
+      // fingerprints changed since.
       [TEMPLATE_REF_HEADER]: ref,
     },
   });

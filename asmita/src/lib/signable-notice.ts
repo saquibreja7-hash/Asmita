@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { SIGNABLE_NOTICE_BASES, templateTypeForNoticeBasis } from "@/lib/notice-basis";
 import { hasRetiredPortalInstructions } from "@/lib/notice-generator";
 import { urlRetentionCutoff } from "@/lib/url-retention";
+import { signableHashIds } from "@/lib/case-hash-annex";
 
 /**
  * Find an unsigned notice that can actually be previewed and signed, with the
@@ -34,4 +35,55 @@ export async function findSignableNotice(caseId: string, skipLegalGate: boolean,
     if (template && !hasRetiredPortalInstructions(template.bodyTemplate)) return { ...url, template };
   }
   return null;
+}
+
+/** The HASH_ADVISORY template preview, sign and the sign page all use. */
+export function findHashAdvisoryTemplate(skipLegalGate: boolean) {
+  return db.noticeTemplate.findFirst({
+    where: { templateType: "HASH_ADVISORY", isActive: true, ...(skipLegalGate ? {} : { reviewedByLegal: true }) },
+    orderBy: { version: "desc" },
+  });
+}
+
+/*
+ * The case's hash advisory when it can be signed from the case page: never
+ * signed, or its signature was voided. The advisory is one document per case
+ * covering every non-rejected fingerprint, so signing again is the same
+ * sign-hash-advisory call the case-creation flow makes.
+ *
+ * Platforms: the ones the survivor chose stay on the case
+ * (hashAdvisoryPlatformIds), and no void clears them, so they are reused as
+ * they are. A case that was never signed has only the platform recorded on
+ * each fingerprint (requestedPlatformId), so those that take email are used.
+ * With no email platform there is nothing to sign, as in the creation flow,
+ * where a survivor who chose only form-based platforms never signs an
+ * advisory. Null whenever anything was already sent under an advisory.
+ */
+export async function findSignableHashAdvisory(caseId: string, skipLegalGate: boolean) {
+  if (process.env.ENABLE_HASH_UPLOAD !== "true") return null;
+  const record = await db.case.findUnique({
+    where: { id: caseId },
+    select: { signedHashAdvisoryPdf: true, hashAdvisoryPlatformIds: true },
+  });
+  if (!record || record.signedHashAdvisoryPdf) return null;
+  const hashIds = await signableHashIds(caseId);
+  if (hashIds.length === 0) return null;
+  if (await db.hashDispatch.count({ where: { hashSubmission: { caseId } } }) > 0) return null;
+
+  let platformIds = record.hashAdvisoryPlatformIds;
+  if (platformIds.length === 0) {
+    const requested = await db.hashSubmission.findMany({
+      where: {
+        id: { in: hashIds },
+        requestedPlatform: { isActive: true, noticeBasis: { not: "FORM_ONLY" } },
+      },
+      select: { requestedPlatformId: true },
+    });
+    platformIds = [...new Set(requested.flatMap((h) => (h.requestedPlatformId ? [h.requestedPlatformId] : [])))];
+  }
+  if (platformIds.length === 0) return null;
+
+  const template = await findHashAdvisoryTemplate(skipLegalGate);
+  if (!template) return null;
+  return { template, hashIds, platformIds };
 }

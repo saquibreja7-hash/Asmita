@@ -55,10 +55,13 @@ export async function GET(
   if (hasRetiredPortalInstructions(template.bodyTemplate)) {
     return NextResponse.json({ error: "notice_template_requires_review" }, { status: 409 });
   }
-  // ?templateRef= asks for the text the review screen already holds a
-  // reference to. If another template is current now, show nothing rather
-  // than different text under that reference.
-  const ref = templateRef(template);
+  // Same builder as signing, and its ids are part of the reference, so signing
+  // refuses if the fingerprints listed here change before the survivor signs.
+  const annex = await buildHashAnnexForSigning(caseId);
+  // ?templateRef= asks for the notice the review screen already holds a
+  // reference to. If the template or the fingerprints changed since, show
+  // nothing rather than a different notice under that reference.
+  const ref = templateRef(template, annex.hashSubmissionIds);
   const expectedRef = req.nextUrl.searchParams.get("templateRef");
   if (expectedRef !== null && expectedRef !== ref) {
     return NextResponse.json({ error: "notice_changed_since_preview" }, { status: 409 });
@@ -76,7 +79,6 @@ export async function GET(
   };
 
   const subject = renderNoticeTemplate(template.subjectTemplate, variables);
-  const annex = await buildHashAnnexForSigning(caseId);
   const body = annex.text
     ? `${renderNoticeTemplate(template.bodyTemplate, variables)}\n\n${annex.text}`
     : renderNoticeTemplate(template.bodyTemplate, variables);
@@ -104,7 +106,8 @@ export async function GET(
       // The review screen signs exactly this link, so the signature covers the
       // notice the survivor read.
       "X-Notice-Url-Id": url.id,
-      // Sent back when signing; signing refuses if the template changed since.
+      // Sent back when signing; signing refuses if the template or the
+      // fingerprints changed since.
       [TEMPLATE_REF_HEADER]: ref,
     },
   });

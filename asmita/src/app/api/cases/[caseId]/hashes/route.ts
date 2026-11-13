@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCaseForUser } from "@/lib/case-ops";
-import { addHashesToCase, listHashesForCase, listDevHashPickerPlatforms, MAX_HASHES_PER_SUBMISSION } from "@/lib/hash-submission";
+import {
+  addHashesToCase,
+  fingerprintsClosedForCase,
+  listHashesForCase,
+  listDevHashPickerPlatforms,
+  recordChosenAdvisoryPlatforms,
+  MAX_HASHES_PER_SUBMISSION,
+} from "@/lib/hash-submission";
 import { requireSession } from "@/lib/auth/middleware";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { verifyCsrfRequest } from "@/lib/csrf";
@@ -97,6 +104,11 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     }
   }
 
+  // Fingerprints are added only while the case is being created.
+  if (await fingerprintsClosedForCase(caseId)) {
+    return NextResponse.json({ error: "fingerprints_closed" }, { status: 409 });
+  }
+
   const limit = await checkRateLimitAsync(`hashes:${caseId}`, 20, 24 * 60 * 60_000);
   const ipLimit = await checkRateLimitAsync(
     `hash-submit-ip:${getClientIp(request)}`,
@@ -121,6 +133,9 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
   const results = await addHashesToCase(caseId, parsed.data.hashes, {
     requestedPlatformId: platformIds?.[0],
   });
+  if (platformIds?.length && results.some((r) => r.ok)) {
+    await recordChosenAdvisoryPlatforms(caseId, platformIds);
+  }
   const rejectedAsMedia = results.some((r) => !r.ok && r.error === "media_payload_rejected");
   if (rejectedAsMedia) {
     await logSecurityEvent({

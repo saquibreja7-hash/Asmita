@@ -40,11 +40,12 @@ describe("account deletion flow", () => {
     expect(users.has("user-1")).toBe(false);
     expect(cases.has(record.id)).toBe(false);
     expect(deactivatedUsers.has("user-1")).toBe(false);
-    expect(globalThis.__asmitaHashStore.has(record.id)).toBe(false);
+    // Fingerprints are kept after a hard delete.
+    expect(globalThis.__asmitaHashStore.get(record.id)).toHaveLength(1);
     const audit = inMemoryAuditLog.find((event) => event.eventType === "CASE_HARD_DELETED");
     expect(audit?.data).toEqual({
-      removed: { cases: 1, links: 0, fingerprints: 1 },
-      retained: { auditLog: "earlier entries are append-only and unchanged" },
+      removed: { cases: 1, links: 0 },
+      retained: { fingerprints: "kept so platforms can keep blocking matching images", auditLog: "earlier entries are append-only and unchanged" },
     });
   });
 
