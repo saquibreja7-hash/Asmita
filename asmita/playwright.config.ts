@@ -20,6 +20,11 @@ export default defineConfig({
       NOTICE_DISPATCH_PERSISTENCE: "database",
       ENABLE_HASH_UPLOAD: "true",
       ENABLE_PLATFORM_API: "false",
+      // Quick Exit tests: the neutral destination is an internal page so the
+      // suite never depends on the outside internet, and the idle sign-out is
+      // short enough to exercise without slowing the suite down.
+      NEXT_PUBLIC_QUICK_EXIT_URL: "http://127.0.0.1:3001/how-it-works",
+      NEXT_PUBLIC_SESSION_IDLE_TIMEOUT_MS: "60000",
       ENABLE_PROVENANCE_CHECK: "true",
       // MFA is enforced as in production; global-setup enrols the synthetic
       // admins the specs sign sessions for.

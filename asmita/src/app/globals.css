@@ -464,6 +464,29 @@ html[lang="hi"] .data-table thead th { letter-spacing: 0; text-transform: none; 
 
 /* ── Buttons: pills only ──────────────────────────────────────── */
 
+/* Quick Exit (survivor-security roadmap, Phase 1 item 2): always reachable,
+   unmistakable, big enough to hit on a phone with someone walking in. */
+.quick-exit {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 60;
+  min-height: 3rem;
+  padding-inline: 1.25rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
+}
+
+@media (max-width: 640px) {
+  .quick-exit {
+    right: 50%;
+    transform: translateX(50%);
+  }
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
