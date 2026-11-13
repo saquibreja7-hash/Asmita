@@ -23,8 +23,17 @@ import {
 import { RecordReplyButton } from "./RecordReplyButton";
 import { RevealLink } from "./RevealLink";
 import { SendNoticeButton } from "./SendNoticeButton";
+import { VoidSignatureButton } from "./VoidSignatureButton";
 
 export const dynamic = "force-dynamic";
+
+// Shown before anyone clicks Send: dispatch refuses these signatures.
+const SIGNED_TEMPLATE_REFUSALS: Record<string, string> = {
+  signed_template_changed:
+    "The notice text changed after the survivor signed. Sending is refused and would void the signature. Nothing was sent.",
+  signed_template_not_dispatchable:
+    "The template the survivor signed is inactive or no longer legally reviewed. Sending is refused. Nothing was sent.",
+};
 
 export default async function AdminCasePage({ params }: { params: Promise<{ reference: string }> }) {
   const auth = await requireAdminPermission("cases:read");
@@ -46,7 +55,7 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
     await headers(),
   );
 
-  const canReview = hasAdminPermission(auth.session.adminRole ?? "SUPER_ADMIN", "cases:review");
+  const canReview = hasAdminPermission(auth.session.adminRole, "cases:review");
   const hashesEnabled = process.env.ENABLE_HASH_UPLOAD === "true";
   const due = dueText(detail.work.nextAction, detail.work.dueAt, now);
   const [advisoryCases, advisoryPlatforms] =
@@ -143,6 +152,19 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {detail.hashAdvisoryRefusal && (
+        <div className="mt-6 grid gap-3 text-sm">
+          <p className="text-[var(--danger)]" role="status">
+            <span aria-hidden="true">! </span>
+            Hash advisory: {SIGNED_TEMPLATE_REFUSALS[detail.hashAdvisoryRefusal.reason]}
+            {detail.hashAdvisoryRefusal.sent && " A platform already received it, so the signature is kept as the record."}
+          </p>
+          {canReview && hashesEnabled && !detail.hashAdvisoryRefusal.sent && (
+            <VoidSignatureButton caseId={detail.caseId} label="Void advisory signature" />
+          )}
         </div>
       )}
 
@@ -244,6 +266,12 @@ function LinkCard({
           {formatIst(link.reply.responseReceivedAt)}.
         </p>
       )}
+      {link.dispatchRefusal && (
+        <p className="mt-2 text-xs text-[var(--danger)]" role="status">
+          <span aria-hidden="true">! </span>
+          {SIGNED_TEMPLATE_REFUSALS[link.dispatchRefusal]}
+        </p>
+      )}
       {link.ladderBlock && (
         <p className="mt-2 text-xs text-[var(--danger)]">
           <span aria-hidden="true">! </span>
@@ -265,9 +293,12 @@ function LinkCard({
                   ? `Reviewed ${formatIst(link.dispatch.reviewedAt)}${link.dispatch.reviewedByName ? ` by ${link.dispatch.reviewedByName}` : ""}`
                   : "Not reviewed (development bypass)"
               }
-              templateLabel={`${link.dispatch.templateType} v${link.dispatch.templateVersion}`}
+              templateLabel={`${link.dispatch.templateType} v${link.dispatch.templateVersion}${link.dispatch.pinned ? ", the version the survivor signed" : ""}`}
               urlId={link.id}
             />
+          )}
+          {link.dispatchRefusal && !link.noticeSent && (
+            <VoidSignatureButton caseId={caseId} label="Void signature and ask to sign again" urlId={link.id} />
           )}
           {link.reply && !link.reply.removed && (
             <RecordReplyButton noticeId={link.reply.noticeId} platformName={link.platformName} />

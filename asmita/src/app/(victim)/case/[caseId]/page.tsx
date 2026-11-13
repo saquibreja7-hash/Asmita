@@ -2,9 +2,8 @@ import Link from "next/link";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
-import { getCaseForUser, isUserDeactivated } from "@/lib/case-ops";
+import { getCaseForUser } from "@/lib/case-ops";
 import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
-import HashGenerator from "@/components/HashGenerator";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { MarkRemovedButton } from "./MarkRemovedButton";
 import { EscalationLadder } from "./EscalationLadder";
@@ -12,7 +11,8 @@ import { PlatformFiledButton } from "./PlatformFiledButton";
 import { getLocale } from "@/lib/get-locale";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
-import { findSignableNotice } from "@/lib/signable-notice";
+import { findSignableHashAdvisory, findSignableNotice } from "@/lib/signable-notice";
+import { findVoidedSignatures } from "@/lib/voided-signatures";
 
 // Wording that matches what has actually happened: "prepared" is not "sent",
 // and "sent" is not "removed".
@@ -92,7 +92,6 @@ export default async function CasePage({
   const locale = await getLocale();
   const auth = await requireSession({ adultOnly: true });
   const record = auth.ok ? await getCaseForUser(caseId, auth.session.sub) : null;
-  const deactivated = record && auth.ok ? await isUserDeactivated(auth.session.sub) : false;
   const hashUploadEnabled = process.env.ENABLE_HASH_UPLOAD === "true";
   let hashSubmissions: DisplayHashSubmission[] = [];
   if (record && hashUploadEnabled) {
@@ -103,7 +102,14 @@ export default async function CasePage({
   // turns them on (docs/product/escalation-ladder.md). Never set in wrangler.jsonc
   // until that review is done.
   const draftsEnabled = process.env.ESCALATION_DRAFTS_REVIEWED === "true" || skipLegalGate;
-  const hasUnsignedQueuedUrl = Boolean(record && (process.env.NODE_ENV === "production" || process.env.DATABASE_URL) && await findSignableNotice(record.id, skipLegalGate));
+  const usesDatabase = process.env.NODE_ENV === "production" || Boolean(process.env.DATABASE_URL);
+  const hasUnsignedQueuedUrl = Boolean(record && usesDatabase && await findSignableNotice(record.id, skipLegalGate));
+  // A signature voided since it was given: say why the sign step is back.
+  const voided = record && usesDatabase ? await findVoidedSignatures(record.id) : { urlIds: [], hashAdvisory: false };
+  const resign = hasUnsignedQueuedUrl && voided.urlIds.length > 0;
+  // The fingerprint advisory can be signed here when it is unsigned (never
+  // signed, or voided) and nothing was sent under an advisory yet.
+  const canSignAdvisory = Boolean(record && usesDatabase && hashUploadEnabled && await findSignableHashAdvisory(record.id, skipLegalGate));
 
   if (!record) {
     return (
@@ -123,29 +129,6 @@ export default async function CasePage({
               <div className="mt-10 flex flex-wrap justify-center gap-3">
                 <Link className="btn btn-primary" href="/register">{t(locale, "case.notFound.cta1")}</Link>
                 <Link className="btn btn-secondary" href="/resources">{t(locale, "case.notFound.cta2")}</Link>
-              </div>
-            </div>
-          </section>
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (deactivated) {
-    return (
-      <AppShell>
-        <div className="page-canvas">
-          <section className="container page-hero text-center">
-            <div className="mx-auto max-w-2xl">
-              <span className="eyebrow">{t(locale, "case.deactivated.pill")}</span>
-              <h1 className="page-title-sm mt-8">
-                {t(locale, "case.deactivated.title")}
-              </h1>
-              <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg">
-                {t(locale, "case.deactivated.sub")}
-              </p>
-              <div className="mt-10 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-secondary" href="/contact">{t(locale, "case.deactivated.cta")}</Link>
               </div>
             </div>
           </section>
@@ -178,8 +161,8 @@ export default async function CasePage({
             {hasUnsignedQueuedUrl ? (
               <section aria-labelledby="case-standing-title" className="rounded-[var(--radius-box)] border border-[var(--brand)] bg-[var(--card)] p-6">
                 <p className="eyebrow text-[var(--brand)]">{t(locale, "case.sign.pill")}</p>
-                <h2 id="case-standing-title" className="subsection-title mt-2">{t(locale, "case.sign.title")}</h2>
-                <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.sign.sub")}</p>
+                <h2 id="case-standing-title" className="subsection-title mt-2">{t(locale, resign ? "case.voided.title" : "case.sign.title")}</h2>
+                <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, resign ? "case.voided.sub" : "case.sign.sub")}</p>
                 <Link className="btn btn-primary mt-5" href={`/case/${caseId}/sign`}>{t(locale, "case.sign.cta")}</Link>
               </section>
             ) : (
@@ -187,6 +170,16 @@ export default async function CasePage({
                 <p className="eyebrow">{t(locale, "case.now.eyebrow")}</p>
                 <h2 id="case-standing-title" className="subsection-title mt-2">{t(locale, STANDING_KEYS[standing][0])}</h2>
                 <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, STANDING_KEYS[standing][1])}</p>
+              </section>
+            )}
+
+            {(voided.hashAdvisory || canSignAdvisory) && (
+              <section aria-labelledby="case-advisory-voided-title" className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6" role="status">
+                <h2 id="case-advisory-voided-title" className="subsection-title">{t(locale, voided.hashAdvisory ? "case.voided.advisory.title" : "case.advisory.sign.title")}</h2>
+                <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, voided.hashAdvisory ? "case.voided.advisory.sub" : "case.advisory.sign.sub")}</p>
+                {canSignAdvisory && (
+                  <Link className="btn btn-primary mt-5" href={`/case/${caseId}/sign?notice=advisory`}>{t(locale, "case.advisory.sign.cta")}</Link>
+                )}
               </section>
             )}
 
@@ -258,12 +251,6 @@ export default async function CasePage({
               <FoldedSection id="actions" title={t(locale, "case.actions.title")} hint={t(locale, "case.actions.hint")}>
                 <CaseDashboardActions caseId={record.id} locale={locale} />
               </FoldedSection>
-              {hashUploadEnabled && (
-                <FoldedSection id="add-fingerprint" title={t(locale, "case.fingerprints.add")} hint={t(locale, "case.fingerprints.hint")}>
-                  <p className="muted mb-4 text-sm leading-[1.75]">{t(locale, "case.fingerprints.sub")}</p>
-                  <HashGenerator caseId={record.id} />
-                </FoldedSection>
-              )}
             </div>
 
             <nav aria-label={t(locale, "case.more.label")} className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[var(--line)] pt-6 text-sm">

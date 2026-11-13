@@ -20,7 +20,15 @@ type StoredAuditEvent = AuditEvent & {
   eventHash: string;
 };
 
+// Memory mode only (local development and tests). When persistence is the
+// database nothing is appended: a Worker isolate is recycled often, so the
+// array would be partial anyway, and it would only grow. Readers use the
+// audit_log table instead.
 export const inMemoryAuditLog: StoredAuditEvent[] = [];
+
+function persistsToDatabase() {
+  return process.env.AUDIT_LOG_PERSISTENCE === "database";
+}
 
 function canonicalize(value: unknown): string {
   if (Array.isArray(value)) {
@@ -37,12 +45,13 @@ function canonicalize(value: unknown): string {
 
 export async function writeAuditLog(event: AuditEvent) {
   try {
-    const previous = inMemoryAuditLog.at(-1);
-    const record = createAuditRecord(event, inMemoryAuditLog.length + 1, previous?.eventHash || "GENESIS");
-    const eventHash = sha256(canonicalize(record));
-    inMemoryAuditLog.push(Object.freeze({ ...record, eventHash }));
-    if (process.env.AUDIT_LOG_PERSISTENCE === "database") {
+    if (persistsToDatabase()) {
       await persistAuditLog(event);
+    } else {
+      const previous = inMemoryAuditLog.at(-1);
+      const record = createAuditRecord(event, inMemoryAuditLog.length + 1, previous?.eventHash || "GENESIS");
+      const eventHash = sha256(canonicalize(record));
+      inMemoryAuditLog.push(Object.freeze({ ...record, eventHash }));
     }
   } catch (err) {
     // Audit logging must never break the victim-facing flow, but a lost
@@ -51,8 +60,35 @@ export async function writeAuditLog(event: AuditEvent) {
   }
 }
 
-export function readAuditTrail(entityId: string) {
-  return inMemoryAuditLog.filter((event) => event.entityId === entityId);
+/**
+ * Events for one entity, oldest first. In database mode this reads the newest
+ * `limit` rows from audit_log (the in-memory array is empty or partial on a
+ * Worker), then returns them in the same chronological order as memory mode.
+ * The caller must already have checked that the entity belongs to the user.
+ */
+export async function readAuditTrail(entityId: string, limit = 200): Promise<Array<Omit<StoredAuditEvent, "eventType"> & { eventType: string }>> {
+  if (!persistsToDatabase()) {
+    return inMemoryAuditLog.filter((event) => event.entityId === entityId);
+  }
+  const rows = usesWorkerKysely()
+    ? await getWorkerDb().selectFrom("audit_log").selectAll().where("entityId", "=", entityId).orderBy("sequence", "desc").limit(limit).execute()
+    : await (await import("@/lib/db")).db.auditLog.findMany({
+      where: { entityId },
+      orderBy: { sequence: "desc" },
+      take: limit,
+    });
+  return rows.reverse().map((row) => ({
+    eventType: row.eventType,
+    ...(row.entityType != null ? { entityType: row.entityType } : {}),
+    ...(row.entityId != null ? { entityId: row.entityId } : {}),
+    ...(row.actorId != null ? { actorId: row.actorId } : {}),
+    ...(row.data != null ? { data: row.data as Record<string, unknown> } : {}),
+    ...(row.ipHash != null ? { ipHash: row.ipHash } : {}),
+    sequence: row.sequence,
+    createdAt: row.createdAt.toISOString(),
+    previousHash: row.previousHash,
+    eventHash: row.eventHash,
+  }));
 }
 
 export function verifyAuditChain() {

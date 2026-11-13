@@ -13,7 +13,7 @@ describe("notice contact validation", () => {
   const params = { params: Promise.resolve({ caseId: "case-1" }) };
   const request = (contact: string) => new Request("https://asmita.test/api/sign", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "Example Person", signature: "Example Person", contact }),
+    body: JSON.stringify({ name: "Example Person", signature: "Example Person", contact, templateRef: "template-1.digest" }),
   });
   beforeEach(() => {
     mocks.findUrl.mockReset().mockResolvedValue(null);
@@ -29,7 +29,7 @@ describe("notice contact validation", () => {
   it("rejects a phone number for a fingerprint advisory", async () => {
     const advisoryRequest = (contact: string) => new Request("https://asmita.test/api/sign", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Example Person", signature: "Example Person", contact, platformIds: ["platform-1"] }),
+      body: JSON.stringify({ name: "Example Person", signature: "Example Person", contact, platformIds: ["platform-1"], templateRef: "template-1.digest" }),
     });
     expect((await signAdvisory(advisoryRequest("+91 9000000000"), params)).status).toBe(400);
   });

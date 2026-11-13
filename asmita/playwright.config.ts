@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { appUrl } from "./tests/e2e/support/database";
+import { testAdminEmails } from "./tests/e2e/support/admin";
 
 // Real infrastructure: a throwaway local Postgres (reset by global-setup) and
 // the dev server connected to it as a least-privilege role. Only Resend, the
@@ -24,7 +25,9 @@ export default defineConfig({
       // MFA is enforced as in production; global-setup enrols the synthetic
       // admins the specs sign sessions for.
       DEV_SKIP_ADMIN_MFA: "false",
-      ADMIN_EMAILS: "e2e-new-admin@example.invalid",
+      // Every admin needs an allowlist entry and a role (admin-allowlist.ts).
+      ADMIN_EMAILS: testAdminEmails.join(","),
+      ADMIN_ROLES: testAdminEmails.map((email) => `${email}=SUPER_ADMIN`).join(","),
       OTP_GLOBAL_HOURLY_LIMIT: "1000",
       // No key, so no voice session reaches Sarvam; a low daily cap so
       // talk.spec.ts can reach it.

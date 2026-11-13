@@ -99,6 +99,8 @@ export function formatIst(value: string | Date) {
 export const LADDER_BLOCK_LABELS: Record<string, string> = {
   no_template: "The original notice has no template to resend.",
   template_not_legal_reviewed: "The notice template is not legally reviewed.",
+  template_changed_since_sent:
+    "The notice template's text changed after this notice was sent, so the follow-up would quote different text. It is held; nothing was sent.",
   no_verified_recipient: "The platform has no human-verified contact.",
   follow_up_cover_not_legal_reviewed: "The follow-up letter is not legally reviewed.",
   follow_up_cover_missing: "There is no follow-up letter template.",

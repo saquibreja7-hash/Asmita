@@ -5,6 +5,7 @@ vi.mock("@/lib/escalation-engine", () => ({
 }));
 vi.mock("@/lib/case-ops", () => ({
   hardDeleteDueUsers: vi.fn(),
+  countFailedDeletionJobs: vi.fn().mockResolvedValue(0),
 }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -17,7 +18,7 @@ vi.mock("@/lib/alerts", () => ({
 }));
 
 import { runDueEscalationsFromDb } from "@/lib/escalation-engine";
-import { hardDeleteDueUsers } from "@/lib/case-ops";
+import { countFailedDeletionJobs, hardDeleteDueUsers } from "@/lib/case-ops";
 import { db } from "@/lib/db";
 import { sendOnCallAlertFireAndForget } from "@/lib/alerts";
 
@@ -160,6 +161,16 @@ describe("/api/cron/maintenance happy path", () => {
     expect(res.status).toBe(200);
     expect(sendOnCallAlertFireAndForget).toHaveBeenCalledWith(
       expect.objectContaining({ title: expect.stringContaining("GO reverification") }),
+    );
+  });
+
+  it("alerts when account deletions are failing", async () => {
+    vi.mocked(countFailedDeletionJobs).mockResolvedValueOnce(2);
+    const res = await maintenanceRoute(cronRequest("/api/cron/maintenance", "shh"));
+    expect(res.status).toBe(200);
+    expect((await res.json()).failedDeletions).toBe(2);
+    expect(sendOnCallAlertFireAndForget).toHaveBeenCalledWith(
+      expect.objectContaining({ severity: "critical", title: "Account deletions failing" }),
     );
   });
 });

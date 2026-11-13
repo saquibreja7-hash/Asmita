@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     let emailLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
     let domainLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
     let ipLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
-    let globalLimit: Awaited<ReturnType<typeof checkRateLimitAsync>>;
+    let globalLimit = { allowed: false, remaining: 0 };
     try {
       emailLimit = await checkRateLimitAsync(`otp:${emailHash}`, 10, 60 * 60_000);
       const domain = parsed.data.email.split("@")[1]?.toLowerCase() || "unknown";
@@ -53,8 +53,12 @@ export async function POST(request: Request) {
       ipLimit = await checkRateLimitAsync(`registration-ip:${getClientIp(request)}`, 30, 60 * 60_000, { shared: true });
       // A site-wide hourly budget, so a flood of fake sign-ups spread across
       // many IPs and addresses cannot exhaust the email quota and sender
-      // reputation survivors depend on.
-      globalLimit = await checkRateLimitAsync("otp-global", otpGlobalHourlyLimit(), 60 * 60_000);
+      // reputation survivors depend on. Only a request that passed every
+      // per-caller limit spends it, so one source cannot drain it by being
+      // rejected again and again.
+      if (emailLimit.allowed && domainLimit.allowed && ipLimit.allowed) {
+        globalLimit = await checkRateLimitAsync("otp-global", otpGlobalHourlyLimit(), 60 * 60_000);
+      }
     } catch (error) {
       await logSecurityEvent({
         event: "rate_limit_unavailable",
@@ -69,7 +73,7 @@ export async function POST(request: Request) {
         event: "rate_limit_exceeded",
         actorHash: emailHash,
         route: "/api/auth/request-otp",
-        reason: globalLimit.allowed ? undefined : "global_budget",
+        reason: emailLimit.allowed && domainLimit.allowed && ipLimit.allowed ? "global_budget" : undefined,
       });
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }

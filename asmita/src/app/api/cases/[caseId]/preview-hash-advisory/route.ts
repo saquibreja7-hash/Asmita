@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
-import { db } from "@/lib/db";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
+import { findHashAdvisoryTemplate } from "@/lib/signable-notice";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
-import { generateNoticePdf } from "@/lib/notice-pdf";
+import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
+import { TEMPLATE_REF_HEADER, templateRef } from "@/lib/signed-template";
 
 // GET /api/cases/[caseId]/preview-hash-advisory
 // Returns a preview PDF of the platform-agnostic HASH_ADVISORY notice
@@ -42,16 +43,16 @@ export async function GET(
   }
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
-  const template = await db.noticeTemplate.findFirst({
-    where: {
-      templateType: "HASH_ADVISORY",
-      isActive: true,
-      ...(skipLegalGate ? {} : { reviewedByLegal: true }),
-    },
-    orderBy: { version: "desc" },
-  });
+  const template = await findHashAdvisoryTemplate(skipLegalGate);
   if (!template) {
     return NextResponse.json({ error: "template_missing" }, { status: 409 });
+  }
+  // As in preview-notice: a held reference must still name the current text
+  // and the same fingerprints.
+  const ref = templateRef(template, annex.hashSubmissionIds);
+  const expectedRef = req.nextUrl.searchParams.get("templateRef");
+  if (expectedRef !== null && expectedRef !== ref) {
+    return NextResponse.json({ error: "notice_changed_since_preview" }, { status: 409 });
   }
 
   const variables = {
@@ -63,13 +64,18 @@ export async function GET(
   const body = renderNoticeTemplate(template.bodyTemplate, variables);
   const noticeBody = `${body}\n\n${annex.text}`;
 
-  const pdfBytes = await generateNoticePdf({
-    platformName: "Grievance Officer(s) / Trust and Safety Teams",
-    caseReference: record.referenceNumber,
-    noticeSubject: subject,
-    noticeBody,
-    date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
-  });
+  let pdfBytes: Buffer;
+  try {
+    pdfBytes = await generateNoticePdf({
+      platformName: "Grievance Officer(s) / Trust and Safety Teams",
+      caseReference: record.referenceNumber,
+      noticeSubject: subject,
+      noticeBody,
+      date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
+    });
+  } catch (err) {
+    return NextResponse.json({ error: noticePdfErrorCode(err) }, { status: 409 });
+  }
 
   // Copy into an exact-sized buffer: Buffer.buffer may be Node's shared 8KB
   // pool with a non-zero offset, which serves garbage bytes around the PDF.
@@ -78,6 +84,9 @@ export async function GET(
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="hash-advisory-preview-${record.referenceNumber}.pdf"`,
       "Cache-Control": "no-store",
+      // Sent back when signing; signing refuses if the template or the
+      // fingerprints changed since.
+      [TEMPLATE_REF_HEADER]: ref,
     },
   });
 }

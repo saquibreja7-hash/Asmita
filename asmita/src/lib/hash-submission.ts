@@ -105,6 +105,43 @@ function toDisplay(record: {
   };
 }
 
+/*
+ * Fingerprints are added only while the case is being created. They close
+ * once the survivor has signed anything on the case (declarationSignedAt is
+ * set by the first signature and no void clears it). The creation flow posts
+ * them right after the case row exists and before any signature; the case
+ * page has no way to add them.
+ */
+export function fingerprintsClosed(input: { declarationSignedAt?: Date | null }): boolean {
+  return Boolean(input.declarationSignedAt);
+}
+
+export async function fingerprintsClosedForCase(caseId: string): Promise<boolean> {
+  const declarationSignedAt = isDevNoDb()
+    ? null
+    : (await db.case.findUnique({ where: { id: caseId }, select: { declarationSignedAt: true } }))?.declarationSignedAt ?? null;
+  return fingerprintsClosed({ declarationSignedAt });
+}
+
+/*
+ * Keeps every email platform the survivor chose on the case, so the advisory
+ * they sign (from the creation flow or later from the case page) and its
+ * dispatch cover all of them, not only the first. Form-only platforms are
+ * not stored: the survivor files those forms themselves. Only while unsigned;
+ * signing writes the final list.
+ */
+export async function recordChosenAdvisoryPlatforms(caseId: string, platformIds: string[]): Promise<void> {
+  if (isDevNoDb() || platformIds.length === 0) return;
+  const email = await db.platform.findMany({
+    where: { id: { in: platformIds }, isActive: true, noticeBasis: { not: "FORM_ONLY" } },
+    select: { id: true },
+  });
+  if (email.length === 0) return;
+  const current = await db.case.findUnique({ where: { id: caseId }, select: { hashAdvisoryPlatformIds: true } });
+  const merged = [...new Set([...(current?.hashAdvisoryPlatformIds ?? []), ...email.map((p) => p.id)])];
+  await db.case.updateMany({ where: { id: caseId, signedHashAdvisoryPdf: null }, data: { hashAdvisoryPlatformIds: merged } });
+}
+
 export async function addHashesToCase(
   caseId: string,
   items: HashPayloadItem[],
