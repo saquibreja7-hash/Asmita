@@ -33,7 +33,7 @@ Both URL takedown and image fingerprint (hash) submission are live and deployed.
 | Feature | Env var | Status |
 |---|---|---|
 | Hash upload (PDQ fingerprinting) | `ENABLE_HASH_UPLOAD=true` | Built, deployed (Worker vars in `wrangler.jsonc`) |
-| Platform API (StopNCII, I4C) | `ENABLE_PLATFORM_API=true` | Not yet built |
+| Platform API (StopNCII, I4C) | `ENABLE_PLATFORM_API=true` | Transport built (URL notices + hash advisories; see `docs/api/platform-api.md`); dispatch stays off pending partner agreements |
 | Provenance check | `ENABLE_PROVENANCE_CHECK=true` | Off; production builds force it off until ADR 002 is accepted |
 | Scheduled work | none | Cron Triggers plus database sweeps. BullMQ/Redis removed (2026-10-31) |
 

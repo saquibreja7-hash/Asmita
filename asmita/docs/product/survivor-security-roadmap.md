@@ -24,6 +24,11 @@ The current codebase covers a meaningful slice of Phase 1 already:
 - Admin dispatch with human contact verification and legal review gates.
 - English and Hindi throughout, OTP login, audit log, rate limiting, CSRF.
 - Client-side content-credential reader (`/check-image`, `ai-provenance.ts`), the first step of the authenticity feature.
+- The guided triage front door: `/get-help` (situation hub with off-ramps, do-not-pay guidance, minor routing) and `/eligibility` (progressive eligibility wizard).
+- The escalation engine (L1 GO follow-up, L2 survivor notification, L3 FIR package) running from the daily sweep.
+- The rebuilt admin console: server-paginated case list, case page with dispatch, needs-action queues, saved views.
+- Honest sign-ready messaging: the case dashboard gates all "ready to sign" copy on `findSignableNotice()` (`src/lib/signable-notice.ts`).
+- Hindi shipped: `src/i18n/hi.json` reviewed and marked PRODUCTION 2026-06-16 (`src/i18n/hi-review-status.json`).
 
 So this roadmap is mostly about adding the response-centre layer around a working takedown engine, not starting over.
 
@@ -53,8 +58,8 @@ Goal: turn the takedown form into a response centre. Most of this touches no med
 
 | # | Feature | Maps to / build | Gate |
 |---|---|---|---|
-| 1 | Guided "Get Help Now" triage | New `(public)` flow feeding case creation; decision tree, not a long form | None. Ships first. |
-| 2 | Safe access + Quick Exit | New global component: Quick Exit button, double-Escape, neutral tab title/favicon, session timeout, `noindex` on dashboards, no sensitive text in emails/notifications | None. Safety-critical, build early. |
+| 1 | Guided "Get Help Now" triage | New `(public)` flow feeding case creation; decision tree, not a long form | **Built (2026-11):** `/get-help` hub + `/eligibility` wizard |
+| 2 | Safe access + Quick Exit | New global component: Quick Exit button, double-Escape, neutral tab title/favicon, session timeout, `noindex` on dashboards, no sensitive text in emails/notifications | **Not built — next up.** Safety-critical. |
 | 3 | Anonymous / pseudonymous case creation | Extend case model + auth: random case ID, password/passkey, optional contact, recovery code, three modes (self-help / anonymous assisted / verified legal) | Review data model against DPDP minimisation. |
 | 4 | Case dashboard | Extend `(victim)` dashboard into a clear timeline with per-URL status, references, escalation deadlines, no vague "processing" | None. |
 | 5 | URL + evidence collection (text only) | Extend URL intake to capture usernames, timestamps, threat text, payment demands as text/hashes. No image storage in Phase 1. | Keep to text + hashes to stay inside current charter. |
@@ -111,7 +116,7 @@ Goal: after partnerships and governance. Highest risk, most governance.
 
 1. **Stop the Cloudflare deepfake-detection container work.** It is a Phase 3 supporting feature, not the centre. The client-side reader already shipped is enough until then.
 2. **Start counsel review of ADR 002.** Everything media-related in Phase 2 and 3 waits on it, so the clock should start now.
-3. **Build Phase 1, items 1 and 2 first** (triage front door + safe access / Quick Exit). They are low-risk, touch no media, and reframe the entire app immediately.
+3. **Build Phase 1, item 2 next: safe access + Quick Exit.** Item 1 (triage front door) shipped at `/get-help` + `/eligibility`. Item 2 is the remaining safety-critical gap — verified in code 2026-11-12: no Quick Exit button, no double-Escape, no `noindex` on victim/admin dashboards, and a fixed 4-hour survivor session cookie with no idle timeout.
 4. Keep the existing "no media, ever" lint tests and no-fetch monitor in force for the takedown and notice pipelines. The new media paths are separate and get their own tests.
 
 ## Sources

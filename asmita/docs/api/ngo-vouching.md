@@ -17,15 +17,17 @@ The vouching API is for approved NGO workers to attest that a beta case came thr
 - Revoke immediately if a partner leaves, a device is lost, or suspicious access appears.
 - Rotate at least quarterly.
 
-## Request Shape
+## Request
 
-```json
-{
-  "caseReference": "ASMITA-2026-00001",
-  "ngoWorkerReference": "partner-local-id",
-  "attestation": "Victim requested NGO-assisted beta support."
-}
+```http
+POST /api/ngo/vouch/{caseId}
+Authorization: Bearer ngo_<key>
 ```
+
+The case id goes in the path; there is no request body. A successful vouch
+marks the case `ngoVerified` and releases its platform-matched URLs from
+review into `NOTICE_QUEUED`. The partner is identified by the API key alone —
+there are no worker-reference or attestation fields.
 
 ## Production Gate
 
