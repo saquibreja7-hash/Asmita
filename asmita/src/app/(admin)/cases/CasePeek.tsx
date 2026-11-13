@@ -73,13 +73,13 @@ export function CasePeek({
   return (
     <aside
       aria-labelledby={titleId}
-      className="fixed inset-0 z-30 overflow-y-auto border-l border-[var(--line)] bg-[var(--page)] p-6 shadow-xl md:inset-y-0 md:left-auto md:right-0 md:w-[min(34rem,45vw)]"
+      className="a-peek fixed inset-0 z-30 overflow-y-auto border-l border-[var(--line)] bg-[var(--page)] p-6 md:inset-y-0 md:left-auto md:right-0 md:w-[min(34rem,45vw)]"
       ref={panelRef}
       role="dialog"
       aria-modal="false"
     >
       <div className="flex items-baseline justify-between gap-4">
-        <h2 className="page-title-sm font-mono text-xl outline-none" id={titleId} ref={headingRef} tabIndex={-1}>
+        <h2 className="font-mono outline-none" id={titleId} ref={headingRef} tabIndex={-1}>
           {reference}
         </h2>
         <button aria-label="Close preview" className="link-underline text-sm" onClick={onClose} type="button">
@@ -91,7 +91,7 @@ export function CasePeek({
         <div aria-busy="true" aria-live="polite" className="mt-6 grid gap-3">
           <span className="sr-only">Loading the case</span>
           {[0, 1, 2, 3].map((index) => (
-            <div className="h-5 animate-pulse rounded bg-[var(--line)] motion-reduce:animate-none" key={index} />
+            <div className="h-4 animate-pulse rounded bg-[var(--line)] motion-reduce:animate-none" key={index} />
           ))}
         </div>
       )}

@@ -25,25 +25,25 @@ export default async function PlatformsPage() {
         <p className="eyebrow">
           Console · Platforms
         </p>
-        <h1 className="page-title-sm mt-3">
+        <h1 className="mt-3">
           Platform database
         </h1>
       </div>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-2">
+      <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-2">
         <Metric label="Awaiting monthly re-verification" value={stale} />
         <Metric label="Total platforms" value={rows.length} />
       </div>
-      <p className="muted mt-4 max-w-xl text-sm leading-[1.7]">
+      <p className="muted mt-4 max-w-xl text-sm">
         Contacts stay blocked from live dispatch until a human verifies them.
         Every edit records the source URL into the change history table below
         and a tamper-evident audit log entry.
       </p>
 
-      <h2 className="section-title mt-12">
+      <h2 className="mt-8">
         Verified contacts
       </h2>
-      <div className="mt-4 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-4 overflow-hidden a-card">
         <table className="w-full min-w-[980px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--line)]">
@@ -126,10 +126,10 @@ export default async function PlatformsPage() {
         </table>
       </div>
 
-      <h2 className="section-title mt-14">
+      <h2 className="mt-8">
         Grievance Officer change history
       </h2>
-      <div className="mt-4 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-4 overflow-hidden a-card">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--line)]">
@@ -195,7 +195,7 @@ function Metric({
       <p className="eyebrow">
         {label}
       </p>
-      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--ink)] tabular-nums">
+      <p className="a-stat-value mt-2">
         {value}
       </p>
     </div>

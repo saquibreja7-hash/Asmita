@@ -1,0 +1,450 @@
+/*
+ * The admin console's design system. Everything here is scoped to .admin, so
+ * no survivor-facing page changes.
+ *
+ * Spacing: 4 8 12 16 24 32 48. In markup these are Tailwind steps
+ *          1 2 3 4 6 8 12 and nothing else.
+ * Type:    12 14 16 20 28 (Tailwind text-xs, text-sm, text-base, text-xl,
+ *          and the page title).
+ * Colour:  five tokens. Muted text and hairlines are mixes of ink and page,
+ *          not extra colours. No gradients, no shadows.
+ */
+
+.admin {
+  --c-page: #f6f3f1;
+  --c-surface: #ffffff;
+  --c-ink: #242424;
+  --c-accent: #0a5e5a;
+  --c-alert: #b42318;
+  --c-muted: color-mix(in srgb, var(--c-ink) 72%, var(--c-page));
+  --c-line: color-mix(in srgb, var(--c-ink) 14%, var(--c-page));
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  --t-xs: 12px;
+  --t-sm: 14px;
+  --t-md: 16px;
+  --t-lg: 20px;
+  --t-xl: 28px;
+
+  /* The site's own names, pointed at the console tokens, so shared classes
+     (.btn, .field, .muted, .link-underline) and older markup cannot bring in
+     a colour from outside the list. */
+  --ink: var(--c-ink);
+  --text: var(--c-ink);
+  --text-muted: var(--c-muted);
+  --line: var(--c-line);
+  --page: var(--c-surface);
+  --card: var(--c-surface);
+  --brand: var(--c-accent);
+  --brand-strong: var(--c-ink);
+  --brand-soft: var(--c-page);
+  --danger: var(--c-alert);
+  --color-off-black: var(--c-ink);
+  --color-graphite: var(--c-muted);
+  --color-smoke: var(--c-muted);
+  --color-ash: var(--c-line);
+  --color-parchment: var(--c-surface);
+  --color-brand-teal: var(--c-accent);
+  --radius-box: var(--s-2);
+  --radius-2xl: var(--s-2);
+  --radius-cards: var(--s-2);
+  --radius-buttons: var(--s-2);
+  --card-padding: var(--s-5);
+
+  min-height: 100vh;
+  background: var(--c-page);
+  color: var(--c-ink);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+/* ── Type ─────────────────────────────────────────────────────── */
+
+.admin h1 {
+  font-size: var(--t-xl);
+  line-height: 1.2;
+}
+
+.admin h2 {
+  font-size: var(--t-lg);
+  line-height: 1.3;
+}
+
+.admin h3 {
+  font-size: var(--t-md);
+  line-height: 1.4;
+}
+
+/* The one small label: field labels, table heads, the line above a title. */
+.admin .eyebrow {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  color: var(--c-muted);
+}
+
+.admin th.eyebrow {
+  display: table-cell;
+  white-space: nowrap;
+}
+
+/* ── Shared controls, at console size ─────────────────────────── */
+
+.admin .btn {
+  min-height: 0;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-4);
+  font-size: var(--t-sm);
+  line-height: 1.4;
+}
+
+.admin .btn-primary,
+.admin .btn-primary:hover {
+  color: var(--c-surface);
+}
+
+.admin .btn-secondary {
+  background: var(--c-surface);
+  border-color: var(--c-line);
+}
+
+.admin .btn-secondary:hover {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+}
+
+.admin .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.admin .field {
+  min-height: 0;
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--t-sm);
+  line-height: 1.4;
+}
+
+.admin select.field {
+  padding-right: var(--s-1);
+}
+
+.admin .card {
+  padding: var(--s-5);
+}
+
+@media (max-width: 767px) {
+  /* 16px stops phones zooming the page when a field takes focus. */
+  .admin .field {
+    font-size: var(--t-md);
+  }
+}
+
+@media (max-width: 480px) {
+  /* The public site makes buttons full width on phones. Console actions sit
+     in tables and toolbars, so they keep their own width. */
+  .admin main .btn:not(.btn-link):not(.node) {
+    width: revert-layer;
+  }
+  .admin main .flex.flex-wrap:has(> .btn) {
+    flex-direction: revert-layer;
+    align-items: revert-layer;
+  }
+}
+
+/* ── Shell ────────────────────────────────────────────────────── */
+
+.a-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.a-side {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.a-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+}
+
+.a-brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.a-brand small {
+  font-size: var(--t-xs);
+  font-weight: 400;
+  color: var(--c-muted);
+}
+
+.a-menu {
+  display: none;
+  padding: 0 var(--s-2) var(--s-4);
+  max-height: calc(100vh - var(--s-7));
+  overflow-y: auto;
+}
+
+.a-menu[data-open="true"] {
+  display: block;
+}
+
+.a-nav {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.a-nav-group {
+  display: grid;
+  gap: var(--s-1);
+}
+
+.a-nav-heading {
+  padding: 0 var(--s-3);
+  font-size: var(--t-xs);
+  color: var(--c-muted);
+}
+
+.a-nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--s-2);
+  font-weight: 500;
+}
+
+.a-nav-link:hover {
+  background: var(--c-page);
+}
+
+.a-nav-link[aria-current="page"] {
+  background: var(--c-page);
+  color: var(--c-accent);
+  font-weight: 600;
+}
+
+.a-count {
+  padding: 0 var(--s-2);
+  border-radius: var(--s-3);
+  background: var(--c-accent);
+  color: var(--c-surface);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.a-side-foot {
+  margin-top: var(--s-4);
+  padding: var(--s-4) var(--s-3) 0;
+  border-top: 1px solid var(--c-line);
+}
+
+.a-main {
+  min-width: 0;
+  padding: var(--s-5) var(--s-4) var(--s-7);
+}
+
+@media (min-width: 1024px) {
+  .a-shell {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .a-side {
+    height: 100vh;
+    overflow-y: auto;
+    border-bottom: 0;
+    border-right: 1px solid var(--c-line);
+  }
+
+  .a-bar {
+    padding: var(--s-5) var(--s-5) var(--s-4);
+  }
+
+  .a-bar .a-toggle {
+    display: none;
+  }
+
+  .a-menu,
+  .a-menu[data-open="true"] {
+    display: block;
+    max-height: none;
+    padding: 0 var(--s-3) var(--s-5);
+  }
+
+  .a-main {
+    padding: var(--s-6) var(--s-6) var(--s-7);
+  }
+
+  .a-main > * {
+    max-width: 1200px;
+  }
+}
+
+/* ── Pieces ───────────────────────────────────────────────────── */
+
+.a-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: var(--s-2);
+}
+
+/* A queue on the home page. An overdue queue carries the alert edge. */
+.a-stat {
+  display: block;
+  height: 100%;
+  padding: var(--s-4);
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: var(--s-2);
+}
+
+.a-stat:hover {
+  border-color: var(--c-ink);
+}
+
+.a-stat[data-urgent="true"] {
+  border-left: var(--s-1) solid var(--c-alert);
+}
+
+.a-stat-value {
+  font-size: var(--t-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An empty queue is quiet: body size, muted, on the same line box. */
+.a-stat-value[data-empty="true"] {
+  font-size: var(--t-md);
+  font-weight: 400;
+  line-height: 2.1;
+  color: var(--c-muted);
+}
+
+/* Filter chips. */
+.a-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-1) var(--s-3);
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: var(--s-4);
+  white-space: nowrap;
+}
+
+.a-chip:hover {
+  border-color: var(--c-ink);
+}
+
+.a-chip[aria-current="page"],
+.a-chip:has([aria-current="page"]) {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.a-chip[aria-current="page"] *,
+.a-chip:has([aria-current="page"]) * {
+  color: inherit;
+}
+
+/* Tables: one cell rhythm everywhere in the console. */
+.admin table {
+  width: 100%;
+  text-align: left;
+}
+
+.admin th {
+  padding: var(--s-2) var(--s-4);
+  background: var(--c-page);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.admin td {
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--c-line);
+  vertical-align: top;
+}
+
+.admin tbody tr:first-child td {
+  border-top: 0;
+}
+
+/* A wide table scrolls inside its card, never the page. */
+.admin .a-card:has(> table) {
+  overflow-x: auto;
+}
+
+/* Rows that open something. */
+.a-table tbody tr:hover,
+.a-table tbody tr:focus-visible,
+.a-table tbody tr[data-selected="true"] {
+  background: var(--c-page);
+}
+
+.a-table tbody tr:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: -2px;
+}
+
+/* While the case preview is open the page makes room for it, and the list
+   keeps only the columns needed to pick a case. */
+@media (min-width: 768px) {
+  .a-main:has(.a-peek) {
+    padding-right: calc(min(34rem, 45vw) + var(--s-6));
+  }
+  .a-main:has(.a-peek) .a-more > div {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .a-table[data-compact="true"] .a-extra {
+    display: none;
+  }
+}
+
+.admin dialog::backdrop {
+  background: color-mix(in srgb, var(--c-ink) 40%, transparent);
+}
+
+.a-nowrap {
+  white-space: nowrap;
+}
+
+/* Extra filters fold away on a phone and stay open on wider screens. */
+.a-more > summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+@supports selector(::details-content) {
+  @media (min-width: 768px) {
+    .a-more > summary {
+      display: none;
+    }
+    .a-more::details-content {
+      content-visibility: visible;
+    }
+  }
+}

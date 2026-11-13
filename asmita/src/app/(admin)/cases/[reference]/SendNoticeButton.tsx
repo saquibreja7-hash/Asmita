@@ -76,14 +76,14 @@ export function SendNoticeButton(props: Props) {
       </button>
       <dialog
         aria-labelledby={titleId}
-        className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-6 text-[var(--ink)] backdrop:bg-black/40"
+        className="m-auto w-[min(32rem,calc(100vw-2rem))] a-card p-6 text-[var(--ink)]"
         onClose={() => setError(null)}
         ref={dialogRef}
       >
-        <h2 className="subsection-title" id={titleId}>
+        <h2 id={titleId}>
           Send notice to {props.platformName}
         </h2>
-        <p className="mt-3 text-sm leading-[1.7]">
+        <p className="mt-3 text-sm">
           This emails a legal notice in the survivor&apos;s name, with the PDF they signed attached. It
           cannot be unsent.
         </p>

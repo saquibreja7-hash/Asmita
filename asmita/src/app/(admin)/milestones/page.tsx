@@ -14,24 +14,24 @@ export default async function MilestonesPage() {
         <p className="eyebrow">
           Console · Milestones
         </p>
-        <h1 className="page-title-sm mt-3">
+        <h1 className="mt-3">
           100-case milestone
         </h1>
       </div>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         <Metric label="Cases processed" value={stats.totalCases} />
         <Metric label="Remaining" value={stats.remaining} />
         <Metric label="Open" value={stats.openCases} />
         <Metric label="Resolved" value={stats.resolvedCases} />
       </div>
 
-      <div className="mt-10">
+      <div className="mt-6">
         <div className="flex items-end justify-between gap-4">
           <p className="eyebrow">
             Progress toward {stats.target} cases
           </p>
-          <p className="font-display text-[24px] tabular-nums">
+          <p className="text-xl font-semibold tabular-nums">
             {stats.progressPercent}%
           </p>
         </div>
@@ -44,7 +44,7 @@ export default async function MilestonesPage() {
         </div>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-6 overflow-hidden a-card">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--line)]">
@@ -100,7 +100,7 @@ function Metric({
       <p className="eyebrow">
         {label}
       </p>
-      <p className="font-display mt-2 text-[36px] leading-none tracking-tight text-[var(--ink)] tabular-nums">
+      <p className="a-stat-value mt-2">
         {value}
       </p>
     </div>

@@ -81,9 +81,9 @@ export default function HashDispatchForm({
   }
 
   return (
-    <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-6">
+    <div className="a-card p-6">
       <div className="grid gap-4 md:grid-cols-2">
-        <label className="grid gap-1.5">
+        <label className="grid gap-1">
           <span className="eyebrow">
             Case
           </span>
@@ -101,7 +101,7 @@ export default function HashDispatchForm({
           </select>
         </label>
 
-        <fieldset className="grid gap-1.5">
+        <fieldset className="grid gap-1">
           <legend className="eyebrow">
             Target platforms (human-verified contacts only)
           </legend>
@@ -137,7 +137,7 @@ export default function HashDispatchForm({
       </button>
 
       {error && (
-        <p className="mt-4 text-sm text-red-700" role="alert">
+        <p className="mt-4 text-sm text-[var(--danger)]" role="alert">
           Dispatch failed: {error}
         </p>
       )}

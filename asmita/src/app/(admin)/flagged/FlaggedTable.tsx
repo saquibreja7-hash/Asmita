@@ -163,7 +163,7 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
         </div>
       )}
 
-      <div className="mt-6 overflow-x-auto rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
+      <div className="mt-6 overflow-x-auto a-card">
         <table className="w-full min-w-[900px] text-left text-sm">
           <caption className="sr-only">Flagged links, oldest first</caption>
           <thead>
@@ -201,7 +201,7 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
                     )}
                   </td>
                 )}
-                <td className="p-4">
+                <td className="a-nowrap">
                   <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`}>
                     {row.referenceNumber}
                   </Link>
@@ -209,10 +209,10 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
                 <td className="p-4">{row.platformName}</td>
                 <td className="font-mono p-4 text-[var(--text-muted)]">{row.domain}</td>
                 <td className="p-4">{row.reason}</td>
-                <td className="font-mono p-4 tabular-nums">
+                <td className="a-nowrap tabular-nums">
                   {Math.floor(row.ageMinutes / 60)}h {row.ageMinutes % 60}m
                 </td>
-                <td className="p-4">
+                <td className={`a-nowrap ${row.slaState === "breached" ? "font-semibold text-[var(--danger)]" : ""}`}>
                   {row.slaState === "breached" && <span aria-hidden="true">! </span>}
                   {row.slaState.replaceAll("_", " ")}
                 </td>

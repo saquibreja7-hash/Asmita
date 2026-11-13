@@ -75,87 +75,118 @@ export default async function NeedsActionPage() {
     });
   }
 
+  // Case queues lead; directory upkeep sits beside the work, not above it.
+  const caseTiles = tiles.filter((tile) => tile.href.startsWith("/admin/cases"));
+  const upkeep = tiles.filter((tile) => !tile.href.startsWith("/admin/cases"));
+
   return (
     <section>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Console</p>
-          <h1 className="page-title-sm mt-3">Needs action</h1>
-        </div>
-        <p className="muted text-sm">Updated {formatIst(now)}</p>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1>Needs action</h1>
+        <p className="muted text-xs tabular-nums">Updated {formatIst(now)}</p>
       </div>
 
-      {tiles.length === 0 ? (
-        <p className="muted mt-10 text-sm">Your admin role has no queues.</p>
-      ) : (
-        <ul className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {tiles.map((tile) => (
-            <li key={tile.title}>
-              <Link
-                className={`block h-full rounded-[var(--radius-box)] border bg-[var(--page)] p-5 ${
-                  tile.urgent ? "border-[var(--danger)]" : "border-[var(--line)]"
-                }`}
-                href={tile.href}
-              >
-                <p className="eyebrow">{tile.title}</p>
-                <p className="font-display mt-3 text-[36px] leading-none tabular-nums text-[var(--ink)]">
+      {tiles.length === 0 && <p className="muted mt-6">Your admin role has no queues.</p>}
+
+      {caseTiles.length > 0 && (
+        <ul aria-label="Case queues" className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          {caseTiles.map((tile) => (
+            <li className="last:odd:col-span-2 md:last:odd:col-span-1" key={tile.title}>
+              <Link className="a-stat" data-urgent={tile.urgent} href={tile.href}>
+                <p className="muted">{tile.title}</p>
+                <p className="a-stat-value mt-2" data-empty={tile.count === 0}>
                   {tile.count === 0 ? "Clear" : tile.count}
                 </p>
-                <ul className="mt-3 grid gap-1 text-sm">
-                  {tile.lines.map((line) => (
-                    <li className={line.startsWith("!") ? "text-[var(--danger)]" : "muted"} key={line}>
-                      {line.startsWith("!") ? (
-                        <>
-                          <span aria-hidden="true">! </span>
-                          {line.slice(2)}
-                        </>
-                      ) : (
-                        line
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <TileLines lines={tile.lines} />
               </Link>
             </li>
           ))}
         </ul>
       )}
 
-      {summary && (
-        <>
-          <h2 className="section-title mt-14">Due next</h2>
-          {summary.dueNext.length === 0 ? (
-            <p className="muted mt-4 text-sm">Nothing is waiting on an operator.</p>
-          ) : (
-            <ol className="mt-4 divide-y divide-[var(--line)] rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)]">
-              {summary.dueNext.map((row) => {
-                const due = dueText(row.nextAction, row.dueAt, now);
-                return (
-                  <li className="grid gap-1 px-4 py-3 text-sm sm:grid-cols-[14rem_1fr_auto] sm:gap-4" key={row.caseId}>
-                    <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`}>
-                      {row.referenceNumber}
-                    </Link>
+      <div className="mt-8 grid gap-8 xl:grid-cols-3">
+        {summary && (
+          <div className="xl:col-span-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2>Due next</h2>
+              {summary.actionable > summary.dueNext.length && (
+                <Link className="link-underline" href="/admin/cases">
+                  All {summary.actionable} cases waiting on an operator
+                </Link>
+              )}
+            </div>
+            {summary.dueNext.length === 0 ? (
+              <p className="a-card muted mt-3 p-6 text-center">Nothing is waiting on an operator.</p>
+            ) : (
+              <ol className="a-card mt-3 divide-y divide-[var(--line)]">
+                {summary.dueNext.map((row) => {
+                  const due = dueText(row.nextAction, row.dueAt, now);
+                  return (
+                    <li
+                      className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 px-4 py-3 md:grid-cols-[12rem_1fr_auto]"
+                      key={row.caseId}
+                    >
+                      <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`}>
+                        {row.referenceNumber}
+                      </Link>
+                      <span className="col-span-2 row-start-2 md:col-span-1 md:row-start-auto">
+                        {nextActionLabel(row.nextAction, row.actionCount)}
+                        {row.platforms.length > 0 && <span className="muted"> · {row.platforms.join(", ")}</span>}
+                      </span>
+                      <span className={`a-nowrap tabular-nums ${due.overdue ? "font-semibold text-[var(--danger)]" : "muted"}`}>
+                        {due.overdue && <span aria-hidden="true">! </span>}
+                        {due.text}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </div>
+        )}
+
+        {upkeep.length > 0 && (
+          <div>
+            <h2>Directory upkeep</h2>
+            <ul className="a-card mt-3 divide-y divide-[var(--line)]">
+              {upkeep.map((tile) => (
+                <li key={tile.title}>
+                  <Link className="flex items-baseline justify-between gap-4 px-4 py-3" href={tile.href}>
                     <span>
-                      {nextActionLabel(row.nextAction, row.actionCount)}
-                      {row.platforms.length > 0 && <span className="muted"> · {row.platforms.join(", ")}</span>}
+                      <span className="font-medium">{tile.title}</span>
+                      <TileLines lines={tile.lines} />
                     </span>
-                    <span className={`tabular-nums ${due.overdue ? "text-[var(--danger)]" : "muted"}`}>
-                      {due.overdue && <span aria-hidden="true">! </span>}
-                      {due.text}
+                    <span className={`tabular-nums ${tile.count === 0 ? "muted" : "text-base font-semibold"}`}>
+                      {tile.count === 0 ? "Clear" : tile.count}
                     </span>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-          {summary.actionable > summary.dueNext.length && (
-            <Link className="link-underline mt-4 inline-block text-sm" href="/admin/cases">
-              All {summary.actionable} cases waiting on an operator
-            </Link>
-          )}
-        </>
-      )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </section>
+  );
+}
+
+function TileLines({ lines }: { lines: string[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <span className="mt-1 grid gap-1 text-xs">
+      {lines.map((line) =>
+        line.startsWith("!") ? (
+          <span className="font-semibold text-[var(--danger)]" key={line}>
+            <span aria-hidden="true">! </span>
+            {line.slice(2)}
+          </span>
+        ) : (
+          <span className="muted" key={line}>
+            {line}
+          </span>
+        ),
+      )}
+    </span>
   );
 }
 

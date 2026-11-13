@@ -50,7 +50,7 @@ export default function HashReviewActions({ hashId }: { hashId: string }) {
       >
         Reject
       </button>
-      {error && <span className="text-xs text-red-700">{error}</span>}
+      {error && <span className="text-xs text-[var(--danger)]">{error}</span>}
     </div>
   );
 }
