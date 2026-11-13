@@ -5,6 +5,8 @@
   "auth.ageMinor": "I am under 18 years of age.",
   "submit.declarationTitle": "Declaration",
   "submit.noUpload": "Do not upload intimate images or videos.",
+  "quickexit.button": "Quick exit",
+  "quickexit.buttonAria": "Quick exit: leave this site immediately and sign out",
   "support.childline": "CHILDLINE 1098",
   "minor.noAdultFlow": "Asmita does not collect adult case URLs from minors.",
   "nav.howItWorks": "How it works",
@@ -829,7 +831,8 @@
   "submit.confirm.title": "Confirm it is you",
   "submit.trust.1": "Read as text, never opened",
   "submit.trust.2": "Photos stay on your device",
-  "submit.trust.3": "You sign before anything is sent",
+  "submit.trust.3": "You sign before anything is sent"
+,
   "review.cta.create": "Create my case",
   "case.heading": "Your case",
   "case.reference": "Reference",

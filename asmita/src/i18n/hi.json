@@ -5,6 +5,8 @@
   "auth.ageMinor": "मैं 18 वर्ष से कम आयु का/की हूँ।",
   "submit.declarationTitle": "घोषणा",
   "submit.noUpload": "ज़ाहिर है, ये बात आपको थोड़ी अजीब लगेगी, लेकिन ये सच है।",
+  "quickexit.button": "तुरंत बाहर निकलें",
+  "quickexit.buttonAria": "तुरंत बाहर निकलें: इस साइट को तुरंत छोड़ें और साइन आउट हो जाएँ",
   "support.childline": "CHILDLINE 1098",
   "minor.noAdultFlow": "Asmita नाबालिगों से adult case के URL नहीं लेती।",
   "nav.howItWorks": "यह कैसे काम करता है",
@@ -829,7 +831,8 @@
   "submit.confirm.title": "पुष्टि करें कि यह आप हैं",
   "submit.trust.1": "सिर्फ़ पाठ के रूप में पढ़ा जाता है, कभी खोला नहीं जाता",
   "submit.trust.2": "तस्वीरें आपके डिवाइस पर ही रहती हैं",
-  "submit.trust.3": "भेजने से पहले आपके हस्ताक्षर ज़रूरी हैं",
+  "submit.trust.3": "भेजने से पहले आपके हस्ताक्षर ज़रूरी हैं"
+,
   "review.cta.create": "मेरा केस बनाएँ",
   "case.heading": "आपका केस",
   "case.reference": "संदर्भ संख्या",

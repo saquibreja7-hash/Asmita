@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth/middleware";
 import { ELIGIBLE_COOKIE } from "@/lib/eligibility";
 import { SubmitForm } from "./SubmitForm";
 import { FlowProgress } from "@/components/FlowProgress";
+import { QuickExit } from "@/components/QuickExit";
 import { listHashPickerPlatforms, type HashPickerPlatform } from "@/lib/hash-submission";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
@@ -34,6 +35,7 @@ export default async function SubmitPage() {
 
   return (
     <AppShell>
+      <QuickExit locale={locale} enableIdle={auth.ok} />
       <div className="page-canvas">
         <div className="container py-8 md:py-20">
           <div className="mx-auto max-w-xl">
