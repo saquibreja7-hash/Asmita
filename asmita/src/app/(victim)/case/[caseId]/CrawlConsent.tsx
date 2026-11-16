@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale } from "@/lib/i18n";
 import { isPdfSafeText } from "@/lib/pdf-text";
+import { consentView, parseConsent, requestSign, requestStop, type ConsentState } from "./crawl-consent-logic";
 
 /*
  * The survivor's choice to let Asmita look for more copies of her images
@@ -15,8 +16,6 @@ import { isPdfSafeText } from "@/lib/pdf-text";
  * shown, and no internal reason is ever shown. Stopping always works.
  */
 
-type Draft = { subject: string; body: string; templateRef: string };
-type ConsentState = { status: "none" | "signed" | "withdrawn"; available: boolean; draft: Draft | null };
 
 const EXPLAIN_KEYS = [
   "crawl.explain.1",
@@ -28,10 +27,10 @@ const EXPLAIN_KEYS = [
   "crawl.explain.7",
 ] as const;
 
-export function CrawlConsent({ caseId, locale }: { caseId: string; locale: Locale }) {
+export function CrawlConsent({ caseId, locale, initialConsent = null, initialTicked = false }: { caseId: string; locale: Locale; initialConsent?: ConsentState | null; initialTicked?: boolean }) {
   const router = useRouter();
-  const [consent, setConsent] = useState<ConsentState | null>(null);
-  const [ticked, setTicked] = useState(false);
+  const [consent, setConsent] = useState<ConsentState | null>(initialConsent);
+  const [ticked, setTicked] = useState(initialTicked);
   const [confirmingStop, setConfirmingStop] = useState(false);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
@@ -45,8 +44,7 @@ export function CrawlConsent({ caseId, locale }: { caseId: string; locale: Local
     try {
       const res = await fetch(`/api/cases/${caseId}/crawl-consent`, { cache: "no-store" });
       if (!res.ok) return null;
-      const data = (await res.json()) as { status?: ConsentState["status"]; available?: boolean; draft?: Draft | null };
-      const next: ConsentState = { status: data.status ?? "none", available: Boolean(data.available), draft: data.draft ?? null };
+      const next = parseConsent((await res.json()) as Parameters<typeof parseConsent>[0]);
       setConsent(next);
       return next;
     } catch {
@@ -60,11 +58,10 @@ export function CrawlConsent({ caseId, locale }: { caseId: string; locale: Local
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (!consent) return <p role="status" aria-live="polite" className="sr-only">{announce}</p>;
-
-  const signed = consent.status === "signed";
-  // Not available, and not already on: show nothing rather than a broken control.
-  if (!signed && !(consent.available && consent.draft)) return <p role="status" aria-live="polite" className="sr-only">{announce}</p>;
+  const view = consentView(consent);
+  // Hidden: not loaded yet, or unavailable and not already on. No broken control.
+  if (!consent || view === "hidden") return <p role="status" aria-live="polite" className="sr-only">{announce}</p>;
+  const signed = view === "on";
 
   const nameUnsupported = !isPdfSafeText(name.trim().normalize("NFC"));
   const signatureUnsupported = !isPdfSafeText(signature.trim().normalize("NFC"));
@@ -88,29 +85,24 @@ export function CrawlConsent({ caseId, locale }: { caseId: string; locale: Local
     setError("");
     setBusy(true);
     try {
-      const res = await csrfFetch(`/api/cases/${caseId}/crawl-consent`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          templateRef: consent.draft.templateRef,
-          name: name.trim(),
-          contact: contact.trim(),
-          signature: signature.trim(),
-        }),
+      const result = await requestSign(csrfFetch, caseId, {
+        templateRef: consent.draft.templateRef,
+        name: name.trim(),
+        contact: contact.trim(),
+        signature: signature.trim(),
       });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        if (data.error === "notice_changed_since_preview") {
+      if (!result.ok) {
+        if (result.outcome === "changed") {
           // Show the current text and ask her to read and agree again. Typed details are kept.
           setAgreed(false);
           setError(t(locale, "crawl.error.changed"));
           await load();
-        } else if (data.error === "already_signed") {
+        } else if (result.outcome === "alreadySigned") {
           await load();
           router.refresh();
-        } else if (data.error === "name_script_unsupported") {
+        } else if (result.outcome === "nameScript") {
           setError(t(locale, "sign.error.nameScript"));
-        } else if (data.error === "crawler_disabled" || data.error === "template_missing" || data.error === "no_hashes" || data.error === "not_found") {
+        } else if (result.outcome === "unavailable") {
           untick();
           await load();
         } else {
@@ -133,13 +125,9 @@ export function CrawlConsent({ caseId, locale }: { caseId: string; locale: Local
     setError("");
     setBusy(true);
     try {
-      const res = await csrfFetch(`/api/cases/${caseId}/crawl-consent`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        if (data.error !== "not_signed") {
-          setError(t(locale, "crawl.error.stop"));
-          return;
-        }
+      if (!(await requestStop(csrfFetch, caseId))) {
+        setError(t(locale, "crawl.error.stop"));
+        return;
       }
       setConfirmingStop(false);
       await load();
