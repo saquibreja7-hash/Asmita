@@ -56,7 +56,9 @@ export async function hashImage(bytes: Buffer, opts: HashOptions): Promise<HashR
   let meta: Metadata;
   try {
     meta = await sharp(bytes, { failOn: "none", limitInputPixels, animated: false }).metadata();
-  } catch {
+  } catch (err) {
+    // sharp checks the header against limitInputPixels before decoding.
+    if (isPixelLimit(err)) throw new CrawlError("image_too_many_pixels");
     throw new CrawlError("image_decode_failed");
   }
   if (!meta.format || !SHARP_FORMAT[format].includes(meta.format)) throw new CrawlError("image_format");
@@ -72,9 +74,13 @@ export async function hashImage(bytes: Buffer, opts: HashOptions): Promise<HashR
   try {
     input = await prepareForPdq(bytes, { limitInputPixels });
   } catch (err) {
-    if (err instanceof Error && /pixel limit/i.test(err.message)) throw new CrawlError("image_too_many_pixels");
+    if (isPixelLimit(err)) throw new CrawlError("image_too_many_pixels");
     throw new CrawlError("image_decode_failed");
   }
   const { hash, quality } = computePdqHash(input);
   return { hash, quality, width: input.width, height: input.height, format };
+}
+
+function isPixelLimit(err: unknown): boolean {
+  return err instanceof Error && /pixel limit/i.test(err.message);
 }

@@ -176,7 +176,9 @@ export class SafeFetcher {
       throw deadline.aborted && !opts.signal?.aborted ? new CrawlError("body_timeout", { retryable: true }) : toCrawlError(err);
     } finally {
       // Release the socket; a no-op once the body has been fully read.
-      body.destroy();
+      // undici emits "aborted" on an unread body we destroy; it is expected.
+      body.on("error", () => undefined);
+      if (!body.destroyed) body.destroy();
     }
   }
 
