@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
+import { CrawlConsent } from "./CrawlConsent";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { MarkRemovedButton } from "./MarkRemovedButton";
 import { EscalationLadder } from "./EscalationLadder";
@@ -137,6 +138,11 @@ export default async function CasePage({
     );
   }
 
+  // Links Asmita's search found are kept apart from the ones she submitted.
+  // The case API may not return `source` yet, in which case none are split off.
+  const isFound = (url: object) => (url as { source?: string }).source === "CRAWLER";
+  const foundUrls = record.urls.filter(isFound);
+  const ownUrls = record.urls.filter((url) => !isFound(url));
   const standing = standingOf(record.urls, hashSubmissions.length);
   const created = new Date(record.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 
@@ -185,11 +191,11 @@ export default async function CasePage({
 
             <section id="urls" aria-labelledby="case-links-title" className="scroll-mt-24">
               <h2 id="case-links-title" className="subsection-title">{t(locale, "case.urls.title")}</h2>
-              {record.urls.length === 0 ? (
+              {ownUrls.length === 0 ? (
                 <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.urls.empty")}</p>
               ) : (
                 <ul className="mt-4 divide-y divide-[var(--line)] overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
-                  {record.urls.map((url) => {
+                  {ownUrls.map((url) => {
                     const entry = findPlatformByDomain(url.domain);
                     const live = url.status !== "REMOVED" && url.status !== "REJECTED";
                     const startedAt = url.noticeSentAt ?? url.platformFiledAt ?? null;
@@ -233,6 +239,24 @@ export default async function CasePage({
               )}
             </section>
 
+            {foundUrls.length > 0 && (
+              <section id="found" aria-labelledby="case-found-title" className="scroll-mt-24">
+                <h2 id="case-found-title" className="subsection-title">{t(locale, "case.found.title")}</h2>
+                <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.found.sub")}</p>
+                <ul className="mt-4 divide-y divide-[var(--line)] overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
+                  {foundUrls.map((url) => (
+                    <li key={url.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-4">
+                      <div className="min-w-0">
+                        {findPlatformByDomain(url.domain) && <p className="font-medium text-[var(--ink)]">{url.platformName}</p>}
+                        <p className="font-mono mt-0.5 break-all text-[12px] text-[var(--text-muted)]">{url.domain}</p>
+                      </div>
+                      <StatusBadge status={url.status} locale={locale} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             {hashUploadEnabled && hashSubmissions.length > 0 && (
               <section id="fingerprints" aria-labelledby="case-fingerprints-title" className="scroll-mt-24">
                 <h2 id="case-fingerprints-title" className="subsection-title">{t(locale, "case.fingerprints.title")}</h2>
@@ -246,6 +270,8 @@ export default async function CasePage({
                 </ul>
               </section>
             )}
+
+            {hashUploadEnabled && hashSubmissions.length > 0 && <CrawlConsent caseId={record.id} locale={locale} />}
 
             <div className="space-y-3">
               <FoldedSection id="actions" title={t(locale, "case.actions.title")} hint={t(locale, "case.actions.hint")}>

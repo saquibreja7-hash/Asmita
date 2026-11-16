@@ -11,6 +11,7 @@
     "/terms - legal document, English only",
     "/case/[caseId]/sign - declaration is legally consequential, English only",
     "/review-sign - as above",
+    "Crawl authorisation text (crawl-consent draft on the case page) - legally consequential signing text, English only; the surrounding crawl.* labels are translated",
     "Platform-specific reporting notes in /resources - references English-language UIs"
   ],
   "machineTranslated": {
@@ -58,6 +59,8 @@
   "pendingNativeReview": {
     "note": "Drafted without a native-speaker review; review before treating as final.",
     "keys": [
+      "crawl.*",
+      "case.found.*",
       "quickexit.button",
       "quickexit.buttonAria"
     ]
