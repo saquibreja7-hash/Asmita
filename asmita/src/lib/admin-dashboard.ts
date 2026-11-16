@@ -111,6 +111,8 @@ export async function listPlatformEditorRowsFromDb(now: Date = new Date()) {
       apiEndpoint: row.apiEndpoint ?? null,
       lastContactVerifiedAt: row.lastContactVerifiedAt ?? null,
       lastContactVerifiedByHuman: row.lastContactVerifiedByHuman,
+      contactChangedBy: null as string | null,
+      contactChangedAt: null as string | null,
     }));
   }
   const platforms = await db.platform.findMany({
@@ -149,6 +151,8 @@ export async function listPlatformEditorRowsFromDb(now: Date = new Date()) {
       lastVerifiedDate: row.lastContactVerifiedAt?.toISOString() ?? "Not verified",
       lastContactVerifiedAt: row.lastContactVerifiedAt?.toISOString() ?? null,
       lastContactVerifiedByHuman: row.lastContactVerifiedByHuman,
+      contactChangedBy: row.contactChangedBy,
+      contactChangedAt: row.contactChangedAt?.toISOString() ?? null,
       verifiedBy: row.lastContactVerifiedByHuman ? "human_reviewer" : "Pending",
       staleFlag: Boolean(queueItem),
       staleReason: queueItem?.reason || "current",

@@ -12,7 +12,8 @@ export type SecurityEvent = {
     | "rate_limit_unavailable"
     | "minor_route_blocked"
     | "flagged_submission"
-    | "media_payload_rejected";
+    | "media_payload_rejected"
+    | "account_deletion_failed";
   actorHash?: string;
   route?: string;
   reason?: string;

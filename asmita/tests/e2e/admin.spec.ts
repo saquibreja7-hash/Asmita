@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { SignJWT } from "jose";
 import { hasAdminPermission, type AdminPermission, type AdminRole } from "@/lib/auth/admin-permissions";
+import { testAdminHash } from "./support/admin";
 
 async function signCookie(payload: Record<string, unknown>, sub: string) {
   return new SignJWT(payload)
@@ -38,7 +39,7 @@ test("admin routes reject anonymous and victim sessions", async ({ page, context
 test("admin session can open operational admin routes", async ({ page, context }) => {
   test.setTimeout(60_000);
   const adminToken = await signCookie(
-    { role: "ADMIN", ageOver18: true, emailHash: "admin-hash", namespace: "admin", mfaComplete: true },
+    { role: "ADMIN", adminRole: "SUPER_ADMIN", ageOver18: true, emailHash: testAdminHash("admin-1"), namespace: "admin", mfaComplete: true },
     "admin-1",
   );
   await context.addCookies([

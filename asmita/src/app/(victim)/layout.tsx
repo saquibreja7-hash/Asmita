@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/middleware";
 import { QuickExit } from "@/components/QuickExit";
 import { getLocale } from "@/lib/get-locale";
+import { AccountDeactivatedNotice } from "./AccountDeactivatedNotice";
 
 /*
  * Victim pages never belong in a search index and keep a neutral tab title:
@@ -18,6 +19,7 @@ export const metadata: Metadata = {
 export default async function VictimLayout({ children }: { children: React.ReactNode }) {
   const auth = await requireSession();
   if (!auth.ok) {
+    if (auth.error === "account_deactivated") return <AccountDeactivatedNotice />;
     redirect("/start");
   }
   if (auth.ok && !auth.session.ageOver18) {

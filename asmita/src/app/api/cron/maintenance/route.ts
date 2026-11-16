@@ -7,6 +7,7 @@ import type { DeliveryEvent } from "@/lib/webhook-events";
 import type { PlatformDirectoryEntry } from "@/lib/platforms";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { pruneRateLimitBuckets } from "@/lib/rate-limit";
+import { countFailedDeletionJobs } from "@/lib/case-ops";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
     reverification?: { dueCount: number; items: ReturnType<typeof createReverificationQueue> };
     deliverability?: ReturnType<typeof summarizeDeliverability>;
     rateLimitBucketsPruned?: number;
+    failedDeletions?: number;
     error?: string;
   } = { startedAt: startedAt.toISOString() };
 
@@ -56,6 +58,18 @@ export async function GET(request: NextRequest) {
     }
 
     result.rateLimitBucketsPruned = await pruneRateLimitBuckets();
+
+    // Account deletions that failed are retried every hourly sweep; a person
+    // needs to look if any are still failing.
+    result.failedDeletions = await countFailedDeletionJobs();
+    if (result.failedDeletions > 0) {
+      sendOnCallAlertFireAndForget({
+        severity: "critical",
+        title: "Account deletions failing",
+        description: `${result.failedDeletions} deletion job(s) failed and are being retried; see DeletionJob.error.`,
+        route: "/api/cron/maintenance",
+      });
+    }
 
     result.finishedAt = new Date().toISOString();
     return NextResponse.json(result);

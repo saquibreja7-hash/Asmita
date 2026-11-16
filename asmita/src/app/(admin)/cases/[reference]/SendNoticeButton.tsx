@@ -15,6 +15,8 @@ const ERRORS: Record<string, string> = {
   notice_template_requires_review: "The template needs legal review before it can be sent.",
   fingerprints_pending_review: "Fingerprints in the signed notice still need review.",
   signed_fingerprints_changed: "A fingerprint in the signed notice was rejected. The survivor must sign again.",
+  signed_template_changed: "The notice text changed after the survivor signed. Nothing was sent. The survivor must review and sign again.",
+  signed_template_not_dispatchable: "The template the survivor signed is inactive or no longer legally reviewed. Nothing was sent.",
   email_already_sent: "This notice was already emailed. Nothing was sent again.",
   permission_denied: "Your admin role cannot send notices.",
 };

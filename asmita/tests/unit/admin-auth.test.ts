@@ -23,7 +23,7 @@ describe("admin auth", () => {
 
   it("keeps victim and admin sessions in separate namespaces", async () => {
     const victim = await signSession({ sub: "user-1", role: "VICTIM", ageOver18: true, emailHash: "hash" });
-    const admin = await signAdminSession({ sub: "admin-1", emailHash: "admin-hash", mfaComplete: true });
+    const admin = await signAdminSession({ sub: "admin-1", emailHash: "admin-hash", adminRole: "SUPER_ADMIN", mfaComplete: true });
 
     await expect(verifySession(victim)).resolves.toMatchObject({ namespace: "victim" });
     await expect(verifyAdminSession(victim)).resolves.toBeNull();

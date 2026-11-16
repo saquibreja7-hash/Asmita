@@ -76,7 +76,7 @@ Set secrets separately with `npx wrangler secret put NAME --name asmita-staging`
 * `OPENAI_API_KEY` when the deeper image check is enabled
 * `SARVAM_API_KEY` for browser voice calls on `/talk` (production only; without it `/talk` shows the phone number instead). `VOICE_DAILY_SESSION_LIMIT` is an optional variable, default 70 sessions a day
 * `SARVAM_CHAT_KEY` for the home page chat (Sarvam's general API key, not the Voice Agents key; without it the chat shows the phone number). `CHAT_DAILY_MESSAGE_LIMIT` is an optional variable, default 500 messages a day
-* `ADMIN_EMAILS` and other admin settings
+* `ADMIN_EMAILS` and `ADMIN_ROLES` (every admin email needs a role entry such as `admin@example.org=SUPER_ADMIN`; without one the admin cannot sign in, and changes to either apply to signed-in admins on their next request) and other admin settings
 
 Set non-secret production values through Wrangler environment variables. Required persistence settings are:
 

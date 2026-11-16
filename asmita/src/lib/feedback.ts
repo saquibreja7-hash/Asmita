@@ -11,7 +11,9 @@ export type FeedbackRecord = {
 };
 
 // Local development and tests without a database keep feedback here.
+// Capped so a long-running dev server cannot grow it without bound.
 export const feedbackRecords: FeedbackRecord[] = [];
+export const MAX_MEMORY_FEEDBACK = 500;
 
 function devNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -40,6 +42,7 @@ export async function recordFeedback(input: Omit<FeedbackRecord, "id" | "created
       createdAt: new Date().toISOString(),
     };
     feedbackRecords.push(record);
+    if (feedbackRecords.length > MAX_MEMORY_FEEDBACK) feedbackRecords.splice(0, feedbackRecords.length - MAX_MEMORY_FEEDBACK);
     return record;
   }
   const saved = await db.feedback.create({

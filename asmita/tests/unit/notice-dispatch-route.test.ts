@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   db: {
-    submittedUrl: { findFirst: vi.fn() },
-    noticeTemplate: { findFirst: vi.fn() },
+    submittedUrl: { findFirst: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    noticeTemplate: { findFirst: vi.fn(), findUnique: vi.fn() },
     hashSubmission: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
@@ -16,6 +16,8 @@ vi.mock("@/lib/encryption", () => ({
   decryptField: vi.fn(() => "https://example.com/reported"),
 }));
 
+vi.mock("@/lib/audit", () => ({ writeAuditLog: vi.fn() }));
+
 vi.mock("@/lib/notice-dispatch", () => ({
   dispatchTier2Notice: vi.fn().mockResolvedValue({ dispatched: true, notice: { messageId: "msg-1" } }),
 }));
@@ -24,6 +26,8 @@ import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { dispatchTier2Notice } from "@/lib/notice-dispatch";
 import { createCsrfPair } from "@/lib/csrf";
+import { writeAuditLog } from "@/lib/audit";
+import { templateDigest } from "@/lib/signed-template";
 import { POST } from "@/app/api/notices/dispatch/route";
 
 function csrfPost(body: unknown) {
@@ -187,5 +191,93 @@ describe("POST /api/notices/dispatch", () => {
     const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
     expect(res.status).toBe(409);
     expect(dispatchTier2Notice).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/notices/dispatch with a pinned template", () => {
+  const signedTemplate = { ...reviewedTemplate, id: "template-v1", bodyTemplate: "Signed text v1 for {{platformName}} {{url}}" };
+  const newerTemplate = { ...reviewedTemplate, id: "template-v2", version: 2, bodyTemplate: "Newer text v2 for {{platformName}} {{url}}" };
+  const pinnedUrl = {
+    ...dispatchableUrl,
+    signedTemplateId: "template-v1",
+    signedTemplateDigest: templateDigest(signedTemplate),
+  };
+
+  beforeEach(() => {
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
+    vi.mocked(db.submittedUrl.findFirst).mockResolvedValue(pinnedUrl as never);
+    vi.mocked(db.noticeTemplate.findFirst).mockResolvedValue(newerTemplate as never);
+    vi.mocked(db.noticeTemplate.findUnique).mockResolvedValue(signedTemplate as never);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("sends the signed template's text even when a newer version is active", async () => {
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+    expect(res.status).toBe(200);
+    const call = vi.mocked(dispatchTier2Notice).mock.calls[0][0];
+    expect(call.body).toContain("Signed text v1");
+    expect(call.body).not.toContain("Newer text v2");
+    expect(call.templateId).toBe("template-v1");
+    expect(db.noticeTemplate.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("refuses, keeping the signature, when the signed template was deactivated", async () => {
+    vi.mocked(db.noticeTemplate.findUnique).mockResolvedValue({ ...signedTemplate, isActive: false } as never);
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "signed_template_not_dispatchable" });
+    expect(dispatchTier2Notice).not.toHaveBeenCalled();
+    expect(db.submittedUrl.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the signed template's legal review was withdrawn", async () => {
+    vi.mocked(db.noticeTemplate.findUnique).mockResolvedValue({ ...signedTemplate, reviewedByLegal: false } as never);
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "signed_template_not_dispatchable" });
+    expect(dispatchTier2Notice).not.toHaveBeenCalled();
+  });
+
+  it("refuses and voids the unsent signature when the signed text was changed in place", async () => {
+    vi.mocked(db.noticeTemplate.findUnique).mockResolvedValue({ ...signedTemplate, bodyTemplate: "Edited text {{url}}" } as never);
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "signed_template_changed" });
+    expect(dispatchTier2Notice).not.toHaveBeenCalled();
+    expect(db.submittedUrl.updateMany).toHaveBeenCalledWith({
+      where: { id: "url-1", signedNoticePdf: "encrypted-signed-pdf", notices: { none: {} } },
+      data: { signedNoticePdf: null, signedHashSubmissionIds: [], signedTemplateId: null, signedTemplateDigest: null },
+    });
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ action: "signatures_voided", trigger: "template_changed" }) }),
+    );
+  });
+
+  it("refuses and voids when the signed template no longer exists", async () => {
+    vi.mocked(db.noticeTemplate.findUnique).mockResolvedValue(null);
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "signed_template_changed" });
+    expect(db.submittedUrl.updateMany).toHaveBeenCalled();
+  });
+
+  it("refuses a pinned template written for a different platform", async () => {
+    vi.mocked(db.noticeTemplate.findUnique).mockResolvedValue({ ...signedTemplate, platformId: "platform-other" } as never);
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "signed_template_changed" });
+  });
+
+  it("keeps today's selection for a notice signed before templates were pinned", async () => {
+    vi.mocked(db.submittedUrl.findFirst).mockResolvedValue({ ...dispatchableUrl, signedTemplateId: null, signedTemplateDigest: null } as never);
+    const res = await POST(csrfPost({ caseId: "case-1", urlId: "url-1" }));
+    expect(res.status).toBe(200);
+    expect(db.noticeTemplate.findUnique).not.toHaveBeenCalled();
+    const call = vi.mocked(dispatchTier2Notice).mock.calls[0][0];
+    expect(call.body).toContain("Newer text v2");
+    expect(call.templateId).toBe("template-v2");
   });
 });

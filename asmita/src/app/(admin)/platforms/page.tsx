@@ -4,12 +4,15 @@ import {
 } from "@/lib/admin-dashboard";
 import { PlatformEditForm } from "./PlatformEditForm";
 import { deniedFor } from "../page-permission";
+import { requireAdminPermission } from "@/lib/auth/require-admin";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformsPage() {
   const denied = await deniedFor("platforms:edit");
   if (denied) return denied;
+  const auth = await requireAdminPermission("platforms:edit");
+  const viewerHash = auth.ok ? auth.session.emailHash : null;
   const [rows, history] = await Promise.all([
     listPlatformEditorRowsFromDb(),
     listGoChangeHistoryRowsFromDb(),
@@ -74,6 +77,12 @@ export default async function PlatformsPage() {
                         formUrl: platform.formUrl,
                         apiEndpoint: platform.apiEndpoint,
                       }}
+                      verified={platform.lastContactVerifiedByHuman}
+                      contactChangedAt={platform.contactChangedAt}
+                      changedByViewer={
+                        Boolean(platform.contactChangedBy) &&
+                        platform.contactChangedBy === viewerHash
+                      }
                     />
                   </div>
                 </td>

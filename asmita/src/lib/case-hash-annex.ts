@@ -32,13 +32,21 @@ function render(rows: Row[]): HashAnnex {
   };
 }
 
+const signingQuery = (caseId: string) => ({
+  where: { caseId, status: { not: "REJECTED" as const } },
+  orderBy: { submittedAt: "asc" as const },
+});
+
 export async function buildHashAnnexForSigning(caseId: string): Promise<HashAnnex> {
   if (process.env.ENABLE_HASH_UPLOAD !== "true") return EMPTY;
-  const rows = await db.hashSubmission.findMany({
-    where: { caseId, status: { not: "REJECTED" } },
-    orderBy: { submittedAt: "asc" },
-  });
-  return render(rows);
+  return render(await db.hashSubmission.findMany(signingQuery(caseId)));
+}
+
+/** The ids buildHashAnnexForSigning would list, without decrypting anything. */
+export async function signableHashIds(caseId: string): Promise<string[]> {
+  if (process.env.ENABLE_HASH_UPLOAD !== "true") return [];
+  const rows = await db.hashSubmission.findMany({ ...signingQuery(caseId), select: { id: true } });
+  return rows.map((h) => h.id);
 }
 
 export type SignedAnnexResult =
@@ -94,7 +102,7 @@ export async function voidSignaturesWithRejectedFingerprints(
   if (voidUrlIds.length > 0) {
     await db.submittedUrl.updateMany({
       where: { id: { in: voidUrlIds } },
-      data: { signedNoticePdf: null, signedHashSubmissionIds: [] },
+      data: { signedNoticePdf: null, signedHashSubmissionIds: [], signedTemplateId: null, signedTemplateDigest: null },
     });
   }
 
@@ -110,7 +118,12 @@ export async function voidSignaturesWithRejectedFingerprints(
     if (sent === 0) {
       await db.case.update({
         where: { id: caseId },
-        data: { signedHashAdvisoryPdf: null, hashAdvisorySignedHashIds: [] },
+        data: {
+          signedHashAdvisoryPdf: null,
+          hashAdvisorySignedHashIds: [],
+          hashAdvisorySignedTemplateId: null,
+          hashAdvisorySignedTemplateDigest: null,
+        },
       });
       hashAdvisory = true;
     }
