@@ -96,6 +96,11 @@ const SYSCALL_CODES: Record<string, ErrorCode> = {
   DEPTH_ZERO_SELF_SIGNED_CERT: "tls_failed",
   SELF_SIGNED_CERT_IN_CHAIN: "tls_failed",
   UNABLE_TO_VERIFY_LEAF_SIGNATURE: "tls_failed",
+  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: "tls_failed",
+  UNABLE_TO_GET_ISSUER_CERT: "tls_failed",
+  CERT_NOT_YET_VALID: "tls_failed",
+  CERT_UNTRUSTED: "tls_failed",
+  ERR_SSL_WRONG_VERSION_NUMBER: "tls_failed",
 };
 
 const RETRYABLE: ReadonlySet<ErrorCode> = new Set<ErrorCode>([

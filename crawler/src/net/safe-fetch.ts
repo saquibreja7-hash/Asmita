@@ -39,6 +39,14 @@ export type SafeFetchConfig = {
   /** Hard deadline for one hop, headers and body together (stops slow drips). */
   totalTimeoutMs: number;
   maxRedirects: number;
+  /**
+   * TEST ONLY: PEM of a CA to trust instead of the system store, so the TLS
+   * path (SNI + certificate name check while dialling a pinned IP) can be
+   * tested against an in-memory CA. Production never sets it: there is no
+   * config key for it and src/cli.ts does not pass it (asserted in
+   * tests/unit/config-policy.test.ts). Verification is never disabled.
+   */
+  testOnlyTrustedCa?: string;
 };
 
 export type FetchKind = "html" | "image" | "robots";
@@ -76,7 +84,12 @@ export class SafeFetcher {
     private readonly policy: NetPolicy,
     private readonly config: SafeFetchConfig,
   ) {
-    const base = buildConnector({ timeout: config.connectTimeoutMs, allowH2: false, rejectUnauthorized: true });
+    const base = buildConnector({
+      timeout: config.connectTimeoutMs,
+      allowH2: false,
+      rejectUnauthorized: true,
+      ...(config.testOnlyTrustedCa ? { ca: config.testOnlyTrustedCa } : {}),
+    });
     this.agent = new Agent({
       headersTimeout: config.headersTimeoutMs,
       bodyTimeout: config.bodyTimeoutMs,

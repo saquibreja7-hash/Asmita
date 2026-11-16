@@ -90,6 +90,12 @@ describe("static guarantees in src/", () => {
       expect(stripComments(f.text), f.path).not.toMatch(/127\.0\.0\.1|localhost|::1|isLoopback|allowLoopback/i);
     }
   });
+  it("never passes the test-only CA or disables certificate checks", () => {
+    for (const f of files.filter((x) => !x.path.endsWith("safe-fetch.ts"))) {
+      expect(stripComments(f.text), f.path).not.toMatch(/testOnlyTrustedCa/);
+    }
+    for (const f of files) expect(stripComments(f.text), f.path).not.toMatch(/rejectUnauthorized:\s*false|NODE_TLS_REJECT_UNAUTHORIZED/);
+  });
   it("reads process.env only in main.ts", () => {
     for (const f of files.filter((x) => !x.path.endsWith("main.ts"))) {
       expect(f.text, f.path).not.toMatch(/process\.env/);
