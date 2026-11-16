@@ -162,7 +162,8 @@ export class FindingsSink {
     this.metrics.findingsPosted += batch.length;
     const withdrawn = new Set<string>();
     results.forEach((r, i) => {
-      if (r.status === "created") this.metrics.findingsCreated++;
+      // "accepted" (new or merged; the server no longer says which) is counted with "created".
+      if (r.status === "created" || r.status === "accepted") this.metrics.findingsCreated++;
       else if (r.status === "duplicate") this.metrics.findingsDuplicate++;
       else {
         this.metrics.findingsRejected++;

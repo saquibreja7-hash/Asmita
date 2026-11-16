@@ -6,11 +6,15 @@ on:
     paths:
       - "crawler/**"
       - "asmita/src/lib/pdq/**"
+      - "asmita/src/app/api/crawler/**"
+      - "asmita/src/lib/crawl-*.ts"
       - ".github/workflows/crawler-ci.yml"
   pull_request:
     paths:
       - "crawler/**"
       - "asmita/src/lib/pdq/**"
+      - "asmita/src/app/api/crawler/**"
+      - "asmita/src/lib/crawl-*.ts"
       - ".github/workflows/crawler-ci.yml"
 
 permissions:

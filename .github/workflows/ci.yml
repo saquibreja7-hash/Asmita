@@ -24,6 +24,11 @@ jobs:
       - run: npm run lint
       - run: npm run type-check
       - run: npm run prisma:validate
+      # tests/integration/crawler-client-contract.test.ts runs the crawler's
+      # real API client against these route handlers; it needs crawler/'s
+      # own dependencies and must not be skipped in CI.
+      - run: npm ci
+        working-directory: crawler
       - run: npm run test
 
   build:

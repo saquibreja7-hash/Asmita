@@ -103,7 +103,8 @@ describe("crawl consent logic", () => {
 });
 
 describe("FoundByAsmita", () => {
-  const urls = [{ id: "u1", domain: "example.test", platformName: "Unknown - under review", status: "PENDING_REVIEW" }];
+  type FoundUrl = Parameters<typeof FoundByAsmita>[0]["urls"][number];
+  const urls: FoundUrl[] = [{ id: "u1", domain: "example.test", platformName: "Unknown - under review", status: "PENDING_REVIEW" }];
   const draw = (list = urls) =>
     renderToStaticMarkup(createElement(FoundByAsmita, { urls: list, locale: "en", badge: (s: string) => createElement("span", null, `status:${s}`) }));
 
