@@ -20,6 +20,9 @@ export default defineConfig({
       SECURITY_LOG_PERSISTENCE: "database",
       NOTICE_DISPATCH_PERSISTENCE: "database",
       ENABLE_HASH_UPLOAD: "true",
+      // crawler-journey.spec.ts: the crawler routes answer only while this is
+      // on. The app never fetches; no crawler process runs in E2E.
+      ENABLE_CRAWLER: "true",
       ENABLE_PLATFORM_API: "false",
       // Quick Exit tests: the idle sign-out is short enough to exercise
       // without slowing the suite down.
