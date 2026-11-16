@@ -13,6 +13,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/admin/cases", label: "Cases", permission: "cases:read" },
       { href: "/admin/queue", label: "Flagged links", permission: "cases:read" },
       { href: "/admin/hashes", label: "Fingerprints", permission: "cases:read" },
+      { href: "/admin/findings", label: "Findings", permission: "findings:review" },
     ],
   },
   {
@@ -20,6 +21,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { href: "/admin/platforms", label: "Platforms", permission: "platforms:edit" },
       { href: "/admin/templates", label: "Templates", permission: "templates:edit" },
+      { href: "/admin/crawl-sources", label: "Crawler sites", permission: "crawler:manage" },
     ],
   },
   {
