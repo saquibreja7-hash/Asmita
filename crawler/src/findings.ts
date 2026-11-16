@@ -162,8 +162,7 @@ export class FindingsSink {
     this.metrics.findingsPosted += batch.length;
     const withdrawn = new Set<string>();
     results.forEach((r, i) => {
-      if (r.status === "created") this.metrics.findingsCreated++;
-      else if (r.status === "duplicate") this.metrics.findingsDuplicate++;
+      if (r.status === "accepted") this.metrics.findingsAccepted++;
       else {
         this.metrics.findingsRejected++;
         const reason = (REJECT_REASONS as readonly string[]).includes(r.reason ?? "") ? r.reason! : "other";

@@ -46,8 +46,8 @@ export class RunMetrics {
   matches = 0;
   findingsQueued = 0;
   findingsPosted = 0;
-  findingsCreated = 0;
-  findingsDuplicate = 0;
+  /** Accepted by the server (new or already known: it no longer says which). */
+  findingsAccepted = 0;
   findingsRejected = 0;
   findingsUnsent = 0;
   findingsWithdrawn = 0;
@@ -97,8 +97,7 @@ export class RunMetrics {
       matches: this.matches,
       findingsQueued: this.findingsQueued,
       findingsPosted: this.findingsPosted,
-      findingsCreated: this.findingsCreated,
-      findingsDuplicate: this.findingsDuplicate,
+      findingsAccepted: this.findingsAccepted,
       findingsRejected: this.findingsRejected,
       findingsUnsent: this.findingsUnsent,
       findingsWithdrawn: this.findingsWithdrawn,

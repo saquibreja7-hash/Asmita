@@ -116,6 +116,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     const problems = {
       unauthorized,
       contractErrors: metrics.findingsFailed,
+      scopeErrors: metrics.rejectedByReason.page_not_in_source ?? 0,
       findingsUnsent: metrics.findingsUnsent,
       poolStale: outcome === "pool_stale",
       disabled: outcome === "disabled",
@@ -128,6 +129,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       problems: {
         unauthorized: Number(problems.unauthorized),
         contractErrors: problems.contractErrors,
+        scopeErrors: problems.scopeErrors,
         findingsUnsent: problems.findingsUnsent,
         poolStale: Number(problems.poolStale),
       },

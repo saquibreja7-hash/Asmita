@@ -137,7 +137,7 @@ describe("memory-only image handling", () => {
       attempts.length = 0;
 
       const { result } = await runFixtureCrawl(fx.site, api);
-      findings = result.summary.findingsCreated as number;
+      findings = result.summary.findingsAccepted as number;
       expect(result.summary.imagesHashed as number).toBeGreaterThan(5);
       // Decoding really went through the isolated child process. The child
       // itself runs under Node's permission model with no fs-write grant

@@ -38,7 +38,7 @@ When several apply, the first row in this table wins.
 |---|---|
 | 0 | Clean run (including SIGTERM, time limit, budget reached), or the crawler is switched off on the server (503), even if findings were then left unsent |
 | 2 | The API rejected the service key (401/403), at load or mid-run |
-| 4 | Contract error: the server refused a request as malformed (400) and the batch was dropped |
+| 4 | Contract error: the server refused a request as malformed (400) and the batch was dropped, or rejected a finding as `page_not_in_source` (a crawler scope bug) |
 | 3 | Findings were still undelivered at exit (API down past all retries) |
 | 5 | The pool could not be re-synced within 60 minutes, so the run stopped early |
 | 1 | Invalid configuration or an unexpected failure |
@@ -194,7 +194,7 @@ Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
 - `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality }] }`
 - `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs }] }`
-- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "created" | "duplicate" | "rejected", reason? }] }`
+- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }` (during the server rollout the old `"created"` / `"duplicate"` are still tolerated and counted as accepted; the server no longer distinguishes new from already-known findings, so the crawler cannot link fingerprints to one case)
 
 Responses are validated with Zod. Findings are validated locally with the
 server's rules (strict objects, `runId` `[A-Za-z0-9_.:-]{1,64}`, integer
@@ -212,14 +212,18 @@ redirects.
 | 429, 5xx, network | retry with backoff + jitter (`Retry-After` honoured); a batch still failing is retried at the final flush. Safe: the server dedups |
 | 3xx | refused (the key never follows a redirect) |
 
-Per-item rejection reasons are counted in the summary (`rejectedByReason`);
-`fingerprint_not_accepted` withdraws that fingerprint immediately.
+Per-item rejection reasons (`invalid_finding`, `media_payload_rejected`,
+`invalid_url`, `unknown_source`, `fingerprint_not_accepted`,
+`page_not_in_source`) are counted in the summary (`rejectedByReason`);
+`fingerprint_not_accepted` withdraws that fingerprint immediately, and
+`page_not_in_source` makes the run exit 4. Accepted findings are counted as
+`findingsAccepted`.
 
 ## Run summary
 
 The last log line, `run_summary`, holds: outcome, duration, sources crawled,
 pages attempted/fetched/non-HTML, images seen/hashed/skipped by reason,
-matches, findings queued/posted/created/duplicate/rejected (by reason)/
+matches, findings queued/posted/accepted/rejected (by reason)/
 withdrawn/invalid/failed/unsent, pool syncs, robots outcomes, errors by code,
 page and image budget used.
 

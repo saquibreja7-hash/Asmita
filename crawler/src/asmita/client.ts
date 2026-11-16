@@ -10,7 +10,7 @@
  * Status handling: 503 = crawler switched off (ApiDisabled, the run stops
  * cleanly with exit 0); 401/403 = bad key (exit non-zero); 5xx, 429 and
  * network errors are retried with backoff. POST /findings is retry-safe
- * because the server reports already-recorded findings as "duplicate".
+ * because the server deduplicates (it answers "accepted" either way).
  */
 import { Agent } from "undici";
 import { z } from "zod";
@@ -76,12 +76,19 @@ export const REJECT_REASONS = [
   "invalid_url",
   "unknown_source",
   "fingerprint_not_accepted",
+  // The page is not inside the source's scope: a crawler scope bug.
+  "page_not_in_source",
 ] as const;
 
 export const FindingsResponseSchema = z.object({
   results: z.array(
     z.object({
-      status: z.enum(["created", "duplicate", "rejected"]),
+      // "accepted" | "rejected". During the server rollout the old
+      // "created" / "duplicate" statuses are still tolerated and treated as
+      // "accepted" (the server no longer tells the two apart).
+      status: z
+        .enum(["accepted", "rejected", "created", "duplicate"])
+        .transform((s): "accepted" | "rejected" => (s === "rejected" ? "rejected" : "accepted")),
       reason: z.string().max(500).optional(),
     }),
   ),

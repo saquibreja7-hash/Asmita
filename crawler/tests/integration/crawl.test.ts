@@ -95,7 +95,7 @@ describe("fixture crawl", () => {
     const s = result.summary;
     expect(result.outcome).toBe("completed");
     expect(result.exitCode).toBe(0);
-    expect(s.problems).toEqual({ unauthorized: 0, contractErrors: 0, findingsUnsent: 0, poolStale: 0 });
+    expect(s.problems).toEqual({ unauthorized: 0, contractErrors: 0, scopeErrors: 0, findingsUnsent: 0, poolStale: 0 });
     const skipped = s.imagesSkipped as Record<string, number>;
     const errors = s.errors as Record<string, number>;
     expect(skipped.low_quality).toBe(1);
@@ -117,7 +117,7 @@ describe("fixture crawl", () => {
     expect(errors.robots_disallowed).toBe(1);
     expect(s.robots).toEqual({ ok: 2, absent: 1 });
     expect(s.pagesNonHtml).toBe(1);
-    expect(s.findingsCreated).toBe(fx.expected.length);
+    expect(s.findingsAccepted).toBe(fx.expected.length);
     expect(s.findingsUnsent).toBe(0);
   });
 
