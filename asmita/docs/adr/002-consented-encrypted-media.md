@@ -1,5 +1,7 @@
 # ADR 002: Media May Be Stored, But Only Encrypted, Consented, and Time-Limited
 
+See also ADR 006 (`006-hash-matching-crawler.md`), which builds opt-in resurfacing monitoring on this ADR's conditions without accepting it; this ADR's status is unchanged.
+
 Status: proposed (blocked on legal sign-off)
 
 ## Context

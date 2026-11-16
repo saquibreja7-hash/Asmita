@@ -1,5 +1,7 @@
 # ADR 004: Platform Stack and Hardening Plan, 2026-2027
 
+See also ADR 006 (`006-hash-matching-crawler.md`): its crawler pool route is a first, limited form of the deferred hash bank below.
+
 Status: accepted (2026-10-31). Decision owner: Saquib.
 
 ## Context

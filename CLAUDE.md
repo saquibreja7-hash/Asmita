@@ -12,11 +12,11 @@ It is safety-critical software. Changes touching URL handling, evidence, outboun
 
 These are not checklists — they are the reasoning to apply when making decisions:
 
-**No media on the server (current rule, under review).** The server must never fetch, preview, scrape, store, or process intimate image content. Hashes are computed client-side; only the 64-hex PDQ string reaches the server. Anything resembling a data URL, base64 blob, or image bytes is rejected at the schema layer. Enforced by architecture and tests (`asmita/tests/lint/`, `src/lib/no-fetch-monitor.ts`). ADR 002 (`asmita/docs/adr/002-consented-encrypted-media.md`) proposes allowing encrypted, consented, time-limited media for the evidence vault; it is blocked on legal sign-off. Until it is accepted this rule holds. When it is, change the ADR status, this section and the tests together; never work around the tests.
+**No media on the server (current rule, under review).** The server must never fetch, preview, scrape, store, or process intimate image content. Hashes are computed client-side; only the 64-hex PDQ string reaches the server. Anything resembling a data URL, base64 blob, or image bytes is rejected at the schema layer. Enforced by architecture and tests (`asmita/tests/lint/`, `src/lib/no-fetch-monitor.ts`). ADR 002 (`asmita/docs/adr/002-consented-encrypted-media.md`) proposes allowing encrypted, consented, time-limited media for the evidence vault; it is blocked on legal sign-off. Until it is accepted this rule holds. When it is, change the ADR status, this section and the tests together; never work around the tests. One narrow exception is planned, not built (ADR 006, `asmita/docs/adr/006-hash-matching-crawler.md`): a separate `crawler/` service outside `asmita/` may fetch images from admin-approved sites only, hold each in memory, fingerprint it, compare it with opted-in survivors' approved fingerprints and discard it, writing nothing to disk and logging no images, addresses or fingerprints. It reports only match metadata. The `asmita/` app still never fetches a submitted or discovered URL, its no-fetch enforcement is unchanged, and real fingerprints or real sites wait for legal review (ADR 006 go-live gates).
 
 **Real data stays out of code.** No real NCII URLs, survivor PII, Aadhaar numbers, platform credentials, or production secrets in tests, fixtures, logs, issues, or comments — ever.
 
-**Notice integrity.** What the survivor reviews and signs must match what gets sent. The signed PDF and the email body must cover the same content. If a hash annex is added after signing, the declaration must explicitly cover it.
+**Notice integrity.** What the survivor reviews and signs must match what gets sent. The signed PDF and the email body must cover the same content. If a hash annex is added after signing, the declaration must explicitly cover it. Planned, not built (ADR 006): a link found by the crawler is sent, after a human analyst approves the finding, by Asmita as the survivor's authorised representative under her signed standing authorisation; her signature is never copied onto a notice she has not seen. This is a separate path and does not relax the survivor-signed one.
 
 **Dispatch gates exist for a reason.** Human contact verification (`lastContactVerifiedByHuman`) and legal template review (`reviewedByLegal`) are safety gates for production. Dev bypasses (`DEV_SKIP_LEGAL_REVIEW=true`, which also auto-approves hashes) exist for development velocity; they must never reach production config. Only a human legal reviewer sets `reviewedByLegal: true`; code and seeds never flip it.
 
@@ -35,6 +35,7 @@ Both URL takedown and image fingerprint (hash) submission are live and deployed.
 | Hash upload (PDQ fingerprinting) | `ENABLE_HASH_UPLOAD=true` | Built, deployed (Worker vars in `wrangler.jsonc`) |
 | Platform API (StopNCII, I4C) | `ENABLE_PLATFORM_API=true` | Transport built (URL notices + hash advisories; see `asmita/docs/api/platform-api.md`); off everywhere, no partner enabled. Enabling one needs a partner agreement, an HTTPS endpoint verified by a second admin, and the env switches |
 | Provenance check | `ENABLE_PROVENANCE_CHECK=true` | Off; production builds force it off until ADR 002 is accepted |
+| Crawler (hash matching, ADR 006) | `ENABLE_CRAWLER=true` | In development; off everywhere. Non-intimate test fixtures only until the ADR 006 go-live gates are met |
 | Scheduled work | none | Cron Triggers plus database sweeps. BullMQ/Redis removed (2026-10-31) |
 
 ## Survivor Paths
@@ -69,6 +70,7 @@ Counters live in Postgres (`RateLimitBucket`, keys hashed) so every Worker isola
 - Every notice, follow-up and hash-advisory email carries a Resend idempotency key, so a retry never emails a platform twice; a retry whose earlier send reached Resend but was not recorded gets 409 `email_already_sent`. Dispatch is synchronous (no Queues, ADR 004).
 - `declarationSignedAt` records the first signature on a case; later signatures never move it, and dispatch does not depend on it.
 - `prisma/seed.ts` never sets `reviewedByLegal: true`: templates are created unreviewed, a re-seed keeps a human reviewer's decision, and changed legal text resets it to unreviewed.
+- Planned, not built (ADR 006): representative notices for crawler findings. Each needs analyst approval of the finding, plus the `reviewedByLegal` and `lastContactVerifiedByHuman` gates; the standing-authorisation and representative-notice templates are seeded unreviewed like the others. The `signature_required` check for survivor-submitted URLs stays as it is.
 
 ## Commands
 
