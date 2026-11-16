@@ -1,6 +1,9 @@
 # Deferred Decision Log
 
-Updated: 2026-05-12.
+Updated: 2026-05-12. Last verified against the implementation: 2026-11-12 —
+all four entries still reflect current behaviour; D-08's playbook is live at
+`docs/ops/non-response-escalation-playbook.md` and is executed by the
+escalation engine's daily sweep.
 
 ## D-02: Anonymous vs. Registered Submissions
 

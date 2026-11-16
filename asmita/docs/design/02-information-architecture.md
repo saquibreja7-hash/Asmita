@@ -5,6 +5,13 @@ Owner: Saquib
 Last updated: 2026-08-04
 Builds on: `01-brand-brief.md`. Reference: `reference/thorn-org-crawl.md`.
 
+> **Implementation status (2026-11-12).** This is the August design direction;
+> the shipped app follows it with naming changes. The audience pages landed as
+> `/who-we-help/[audience]` (not `/for-young-people` / `/for-parents`), and
+> the app also ships `/eligibility`, `/issue`, `/glossary`, `/research`,
+> `/talk` and `/contact`. Where this document and the router disagree, the
+> router wins.
+
 This is document 2 of 4. It defines the site's structure: navigation, page list,
 audience segmentation, and page templates. It turns Asmita from a single
 complaint flow into a multi-section platform. No visual decisions here yet.

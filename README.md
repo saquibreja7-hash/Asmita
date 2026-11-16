@@ -58,14 +58,15 @@ npm run prisma:validate
 
 ## Technology
 
-- Next.js
+- Next.js 16 (App Router), built with vinext, deployed on Cloudflare Workers
 - TypeScript
-- Prisma
-- PostgreSQL
-- Redis/BullMQ
-- Vitest
-- Playwright
+- Prisma (schema + local Node) and Kysely + `pg` at Worker runtime (Hyperdrive)
+- PostgreSQL (Supabase, Mumbai)
+- Vitest, Playwright
 - Resend-compatible email delivery
+
+Redis/BullMQ were removed on 2026-10-31 (ADR 004): scheduled work now runs on
+Cloudflare Cron Triggers plus PostgreSQL-backed sweep routes.
 
 ## Project Status
 
@@ -98,7 +99,4 @@ Do not include real NCII URLs, survivor personal data, government IDs, secrets, 
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
-
-
-Linear test
 
