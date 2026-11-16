@@ -340,6 +340,23 @@ model SubmittedUrl {
   source           UrlSource @default(SURVIVOR)
   // Set when the link came from an approved crawler finding.
   crawlFindingId   String?   @unique
+  // Crawler links only (src/lib/crawl-notice.ts). The notice Asmita sends as
+  // the survivor's authorised representative, never signed by her: the
+  // encrypted PDF of record, a digest of what the analyst previewed, the
+  // CRAWL_REPRESENTATIVE_NOTICE template and its text digest, the
+  // authorisation (CrawlConsent) it relies on, who sent it and who approved
+  // the finding. Kept apart from signedNoticePdf so a representative notice
+  // can never pass for a survivor signature.
+  representativeNoticePdf      String?
+  representativeNoticeDigest   String?
+  representativeTemplateId     String?
+  representativeTemplateDigest String?
+  representativeConsentId      String?
+  representativeSentById       String?
+  representativeApprovedById   String?
+  // Set on an unsent crawler link when the survivor withdrew her crawl
+  // authorisation. Permanent: a later authorisation never revives it.
+  crawlConsentWithdrawnAt      DateTime?
 
   case         Case             @relation(fields: [caseId], references: [id])
   platform     Platform?        @relation(fields: [platformId], references: [id])
