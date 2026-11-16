@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { recordAdminAccess, REVEAL_REASONS } from "@/lib/admin-access-log";
 import { writeAuditLog } from "@/lib/audit";
-import { getFindingUrlsForReveal } from "@/lib/crawl-findings";
+import { findingUrlsExpired, getFindingUrlsForReveal } from "@/lib/crawl-findings";
 import { decryptField } from "@/lib/encryption";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 
@@ -31,7 +31,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params;
   const finding = await getFindingUrlsForReveal(id);
   if (!finding) return noStore({ error: "finding_not_found" }, 404);
-  if (!finding.pageUrlEncrypted || !finding.imageUrlEncrypted) return noStore({ error: "url_expired" }, 410);
+  if (findingUrlsExpired(finding) || !finding.imageUrlEncrypted) return noStore({ error: "url_expired" }, 410);
 
   try {
     await recordAdminAccess(

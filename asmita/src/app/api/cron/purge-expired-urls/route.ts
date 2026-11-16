@@ -12,17 +12,16 @@ export async function GET(request: NextRequest) {
   if (!safeEqual(request.headers.get("authorization"), `Bearer ${secret}`)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  try {
-    const expiredUrlsPurged = await purgeExpiredUrls();
-    const expiredFindingsPurged = await purgeExpiredCrawlFindings();
-    return NextResponse.json({ expiredUrlsPurged, expiredFindingsPurged });
-  } catch {
-    sendOnCallAlertFireAndForget({
-      severity: "critical",
-      title: "URL retention cleanup failed",
-      description: "The scheduled URL cleanup failed; investigate the cleanup job and database.",
-      route: "/api/cron/purge-expired-urls",
-    });
-    return NextResponse.json({ error: "url_cleanup_failed" }, { status: 500 });
+  // Both run even if one fails, so neither retention can block the other.
+  const [urls, findings] = await Promise.allSettled([purgeExpiredUrls(), purgeExpiredCrawlFindings()]);
+  if (urls.status === "fulfilled" && findings.status === "fulfilled") {
+    return NextResponse.json({ expiredUrlsPurged: urls.value, expiredFindingsPurged: findings.value });
   }
+  sendOnCallAlertFireAndForget({
+    severity: "critical",
+    title: "URL retention cleanup failed",
+    description: "The scheduled URL cleanup failed; investigate the cleanup job and database.",
+    route: "/api/cron/purge-expired-urls",
+  });
+  return NextResponse.json({ error: "url_cleanup_failed" }, { status: 500 });
 }

@@ -4,9 +4,11 @@ import { logSecurityEvent } from "@/lib/security-log";
 
 // POST /api/crawler/findings: possible copies the crawler found. URLs are
 // strings only: validated, encrypted and stored, never fetched or logged.
-// A malformed batch (shape, size, distance range, media-like payload) is
-// refused whole with 400; a well-formed item that cannot be accepted is
-// "rejected" in its own result, index-aligned with the input.
+// A malformed envelope (not JSON, bad runId, not 1..50 findings, unknown
+// field) is refused whole with 400. Each finding is then checked on its own
+// (shape, http(s) URL, distance 0..31, media-like payload, private host,
+// source, fingerprint) and a bad one is "rejected" in its own result,
+// index-aligned with the input.
 export const dynamic = "force-dynamic";
 
 const FINDING_REQUESTS_PER_HOUR = 600;
@@ -27,11 +29,8 @@ export async function POST(request: Request) {
     json = null;
   }
   const parsed = crawlFindingsBodySchema.safeParse(json);
-  if (!parsed.success) {
-    if (parsed.error.issues.some((issue) => issue.message === "media_payload_rejected")) {
-      await logSecurityEvent({ event: "media_payload_rejected", route: "/api/crawler/findings" });
-    }
-    return crawlerJson({ error: "invalid_payload" }, 400);
-  }
-  return crawlerJson({ results: await recordCrawlFindings(parsed.data, auth.keyId) });
+  if (!parsed.success) return crawlerJson({ error: "invalid_payload" }, 400);
+  const { results, mediaRejected } = await recordCrawlFindings(parsed.data, auth.keyId);
+  if (mediaRejected) await logSecurityEvent({ event: "media_payload_rejected", route: "/api/crawler/findings" });
+  return crawlerJson({ results });
 }

@@ -205,22 +205,35 @@ describe("POST /api/crawler/findings", () => {
   });
 
   it.each([
-    ["a data URL", { imageUrl: "data:image/png;base64,iVBORw0KGgo=" }],
-    ["a base64 payload inside a URL", { imageUrl: "https://cdn.example.com/x;base64,AAAA" }],
-    ["a bare host without scheme", { pageUrl: "forum.example.com/thread/1" }],
-    ["a non-http scheme", { pageUrl: "ftp://forum.example.com/file" }],
-    ["a URL with whitespace", { pageUrl: "https://forum.example.com/a b" }],
-    ["an over-long URL", { pageUrl: `https://forum.example.com/${"a".repeat(2100)}` }],
-    ["a distance above 31", { distance: 32 }],
-    ["a negative distance", { distance: -1 }],
-    ["a fractional distance", { distance: 1.5 }],
-    ["an unknown field", { image: "AAAA" }],
-    ["a bad timestamp", { observedAt: "yesterday" }],
-  ])("refuses the whole batch for %s", async (_label, override) => {
-    const { status, body } = await report([finding({ fingerprintId: fp }), finding({ fingerprintId: fp, ...override })]);
-    expect(status).toBe(400);
-    expect(body).toEqual({ error: "invalid_payload" });
-    expect(crawlMemory().findings.size).toBe(0);
+    ["a data URL", { imageUrl: "data:image/png;base64,iVBORw0KGgo=" }, "media_payload_rejected"],
+    ["a base64 payload inside a URL", { imageUrl: "https://cdn.example.com/x;base64,AAAA" }, "media_payload_rejected"],
+    ["a bare host without scheme", { pageUrl: "forum.example.com/thread/1" }, "invalid_finding"],
+    ["a non-http scheme", { pageUrl: "ftp://forum.example.com/file" }, "invalid_finding"],
+    ["a URL with whitespace", { pageUrl: "https://forum.example.com/a b" }, "invalid_finding"],
+    ["an over-long URL", { pageUrl: `https://forum.example.com/${"a".repeat(2100)}` }, "invalid_finding"],
+    ["a distance above 31", { distance: 32 }, "invalid_finding"],
+    ["a negative distance", { distance: -1 }, "invalid_finding"],
+    ["a fractional distance", { distance: 1.5 }, "invalid_finding"],
+    ["an unknown field", { image: "AAAA" }, "invalid_finding"],
+    ["a bad timestamp", { observedAt: "yesterday" }, "invalid_finding"],
+  ])("rejects %s without losing the rest of the batch", async (_label, override, reason) => {
+    const { status, body } = await report([finding({ fingerprintId: fp, ...override }), finding({ fingerprintId: fp })]);
+    expect(status).toBe(200);
+    expect(body.results).toEqual([{ status: "rejected", reason }, { status: "created" }]);
+    expect(crawlMemory().findings.size).toBe(1);
+    const stored = JSON.stringify([...crawlMemory().findings.values()]);
+    expect(stored).not.toContain("base64");
+  });
+
+  it.each([
+    ["not JSON", "{oops"],
+    ["a bad runId", { runId: "run id with spaces", findings: [{}] }],
+    ["an unknown envelope field", { runId: "r", findings: [{}], extra: true }],
+    ["findings not an array", { runId: "r", findings: "x" }],
+  ])("refuses the whole request for %s", async (_label, body) => {
+    const response = await postFindings(crawlerRequest("findings", { method: "POST", body }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_payload" });
   });
 
   it("refuses an empty batch and one over 50", async () => {

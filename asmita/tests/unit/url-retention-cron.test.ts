@@ -33,4 +33,13 @@ describe("URL retention cron", () => {
     expect(await response.json()).toEqual({ error: "url_cleanup_failed" });
     expect(sendOnCallAlertFireAndForget).toHaveBeenCalled();
   });
+  it("still purges crawler findings when the link purge fails", async () => {
+    process.env.CRON_SECRET = "test-secret";
+    vi.mocked(purgeExpiredUrls).mockRejectedValue(new Error("database failure"));
+    vi.mocked(purgeExpiredCrawlFindings).mockResolvedValue(1);
+    const response = await GET(request("Bearer test-secret"));
+    expect(response.status).toBe(500);
+    expect(purgeExpiredCrawlFindings).toHaveBeenCalled();
+    expect(sendOnCallAlertFireAndForget).toHaveBeenCalled();
+  });
 });

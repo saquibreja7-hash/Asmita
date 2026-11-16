@@ -59,7 +59,7 @@ describe("crawl pool, database path", () => {
 describe("final approval, database path", () => {
   it("claims the finding and creates a CRAWLER SubmittedUrl linked to it", async () => {
     db.crawlFinding.findUnique.mockResolvedValue({
-      id: "cf1", caseId: "c1", hashSubmissionId: "h1", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null,
+      id: "cf1", caseId: "c1", hashSubmissionId: "h1", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null, firstSeenAt: new Date(),
       pageUrlEncrypted: encryptField("https://www.instagram.com/p/placeholder"), imageUrlEncrypted: encryptField("https://cdn.example.com/i.jpg"),
     });
     db.platform.findFirst.mockResolvedValue({ id: "platform-ig" });
@@ -83,7 +83,7 @@ describe("final approval, database path", () => {
   it("refuses when the survivor's authorisation no longer covers the fingerprint", async () => {
     db.crawlConsent.findMany.mockResolvedValue([]);
     db.crawlFinding.findUnique.mockResolvedValue({
-      id: "cf1", caseId: "c1", hashSubmissionId: "h1", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null,
+      id: "cf1", caseId: "c1", hashSubmissionId: "h1", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null, firstSeenAt: new Date(),
       pageUrlEncrypted: encryptField("https://forum.example.com/t"), imageUrlEncrypted: encryptField("https://cdn.example.com/i.jpg"),
     });
     expect(await reviewCrawlFinding({ findingId: "cf1", decision: "approve", reviewerId: "admin-1" })).toEqual({ ok: false, error: "consent_withdrawn" });
@@ -92,7 +92,7 @@ describe("final approval, database path", () => {
 
   it("a concurrent review that got there first wins", async () => {
     db.crawlFinding.findUnique.mockResolvedValue({
-      id: "cf1", caseId: "c1", hashSubmissionId: "h1", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null,
+      id: "cf1", caseId: "c1", hashSubmissionId: "h1", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null, firstSeenAt: new Date(),
       pageUrlEncrypted: encryptField("https://forum.example.com/t"), imageUrlEncrypted: encryptField("https://cdn.example.com/i.jpg"),
     });
     db.tx.crawlFinding.updateMany.mockResolvedValue({ count: 0 });

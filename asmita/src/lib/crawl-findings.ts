@@ -8,6 +8,7 @@ import { isEnabledCrawlSource } from "@/lib/crawl-sources";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { parseSubmittedUrl } from "@/lib/url-parser";
+import { isUrlExpired } from "@/lib/url-retention";
 import * as store from "@/lib/store";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
@@ -56,10 +57,12 @@ export const crawlFindingSchema = z
   })
   .strict();
 
+// The envelope is checked whole (400 when wrong); each finding is checked on
+// its own, so one malformed item is "rejected" without losing the others.
 export const crawlFindingsBodySchema = z
   .object({
     runId: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/),
-    findings: z.array(crawlFindingSchema).min(1).max(MAX_FINDINGS_PER_BATCH),
+    findings: z.array(z.unknown()).min(1).max(MAX_FINDINGS_PER_BATCH),
   })
   .strict();
 
@@ -171,12 +174,25 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
  * clock is the server's: observedAt is accepted for the crawler's own
  * records but never drives retention.
  */
-export async function recordCrawlFindings(body: CrawlFindingsBody, keyId: string, now = new Date()): Promise<CrawlFindingResult[]> {
+export async function recordCrawlFindings(
+  body: CrawlFindingsBody,
+  keyId: string,
+  now = new Date(),
+): Promise<{ results: CrawlFindingResult[]; mediaRejected: boolean }> {
   const fingerprints = new Map<string, Awaited<ReturnType<typeof resolvePoolFingerprint>>>();
   const sources = new Map<string, boolean>();
   const results: CrawlFindingResult[] = [];
+  let mediaRejected = false;
 
-  for (const item of body.findings) {
+  for (const raw of body.findings) {
+    const checked = crawlFindingSchema.safeParse(raw);
+    if (!checked.success) {
+      const media = checked.error.issues.some((issue) => issue.message === "media_payload_rejected");
+      mediaRejected ||= media;
+      results.push({ status: "rejected", reason: media ? "media_payload_rejected" : "invalid_finding" });
+      continue;
+    }
+    const item = checked.data;
     const page = parseSubmittedUrl(item.pageUrl);
     const image = parseSubmittedUrl(item.imageUrl);
     if (!page.ok || !image.ok) {
@@ -218,7 +234,7 @@ export async function recordCrawlFindings(body: CrawlFindingsBody, keyId: string
     }
     results.push({ status: created ? "created" : "duplicate" });
   }
-  return results;
+  return { results, mediaRejected };
 }
 
 // ---------------------------------------------------------------------------
@@ -284,13 +300,18 @@ export async function listCrawlFindings(filter: { status?: FindingStatus; caseId
 }
 
 /** The encrypted URLs of one finding, for the audited reveal route only. */
-export async function getFindingUrlsForReveal(id: string): Promise<{ id: string; pageUrlEncrypted: string; imageUrlEncrypted: string } | null> {
+export async function getFindingUrlsForReveal(id: string): Promise<{ id: string; pageUrlEncrypted: string; imageUrlEncrypted: string; firstSeenAt: Date } | null> {
   if (isDevNoDb()) {
     const f = crawlMemory().findings.get(id);
-    return f ? { id: f.id, pageUrlEncrypted: f.pageUrlEncrypted, imageUrlEncrypted: f.imageUrlEncrypted } : null;
+    return f ? { id: f.id, pageUrlEncrypted: f.pageUrlEncrypted, imageUrlEncrypted: f.imageUrlEncrypted, firstSeenAt: f.firstSeenAt } : null;
   }
   const { db } = await import("@/lib/db");
-  return db.crawlFinding.findUnique({ where: { id }, select: { id: true, pageUrlEncrypted: true, imageUrlEncrypted: true } });
+  return db.crawlFinding.findUnique({ where: { id }, select: { id: true, pageUrlEncrypted: true, imageUrlEncrypted: true, firstSeenAt: true } });
+}
+
+/** Past retention even if the hourly purge has not blanked it yet. */
+export function findingUrlsExpired(finding: { pageUrlEncrypted: string; firstSeenAt: Date }, now = new Date()) {
+  return !finding.pageUrlEncrypted || isUrlExpired(finding.firstSeenAt, now);
 }
 
 export type ReviewDecision = "approve" | "dismiss";
@@ -362,7 +383,7 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
   }
 
   if (!(await fingerprintStillConsented(finding.caseId, finding.hashSubmissionId))) return { ok: false, error: "consent_withdrawn" };
-  if (!finding.pageUrlEncrypted) return { ok: false, error: "finding_expired" };
+  if (findingUrlsExpired(finding, now)) return { ok: false, error: "finding_expired" };
   const parsed = parseSubmittedUrl(decryptField(finding.pageUrlEncrypted));
   if (!parsed.ok) return { ok: false, error: "invalid_url" };
   const dbPlatform = parsed.platform
@@ -419,7 +440,7 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
     return { ok: true, status: "AWAITING_SECOND_REVIEW" };
   }
   if (!(await fingerprintStillConsented(finding.caseId, finding.hashSubmissionId))) return { ok: false, error: "consent_withdrawn" };
-  if (!finding.pageUrlEncrypted) return { ok: false, error: "finding_expired" };
+  if (findingUrlsExpired(finding, now)) return { ok: false, error: "finding_expired" };
   const parsed = parseSubmittedUrl(decryptField(finding.pageUrlEncrypted));
   if (!parsed.ok) return { ok: false, error: "invalid_url" };
   const record = store.cases.get(finding.caseId);
