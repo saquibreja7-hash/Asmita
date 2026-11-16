@@ -14,7 +14,7 @@ const LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
 
 export function checkDomain(raw: string): { ok: true; domain: string } | { ok: false; message: string } {
   const domain = raw.trim().toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
-  const bad = { ok: false as const, message: "Enter a public website name such as example-news.org, with no http:// or path." };
+  const bad = { ok: false as const, message: "Enter a public host name such as news.example-site.org, with no http:// or path." };
   if (!domain || domain.length > 253 || /[^a-z0-9.-]/.test(domain)) return bad;
   const labels = domain.split(".");
   if (labels.length < 2 || !labels.every((label) => LABEL.test(label))) return bad;
@@ -41,11 +41,12 @@ export function checkDelay(value: string): { ok: true; value: number } | { ok: f
 }
 
 export const SOURCE_ERRORS: Record<string, string> = {
-  invalid_domain: "That is not a valid public website name.",
+  invalid_domain: "That is not a valid public host name.",
   private_domain: "That looks like a private or reserved name. Only public sites can be crawled.",
-  source_exists: "That site is already in the list.",
+  source_exists: "That host is already in the list.",
   source_not_found: "That site no longer exists. Reload the page.",
   invalid_payload: "The server did not accept those values. Check them and try again.",
   csrf_failed: "The page session expired. Reload and try again.",
   permission_denied: "Only a SUPER_ADMIN can manage crawler sites.",
+  crawler_disabled: "The crawler is switched off (ENABLE_CRAWLER), so sites cannot be changed. Nothing was saved.",
 };

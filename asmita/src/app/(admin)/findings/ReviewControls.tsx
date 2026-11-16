@@ -25,12 +25,17 @@ export function ReviewControls({
   needsSecondReview,
   awaitingSecondReview,
   distance,
+  currentAdminGaveFirstReview = false,
+  crawlerEnabled = true,
 }: {
   findingId: string;
   reviewStatus: "CANDIDATE" | "APPROVED" | "DISMISSED";
   needsSecondReview: boolean;
   awaitingSecondReview: boolean;
   distance: number;
+  /** From the server: whether the admin viewing gave the first review. */
+  currentAdminGaveFirstReview?: boolean;
+  crawlerEnabled?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [decision, setDecision] = useState<Decision>("approve");
@@ -70,6 +75,23 @@ export function ReviewControls({
     return (
       <p className="text-sm" role="status">
         {reviewStatus === "APPROVED" ? "Approved." : "Dismissed."}
+      </p>
+    );
+  }
+
+  if (!crawlerEnabled) {
+    return (
+      <p className="text-sm" role="status">
+        Not reviewed yet. Reviewing is unavailable while the crawler is switched off.
+      </p>
+    );
+  }
+
+  if (awaitingSecondReview && currentAdminGaveFirstReview) {
+    return (
+      <p className="text-sm" data-testid="second-review-note" role="status">
+        You gave the first approval. Distance {distance} is above the limit for one reviewer, so a second, different admin
+        must approve or dismiss it.
       </p>
     );
   }

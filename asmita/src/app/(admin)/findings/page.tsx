@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { FINDING_STATUSES, listCrawlFindings, type FindingStatus } from "@/lib/crawl-findings";
 import { crawlerEnabled } from "@/lib/crawler-auth";
-import { deniedFor } from "../page-permission";
+import { adminFor } from "../page-permission";
 import { CrawlerOffBanner } from "./CrawlerOffBanner";
-import { reviewLabel, shortDate, sortFindings, STATUS_LABELS } from "./finding-view";
+import { noticeLabel, platformLabel, reviewLabel, shortDate, sortFindings, STATUS_LABELS } from "./finding-view";
 
 export const dynamic = "force-dynamic";
 
@@ -12,15 +12,15 @@ export default async function FindingsPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const denied = await deniedFor("findings:review");
-  if (denied) return denied;
+  const { denied, adminId } = await adminFor("findings:review");
+  if (denied || !adminId) return denied;
 
   const raw = (await searchParams) || {};
   const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? "";
   const status = FINDING_STATUSES.find((value) => value === one(raw.status));
   const caseId = one(raw.caseId).trim().slice(0, 64);
 
-  const rows = sortFindings(await listCrawlFindings({ status, caseId: caseId || undefined, limit: 500 }));
+  const rows = sortFindings(await listCrawlFindings({ status, caseId: caseId || undefined, limit: 500 }, adminId));
   const href = (next: { status?: FindingStatus | ""; caseId?: string }) => {
     const query = new URLSearchParams();
     const s = next.status ?? "";
@@ -76,17 +76,20 @@ export default async function FindingsPage({
       </form>
 
       <div className="mt-6 overflow-hidden a-card">
-        <table className="a-table w-full min-w-[860px] text-left text-sm">
+        <table className="a-table w-full min-w-[1100px] text-left text-sm">
           <caption className="sr-only">Crawler findings, unreviewed first</caption>
           <thead>
             <tr>
               <th className="eyebrow" scope="col">Case</th>
+              <th className="eyebrow" scope="col">Fingerprint</th>
               <th className="eyebrow" scope="col">Distance</th>
               <th className="eyebrow" scope="col">Quality</th>
               <th className="eyebrow" scope="col">Source</th>
+              <th className="eyebrow" scope="col">Platform</th>
               <th className="eyebrow" scope="col">First seen</th>
               <th className="eyebrow" scope="col">Last seen</th>
               <th className="eyebrow" scope="col">Review</th>
+              <th className="eyebrow" scope="col">Notice</th>
             </tr>
           </thead>
           <tbody>
@@ -98,12 +101,15 @@ export default async function FindingsPage({
                     <span className="sr-only"> open finding</span>
                   </Link>
                 </td>
+                <td className="font-mono">{row.fingerprintRef ? `${row.fingerprintRef}…` : "-"}</td>
                 <td className="tabular-nums">{row.distance}</td>
                 <td className="tabular-nums">{row.quality}/100</td>
                 <td>{row.sourceDomain ?? "-"}</td>
+                <td>{platformLabel(row.platform)}</td>
                 <td className="a-nowrap tabular-nums">{shortDate(row.firstSeenAt)}</td>
                 <td className="a-nowrap tabular-nums">{shortDate(row.lastSeenAt)}</td>
                 <td>{reviewLabel(row)}</td>
+                <td>{noticeLabel(row)}</td>
               </tr>
             ))}
           </tbody>

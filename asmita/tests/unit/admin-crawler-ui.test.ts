@@ -10,11 +10,12 @@ import { ADMIN_NAV } from "@/app/(admin)/admin-nav";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { AddressDisplay } from "@/app/(admin)/findings/AddressDisplay";
 import { ReviewControls } from "@/app/(admin)/findings/ReviewControls";
-import { NoticeStep } from "@/app/(admin)/findings/NoticeStep";
+import { NoticeStep, PreviewView } from "@/app/(admin)/findings/NoticeStep";
 import { SafetyNote } from "@/app/(admin)/findings/SafetyNote";
-import { messageFor, NOTICE_ERRORS, REVIEW_ERRORS } from "@/app/(admin)/findings/findings-client";
-import { reviewLabel, sortFindings } from "@/app/(admin)/findings/finding-view";
+import { messageFor, NOTICE_ERRORS, REVIEW_ERRORS, type NoticePreview, type SendResult } from "@/app/(admin)/findings/findings-client";
+import { noticeGate, noticeLabel, platformLabel, reviewLabel, sortFindings, type NoticeGateInput } from "@/app/(admin)/findings/finding-view";
 import { checkBudget, checkDelay, checkDomain } from "@/app/(admin)/crawl-sources/source-validation";
+import { SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
 import { validateCrawlDomain } from "@/lib/crawl-sources";
 import type { CrawlFindingListRow } from "@/lib/crawl-findings";
 
@@ -84,6 +85,14 @@ describe("review controls", () => {
     expect(waiting).toContain("If you gave the first review, you cannot give the second");
     expect(waiting).toContain("Give second approval");
   });
+  it("tells the first reviewer, from the server flag, that someone else must give the second review", () => {
+    const html = render({ needsSecondReview: true, awaitingSecondReview: true, distance: 30, currentAdminGaveFirstReview: true });
+    expect(html).toContain("You gave the first approval");
+    expect(html).not.toContain("<button");
+  });
+  it("offers no review while the crawler is off", () => {
+    expect(render({ crawlerEnabled: false })).not.toContain("<button");
+  });
   it("shows a decided finding without buttons", () => {
     expect(render({ reviewStatus: "APPROVED" })).not.toContain("<button");
   });
@@ -93,17 +102,90 @@ describe("review controls", () => {
 });
 
 describe("notice step and error messages", () => {
-  it("starts with Preview offered and Send disabled", () => {
-    const html = renderToStaticMarkup(createElement(NoticeStep, { findingId: "f1" }));
-    expect(html).toContain("Preview notice");
+  const state: NoticeGateInput = {
+    reviewStatus: "APPROVED", representativeNoticeSentAt: null, noticeAttemptUnconfirmed: false,
+    crawlConsentWithdrawn: false, urlsPurged: false, linkStatus: "NOTICE_QUEUED", crawlerEnabled: true,
+  };
+  const render = (over: Partial<typeof state> = {}) =>
+    renderToStaticMarkup(createElement(NoticeStep, { findingId: "f1", caseId: "c1", state: { ...state, ...over } }));
+
+  it("never previews by itself: the reveal is explained and must be acknowledged first; Send waits for a preview", () => {
+    const html = render();
+    expect(html).toContain("recorded against my name as an");
+    expect(html).toContain("20 previews an hour");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Preview notice/);
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Send notice/);
+    expect(html).not.toContain("notice-preview");
   });
+
+  it("shows sent state, consent withdrawn, the crawler switch and an unconfirmed attempt", () => {
+    const sent = render({ representativeNoticeSentAt: "2026-11-16T05:30:00.000Z" });
+    expect(sent).toContain("Representative notice sent on 2026-11-16 05:30 UTC");
+    expect(sent).not.toContain("<button");
+    const withdrawn = render({ crawlConsentWithdrawn: true });
+    expect(withdrawn).toContain("Consent withdrawn");
+    expect(withdrawn).not.toContain("<button");
+    expect(render({ crawlerEnabled: false })).toContain("switched off");
+    expect(render({ crawlerEnabled: false })).not.toContain("<button");
+    expect(render({ noticeAttemptUnconfirmed: true })).toContain("not recorded as sent");
+    expect(render({ linkStatus: null })).not.toContain("<button");
+  });
+
+  it("renders the PDF text and the email body as text, offers the PDF download, and never links an address", () => {
+    const preview: NoticePreview = {
+      findingId: "f1", caseId: "c1", caseReference: "ASMITA-2026-00001", urlId: "u1", platformName: "Example Forum",
+      recipientEmail: "grievance@example.org", transport: "email", subject: "Subject line",
+      body: `Page address: ${PAGE}\nImage address: ${IMAGE}`, emailBody: "Page address: [Page address is in the attached notice]",
+      noticeDate: "16 November 2026", signedAs: "ASMITA-REVIEWER-ABCDEF1234", consent: { id: "consent-1", signedAt: "2026-11-10T06:00:00.000Z" },
+      templateId: "t", fingerprintIds: ["h1"], approvedById: "a", secondApprovedById: null, pdfBase64: "JVBERg==", contentDigest: "0".repeat(64),
+    };
+    const html = renderToStaticMarkup(createElement(PreviewView, { preview }));
+    expect(html).toContain(PAGE);
+    expect(html).toContain("[Page address is in the attached notice]");
+    expect(html).toContain("Download the PDF");
+    expect(html).toContain("ASMITA-REVIEWER-ABCDEF1234");
+    expect(html).not.toMatch(/<a[\s>]/i);
+    expect(html).not.toMatch(/<(img|iframe|embed|object)[\s>]/i);
+  });
+
   it("gives a sentence for known codes, and a generic one for unknown codes and 503", () => {
     for (const code of ["consent_withdrawn", "template_not_reviewed", "verified_platform_contact_required", "notice_changed", "email_already_sent"]) {
       expect(messageFor(NOTICE_ERRORS, 409, code)).not.toContain(code);
     }
     expect(messageFor(NOTICE_ERRORS, 503, undefined)).toMatch(/switched off/);
     expect(messageFor(NOTICE_ERRORS, 409, "brand_new_code")).toContain("brand_new_code");
+  });
+
+  it("every refusal code in docs/product/crawler-notice-flow.md has its own sentence", () => {
+    const doc = readFileSync(join(process.cwd(), "docs/product/crawler-notice-flow.md"), "utf8");
+    const tables = doc.slice(doc.indexOf("## Gates and codes"), doc.indexOf("## Sending and retries"));
+    const codes = new Set<string>();
+    for (const line of tables.split("\n")) {
+      const cell = line.match(/^\|\s*(`[^|]+)\|/);
+      if (!cell) continue;
+      for (const code of cell[1].matchAll(/`([a-z_]+)`/g)) codes.add(code[1]);
+    }
+    expect(codes.size).toBeGreaterThan(25);
+    for (const code of codes) {
+      expect(NOTICE_ERRORS[code], code).toBeTruthy();
+      expect(NOTICE_ERRORS[code], code).not.toContain(code);
+    }
+  });
+
+  it("explains an unconfirmed earlier attempt and points to the runbook", () => {
+    expect(NOTICE_ERRORS.earlier_attempt_unconfirmed).toContain("crawler-runbook.md");
+    expect(NOTICE_ERRORS.dispatch_in_progress).toMatch(/Nothing was sent/);
+  });
+
+  it("matches the real preview and dispatch shapes the routes return", () => {
+    const preview = readFileSync(join(process.cwd(), "src/app/api/admin/findings/[id]/notice/preview/route.ts"), "utf8");
+    for (const key of ["findingId", "caseId", "caseReference", "urlId", "platformName", "recipientEmail", "transport", "subject", "body", "emailBody", "noticeDate", "signedAs", "consent", "templateId", "fingerprintIds", "approvedById", "secondApprovedById", "pdfBase64", "contentDigest"] satisfies Array<keyof NoticePreview>) {
+      expect(preview, key).toMatch(new RegExp(`\\b${key}:`));
+    }
+    const dispatch = readFileSync(join(process.cwd(), "src/app/api/admin/findings/[id]/notice/dispatch/route.ts"), "utf8");
+    for (const key of ["dispatched", "transport", "messageId", "sentAt", "contentDigest"] satisfies Array<keyof SendResult>) {
+      expect(dispatch, key).toMatch(new RegExp(`\\b${key}:`));
+    }
   });
 });
 
@@ -140,6 +222,15 @@ describe("safety note and list helpers", () => {
     crawlConsentWithdrawn: false,
     ...over,
   });
+  it("labels platform and notice state", () => {
+    expect(platformLabel(null)).toBe("Unknown platform");
+    expect(platformLabel({ name: "X", formOnly: true, contactVerified: false })).toContain("own form only");
+    expect(platformLabel({ name: "Y", formOnly: false, contactVerified: false })).toContain("not verified");
+    expect(noticeLabel(row({ reviewStatus: "APPROVED", representativeNoticeSentAt: "2026-11-16T05:30:00.000Z" }))).toBe("Sent 2026-11-16 05:30");
+    expect(noticeLabel(row({ reviewStatus: "APPROVED", crawlConsentWithdrawn: true }))).toBe("Consent withdrawn");
+    expect(noticeLabel(row({ reviewStatus: "APPROVED", noticeAttemptUnconfirmed: true }))).toBe("Attempt unconfirmed");
+    expect(noticeGate({ ...row({ reviewStatus: "APPROVED", linkStatus: "NOTICE_QUEUED" }), crawlerEnabled: true })).toEqual({ kind: "open", warning: null });
+  });
   it("sorts unreviewed first, second-review waiting ahead of them", () => {
     const sorted = sortFindings([
       row({ id: "done", reviewStatus: "APPROVED", firstSeenAt: "2026-10-01T00:00:00.000Z" }),
@@ -148,6 +239,22 @@ describe("safety note and list helpers", () => {
     ]);
     expect(sorted.map((r) => r.id)).toEqual(["wait", "new", "done"]);
     expect(reviewLabel(sorted[0])).toBe("Waiting for second reviewer");
+  });
+});
+
+describe("sources manager", () => {
+  const source = { id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false, approvedBy: "super-1", createdAt: "2026-11-16T00:00:00.000Z" };
+  it("offers to edit a host's page budget and delay, and speaks of hosts", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [source] }));
+    expect(html).toContain("Edit page budget and delay for news.example-site.org");
+    expect(html).toContain("Add a host");
+    expect(html).toContain("its subdomains");
+  });
+  it("disables every change while the crawler is off", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [source], crawlerEnabled: false }));
+    for (const label of ["Edit page budget", "Switch on crawling"]) {
+      expect(html).toMatch(new RegExp(`<button[^>]*aria-label="${label}[^"]*"[^>]*disabled=""|<button[^>]*disabled=""[^>]*aria-label="${label}`));
+    }
   });
 });
 

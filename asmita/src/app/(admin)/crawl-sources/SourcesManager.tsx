@@ -25,7 +25,7 @@ async function send(method: "POST" | "PATCH", body: unknown): Promise<{ ok: true
   }
 }
 
-export function SourcesManager({ sources }: { sources: CrawlSourceView[] }) {
+export function SourcesManager({ sources, crawlerEnabled = true }: { sources: CrawlSourceView[]; crawlerEnabled?: boolean }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [pending, setPending] = useState<CrawlSourceView | null>(null);
@@ -39,6 +39,32 @@ export function SourcesManager({ sources }: { sources: CrawlSourceView[] }) {
   const [delay, setDelay] = useState("2000");
   const [touched, setTouched] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+
+  // Editing one host's page budget and delay (PATCH).
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editBudget, setEditBudget] = useState("");
+  const [editDelay, setEditDelay] = useState("");
+  const editBudgetCheck = checkBudget(editBudget);
+  const editDelayCheck = checkDelay(editDelay);
+
+  function startEdit(source: CrawlSourceView) {
+    setEditing(source.id);
+    setEditBudget(String(source.pageBudget));
+    setEditDelay(String(source.delayMs));
+    setRowError(null);
+    setNotice(null);
+  }
+
+  async function saveEdit(source: CrawlSourceView) {
+    if (!editBudgetCheck.ok || !editDelayCheck.ok) return;
+    setBusy(true);
+    const result = await send("PATCH", { id: source.id, pageBudget: editBudgetCheck.value, delayMs: editDelayCheck.value });
+    setBusy(false);
+    if (!result.ok) return setRowError(result.message);
+    setEditing(null);
+    setNotice(`${source.domain}: page budget ${editBudgetCheck.value}, delay ${editDelayCheck.value} ms.`);
+    router.refresh();
+  }
 
   const domainCheck = checkDomain(domain);
   const budgetCheck = checkBudget(budget);
@@ -113,20 +139,45 @@ export function SourcesManager({ sources }: { sources: CrawlSourceView[] }) {
           <caption className="sr-only">Sites the crawler may visit</caption>
           <thead>
             <tr>
-              <th className="eyebrow" scope="col">Site</th>
+              <th className="eyebrow" scope="col">Host</th>
               <th className="eyebrow" scope="col">Page budget</th>
               <th className="eyebrow" scope="col">Delay</th>
               <th className="eyebrow" scope="col">Approved by</th>
               <th className="eyebrow" scope="col">Added</th>
               <th className="eyebrow" scope="col">Crawling</th>
+              <th className="eyebrow" scope="col">Limits</th>
             </tr>
           </thead>
           <tbody>
             {sources.map((source) => (
               <tr key={source.id}>
                 <td className="font-mono">{source.domain}</td>
-                <td className="tabular-nums">{source.pageBudget}</td>
-                <td className="tabular-nums">{source.delayMs} ms</td>
+                <td className="tabular-nums">
+                  {editing === source.id ? (
+                    <input
+                      aria-label={`Page budget for ${source.domain}`}
+                      className="field w-24"
+                      inputMode="numeric"
+                      onChange={(event) => setEditBudget(event.target.value)}
+                      value={editBudget}
+                    />
+                  ) : (
+                    source.pageBudget
+                  )}
+                </td>
+                <td className="tabular-nums">
+                  {editing === source.id ? (
+                    <input
+                      aria-label={`Delay in milliseconds for ${source.domain}`}
+                      className="field w-24"
+                      inputMode="numeric"
+                      onChange={(event) => setEditDelay(event.target.value)}
+                      value={editDelay}
+                    />
+                  ) : (
+                    `${source.delayMs} ms`
+                  )}
+                </td>
                 <td className="font-mono">{source.approvedBy ?? "-"}</td>
                 <td className="a-nowrap tabular-nums">{source.createdAt.slice(0, 16).replace("T", " ")}</td>
                 <td>
@@ -134,12 +185,44 @@ export function SourcesManager({ sources }: { sources: CrawlSourceView[] }) {
                     aria-label={`${source.enabled ? "Switch off" : "Switch on"} crawling of ${source.domain}`}
                     aria-pressed={source.enabled}
                     className={`btn px-3 py-1 text-xs ${source.enabled ? "btn-primary" : "btn-secondary"}`}
-                    disabled={busy}
+                    disabled={busy || !crawlerEnabled}
                     onClick={() => toggle(source)}
                     type="button"
                   >
                     {source.enabled ? "On" : "Off"}
                   </button>
+                </td>
+                <td className="a-nowrap">
+                  {editing === source.id ? (
+                    <span className="flex flex-wrap gap-2">
+                      <button
+                        className="btn btn-primary px-3 py-1 text-xs"
+                        disabled={busy || !editBudgetCheck.ok || !editDelayCheck.ok}
+                        onClick={() => saveEdit(source)}
+                        type="button"
+                      >
+                        Save
+                      </button>
+                      <button className="btn btn-secondary px-3 py-1 text-xs" onClick={() => setEditing(null)} type="button">
+                        Cancel
+                      </button>
+                      {(!editBudgetCheck.ok || !editDelayCheck.ok) && (
+                        <span className="text-xs text-[var(--danger)]" role="alert">
+                          {!editBudgetCheck.ok ? editBudgetCheck.message : !editDelayCheck.ok ? editDelayCheck.message : ""}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <button
+                      aria-label={`Edit page budget and delay for ${source.domain}`}
+                      className="btn btn-secondary px-3 py-1 text-xs"
+                      disabled={busy || !crawlerEnabled}
+                      onClick={() => startEdit(source)}
+                      type="button"
+                    >
+                      Edit
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -149,12 +232,12 @@ export function SourcesManager({ sources }: { sources: CrawlSourceView[] }) {
       </div>
 
       <form className="a-card grid max-w-xl gap-4 p-4" noValidate onSubmit={add}>
-        <h2>Add a site</h2>
+        <h2>Add a host</h2>
         <Field
           error={touched && !domainCheck.ok ? domainCheck.message : null}
-          hint="The website name only, for example example-news.org."
+          hint="The host name only, for example news.example-site.org. Pages on this host and its subdomains may be crawled."
           id="source-domain"
-          label="Site"
+          label="Host"
         >
           <input
             aria-describedby="source-domain-hint"
@@ -202,8 +285,8 @@ export function SourcesManager({ sources }: { sources: CrawlSourceView[] }) {
           </p>
         )}
         <div>
-          <button className="btn btn-primary" disabled={busy || (touched && !valid)} type="submit">
-            {busy ? "Adding…" : "Add site (switched off)"}
+          <button className="btn btn-primary" disabled={busy || !crawlerEnabled || (touched && !valid)} type="submit">
+            {busy ? "Adding…" : "Add host (switched off)"}
           </button>
         </div>
       </form>
@@ -216,7 +299,7 @@ export function SourcesManager({ sources }: { sources: CrawlSourceView[] }) {
       >
         <h2 id="enable-source-title">Switch on {pending?.domain}?</h2>
         <p className="mt-3 text-sm">
-          The crawler will start visiting this public site, up to {pending?.pageBudget} pages a run with {pending?.delayMs} ms
+          The crawler will start visiting pages on this public host and its subdomains, up to {pending?.pageBudget} pages a run with {pending?.delayMs} ms
           between pages, and comparing images with survivors&apos; fingerprints. Only enable a site you have decided is
           appropriate to crawl. This is recorded.
         </p>
