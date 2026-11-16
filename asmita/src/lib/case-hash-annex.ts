@@ -70,6 +70,30 @@ export async function buildSignedHashAnnex(signedIds: string[]): Promise<SignedA
   return { ok: true, annex: render(rows) };
 }
 
+export type RepresentativeAnnexResult =
+  | { ok: true; annex: HashAnnex }
+  | { ok: false; reason: "fingerprint_not_approved" | "hash_upload_disabled" };
+
+/**
+ * For a representative notice (src/lib/crawl-notice.ts): exactly the
+ * fingerprints an approved crawler finding matched, scoped to the case, and
+ * only while each is still approved. Never every fingerprint on the case, and
+ * never a void of anything the survivor signed: a refusal here only stops
+ * this notice.
+ */
+export async function buildRepresentativeHashAnnex(caseId: string, ids: string[]): Promise<RepresentativeAnnexResult> {
+  if (ids.length === 0) return { ok: false, reason: "fingerprint_not_approved" };
+  if (process.env.ENABLE_HASH_UPLOAD !== "true") return { ok: false, reason: "hash_upload_disabled" };
+  const rows = await db.hashSubmission.findMany({
+    where: { id: { in: ids }, caseId },
+    orderBy: { submittedAt: "asc" },
+  });
+  if (rows.length !== new Set(ids).size || rows.some((h) => h.status !== "APPROVED" && h.status !== "DISPATCHED")) {
+    return { ok: false, reason: "fingerprint_not_approved" };
+  }
+  return { ok: true, annex: render(rows) };
+}
+
 /*
  * A rejected (or missing) fingerprint can never be sent, so a signature that
  * lists one could never be dispatched. Void every such signature that has not

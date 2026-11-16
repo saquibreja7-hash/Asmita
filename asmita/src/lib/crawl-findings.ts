@@ -89,6 +89,12 @@ type NewFinding = {
   runId: string;
 };
 
+// A closer sighting replaces the matched fingerprint and distance only while
+// nobody has reviewed the finding: once an analyst approved it (even the
+// first of two), the fingerprint the analysts confirmed is the one a
+// representative notice names (src/lib/crawl-notice.ts).
+const CLOSER_WHILE_CANDIDATE = sql`excluded."distance" < "CrawlFinding"."distance" AND "CrawlFinding"."reviewStatus" = 'CANDIDATE' AND "CrawlFinding"."reviewedById" IS NULL`;
+
 /** Inserts or merges one finding. Returns its id and whether it was new. */
 async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string; created: boolean }> {
   if (isDevNoDb()) {
@@ -96,7 +102,7 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
     const existing = [...memory.findings.values()].find((f) => f.caseId === input.caseId && f.urlDigest === input.urlDigest);
     if (existing) {
       existing.lastSeenAt = now;
-      if (input.distance < existing.distance) {
+      if (existing.reviewStatus === "CANDIDATE" && existing.reviewedById === null && input.distance < existing.distance) {
         Object.assign(existing, { distance: input.distance, quality: input.quality, hashSubmissionId: input.hashSubmissionId, sourceId: input.sourceId, runId: input.runId });
       }
       return { id: existing.id, created: false };
@@ -121,11 +127,11 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
       firstSeenAt: now, lastSeenAt: now, sourceId: input.sourceId, runId: input.runId,
     }).onConflict((oc) => oc.columns(["caseId", "urlDigest"]).doUpdateSet({
       lastSeenAt: now,
-      hashSubmissionId: sql`CASE WHEN excluded."distance" < "CrawlFinding"."distance" THEN excluded."hashSubmissionId" ELSE "CrawlFinding"."hashSubmissionId" END`,
-      quality: sql`CASE WHEN excluded."distance" < "CrawlFinding"."distance" THEN excluded."quality" ELSE "CrawlFinding"."quality" END`,
-      sourceId: sql`CASE WHEN excluded."distance" < "CrawlFinding"."distance" THEN excluded."sourceId" ELSE "CrawlFinding"."sourceId" END`,
-      runId: sql`CASE WHEN excluded."distance" < "CrawlFinding"."distance" THEN excluded."runId" ELSE "CrawlFinding"."runId" END`,
-      distance: sql`LEAST("CrawlFinding"."distance", excluded."distance")`,
+      hashSubmissionId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."hashSubmissionId" ELSE "CrawlFinding"."hashSubmissionId" END`,
+      quality: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."quality" ELSE "CrawlFinding"."quality" END`,
+      sourceId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."sourceId" ELSE "CrawlFinding"."sourceId" END`,
+      runId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."runId" ELSE "CrawlFinding"."runId" END`,
+      distance: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."distance" ELSE "CrawlFinding"."distance" END`,
     })).returning(["id", sql<boolean>`(xmax = 0)`.as("inserted")]).executeTakeFirstOrThrow();
     return { id: row.id, created: Boolean(row.inserted) };
   }
@@ -133,13 +139,13 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
   const { db } = await import("@/lib/db");
   const where = { caseId_urlDigest: { caseId: input.caseId, urlDigest: input.urlDigest } };
   const merge = async () => {
-    const existing = await db.crawlFinding.findUnique({ where, select: { id: true, distance: true } });
+    const existing = await db.crawlFinding.findUnique({ where, select: { id: true, distance: true, reviewStatus: true, reviewedById: true } });
     if (!existing) return null;
     await db.crawlFinding.update({
       where: { id: existing.id },
       data: {
         lastSeenAt: now,
-        ...(input.distance < existing.distance
+        ...(existing.reviewStatus === "CANDIDATE" && existing.reviewedById === null && input.distance < existing.distance
           ? { distance: input.distance, quality: input.quality, hashSubmissionId: input.hashSubmissionId, sourceId: input.sourceId, runId: input.runId }
           : {}),
       },

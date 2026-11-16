@@ -4,14 +4,17 @@ import { crawlMemory } from "@/lib/crawl-store";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
 import { templateRef } from "@/lib/signed-template";
+import * as store from "@/lib/store";
 
 /*
  * The survivor's crawl authorisation (template CRAWL_AUTHORISATION): she lets
  * Asmita compare her fingerprints with images its crawler finds on public
  * websites, and act for her on confirmed copies. One live authorisation per
  * case; withdrawing it stops the search at once (the fingerprints leave the
- * pool and lose their pool ids) and deletes possible matches nobody has
- * finished reviewing. Withdrawn rows stay as the record.
+ * pool and lose their pool ids), deletes possible matches nobody has
+ * finished reviewing, and marks approved crawler links that no notice went
+ * out for (crawlConsentWithdrawnAt) so they can never be sent. Withdrawn
+ * rows stay as the record.
  *
  * Signing follows the notice-integrity pattern: the authorisation lists the
  * fingerprints it covers (the same annex the hash advisory uses), the PDF is
@@ -175,6 +178,7 @@ export async function withdrawCrawlConsent(
   actorId?: string,
 ): Promise<{ ok: true; candidatesDeleted: number } | { ok: false; error: "not_signed" }> {
   let candidatesDeleted = 0;
+  let linksStopped = 0;
   if (isDevNoDb()) {
     const memory = crawlMemory();
     const live = memory.consents.filter((c) => c.caseId === caseId && !c.withdrawnAt);
@@ -190,24 +194,42 @@ export async function withdrawCrawlConsent(
     for (const fingerprint of memory.fingerprints.values()) {
       if (fingerprint.caseId === caseId) fingerprint.crawlPoolId = null;
     }
+    // Nothing is ever sent from the memory store, so every crawler link on
+    // the case is unsent.
+    for (const url of store.cases.get(caseId)?.urls ?? []) {
+      if (url.source === "CRAWLER" && !url.crawlConsentWithdrawnAt) {
+        url.crawlConsentWithdrawnAt = now.toISOString();
+        linksStopped += 1;
+      }
+    }
   } else {
     const { db } = await import("@/lib/db");
     const result = await db.$transaction(async (tx) => {
-      const withdrawn = await tx.crawlConsent.updateMany({ where: { caseId, withdrawnAt: null }, data: { withdrawnAt: new Date() } });
+      const now = new Date();
+      const withdrawn = await tx.crawlConsent.updateMany({ where: { caseId, withdrawnAt: null }, data: { withdrawnAt: now } });
       if (withdrawn.count === 0) return null;
       // Pool ids go first, so the crawler's next report on them is refused.
       await tx.hashSubmission.updateMany({ where: { caseId, crawlPoolId: { not: null } }, data: { crawlPoolId: null } });
-      return (await tx.crawlFinding.deleteMany({ where: { caseId, reviewStatus: "CANDIDATE" } })).count;
+      // Approved crawler links with no notice sent can never be sent now, even
+      // under a later authorisation (crawl-notice.ts refuses them). Links
+      // already sent keep their record untouched.
+      const stopped = await tx.submittedUrl.updateMany({
+        where: { caseId, source: "CRAWLER", crawlConsentWithdrawnAt: null, notices: { none: {} } },
+        data: { crawlConsentWithdrawnAt: now },
+      });
+      const deleted = await tx.crawlFinding.deleteMany({ where: { caseId, reviewStatus: "CANDIDATE" } });
+      return { candidatesDeleted: deleted.count, linksStopped: stopped.count };
     });
     if (result === null) return { ok: false, error: "not_signed" };
-    candidatesDeleted = result;
+    candidatesDeleted = result.candidatesDeleted;
+    linksStopped = result.linksStopped;
   }
   await writeAuditLog({
     eventType: "CRAWL_CONSENT_WITHDRAWN",
     entityType: "Case",
     entityId: caseId,
     actorId,
-    data: { candidatesDeleted },
+    data: { candidatesDeleted, linksStopped },
   });
   return { ok: true, candidatesDeleted };
 }

@@ -31,6 +31,8 @@ export type UrlRecord = {
   /** CRAWLER when the link came from an approved crawler finding (crawl-findings.ts). */
   source?: "SURVIVOR" | "CRAWLER";
   crawlFindingId?: string;
+  /** Crawler links: set when the survivor withdrew her crawl authorisation before a notice went out. */
+  crawlConsentWithdrawnAt?: string | null;
 };
 
 type StoreGlobals = {

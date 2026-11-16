@@ -29,6 +29,10 @@ export async function purgeExpiredUrls(now = new Date()): Promise<number> {
         urlEncrypted: "", urlHash: "", signedNoticePdf: null, signedHashSubmissionIds: [],
         signedTemplateId: null, signedTemplateDigest: null,
       }).where("id", "in", ids).execute();
+      // A representative notice PDF names the page and image addresses too.
+      // Its digest, template, authorisation and sender ids stay as the record.
+      await tx.updateTable("SubmittedUrl").set({ representativeNoticePdf: null })
+        .where("id", "in", ids).where("representativeNoticePdf", "is not", null).execute();
       return ids.length;
     });
   }
@@ -46,6 +50,12 @@ export async function purgeExpiredUrls(now = new Date()): Promise<number> {
         urlEncrypted: "", urlHash: "", signedNoticePdf: null, signedHashSubmissionIds: [],
         signedTemplateId: null, signedTemplateDigest: null,
       },
+    });
+    // A representative notice PDF names the page and image addresses too.
+    // Its digest, template, authorisation and sender ids stay as the record.
+    await tx.submittedUrl.updateMany({
+      where: { id: { in: ids }, representativeNoticePdf: { not: null } },
+      data: { representativeNoticePdf: null },
     });
     return result.count;
   });

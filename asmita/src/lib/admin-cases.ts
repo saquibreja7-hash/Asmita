@@ -55,6 +55,10 @@ export type LinkFact = {
   signed: boolean;
   /** Dispatch would refuse this link's signature because of the template it was signed with. */
   templateRefusal?: SignedTemplateRefusal | null;
+  /** CRAWLER links are never signed by the survivor; Asmita sends them as her representative (crawl-notice.ts). */
+  source?: string;
+  /** Crawler links: the survivor withdrew her authorisation before a notice went out. */
+  crawlConsentWithdrawn?: boolean;
 };
 
 export type NoticeFact = {
@@ -151,6 +155,21 @@ export function deriveCaseWork(facts: CaseFacts, gates: Gates, now: Date): CaseW
     if (link.status === "REJECTED") continue;
     if (link.status === "PENDING_REVIEW" || (link.flaggedForReview && link.status !== "REMOVED")) {
       add("review_links", new Date(link.submittedAt.getTime() + REVIEW_SLA_HOURS * HOUR));
+      continue;
+    }
+
+    // A crawler link never waits on the survivor's signature, and its
+    // representative notice states no removal deadline, so no ladder clock
+    // runs for it (escalation-engine.ts leaves these notices alone too).
+    if (link.source === "CRAWLER") {
+      const sent = noticeByUrl.get(link.id);
+      if (sent) {
+        started += 1;
+        if (link.status === "REMOVED" || sent.removedAt) removed += 1;
+        else if (!sent.responseReceivedAt) add("awaiting_reply", null);
+        continue;
+      }
+      if (link.status === "NOTICE_QUEUED" && !link.crawlConsentWithdrawn) add("send_notice", null);
       continue;
     }
 
@@ -466,6 +485,8 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
         submittedAt: true,
         platformId: true,
         platformFiledAt: true,
+        source: true,
+        crawlConsentWithdrawnAt: true,
       },
     }),
     db.submittedUrl.findMany({
@@ -516,6 +537,8 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
         platformFiledAt: link.platformFiledAt,
         signed: signedIds.has(link.id),
         templateRefusal: refusals.get(link.id) ?? null,
+        source: link.source,
+        crawlConsentWithdrawn: Boolean(link.crawlConsentWithdrawnAt),
       },
     ]);
   }
@@ -582,6 +605,8 @@ async function loadMemoryCaseFacts(filters: AdminCaseListFilters): Promise<CaseF
           platformId: url.platformId,
           platformFiledAt: url.platformFiledAt ? new Date(url.platformFiledAt) : null,
           signed: Boolean(url.hasSignedNotice),
+          source: url.source,
+          crawlConsentWithdrawn: Boolean(url.crawlConsentWithdrawn),
         })),
         notices: record.urls
           .filter((url) => url.noticeSentAt)
@@ -733,6 +758,10 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
         platformId: true,
         platformFiledAt: true,
         signedHashSubmissionIds: true,
+        source: true,
+        crawlFindingId: true,
+        crawlConsentWithdrawnAt: true,
+        representativeNoticeDigest: true,
       },
     }),
     db.submittedUrl.findMany({
@@ -781,6 +810,8 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
     platformId: link.platformId,
     platformFiledAt: link.platformFiledAt,
     signed: signedIds.has(link.id),
+    source: link.source,
+    crawlConsentWithdrawn: Boolean(link.crawlConsentWithdrawnAt),
   }));
   const originals = notices.filter((notice) => !notice.followUpOf && notice.sentAt);
   const blocks = await loadLadderBlocks(originals);
@@ -873,7 +904,8 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
       const linkNotices = notices.filter((notice) => notice.urlId === link.id);
       const fact = facts.notices.find((notice) => notice.urlId === link.id);
       const startedAt = fact?.sentAt ?? link.platformFiledAt;
-      const ladder = startedAt
+      // Representative notices state no deadline: no ladder (see deriveCaseWork).
+      const ladder = startedAt && link.source !== "CRAWLER"
         ? buildLadder({ startedAt, status: link.status, responseType: fact?.responseType, responseAt: fact?.responseReceivedAt, now })
         : null;
       const current = ladder ? ladder.steps.findIndex((step) => step.state === "current") + 1 : 0;
@@ -896,6 +928,11 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
         contactVerifiedAt: platform?.lastContactVerifiedAt?.toISOString() ?? null,
         signed: signedIds.has(link.id),
         signedFingerprintIds: signedIds.has(link.id) ? link.signedHashSubmissionIds : [],
+        // Crawler links: sent from the finding (/api/admin/findings/[id]/notice/*), never here.
+        source: link.source,
+        crawlFindingId: link.crawlFindingId,
+        crawlConsentWithdrawn: Boolean(link.crawlConsentWithdrawnAt),
+        representativeNoticeStored: Boolean(link.representativeNoticeDigest),
         platformFiledAt: link.platformFiledAt?.toISOString() ?? null,
         notices: linkNotices.map((notice) => ({
           id: notice.id,
