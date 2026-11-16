@@ -1,6 +1,6 @@
 # ADR 006: Targeted Hash-Matching Crawler
 
-Status: accepted by owner (2026-11-16) for build and test with non-intimate fixtures; real-case use gated on legal review. Decision owner: Saquib. Not yet built.
+Status: accepted by owner (2026-11-16) for build and test with non-intimate fixtures; real-case use gated on legal review. Decision owner: Saquib. Built and switched off: `ENABLE_CRAWLER` is off in every deployed environment (branch `feat/crawler`, 2026-11-16). Operations and the go-live checklist: `docs/ops/crawler-runbook.md`.
 
 The two levels mean:
 
@@ -42,7 +42,7 @@ Each item is meant to be checkable by a test, a lint rule, a configuration check
 
 ### Allowed, in `crawler/` only
 
-- A1. Fetching HTML pages and images over HTTP(S) from hosts on the admin-approved source list whose per-source flag is on.
+- A1. Fetching HTML pages over HTTP(S) only on a host on the admin-approved source list whose per-source flag is on, or a subdomain of it (amended 2026-11-16: scoped to the approved host, not the registrable domain), never following a page link off that host; and fetching the images those pages embed, which may be on other public hosts (for example a CDN), because that is how sites serve images. Every fetch, page or image, passes every network-safety check in N5. The owner is asked to confirm the image rule (runbook).
 - A2. Holding a fetched image in process memory long enough to decode it and compute one PDQ fingerprint, then releasing it.
 - A3. Comparing that fingerprint with the pool in memory, by Hamming distance against a threshold set in configuration.
 - A4. Sending one match report per match to Asmita, containing only: page address, image address, opaque pool id, Hamming distance, PDQ quality, time.
@@ -61,7 +61,7 @@ Each item is meant to be checkable by a test, a lint rule, a configuration check
 - N2. Any image bytes, decoded pixels, data URLs or base64 image content in `asmita/`, in a match report, in a log line, in a database row, or on disk in `crawler/`.
 - N3. The crawler writing to the filesystem at all (no cache, no temp files, no core dumps containing images where the platform allows that to be disabled).
 - N4. Any path from `SubmittedUrl` or any survivor-supplied address to the crawler's fetch list. Sources come only from the admin-approved list.
-- N5. The crawler fetching a host that is not on the approved list, including hosts reached by redirect, or any private, loopback, link-local or metadata address.
+- N5. The crawler fetching a page on a host that is not an approved host or its subdomain, including hosts reached by redirect or by following a link; or fetching anything (page or embedded image) from a private, loopback, link-local, carrier-grade NAT or metadata address, checked after DNS resolution and on every redirect.
 - N6. The pool carrying a case id, user id, email, name, URL or any other personal data. Pool ids are random and are not derived from the fingerprint or from `HashSubmission.hashDigest`.
 - N7. A fingerprint in the pool from a survivor who has not signed the standing authorisation, who has withdrawn, or whose fingerprint is not approved.
 - N8. Classifying, labelling, storing, counting by content type, or surfacing any image that did not match. The crawler has no nudity, age or abuse classifier.
@@ -122,9 +122,9 @@ This ADR does not use or decide the number 003, which ADR 005 leaves reserved.
 
 ## Enforcement
 
-### `crawler/` (to be built with the service; none exists yet)
+### `crawler/` (built; `npm run check` in `crawler/`, CI `.github/workflows/crawler-ci.yml`)
 
-Tests and checks that must exist before the crawler handles anything beyond fixtures:
+Tests and checks that must exist before the crawler handles anything beyond fixtures (they exist; CI on Linux and the Docker image build are still to be seen green, see open items):
 
 - **No disk writes.** A test that runs a full crawl of a fixture site and asserts no file is created or modified (for example by running with a read-only filesystem, or by spying on every filesystem write API and failing on any call). The deployment configuration sets a read-only root filesystem, and a check fails the build if it does not.
 - **Lint.** The crawler's own ESLint (or equivalent) configuration forbids importing filesystem write APIs, forbids logging calls whose arguments include address, URL, image, buffer or fingerprint variables, and forbids any persistence client.
@@ -139,6 +139,7 @@ Tests and checks that must exist before the crawler handles anything beyond fixt
 - Existing enforcement is unchanged: the `no-restricted-syntax` rules in `asmita/eslint.config.mjs`, `asmita/tests/integration/no-url-fetch.test.ts` and `asmita/src/lib/no-fetch-monitor.ts` keep applying to all of `asmita/`, including any new crawler-facing route.
 - New tests with the routes: the pool route serves nothing (proposed: 404) when `ENABLE_CRAWLER` is not `true`; the pool contains no fingerprint from outside the adult case flow, and none from a case routed to the minor pathway; the pool contains no fingerprint of a survivor who has not opted in, has withdrawn or whose fingerprint is not approved; the pool response contains no field other than opaque id and fingerprint; withdrawal removes fingerprints from the next pool response and deletes unapproved findings; a report for a pool id no longer in the pool is not stored (N13); the report route rejects any field outside A4 and anything resembling image data; findings are purged on the 30-day schedule; a representative notice cannot be dispatched without analyst approval, `reviewedByLegal` and `lastContactVerifiedByHuman`; ingesting a finding and dispatching its notice call no `fetch` on the finding's addresses.
 - `ENABLE_CRAWLER` is read in one place (as `src/lib/dev-flags.ts` is for the provenance flag) so its default is off.
+- Built: the `no-restricted-syntax` rule now also matches the crawler's address names (`pageUrl`, `imageUrl`, `findingUrl`, `pageAddress`, `imageAddress` and others, as variables and properties), checked by `tests/unit/eslint-no-url-fetch.test.ts`; `tests/unit/admin-no-url-content.test.ts` covers every crawler admin page.
 
 ## Consent and notice model
 
@@ -149,6 +150,21 @@ Tests and checks that must exist before the crawler handles anything beyond fixt
 - **Representative notice.** Sent by Asmita in its own name as the survivor's authorised representative, citing the signed standing authorisation by date and reference. It never reproduces her signature and never states that she reviewed the specific notice. Legal grounds may cite only what PRD Section 4 already supports (for example IT Rules 2021 Rule 3(2)(b) as accelerated by the 2026 Amendment Rules, and the MeitY November 2025 SOP); anything about representative standing is tagged `[CITATION REQUIRED — verify with legal advisor]`.
 - **Survivor-signed path unchanged.** Links the survivor submits herself keep the existing flow: she reviews and signs the notice PDF, and `/api/notices/dispatch` refuses a URL without `signedNoticePdf`. The representative path is a separate path for findings only and must not relax that check.
 - **Survivor visibility.** Not decided. Whether she can see her findings, whether she is told about each finding before a notice goes out, and how, are open items, to be settled in the consent wording with the legal reviewer. Seeing a list of addresses where her images were found may itself cause harm, so the default is not assumed either way.
+
+## Decisions recorded since acceptance (2026-11-16)
+
+Made while building; each is in the code and its tests.
+
+- **The page address is the case link.** Final approval adds the finding's page address to the case as a `SubmittedUrl` with `source = CRAWLER`. The image address stays on the finding and appears only in the notice.
+- **Crawler links never enter the survivor's sign flow.** The sign page, preview, signing and `/api/notices/dispatch` refuse them (`crawler_link_not_survivor_signed`); only the representative path sends them. If she reports the same address herself while no representative notice was sent or claimed, the link becomes hers (`SURVIVOR`) and enters her sign flow; the finding keeps its record.
+- **Consent is re-checked at send.** Preview and dispatch re-check that a live authorisation lists the matched fingerprint and that the finding was recorded under that authorisation (`CrawlFinding.crawlConsentId`). Approval and finding ingest re-check it under a row lock in the same transaction as the write, so a withdrawal cannot slip between check and write.
+- **Withdrawal.** Unreviewed findings are deleted, fingerprints leave the pool at once, and unsent crawler links are stopped for good; notices already sent are untouched. A later authorisation never revives a stopped link: findings are deduplicated per authorisation, so a copy found again is a new finding, reviewed from the start, with its own link. A request to delete her account withdraws the authorisation on every case at once; cancelling the deletion does not opt her back in.
+- **Dismissed findings can reappear** after the 30-day purge (the dedup digest is purged with the addresses) and under a new authorisation.
+- **One tick box** covers both comparison and representative notices. This is in tension with ADR 002 condition 2 (separate consent per feature); the owner accepted it, and it is on the legal reviewer's list.
+- **Findings are bound to their source.** A reported page must be on the source's host or a subdomain (`page_not_in_source`); the image may be on another public host. The findings route answers `accepted` for both new and merged findings, so the crawler cannot tell whether two pool ids belong to one case.
+- **Image decoding runs in an isolated worker** in the crawler process that never receives the fingerprint pool, so a decoder flaw does not expose the pool directly (being implemented in `crawler/`).
+- **The two draft templates agree.** The representative notice states that the survivor declared the images are intimate images of her shared without her consent; the draft authorisation now contains that declaration. Both stay draft-marked and unreviewed.
+- **Survivor visibility.** Her case page lists found links by website name only, with a true status (a stopped badge after withdrawal; the date Asmita sent its notice; never an escalation ladder). `CRAWLER_SHOW_FINDINGS_TO_SURVIVOR` (default on) turns the list off; whether she should see it is still an owner decision (open items).
 
 ## Go-live gates
 
@@ -168,18 +184,27 @@ Production launch of Asmita as a whole remains gated on the items in `CLAUDE.md`
 
 ## Open items
 
-- Child-abuse-material procedure for analysts (go-live gate 3). Required before go-live.
-- Legal read on the in-memory fetch and on representative standing (go-live gates 1 and 2).
+Still open after the build:
+
+- Child-abuse-material procedure for analysts: a written procedure for suspected child sexual abuse material on a matched page (go-live gate 3). Required before go-live.
+- Analyst welfare rule: how long and how often an analyst may review matched pages, and what support they get. Required before go-live.
+- Legal read on the in-memory fetch and on representative standing (go-live gates 1 and 2), on the two draft templates, on the notice's consent statement resting on the authorisation's declaration (item 8 of the draft), and on one tick box covering both uses (ADR 002 condition 2).
+- Hindi: the crawl and found-link strings are drafted, not reviewed by a native speaker (`src/i18n/hi-review-status.json`).
+- Verification not yet done: the migrations applied and the Kysely and Prisma paths exercised on a real Postgres (only mocks and the memory store so far); crawler CI green on Linux and the Docker image built (this was built on Windows without Docker).
+- MeitY SOP date: `CLAUDE.md` cites the MeitY NCII SOP as October 2025 and this ADR cites it as November 2025 (a date of 11 November 2025 has also been given). A human should confirm the correct date against the SOP itself; nothing here changes either.
+- PDQ agreement: re-run with the crawler's own decode module (`tools/pdq-agreement/REPORT.md`), CMYK JPEG without a profile disagrees by 14 bits (above the 10-bit guidance, within the 31 threshold).
+- Owner decisions: whether survivors see the website names of found links (`CRAWLER_SHOW_FINDINGS_TO_SURVIVOR`, default on); whether dismissed or already-sent findings may recur after the 30-day purge; whether the same admin may retry a failed send only on the same day (after the date changes the retry is refused as `earlier_attempt_unconfirmed`); confirming that embedded images may be fetched from other public hosts (A1).
 - Consent granularity. ADR 002 condition 2 asks for separate consent per feature; the owner chose one tick box covering both comparison and representative notices. Whether one signature for both is acceptable is for the legal reviewer.
-- Hamming distance threshold and PDQ quality floor for a match.
-- Byte, pixel, page-count and time limits per fetch and per source; crawl rate per source; whether `robots.txt` and site terms are honoured and how.
-- Crawler hosting (in India, ADR 004) and how the crawler authenticates to Asmita and is authenticated by it.
-- Whether the crawler may keep the pool only in memory or may cache it, and how it is protected in transit and in the crawler.
-- How an analyst confirms a match without `asmita/` fetching or previewing the page, and what wellbeing protections apply (roadmap: blurred by default, limited viewing, access logging).
-- What withdrawal does to approved findings and to notices already sent.
-- Whether the survivor can see her findings, and whether she is told about each finding before a notice goes out.
-- Lint coverage of new `asmita/` code. The existing `no-restricted-syntax` rule matches only the identifiers `url`, `submittedUrl`, `contentUrl` and `urlString`, so a variable such as `pageUrl` or `imageUrl` in finding code would not be caught. Widening the rule is a separate change; until then, finding code should use those names or be covered by a dedicated test.
-- How the source list is managed (who may add a site, two-person approval, audit).
+Earlier open items, settled for the build (values to revisit with real data before go-live):
+
+- Hamming threshold 31 for a report (`CRAWL_MATCH_THRESHOLD`), a second analyst above 20; no quality floor beyond the crawler's own.
+- Byte, pixel, page-count and time limits, crawl delay per source and `robots.txt` handling are in `crawler/` (see `crawler/README.md`).
+- Hosting: proposed Google Cloud Run job in Mumbai (`asia-south1`), read-only filesystem, secrets in Secret Manager (runbook); the owner sets it up. The crawler authenticates with a bearer service key whose sha256 alone is stored.
+- The pool is held in memory only and fetched over HTTPS each run; its protection inside the crawler (decoder isolation) is above.
+- The analyst confirms a match by reading the address as text, after a reasoned, audited, rate-limited reveal; the app never previews it. Wellbeing protections beyond the interim safety note are the open welfare rule above.
+- Withdrawal: see "Decisions recorded since acceptance".
+- Whether she is told about each finding before a notice goes out: not built; she sees found links on her case page after approval (owner decision above).
+- Sources: a SUPER_ADMIN (`crawler:manage`) adds each host, which starts switched off; every change is audited. Two-person approval of sources is not built.
 
 ## Consequences
 

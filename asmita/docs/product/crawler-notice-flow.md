@@ -20,7 +20,7 @@ The survivor routes refuse a crawler link with 409 `crawler_link_not_survivor_si
 
 ## What the analyst sees
 
-Both routes need `findings:review` (SUPER_ADMIN, CASE_REVIEWER), CSRF, and `ENABLE_CRAWLER=true`.
+Both routes need `findings:review` (SUPER_ADMIN, CASE_REVIEWER), CSRF, and `ENABLE_CRAWLER=true`. The console (`/admin/findings/[id]`) reads the address-free summary (`GET /api/admin/findings/[id]/summary`), asks the analyst to acknowledge that a preview is a recorded reveal before the preview button works, never previews by itself, shows both the PDF text and the email body, offers the PDF for download from the returned bytes, and turns every code below into a sentence (`src/app/(admin)/findings/findings-client.ts`; a test fails if a code here has none).
 
 **Preview.** `POST /api/admin/findings/[id]/notice/preview` with `{ "caseId": "..." }` runs every gate below, renders the notice as this admin would send it today, and sends nothing. The response shows the page and image addresses, so it counts as a reveal. It writes an access-log row (`finding_notice_previewed`, which is required) and a `URL_REVEALED` audit entry. It is limited to 20 an hour per admin and is sent `no-store`.
 
@@ -84,7 +84,7 @@ Dispatch only:
 |-|-|-|
 | `notice_changed` | 409 | The digest differs from the preview |
 | `dispatch_in_progress` | 409 | Another request claimed the link first |
-| `earlier_attempt_unconfirmed` | 409 | A different stored notice was never recorded as sent; it may have reached the platform. Needs a human (see open questions) |
+| `earlier_attempt_unconfirmed` | 409 | A different stored notice was never recorded as sent; it may have reached the platform. Needs a human: `docs/ops/crawler-runbook.md`, "Unconfirmed send" |
 | `email_already_sent` | 409 | Resend already accepted this notice. Nothing is sent twice |
 | `send_failed` | 502 | Resend returned an error. The error may come after the request reached Resend, so the stored notice is kept and a retry the same day resends it. After the date changes, the retry gets `earlier_attempt_unconfirmed` |
 
@@ -107,7 +107,7 @@ If she later signs a new authorisation, findings are deduplicated per authorisat
 
   Bringing them in needs a reviewed representative follow-up template and a deadline counsel confirms.
 - The platform API transport.
-- `earlier_attempt_unconfirmed` has no admin action to clear it yet.
+- `earlier_attempt_unconfirmed` and `dispatch_in_progress` have no admin action to clear them. Neither does the survivor path's `email_already_sent`, so none was invented here: the console says what happened, and the owner resolves it by hand (`docs/ops/crawler-runbook.md`, "Unconfirmed send").
 - The memory-store path for preview and dispatch.
 
 ## For counsel
