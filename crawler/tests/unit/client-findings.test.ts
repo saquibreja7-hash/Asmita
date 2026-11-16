@@ -227,7 +227,7 @@ describe("FindingsSink", () => {
     sink.add({ ...mk(2), distance: 1.5 });
     sink.add({ ...mk(3), observedAt: "2026-11-16 10:00" });
     sink.add({ ...mk(4), imageUrl: "data:image/png;base64,AAAA" });
-    sink.add({ ...mk(5), pageUrl: `https://site.example/${"x".repeat(3000)}` });
+    sink.add({ ...mk(5), pageUrl: `https://site.example/${"x".repeat(300_000)}` }); // over the body limit
     sink.add({ ...mk(6), ...({ extra: true } as object) });
     sink.add(mk(7));
     expect(m.findingsInvalid).toBe(6);

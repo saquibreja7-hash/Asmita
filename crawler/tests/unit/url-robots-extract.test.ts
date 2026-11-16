@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CrawlError } from "../../src/errors.ts";
 import { extract, largestFromSrcset } from "../../src/crawl/extract.ts";
 import { parseRobots, RobotsCache } from "../../src/crawl/robots.ts";
-import { inScope, normalizeUrl, registrableDomain } from "../../src/crawl/url.ts";
+import { inScope, normalizeUrl, registrableDomain, urlKey } from "../../src/crawl/url.ts";
 import type { FetchResult } from "../../src/net/safe-fetch.ts";
 
 describe("normalizeUrl", () => {
@@ -11,11 +11,18 @@ describe("normalizeUrl", () => {
     ["HTTP://Example.COM", "http://example.com/"],
     ["http://example.com:80/a/../b/./c", "http://example.com/b/c"],
     ["https://example.com:443/x#frag", "https://example.com/x"],
-    ["http://example.com/p?b=2&a=1&utm_source=x&fbclid=y", "http://example.com/p?a=1&b=2"],
-    ["http://example.com/p?utm_medium=z", "http://example.com/p"],
+    ["http://example.com/p?b=2&a=1&utm_source=x", "http://example.com/p?b=2&a=1&utm_source=x"], // query kept as written
     ["http://bücher.example/", "http://xn--bcher-kva.example/"],
     ["http://0x7f.1/", "http://127.0.0.1/"],
   ])("%s -> %s", (input, want) => expect(n(input)).toBe(want));
+  it("dedup key drops tracking params and sorts the rest, without changing the URL", () => {
+    const u = new URL("http://example.com/p?b=2&a=1&utm_source=x&fbclid=y");
+    expect(urlKey(u)).toBe("http://example.com/p?a=1&b=2");
+    expect(urlKey(new URL("http://example.com/p?utm_medium=z"))).toBe("http://example.com/p");
+    expect(u.href).toBe("http://example.com/p?b=2&a=1&utm_source=x&fbclid=y");
+    const signed = new URL("https://cdn.example.net/i.jpg?sig=a%2Fb&exp=1&url=https://x/y");
+    expect(normalizeUrl(signed.href)!.href).toBe(signed.href);
+  });
   it("resolves relative URLs and rejects non-http schemes", () => {
     expect(n("../img/a.png", "http://example.com/x/y/page")).toBe("http://example.com/x/img/a.png");
     expect(n("//cdn.example.net/a.png", "https://example.com/")).toBe("https://cdn.example.net/a.png");
@@ -176,6 +183,6 @@ describe("extract", () => {
 
   it("drops fragments and dedups links", () => {
     const ex = extract(`<a href="/x#1">1</a><a href="/x#2">2</a><a href="/x?utm_campaign=q">3</a><a href="mailto:a@b.c">m</a>`, page);
-    expect(paths(ex.links)).toEqual(["https://example.com/x"]);
+    expect(paths(ex.links)).toEqual(["https://example.com/x"]); // first occurrence kept
   });
 });

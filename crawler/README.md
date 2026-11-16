@@ -23,7 +23,8 @@ main.ts -> cli.ts (config, signals, exit codes)
          per image: SafeFetcher -> Buffer -> hash-image.ts (sniff, sharp,
                     prepare.ts, pdq.ts) -> Matcher -> FindingsSink
        pool re-sync every POOL_RESYNC_MINUTES (<= 60)
-       FindingsSink: POST /findings in batches (<= 50 items, <= 240 KiB)
+       FindingsSink: POST /findings in batches (<= 50 items, <= 240 KiB),
+                     whenever a batch fills, every 15 s, and at once on stop
   -> run_summary log line, exit code
 ```
 
@@ -45,6 +46,7 @@ API rejected the service key, `64` bad command line.
 | **Service key only to Asmita.** | `AsmitaClient` has its own agent, builds URLs only from `ASMITA_API_URL`, refuses redirects. The crawl fetcher sends no auth or cookie headers. | `crawl.test.ts` "never sends credentials or cookies to crawled hosts"; `client-findings.test.ts` "refuses redirects" |
 | **No URLs, hostnames, fingerprints or bodies in logs.** Field allowlist, string sanitiser, errors reduced to fixed codes; uncaught errors and Node warnings routed through the logger. | `log.ts`, `errors.ts`, `cli.ts`. | `crawl.test.ts` log scan; `tests/integration/process.test.ts` runs the real `runMain` in a child process and scans all of stdout and stderr |
 | **Politeness.** robots.txt per origin (cached for the run), `Crawl-delay` honoured up to a cap, meta robots / `X-Robots-Tag` / `rel` nofollow, per-host delay, global concurrency cap, retries with exponential backoff and full jitter, `Retry-After`. | `crawl/robots.ts`, `crawl/limits.ts`, `retry.ts`. | `url-robots-extract.test.ts`, `log-retry-limits.test.ts`, `crawl.test.ts` |
+| **Real addresses.** URLs are fetched and reported as the site wrote them (fragment removed, query untouched, so signed CDN URLs work); tracking-param stripping and sorting apply only to the dedup key. | `crawl/url.ts` (`normalizeUrl` vs `urlKey`). | `url-robots-extract.test.ts` |
 | **Scope.** Pages only within the source's registrable domain (private suffixes on, so `x.blogspot.com` stays `x.blogspot.com`), BFS to `MAX_DEPTH`, `pageBudget` per source. Image hosts may differ (CDNs) but pass every safe-fetch check. | `crawl/url.ts`, `crawler.ts`. | `crawl.test.ts` (off-domain site never requested, CDN image fetched) |
 | **Withdrawn fingerprints stop matching.** Pool re-synced at least hourly; a pool older than 60 minutes stops the run; queued findings for removed ids are dropped; a `fingerprint_not_accepted` rejection removes the id from the in-memory pool at once. | `crawler.ts`, `findings.ts`, `match/matcher.ts`. | `tests/integration/lifecycle.test.ts`, `client-findings.test.ts` |
 | **Fail closed config**, no setting that loosens the network policy. Loopback access for tests is a policy object injected in code from `tests/support/test-policy.ts`. | `config.ts`. | `config-policy.test.ts` (schema has no such key; `src/` network code never mentions loopback) |

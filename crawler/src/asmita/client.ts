@@ -53,11 +53,11 @@ export type Source = z.infer<typeof SourcesSchema>["sources"][number];
  * malformed finding is dropped locally instead of failing a whole batch.
  */
 export const RUN_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
-export const MAX_FINDING_URL_LENGTH = 2048;
 export const FindingSchema = z.strictObject({
   fingerprintId: ID,
-  pageUrl: z.url({ protocol: /^https?$/ }).max(MAX_FINDING_URL_LENGTH),
-  imageUrl: z.url({ protocol: /^https?$/ }).max(MAX_FINDING_URL_LENGTH),
+  // No length cap beyond the batch byte limit (the contract sets none).
+  pageUrl: z.url({ protocol: /^https?$/ }),
+  imageUrl: z.url({ protocol: /^https?$/ }),
   distance: z.number().int().min(0).max(31),
   quality: z.number().min(0).max(100),
   observedAt: z.iso.datetime({ offset: true }),

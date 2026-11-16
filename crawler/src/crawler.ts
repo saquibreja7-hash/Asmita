@@ -19,13 +19,15 @@ import type { Finding, FindingResult, Pool, Source } from "./asmita/client.ts";
 import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, RobotsCache } from "./crawl/robots.ts";
-import { inScope, normalizeUrl, registrableDomain } from "./crawl/url.ts";
+import { inScope, normalizeUrl, registrableDomain, urlKey } from "./crawl/url.ts";
 import { hashImage } from "./image/hash-image.ts";
 import type { FetchOptions, FetchResult, SafeFetcher } from "./net/safe-fetch.ts";
 import { withRetry } from "./retry.ts";
 
 /** Pool older than this is never matched against (withdrawn ids must stop matching). */
 export const POOL_MAX_AGE_MS = 60 * 60 * 1000;
+/** Queued findings are posted at least this often. */
+export const FLUSH_INTERVAL_MS = 15_000;
 
 export type AsmitaApi = {
   getPool(signal?: AbortSignal): Promise<Pool>;
@@ -67,11 +69,15 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   // stop = no new work; hard = abort in-flight (after the grace period).
   const stop = new AbortController();
   const hard = new AbortController();
+  // Assigned once the run is loaded; a stop flushes it straight away so
+  // findings reach Asmita inside the shutdown window.
+  const sinkRef: { current?: FindingsSink } = {};
   const requestStop = (why: RunOutcome) => {
     if (stop.signal.aborted) return;
     outcome = why;
     log.info("run_stopping", { reason: why });
     stop.abort();
+    void sinkRef.current?.flush(true, AbortSignal.timeout(config.SHUTDOWN_GRACE_MS + 3_000));
     const t = setTimeout(() => hard.abort(), config.SHUTDOWN_GRACE_MS);
     t.unref();
   };
@@ -126,6 +132,11 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     matcher.withdraw(id);
     log.info("fingerprint_withdrawn", { poolSize: matcher.size });
   });
+  sinkRef.current = sink;
+  // Post whatever is queued every FLUSH_INTERVAL_MS, not only when 50 have
+  // accumulated: a typical run has few matches, and a crash must not lose them.
+  const flushTimer = setInterval(() => void sink.flush(true, AbortSignal.timeout(config.API_TIMEOUT_MS * 2)), FLUSH_INTERVAL_MS);
+  flushTimer.unref();
 
   // --- pool re-sync ---------------------------------------------------------
   let resyncing = false;
@@ -217,8 +228,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
 
   // --- per image ------------------------------------------------------------
   const processImage = async (img: URL, pageUrl: URL, source: Source, registrable: string): Promise<void> => {
-    if (seenImages.has(img.href)) return metrics.skip("duplicate_url");
-    seenImages.add(img.href);
+    if (seenImages.has(urlKey(img))) return metrics.skip("duplicate_url");
+    seenImages.add(urlKey(img));
     if (metrics.imagesSeen >= config.MAX_IMAGES) {
       budgetHit = true;
       return metrics.skip("budget");
@@ -243,7 +254,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     // The image is reported at the address it was actually fetched from
     // (after redirects); mark that address seen too.
     const imageUrl = res.url.href;
-    seenImages.add(imageUrl);
+    seenImages.add(urlKey(res.url));
     if (res.contentType !== "" && !res.contentType.startsWith("image/") && res.contentType !== "application/octet-stream") {
       record("content_type");
       return metrics.skip("content_type");
@@ -274,7 +285,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     if (!m) return metrics.skip("pool_stale");
     const observedAt = new Date(now()).toISOString();
     for (const hit of m.match(hashed.hash)) {
-      const key = `${hit.fingerprintId}\n${img.href}`;
+      const key = `${hit.fingerprintId}\n${imageUrl}`;
       if (reported.has(key)) continue;
       reported.add(key);
       metrics.matches++;
@@ -304,7 +315,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     metrics.sourcesCrawled++;
     const started = now();
     const queue: { url: URL; depth: number }[] = [{ url: seed, depth: 0 }];
-    const seen = new Set<string>([seed.href]);
+    const seen = new Set<string>([urlKey(seed)]);
     let pages = 0;
 
     while (queue.length > 0 && pages < source.pageBudget && !stop.signal.aborted) {
@@ -350,8 +361,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       metrics.skip("invalid_url", ex.skipped.invalid);
       if (depth < config.MAX_DEPTH) {
         for (const link of ex.links) {
-          if (seen.has(link.href) || !inScope(link, registrable)) continue;
-          seen.add(link.href);
+          if (seen.has(urlKey(link)) || !inScope(link, registrable)) continue;
+          seen.add(urlKey(link));
           queue.push({ url: link, depth: depth + 1 });
         }
       }
@@ -384,8 +395,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
 
   if (budgetHit && outcome === "completed") outcome = "budget";
   clearInterval(resyncTimer);
-  // Final flush gets its own short deadline so a dead API cannot hang the job.
-  const flushDeadline = AbortSignal.timeout(Math.max(config.SHUTDOWN_GRACE_MS, 10_000) + config.API_TIMEOUT_MS);
+  clearInterval(flushTimer);
+  // Final flush deadline: short after a signal (the platform kills the
+  // process soon after SIGTERM), longer for a normal end of run.
+  const flushDeadline = AbortSignal.timeout((outcome as RunOutcome) === "stopped" ? 3_000 : config.API_TIMEOUT_MS * 2);
   if (sink.disabled && outcome === "completed") outcome = "disabled";
   await sink.flush(true, flushDeadline);
   sink.finish();

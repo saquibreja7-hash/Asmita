@@ -10,13 +10,16 @@ export class Semaphore {
   constructor(private readonly max: number) {}
 
   async use<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.active >= this.max) await new Promise<void>((r) => this.waiters.push(r));
-    this.active++;
+    if (this.active < this.max) this.active++;
+    // Otherwise wait for a releasing holder to hand its slot over directly
+    // (active is not decremented in between, so nobody can slip in).
+    else await new Promise<void>((r) => this.waiters.push(r));
     try {
       return await fn();
     } finally {
-      this.active--;
-      this.waiters.shift()?.();
+      const next = this.waiters.shift();
+      if (next) next();
+      else this.active--;
     }
   }
 }

@@ -4,7 +4,7 @@
  * out of reach by design (see README "Known limits").
  */
 import { load } from "cheerio";
-import { normalizeUrl } from "./url.ts";
+import { normalizeUrl, urlKey } from "./url.ts";
 
 export type Extracted = {
   links: URL[];
@@ -109,7 +109,8 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = ""): Extracted 
       skipped.svg++;
       return;
     }
-    images.set(url.href, url);
+    // First occurrence wins: keep the address as the page first wrote it.
+    if (!images.has(urlKey(url))) images.set(urlKey(url), url);
   };
   const addSrcset = (srcset: string | undefined) => {
     if (!srcset) return;
@@ -157,11 +158,11 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = ""): Extracted 
     if (IMAGE_EXT.test(url.pathname)) {
       // A link straight to an image file is an image candidate, not a page,
       // and fetching it is not "following" the link.
-      images.set(url.href, url);
+      if (!images.has(urlKey(url))) images.set(urlKey(url), url);
       return;
     }
     if (nofollow || hasNofollow(a.attr("rel"))) return;
-    links.set(url.href, url);
+    if (!links.has(urlKey(url))) links.set(urlKey(url), url);
   });
 
   return { links: [...links.values()], images: [...images.values()], nofollow, skipped };
