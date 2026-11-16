@@ -196,16 +196,12 @@ describe("GET /api/crawler/sources", () => {
 describe("POST /api/crawler/findings", () => {
   let caseA: store.CaseRecord;
   let fp: string;
-  let igSource: string;
 
   beforeEach(async () => {
     caseA = await store.createCase("user-a");
     seedFingerprint("hs-1", caseA.id, PDQ_A);
     await consent(caseA.id, ["hs-1"]);
     fp = poolId("hs-1");
-    const ig = await createCrawlSource({ domain: "www.instagram.com", pageBudget: 10, delayMs: 1000, enabled: true }, "admin-1");
-    if (!ig.ok) throw new Error("source");
-    igSource = ig.source.id;
   });
 
   it.each([

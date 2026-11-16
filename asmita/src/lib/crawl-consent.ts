@@ -176,6 +176,7 @@ export async function recordCrawlConsent(input: RecordConsentInput): Promise<{ o
 export async function withdrawCrawlConsent(
   caseId: string,
   actorId?: string,
+  reason: "survivor" | "account_deletion" = "survivor",
 ): Promise<{ ok: true; candidatesDeleted: number } | { ok: false; error: "not_signed" }> {
   let candidatesDeleted = 0;
   let linksStopped = 0;
@@ -229,7 +230,23 @@ export async function withdrawCrawlConsent(
     entityType: "Case",
     entityId: caseId,
     actorId,
-    data: { candidatesDeleted, linksStopped },
+    data: { candidatesDeleted, linksStopped, reason },
   });
   return { ok: true, candidatesDeleted };
+}
+
+/**
+ * Account deletion requested: the search stops at once for every case of
+ * hers, with the same effects as her own withdrawal (fingerprints leave the
+ * pool, unreviewed matches are deleted, unsent crawler links are stopped).
+ * Cancelling the deletion by signing in does not undo this: she would have to
+ * sign a new authorisation to opt in again.
+ */
+export async function withdrawCrawlConsentsForDeletion(caseIds: string[], userId: string): Promise<number> {
+  let withdrawn = 0;
+  for (const caseId of caseIds) {
+    const result = await withdrawCrawlConsent(caseId, userId, "account_deletion");
+    if (result.ok) withdrawn += 1;
+  }
+  return withdrawn;
 }

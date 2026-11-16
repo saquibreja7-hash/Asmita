@@ -113,7 +113,24 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
     if (!parsed.ok) {
       return { ok: false as const, rawUrl, error: parsed.error };
     }
-    const duplicate = record.urls.find((url) => url.urlHash === parsed.urlHash);
+    const duplicate =
+      record.urls.find((url) => url.urlHash === parsed.urlHash && url.source !== "CRAWLER") ??
+      record.urls.find((url) => url.urlHash === parsed.urlHash);
+    // Her own report of a link the crawler found makes it hers (see
+    // case-ops addUrlsToCase). Nothing is ever sent from the memory store, so
+    // no crawler link here has a representative notice.
+    if (duplicate && duplicate.source === "CRAWLER") {
+      Object.assign(duplicate, {
+        source: "SURVIVOR" as const,
+        crawlFindingId: undefined,
+        crawlConsentWithdrawnAt: null,
+        platformName: parsed.platform?.name || "Unknown - will be reviewed",
+        status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
+        flaggedForReview,
+        flagReason: options?.flagReasons?.join(","),
+      });
+      return { ok: true as const, duplicate: false, url: duplicate };
+    }
     if (duplicate) {
       return { ok: true as const, duplicate: true, url: duplicate };
     }

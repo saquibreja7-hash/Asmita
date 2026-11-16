@@ -557,12 +557,11 @@ export async function addUrlsToCase(
       continue;
     }
 
-    const existing = await db.submittedUrl.findFirst({ where: { caseId, urlHash: parsed.urlHash } });
-    if (existing) {
-      results.push({ ok: true, duplicate: true, url: toDisplayUrl(existing) });
-      continue;
-    }
-
+    // Her own link wins over a crawler link for the same address while no
+    // representative notice was sent or claimed for it.
+    const existing =
+      (await db.submittedUrl.findFirst({ where: { caseId, urlHash: parsed.urlHash, source: "SURVIVOR" } })) ??
+      (await db.submittedUrl.findFirst({ where: { caseId, urlHash: parsed.urlHash } }));
     const dbPlatform = parsed.platform
       ? await db.platform.findFirst({
           where: {
@@ -574,6 +573,42 @@ export async function addUrlsToCase(
           select: { id: true },
         })
       : null;
+
+    if (existing?.source === "CRAWLER") {
+      // She reported a link Asmita's crawler had found: it becomes her link and
+      // enters her own sign flow. Conditional on nothing having been sent or
+      // claimed, so a representative notice in flight is never undercut. The
+      // finding keeps its own record and audit history.
+      const converted = await db.submittedUrl.updateMany({
+        where: { id: existing.id, source: "CRAWLER", representativeNoticePdf: null, notices: { none: {} } },
+        data: {
+          source: "SURVIVOR",
+          crawlFindingId: null,
+          crawlConsentWithdrawnAt: null,
+          platformId: dbPlatform?.id ?? null,
+          status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
+          flaggedForReview,
+          flagReason: options?.flagReasons?.join(",") ?? null,
+        },
+      });
+      const current = await db.submittedUrl.findUnique({ where: { id: existing.id } });
+      if (converted.count === 1 && current) {
+        await writeAuditLog({
+          eventType: "URL_SUBMITTED",
+          entityType: "SubmittedUrl",
+          entityId: existing.id,
+          data: { caseId, reportedBySurvivor: true, crawlFindingId: existing.crawlFindingId },
+        });
+        results.push({ ok: true, duplicate: false, url: toDisplayUrl(current) });
+      } else {
+        results.push({ ok: true, duplicate: true, url: toDisplayUrl(current ?? existing) });
+      }
+      continue;
+    }
+    if (existing) {
+      results.push({ ok: true, duplicate: true, url: toDisplayUrl(existing) });
+      continue;
+    }
 
     const created = await db.submittedUrl.create({
       data: {
@@ -724,7 +759,15 @@ export async function vouchCase(
 }
 
 export async function deactivateUser(userId: string): Promise<{ deactivatedAt: string; hardDeleteAfter: string }> {
-  if (isDevNoDb()) return store.deactivateUser(userId);
+  // A deletion request stops the crawler search at once (crawl-consent.ts):
+  // during the 30-day grace period her sessions are refused, so she could
+  // not withdraw herself, and no notice may go out in her name.
+  const { withdrawCrawlConsentsForDeletion } = await import("@/lib/crawl-consent");
+  if (isDevNoDb()) {
+    const result = store.deactivateUser(userId);
+    await withdrawCrawlConsentsForDeletion([...store.cases.values()].filter((c) => c.userId === userId).map((c) => c.id), userId);
+    return result;
+  }
   const db = await getPrismaDb();
   const deactivatedAt = new Date();
   const hardDeleteAfter = new Date(deactivatedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -737,6 +780,7 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
       data: cases.map((c) => ({ caseId: c.id, scheduledAt: hardDeleteAfter, status: "SCHEDULED" })),
     });
   }
+  await withdrawCrawlConsentsForDeletion(cases.map((c) => c.id), userId);
 
   return { deactivatedAt: deactivatedAt.toISOString(), hardDeleteAfter: hardDeleteAfter.toISOString() };
 }
