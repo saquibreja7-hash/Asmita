@@ -48,6 +48,9 @@ describe("fixture crawl", () => {
       .sort((a, b) => (a.fingerprintId + a.imageUrl).localeCompare(b.fingerprintId + b.imageUrl));
     expect(got).toEqual(want);
     expect(api.created.size).toBe(want.length);
+    // Every request met the server's strict contract (no 400s, no 413s).
+    expect(api.badRequests).toEqual([]);
+    expect(Math.max(...api.bodySizes)).toBeLessThanOrEqual(256 * 1024);
   });
 
   it("reports distances and quality within contract", () => {

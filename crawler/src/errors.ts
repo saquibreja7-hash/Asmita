@@ -41,6 +41,9 @@ export const ERROR_CODES = [
   "api_http_status",
   "api_network",
   "api_redirect",
+  "api_bad_request",
+  "api_payload_too_large",
+  "finding_invalid",
   "pool_stale",
   // other
   "robots_disallowed",

@@ -87,6 +87,15 @@ describe("AsmitaClient", () => {
     replies = [{ status: 502 }, { status: 502 }];
     expect(await code(client(2).getSources())).toBe("api_http_status");
   });
+  it("400 is a bug and 413 asks for a smaller batch: neither is retried by the client", async () => {
+    replies = [{ status: 400 }, { status: 200, body: { sources: [] } }];
+    const before = seen.length;
+    expect(await code(client().getSources())).toBe("api_bad_request");
+    expect(seen.length - before).toBe(1);
+    replies = [{ status: 413 }];
+    expect(await code(client().getSources())).toBe("api_payload_too_large");
+    replies = [];
+  });
   it("refuses redirects and never follows them with the key", async () => {
     replies = [{ status: 302, headers: { location: `${base}/elsewhere` } }];
     expect(await code(client().getPool())).toBe("api_redirect");
@@ -130,6 +139,7 @@ describe("AsmitaClient", () => {
 });
 
 describe("FindingsSink", () => {
+  const ok = (f: Finding[]) => f.map(() => ({ status: "created" as const }));
   const mk = (i: number, id = "f1"): Finding => ({
     fingerprintId: id,
     pageUrl: `https://site.example/p${i}`,
@@ -208,5 +218,103 @@ describe("FindingsSink", () => {
     expect(sink.disabled).toBe(true);
     sink.finish();
     expect(m.findingsUnsent).toBe(120);
+  });
+
+  it("drops findings that would fail server validation before queueing", () => {
+    const m = new RunMetrics();
+    const sink = new FindingsSink("run", async (_r, f) => ok(f), m, silent);
+    sink.add({ ...mk(1), distance: 32 });
+    sink.add({ ...mk(2), distance: 1.5 });
+    sink.add({ ...mk(3), observedAt: "2026-11-16 10:00" });
+    sink.add({ ...mk(4), imageUrl: "data:image/png;base64,AAAA" });
+    sink.add({ ...mk(5), pageUrl: `https://site.example/${"x".repeat(3000)}` });
+    sink.add({ ...mk(6), ...({ extra: true } as object) });
+    sink.add(mk(7));
+    expect(m.findingsInvalid).toBe(6);
+    expect(sink.pending).toBe(1);
+  });
+
+  it("cuts batches by size as well as count", async () => {
+    const sizes: number[] = [];
+    const m = new RunMetrics();
+    const sink = new FindingsSink("run", async (r, f) => (sizes.push(Buffer.byteLength(JSON.stringify({ runId: r, findings: f }))), ok(f)), m, silent);
+    const long = (i: number): Finding => ({ ...mk(i), pageUrl: `https://site.example/${"p".repeat(1900)}${i}`, imageUrl: `https://site.example/${"i".repeat(1900)}${i}` });
+    for (let i = 0; i < 49; i++) sink.add(long(i));
+    await sink.flush(true);
+    expect(sizes.every((n) => n <= 256 * 1024)).toBe(true);
+    expect(m.findingsCreated).toBe(49);
+  });
+
+  it("splits a batch on 413 and resends both halves", async () => {
+    const sizes: number[] = [];
+    const m = new RunMetrics();
+    const sink = new FindingsSink(
+      "run",
+      async (_r, f) => {
+        if (f.length > 10) throw new CrawlError("api_payload_too_large", { status: 413 });
+        sizes.push(f.length);
+        return ok(f);
+      },
+      m,
+      silent,
+    );
+    for (let i = 0; i < 40; i++) sink.add(mk(i));
+    await sink.flush(true);
+    expect(sizes.reduce((a, b) => a + b, 0)).toBe(40);
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(10);
+    expect(m.findingsCreated).toBe(40);
+    expect(m.findingsUnsent).toBe(0);
+  });
+
+  it("drops a batch the server calls malformed (400) without retrying it", async () => {
+    let calls = 0;
+    const m = new RunMetrics();
+    const sink = new FindingsSink(
+      "run",
+      async () => {
+        calls++;
+        throw new CrawlError("api_bad_request", { status: 400 });
+      },
+      m,
+      silent,
+    );
+    sink.add(mk(1));
+    await sink.flush(true);
+    await sink.flush(true);
+    expect(calls).toBe(1);
+    expect(m.findingsFailed).toBe(1);
+    expect(m.errors.api_bad_request).toBe(1);
+  });
+
+  it("counts rejections by reason and withdraws fingerprints not accepted", async () => {
+    const withdrawn: string[] = [];
+    const m = new RunMetrics();
+    const reasons = ["fingerprint_not_accepted", "invalid_url", "unknown_source", "something_new"];
+    let first = true;
+    const posted: string[] = [];
+    const sink = new FindingsSink(
+      "run",
+      async (_r, f) => {
+        posted.push(...f.map((x) => x.fingerprintId));
+        if (!first) return ok(f);
+        first = false;
+        return f.map((_, i) => ({ status: "rejected" as const, reason: reasons[i] }));
+      },
+      m,
+      silent,
+      (id) => withdrawn.push(id),
+    );
+    sink.add(mk(1, "gone"));
+    sink.add(mk(2, "a"));
+    sink.add(mk(3, "b"));
+    sink.add(mk(4, "c"));
+    await sink.flush(true);
+    sink.add(mk(5, "gone")); // refused: withdrawn ids are never queued again
+    sink.add(mk(6, "a"));
+    expect(withdrawn).toEqual(["gone"]);
+    expect(m.rejectedByReason).toEqual({ fingerprint_not_accepted: 1, invalid_url: 1, unknown_source: 1, other: 1 });
+    await sink.flush(true);
+    expect(posted.slice(4)).toEqual(["a"]);
+    expect(m.findingsWithdrawn).toBe(1);
   });
 });

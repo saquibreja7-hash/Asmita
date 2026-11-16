@@ -47,15 +47,36 @@ export const SourcesSchema = z.object({
 });
 export type Source = z.infer<typeof SourcesSchema>["sources"][number];
 
-export type Finding = {
-  fingerprintId: string;
-  pageUrl: string;
-  imageUrl: string;
-  distance: number;
-  quality: number;
-  observedAt: string;
-  sourceId: string;
-};
+/**
+ * The server validates findings strictly (no extra fields at envelope or
+ * item level). The same rules are applied here before sending, so a
+ * malformed finding is dropped locally instead of failing a whole batch.
+ */
+export const RUN_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+export const MAX_FINDING_URL_LENGTH = 2048;
+export const FindingSchema = z.strictObject({
+  fingerprintId: ID,
+  pageUrl: z.url({ protocol: /^https?$/ }).max(MAX_FINDING_URL_LENGTH),
+  imageUrl: z.url({ protocol: /^https?$/ }).max(MAX_FINDING_URL_LENGTH),
+  distance: z.number().int().min(0).max(31),
+  quality: z.number().min(0).max(100),
+  observedAt: z.iso.datetime({ offset: true }),
+  sourceId: ID,
+});
+export type Finding = z.infer<typeof FindingSchema>;
+export const FindingsRequestSchema = z.strictObject({
+  runId: z.string().regex(RUN_ID_PATTERN),
+  findings: z.array(FindingSchema).min(1).max(50),
+});
+
+/** Per-item rejection reasons the server can return. */
+export const REJECT_REASONS = [
+  "invalid_finding",
+  "media_payload_rejected",
+  "invalid_url",
+  "unknown_source",
+  "fingerprint_not_accepted",
+] as const;
 
 export const FindingsResponseSchema = z.object({
   results: z.array(
@@ -68,6 +89,8 @@ export const FindingsResponseSchema = z.object({
 export type FindingResult = z.infer<typeof FindingsResponseSchema>["results"][number];
 
 export const MAX_FINDINGS_PER_CALL = 50;
+/** Server body limit is 256 KiB; batches are cut below it with headroom. */
+export const MAX_FINDINGS_BODY_BYTES = 240 * 1024;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024; // pools can be large; still bounded
 
 export type AsmitaClientConfig = {
@@ -99,8 +122,10 @@ export class AsmitaClient {
 
   async postFindings(runId: string, findings: Finding[], signal?: AbortSignal): Promise<FindingResult[]> {
     if (findings.length === 0) return [];
-    if (findings.length > MAX_FINDINGS_PER_CALL) throw new CrawlError("internal");
-    const res = await this.call("POST", "/api/crawler/findings", { runId, findings }, FindingsResponseSchema, signal);
+    const body = { runId, findings };
+    // Never send something the server would 400 on: that would be our bug.
+    if (!FindingsRequestSchema.safeParse(body).success) throw new CrawlError("internal");
+    const res = await this.call("POST", "/api/crawler/findings", body, FindingsResponseSchema, signal);
     if (res.results.length !== findings.length) throw new CrawlError("api_bad_response");
     return res.results;
   }
@@ -146,6 +171,10 @@ export class AsmitaClient {
         if (statusCode === 503) throw new CrawlError("api_disabled", { status: 503 });
         if (statusCode === 401 || statusCode === 403) throw new CrawlError("api_unauthorized", { status: statusCode });
         if (statusCode >= 300 && statusCode < 400) throw new CrawlError("api_redirect", { status: statusCode });
+        // 400 = our request was malformed (a bug): never retried.
+        if (statusCode === 400) throw new CrawlError("api_bad_request", { status: 400 });
+        // 413 = batch too large: the findings sink splits it and resends.
+        if (statusCode === 413) throw new CrawlError("api_payload_too_large", { status: 413 });
         if (statusCode < 200 || statusCode >= 300) {
           throw new CrawlError("api_http_status", {
             status: statusCode,

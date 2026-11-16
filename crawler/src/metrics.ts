@@ -35,6 +35,11 @@ export class RunMetrics {
   findingsRejected = 0;
   findingsUnsent = 0;
   findingsWithdrawn = 0;
+  /** Failed local validation (never sent). */
+  findingsInvalid = 0;
+  /** Sent but refused as a whole (400, or 413 for a single finding). */
+  findingsFailed = 0;
+  readonly rejectedByReason: Record<string, number> = {};
   poolSyncs = 0;
   poolSyncFailures = 0;
   sourcesCrawled = 0;
@@ -75,6 +80,9 @@ export class RunMetrics {
       findingsRejected: this.findingsRejected,
       findingsUnsent: this.findingsUnsent,
       findingsWithdrawn: this.findingsWithdrawn,
+      findingsInvalid: this.findingsInvalid,
+      findingsFailed: this.findingsFailed,
+      rejectedByReason: { ...this.rejectedByReason },
       poolSyncs: this.poolSyncs,
       poolSyncFailures: this.poolSyncFailures,
       errors: { ...this.errors } as Record<string, number>,

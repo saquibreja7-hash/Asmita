@@ -95,6 +95,20 @@ describe("run lifecycle", () => {
     expect(result.summary.findingsRejected).toBe(0);
   }, 30_000);
 
+  it("drops a fingerprint the server no longer accepts and counts the rejection", async () => {
+    // A tiny server body limit also forces 413 -> split -> resend down to
+    // single-finding batches; nothing may be lost or sent twice.
+    const api = await mock({ notAccepted: ["fp-two-1"], bodyLimit: 900 });
+    const { result } = await runFixtureCrawl(fx.site, api);
+    const rejected = result.summary.rejectedByReason as Record<string, number>;
+    expect(rejected).toEqual({ fingerprint_not_accepted: 1 });
+    expect(api.created.size).toBe(fx.expected.length - 1);
+    expect(api.posted.filter((f) => f.fingerprintId === "fp-two-1")).toHaveLength(1);
+    expect((result.summary.errors as Record<string, number>).api_payload_too_large ?? 0).toBeGreaterThan(0);
+    expect(result.summary.findingsUnsent).toBe(0);
+    expect(api.badRequests).toEqual([]);
+  }, 30_000);
+
   it("stops matching when the pool is older than 60 minutes", async () => {
     const api = await mock({ status: {}, sources: [source()] });
     const t = Date.now();

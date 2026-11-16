@@ -118,7 +118,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   metrics.poolSyncs++;
   log.info("pool_loaded", { poolSize: matcher.size, count: sources.length });
 
-  const sink = new FindingsSink(runId, (r, f, s) => api.postFindings(r, f, s), metrics, log);
+  // Fingerprints the server stopped accepting during this run stay excluded
+  // even if a later pool re-sync still lists them.
+  const withdrawnIds = new Set<string>();
+  const sink = new FindingsSink(runId, (r, f, s) => api.postFindings(r, f, s), metrics, log, (id) => {
+    withdrawnIds.add(id);
+    matcher.withdraw(id);
+    log.info("fingerprint_withdrawn", { poolSize: matcher.size });
+  });
 
   // --- pool re-sync ---------------------------------------------------------
   let resyncing = false;
@@ -128,6 +135,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     try {
       const next = await api.getPool(hard.signal);
       const fresh = new Matcher(next.fingerprints, next.threshold);
+      for (const id of withdrawnIds) fresh.withdraw(id);
       const dropped = [...matcher.idSetView()].filter((id) => !fresh.has(id)).length;
       matcher = fresh;
       poolSyncedAt = now();
@@ -232,6 +240,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       record(err.code);
       return metrics.skip(err.code === "robots_disallowed" ? "robots" : "fetch_failed");
     }
+    // The image is reported at the address it was actually fetched from
+    // (after redirects); mark that address seen too.
+    const imageUrl = res.url.href;
+    seenImages.add(imageUrl);
     if (res.contentType !== "" && !res.contentType.startsWith("image/") && res.contentType !== "application/octet-stream") {
       record("content_type");
       return metrics.skip("content_type");
@@ -269,7 +281,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       sink.add({
         fingerprintId: hit.fingerprintId,
         pageUrl: pageUrl.href,
-        imageUrl: img.href,
+        imageUrl,
         distance: hit.distance,
         quality: hashed.quality,
         observedAt,
@@ -296,8 +308,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     let pages = 0;
 
     while (queue.length > 0 && pages < source.pageBudget && !stop.signal.aborted) {
-      if (sink.disabled) {
-        requestStop("disabled");
+      if (sink.disabled || sink.unauthorized) {
+        requestStop(sink.disabled ? "disabled" : "stopped");
         break;
       }
       if (metrics.pagesAttempted >= config.MAX_PAGES) {
@@ -345,7 +357,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       }
       for (const img of ex.images) {
         if (stop.signal.aborted) break;
-        await processImage(img, page.url, source, registrable);
+        // pageUrl is the page address as crawled (before any redirect).
+        await processImage(img, url, source, registrable);
       }
     }
     slog.info("source_done", { pages, durationMs: now() - started });
@@ -377,7 +390,9 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   await sink.flush(true, flushDeadline);
   sink.finish();
   cleanup();
-  return summarize();
+  const result = summarize();
+  if (sink.unauthorized) throw new CrawlError("api_unauthorized");
+  return result;
 
   function cleanup() {
     clearTimeout(wallClock);

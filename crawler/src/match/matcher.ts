@@ -44,6 +44,7 @@ export class Matcher {
   private readonly words: Uint32Array;
   private readonly ids: string[];
   private readonly idSet: Set<string>;
+  private readonly withdrawn = new Set<string>();
 
   constructor(entries: readonly PoolEntry[], poolThreshold: number) {
     this.threshold = effectiveThreshold(poolThreshold);
@@ -66,6 +67,15 @@ export class Matcher {
   }
 
   /**
+   * Stop matching a fingerprint immediately (the server said it is no longer
+   * accepted, e.g. consent withdrawn). Takes effect for the next match() call.
+   */
+  withdraw(id: string): void {
+    this.withdrawn.add(id);
+    this.idSet.delete(id);
+  }
+
+  /**
    * Every pool entry within the threshold, best (lowest distance) first,
    * one result per distinct fingerprint id. Several entries can match one
    * image (the same picture submitted by different survivors); each is a
@@ -84,6 +94,7 @@ export class Matcher {
       d += popcount32(w[o + 4]! ^ q4) + popcount32(w[o + 5]! ^ q5) + popcount32(w[o + 6]! ^ q6) + popcount32(w[o + 7]! ^ q7);
       if (d > t) continue;
       const id = this.ids[i]!;
+      if (this.withdrawn.size > 0 && this.withdrawn.has(id)) continue;
       const prev = found.get(id);
       if (prev === undefined || d < prev) found.set(id, d);
     }
