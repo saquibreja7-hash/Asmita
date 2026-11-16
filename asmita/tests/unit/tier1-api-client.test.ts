@@ -48,6 +48,14 @@ describe("routeTier1OrFallback", () => {
     }
   });
 
+  it("never routes signed notices to a non-HTTPS endpoint", () => {
+    const result = routeTier1OrFallback(
+      { ...directoryPlatform, apiEndpoint: "http://api.example.com/removals" },
+      enabled,
+    );
+    expect(result.method).toBe("EMAIL");
+  });
+
   it("routes a database platform row with no email to the API when configured", () => {
     expect(routeTier1OrFallback(dbPlatformRow, enabled)).toMatchObject({
       method: "API",

@@ -6,6 +6,7 @@ import {
   PrismaClient,
   UserRole,
 } from "@prisma/client";
+import { platformSeedCreateData, platformSeedUpdateData } from "./platform-seed-data";
 import { templateSeeds } from "./template-seeds";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -254,21 +255,18 @@ async function main() {
       select: { id: true },
     });
 
-    const data = {
-      domainPatterns: [...platform.domainPatterns],
-      tier: platform.tier,
-      noticeBasis: platform.noticeBasis,
-      grievanceEmail: platform.grievanceEmail,
-      formUrl: platform.formUrl,
-      apiEndpoint: platform.apiEndpoint,
-      lastContactVerifiedByHuman: platform.lastContactVerifiedByHuman,
-      lastContactVerifiedAt: "lastContactVerifiedAt" in platform ? platform.lastContactVerifiedAt : null,
-    };
-
+    // A re-seed keeps whatever a human has done to an existing platform:
+    // contact fields and verification are only ever written on create (see
+    // platform-seed-data.ts). Contact changes go through the admin console.
     if (existing) {
-      await prisma.platform.update({ where: { id: existing.id }, data });
+      await prisma.platform.update({
+        where: { id: existing.id },
+        data: platformSeedUpdateData(platform),
+      });
     } else {
-      await prisma.platform.create({ data: { name: platform.name, ...data } });
+      await prisma.platform.create({
+        data: { name: platform.name, ...platformSeedCreateData(platform) },
+      });
     }
   }
 

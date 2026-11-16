@@ -18,6 +18,6 @@ export async function GET(request: Request, context: { params: Promise<{ referen
     { adminId: auth.session.sub, action: "case_viewed", entityType: "Case", entityId: detail.caseId },
     request.headers,
   );
-  const canReview = hasAdminPermission(auth.session.adminRole ?? "SUPER_ADMIN", "cases:review");
+  const canReview = hasAdminPermission(auth.session.adminRole, "cases:review");
   return NextResponse.json({ detail, canReview }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -72,13 +72,15 @@ async function post(request: APIRequestContext, path: string, data: unknown) {
   return request.post(path, { data, headers: { "x-csrf-token": token } });
 }
 
-// A later fingerprint, added by the survivor after signing.
-async function addFingerprint(page: Page, caseId: string) {
+// A later fingerprint, added by the survivor after signing: refused, because
+// fingerprints are only added while the case is being created.
+async function expectFingerprintRefused(page: Page, caseId: string) {
   const response = await post(page.request, `/api/cases/${caseId}/hashes`, {
     hashes: [{ hash: randomBytes(32).toString("hex"), quality: 90 }],
     declaration: true,
   });
-  expect(response.ok()).toBe(true);
+  expect(response.status()).toBe(409);
+  expect(await response.json()).toEqual({ error: "fingerprints_closed" });
 }
 
 async function adminRequest(browser: Browser) {
@@ -112,7 +114,7 @@ async function signNextNotice(page: Page, caseId: string) {
 }
 
 test.describe("notice integrity", () => {
-  test("each signed URL notice sends exactly the fingerprints it lists, and a rejection asks for a new signature", async ({ page, browser }, testInfo) => {
+  test("each signed URL notice sends exactly the fingerprints it lists, and no fingerprint can be added after signing", async ({ page, browser }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
     test.setTimeout(180_000);
     const caseId = await reportWithFingerprint(page, [
@@ -130,82 +132,44 @@ test.describe("notice integrity", () => {
     );
     expect(urlIds).toHaveLength(2);
 
-    // Sign the first notice, add a fingerprint, then sign the second.
+    // Sign the first notice; a fingerprint can no longer be added.
     await signNextNotice(page, caseId);
-    await addFingerprint(page, caseId);
-    const [, fingerprintB] = await fingerprintIds(caseId);
+    await expectFingerprintRefused(page, caseId);
     await signNextNotice(page, caseId);
+    expect(await fingerprintIds(caseId)).toEqual([fingerprintA]);
 
     const signedSets = await withAdmin(async (db) =>
-      (
-        await db.query(
-          'SELECT id, "signedHashSubmissionIds" AS ids FROM "SubmittedUrl" WHERE "caseId" = $1 ORDER BY cardinality("signedHashSubmissionIds")',
-          [caseId],
-        )
-      ).rows as { id: string; ids: string[] }[],
+      (await db.query('SELECT id, "signedHashSubmissionIds" AS ids FROM "SubmittedUrl" WHERE "caseId" = $1', [caseId]))
+        .rows as { id: string; ids: string[] }[],
     );
-    const [first, second] = signedSets;
-    expect(first.ids).toEqual([fingerprintA]);
-    expect(second.ids).toEqual([fingerprintA, fingerprintB]);
+    expect(signedSets).toHaveLength(2);
+    for (const signed of signedSets) expect(signed.ids).toEqual([fingerprintA]);
 
     // Nothing goes out while a signed fingerprint is still awaiting review.
-    const early = await post(admin, "/api/notices/dispatch", { caseId, urlId: first.id });
+    const early = await post(admin, "/api/notices/dispatch", { caseId, urlId: signedSets[0].id });
     expect(early.status(), await early.text()).toBe(409);
     expect(await early.json()).toEqual({ error: "fingerprints_pending_review" });
 
-    // A is approved, B is rejected. The second notice listed B and can never
-    // be sent as signed, so its signature is voided; the first is untouched.
     expect((await post(admin, `/api/admin/hashes/${fingerprintA}/approve`, {})).ok()).toBe(true);
-    const rejected = await post(admin, `/api/admin/hashes/${fingerprintB}/reject`, { reason: "synthetic" });
-    expect(rejected.ok()).toBe(true);
-    expect((await rejected.json()).voided).toEqual({ urlNotices: 1, hashAdvisory: false });
-    const voidAudit = await withAdmin(async (db) =>
+    for (const signed of signedSets) {
+      const sent = await post(admin, "/api/notices/dispatch", { caseId, urlId: signed.id });
+      expect((await sent.json()).dispatched).toBe(true);
+    }
+
+    // The audit trail shows each notice carried only what its PDF lists.
+    const sentSets = await withAdmin(async (db) =>
       (
         await db.query(
-          `SELECT data FROM "audit_log" WHERE "eventType" = 'ADMIN_ACTION' AND "entityId" = $1
-           AND data->>'action' = 'signatures_voided'`,
-          [caseId],
+          `SELECT data->'fingerprintIds' AS ids FROM "audit_log"
+           WHERE "eventType" = 'NOTICE_SENT' AND "entityId" = ANY($1)`,
+          [urlIds],
         )
-      ).rows.map((r) => r.data),
+      ).rows.map((r) => r.ids as string[]),
     );
-    expect(voidAudit).toEqual([
-      expect.objectContaining({ trigger: "rejection", urlIds: [second.id], hashAdvisory: false }),
-    ]);
-
-    const sendFirst = await post(admin, "/api/notices/dispatch", { caseId, urlId: first.id });
-    expect((await sendFirst.json()).dispatched).toBe(true);
-    const unsigned = await post(admin, "/api/notices/dispatch", { caseId, urlId: second.id });
-    expect(unsigned.status()).toBe(409);
-    expect(await unsigned.json()).toEqual({ error: "signature_required" });
-
-    // The survivor signs the second notice again; it now lists only A.
-    await signNextNotice(page, caseId);
-    const resigned = await withAdmin(async (db) =>
-      (await db.query('SELECT "signedHashSubmissionIds" AS ids FROM "SubmittedUrl" WHERE id = $1', [second.id])).rows[0]
-        .ids as string[],
-    );
-    expect(resigned).toEqual([fingerprintA]);
-    const sendSecond = await post(admin, "/api/notices/dispatch", { caseId, urlId: second.id });
-    expect((await sendSecond.json()).dispatched).toBe(true);
-
-    // The audit trail shows each notice carried only what its PDF lists:
-    // fingerprint B, added after the first signature, never rides on it.
-    const sentSets = await withAdmin(async (db) =>
-      Object.fromEntries(
-        (
-          await db.query(
-            `SELECT "entityId", data->'fingerprintIds' AS ids FROM "audit_log"
-             WHERE "eventType" = 'NOTICE_SENT' AND "entityId" = ANY($1)`,
-            [urlIds],
-          )
-        ).rows.map((r) => [r.entityId as string, r.ids as string[]]),
-      ),
-    );
-    expect(sentSets[first.id]).toEqual([fingerprintA]);
-    expect(sentSets[second.id]).toEqual([fingerprintA]);
+    expect(sentSets).toEqual([[fingerprintA], [fingerprintA]]);
   });
 
-  test("a signed hash advisory never carries fingerprints added after signing", async ({ page, browser }, testInfo) => {
+  test("a signed hash advisory lists only the fingerprints made at creation", async ({ page, browser }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
     test.setTimeout(180_000);
     const caseId = await reportWithFingerprint(page, [`https://www.whatsapp.com/channel/asmita-synthetic-${randomUUID()}`]);
@@ -215,27 +179,32 @@ test.describe("notice integrity", () => {
     );
 
     await markTemplateReviewed("HASH_ADVISORY");
+    // Signing sends back the reference of the text the preview showed.
+    const preview = await page.request.get(`/api/cases/${caseId}/preview-hash-advisory`);
+    expect(preview.ok(), await preview.text()).toBe(true);
+    const templateRef = preview.headers()["x-notice-template-ref"];
+    expect(templateRef).toBeTruthy();
     const signed = await post(page.request, `/api/cases/${caseId}/sign-hash-advisory`, {
       name: "Synthetic Survivor",
       contact: "survivor@example.invalid",
       signature: "Synthetic Survivor",
       platformIds: [whatsapp],
+      templateRef,
     });
     expect(signed.ok(), await signed.text()).toBe(true);
-    await addFingerprint(page, caseId);
-    const [, fingerprintB] = await fingerprintIds(caseId);
+    await expectFingerprintRefused(page, caseId);
 
     const admin = await adminRequest(browser);
     const early = await post(admin, "/api/admin/hashes/dispatch", { caseId, platformIds: [whatsapp] });
     expect(early.status(), await early.text()).toBe(409);
     expect(await early.json()).toEqual({ error: "fingerprints_pending_review" });
 
-    for (const id of [fingerprintA, fingerprintB]) {
-      expect((await post(admin, `/api/admin/hashes/${id}/approve`, {})).ok()).toBe(true);
-    }
-    const sent = await post(admin, "/api/admin/hashes/dispatch", { caseId, platformIds: [whatsapp] });
-    expect(sent.ok()).toBe(true);
-    expect((await sent.json()).results[0]).toMatchObject({ dispatched: true, hashCount: 1 });
+    expect((await post(admin, `/api/admin/hashes/${fingerprintA}/approve`, {})).ok()).toBe(true);
+    // Approving the last signed fingerprint sends the advisory to the chosen
+    // platform; a manual dispatch afterwards sends nothing more.
+    const again = await post(admin, "/api/admin/hashes/dispatch", { caseId, platformIds: [whatsapp] });
+    expect(again.ok()).toBe(true);
+    expect((await again.json()).results[0]).toMatchObject({ dispatched: false, reason: "already_dispatched" });
 
     const dispatched = await withAdmin(async (db) =>
       (

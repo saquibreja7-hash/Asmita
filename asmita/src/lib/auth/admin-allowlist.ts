@@ -9,34 +9,45 @@ const ADMIN_ROLES: ReadonlySet<string> = new Set([
   "SUPPORT_AGENT",
 ]);
 
-/**
- * Sub-role per admin email, configured as
- * ADMIN_ROLES="legal@example.org=LEGAL_ADVISOR,reviewer@example.org=CASE_REVIEWER".
- * Emails in ADMIN_EMAILS without an entry default to SUPER_ADMIN (the founder
- * bootstrap case); unknown role names are ignored rather than granted.
- */
-export function getAdminRole(email: string): AdminRole {
-  const normalized = email.trim().toLowerCase();
-  const entries = (process.env.ADMIN_ROLES || "")
+export type AdminRoleResolution =
+  | { ok: true; role: AdminRole }
+  | { ok: false; reason: "not_allowlisted" | "role_missing" | "role_unknown" };
+
+function envList(name: "ADMIN_EMAILS" | "ADMIN_ROLES") {
+  return (process.env[name] || "")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-  for (const entry of entries) {
-    const [entryEmail, role] = entry.split("=").map((part) => part?.trim());
-    if (entryEmail?.toLowerCase() === normalized && role && ADMIN_ROLES.has(role)) {
-      return role as AdminRole;
-    }
+}
+
+/**
+ * The admin's role as configured right now, looked up by email hash so a
+ * session (which carries only the hash) can be checked on every request.
+ * Every admin needs both an ADMIN_EMAILS entry and an ADMIN_ROLES entry,
+ * ADMIN_ROLES="founder@example.org=SUPER_ADMIN,legal@example.org=LEGAL_ADVISOR".
+ * A missing or unrecognised role grants nothing; the first ADMIN_ROLES entry
+ * for an email decides.
+ */
+export function resolveAdminRoleByHash(emailHash: string): AdminRoleResolution {
+  if (!emailHash || !envList("ADMIN_EMAILS").some((email) => hashEmail(email) === emailHash)) {
+    return { ok: false, reason: "not_allowlisted" };
   }
-  return "SUPER_ADMIN";
+  for (const entry of envList("ADMIN_ROLES")) {
+    const [entryEmail, role] = entry.split("=").map((part) => part?.trim());
+    if (!entryEmail || hashEmail(entryEmail) !== emailHash) continue;
+    if (!role) return { ok: false, reason: "role_missing" };
+    return ADMIN_ROLES.has(role) ? { ok: true, role: role as AdminRole } : { ok: false, reason: "role_unknown" };
+  }
+  return { ok: false, reason: "role_missing" };
+}
+
+export function resolveAdminRole(email: string): AdminRoleResolution {
+  return resolveAdminRoleByHash(hashEmail(email));
 }
 
 export function isAdminEmail(email: string) {
   const normalized = email.trim().toLowerCase();
-  const allowlist = (process.env.ADMIN_EMAILS || "")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-  return allowlist.includes(normalized);
+  return envList("ADMIN_EMAILS").some((item) => item.toLowerCase() === normalized);
 }
 
 export function createAdminIdentity(email: string) {

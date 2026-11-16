@@ -39,18 +39,23 @@ while the switch is off.
    (`TIER1_API_TOKEN_<ID>` or the shared fallback), and
    `lastContactVerifiedByHuman=true` — the same human contact-verification
    gate as email, because the API channel carries the same signed package
-   and survivor fingerprints. The admin platform editor **resets that flag
-   whenever `apiEndpoint` changes** (unless the same request records
-   `markVerified` with a source URL), so platform-edit rights alone can
-   never redirect notices or fingerprints to a new endpoint.
+   and survivor fingerprints. Any edit to the platform row, including a new
+   `apiEndpoint`, **withdraws that verification**, and a **different admin**
+   must verify it (`POST /api/admin/platforms/{id}/verify`, the two-person
+   rule), so one person's platform-edit rights can never redirect notices or
+   fingerprints to a new endpoint. The endpoint must be **HTTPS**: the editor
+   rejects anything else, routing ignores it, and the client refuses to send.
+   The client **never follows redirects**, so a partner endpoint cannot
+   forward the token, signed PDF or fingerprints to an unverified host.
 4. **Idempotency, three layers.** (a) `Idempotency-Key` header so the partner
    can dedupe; (b) the `Notice` table (`method: "API"`) blocks re-dispatch in
    database-persistence mode; (c) the in-memory map covers dev/isolate
    restarts. Hash advisories keep the `HashDispatch` unique
    `(hashSubmissionId, platformId)` constraint on top.
-5. **No double delivery.** A 4xx from the platform is a definite rejection —
+5. **No double delivery.** A 4xx from the platform (except 408 and 409) is a definite rejection —
    the email channel may take over when a verified contact exists. A timeout,
-   network error or 5xx is *ambiguous* (the partner may have processed the
+   network error, redirect, 5xx, 408 or 409 (commonly "this Idempotency-Key
+   was already received") is *ambiguous* (the partner may have processed the
    request), so no second channel fires: the admin retries — the same
    Idempotency-Key makes the retry safe — or confirms with the partner
    before emailing. One notice, one channel, unless delivery is proven not
@@ -104,9 +109,9 @@ Idempotency-Key: <sha256-derived key>
 Expected response: any 2xx. Optional JSON body `{ "referenceId": "…" }` (or
 `{ "id": "…" }`) is stored as `Notice.messageId` for reply correlation.
 
-Failure semantics: a 4xx is a definite rejection — the caller may fall back
-to the email channel when a verified contact exists. A 5xx, timeout or
-network error is ambiguous — the platform may have processed the request —
+Failure semantics: a 4xx other than 408 and 409 is a definite rejection — the
+caller may fall back to the email channel when a verified contact exists. A
+5xx, 408, 409, redirect, timeout or network error is ambiguous — the platform may have processed the request —
 and **never** triggers an automatic second channel; the admin retries (the
 same `Idempotency-Key` makes that safe) or confirms before emailing.
 
@@ -163,10 +168,10 @@ partner is a deliberate act with a signed agreement behind it.
 
 1. Signed partner agreement (PRD Feature 2.2/2.3 gate).
 2. Partner endpoint + token verified; token stored as a Worker secret.
-3. Platform row updated through the admin GO editor (`apiEndpoint`). Changing
-   the endpoint resets `lastContactVerifiedByHuman`, so record
-   `markVerified` with a source URL in the same or a following edit — a
-   human verifies the *endpoint* before anything is dispatched to it.
+3. Platform row updated through the admin GO editor (`apiEndpoint`, HTTPS
+   only). The edit withdraws `lastContactVerifiedByHuman`; a **second admin**
+   then verifies the *endpoint* with a source URL through the verify action
+   before anything is dispatched to it.
 4. The platform's notice basis has an active, legally reviewed template
    (`reviewedByLegal: true`).
 5. Staging dispatch exercised with a synthetic case, including the email

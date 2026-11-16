@@ -21,10 +21,9 @@ export async function POST(
   }
   const { hashId } = await context.params;
 
-  // Read requestedPlatformId before approving (approval changes status).
   const record = await db.hashSubmission.findUnique({
     where: { id: hashId },
-    select: { caseId: true, requestedPlatformId: true },
+    select: { caseId: true },
   });
   if (!record) {
     return NextResponse.json({ error: "hash_submission_not_found" }, { status: 404 });
@@ -42,21 +41,29 @@ export async function POST(
     return NextResponse.json({ error: msg }, { status: 404 });
   }
 
-  // If the survivor nominated a platform, dispatch the advisory immediately.
-  let dispatchResult = null;
-  if (record.requestedPlatformId) {
+  // The survivor signed one advisory for every platform they chose; once all
+  // its fingerprints are approved it goes to each of them. Dispatch refuses
+  // until then, and a platform already sent is skipped, so approving the
+  // fingerprints one by one is safe.
+  let dispatchResults: Awaited<ReturnType<typeof dispatchHashAdvisories>> | null = null;
+  let dispatchResult: Awaited<ReturnType<typeof dispatchHashAdvisories>>[number] | { dispatched: false; reason: string } | null = null;
+  const advisory = await db.case.findUnique({
+    where: { id: record.caseId },
+    select: { signedHashAdvisoryPdf: true, hashAdvisoryPlatformIds: true },
+  });
+  if (advisory?.signedHashAdvisoryPdf && advisory.hashAdvisoryPlatformIds.length > 0) {
     try {
-      const results = await dispatchHashAdvisories({
+      dispatchResults = await dispatchHashAdvisories({
         caseId: record.caseId,
-        platformIds: [record.requestedPlatformId],
+        platformIds: [...new Set(advisory.hashAdvisoryPlatformIds)],
         actorId: auth.session.sub,
       });
-      dispatchResult = results[0] ?? null;
+      dispatchResult = dispatchResults[0] ?? null;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "dispatch_error";
       dispatchResult = { dispatched: false, reason: msg };
     }
   }
 
-  return NextResponse.json({ success: true, submission, dispatchResult });
+  return NextResponse.json({ success: true, submission, dispatchResult, dispatchResults });
 }

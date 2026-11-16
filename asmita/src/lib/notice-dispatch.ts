@@ -9,6 +9,7 @@ import {
   recordPlatformApiAttempt,
   sendNoticeToPlatformApi,
   type PlatformApiFingerprint,
+  type PlatformApiSendResult,
 } from "@/lib/platform-api";
 
 // Workers are stateless: the in-memory idempotency maps below reset with
@@ -274,7 +275,7 @@ export async function dispatchTier1ApiNotice(input: {
 }): Promise<
   | { dispatched: true; notice: DispatchedNotice; referenceId?: string }
   | { dispatched: false; reason: "already_dispatched" }
-  | { dispatched: false; reason: "api_send_failed"; status: number | "network_error" | "timeout" }
+  | { dispatched: false; reason: "api_send_failed"; status: PlatformApiSendResult["status"] }
 > {
   const idempotencyKey = sha256(`platform-api:${input.caseId}:${input.urlId}:${input.platform.id}`);
   const existing = dispatchedApiNotices.get(idempotencyKey);

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildPlatformApiPayload,
+  isDefinitePlatformRejection,
   platformApiEnabled,
   platformApiTimeoutMs,
   sendNoticeToPlatformApi,
@@ -133,5 +134,44 @@ describe("sendNoticeToPlatformApi", () => {
       fetchImpl: fetchImpl as never,
     });
     expect(result).toEqual({ ok: false, status: "timeout" });
+  });
+});
+
+describe("transport hardening", () => {
+  const base = { accessToken: "partner-token", payload };
+
+  it("refuses a non-HTTPS endpoint without sending anything", async () => {
+    const fetchImpl = vi.fn();
+    const result = await sendNoticeToPlatformApi({
+      ...base,
+      endpoint: "http://api.partner.example/removals",
+      fetchImpl: fetchImpl as never,
+    });
+    expect(result).toEqual({ ok: false, status: "insecure_endpoint" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("never follows a redirect to another host", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 201 }));
+    await sendNoticeToPlatformApi({
+      ...base,
+      endpoint: "https://api.partner.example/removals",
+      fetchImpl: fetchImpl as never,
+    });
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.redirect).toBe("error");
+  });
+
+  it("treats only a clear 4xx as a rejection that may fall back to email", () => {
+    expect(isDefinitePlatformRejection(400)).toBe(true);
+    expect(isDefinitePlatformRejection(401)).toBe(true);
+    expect(isDefinitePlatformRejection(422)).toBe(true);
+    // The partner may already hold the notice: emailing too would send it twice.
+    expect(isDefinitePlatformRejection(408)).toBe(false);
+    expect(isDefinitePlatformRejection(409)).toBe(false);
+    expect(isDefinitePlatformRejection(500)).toBe(false);
+    expect(isDefinitePlatformRejection("timeout")).toBe(false);
+    expect(isDefinitePlatformRejection("network_error")).toBe(false);
+    expect(isDefinitePlatformRejection("insecure_endpoint")).toBe(false);
   });
 });

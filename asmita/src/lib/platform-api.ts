@@ -76,7 +76,29 @@ export function buildPlatformApiPayload(input: {
 
 export type PlatformApiSendResult =
   | { ok: true; status: number; referenceId?: string }
-  | { ok: false; status: number | "network_error" | "timeout"; error?: string };
+  | { ok: false; status: number | "network_error" | "timeout" | "insecure_endpoint"; error?: string };
+
+/** Only HTTPS endpoints may receive signed notices and survivor fingerprints. */
+export function isHttpsEndpoint(endpoint: string) {
+  try {
+    return new URL(endpoint).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True only for a response that proves the partner received the request and
+ * did not process it, so another channel may deliver the notice without a
+ * duplicate. 408 (server gave up mid-request) and 409 (commonly "this
+ * Idempotency-Key was already received") are excluded: the partner may hold
+ * the notice, and emailing it as well would deliver it twice.
+ */
+export function isDefinitePlatformRejection(
+  status: PlatformApiSendResult["status"],
+): status is number {
+  return typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 409;
+}
 
 /**
  * POSTs the notice payload to the platform endpoint. Non-2xx responses and
@@ -90,6 +112,10 @@ export async function sendNoticeToPlatformApi(input: {
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }): Promise<PlatformApiSendResult> {
+  // Nothing is sent over plain HTTP, whatever the platform row says.
+  if (!isHttpsEndpoint(input.endpoint)) {
+    return { ok: false, status: "insecure_endpoint" };
+  }
   const timeoutMs = input.timeoutMs ?? platformApiTimeoutMs();
   const doFetch = input.fetchImpl ?? fetch;
   const controller = new AbortController();
@@ -104,6 +130,10 @@ export async function sendNoticeToPlatformApi(input: {
       },
       body: JSON.stringify(input.payload),
       signal: controller.signal,
+      // Never follow a redirect: it would re-send the token, the signed PDF
+      // and the fingerprints to a host no admin verified. A redirect surfaces
+      // as a network error, which is ambiguous and never falls back to email.
+      redirect: "error",
     });
     if (!response.ok) {
       return { ok: false, status: response.status };

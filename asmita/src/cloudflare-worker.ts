@@ -1,4 +1,5 @@
 import app from "vinext/server/fetch-handler";
+import { withPageCsp } from "./lib/csp";
 import { requestScope } from "./lib/request-scope";
 
 type WorkerEnv = {
@@ -40,8 +41,15 @@ const worker = {
       url.hostname = "meriasmita.org";
       return Response.redirect(url.toString(), 308);
     }
+    const { request: appRequest, policy } = withPageCsp(request, url.pathname);
     // One scope per request: connection-backed clients must not be shared.
-    return requestScope.run(new Map(), () => app.fetch(request, env, ctx));
+    return requestScope.run(new Map(), async () => {
+      const response = await app.fetch(appRequest, env, ctx);
+      if (!policy) return response;
+      const withPolicy = new Response(response.body, response);
+      withPolicy.headers.set("Content-Security-Policy", policy);
+      return withPolicy;
+    });
   },
 
   scheduled(controller: WorkerScheduledController, env: WorkerEnv, ctx: WorkerExecutionContext) {

@@ -11,7 +11,7 @@ import {
   platformApiTokenFor,
   routeTier1OrFallback,
 } from "@/lib/tier1-api-client";
-import type { PlatformApiFingerprint } from "@/lib/platform-api";
+import { isDefinitePlatformRejection, type PlatformApiFingerprint } from "@/lib/platform-api";
 import {
   assertNoticeBodySafe,
   assertNoticeSubjectSafe,
@@ -20,6 +20,7 @@ import {
 } from "@/lib/notice-generator";
 import { buildSignedHashAnnex, voidSignaturesWithRejectedFingerprints } from "@/lib/case-hash-annex";
 import { isUrlExpired } from "@/lib/url-retention";
+import { loadSignedTemplate, voidUrlSignatureForChangedTemplate } from "@/lib/signed-template";
 
 const schema = z.object({
   caseId: z.string().min(1),
@@ -110,15 +111,40 @@ export async function POST(request: Request) {
   }
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
-  const template = await db.noticeTemplate.findFirst({
-    where: {
-      templateType,
-      isActive: true,
-      ...(skipLegalGate ? {} : { reviewedByLegal: true }),
-      OR: [{ platformId: platform.id }, { platformId: null }],
-    },
-    orderBy: [{ platformId: "desc" }, { version: "desc" }],
-  });
+  let template;
+  if (submittedUrl.signedTemplateId) {
+    // The email body comes from the template the survivor signed, never a
+    // newer one, so it matches the attached PDF.
+    const signed = await loadSignedTemplate(
+      { id: submittedUrl.signedTemplateId, digest: submittedUrl.signedTemplateDigest },
+      { templateType, platformId: platform.id },
+      skipLegalGate,
+    );
+    if (!signed.ok) {
+      if (signed.reason === "signed_template_changed") {
+        await voidUrlSignatureForChangedTemplate({
+          caseId: parsed.data.caseId,
+          urlId: submittedUrl.id,
+          signedNoticePdf: submittedUrl.signedNoticePdf,
+          actorId: auth.session.sub,
+        });
+      }
+      return NextResponse.json({ error: signed.reason }, { status: 409 });
+    }
+    template = signed.template;
+  } else {
+    // Signed before templates were pinned: nothing records which template was
+    // signed, so keep the selection those signatures were made under.
+    template = await db.noticeTemplate.findFirst({
+      where: {
+        templateType,
+        isActive: true,
+        ...(skipLegalGate ? {} : { reviewedByLegal: true }),
+        OR: [{ platformId: platform.id }, { platformId: null }],
+      },
+      orderBy: [{ platformId: "desc" }, { version: "desc" }],
+    });
+  }
   if (!template) {
     return NextResponse.json({ error: "reviewed_template_required" }, { status: 409 });
   }
@@ -165,7 +191,7 @@ export async function POST(request: Request) {
   // ─── Tier 1 platform API channel ──────────────────────────────────────
   // Same signed package as the email below; only the transport differs. On a
   // send failure we fall back to the email path when a verified contact exists.
-  let fellBackFromApi: number | "network_error" | "timeout" | null = null;
+  let fellBackFromApi: number | null = null;
   if (channel.method === "API") {
     // Defence in depth beyond routeTier1OrFallback: the API channel carries
     // the same signed package and survivor fingerprints as email, so the
@@ -231,9 +257,7 @@ export async function POST(request: Request) {
     // second channel would deliver the same signed notice twice. Ambiguous
     // outcomes never auto-fall-back; the admin retries (the partner-side
     // Idempotency-Key makes that safe) or confirms before emailing.
-    const definiteRejection =
-      typeof result.status === "number" && result.status >= 400 && result.status < 500;
-    if (!definiteRejection) {
+    if (!isDefinitePlatformRejection(result.status)) {
       return NextResponse.json(
         { error: "platform_api_ambiguous", status: result.status },
         { status: 502 },

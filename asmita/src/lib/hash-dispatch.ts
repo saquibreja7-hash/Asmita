@@ -12,6 +12,7 @@ import {
 } from "@/lib/tier1-api-client";
 import {
   buildPlatformApiPayload,
+  isDefinitePlatformRejection,
   recordPlatformApiAttempt,
   sendNoticeToPlatformApi,
 } from "@/lib/platform-api";
@@ -21,17 +22,20 @@ import {
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
 import { buildSignedHashAnnex, voidSignaturesWithRejectedFingerprints } from "@/lib/case-hash-annex";
+import { loadSignedTemplate, voidHashAdvisoryForChangedTemplate } from "@/lib/signed-template";
 
 // Dispatches the signed hash advisory to each target email platform.
 // Hard gates, in order:
 //   1. ENABLE_HASH_UPLOAD must be on (checked by callers' routes).
 //   2. Case must have a signedHashAdvisoryPdf - survivor must have reviewed and signed.
-//   3. The HASH_ADVISORY template must be human-legally reviewed (or DEV bypass).
+//   3. The HASH_ADVISORY template must be human-legally reviewed (or DEV bypass),
+//      and must be the template the advisory was signed against.
 //   4. Only the fingerprints the signed advisory lists are dispatched, and only
 //      once every one of them is APPROVED (admin-reviewed).
 //   5. Recipients must be human-verified platform contacts.
 //   6. Idempotent per (hashSubmission, platform) via the HashDispatch unique
-//      constraint - re-runs never double-send.
+//      constraint - re-runs never double-send, and a re-run after one platform
+//      failed sends only to the platforms not yet sent.
 //
 // Integrity: the notice body is rendered ONCE from the platform-agnostic
 // HASH_ADVISORY template and is identical for every email platform. The signed
@@ -54,6 +58,8 @@ export async function dispatchHashAdvisories(input: {
       referenceNumber: true,
       signedHashAdvisoryPdf: true,
       hashAdvisorySignedHashIds: true,
+      hashAdvisorySignedTemplateId: true,
+      hashAdvisorySignedTemplateDigest: true,
     },
   });
   if (!dbCase) throw new Error("case_not_found");
@@ -76,14 +82,39 @@ export async function dispatchHashAdvisories(input: {
   const submissions = signed.annex.hashSubmissionIds.map((id) => ({ id }));
 
   const skipLegalGate = devFlagEnabled("DEV_SKIP_LEGAL_REVIEW");
-  const template = await db.noticeTemplate.findFirst({
-    where: {
-      templateType: "HASH_ADVISORY",
-      isActive: true,
-      ...(skipLegalGate ? {} : { reviewedByLegal: true }),
-    },
-    orderBy: { version: "desc" },
-  });
+  let template;
+  if (dbCase.hashAdvisorySignedTemplateId) {
+    // The email body comes from the template the survivor signed, never a
+    // newer one, so it matches the attached PDF.
+    const pinned = await loadSignedTemplate(
+      { id: dbCase.hashAdvisorySignedTemplateId, digest: dbCase.hashAdvisorySignedTemplateDigest },
+      { templateType: "HASH_ADVISORY" },
+      skipLegalGate,
+    );
+    if (!pinned.ok) {
+      if (pinned.reason === "signed_template_changed") {
+        await voidHashAdvisoryForChangedTemplate({
+          caseId: input.caseId,
+          signedHashAdvisoryPdf: dbCase.signedHashAdvisoryPdf,
+          signedHashIds: dbCase.hashAdvisorySignedHashIds,
+          actorId: input.actorId,
+        });
+      }
+      throw new Error(pinned.reason);
+    }
+    template = pinned.template;
+  } else {
+    // Signed before templates were pinned: keep the selection those
+    // signatures were made under.
+    template = await db.noticeTemplate.findFirst({
+      where: {
+        templateType: "HASH_ADVISORY",
+        isActive: true,
+        ...(skipLegalGate ? {} : { reviewedByLegal: true }),
+      },
+      orderBy: { version: "desc" },
+    });
+  }
   if (!template) throw new Error("hash_advisory_template_missing");
 
   // Render the notice body ONCE. The HASH_ADVISORY template is platform-agnostic;
@@ -134,6 +165,9 @@ export async function dispatchHashAdvisories(input: {
         continue;
       }
       const accessToken = platformApiTokenFor(tier1Config, platform.id);
+      // Like the email path below: one platform failing (a decrypt or
+      // database error here) must not stop dispatch to the others.
+      try {
       if (accessToken) {
         const rows = await db.hashSubmission.findMany({
           where: { id: { in: pendingSubmissions.map((s) => s.id) } },
@@ -206,8 +240,7 @@ export async function dispatchHashAdvisories(input: {
         // later (the partner-side Idempotency-Key makes that safe).
         // entityType Case (not Notice): advisory fallbacks never read as
         // escalation-ladder blocks.
-        const definiteRejection =
-          typeof result.status === "number" && result.status >= 400 && result.status < 500;
+        const definiteRejection = isDefinitePlatformRejection(result.status);
         await writeAuditLog({
           eventType: "NOTICE_FAILED",
           entityType: "Case",
@@ -226,6 +259,10 @@ export async function dispatchHashAdvisories(input: {
         }
         // Fall through to the email channel.
       }
+      } catch {
+        results.push({ platformId, dispatched: false, reason: "send_failed" });
+        continue;
+      }
     }
 
     if (!platform.lastContactVerifiedByHuman) {
@@ -243,44 +280,50 @@ export async function dispatchHashAdvisories(input: {
       continue;
     }
 
-    // The body is identical on a retry, so Resend returns the first send
-    // instead of emailing the platform twice.
-    const idempotencyKey = sha256(`hash-advisory:${input.caseId}:${platformId}:${pendingSubmissions.map((s) => s.id).sort().join(",")}`);
-    const sent = await sendNoticeDraft(platform.grievanceEmail, subject, emailBody, [
-      {
-        filename: `notice-${dbCase.referenceNumber}.pdf`,
-        content: pdfBuffer,
-      },
-    ], idempotencyKey);
-    const messageId =
-      "id" in sent && typeof sent.id === "string"
-        ? sent.id
-        : "data" in sent && sent.data?.id
-          ? sent.data.id
-          : `hash-advisory-${input.caseId.slice(0, 8)}-${platformId.slice(0, 8)}`;
+    // One platform failing must not stop the others; a retry sends only to
+    // the platforms with no HashDispatch row yet.
+    try {
+      // The body is identical on a retry, so Resend returns the first send
+      // instead of emailing the platform twice.
+      const idempotencyKey = sha256(`hash-advisory:${input.caseId}:${platformId}:${pendingSubmissions.map((s) => s.id).sort().join(",")}`);
+      const sent = await sendNoticeDraft(platform.grievanceEmail, subject, emailBody, [
+        {
+          filename: `notice-${dbCase.referenceNumber}.pdf`,
+          content: pdfBuffer,
+        },
+      ], idempotencyKey);
+      const messageId =
+        "id" in sent && typeof sent.id === "string"
+          ? sent.id
+          : "data" in sent && sent.data?.id
+            ? sent.data.id
+            : `hash-advisory-${input.caseId.slice(0, 8)}-${platformId.slice(0, 8)}`;
 
-    await db.hashDispatch.createMany({
-      data: pendingSubmissions.map((s) => ({ hashSubmissionId: s.id, platformId })),
-      skipDuplicates: true,
-    });
-    await db.hashSubmission.updateMany({
-      where: { id: { in: pendingSubmissions.map((s) => s.id) }, status: "APPROVED" },
-      data: { status: "DISPATCHED" },
-    });
-    await writeAuditLog({
-      eventType: "HASH_DISPATCHED",
-      entityType: "Case",
-      entityId: input.caseId,
-      actorId: input.actorId,
-      data: {
-        platformId,
-        platformName: platform.name,
-        messageId,
-        hashCount: pendingSubmissions.length,
-        templateVersion: template.version,
-      },
-    });
-    results.push({ platformId, dispatched: true, messageId, hashCount: pendingSubmissions.length });
+      await db.hashDispatch.createMany({
+        data: pendingSubmissions.map((s) => ({ hashSubmissionId: s.id, platformId })),
+        skipDuplicates: true,
+      });
+      await db.hashSubmission.updateMany({
+        where: { id: { in: pendingSubmissions.map((s) => s.id) }, status: "APPROVED" },
+        data: { status: "DISPATCHED" },
+      });
+      await writeAuditLog({
+        eventType: "HASH_DISPATCHED",
+        entityType: "Case",
+        entityId: input.caseId,
+        actorId: input.actorId,
+        data: {
+          platformId,
+          platformName: platform.name,
+          messageId,
+          hashCount: pendingSubmissions.length,
+          templateVersion: template.version,
+        },
+      });
+      results.push({ platformId, dispatched: true, messageId, hashCount: pendingSubmissions.length });
+    } catch {
+      results.push({ platformId, dispatched: false, reason: "send_failed" });
+    }
   }
 
   return results;

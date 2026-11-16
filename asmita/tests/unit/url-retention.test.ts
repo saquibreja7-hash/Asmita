@@ -30,7 +30,10 @@ describe("reported URL retention", () => {
     }));
     expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { urlId: { in: ["expired"] } } });
     expect(mocks.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: { urlEncrypted: "", urlHash: "", signedNoticePdf: null, signedHashSubmissionIds: [] },
+      data: {
+        urlEncrypted: "", urlHash: "", signedNoticePdf: null, signedHashSubmissionIds: [],
+        signedTemplateId: null, signedTemplateDigest: null,
+      },
     }));
   });
 

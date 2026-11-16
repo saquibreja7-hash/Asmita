@@ -48,7 +48,7 @@ export type Tier1RoutingResult =
 
 export type Tier1ApiAttempt = {
   platformId: string;
-  status: number | "not_sent" | "network_error" | "timeout";
+  status: number | "not_sent" | "network_error" | "timeout" | "insecure_endpoint";
   platformReferenceId?: string;
   fallbackReason?: string;
   timestamp: string;
@@ -83,11 +83,14 @@ export function routeTier1OrFallback(
 
   const endpoint = platform.apiEndpoint ?? undefined;
   const token = platformApiTokenFor(config, platform.id);
+  // Signed notices and survivor fingerprints only ever travel over HTTPS.
+  const httpsEndpoint = Boolean(endpoint) && /^https:\/\//i.test(endpoint as string);
   const apiConfigured =
     config.enabled &&
     platform.tier === "TIER_1" &&
     Boolean(platform.lastContactVerifiedByHuman) &&
     endpoint &&
+    httpsEndpoint &&
     token &&
     config.enabledPlatformIds.includes(platform.id);
 
