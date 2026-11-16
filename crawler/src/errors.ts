@@ -15,6 +15,7 @@ export const ERROR_CODES = [
   "redirect_invalid",
   "out_of_scope",
   "image_host_cap",
+  "image_host_failures",
   // transport
   "connect_failed",
   "connect_timeout",

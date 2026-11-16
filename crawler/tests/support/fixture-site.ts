@@ -405,6 +405,19 @@ export async function buildFixture(): Promise<Fixture> {
   offHosts.forEach((hst, i) => site.route(hst, `/p${i}.png`, sendBytes(i === 0 ? img.offA : img.decoy, "image/png")));
   site.route(`h6.${CDN_HOST}`, "/p6.png", sendBytes(img.decoy, "image/png"));
 
+  // ---- junk image hosts: approve junk.fixture.test ----
+  // Four off-scope hosts that never return an image (404 on j1..j3, HTML on
+  // j4), then the real CDN image (h1, matches fp-off-a). Junk hosts must not
+  // use up MAX_OFFSITE_IMAGE_HOSTS; MAX_OFFSITE_HOST_FAILURES bounds them.
+  const J = `junk.${S}`;
+  const junkHosts = [1, 2, 3, 4].map((i) => `j${i}.${CDN_HOST}`);
+  site.route(
+    J,
+    "/",
+    sendHtml(html(`${junkHosts.map((hst) => `<img src="${o(hst)}/x.png">`).join("")}<img src="${o(`h1.${CDN_HOST}`)}/p0.png">`)),
+  );
+  site.route(`j4.${CDN_HOST}`, "/x.png", sendHtml(html("not an image")));
+
   // ---- link flood: approve flood.fixture.test ----
   // Every page is ~1.6 MB of links to 40,000 further pages (a hostile site
   // trying to exhaust the frontier). The home page also has one real image.

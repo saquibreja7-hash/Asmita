@@ -61,4 +61,39 @@ describe("page scope", () => {
       await gallery.stop();
     }
   }, 30_000);
+
+  const junkRun = async (env: Record<string, string>) => {
+    const junk = await new MockAsmita({
+      key: TEST_KEY,
+      pool: fx.pool,
+      sources: [{ id: "src-junk", kind: "site", domain: `junk.${SOURCE_DOMAIN}`, pageBudget: 2, delayMs: 0 }],
+    }).start();
+    try {
+      const before = fx.site.requests.length;
+      const { result } = await runFixtureCrawl(fx.site, junk, { env });
+      const contacted = new Set(fx.site.requests.slice(before).map((r) => r.host).filter((h) => h.endsWith(CDN_HOST)));
+      return { result, contacted: [...contacted].sort(), posted: junk.posted.map((f) => f.fingerprintId) };
+    } finally {
+      await junk.stop();
+    }
+  };
+
+  it("hosts that never return an image do not use up the image-host cap", async () => {
+    // Cap 1: before, the first junk host took the only slot and the real CDN
+    // image was skipped. A host now counts only once it has returned an image.
+    const { result, contacted, posted } = await junkRun({ MAX_OFFSITE_IMAGE_HOSTS: "1", MAX_OFFSITE_HOST_FAILURES: "10" });
+    expect(contacted).toEqual([`h1.${CDN_HOST}`, ...[1, 2, 3, 4].map((i) => `j${i}.${CDN_HOST}`)]);
+    expect(posted).toEqual(["fp-off-a"]);
+    expect(result.summary.imageHostsCapped).toBe(0);
+    expect(result.summary.imageHostFailuresCapped).toBe(0);
+  }, 30_000);
+
+  it("bounds the distinct off-scope hosts that failed, so junk cannot cause unbounded requests", async () => {
+    const { result, contacted, posted } = await junkRun({ MAX_OFFSITE_IMAGE_HOSTS: "5", MAX_OFFSITE_HOST_FAILURES: "2" });
+    // j1 and j2 fail and fill the failure cap; j3, j4 and h1 are never contacted.
+    expect(contacted).toEqual([`j1.${CDN_HOST}`, `j2.${CDN_HOST}`]);
+    expect(posted).toEqual([]);
+    expect(result.summary.imageHostFailuresCapped).toBe(3);
+    expect((result.summary.imagesSkipped as Record<string, number>).image_host_failures_capped).toBe(3);
+  }, 30_000);
 });

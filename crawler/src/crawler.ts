@@ -57,8 +57,18 @@ type SourceCtx = {
   source: Source;
   /** Approved host; pages must equal it or be a subdomain (inScope). */
   scopeHost: string;
-  /** Distinct off-scope hosts images were fetched from, for the per-source cap. */
+  /**
+   * Distinct off-scope hosts that have returned an image, for the per-source
+   * cap (MAX_OFFSITE_IMAGE_HOSTS). A host counts only once it has answered
+   * with an image, so hosts that fail cannot use up the cap.
+   */
   offHosts: Set<string>;
+  /**
+   * Distinct off-scope hosts tried that have not (yet) returned an image,
+   * capped at MAX_OFFSITE_HOST_FAILURES so junk hosts cannot cause unbounded
+   * requests either. A host leaves this set when it later returns an image.
+   */
+  failedOffHosts: Set<string>;
 };
 
 export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget" | "unauthorized";
@@ -273,11 +283,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * Fetch, hash and match one image candidate. Only called with candidates
    * extracted from an in-scope page (crawlSource), never with URLs found any
    * other way. The image may live on another public host (sites serve images
-   * from CDNs); every hop still passes the safe fetcher, and the number of
-   * distinct off-scope hosts per source is capped (MAX_OFFSITE_IMAGE_HOSTS).
+   * from CDNs); every hop still passes the safe fetcher. Per source, distinct
+   * off-scope hosts that returned an image are capped (MAX_OFFSITE_IMAGE_HOSTS)
+   * and, separately, distinct off-scope hosts that did not
+   * (MAX_OFFSITE_HOST_FAILURES). Images of one source are processed one at a
+   * time (crawlSource awaits each), so these sets need no reservation.
    */
   const processImage = async (img: URL, pageUrl: URL, ctx: SourceCtx): Promise<void> => {
-    const { source, scopeHost, offHosts } = ctx;
+    const { source, scopeHost, offHosts, failedOffHosts } = ctx;
     if (!inScope(pageUrl, scopeHost)) {
       // Unreachable by construction; refuse rather than fetch on a bug.
       record("out_of_scope");
@@ -294,13 +307,33 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     metrics.imagesSeen++;
     const delay = inScope(img, scopeHost) ? source.delayMs : Math.max(source.delayMs, config.OFFSITE_HOST_DELAY_MS);
     let touchedOffHost = false;
-    /** Runs on every hop before robots.txt or the request itself. */
+    /** Off-scope hosts this image's fetch has tried that had not yet returned an image. */
+    const tried = new Set<string>();
+    /** Runs on every hop (and retry) before robots.txt or the request itself. */
     const admitHost = (u: URL) => {
       if (inScope(u, scopeHost)) return;
       touchedOffHost = true;
-      if (offHosts.has(u.hostname)) return;
+      const host = u.hostname;
+      if (offHosts.has(host) || tried.has(host)) return;
+      // No room for another image host even if this one succeeds.
       if (offHosts.size >= config.MAX_OFFSITE_IMAGE_HOSTS) throw new CrawlError("image_host_cap");
-      offHosts.add(u.hostname);
+      // A host that already failed may be tried again (it adds no new host);
+      // a new one only while the failed set has room.
+      if (!failedOffHosts.has(host) && failedOffHosts.size >= config.MAX_OFFSITE_HOST_FAILURES) {
+        throw new CrawlError("image_host_failures");
+      }
+      tried.add(host);
+    };
+    /** Every tried host that did not end up returning an image counts as failed. */
+    const settleHosts = (imageHost: string | null) => {
+      for (const host of tried) {
+        if (host === imageHost) {
+          failedOffHosts.delete(host);
+          offHosts.add(host);
+        } else if (!offHosts.has(host)) {
+          failedOffHosts.add(host);
+        }
+      }
     };
     let res: FetchResult;
     try {
@@ -314,9 +347,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       });
     } catch (raw) {
       const err = toCrawlError(raw);
+      settleHosts(null);
       if (err.code === "image_host_cap") {
         metrics.imageHostsCapped++;
         return metrics.skip("image_hosts_capped");
+      }
+      if (err.code === "image_host_failures") {
+        metrics.imageHostFailuresCapped++;
+        return metrics.skip("image_host_failures_capped");
       }
       if (touchedOffHost) metrics.imagesOffHost++;
       record(err.code);
@@ -328,9 +366,12 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     const imageUrl = res.url.href;
     seenImages.add(urlKey(res.url));
     if (res.contentType !== "" && !res.contentType.startsWith("image/") && res.contentType !== "application/octet-stream") {
+      settleHosts(null);
       record("content_type");
       return metrics.skip("content_type");
     }
+    // The host that served the image now counts against the cap.
+    settleHosts(res.url.hostname);
     let hashed;
     try {
       // Decoding runs in an isolated child process (decoder-pool.ts) that
@@ -396,7 +437,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     const started = now();
     const queue: { url: URL; depth: number }[] = [{ url: seed, depth: 0 }];
     const seen = new Set<string>([urlKey(seed)]);
-    const ctx: SourceCtx = { source, scopeHost, offHosts: new Set<string>() };
+    const ctx: SourceCtx = { source, scopeHost, offHosts: new Set<string>(), failedOffHosts: new Set<string>() };
     let pages = 0;
 
     while (queue.length > 0 && pages < source.pageBudget && !stop.signal.aborted) {

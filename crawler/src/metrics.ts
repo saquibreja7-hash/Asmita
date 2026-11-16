@@ -13,6 +13,7 @@ export type SkipReason =
   | "decoder_timeout"
   | "decoder_crashed"
   | "image_hosts_capped"
+  | "image_host_failures_capped"
   | "truncated"
   | "too_small"
   | "too_many_pixels"
@@ -43,6 +44,8 @@ export class RunMetrics {
   imagesOffHost = 0;
   /** Images refused because the source hit MAX_OFFSITE_IMAGE_HOSTS. */
   imageHostsCapped = 0;
+  /** Images refused because the source hit MAX_OFFSITE_HOST_FAILURES. */
+  imageHostFailuresCapped = 0;
   matches = 0;
   findingsQueued = 0;
   findingsPosted = 0;
@@ -93,6 +96,7 @@ export class RunMetrics {
       imagesHashed: this.imagesHashed,
       imagesOffHost: this.imagesOffHost,
       imageHostsCapped: this.imageHostsCapped,
+      imageHostFailuresCapped: this.imageHostFailuresCapped,
       imagesSkipped: { ...this.imagesSkipped } as Record<string, number>,
       matches: this.matches,
       findingsQueued: this.findingsQueued,

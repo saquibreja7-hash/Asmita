@@ -48,10 +48,16 @@ export const ConfigSchema = z.object({
   /** Delay between requests to image hosts outside the source (CDNs). */
   OFFSITE_HOST_DELAY_MS: int(0, 600_000, 1_000),
   /**
-   * Distinct hosts outside a source's scope that images may be fetched from,
-   * per source per run (CDNs). Further off-scope image hosts are skipped.
+   * Distinct hosts outside a source's scope that have returned an image, per
+   * source per run (CDNs). A host counts only after it answers with an image;
+   * once the cap is reached further new off-scope hosts are skipped.
    */
   MAX_OFFSITE_IMAGE_HOSTS: int(0, 1000, 50),
+  /**
+   * Distinct off-scope hosts per source per run that were tried and did not
+   * return an image. Bounds requests to junk hosts a hostile page lists.
+   */
+  MAX_OFFSITE_HOST_FAILURES: int(1, 1000, 20),
   /** robots.txt Crawl-delay is honoured up to this cap. */
   MAX_CRAWL_DELAY_MS: int(0, 600_000, 30_000),
   POOL_RESYNC_MINUTES: int(1, 60, 30),
