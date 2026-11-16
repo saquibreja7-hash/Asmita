@@ -113,9 +113,13 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
     if (!parsed.ok) {
       return { ok: false as const, rawUrl, error: parsed.error };
     }
+    // As case-ops pickExistingLink: her own link first, else the live crawler
+    // link, else the newest stopped one (nothing is ever sent from memory).
+    const sameAddress = record.urls.filter((url) => url.urlHash === parsed.urlHash).reverse();
     const duplicate =
-      record.urls.find((url) => url.urlHash === parsed.urlHash && url.source !== "CRAWLER") ??
-      record.urls.find((url) => url.urlHash === parsed.urlHash);
+      sameAddress.find((url) => url.source !== "CRAWLER") ??
+      sameAddress.find((url) => !url.crawlConsentWithdrawnAt) ??
+      sameAddress[0];
     // Her own report of a link the crawler found makes it hers (see
     // case-ops addUrlsToCase). Nothing is ever sent from the memory store, so
     // no crawler link here has a representative notice.

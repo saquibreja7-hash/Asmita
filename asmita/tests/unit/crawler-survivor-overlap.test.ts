@@ -116,6 +116,21 @@ describe("R2: her own report of a link the crawler found", () => {
     expect(link.crawlConsentWithdrawnAt).toBeNull();
   });
 
+  it("with a stopped link from an old authorisation and a live one from the new, the live one becomes hers", async () => {
+    const { finding: oldFinding, link: oldLink } = await approvedCrawlerLink();
+    const { withdrawCrawlConsent } = await import("@/lib/crawl-consent");
+    await withdrawCrawlConsent(record.id, "user-r2");
+    expect((await recordCrawlConsent({ caseId: record.id, signedPdfEncrypted: "enc", hashSubmissionIds: ["hs-1"], templateId: "t", templateDigest: "d" })).ok).toBe(true);
+    await report(PAGE);
+    const newFinding = [...crawlMemory().findings.values()].find((f) => f.id !== oldFinding.id)!;
+    await reviewCrawlFinding({ findingId: newFinding.id, decision: "approve", reviewerId: "admin-1" });
+    const liveLink = store.cases.get(record.id)!.urls.find((u) => u.crawlFindingId === newFinding.id)!;
+    const [result] = await addUrlsToCase(record.id, [PAGE]);
+    expect(result).toMatchObject({ ok: true, duplicate: false, url: { id: liveLink.id, source: "SURVIVOR" } });
+    expect(oldLink).toMatchObject({ source: "CRAWLER", crawlFindingId: oldFinding.id });
+    expect(oldLink.crawlConsentWithdrawnAt).toBeTruthy();
+  });
+
   it("a link she had already reported herself stays a plain duplicate", async () => {
     await seedCase("user-r2b");
     await addUrlsToCase(record.id, [PAGE]);

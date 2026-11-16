@@ -100,6 +100,11 @@ test.describe("crawler journey", () => {
     test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
     test.setTimeout(240_000);
 
+    // Other journeys, or a retry of this one, may have reviewed the crawler
+    // templates in this database: start from unreviewed.
+    await withAdmin((db) =>
+      db.query(`UPDATE "NoticeTemplate" SET "reviewedByLegal" = false WHERE "templateType" IN ('CRAWL_AUTHORISATION', 'CRAWL_REPRESENTATIVE_NOTICE')`),
+    );
     const caseId = await caseWithFingerprint(page);
     const first = await admin(browser, "integrity-admin");
     const second = await admin(browser, "admin-1");

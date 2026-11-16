@@ -1,10 +1,12 @@
 /**
  * SWAPPABLE MODULE: image bytes -> PdqInput.
  *
- * Copied verbatim from tools/pdq-agreement/src/prepare.ts on branch
- * feat/crawler-pdq-agreement (commit 876ad33), the experiment that measured
- * Node + sharp + pdq.ts against browser-computed hashes (74 synthetic images:
- * max distance 10, p95 0, 71 exact). Only the imports changed (PdqInput path; SharpOptions as a named type import
+ * Originally copied from tools/pdq-agreement/src/prepare.ts (commit 876ad33,
+ * measured with sharp 0.34.5: 74 synthetic images, max distance 10, p95 0,
+ * 71 exact). The harness now imports THIS module instead of a copy; re-run on
+ * 2026-11-16 with this package's sharp 0.35.5 / libvips 8.18.7 it measured
+ * max 14 (CMYK JPEG without a profile), p95 2, 70 exact
+ * (tools/pdq-agreement/REPORT.md). Only the imports changed (PdqInput path; SharpOptions as a named type import
  * because this TypeScript/sharp pair does not expose the sharp namespace).
  * Keep this file a faithful copy so it can be replaced wholesale when the
  * recipe is re-measured; crawler-specific policy (format allowlist, size

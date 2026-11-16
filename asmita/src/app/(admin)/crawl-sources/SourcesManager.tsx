@@ -235,7 +235,7 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
         <h2>Add a host</h2>
         <Field
           error={touched && !domainCheck.ok ? domainCheck.message : null}
-          hint="The host name only, for example news.example-site.org. Pages on this host and its subdomains may be crawled."
+          hint="The host name only, for example news.example-site.org. Pages on this host and its subdomains may be crawled. A leading www. is dropped, so www.example.org covers example.org and all its subdomains."
           id="source-domain"
           label="Host"
         >

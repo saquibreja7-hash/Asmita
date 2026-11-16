@@ -126,7 +126,7 @@ Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
 - `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality }] }`
 - `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs }] }`
-- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "created" | "duplicate" | "rejected", reason? }] }`
+- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and merged findings alike, so the crawler cannot tell whether two pool ids belong to one case; the client still tolerates `created` / `duplicate` from older servers and counts them all as created. A page must be on its source's host or a subdomain (`page_not_in_source`); the image may be on another public host
 
 Responses are validated with Zod. Findings are validated locally with the
 server's rules (strict objects, `runId` `[A-Za-z0-9_.:-]{1,64}`, integer

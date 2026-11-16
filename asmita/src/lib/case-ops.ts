@@ -537,6 +537,24 @@ export type AddUrlResult =
   | { ok: true; duplicate: true; url: DisplayUrl }
   | { ok: true; duplicate: false; url: DisplayUrl };
 
+type ExistingLink = { source: string; representativeNoticePdf: string | null; crawlConsentWithdrawnAt: Date | string | null; sent: boolean };
+
+/**
+ * Which existing row a survivor's report of an address meets, newest first:
+ * her own link if she has one; else, if any crawler link for the address had
+ * a representative notice sent or claimed, that link (her report is then a
+ * duplicate: Asmita already noticed it); else the live crawler link, or the
+ * newest stopped one, which becomes hers. At most one crawler link per
+ * address is ever live, so the ones left behind stay stopped.
+ */
+export function pickExistingLink<T extends ExistingLink>(rows: T[]): T | undefined {
+  const own = rows.find((row) => row.source !== "CRAWLER");
+  if (own) return own;
+  const noticed = rows.find((row) => row.sent || row.representativeNoticePdf !== null);
+  if (noticed) return noticed;
+  return rows.find((row) => !row.crawlConsentWithdrawnAt) ?? rows[0];
+}
+
 export async function addUrlsToCase(
   caseId: string,
   rawUrls: string[],
@@ -558,10 +576,15 @@ export async function addUrlsToCase(
     }
 
     // Her own link wins over a crawler link for the same address while no
-    // representative notice was sent or claimed for it.
-    const existing =
-      (await db.submittedUrl.findFirst({ where: { caseId, urlHash: parsed.urlHash, source: "SURVIVOR" } })) ??
-      (await db.submittedUrl.findFirst({ where: { caseId, urlHash: parsed.urlHash } }));
+    // representative notice was sent or claimed for it (pickExistingLink).
+    // A case can hold several crawler links for one address (one per
+    // authorisation, ADR 006), so every row for the address is looked at.
+    const sameAddress = await db.submittedUrl.findMany({
+      where: { caseId, urlHash: parsed.urlHash },
+      include: { notices: { select: { sentAt: true, responseType: true, responseReceivedAt: true }, orderBy: { createdAt: "asc" }, take: 1 } },
+      orderBy: { submittedAt: "desc" },
+    });
+    const existing = pickExistingLink(sameAddress.map((row) => ({ ...row, sent: row.notices.length > 0 })));
     const dbPlatform = parsed.platform
       ? await db.platform.findFirst({
           where: {
@@ -574,7 +597,7 @@ export async function addUrlsToCase(
         })
       : null;
 
-    if (existing?.source === "CRAWLER") {
+    if (existing?.source === "CRAWLER" && !existing.sent && existing.representativeNoticePdf === null) {
       // She reported a link Asmita's crawler had found: it becomes her link and
       // enters her own sign flow. Conditional on nothing having been sent or
       // claimed, so a representative notice in flight is never undercut. The
@@ -764,23 +787,24 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
   // not withdraw herself, and no notice may go out in her name.
   const { withdrawCrawlConsentsForDeletion } = await import("@/lib/crawl-consent");
   if (isDevNoDb()) {
-    const result = store.deactivateUser(userId);
     await withdrawCrawlConsentsForDeletion([...store.cases.values()].filter((c) => c.userId === userId).map((c) => c.id), userId);
-    return result;
+    return store.deactivateUser(userId);
   }
   const db = await getPrismaDb();
   const deactivatedAt = new Date();
   const hardDeleteAfter = new Date(deactivatedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+  // Withdraw first: if it fails, she is not left locked out with the search live.
+  const cases = await db.case.findMany({ where: { userId }, select: { id: true } });
+  await withdrawCrawlConsentsForDeletion(cases.map((c) => c.id), userId);
+
   await db.user.update({ where: { id: userId }, data: { deactivatedAt } });
 
-  const cases = await db.case.findMany({ where: { userId }, select: { id: true } });
   if (cases.length > 0) {
     await db.deletionJob.createMany({
       data: cases.map((c) => ({ caseId: c.id, scheduledAt: hardDeleteAfter, status: "SCHEDULED" })),
     });
   }
-  await withdrawCrawlConsentsForDeletion(cases.map((c) => c.id), userId);
 
   return { deactivatedAt: deactivatedAt.toISOString(), hardDeleteAfter: hardDeleteAfter.toISOString() };
 }

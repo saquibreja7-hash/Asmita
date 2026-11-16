@@ -6,16 +6,18 @@ import { checkLink } from "@/lib/link-check";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
 /*
- * Public sites the crawler may visit. A SUPER_ADMIN adds each one by domain
- * and sets how many pages a run may fetch and how long to wait between them.
+ * Public hosts the crawler may visit. A SUPER_ADMIN adds each one by host
+ * name and sets how many pages a run may fetch and how long to wait between
+ * them. Pages are crawled on the host and its subdomains only (findings for a
+ * page elsewhere are refused, crawl-findings.ts); a leading "www." is
+ * dropped, so "www.example.org" approves example.org and all its subdomains.
  * New sites start disabled; the crawler only ever sees enabled ones. Every
  * change is audited (ADMIN_ACTION, action crawl_source_*).
  *
- * Domain rule: a public DNS name with at least two labels and an alphabetic
+ * Host rule: a public DNS name with at least two labels and an alphabetic
  * top-level label, so IP literals, single-label and private hosts are
- * refused. There is no public-suffix list here, so "registrable" is an
- * approximation: subdomains are accepted, and a bare public suffix with two
- * labels (e.g. "co.in") is not detected.
+ * refused. There is no public-suffix list here, so a bare public suffix with
+ * two labels (e.g. "co.in") is not detected: the admin must not add one.
  */
 
 export const CRAWL_PAGE_BUDGET_MAX = 10_000;
