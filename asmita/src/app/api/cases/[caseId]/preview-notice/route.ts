@@ -34,11 +34,16 @@ export async function GET(
   const url = await findSignableNotice(caseId, skipLegalGate, urlId ?? undefined);
 
   if (!url?.platform) {
+    // A crawler link is never signed by the survivor (crawl-notice.ts).
+    if (urlId && (await db.submittedUrl.count({ where: { id: urlId, caseId, source: "CRAWLER" } })) > 0) {
+      return NextResponse.json({ error: "crawler_link_not_survivor_signed" }, { status: 409 });
+    }
     // Nothing to sign, but a link on a form-only platform is waiting: the
     // survivor files that platform's own form.
     const formOnly = await db.submittedUrl.count({
       where: {
         caseId,
+        source: "SURVIVOR",
         status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
         platform: { noticeBasis: { notIn: [...SIGNABLE_NOTICE_BASES] } },
       },
