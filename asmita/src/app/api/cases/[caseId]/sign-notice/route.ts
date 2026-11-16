@@ -3,7 +3,7 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { z } from "zod";
 import type { UrlStatus } from "@prisma/client";
 import { verifyCsrfRequest } from "@/lib/csrf";
-import { survivorActableLinkWhere } from "@/lib/case-ops";
+import { survivorActableLinkWhere } from "@/lib/crawler-flags";
 import { requireSession } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
 import { decryptField, encryptField } from "@/lib/encryption";

@@ -7,7 +7,7 @@ import { parseSubmittedUrl } from "@/lib/url-parser";
 import { findPlatformByDomain } from "@/lib/platforms";
 import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
-import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
+import { crawlerFindingsVisibleToSurvivor, survivorActableLinkWhere, survivorMayActOnLink } from "@/lib/crawler-flags";
 import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { logSecurityEvent } from "@/lib/security-log";
@@ -719,21 +719,6 @@ async function addUrlsToCaseUnfiltered(
   });
 
   return results;
-}
-
-/**
- * Which of her case's links a survivor may act on. With crawler findings
- * hidden from her (CRAWLER_SHOW_FINDINGS_TO_SURVIVOR=false) a crawler-found
- * link behaves exactly as if it did not exist: the same "url_not_found" as an
- * id from another case. With them shown she may mark one removed or filed.
- */
-export function survivorMayActOnLink(url: { source?: string | null }): boolean {
-  return crawlerFindingsVisibleToSurvivor() || urlSource(url.source) !== "CRAWLER";
-}
-
-/** The Prisma filter for survivorMayActOnLink. */
-export function survivorActableLinkWhere(): { source?: "SURVIVOR" } {
-  return crawlerFindingsVisibleToSurvivor() ? {} : { source: "SURVIVOR" };
 }
 
 export async function markUrlResolved(caseId: string, userId: string, urlId?: string): Promise<void> {
