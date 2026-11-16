@@ -11,6 +11,8 @@ const NEEDS: Record<AdminPermission, string> = {
   "metrics:read": "read metrics",
   "users:manage": "manage admins",
   "audit:read": "read the audit log",
+  "findings:review": "review crawler findings",
+  "crawler:manage": "manage crawler sites",
 };
 
 /**

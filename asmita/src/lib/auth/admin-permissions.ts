@@ -14,7 +14,11 @@ export type AdminPermission =
   | "platforms:edit"
   | "metrics:read"
   | "users:manage"
-  | "audit:read";
+  | "audit:read"
+  // Review crawler findings (src/lib/crawl-findings.ts).
+  | "findings:review"
+  // Manage the sites the crawler visits (src/lib/crawl-sources.ts).
+  | "crawler:manage";
 
 const rolePermissions: Record<AdminRole, ReadonlySet<AdminPermission>> = {
   SUPER_ADMIN: new Set([
@@ -27,9 +31,11 @@ const rolePermissions: Record<AdminRole, ReadonlySet<AdminPermission>> = {
     "metrics:read",
     "users:manage",
     "audit:read",
+    "findings:review",
+    "crawler:manage",
   ]),
   LEGAL_ADVISOR: new Set(["cases:read", "templates:edit", "templates:activate", "audit:read"]),
-  CASE_REVIEWER: new Set(["cases:read", "cases:review", "audit:read"]),
+  CASE_REVIEWER: new Set(["cases:read", "cases:review", "audit:read", "findings:review"]),
   GO_EDITOR: new Set(["platforms:edit", "metrics:read", "audit:read"]),
   SUPPORT_AGENT: new Set(["cases:read", "cases:note"]),
 };
