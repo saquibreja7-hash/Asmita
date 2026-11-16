@@ -33,7 +33,7 @@ Both URL takedown and image fingerprint (hash) submission are live and deployed.
 | Feature | Env var | Status |
 |---|---|---|
 | Hash upload (PDQ fingerprinting) | `ENABLE_HASH_UPLOAD=true` | Built, deployed (Worker vars in `wrangler.jsonc`) |
-| Platform API (StopNCII, I4C) | `ENABLE_PLATFORM_API=true` | Not yet built on master (transport for URL notices + hash advisories is in open PR #55); dispatch stays off pending partner agreements |
+| Platform API (StopNCII, I4C) | `ENABLE_PLATFORM_API=true` | Transport built (URL notices + hash advisories; see `asmita/docs/api/platform-api.md`); off everywhere, no partner enabled. Enabling one needs a partner agreement, an HTTPS endpoint verified by a second admin, and the env switches |
 | Provenance check | `ENABLE_PROVENANCE_CHECK=true` | Off; production builds force it off until ADR 002 is accepted |
 | Scheduled work | none | Cron Triggers plus database sweeps. BullMQ/Redis removed (2026-10-31) |
 
