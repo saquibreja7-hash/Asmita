@@ -1,3 +1,4 @@
+import { noticeDate } from "@/lib/notice-date";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/middleware";
@@ -113,7 +114,7 @@ export async function POST(request: Request, context: Context) {
       caseReference: owned.record.referenceNumber,
       noticeSubject: draft.subject,
       noticeBody: draft.body,
-      date: new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }),
+      date: noticeDate(new Date()),
       survivorName: name,
       survivorContact: parsed.data.contact,
       signature,

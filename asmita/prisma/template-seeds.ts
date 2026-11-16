@@ -634,6 +634,8 @@ export const templateSeeds = [
       "",
       "7.  I confirm that I am an adult, that the fingerprints listed below were made from images of me, and that I give this authorisation voluntarily.",
       "",
+      "8.  I declare that the images from which the fingerprints listed below were made are intimate images of me, and that I did not consent to any copy of them being shared or published on a website or platform. I understand that Asmita relies on this declaration when it tells a website or platform that a matching copy is published without my consent.",
+      "",
       "[The list of fingerprints covered by this authorisation is appended below.]",
       DRAFT_MARKER,
     ].join("\n"),
@@ -642,8 +644,10 @@ export const templateSeeds = [
   {
     // The takedown notice Asmita sends, as the survivor's authorised
     // representative, for a copy the crawler found and analysts confirmed.
-    // Not used yet (a later wave wires it into dispatch). Placeholder text,
-    // seeded unreviewed; no legal basis asserted until counsel drafts one.
+    // Rendered by src/lib/crawl-notice.ts. Its consent statement (item 3)
+    // rests on item 8 of CRAWL_AUTHORISATION; change the two together.
+    // Placeholder text, seeded unreviewed; no legal basis asserted until
+    // counsel drafts one.
     templateType: TemplateType.CRAWL_REPRESENTATIVE_NOTICE,
     subjectTemplate:
       "[DRAFT — NOT LEGALLY REVIEWED] Request to remove non-consensual intimate content - {{caseReference}}",
@@ -661,7 +665,7 @@ export const templateSeeds = [
       "",
       "Location: {{url}}",
       "",
-      "3.  The Complainant has declared that the content shows her and is published without her consent.",
+      "3.  In the signed authorisation referred to above, the Complainant has declared that the images from which her fingerprints were made are intimate images of her, and that she did not consent to any copy of them being shared or published. The content at the location above matched one of those fingerprints.",
       "",
       "4.  Asmita requests that you remove or disable access to the content at the location above, and preserve the related records. Applicable removal period: " + CITE,
       "",

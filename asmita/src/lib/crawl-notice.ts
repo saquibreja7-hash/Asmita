@@ -5,6 +5,7 @@ import { consentCoversFinding } from "@/lib/crawl-pool";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
+import { noticeDate } from "@/lib/notice-date";
 import {
   assertNoticeBodySafe,
   assertNoticeSubjectSafe,
@@ -51,10 +52,8 @@ function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
 }
 
-/** Notice dates are India dates, as the survivor path prints them. */
-export function noticeDate(date: Date) {
-  return date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "long", day: "numeric" });
-}
+/** Notice dates are India dates, as the survivor path prints them (notice-date.ts). */
+export { noticeDate };
 
 /**
  * A stable, non-identifying reference for the admin who sends the notice.

@@ -197,3 +197,17 @@ describe("notice template seeds", () => {
     expect(dmca!.legalCitations.some((c) => c.includes("6851"))).toBe(true);
   });
 });
+
+describe("crawler drafts agree with each other (R6)", () => {
+  it("the notice's consent statement rests on a declaration the authorisation actually contains", async () => {
+    const { templateSeeds } = await import("../../prisma/template-seeds");
+    const body = (type: string) => templateSeeds.find((t) => t.templateType === type)!.bodyTemplate;
+    const authorisation = body("CRAWL_AUTHORISATION");
+    const notice = body("CRAWL_REPRESENTATIVE_NOTICE");
+    expect(authorisation).toMatch(/intimate images of me/);
+    expect(authorisation).toMatch(/did not consent to any copy of them being shared or published/);
+    expect(notice).toMatch(/In the signed authorisation referred to above, the Complainant has declared/);
+    expect(notice).toMatch(/did not consent to any copy of them being shared or published/);
+    for (const text of [authorisation, notice]) expect(text).toContain("[DRAFT — NOT LEGALLY REVIEWED]");
+  });
+});
