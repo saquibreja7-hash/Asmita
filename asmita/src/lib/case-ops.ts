@@ -721,11 +721,27 @@ async function addUrlsToCaseUnfiltered(
   return results;
 }
 
+/**
+ * Which of her case's links a survivor may act on. With crawler findings
+ * hidden from her (CRAWLER_SHOW_FINDINGS_TO_SURVIVOR=false) a crawler-found
+ * link behaves exactly as if it did not exist: the same "url_not_found" as an
+ * id from another case. With them shown she may mark one removed or filed.
+ */
+export function survivorMayActOnLink(url: { source?: string | null }): boolean {
+  return crawlerFindingsVisibleToSurvivor() || urlSource(url.source) !== "CRAWLER";
+}
+
+/** The Prisma filter for survivorMayActOnLink. */
+export function survivorActableLinkWhere(): { source?: "SURVIVOR" } {
+  return crawlerFindingsVisibleToSurvivor() ? {} : { source: "SURVIVOR" };
+}
+
 export async function markUrlResolved(caseId: string, userId: string, urlId?: string): Promise<void> {
   if (isDevNoDb()) {
     const record = store.cases.get(caseId);
     if (!record || record.userId !== userId) throw new Error("case_not_found");
-    const url = urlId ? record.urls.find((item) => item.id === urlId) : record.urls[0];
+    const actable = record.urls.filter(survivorMayActOnLink);
+    const url = urlId ? actable.find((item) => item.id === urlId) : actable[0];
     if (!url) throw new Error("url_not_found");
     url.status = "REMOVED";
     await writeAuditLog({ eventType: "CONTENT_REMOVED", entityType: "SubmittedUrl", entityId: url.id, actorId: userId });
@@ -736,8 +752,8 @@ export async function markUrlResolved(caseId: string, userId: string, urlId?: st
   if (!dbCase) throw new Error("case_not_found");
 
   const url = urlId
-    ? await db.submittedUrl.findFirst({ where: { id: urlId, caseId } })
-    : await db.submittedUrl.findFirst({ where: { caseId }, orderBy: { submittedAt: "asc" } });
+    ? await db.submittedUrl.findFirst({ where: { id: urlId, caseId, ...survivorActableLinkWhere() } })
+    : await db.submittedUrl.findFirst({ where: { caseId, ...survivorActableLinkWhere() }, orderBy: { submittedAt: "asc" } });
 
   if (!url) throw new Error("url_not_found");
 
@@ -750,14 +766,14 @@ export async function markPlatformFiled(caseId: string, userId: string, urlId: s
   if (isDevNoDb()) {
     const record = store.cases.get(caseId);
     if (!record || record.userId !== userId) throw new Error("case_not_found");
-    const url = record.urls.find((item) => item.id === urlId);
+    const url = record.urls.find((item) => item.id === urlId && survivorMayActOnLink(item));
     if (!url) throw new Error("url_not_found");
     url.platformFiledAt ??= filedAt.toISOString();
     return;
   }
   const db = await getPrismaDb();
   const url = await db.submittedUrl.findFirst({
-    where: { id: urlId, caseId, case: { userId } },
+    where: { id: urlId, caseId, case: { userId }, ...survivorActableLinkWhere() },
     select: { id: true },
   });
   if (!url) throw new Error("url_not_found");

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
+import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/encryption";
 import { isUrlExpired } from "@/lib/url-retention";
@@ -34,8 +35,10 @@ export async function GET(
   const url = await findSignableNotice(caseId, skipLegalGate, urlId ?? undefined);
 
   if (!url?.platform) {
-    // A crawler link is never signed by the survivor (crawl-notice.ts).
-    if (urlId && (await db.submittedUrl.count({ where: { id: urlId, caseId, source: "CRAWLER" } })) > 0) {
+    // A crawler link is never signed by the survivor (crawl-notice.ts). One
+    // hidden from her (CRAWLER_SHOW_FINDINGS_TO_SURVIVOR=false) gets the same
+    // answer as an id that is not hers.
+    if (urlId && crawlerFindingsVisibleToSurvivor() && (await db.submittedUrl.count({ where: { id: urlId, caseId, source: "CRAWLER" } })) > 0) {
       return NextResponse.json({ error: "crawler_link_not_survivor_signed" }, { status: 409 });
     }
     // Nothing to sign, but a link on a form-only platform is waiting: the
