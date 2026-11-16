@@ -31,3 +31,10 @@ export async function deniedFor(permission: AdminPermission): Promise<React.Reac
     </section>
   );
 }
+
+/** As deniedFor, also giving the signed-in admin's id for per-admin views. */
+export async function adminFor(permission: AdminPermission): Promise<{ denied: React.ReactNode | null; adminId: string | null }> {
+  const auth = await requireAdminPermission(permission);
+  if (auth.ok) return { denied: null, adminId: auth.session.sub };
+  return { denied: await deniedFor(permission), adminId: null };
+}

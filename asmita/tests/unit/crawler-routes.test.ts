@@ -26,6 +26,8 @@ import * as consentRoute from "@/app/api/cases/[caseId]/crawl-consent/route";
 import { GET as listFindingsRoute } from "@/app/api/admin/findings/route";
 import { GET as revealFindingRoute } from "@/app/api/admin/findings/[id]/route";
 import { POST as reviewFindingRoute } from "@/app/api/admin/findings/[id]/review/route";
+import { GET as findingSummaryRoute } from "@/app/api/admin/findings/[id]/summary/route";
+import { sha256 } from "@/lib/hash";
 import * as sourcesRoute from "@/app/api/admin/crawl-sources/route";
 
 const adult = { ok: true as const, session: { sub: "user-a", role: "VICTIM", ageOver18: true, namespace: "victim" } };
@@ -219,6 +221,110 @@ describe("analyst finding routes", () => {
     const second = await reviewFindingRoute(request(url, "POST", { decision: "approve" }), params({ id: findingId }));
     expect(await second.json()).toMatchObject({ ok: true, status: "APPROVED", createdUrl: true });
     expect((await reviewFindingRoute(request(url, "POST", { decision: "maybe" }), params({ id: findingId }))).status).toBe(400);
+  });
+});
+
+describe("analyst finding routes: list fields, summary and the crawler switch", () => {
+  let findingId: string;
+  let caseId: string;
+
+  beforeEach(async () => {
+    const record = await store.createCase("user-a");
+    caseId = record.id;
+    crawlMemory().fingerprints.set("hs-1", { id: "hs-1", caseId, hashEncrypted: encryptField("a".repeat(64)), quality: 80, status: "APPROVED", crawlPoolId: null });
+    await recordCrawlConsent({ caseId, signedPdfEncrypted: "enc", hashSubmissionIds: ["hs-1"], templateId: "t", templateDigest: "d" });
+    const source = await createCrawlSource({ domain: "forum.example.com", pageBudget: 10, delayMs: 1000, enabled: true }, "admin-0");
+    if (!source.ok) throw new Error("source");
+    await recordCrawlFindings({
+      runId: "run-1",
+      findings: [{ fingerprintId: crawlMemory().fingerprints.get("hs-1")!.crawlPoolId!, pageUrl: "https://forum.example.com/thread/summary-secret", imageUrl: "https://cdn.example.com/summary-secret.jpg", distance: 26, quality: 90, observedAt: "2026-11-16T00:00:00Z", sourceId: source.source.id }],
+    }, "key-1");
+    findingId = [...crawlMemory().findings.keys()][0];
+  });
+
+  async function rows(adminId: string) {
+    vi.mocked(requireAdminPermission).mockResolvedValue(admin(adminId) as never);
+    const body = await (await listFindingsRoute(request("https://asmita.test/api/admin/findings"))).json();
+    return body as { findings: Array<Record<string, unknown>>; crawlerEnabled: boolean };
+  }
+
+  it("list rows carry the fingerprint reference, review progress, notice state and consent state, but no PDQ, URL or reviewer id", async () => {
+    const before = await rows("admin-1");
+    expect(before.crawlerEnabled).toBe(true);
+    expect(before.findings[0]).toMatchObject({
+      fingerprintRef: sha256("a".repeat(64)).slice(0, 16),
+      secondReviewRequired: true,
+      firstReviewedAt: null,
+      currentAdminGaveFirstReview: false,
+      representativeNoticeSentAt: null,
+      noticeAttemptUnconfirmed: false,
+      crawlConsentWithdrawn: false,
+      linkStatus: null,
+    });
+    expect(before.findings[0]).toHaveProperty("platform");
+
+    const url = `https://asmita.test/api/admin/findings/${findingId}/review`;
+    await reviewFindingRoute(request(url, "POST", { decision: "approve" }), params({ id: findingId }));
+    const mine = (await rows("admin-1")).findings[0];
+    expect(mine).toMatchObject({ currentAdminGaveFirstReview: true, awaitingSecondReview: true });
+    expect(typeof mine.firstReviewedAt).toBe("string");
+    const theirs = (await rows("admin-2")).findings[0];
+    expect(theirs.currentAdminGaveFirstReview).toBe(false);
+
+    const text = JSON.stringify(theirs);
+    expect(text).not.toContain("a".repeat(64));
+    expect(text).not.toContain("summary-secret");
+    expect(text).not.toContain("admin-1");
+    expect(text).not.toMatch(/reviewedById|Encrypted/);
+  });
+
+  it("shows a withdrawn authorisation", async () => {
+    const { withdrawCrawlConsent } = await import("@/lib/crawl-consent");
+    vi.mocked(requireAdminPermission).mockResolvedValue(admin("admin-1") as never);
+    const url = `https://asmita.test/api/admin/findings/${findingId}/review`;
+    await reviewFindingRoute(request(url, "POST", { decision: "approve" }), params({ id: findingId }));
+    vi.mocked(requireAdminPermission).mockResolvedValue(admin("admin-2") as never);
+    await reviewFindingRoute(request(url, "POST", { decision: "approve" }), params({ id: findingId }));
+    await withdrawCrawlConsent(caseId, "user-a");
+    const row = (await rows("admin-1")).findings[0];
+    expect(row).toMatchObject({ reviewStatus: "APPROVED", crawlConsentWithdrawn: true, linkStatus: "PENDING_REVIEW" });
+  });
+
+  it("the summary is one finding, address-free, needs findings:review and is not a reveal", async () => {
+    vi.mocked(requireAdminPermission).mockResolvedValue({ ok: false, status: 403, error: "permission_denied" } as never);
+    expect((await findingSummaryRoute(request("https://asmita.test/x"), params({ id: findingId }))).status).toBe(403);
+    vi.mocked(requireAdminPermission).mockResolvedValue(admin("admin-1") as never);
+    const response = await findingSummaryRoute(request("https://asmita.test/x"), params({ id: findingId }));
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const text = await response.text();
+    expect(JSON.parse(text)).toMatchObject({ finding: { id: findingId, caseId }, crawlerEnabled: true });
+    expect(text).not.toContain("summary-secret");
+    expect(inMemoryAdminAccessLog).toEqual([]);
+    expect(inMemoryAuditLog.some((e) => e.eventType === "URL_REVEALED")).toBe(false);
+    expect((await findingSummaryRoute(request("https://asmita.test/x"), params({ id: "missing" }))).status).toBe(404);
+  });
+
+  it("with ENABLE_CRAWLER off, reads still work and say so, and every change is refused with 503 crawler_disabled", async () => {
+    vi.stubEnv("ENABLE_CRAWLER", "false");
+    vi.mocked(requireAdminPermission).mockResolvedValue(admin("super-1", "SUPER_ADMIN") as never);
+    const list = await rows("super-1");
+    expect(list).toMatchObject({ crawlerEnabled: false });
+    expect(list.findings).toHaveLength(1);
+    vi.mocked(requireAdminPermission).mockResolvedValue(admin("super-1", "SUPER_ADMIN") as never);
+    expect(await (await findingSummaryRoute(request("https://asmita.test/x"), params({ id: findingId }))).json()).toMatchObject({ crawlerEnabled: false });
+    expect((await revealFindingRoute(request(`https://asmita.test/x?reason=other`), params({ id: findingId }))).status).toBe(200);
+    expect(await (await sourcesRoute.GET()).json()).toMatchObject({ crawlerEnabled: false });
+
+    const refusals = [
+      await reviewFindingRoute(request("https://asmita.test/x", "POST", { decision: "approve" }), params({ id: findingId })),
+      await sourcesRoute.POST(request("https://asmita.test/x", "POST", { domain: "example.org", pageBudget: 10, delayMs: 1000 })),
+      await sourcesRoute.PATCH(request("https://asmita.test/x", "PATCH", { id: "any", enabled: true })),
+    ];
+    for (const response of refusals) {
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "crawler_disabled" });
+    }
+    expect(crawlMemory().findings.get(findingId)!.reviewedById).toBeNull();
   });
 });
 

@@ -7,6 +7,7 @@ import { findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } 
 import { isEnabledCrawlSource } from "@/lib/crawl-sources";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
+import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { isUrlExpired } from "@/lib/url-retention";
 import * as store from "@/lib/store";
@@ -254,6 +255,14 @@ export async function recordCrawlFindings(
 export const FINDING_STATUSES = ["CANDIDATE", "APPROVED", "DISMISSED"] as const;
 export type FindingStatus = (typeof FINDING_STATUSES)[number];
 
+export type FindingPlatformView = {
+  name: string;
+  /** A human verified the grievance email and the platform takes notices by email. */
+  contactVerified: boolean;
+  /** The platform takes reports only through its own form (or has no grievance email). */
+  formOnly: boolean;
+};
+
 export type CrawlFindingListRow = {
   id: string;
   caseId: string;
@@ -264,50 +273,195 @@ export type CrawlFindingListRow = {
   lastSeenAt: string;
   reviewStatus: FindingStatus;
   sourceDomain: string | null;
+  /** The matched fingerprint as the hashes page shows it: the first 16 hex of its digest, never the PDQ. */
+  fingerprintRef: string | null;
+  /** The link's platform once approved; before that, the platform the source site belongs to, if known. */
+  platform: FindingPlatformView | null;
   needsSecondReview: boolean;
+  /** Same as needsSecondReview: distance above SECOND_REVIEW_DISTANCE. */
+  secondReviewRequired: boolean;
   awaitingSecondReview: boolean;
+  firstReviewedAt: string | null;
+  /** Whether the admin asking gave the first review. Never says who did. */
+  currentAdminGaveFirstReview: boolean;
   urlsPurged: boolean;
+  /** Status of the CRAWLER link approval created, if any. */
+  linkStatus: string | null;
+  /** When Asmita's representative notice for this finding went out. */
+  representativeNoticeSentAt: string | null;
+  /**
+   * A notice was stored for sending but never recorded as sent: a send in
+   * progress, or an earlier attempt that may have reached the platform.
+   */
+  noticeAttemptUnconfirmed: boolean;
+  /** She withdrew the authorisation this finding was matched under, so no notice can go out for it. */
+  crawlConsentWithdrawn: boolean;
 };
 
 type FindingRow = Omit<MemoryCrawlFinding, "reviewStatus"> & { reviewStatus: string };
 
-function toListRow(row: FindingRow, caseReference: string | null, sourceDomain: string | null): CrawlFindingListRow {
+type ListExtras = {
+  caseReference: string | null;
+  sourceDomain: string | null;
+  fingerprintRef: string | null;
+  platform: FindingPlatformView | null;
+  link: { status: string; sentAt: Date | string | null; claimPending: boolean; stopped: boolean } | null;
+  consentWithdrawn: boolean;
+};
+
+function toListRow(row: FindingRow, extras: ListExtras, viewerId?: string): CrawlFindingListRow {
   const needsSecondReview = row.distance > SECOND_REVIEW_DISTANCE;
+  const sentAt = extras.link?.sentAt ? new Date(extras.link.sentAt).toISOString() : null;
   return {
     id: row.id,
     caseId: row.caseId,
-    caseReference,
+    caseReference: extras.caseReference,
     distance: row.distance,
     quality: row.quality,
     firstSeenAt: row.firstSeenAt.toISOString(),
     lastSeenAt: row.lastSeenAt.toISOString(),
     reviewStatus: row.reviewStatus as FindingStatus,
-    sourceDomain,
+    sourceDomain: extras.sourceDomain,
+    fingerprintRef: extras.fingerprintRef,
+    platform: extras.platform,
     needsSecondReview,
+    secondReviewRequired: needsSecondReview,
     awaitingSecondReview: row.reviewStatus === "CANDIDATE" && needsSecondReview && row.reviewedById !== null,
+    firstReviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
+    currentAdminGaveFirstReview: Boolean(viewerId) && row.reviewedById === viewerId,
     urlsPurged: row.pageUrlEncrypted === "",
+    linkStatus: extras.link?.status ?? null,
+    representativeNoticeSentAt: sentAt,
+    noticeAttemptUnconfirmed: Boolean(extras.link?.claimPending) && !sentAt,
+    // A sent notice is never undone by a withdrawal.
+    crawlConsentWithdrawn: !sentAt && (Boolean(extras.link?.stopped) || extras.consentWithdrawn),
   };
 }
 
-/** The review list. Never carries a URL, encrypted or not. */
-export async function listCrawlFindings(filter: { status?: FindingStatus; caseId?: string; limit?: number } = {}): Promise<CrawlFindingListRow[]> {
+function platformView(
+  platform: { name: string; noticeBasis: string; grievanceEmail: string | null; lastContactVerifiedByHuman: boolean } | null | undefined,
+): FindingPlatformView | null {
+  if (!platform) return null;
+  const hasEmail = Boolean(platform.grievanceEmail) && platform.grievanceEmail !== HUMAN_VERIFICATION_REQUIRED;
+  const formOnly = platform.noticeBasis === "FORM_ONLY" || !hasEmail;
+  return { name: platform.name, formOnly, contactVerified: platform.lastContactVerifiedByHuman && !formOnly };
+}
+
+/** Whether the authorisation a finding was matched under is no longer live. */
+function consentGone(
+  finding: { caseId: string; crawlConsentId: string | null },
+  consents: Array<{ id: string; caseId: string; withdrawnAt: Date | null }>,
+) {
+  if (finding.crawlConsentId) return !consents.some((c) => c.id === finding.crawlConsentId && !c.withdrawnAt);
+  return !consents.some((c) => c.caseId === finding.caseId && !c.withdrawnAt);
+}
+
+export type ListFindingsFilter = { status?: FindingStatus; caseId?: string; id?: string; limit?: number };
+
+/**
+ * The review list. Never carries a URL (encrypted or not), a PDQ value or
+ * another admin's identity. viewerId is the admin asking, for
+ * currentAdminGaveFirstReview.
+ */
+export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerId?: string): Promise<CrawlFindingListRow[]> {
   const limit = Math.min(Math.max(filter.limit ?? 100, 1), 500);
+  const keep = (f: { id: string; caseId: string; reviewStatus: string }) =>
+    (!filter.status || f.reviewStatus === filter.status) && (!filter.caseId || f.caseId === filter.caseId) && (!filter.id || f.id === filter.id);
+
   if (isDevNoDb()) {
     const memory = crawlMemory();
     return [...memory.findings.values()]
-      .filter((f) => (!filter.status || f.reviewStatus === filter.status) && (!filter.caseId || f.caseId === filter.caseId))
+      .filter(keep)
       .sort((a, b) => a.firstSeenAt.getTime() - b.firstSeenAt.getTime())
       .slice(0, limit)
-      .map((f) => toListRow(f, store.cases.get(f.caseId)?.referenceNumber ?? null, memory.sources.get(f.sourceId)?.domain ?? null));
+      .map((f) => {
+        const record = store.cases.get(f.caseId);
+        const link = record?.urls.find((url) => url.crawlFindingId === f.id && url.source === "CRAWLER");
+        const sourceDomain = memory.sources.get(f.sourceId)?.domain ?? null;
+        const directory = findPlatformByDomain(link?.domain ?? sourceDomain ?? "");
+        const fingerprint = memory.fingerprints.get(f.hashSubmissionId);
+        let fingerprintRef: string | null = null;
+        try {
+          fingerprintRef = fingerprint ? sha256(decryptField(fingerprint.hashEncrypted).trim().toLowerCase()).slice(0, 16) : null;
+        } catch {
+          fingerprintRef = null;
+        }
+        return toListRow(f, {
+          caseReference: record?.referenceNumber ?? null,
+          sourceDomain,
+          fingerprintRef,
+          platform: platformView(directory ?? null),
+          // Nothing is ever sent from the memory store.
+          link: link ? { status: link.status, sentAt: null, claimPending: false, stopped: Boolean(link.crawlConsentWithdrawnAt) } : null,
+          consentWithdrawn: consentGone(f, memory.consents),
+        }, viewerId);
+      });
   }
+
   const { db } = await import("@/lib/db");
+  const platformSelect = { name: true, noticeBasis: true, grievanceEmail: true, lastContactVerifiedByHuman: true } as const;
   const rows = await db.crawlFinding.findMany({
-    where: { ...(filter.status ? { reviewStatus: filter.status } : {}), ...(filter.caseId ? { caseId: filter.caseId } : {}) },
-    include: { case: { select: { referenceNumber: true } }, source: { select: { domain: true } } },
+    where: {
+      ...(filter.status ? { reviewStatus: filter.status } : {}),
+      ...(filter.caseId ? { caseId: filter.caseId } : {}),
+      ...(filter.id ? { id: filter.id } : {}),
+    },
+    include: {
+      case: { select: { referenceNumber: true } },
+      source: { select: { domain: true } },
+      hashSubmission: { select: { hashDigest: true } },
+      submittedUrl: {
+        select: {
+          status: true,
+          source: true,
+          crawlConsentWithdrawnAt: true,
+          // Only whether a claim exists: the stored PDF never leaves the database here.
+          representativeNoticeDigest: true,
+          platform: { select: platformSelect },
+          notices: { select: { sentAt: true }, orderBy: { createdAt: "asc" }, take: 1 },
+        },
+      },
+    },
     orderBy: { firstSeenAt: "asc" },
     take: limit,
   });
-  return rows.map((row) => toListRow(row, row.case.referenceNumber, row.source.domain));
+  const caseIds = [...new Set(rows.map((row) => row.caseId))];
+  const consents = caseIds.length
+    ? await db.crawlConsent.findMany({ where: { caseId: { in: caseIds } }, select: { id: true, caseId: true, withdrawnAt: true } })
+    : [];
+  // Before approval there is no link: show the platform the source site belongs to.
+  const domains = [...new Set(rows.filter((row) => !row.submittedUrl).map((row) => row.source.domain))];
+  const sitePlatforms = new Map<string, FindingPlatformView | null>();
+  for (const domain of domains) {
+    const platform = await db.platform.findFirst({
+      where: { OR: [{ domainPatterns: { has: domain } }, { domainPatterns: { has: domain.replace(/^www\./, "") } }] },
+      select: platformSelect,
+    });
+    sitePlatforms.set(domain, platformView(platform));
+  }
+  return rows.map((row) => {
+    const url = row.submittedUrl && row.submittedUrl.source === "CRAWLER" ? row.submittedUrl : null;
+    return toListRow(row, {
+      caseReference: row.case.referenceNumber,
+      sourceDomain: row.source.domain,
+      fingerprintRef: row.hashSubmission?.hashDigest ? row.hashSubmission.hashDigest.slice(0, 16) : null,
+      platform: url ? platformView(url.platform) : sitePlatforms.get(row.source.domain) ?? null,
+      link: url
+        ? {
+            status: url.status,
+            sentAt: url.notices[0]?.sentAt ?? null,
+            claimPending: url.representativeNoticeDigest !== null,
+            stopped: url.crawlConsentWithdrawnAt !== null,
+          }
+        : null,
+      consentWithdrawn: consentGone(row, consents),
+    }, viewerId);
+  });
+}
+
+/** One finding, address-free, for the detail page. */
+export async function getCrawlFindingSummary(id: string, viewerId?: string): Promise<CrawlFindingListRow | null> {
+  return (await listCrawlFindings({ id, limit: 1 }, viewerId))[0] ?? null;
 }
 
 /** The encrypted URLs of one finding, for the audited reveal route only. */

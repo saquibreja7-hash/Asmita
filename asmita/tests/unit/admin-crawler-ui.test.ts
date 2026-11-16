@@ -126,9 +126,18 @@ describe("safety note and list helpers", () => {
     lastSeenAt: "2026-11-01T00:00:00.000Z",
     reviewStatus: "CANDIDATE",
     sourceDomain: "a.example",
+    fingerprintRef: "0123456789abcdef",
+    platform: null,
     needsSecondReview: false,
+    secondReviewRequired: false,
     awaitingSecondReview: false,
+    firstReviewedAt: null,
+    currentAdminGaveFirstReview: false,
     urlsPurged: false,
+    linkStatus: null,
+    representativeNoticeSentAt: null,
+    noticeAttemptUnconfirmed: false,
+    crawlConsentWithdrawn: false,
     ...over,
   });
   it("sorts unreviewed first, second-review waiting ahead of them", () => {

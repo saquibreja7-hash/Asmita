@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
+import { crawlerEnabled } from "@/lib/crawler-auth";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import {
   createCrawlSource,
@@ -10,17 +11,20 @@ import {
 } from "@/lib/crawl-sources";
 
 // The sites the crawler may visit (src/lib/crawl-sources.ts). SUPER_ADMIN
-// only (crawler:manage). Every change is audited.
+// only (crawler:manage). Every change is audited. While ENABLE_CRAWLER is
+// off the list still reads (with crawlerEnabled: false) and changes are
+// refused with 503 crawler_disabled.
 
 const STATUS: Record<string, number> = { invalid_domain: 400, private_domain: 400, source_exists: 409, source_not_found: 404 };
 
 export async function GET() {
   const auth = await requireAdminPermission("crawler:manage");
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  return NextResponse.json({ sources: await listCrawlSources() }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ sources: await listCrawlSources(), crawlerEnabled: crawlerEnabled() }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
+  if (!crawlerEnabled()) return NextResponse.json({ error: "crawler_disabled" }, { status: 503 });
   if (!verifyCsrfRequest(request)) return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   const auth = await requireAdminPermission("crawler:manage");
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
@@ -32,6 +36,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  if (!crawlerEnabled()) return NextResponse.json({ error: "crawler_disabled" }, { status: 503 });
   if (!verifyCsrfRequest(request)) return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   const auth = await requireAdminPermission("crawler:manage");
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });

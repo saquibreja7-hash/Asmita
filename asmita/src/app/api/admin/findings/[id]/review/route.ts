@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
+import { crawlerEnabled } from "@/lib/crawler-auth";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { reviewCrawlFinding } from "@/lib/crawl-findings";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
@@ -8,6 +9,7 @@ import { checkRateLimitAsync } from "@/lib/rate-limit";
 // POST /api/admin/findings/[id]/review { decision: "approve" | "dismiss" }.
 // Above distance 20 an approval needs a second, different reviewer. Final
 // approval adds the page URL to the case (source CRAWLER); nothing is sent.
+// Refused (503 crawler_disabled) while ENABLE_CRAWLER is off.
 
 const schema = z.object({ decision: z.enum(["approve", "dismiss"]) }).strict();
 const REVIEWS_PER_HOUR = 200;
@@ -23,6 +25,7 @@ const STATUS: Record<string, number> = {
 };
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  if (!crawlerEnabled()) return NextResponse.json({ error: "crawler_disabled" }, { status: 503 });
   if (!verifyCsrfRequest(request)) return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   const auth = await requireAdminPermission("findings:review");
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
