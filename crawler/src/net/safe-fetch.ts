@@ -53,6 +53,11 @@ export type FetchOptions = {
    * (scope, robots); await to wait for the host's politeness slot.
    */
   beforeHop?: (url: URL, hop: number) => Promise<void>;
+  /**
+   * Wraps the network part of each hop (global concurrency cap). Applied
+   * after beforeHop, so a politeness wait does not hold a slot.
+   */
+  gate?: <T>(fn: () => Promise<T>) => Promise<T>;
 };
 
 export type FetchResult = {
@@ -101,7 +106,8 @@ export class SafeFetcher {
     for (let hop = 0; ; hop++) {
       if (hop > this.config.maxRedirects) throw new CrawlError("too_many_redirects");
       if (opts.beforeHop) await opts.beforeHop(url, hop);
-      const result = await this.fetchHop(url, opts);
+      const hopUrl = url;
+      const result = opts.gate ? await opts.gate(() => this.fetchHop(hopUrl, opts)) : await this.fetchHop(hopUrl, opts);
       if (result.kind === "redirect") {
         let next: URL;
         try {

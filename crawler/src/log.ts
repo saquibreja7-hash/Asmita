@@ -43,6 +43,7 @@ export const LOG_FIELDS = [
   "budgetImages",
   "elapsedMs",
   "summary",
+  "invalidKeys",
 ] as const;
 
 export type LogField = (typeof LOG_FIELDS)[number];

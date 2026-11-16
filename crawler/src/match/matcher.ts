@@ -61,6 +61,10 @@ export class Matcher {
     return this.idSet.has(id);
   }
 
+  idSetView(): ReadonlySet<string> {
+    return this.idSet;
+  }
+
   /**
    * Every pool entry within the threshold, best (lowest distance) first,
    * one result per distinct fingerprint id. Several entries can match one
