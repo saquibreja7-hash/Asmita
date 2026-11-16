@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { downloadPdf, PREVIEWS_PER_HOUR, previewNotice, sendNotice, type NoticePreview } from "./findings-client";
 import { noticeGate, type NoticeGateInput } from "./finding-view";
+import { PREVIEW_IDLE_SECONDS, startIdleTimer, type IdleTimer } from "./preview-timeout";
 
 export function formatTime(iso: string) {
   const date = new Date(iso);
@@ -13,7 +14,9 @@ export function formatTime(iso: string) {
 // Preview first, then send exactly what was previewed: the digest from the
 // preview goes back with the send, so the server refuses if anything changed.
 // The preview shows the page and image addresses, so it is a recorded reveal:
-// the analyst says so before it runs, and it never runs by itself.
+// the analyst says so before it runs, and it never runs by itself. It is
+// dropped (addresses and PDF bytes) after PREVIEW_IDLE_SECONDS without
+// activity on it, and Send needs a live preview.
 export function NoticeStep({ findingId, caseId, state }: { findingId: string; caseId: string; state: NoticeGateInput }) {
   const router = useRouter();
   const [preview, setPreview] = useState<NoticePreview | null>(null);
@@ -23,6 +26,29 @@ export function NoticeStep({ findingId, caseId, state }: { findingId: string; ca
   const [errorCode, setErrorCode] = useState<string | undefined>();
   const [formUrl, setFormUrl] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<string | null>(null);
+  const [previewHidden, setPreviewHidden] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(PREVIEW_IDLE_SECONDS);
+  const timer = useRef<IdleTimer | null>(null);
+
+  // A live preview counts down; activity on it restarts the count. On expiry
+  // the whole preview, including pdfBase64, leaves state.
+  useEffect(() => {
+    if (!preview) return;
+    const idle = startIdleTimer({
+      onTick: setSecondsLeft,
+      onExpire: () => {
+        setPreview(null);
+        setPreviewHidden(true);
+      },
+    });
+    timer.current = idle;
+    return () => {
+      idle.stop();
+      if (timer.current === idle) timer.current = null;
+    };
+  }, [preview]);
+
+  const touch = () => timer.current?.touch();
 
   const gate = noticeGate(state);
 
@@ -47,11 +73,14 @@ export function NoticeStep({ findingId, caseId, state }: { findingId: string; ca
       fail(result);
       return;
     }
+    setPreviewHidden(false);
+    setSecondsLeft(PREVIEW_IDLE_SECONDS);
     setPreview(result.data);
   }
 
   async function doSend() {
-    if (!preview) return;
+    // Only a live preview can be sent.
+    if (!preview || !timer.current || timer.current.expired()) return;
     setBusy("send");
     setError(null);
     setErrorCode(undefined);
@@ -128,7 +157,20 @@ export function NoticeStep({ findingId, caseId, state }: { findingId: string; ca
         )}
       </div>
 
-      {preview && <PreviewView preview={preview} />}
+      {previewHidden && !preview && (
+        <p className="text-sm" data-testid="preview-hidden" role="status">
+          Preview hidden after {PREVIEW_IDLE_SECONDS / 60} minutes without activity, and the PDF was cleared from this page.
+          Preview again to continue.
+        </p>
+      )}
+      {preview && (
+        <div onFocusCapture={touch} onKeyDownCapture={touch} onPointerDownCapture={touch} onPointerMove={touch} onScrollCapture={touch}>
+          <p className="muted text-xs tabular-nums" data-testid="preview-countdown">
+            Hidden in {secondsLeft}s without activity. Send needs the preview on screen.
+          </p>
+          <PreviewView preview={preview} />
+        </div>
+      )}
     </div>
   );
 }
@@ -162,6 +204,10 @@ export function PreviewView({ preview }: { preview: NoticePreview }) {
         <button className="btn btn-secondary mt-2 px-3 py-1 text-xs" onClick={() => downloadPdf(preview)} type="button">
           Download the PDF
         </button>
+        <p className="muted mt-1 text-xs">
+          The PDF holds both addresses. You will be asked to confirm; keep it only where Asmita keeps its records, never on a
+          personal device.
+        </p>
       </div>
       <div>
         <p className="eyebrow">Email body, exactly as it will be sent (addresses replaced)</p>

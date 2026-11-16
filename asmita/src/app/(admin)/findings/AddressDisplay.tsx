@@ -1,6 +1,7 @@
 // Shows a revealed page and image address as plain text. Never a link, never
 // an image or frame source: the app does not open, fetch or preview what a
 // survivor's case may point at. Presentational only, so it can be tested.
+import { COPY_CAUTION } from "./findings-client";
 
 export function AddressDisplay({
   pageUrl,
@@ -36,6 +37,9 @@ export function AddressDisplay({
           </div>
         </div>
       ))}
+      <p className="muted text-xs" data-testid="copy-caution">
+        {COPY_CAUTION}
+      </p>
       <p className="muted text-xs tabular-nums">
         Hidden in {secondsLeft}s. Shown as text only: do not open it on a personal device.{" "}
         <button className="link-underline" onClick={onHide} type="button">

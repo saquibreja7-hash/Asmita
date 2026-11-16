@@ -184,13 +184,27 @@ export const sendNotice = (id: string, caseId: string, contentDigest: string) =>
  * Saves the notice PDF the preview already returned. Built in the browser
  * from those bytes: nothing is fetched.
  */
-export function downloadPdf(preview: Pick<NoticePreview, "pdfBase64" | "caseReference">) {
+/** Asked before the PDF is saved: the file holds both addresses. */
+export const PDF_DOWNLOAD_CAUTION =
+  "This PDF contains the page and image addresses. Save it only where Asmita keeps its records, and never keep it on a personal device. Download it now?";
+
+/** Shown next to copy buttons: the clipboard holds the address afterwards. */
+export const COPY_CAUTION =
+  "Copying puts the address on this device's clipboard. Paste it only into Asmita's own systems, then clear the clipboard; never on a personal device.";
+
+/** No case reference in the file name: a file name travels further than its contents. */
+export const PDF_FILE_NAME = "representative-notice.pdf";
+
+/** Saves the previewed PDF after the analyst confirms. Returns whether it was saved. */
+export function downloadPdf(preview: Pick<NoticePreview, "pdfBase64">, confirm: (message: string) => boolean = (m) => window.confirm(m)) {
+  if (!confirm(PDF_DOWNLOAD_CAUTION)) return false;
   const bytes = Uint8Array.from(atob(preview.pdfBase64), (c) => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: "application/pdf" });
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  anchor.download = `representative-notice-${preview.caseReference}.pdf`;
+  anchor.download = PDF_FILE_NAME;
   anchor.href = objectUrl;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+  return true;
 }
