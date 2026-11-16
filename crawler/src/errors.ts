@@ -13,6 +13,7 @@ export const ERROR_CODES = [
   "dns_failed",
   "too_many_redirects",
   "redirect_invalid",
+  "out_of_scope",
   // transport
   "connect_failed",
   "connect_timeout",
@@ -39,6 +40,8 @@ export const ERROR_CODES = [
   "api_bad_response",
   "api_http_status",
   "api_network",
+  "api_redirect",
+  "pool_stale",
   // other
   "robots_disallowed",
   "internal",
@@ -50,14 +53,16 @@ export class CrawlError extends Error {
   readonly code: ErrorCode;
   readonly status: number | undefined;
   readonly retryable: boolean;
+  readonly retryAfterMs: number | undefined;
 
-  constructor(code: ErrorCode, opts: { status?: number; retryable?: boolean } = {}) {
+  constructor(code: ErrorCode, opts: { status?: number; retryable?: boolean; retryAfterMs?: number } = {}) {
     // The message is the code on purpose: nothing variable goes in it.
     super(code);
     this.name = "CrawlError";
     this.code = code;
     this.status = opts.status;
     this.retryable = opts.retryable ?? false;
+    this.retryAfterMs = opts.retryAfterMs;
   }
 }
 
@@ -76,6 +81,12 @@ const SYSCALL_CODES: Record<string, ErrorCode> = {
   UND_ERR_SOCKET: "network_error",
   UND_ERR_CLOSED: "network_error",
   UND_ERR_ABORTED: "aborted",
+  UND_ERR_RES_CONTENT_LENGTH_MISMATCH: "network_error",
+  UND_ERR_RESPONSE_EXCEEDED_MAX_SIZE: "body_too_large",
+  ERR_BUFFER_TOO_LARGE: "body_too_large",
+  Z_DATA_ERROR: "decompression_failed",
+  Z_BUF_ERROR: "decompression_failed",
+  ERR_PADDING_1: "decompression_failed",
   ABORT_ERR: "aborted",
   ERR_TLS_CERT_ALTNAME_INVALID: "tls_failed",
   CERT_HAS_EXPIRED: "tls_failed",
@@ -104,7 +115,7 @@ export function toCrawlError(err: unknown): CrawlError {
       const code = SYSCALL_CODES[e.code]!;
       return new CrawlError(code, { retryable: RETRYABLE.has(code) });
     }
-    if (e.name === "AbortError") return new CrawlError("aborted");
+    if (e.name === "AbortError" || e.name === "TimeoutError") return new CrawlError("aborted");
     if (Array.isArray(e.errors) && e.errors.length > 0) {
       cur = e.errors[0];
       continue;
