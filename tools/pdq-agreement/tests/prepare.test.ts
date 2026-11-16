@@ -58,3 +58,13 @@ describe("canvasAlphaRoundTrip", () => {
     expect(px[11]).toBe(128);
   });
 });
+
+describe("single source of truth", () => {
+  it("the harness measures the crawler's own module, not a copy", async () => {
+    const harness = await import("../src/prepare");
+    const crawler = await import("../../../crawler/src/prepare.ts");
+    expect(harness.prepareForPdq).toBe(crawler.prepareForPdq);
+    expect(harness.canvasAlphaRoundTrip).toBe(crawler.canvasAlphaRoundTrip);
+    expect(harness.FAIL_ON).toBe("truncated");
+  });
+});
