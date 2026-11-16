@@ -7,7 +7,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ["**/*.mjs"],
-    languageOptions: { globals: { URL: "readonly", process: "readonly", console: "readonly", Buffer: "readonly" } },
+    languageOptions: { globals: { URL: "readonly", process: "readonly", console: "readonly", Buffer: "readonly", setTimeout: "readonly" } },
   },
   {
     files: ["**/*.ts"],
@@ -37,6 +37,24 @@ export default tseslint.config(
         "error",
         { selector: "CallExpression[callee.property.name='toFile']", message: "Images stay in memory: never sharp().toFile()." },
         { selector: "CallExpression[callee.name='fetch']", message: "Use SafeFetcher (crawl) or AsmitaClient (API), never global fetch." },
+      ],
+    },
+  },
+  {
+    // The entrypoint's one file read: the service key file (src/secrets.ts).
+    files: ["src/main.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            { name: "fs", message: "Only node:fs readFileSync, for the key file." },
+            { name: "node:fs", allowImportNames: ["readFileSync"], message: "Only readFileSync, for the key file." },
+            { name: "fs/promises", message: "The crawler never touches the filesystem (memory-only)." },
+            { name: "node:fs/promises", message: "The crawler never touches the filesystem (memory-only)." },
+            { name: "node:os", importNames: ["tmpdir"], message: "No temp files." },
+          ],
+        },
       ],
     },
   },

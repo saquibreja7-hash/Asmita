@@ -2,25 +2,42 @@
  * Runs image decoding + PDQ in separate child processes.
  *
  * Why: libvips is a large native decoder fed attacker-controlled bytes. The
- * fingerprint pool, matcher and service key live in the parent; a decoder
- * exploit in a child process (separate address space) cannot read them.
- * child_process was chosen over worker_threads because worker threads share
- * the parent's address space, so a native-code exploit there could read the
- * pool directly; a process boundary costs one IPC copy per image (measured
- * in README "Decoder isolation").
+ * fingerprint pool and matcher live only in this (parent) process's memory,
+ * and a child is a separate address space, so a decoder exploit cannot read
+ * them through memory. child_process was chosen over worker_threads because
+ * worker threads share the parent's address space; a process boundary costs
+ * one IPC copy per image (measured in README "Decoder isolation").
  *
  * Each child:
  *   - gets ONLY image bytes and a minimum side, and returns ONLY
- *     { pdq, quality } or a fixed error code; replies are validated strictly
- *     and anything unexpected kills the child;
- *   - has a scrubbed environment (decoderEnv(): no key, no config);
+ *     { pdq, quality, rss } or a fixed error code; replies are validated
+ *     strictly and anything unexpected kills the child;
+ *   - has a scrubbed environment (decoderEnv(): no key, no config), and the
+ *     key is never on its argv;
  *   - runs under Node's permission model: no fs writes, no child processes,
- *     no worker threads, fs reads limited to the application directory;
+ *     no worker threads, fs reads limited to its own bundle and sharp/libvips
+ *     (decoderExecArgv());
  *   - has a JS heap cap; native memory is bounded by the pixel limit and the
- *     image byte cap, and the child recycles itself above an RSS ceiling;
+ *     image byte cap;
+ *   - is recycled BY THE PARENT after maxTasksPerChild tasks or when the RSS
+ *     it reports exceeds maxChildRssBytes, before it is given another task,
+ *     which also bounds how long a compromised child lives;
  *   - has a per-task timeout: on timeout or crash it is killed and replaced;
+ *     an image whose child died before answering is retried ONCE on a fresh
+ *     child (never more, so a poison image cannot loop);
  *   - has stdout/stderr discarded, so crash output (which could contain
  *     bytes) never reaches our logs. Only exit codes are counted.
+ *
+ * What this does NOT give: the child runs as the same OS user as the parent,
+ * and Node's permission model does not restrict native code (sharp is an
+ * addon). Native code running in an exploited child can make raw syscalls:
+ * open the network, read any file that user can read (including
+ * /proc/<parent pid>/environ, which on Linux shows the parent's INITIAL
+ * environment even after runMain deletes the key from the live environment), and
+ * ptrace or read /proc/<pid>/mem of the parent where the kernel allows it.
+ * Closing that needs deployment hardening (separate UID or a syscall sandbox
+ * for the decoder, no egress for it, key mounted as a file the decoder's
+ * user cannot read): see README "What this does not protect against".
  */
 import { fork, type ChildProcess } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -36,7 +53,20 @@ export type ImageDecoder = {
   readonly stats: DecoderStats;
 };
 
-export type DecoderStats = { started: number; crashes: number; timeouts: number; protocolErrors: number };
+export type DecoderStats = {
+  started: number;
+  crashes: number;
+  timeouts: number;
+  protocolErrors: number;
+  /** Children retired by the parent (task count or RSS), never mid-task. */
+  recycled: number;
+  /** Images re-run on a fresh child after their child died before answering. */
+  retried: number;
+};
+
+/** Defaults for parent-side recycling (bounds leaks and a compromised child's life). */
+export const DEFAULT_MAX_TASKS_PER_CHILD = 500;
+export const DEFAULT_MAX_CHILD_RSS_BYTES = 768 * 1024 * 1024;
 
 export type DecoderPoolOptions = {
   size: number;
@@ -46,6 +76,10 @@ export type DecoderPoolOptions = {
   maxOldSpaceMb?: number;
   /** Override the worker script (tests use a fake worker). */
   workerPath?: string;
+  /** Retire a child after this many answered tasks (tests inject a low value). */
+  maxTasksPerChild?: number;
+  /** Retire a child whose reported RSS exceeds this, in bytes. */
+  maxChildRssBytes?: number;
 };
 
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -66,14 +100,25 @@ export function decoderEnv(): Record<string, string> {
   return { VIPS_DISC_THRESHOLD: "2g", TMPDIR: NO_TMP, TMP: NO_TMP, TEMP: NO_TMP };
 }
 
-/** Node flags for a decoder child; exported so tests can prove what they deny. */
-export function decoderExecArgv(workerPath: string, maxOldSpaceMb = 256): string[] {
+/**
+ * What a decoder child may read: its own bundle and sharp with its native
+ * libvips binaries and runtime dependencies. Nothing else in the app root
+ * (no package.json, no src/, no .env in a non-container run).
+ */
+export const DECODER_READABLE_PACKAGES = ["sharp", "@img", "detect-libc", "semver"] as const;
+
+export function decoderReadPaths(workerPath: string): string[] {
   // The app root holds dist/ and node_modules/ (sharp's native addon).
   const appRoot = dirname(dirname(workerPath));
+  return [workerPath, ...DECODER_READABLE_PACKAGES.map((p) => join(appRoot, "node_modules", p, "*"))];
+}
+
+/** Node flags for a decoder child; exported so tests can prove what they deny. */
+export function decoderExecArgv(workerPath: string, maxOldSpaceMb = 256): string[] {
   return [
     "--permission",
     "--allow-addons", // sharp is a native addon; see README for what this implies
-    `--allow-fs-read=${join(appRoot, "*")}`,
+    ...decoderReadPaths(workerPath).map((p) => `--allow-fs-read=${p}`),
     `--max-old-space-size=${maxOldSpaceMb}`,
     "--disallow-code-generation-from-strings",
     "--no-warnings",
@@ -82,26 +127,34 @@ export function decoderExecArgv(workerPath: string, maxOldSpaceMb = 256): string
 
 type Task = {
   bytes: Uint8Array;
+  /** True once this image has been re-run after its child died. */
+  retried: boolean;
   resolve: (r: DecodeResult) => void;
   reject: (e: CrawlError) => void;
 };
 
 type Slot = {
   child: ChildProcess | null;
+  /** Tasks the current child has answered. */
+  tasksDone: number;
   task: (Task & { id: number; timer: NodeJS.Timeout }) | null;
 };
 
 export class DecoderPool implements ImageDecoder {
-  readonly stats: DecoderStats = { started: 0, crashes: 0, timeouts: 0, protocolErrors: 0 };
+  readonly stats: DecoderStats = { started: 0, crashes: 0, timeouts: 0, protocolErrors: 0, recycled: 0, retried: 0 };
   private readonly slots: Slot[];
   private readonly queue: Task[] = [];
   private readonly workerPath: string;
+  private readonly maxTasks: number;
+  private readonly maxRss: number;
   private nextId = 1;
   private closed = false;
 
   constructor(private readonly opts: DecoderPoolOptions) {
     this.workerPath = opts.workerPath ?? defaultWorkerPath();
-    this.slots = Array.from({ length: Math.max(1, opts.size) }, () => ({ child: null, task: null }));
+    this.maxTasks = Math.max(1, opts.maxTasksPerChild ?? DEFAULT_MAX_TASKS_PER_CHILD);
+    this.maxRss = opts.maxChildRssBytes ?? DEFAULT_MAX_CHILD_RSS_BYTES;
+    this.slots = Array.from({ length: Math.max(1, opts.size) }, () => ({ child: null, tasksDone: 0, task: null }));
   }
 
   hash(bytes: Buffer): Promise<DecodeResult> {
@@ -109,7 +162,7 @@ export class DecoderPool implements ImageDecoder {
     return new Promise((resolve, reject) => {
       // Copy into a fresh, exactly-sized view: never send a slice of a larger
       // pooled buffer (it could carry unrelated bytes across the boundary).
-      this.queue.push({ bytes: new Uint8Array(bytes), resolve, reject });
+      this.queue.push({ bytes: new Uint8Array(bytes), retried: false, resolve, reject });
       this.pump();
     });
   }
@@ -139,15 +192,23 @@ export class DecoderPool implements ImageDecoder {
   }
 
   private run(slot: Slot, task: Task): void {
-    if (!slot.child) slot.child = this.spawn(slot);
+    if (!slot.child) {
+      slot.child = this.spawn(slot);
+      slot.tasksDone = 0;
+    }
     const id = this.nextId++;
     const timer = setTimeout(() => {
       this.stats.timeouts++;
       this.fail(slot, "image_decode_timeout");
     }, this.opts.taskTimeoutMs);
     slot.task = { ...task, id, timer };
-    slot.child.send({ id, bytes: task.bytes, minSide: this.opts.minSide }, (err) => {
-      if (err) this.fail(slot, "image_decoder_crashed");
+    const child = slot.child;
+    child.send({ id, bytes: task.bytes, minSide: this.opts.minSide }, (err) => {
+      // The child went away before taking the task: same as dying mid-task.
+      if (err && slot.child === child) {
+        child.kill("SIGKILL");
+        this.onExit(slot, child);
+      }
     });
   }
 
@@ -164,22 +225,45 @@ export class DecoderPool implements ImageDecoder {
     }
     clearTimeout(task.timer);
     slot.task = null;
+    slot.tasksDone++;
+    // The parent decides recycling, before this child is given another task,
+    // so no image is ever handed to a child that is about to exit.
+    if (slot.tasksDone >= this.maxTasks || r.rss > this.maxRss) this.retire(slot);
     if (r.ok) task.resolve({ pdq: r.pdq, quality: r.quality });
     else task.reject(new CrawlError(r.code));
     this.pump();
   }
 
+  /** Replace an idle child; the next task spawns a fresh one. */
+  private retire(slot: Slot): void {
+    const child = slot.child;
+    slot.child = null;
+    slot.tasksDone = 0;
+    if (!child) return;
+    this.stats.recycled++;
+    child.kill("SIGKILL");
+  }
+
   private onExit(slot: Slot, child: ChildProcess): void {
     if (slot.child !== child) return;
     slot.child = null;
+    slot.tasksDone = 0;
     if (slot.task) {
       this.stats.crashes++;
       const task = slot.task;
       clearTimeout(task.timer);
       slot.task = null;
-      task.reject(new CrawlError("image_decoder_crashed"));
+      if (!task.retried && !this.closed) {
+        // The child died before answering: the image may be fine (the child
+        // could have died of something else). Run it once more on a fresh
+        // child; a second death is final, so a poison image cannot loop.
+        this.stats.retried++;
+        this.queue.unshift({ bytes: task.bytes, retried: true, resolve: task.resolve, reject: task.reject });
+      } else {
+        task.reject(new CrawlError("image_decoder_crashed"));
+      }
     }
-    // An idle child that exits (recycled after MAX_TASKS) is respawned lazily.
+    // An idle child that exits is respawned lazily.
     this.pump();
   }
 
@@ -193,6 +277,7 @@ export class DecoderPool implements ImageDecoder {
       clearTimeout(task.timer);
       task.reject(new CrawlError(code));
     }
+    slot.tasksDone = 0;
     child?.kill("SIGKILL");
     this.pump();
   }
@@ -215,7 +300,7 @@ export class DecoderPool implements ImageDecoder {
   }
 }
 
-type Reply = { ok: true; pdq: string; quality: number } | { ok: false; code: ErrorCode };
+type Reply = { ok: true; pdq: string; quality: number; rss: number } | { ok: false; code: ErrorCode; rss: number };
 
 /** Strictly validate a child's reply; null for anything unexpected. */
 export function parseReply(m: unknown, expectedId: number): Reply | null {
@@ -223,16 +308,18 @@ export function parseReply(m: unknown, expectedId: number): Reply | null {
   const r = m as Record<string, unknown>;
   if (r.id !== expectedId) return null;
   const keys = Object.keys(r).sort().join(",");
+  // Resident set size in bytes, reported with every reply for recycling.
+  if (typeof r.rss !== "number" || !Number.isSafeInteger(r.rss) || r.rss < 0) return null;
   if (r.ok === true) {
-    if (keys !== "id,ok,pdq,quality") return null;
+    if (keys !== "id,ok,pdq,quality,rss") return null;
     if (typeof r.pdq !== "string" || !HEX64.test(r.pdq)) return null;
     if (typeof r.quality !== "number" || !Number.isFinite(r.quality) || r.quality < 0 || r.quality > 100) return null;
-    return { ok: true, pdq: r.pdq, quality: r.quality };
+    return { ok: true, pdq: r.pdq, quality: r.quality, rss: r.rss };
   }
   if (r.ok === false) {
-    if (keys !== "code,id,ok") return null;
+    if (keys !== "code,id,ok,rss") return null;
     if (typeof r.code !== "string" || !ERROR_SET.has(r.code)) return null;
-    return { ok: false, code: r.code as ErrorCode };
+    return { ok: false, code: r.code as ErrorCode, rss: r.rss };
   }
   return null;
 }

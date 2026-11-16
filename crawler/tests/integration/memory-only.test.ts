@@ -143,6 +143,7 @@ describe("memory-only image handling", () => {
       // itself runs under Node's permission model with no fs-write grant
       // (proved in tests/unit/decoder-isolation.test.ts).
       expect((result.summary.decoder as { started: number }).started).toBeGreaterThan(0);
+      expect(result.summary.decoder).toMatchObject({ recycled: 0, retried: 0, crashes: 0 });
     } finally {
       unpatch();
     }

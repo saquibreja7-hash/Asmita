@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { CrawlError } from "../../src/errors.ts";
 import { hashImage } from "../../src/image/hash-image.ts";
-import { DecoderPool, decoderEnv, decoderExecArgv, defaultWorkerPath, parseReply } from "../../src/image/decoder-pool.ts";
+import { DecoderPool, decoderEnv, decoderExecArgv, decoderReadPaths, defaultWorkerPath, parseReply } from "../../src/image/decoder-pool.ts";
 import { patternImage } from "../support/synthetic.ts";
 
 const FAKE = fileURLToPath(new URL("../support/fake-decoder-worker.mjs", import.meta.url));
@@ -91,6 +91,91 @@ describe("what the child can see and do", () => {
     expect(flags).toContain("--permission");
     expect(flags.some((f) => f.startsWith("--allow-fs-write") || f.startsWith("--allow-child-process") || f.startsWith("--allow-worker"))).toBe(false);
   });
+
+  it("the child may read only its own bundle and sharp/libvips, not the rest of the app root", () => {
+    const tryRead = (p: string) => `try { fs.readFileSync(${JSON.stringify(p)}); out.push("ok"); } catch (e) { out.push(e.code); }`;
+    const script = `
+      const fs = require("node:fs");
+      const out = [];
+      ${tryRead(defaultWorkerPath())}
+      ${tryRead(join(ROOT, "node_modules", "sharp", "package.json"))}
+      ${tryRead(join(ROOT, "package.json"))}
+      ${tryRead(join(ROOT, "src", "config.ts"))}
+      ${tryRead(join(ROOT, "dist", "main.js"))}
+      ${tryRead(join(ROOT, ".env"))}
+      ${tryRead(join(ROOT, "node_modules", "undici", "package.json"))}
+      process.stdout.write(out.join(","));`;
+    const r = spawnSync(process.execPath, [...decoderExecArgv(defaultWorkerPath()), "-e", script], { env: decoderEnv(), encoding: "utf8" });
+    expect(r.stdout).toBe(["ok", "ok", ...Array(5).fill("ERR_ACCESS_DENIED")].join(","));
+    const reads = decoderExecArgv(defaultWorkerPath()).filter((f) => f.startsWith("--allow-fs-read="));
+    expect(reads.map((f) => f.slice("--allow-fs-read=".length))).toEqual(decoderReadPaths(defaultWorkerPath()));
+    expect(reads.some((f) => f === `--allow-fs-read=${join(ROOT, "*")}`)).toBe(false);
+  });
+
+  it("the service key is never on the child's argv or environment", async () => {
+    process.env.CRAWLER_SERVICE_KEY = "parent-secret-key-value-0123456789";
+    try {
+      const flags = decoderExecArgv(defaultWorkerPath()).join(" ");
+      expect(flags).not.toContain("parent-secret");
+      // 0x06 replies "blocked_port" if argv/execArgv carries the key.
+      expect(await code(pool({ workerPath: FAKE }).hash(img(0x06)))).toBe("image_format");
+    } finally {
+      delete process.env.CRAWLER_SERVICE_KEY;
+    }
+  });
+});
+
+describe("recycling is decided by the parent", () => {
+  it("retires a child after maxTasksPerChild answered tasks, before giving it another", async () => {
+    const p = pool({ workerPath: FAKE, maxTasksPerChild: 2 });
+    for (let i = 0; i < 5; i++) expect((await p.hash(img(0x00))).quality).toBe(77);
+    expect(p.stats).toMatchObject({ started: 3, recycled: 2, crashes: 0, retried: 0 });
+  });
+  it("loses no image when many are queued across recycles", async () => {
+    const p = pool({ workerPath: FAKE, maxTasksPerChild: 3, size: 2 });
+    const out = await Promise.all(Array.from({ length: 13 }, () => code(p.hash(img(0x00)))));
+    expect(out).toEqual(Array(13).fill("ok"));
+    expect(p.stats.crashes).toBe(0);
+    expect(p.stats.recycled).toBeGreaterThanOrEqual(3);
+  });
+  it("retires a child whose reported RSS is over the ceiling", async () => {
+    const p = pool({ workerPath: FAKE });
+    expect((await p.hash(img(0x08))).quality).toBe(77);
+    expect((await p.hash(img(0x00))).quality).toBe(77);
+    expect(p.stats).toMatchObject({ started: 2, recycled: 1 });
+    const q = pool({ workerPath: FAKE, maxChildRssBytes: 1 });
+    await q.hash(img(0x00));
+    await q.hash(img(0x00));
+    expect(q.stats).toMatchObject({ started: 2, recycled: 2 });
+  });
+  it("the real decoder child does not exit on its own after answering", async () => {
+    const p = pool({ maxTasksPerChild: 1000 });
+    const bytes = await patternImage(77, 120, 120, "png");
+    for (let i = 0; i < 3; i++) await p.hash(bytes);
+    expect(p.stats).toMatchObject({ started: 1, recycled: 0, crashes: 0 });
+  });
+});
+
+describe("an image whose child died before answering", () => {
+  it("is retried once on a fresh child (a child dying after taking it loses nothing)", async () => {
+    const p = pool({ workerPath: FAKE });
+    // 0x07 answers, then ignores the next task and exits: the second image is
+    // handed to a dying child, as with a child that recycles itself.
+    const [a, b] = await Promise.all([code(p.hash(img(0x07))), code(p.hash(img(0x00)))]);
+    expect([a, b]).toEqual(["ok", "ok"]);
+    expect(p.stats).toMatchObject({ crashes: 1, retried: 1, started: 2 });
+  });
+  it("is not retried a second time, so a poison image cannot loop", async () => {
+    const p = pool({ workerPath: FAKE });
+    expect(await code(p.hash(img(0x02)))).toBe("image_decoder_crashed");
+    expect(p.stats).toMatchObject({ crashes: 2, retried: 1, started: 2 });
+  });
+  it("timeouts and bad replies are not retried", async () => {
+    const p = pool({ workerPath: FAKE, taskTimeoutMs: 300 });
+    expect(await code(p.hash(img(0x01)))).toBe("image_decode_timeout");
+    expect(await code(p.hash(img(0x03)))).toBe("image_decoder_crashed");
+    expect(p.stats).toMatchObject({ retried: 0, started: 2 });
+  });
 });
 
 describe("failure handling", () => {
@@ -104,7 +189,8 @@ describe("failure handling", () => {
     const p = pool({ workerPath: FAKE });
     expect(await code(p.hash(img(0x02)))).toBe("image_decoder_crashed");
     expect((await p.hash(img(0x00))).quality).toBe(77);
-    expect(p.stats).toMatchObject({ crashes: 1, started: 2 });
+    // The crashing image is retried once on a fresh child, then given up.
+    expect(p.stats).toMatchObject({ crashes: 2, retried: 1, started: 3 });
   });
   it("treats malformed or unsolicited replies as a compromised child", async () => {
     const p = pool({ workerPath: FAKE });
@@ -120,15 +206,20 @@ describe("failure handling", () => {
   }, 30_000);
   it("parseReply accepts only the exact reply shapes", () => {
     const h = "ab".repeat(32);
-    expect(parseReply({ id: 1, ok: true, pdq: h, quality: 60 }, 1)).toEqual({ ok: true, pdq: h, quality: 60 });
-    expect(parseReply({ id: 1, ok: false, code: "image_format" }, 1)).toEqual({ ok: false, code: "image_format" });
+    expect(parseReply({ id: 1, ok: true, pdq: h, quality: 60, rss: 5 }, 1)).toEqual({ ok: true, pdq: h, quality: 60, rss: 5 });
+    expect(parseReply({ id: 1, ok: false, code: "image_format", rss: 5 }, 1)).toEqual({ ok: false, code: "image_format", rss: 5 });
     for (const bad of [
-      { id: 2, ok: true, pdq: h, quality: 60 },
-      { id: 1, ok: true, pdq: h.toUpperCase(), quality: 60 },
-      { id: 1, ok: true, pdq: h, quality: 101 },
-      { id: 1, ok: true, pdq: h, quality: 60, url: "x" },
-      { id: 1, ok: false, code: "https://leak.example/" },
-      { id: 1, ok: false, code: "image_format", message: "boom" },
+      { id: 2, ok: true, pdq: h, quality: 60, rss: 5 },
+      { id: 1, ok: true, pdq: h.toUpperCase(), quality: 60, rss: 5 },
+      { id: 1, ok: true, pdq: h, quality: 101, rss: 5 },
+      { id: 1, ok: true, pdq: h, quality: 60, rss: 5, url: "x" },
+      { id: 1, ok: true, pdq: h, quality: 60 },
+      { id: 1, ok: true, pdq: h, quality: 60, rss: -1 },
+      { id: 1, ok: true, pdq: h, quality: 60, rss: 1.5 },
+      { id: 1, ok: true, pdq: h, quality: 60, rss: "5" },
+      { id: 1, ok: false, code: "https://leak.example/", rss: 5 },
+      { id: 1, ok: false, code: "image_format", message: "boom", rss: 5 },
+      { id: 1, ok: false, code: "image_format" },
       [1],
       "x",
       null,
