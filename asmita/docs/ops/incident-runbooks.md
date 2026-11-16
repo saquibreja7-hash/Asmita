@@ -26,13 +26,13 @@ Trigger: bounce, complaint, failed manual verification, expired verification dat
 
 ## Scheduler Failure
 
-Trigger: escalation scheduler lag above 30 minutes, duplicate job execution, or queue outage.
+Trigger: escalation sweep lag above 30 minutes, duplicate job execution, or Cron Trigger failure.
 
-1. Stop workers if duplicate notices or victim notifications are possible.
-2. Inspect queue health, Redis connectivity, worker logs, idempotency keys, and due escalation counts.
-3. Re-run due jobs only through idempotent worker entrypoints.
+1. Stop outbound notice dispatch if duplicate notices or victim notifications are possible.
+2. Inspect Cloudflare Cron Trigger executions, Worker logs, idempotency keys, and due escalation counts. Redis/BullMQ queues were removed 2026-10-31 (ADR 004): scheduled work is Cron Triggers calling the `/api/cron/*` sweep routes (authenticated by `CRON_SECRET`), deduplicated by the Notice table and Resend idempotency keys.
+3. Re-run due work only through the idempotent cron entrypoints, never by hand-crafted requests.
 4. Verify T+24h, T+48h, and T+7d actions complete exactly once per notice URL pair.
-5. Watch scheduler lag, escalation backlog, notice dispatch latency, and API 5xx rate for one hour after recovery.
+5. Watch sweep lag, escalation backlog, notice dispatch latency, and API 5xx rate for one hour after recovery.
 
 ## Data Breach
 

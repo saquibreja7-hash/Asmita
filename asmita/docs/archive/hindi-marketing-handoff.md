@@ -1,5 +1,12 @@
 # Hindi Marketing Translation — Translator Handoff
 
+> **Completed, moved to archive 2026-11-12.** The marketing pages this
+> inventory covers were translated into `src/i18n/hi.json` and the whole set
+> was reviewed and marked `PRODUCTION` on 2026-06-16
+> (`src/i18n/hi-review-status.json`: reviewed by Saquib, 100% key parity).
+> The tone policy and legal-citation rules below remain the binding standard
+> for any future Hindi additions.
+
 **Version:** 1.0
 **Created:** 2026-05-17
 **Status:** Draft inventory; awaiting native-speaker translator

@@ -16,15 +16,15 @@ This runbook is for staging and production rollback. Do not roll back legal noti
 
 1. Prefer forward fixes for migrations that have already reached production.
 2. Before any destructive migration, verify the latest backup and point-in-time recovery window.
-3. If rollback is required, stop workers first so notice, escalation, deletion, and webhook jobs cannot write during the rollback.
+3. If rollback is required, pause the production Cron Triggers first so notice, escalation, deletion, and webhook jobs cannot write during the rollback.
 4. Restore staging from the production snapshot and rehearse the rollback command there.
 5. Run Prisma validation, schema privacy tests, audit hash-chain tests, and API smoke tests against staging.
 6. Apply the approved rollback or forward-fix migration in production only after the incident owner and database owner both approve.
-7. Restart workers gradually and watch queue backlog, scheduler lag, email bounces, API 5xx rate, and deletion backlog for at least one hour.
+7. Restart the Worker and re-enable Cron Triggers gradually, and watch escalation backlog, email bounces, API 5xx rate, and deletion backlog for at least one hour.
 
 ## Rollback blockers
 
 - Do not delete or rewrite append-only audit events.
 - Do not expose raw submitted URL strings outside notice/PDF surfaces already designed for victim evidence.
-- Do not enable Phase 2 hash fields or content storage as part of a rollback workaround.
+- Do not disable hash approval, legal-review, or contact-verification gates as part of a rollback workaround.
 - Do not resume production notice sending if platform contacts, templates, or sender domains are unverified.

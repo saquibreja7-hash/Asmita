@@ -1,6 +1,6 @@
 # Admin console redesign
 
-Status: recommendation, 8 November 2026. Phases 0 to 3 are built on `feat/admin-console-phase-0` (9 November); Phase 4 is not started. Owner: Saquib.
+Status: recommendation, 8 November 2026. Phases 0 to 3 are built and merged to master (PRs #53 and #54, 12 November); Phase 4 is not started. The "hash queue copy" finding below was resolved in the rebuild (the stale "Phase 2 hash intake is disabled" string no longer exists in the code). Owner: Saquib.
 
 ## In one paragraph
 

@@ -1,5 +1,13 @@
 # Reporting workflow verification — 31 October 2026
 
+> **Superseded, moved to archive 2026-11-12.** Point-in-time record. The
+> critical finding below — the dashboard claiming "your notice is ready to
+> sign" while the preview API returned `no_eligible_url` — has since been
+> fixed: the case page now gates all sign-ready messaging on
+> `findSignableNotice()` (`src/lib/signable-notice.ts`). Live end-to-end
+> delivery remains unverified until a staging database exists; the staging
+> prerequisite in "Still required" still stands.
+
 ## Verdict
 
 Local intake and case management pass the exercised checks. Live end-to-end notice delivery remains unverified. This is not a production-readiness approval or proof of content removal.
