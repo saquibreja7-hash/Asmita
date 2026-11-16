@@ -602,4 +602,72 @@ export const templateSeeds = [
       "MeitY NCII SOP v.1 (October 2025) - NCRP and law enforcement channels",
     ],
   },
+  {
+    // The survivor's authorisation for Asmita's crawler to search public
+    // websites for her fingerprints and to act for her on confirmed copies
+    // (src/lib/crawl-consent.ts). Addressed to Asmita, not to a platform;
+    // nothing is sent when she signs it. Placeholder text: no legal basis is
+    // asserted until a legal advisor drafts one, and it stays unreviewed (and
+    // unsignable in production) until a human reviewer approves it.
+    templateType: TemplateType.CRAWL_AUTHORISATION,
+    subjectTemplate:
+      "[DRAFT — NOT LEGALLY REVIEWED] Authorisation to search for copies of my images - {{caseReference}}",
+    bodyTemplate: [
+      "[DRAFT — NOT LEGALLY REVIEWED]",
+      "",
+      "AUTHORISATION TO SEARCH FOR COPIES OF MY IMAGES AND TO ACT ON MY BEHALF",
+      "",
+      "Asmita Case Reference: {{caseReference}}",
+      "Declaration Reference: {{declarationReference}}",
+      "",
+      "1.  I authorise Asmita (meriasmita.org) to compare the fingerprints set out at the end of this authorisation with images that Asmita's search service finds on public websites. Each fingerprint was made on my own device; Asmita has never received the images themselves.",
+      "",
+      "2.  I understand how the search works. A separate Asmita service visits public pages on websites that a person at Asmita has approved. It works out the fingerprint of each image it sees, compares it with my fingerprints, and keeps nothing about an image that does not match. When an image is close to one of my fingerprints, it records only the address of the page and of the image, never the image.",
+      "",
+      "3.  I understand that a match is only a possible match. A person at Asmita reviews every possible match, and a less certain match is checked by a second person, before anything is done with it.",
+      "",
+      "4.  When a person at Asmita confirms that a copy matches, I authorise Asmita to send a takedown notice for that copy to the website or platform that hosts it, on my behalf and as my authorised representative. Legal basis for acting as my representative: " + CITE,
+      "",
+      "5.  I understand that the addresses of possible matches are stored encrypted. Asmita deletes each address thirty (30) days after it is found or, if it is confirmed and added to my case, thirty (30) days after it is added, as with links I report myself.",
+      "",
+      "6.  I can withdraw this authorisation at any time from my case page. When I withdraw it, the search for my fingerprints stops and possible matches that nobody has reviewed yet are deleted. Notices already sent before I withdraw are not recalled.",
+      "",
+      "7.  I confirm that I am an adult, that the fingerprints listed below were made from images of me, and that I give this authorisation voluntarily.",
+      "",
+      "[The list of fingerprints covered by this authorisation is appended below.]",
+      DRAFT_MARKER,
+    ].join("\n"),
+    legalCitations: [CITE],
+  },
+  {
+    // The takedown notice Asmita sends, as the survivor's authorised
+    // representative, for a copy the crawler found and analysts confirmed.
+    // Not used yet (a later wave wires it into dispatch). Placeholder text,
+    // seeded unreviewed; no legal basis asserted until counsel drafts one.
+    templateType: TemplateType.CRAWL_REPRESENTATIVE_NOTICE,
+    subjectTemplate:
+      "[DRAFT — NOT LEGALLY REVIEWED] Request to remove non-consensual intimate content - {{caseReference}}",
+    bodyTemplate: [
+      "[DRAFT — NOT LEGALLY REVIEWED]",
+      "",
+      "To: Grievance Officer / Trust and Safety Team, {{platformName}}",
+      "",
+      "Asmita Case Reference: {{caseReference}}",
+      "Authorisation Reference: {{declarationReference}}",
+      "",
+      "1.  Asmita writes as the authorised representative of the person concerned (\"the Complainant\"), under a signed authorisation that permits Asmita to request removal of copies of her images on her behalf. Legal basis: " + CITE,
+      "",
+      "2.  The content at the location below was identified by comparing a perceptual fingerprint of the image with fingerprints the Complainant made of images of herself. A reviewer at Asmita confirmed the match before this notice was sent.",
+      "",
+      "Location: {{url}}",
+      "",
+      "3.  The Complainant has declared that the content shows her and is published without her consent.",
+      "",
+      "4.  Asmita requests that you remove or disable access to the content at the location above, and preserve the related records. Applicable removal period: " + CITE,
+      "",
+      "5.  Please reply to this notice with the case reference above.",
+      DRAFT_MARKER,
+    ].join("\n"),
+    legalCitations: [CITE],
+  },
 ] as const;
