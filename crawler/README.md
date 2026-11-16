@@ -58,7 +58,7 @@ is not a run failure; it is counted in the summary only.
 | **Byte caps** (10 MB images, 2 MB HTML, 500 KiB robots.txt) while streaming AND after decompression; stacked/unknown encodings refused. | `readCapped`, `decode` (`maxOutputLength`). | `tests/unit/bytes.test.ts` (gzip/brotli/deflate bombs, declared length, chunked stream, timeouts) |
 | **Timeouts**: connect, headers, body idle, and an overall per-request deadline (stops slow drips). | undici options + `AbortSignal.timeout`. | `bytes.test.ts`, fixture `/img/slow.png` |
 | **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active); `tests/unit/config-policy.test.ts` |
-| **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files rejected. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, truncated JPEG/PNG, AVIF); fixture `cut.jpg` and `pic.avif` |
+| **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files decode tolerantly (`failOn: "none"`) but stay bounded by the byte cap and pixel limit. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, light and heavy truncation, AVIF); fixtures `cut.jpg` (matches), `cut-heavy.jpg` (does not) and `pic.avif` |
 | **Service key only to Asmita.** | `AsmitaClient` has its own agent, builds URLs only from `ASMITA_API_URL`, refuses redirects. The crawl fetcher sends no auth or cookie headers. | `crawl.test.ts` "never sends credentials or cookies to crawled hosts"; `client-findings.test.ts` "refuses redirects" |
 | **No URLs, hostnames, fingerprints or bodies in logs.** Field allowlist, string sanitiser, errors reduced to fixed codes; uncaught errors and Node warnings routed through the logger. | `log.ts`, `errors.ts`, `cli.ts`. | `crawl.test.ts` log scan; `tests/integration/process.test.ts` runs the real `runMain` in a child process and scans all of stdout and stderr |
 | **Politeness.** robots.txt per origin (cached for the run), `Crawl-delay` honoured up to a cap, meta robots / `X-Robots-Tag` / `rel` nofollow, per-host delay, global concurrency cap, retries with exponential backoff and full jitter, `Retry-After`. | `crawl/robots.ts`, `crawl/limits.ts`, `retry.ts`. | `url-robots-extract.test.ts`, `log-retry-limits.test.ts`, `crawl.test.ts` |
@@ -90,7 +90,7 @@ need the app tree. Dihedral (rotated/flipped) variants are not generated:
 Decoding follows `src/prepare.ts`, copied from the PDQ agreement experiment
 (`tools/pdq-agreement/src/prepare.ts`, commit `876ad33`, branch
 `feat/crawler-pdq-agreement`) and kept as one swappable module: sharp with
-`failOn: "truncated"`, `limitInputPixels: 25_000_000`, `animated: false` ->
+`failOn: "none"`, `limitInputPixels: 25_000_000`, `animated: false` ->
 `.rotate()` -> `.toColourspace("srgb")` -> `.ensureAlpha()` -> `.raw()`, no
 resize, canvas alpha round-trip emulation, and a naive CMYK conversion for CMYK
 images without an ICC profile.
@@ -100,18 +100,18 @@ maximum distance 10, p95 0, 71 exact matches (verdict: go for Node + sharp +
 pdq.ts). Caveats: the fixtures were synthetic, the browser side was Chromium on
 Windows only, and CMYK is best-effort.
 
-**Truncated images (`failOn: "truncated"`, the one change from the harness
-copy).** Re-measured with the harness's Chromium on 2026-11-16: the
-well-formed fixtures give identical results under `none`, `truncated`,
-`error` and `warning`, so the numbers above still hold. For 30 truncated files
-(JPEG cut at 99/90/60/20% or missing only its EOI marker, PNG and WebP cut
-short), Chromium's `createImageBitmap`, which is what survivors' browsers use
-to fingerprint, rejected every one. `failOn: "none"` hashed them anyway (one
-90%-truncated photo landed at distance 4 from the full image), while
-`"truncated"` rejected exactly the files Chromium rejected. An `<img>`
-element does paint truncated JPEGs partially, but that is not the path that
-produces survivor fingerprints. Truncated images are skipped with reason
-`truncated`.
+**Truncated images (`failOn: "none"`, as in the harness).** A cut-short copy
+of a survivor's image on a site is still that image, so it should still be
+found. Measured on synthetic 640x480 images: JPEG or PNG cut to 99% of its
+bytes stays within distance 10 of the intact file, cut to 90% within 28
+(match); heavier truncation drifts to 60+ (no match). Truncated WebP, and a
+JPEG with almost no data, fail to decode and are skipped (`truncated` or
+`decode_failed`). Well-formed images hash identically under every `failOn`
+setting, so the agreement numbers above are unaffected. Chromium's
+`createImageBitmap` (the survivor path) rejects truncated files outright; that
+matters for same-file agreement, not for finding copies. Stricter behaviour,
+if wanted, belongs in a policy check in `src/image/hash-image.ts`, not in the
+recipe.
 
 Matching: images with PDQ quality below 50 are skipped; brute-force Hamming
 over a packed `Uint32Array` with SWAR popcount; threshold = pool `threshold`

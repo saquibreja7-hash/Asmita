@@ -35,16 +35,32 @@ describe("sniffImage", () => {
 });
 
 describe("truncated and AVIF images", () => {
-  it("rejects truncated JPEGs (also when only the EOI marker is missing), like createImageBitmap", async () => {
-    const full = await patternImage(61, 640, 480, "jpeg");
-    expect((await hashImage(full, { minSide: 1 })).hash).toMatch(/^[0-9a-f]{64}$/);
-    for (const cut of [full.subarray(0, full.length - 2), full.subarray(0, Math.floor(full.length * 0.99)), full.subarray(0, Math.floor(full.length * 0.6))]) {
-      expect(await code(hashImage(Buffer.from(cut), { minSide: 1 }))).toBe("image_truncated");
+  // failOn "none" (the measured recipe): a cut-short copy of an image still
+  // hashes close to the intact file, so it can still be found.
+  it("hashes lightly truncated JPEGs and PNGs within the match threshold", async () => {
+    for (const fmt of ["jpeg", "png"] as const) {
+      const full = await patternImage(61, 640, 480, fmt);
+      const base = (await hashImage(full, { minSide: 1 })).hash;
+      for (const cut of [full.subarray(0, full.length - 2), full.subarray(0, Math.floor(full.length * 0.99)), full.subarray(0, Math.floor(full.length * 0.9))]) {
+        const r = await hashImage(Buffer.from(cut), { minSide: 1 });
+        expect(hammingDistance(base, r.hash)).toBeLessThanOrEqual(31);
+      }
     }
   });
-  it("rejects truncated PNGs", async () => {
-    const full = await patternImage(62, 320, 240, "png");
-    expect(await code(hashImage(Buffer.from(full.subarray(0, Math.floor(full.length * 0.9))), { minSide: 1 }))).toBe("image_truncated");
+  it("heavily truncated files end in a far hash or a coded error, never a raw throw", async () => {
+    for (const fmt of ["jpeg", "png", "webp"] as const) {
+      const full = await patternImage(62, 640, 480, fmt);
+      const base = (await hashImage(full, { minSide: 1 })).hash;
+      for (const f of [0.6, 0.2, 0.01]) {
+        const cut = Buffer.from(full.subarray(0, Math.floor(full.length * f)));
+        try {
+          const r = await hashImage(cut, { minSide: 1 });
+          expect(hammingDistance(base, r.hash)).toBeGreaterThan(31);
+        } catch (e) {
+          expect(e).toBeInstanceOf(CrawlError);
+        }
+      }
+    }
   });
   it("hashes AVIF (sniffed by brand, decoded as AV1) close to the same picture as PNG", async () => {
     const avif = await patternImage(63, 320, 240, "avif");

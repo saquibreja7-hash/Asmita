@@ -10,22 +10,15 @@
  * recipe is re-measured; crawler-specific policy (format allowlist, size
  * checks, error mapping) lives in src/image/hash-image.ts, not here.
  *
- * ONE DELIBERATE CHANGE from the harness copy: failOn is "truncated", not
- * "none" (FAIL_ON below). Measured on 2026-11-16 with the harness's own
- * Chromium (Playwright) and fixtures:
- *   - well-formed fixtures: identical results under none / truncated / error /
- *     warning (74 images: 71 exact, max distance 10, p95 0), so the
- *     agreement numbers still hold;
- *   - truncated files (JPEG cut at 99/90/60/20% or missing only its EOI
- *     marker, PNG and WebP cut short): Chromium's createImageBitmap, the path
- *     survivors' browsers use (SubmitForm.tsx), REJECTED all of them
- *     ("The source image could not be decoded"), so a survivor can never
- *     have a fingerprint of a partial image. failOn "none" hashed them anyway
- *     (a 90%-truncated photo landed at distance 4 from the full image);
- *     failOn "truncated" rejected exactly the files Chromium rejected (30/30;
- *     a PNG missing only its IEND CRC was accepted by both).
- *   An <img> element does paint truncated JPEGs partially, but that is not
- *   the path that produces survivor fingerprints.
+ * failOn is "none", exactly as in the harness, so truncated files still hash.
+ * Measured 2026-11-16 on synthetic 640x480 images: a JPEG or PNG cut to 99%
+ * of its bytes stays within distance 10 of the intact file, one cut to 90%
+ * within 28, so a cut-short copy of a survivor's image on a site can still
+ * match. Heavier truncation drifts to 60+ (no match); truncated WebP and a
+ * JPEG with almost no data fail to decode. Chromium's createImageBitmap (the
+ * survivor path) rejects truncated files outright; that matters for same-file
+ * agreement, not for finding copies. If stricter behaviour is ever wanted, add
+ * a policy check in src/image/hash-image.ts rather than editing this recipe.
  * The decoder is still bounded by limitInputPixels (pixel bombs) and by the
  * byte cap applied before this module ever sees the buffer.
  */
@@ -60,9 +53,6 @@ import type { PdqInput } from "./pdq.ts";
 
 export const DEFAULT_LIMIT_INPUT_PIXELS = 25_000_000;
 
-/** See the header: mirrors createImageBitmap, which rejects truncated files. */
-export const FAIL_ON = "truncated" as const;
-
 export type PrepareOptions = {
   /** Reject absurdly large inputs (decompression-bomb guard). Default 25 MP (the crawler's cap). */
   limitInputPixels?: number;
@@ -72,7 +62,7 @@ export type PrepareOptions = {
 
 export async function prepareForPdq(buffer: Buffer, opts: PrepareOptions = {}): Promise<PdqInput> {
   const sharpOpts = {
-    failOn: FAIL_ON,
+    failOn: "none" as const,
     limitInputPixels: opts.limitInputPixels ?? DEFAULT_LIMIT_INPUT_PIXELS,
     animated: false, // first frame only, like createImageBitmap
   };

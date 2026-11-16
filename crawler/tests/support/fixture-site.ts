@@ -168,7 +168,8 @@ export async function buildFixture(): Promise<Fixture> {
       fp("fp-flat", h.flat!),
       fp("fp-tiny", h.tinyReal!),
       fp("fp-avif", h.avif!),
-      fp("fp-truncated", h.truncFull!), // must not match: the served copy is cut short
+      // Served twice, cut short: at 97% it still matches (failOn "none"); at 40% it must not.
+      fp("fp-truncated", h.truncFull!),
       ...Array.from({ length: 200 }, (_, i) => fp(`fp-rand-${i}`, randomFingerprint(5000 + i))),
     ],
   };
@@ -187,6 +188,7 @@ export async function buildFixture(): Promise<Fixture> {
     { fingerprintId: "fp-two-1", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/two.png" },
     { fingerprintId: "fp-two-2", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/two.png" },
     { fingerprintId: "fp-avif", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/pic.avif" },
+    { fingerprintId: "fp-truncated", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/cut.jpg" },
   ];
 
   // ---- robots ----
@@ -280,7 +282,7 @@ export async function buildFixture(): Promise<Fixture> {
   site.route(
     `www.${S}`,
     "/sub",
-    sendHtml(html(`<img src="/img/gz.png"><img src="/img/two.png"><img src="/img/pic.avif"><img src="/img/cut.jpg"><a href="/">home</a>`)),
+    sendHtml(html(`<img src="/img/gz.png"><img src="/img/two.png"><img src="/img/pic.avif"><img src="/img/cut.jpg"><img src="/img/cut-heavy.jpg"><a href="/">home</a>`)),
   );
 
   // ---- images on the source ----
@@ -340,6 +342,7 @@ export async function buildFixture(): Promise<Fixture> {
   site.route(`www.${S}`, "/img/pic.avif", sendBytes(img.avif, "image/avif"));
   // 97% of a JPEG whose complete version is in the pool.
   site.route(`www.${S}`, "/img/cut.jpg", sendBytes(Buffer.from(img.truncFull.subarray(0, Math.floor(img.truncFull.length * 0.97))), "image/jpeg"));
+  site.route(`www.${S}`, "/img/cut-heavy.jpg", sendBytes(Buffer.from(img.truncFull.subarray(0, Math.floor(img.truncFull.length * 0.4))), "image/jpeg"));
 
   // ---- CDN ----
   site.route(CDN_HOST, "/c.png", sendBytes(img.matchC, "image/png"));
