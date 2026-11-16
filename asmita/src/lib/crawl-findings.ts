@@ -4,7 +4,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { crawlMemory, type MemoryCrawlFinding } from "@/lib/crawl-store";
 import { findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
-import { isEnabledCrawlSource } from "@/lib/crawl-sources";
+import { enabledCrawlSourceDomain } from "@/lib/crawl-sources";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
@@ -71,7 +71,8 @@ export const crawlFindingsBodySchema = z
   .strict();
 
 export type CrawlFindingsBody = z.infer<typeof crawlFindingsBodySchema>;
-export type CrawlFindingResult = { status: "created" | "duplicate" | "rejected"; reason?: string };
+/** "accepted" covers new and merged findings alike (see recordCrawlFindings). */
+export type CrawlFindingResult = { status: "accepted" | "rejected"; reason?: string };
 
 // One reason for every fingerprint refusal, so the crawler cannot tell an
 // unknown id from a withdrawn or unapproved one.
@@ -100,10 +101,19 @@ type NewFinding = {
 // representative notice names (src/lib/crawl-notice.ts).
 const CLOSER_WHILE_CANDIDATE = sql`excluded."distance" < "CrawlFinding"."distance" AND "CrawlFinding"."reviewStatus" = 'CANDIDATE' AND "CrawlFinding"."reviewedById" IS NULL`;
 
-/** Inserts or merges one finding. Returns its id and whether it was new. */
-async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string; created: boolean }> {
+/**
+ * Inserts or merges one finding, only while the authorisation it was matched
+ * under is still live. Returns null when it is not.
+ *
+ * On the database paths the live authorisation row is locked (FOR SHARE) in
+ * the same transaction as the write, so a withdrawal either commits first
+ * (and this report is refused) or waits for this write and then deletes the
+ * candidate it created. Memory path: single-threaded, no race.
+ */
+async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string; created: boolean } | null> {
   if (isDevNoDb()) {
     const memory = crawlMemory();
+    if (!memory.consents.some((c) => c.id === input.crawlConsentId && !c.withdrawnAt)) return null;
     const existing = [...memory.findings.values()].find((f) => f.caseId === input.caseId && f.urlDigest === input.urlDigest);
     if (existing) {
       existing.lastSeenAt = now;
@@ -124,43 +134,48 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
   }
 
   if (usesWorkerKysely()) {
-    // One statement, so concurrent reports of the same copy cannot race.
-    const row = await getWorkerDb().insertInto("CrawlFinding").values({
-      id: randomUUID(), caseId: input.caseId, hashSubmissionId: input.hashSubmissionId, crawlConsentId: input.crawlConsentId,
-      pageUrlEncrypted: encryptField(input.pageUrl), imageUrlEncrypted: encryptField(input.imageUrl),
-      urlDigest: input.urlDigest, distance: input.distance, quality: input.quality,
-      firstSeenAt: now, lastSeenAt: now, sourceId: input.sourceId, runId: input.runId,
-    }).onConflict((oc) => oc.columns(["caseId", "urlDigest"]).doUpdateSet({
-      lastSeenAt: now,
-      hashSubmissionId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."hashSubmissionId" ELSE "CrawlFinding"."hashSubmissionId" END`,
-      quality: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."quality" ELSE "CrawlFinding"."quality" END`,
-      sourceId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."sourceId" ELSE "CrawlFinding"."sourceId" END`,
-      runId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."runId" ELSE "CrawlFinding"."runId" END`,
-      distance: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."distance" ELSE "CrawlFinding"."distance" END`,
-    })).returning(["id", sql<boolean>`(xmax = 0)`.as("inserted")]).executeTakeFirstOrThrow();
-    return { id: row.id, created: Boolean(row.inserted) };
+    return getWorkerDb().transaction().execute(async (trx) => {
+      const live = await trx.selectFrom("CrawlConsent").select("id")
+        .where("id", "=", input.crawlConsentId).where("withdrawnAt", "is", null)
+        .forShare().executeTakeFirst();
+      if (!live) return null;
+      // One statement, so concurrent reports of the same copy cannot race.
+      const row = await trx.insertInto("CrawlFinding").values({
+        id: randomUUID(), caseId: input.caseId, hashSubmissionId: input.hashSubmissionId, crawlConsentId: input.crawlConsentId,
+        pageUrlEncrypted: encryptField(input.pageUrl), imageUrlEncrypted: encryptField(input.imageUrl),
+        urlDigest: input.urlDigest, distance: input.distance, quality: input.quality,
+        firstSeenAt: now, lastSeenAt: now, sourceId: input.sourceId, runId: input.runId,
+      }).onConflict((oc) => oc.columns(["caseId", "urlDigest"]).doUpdateSet({
+        lastSeenAt: now,
+        hashSubmissionId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."hashSubmissionId" ELSE "CrawlFinding"."hashSubmissionId" END`,
+        quality: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."quality" ELSE "CrawlFinding"."quality" END`,
+        sourceId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."sourceId" ELSE "CrawlFinding"."sourceId" END`,
+        runId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."runId" ELSE "CrawlFinding"."runId" END`,
+        distance: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."distance" ELSE "CrawlFinding"."distance" END`,
+      })).returning(["id", sql<boolean>`(xmax = 0)`.as("inserted")]).executeTakeFirstOrThrow();
+      return { id: row.id, created: Boolean(row.inserted) };
+    });
   }
 
   const { db } = await import("@/lib/db");
   const where = { caseId_urlDigest: { caseId: input.caseId, urlDigest: input.urlDigest } };
-  const merge = async () => {
-    const existing = await db.crawlFinding.findUnique({ where, select: { id: true, distance: true, reviewStatus: true, reviewedById: true } });
-    if (!existing) return null;
-    await db.crawlFinding.update({
-      where: { id: existing.id },
-      data: {
-        lastSeenAt: now,
-        ...(existing.reviewStatus === "CANDIDATE" && existing.reviewedById === null && input.distance < existing.distance
-          ? { distance: input.distance, quality: input.quality, hashSubmissionId: input.hashSubmissionId, sourceId: input.sourceId, runId: input.runId }
-          : {}),
-      },
-    });
-    return { id: existing.id, created: false };
-  };
-  const merged = await merge();
-  if (merged) return merged;
-  try {
-    const created = await db.crawlFinding.create({
+  const attempt = () => db.$transaction(async (tx) => {
+    const live = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "CrawlConsent" WHERE "id" = ${input.crawlConsentId} AND "withdrawnAt" IS NULL FOR SHARE`;
+    if (live.length === 0) return null;
+    const existing = await tx.crawlFinding.findUnique({ where, select: { id: true, distance: true, reviewStatus: true, reviewedById: true } });
+    if (existing) {
+      await tx.crawlFinding.update({
+        where: { id: existing.id },
+        data: {
+          lastSeenAt: now,
+          ...(existing.reviewStatus === "CANDIDATE" && existing.reviewedById === null && input.distance < existing.distance
+            ? { distance: input.distance, quality: input.quality, hashSubmissionId: input.hashSubmissionId, sourceId: input.sourceId, runId: input.runId }
+            : {}),
+        },
+      });
+      return { id: existing.id, created: false };
+    }
+    const created = await tx.crawlFinding.create({
       data: {
         caseId: input.caseId, hashSubmissionId: input.hashSubmissionId, crawlConsentId: input.crawlConsentId,
         pageUrlEncrypted: encryptField(input.pageUrl), imageUrlEncrypted: encryptField(input.imageUrl),
@@ -170,20 +185,37 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
       select: { id: true },
     });
     return { id: created.id, created: true };
+  });
+  try {
+    return await attempt();
   } catch (err) {
-    // Another request recorded the same copy first.
-    if ((err as { code?: string }).code === "P2002") {
-      const again = await merge();
-      if (again) return again;
-    }
+    // Another request recorded the same copy first; the retry merges into it.
+    if ((err as { code?: string }).code === "P2002") return attempt();
     throw err;
   }
+}
+
+/** Whether a page address is on the source's host or one of its subdomains. */
+export function pageOnSourceHost(pageUrl: string, sourceDomain: string) {
+  let host: string;
+  try {
+    host = new URL(pageUrl).hostname.toLowerCase().replace(/\.$/, "");
+  } catch {
+    return false;
+  }
+  const domain = sourceDomain.toLowerCase();
+  return host === domain || host.endsWith(`.${domain}`);
 }
 
 /**
  * Records a validated batch. Results are index-aligned with the input. The
  * clock is the server's: observedAt is accepted for the crawler's own
  * records but never drives retention.
+ *
+ * A stored finding is "accepted" whether it is new or merged into an
+ * earlier one, so the crawler cannot tell whether two pool ids belong to one
+ * case. A page must be on its source's host (or a subdomain); the image may
+ * be on another public host (a CDN) but passes the same link checks.
  */
 export async function recordCrawlFindings(
   body: CrawlFindingsBody,
@@ -191,7 +223,7 @@ export async function recordCrawlFindings(
   now = new Date(),
 ): Promise<{ results: CrawlFindingResult[]; mediaRejected: boolean }> {
   const fingerprints = new Map<string, Awaited<ReturnType<typeof resolvePoolFingerprint>>>();
-  const sources = new Map<string, boolean>();
+  const sources = new Map<string, string | null>();
   const results: CrawlFindingResult[] = [];
   let mediaRejected = false;
 
@@ -210,9 +242,14 @@ export async function recordCrawlFindings(
       results.push({ status: "rejected", reason: "invalid_url" });
       continue;
     }
-    if (!sources.has(item.sourceId)) sources.set(item.sourceId, await isEnabledCrawlSource(item.sourceId));
-    if (!sources.get(item.sourceId)) {
+    if (!sources.has(item.sourceId)) sources.set(item.sourceId, await enabledCrawlSourceDomain(item.sourceId));
+    const sourceDomain = sources.get(item.sourceId);
+    if (!sourceDomain) {
       results.push({ status: "rejected", reason: "unknown_source" });
+      continue;
+    }
+    if (!pageOnSourceHost(page.normalizedUrl, sourceDomain)) {
+      results.push({ status: "rejected", reason: "page_not_in_source" });
       continue;
     }
     if (!fingerprints.has(item.fingerprintId)) fingerprints.set(item.fingerprintId, await resolvePoolFingerprint(item.fingerprintId));
@@ -222,7 +259,7 @@ export async function recordCrawlFindings(
       continue;
     }
 
-    const { id, created } = await upsertFinding({
+    const stored = await upsertFinding({
       caseId: fingerprint.caseId,
       hashSubmissionId: fingerprint.hashSubmissionId,
       crawlConsentId: fingerprint.consentId,
@@ -234,17 +271,23 @@ export async function recordCrawlFindings(
       sourceId: item.sourceId,
       runId: body.runId,
     }, now);
-    if (created) {
+    if (!stored) {
+      // The authorisation was withdrawn after the pool id was resolved.
+      fingerprints.set(item.fingerprintId, null);
+      results.push({ status: "rejected", reason: FINGERPRINT_REFUSED });
+      continue;
+    }
+    if (stored.created) {
       // Never the URLs or the fingerprint.
       await writeAuditLog({
         eventType: "CRAWL_FINDING_RECORDED",
         entityType: "CrawlFinding",
-        entityId: id,
+        entityId: stored.id,
         actorId: `crawler:${keyId}`,
         data: { caseId: fingerprint.caseId, distance: item.distance, sourceId: item.sourceId, runId: body.runId },
       });
     }
-    results.push({ status: created ? "created" : "duplicate" });
+    results.push({ status: "accepted" });
   }
   return { results, mediaRejected };
 }

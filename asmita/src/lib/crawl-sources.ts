@@ -100,16 +100,22 @@ export async function listEnabledCrawlSources() {
     .sort((a, b) => a.domain.localeCompare(b.domain));
 }
 
+/** The host findings under this source must be on, while the source exists and is enabled; else null. */
+export async function enabledCrawlSourceDomain(id: string): Promise<string | null> {
+  let row: { domain: string; enabled: boolean } | null | undefined;
+  if (isDevNoDb()) row = crawlMemory().sources.get(id);
+  else if (usesWorkerKysely()) {
+    row = await getWorkerDb().selectFrom("CrawlSource").select(["domain", "enabled"]).where("id", "=", id).executeTakeFirst();
+  } else {
+    const { db } = await import("@/lib/db");
+    row = await db.crawlSource.findUnique({ where: { id }, select: { domain: true, enabled: true } });
+  }
+  return row?.enabled === true ? row.domain : null;
+}
+
 /** Whether findings may name this source: it exists and is enabled. */
 export async function isEnabledCrawlSource(id: string): Promise<boolean> {
-  if (isDevNoDb()) return crawlMemory().sources.get(id)?.enabled === true;
-  if (usesWorkerKysely()) {
-    const row = await getWorkerDb().selectFrom("CrawlSource").select("enabled").where("id", "=", id).executeTakeFirst();
-    return row?.enabled === true;
-  }
-  const { db } = await import("@/lib/db");
-  const row = await db.crawlSource.findUnique({ where: { id }, select: { enabled: true } });
-  return row?.enabled === true;
+  return (await enabledCrawlSourceDomain(id)) !== null;
 }
 
 export async function listCrawlSources(): Promise<CrawlSourceView[]> {

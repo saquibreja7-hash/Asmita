@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => {
   const tx = {
-    crawlFinding: { updateMany: vi.fn() },
+    $queryRaw: vi.fn(),
+    crawlFinding: { updateMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     submittedUrl: { findFirst: vi.fn(), create: vi.fn() },
   };
   return {
@@ -13,6 +14,7 @@ const db = vi.hoisted(() => {
     crawlConsent: { findMany: vi.fn() },
     hashSubmission: { findMany: vi.fn(), findUnique: vi.fn() },
     crawlFinding: { findUnique: vi.fn() },
+    crawlSource: { findUnique: vi.fn() },
     platform: { findFirst: vi.fn() },
     $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
   };
@@ -22,7 +24,7 @@ vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => false, getWorker
 vi.mock("@/lib/db", () => ({ db }));
 
 import { buildCrawlPool, resolvePoolFingerprint } from "@/lib/crawl-pool";
-import { reviewCrawlFinding } from "@/lib/crawl-findings";
+import { recordCrawlFindings, reviewCrawlFinding } from "@/lib/crawl-findings";
 import { encryptField } from "@/lib/encryption";
 
 const PDQ = "ab".repeat(32);
@@ -111,5 +113,40 @@ describe("final approval, database path", () => {
     db.tx.crawlFinding.updateMany.mockResolvedValue({ count: 0 });
     expect(await reviewCrawlFinding({ findingId: "cf1", decision: "approve", reviewerId: "admin-1" })).toEqual({ ok: false, error: "already_reviewed" });
     expect(db.tx.submittedUrl.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("findings ingest, database path", () => {
+  const body = (pageUrl = "https://forum.example.com/t/1") => ({
+    runId: "run-1",
+    findings: [{ fingerprintId: "fp_1", pageUrl, imageUrl: "https://cdn.example.net/i.jpg", distance: 4, quality: 80, observedAt: "2026-11-16T00:00:00Z", sourceId: "src-1" }],
+  });
+
+  beforeEach(() => {
+    db.crawlSource.findUnique.mockResolvedValue({ domain: "forum.example.com", enabled: true });
+    db.hashSubmission.findUnique.mockResolvedValue({ id: "h1", caseId: "c1", crawlPoolId: "fp_1", hashEncrypted: "x", quality: 70, status: "APPROVED" });
+  });
+
+  it("locks the live authorisation in the same transaction as the write and records the consent on the finding", async () => {
+    db.tx.$queryRaw.mockResolvedValue([{ id: "consent-1" }]);
+    db.tx.crawlFinding.findUnique.mockResolvedValue(null);
+    db.tx.crawlFinding.create.mockResolvedValue({ id: "cf-new" });
+    expect((await recordCrawlFindings(body(), "key-1")).results).toEqual([{ status: "accepted" }]);
+    const sqlText = (db.tx.$queryRaw.mock.calls[0][0] as string[]).join("?");
+    expect(sqlText).toMatch(/FOR SHARE/);
+    expect(db.tx.$queryRaw.mock.calls[0]).toContain("consent-1");
+    expect(db.tx.crawlFinding.create.mock.calls[0][0].data).toMatchObject({ caseId: "c1", hashSubmissionId: "h1", crawlConsentId: "consent-1" });
+  });
+
+  it("a withdrawal that commits first means the report is refused and nothing is written", async () => {
+    db.tx.$queryRaw.mockResolvedValue([]);
+    expect((await recordCrawlFindings(body(), "key-1")).results).toEqual([{ status: "rejected", reason: "fingerprint_not_accepted" }]);
+    expect(db.tx.crawlFinding.create).not.toHaveBeenCalled();
+    expect(db.tx.crawlFinding.update).not.toHaveBeenCalled();
+  });
+
+  it("a page off the source host is refused before anything is looked up", async () => {
+    expect((await recordCrawlFindings(body("https://other.example.org/t/1"), "key-1")).results).toEqual([{ status: "rejected", reason: "page_not_in_source" }]);
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 });

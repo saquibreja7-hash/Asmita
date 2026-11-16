@@ -156,8 +156,8 @@ describe("GET /api/crawler/pool", () => {
     seedFingerprint("hs-1", caseA.id, PDQ_A);
     await consent(caseA.id, ["hs-1"]);
     const oldPoolId = poolId("hs-1");
-    expect((await report([finding({ fingerprintId: oldPoolId })])).body.results).toEqual([{ status: "created" }]);
-    expect((await report([finding({ fingerprintId: oldPoolId, pageUrl: "https://forum.example.com/thread/2" })])).body.results[0].status).toBe("created");
+    expect((await report([finding({ fingerprintId: oldPoolId })])).body.results).toEqual([{ status: "accepted" }]);
+    expect((await report([finding({ fingerprintId: oldPoolId, pageUrl: "https://forum.example.com/thread/2" })])).body.results[0].status).toBe("accepted");
     const [first] = await listCrawlFindings({ caseId: caseA.id });
     expect((await reviewCrawlFinding({ findingId: first.id, decision: "dismiss", reviewerId: "admin-1" })).ok).toBe(true);
 
@@ -196,12 +196,16 @@ describe("GET /api/crawler/sources", () => {
 describe("POST /api/crawler/findings", () => {
   let caseA: store.CaseRecord;
   let fp: string;
+  let igSource: string;
 
   beforeEach(async () => {
     caseA = await store.createCase("user-a");
     seedFingerprint("hs-1", caseA.id, PDQ_A);
     await consent(caseA.id, ["hs-1"]);
     fp = poolId("hs-1");
+    const ig = await createCrawlSource({ domain: "www.instagram.com", pageBudget: 10, delayMs: 1000, enabled: true }, "admin-1");
+    if (!ig.ok) throw new Error("source");
+    igSource = ig.source.id;
   });
 
   it.each([
@@ -219,7 +223,7 @@ describe("POST /api/crawler/findings", () => {
   ])("rejects %s without losing the rest of the batch", async (_label, override, reason) => {
     const { status, body } = await report([finding({ fingerprintId: fp, ...override }), finding({ fingerprintId: fp })]);
     expect(status).toBe(200);
-    expect(body.results).toEqual([{ status: "rejected", reason }, { status: "created" }]);
+    expect(body.results).toEqual([{ status: "rejected", reason }, { status: "accepted" }]);
     expect(crawlMemory().findings.size).toBe(1);
     const stored = JSON.stringify([...crawlMemory().findings.values()]);
     expect(stored).not.toContain("base64");
@@ -257,7 +261,7 @@ describe("POST /api/crawler/findings", () => {
       { status: "rejected", reason: "invalid_url" },
       { status: "rejected", reason: "unknown_source" },
       { status: "rejected", reason: "fingerprint_not_accepted" },
-      { status: "created" },
+      { status: "accepted" },
     ]);
   });
 
@@ -277,7 +281,7 @@ describe("POST /api/crawler/findings", () => {
 
   it("deduplicates per case, moving lastSeenAt and keeping the lowest distance", async () => {
     const first = await report([finding({ fingerprintId: fp, distance: 12 })]);
-    expect(first.body.results).toEqual([{ status: "created" }]);
+    expect(first.body.results).toEqual([{ status: "accepted" }]);
     const [before] = [...crawlMemory().findings.values()];
     const seenAt = before.lastSeenAt.getTime();
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -285,7 +289,7 @@ describe("POST /api/crawler/findings", () => {
       finding({ fingerprintId: fp, distance: 4, pageUrl: "https://forum.example.com/thread/1#comment", observedAt: "2020-01-01T00:00:00Z" }),
       finding({ fingerprintId: fp, distance: 20 }),
     ], "run-2");
-    expect(again.body.results).toEqual([{ status: "duplicate" }, { status: "duplicate" }]);
+    expect(again.body.results).toEqual([{ status: "accepted" }, { status: "accepted" }]);
     expect(crawlMemory().findings.size).toBe(1);
     const [after] = [...crawlMemory().findings.values()];
     expect(after.distance).toBe(4);
@@ -300,7 +304,7 @@ describe("POST /api/crawler/findings", () => {
     seedFingerprint("hs-b", caseB.id, PDQ_B);
     await consent(caseB.id, ["hs-b"]);
     const { body } = await report([finding({ fingerprintId: fp }), finding({ fingerprintId: poolId("hs-b") })]);
-    expect(body.results).toEqual([{ status: "created" }, { status: "created" }]);
+    expect(body.results).toEqual([{ status: "accepted" }, { status: "accepted" }]);
     const a = await listCrawlFindings({ caseId: caseA.id });
     const b = await listCrawlFindings({ caseId: caseB.id });
     expect(a).toHaveLength(1);
@@ -333,15 +337,55 @@ describe("POST /api/crawler/findings", () => {
   });
 });
 
+describe("findings: source binding and a neutral result", () => {
+  it("rejects a page off the source's host; accepts the host, its subdomains, and an image on another public host", async () => {
+    const record = await store.createCase("user-r3");
+    seedFingerprint("hs-r3", record.id, PDQ_A);
+    await consent(record.id, ["hs-r3"]);
+    const fp = poolId("hs-r3");
+    const { body } = await report([
+      finding({ fingerprintId: fp, pageUrl: "https://elsewhere.example.org/thread/1" }),
+      finding({ fingerprintId: fp, pageUrl: "https://forum.example.com.evil.example.org/x" }),
+      finding({ fingerprintId: fp, pageUrl: "https://notforum.example.com/x" }),
+      finding({ fingerprintId: fp, pageUrl: "https://forum.example.com/thread/9", imageUrl: "https://cdn.example.net/i/9.jpg" }),
+      finding({ fingerprintId: fp, pageUrl: "https://m.forum.example.com/thread/10" }),
+    ]);
+    expect(body.results).toEqual([
+      { status: "rejected", reason: "page_not_in_source" },
+      { status: "rejected", reason: "page_not_in_source" },
+      { status: "rejected", reason: "page_not_in_source" },
+      { status: "accepted" },
+      { status: "accepted" },
+    ]);
+    expect([...crawlMemory().findings.values()].filter((f) => f.caseId === record.id)).toHaveLength(2);
+  });
+
+  it("answers the same 'accepted' for a new finding and a repeat, so two pool ids cannot be linked to one case", async () => {
+    const record = await store.createCase("user-r5");
+    seedFingerprint("hs-r5a", record.id, PDQ_A);
+    seedFingerprint("hs-r5b", record.id, PDQ_B);
+    await consent(record.id, ["hs-r5a", "hs-r5b"]);
+    const page = { pageUrl: "https://forum.example.com/thread/r5", imageUrl: "https://cdn.example.com/r5.jpg" };
+    const first = await report([finding({ fingerprintId: poolId("hs-r5a"), ...page })]);
+    const second = await report([finding({ fingerprintId: poolId("hs-r5b"), ...page })]);
+    expect(first.body).toEqual(second.body);
+    expect(second.body.results).toEqual([{ status: "accepted" }]);
+  });
+});
+
 describe("analyst review", () => {
   let caseA: store.CaseRecord;
   let fp: string;
+  let igSource: string;
 
   beforeEach(async () => {
     caseA = await store.createCase("user-a");
     seedFingerprint("hs-1", caseA.id, PDQ_A);
     await consent(caseA.id, ["hs-1"]);
     fp = poolId("hs-1");
+    const ig = await createCrawlSource({ domain: "www.instagram.com", pageBudget: 10, delayMs: 1000, enabled: true }, "admin-1");
+    if (!ig.ok) throw new Error("source");
+    igSource = ig.source.id;
   });
 
   async function oneFinding(overrides: Record<string, unknown>) {
@@ -351,7 +395,7 @@ describe("analyst review", () => {
   }
 
   it("a close match is approved by one reviewer and becomes a CRAWLER link on the case", async () => {
-    const row = await oneFinding({ distance: 8, pageUrl: "https://www.instagram.com/p/placeholder" });
+    const row = await oneFinding({ distance: 8, pageUrl: "https://www.instagram.com/p/placeholder", sourceId: igSource });
     const outcome = await reviewCrawlFinding({ findingId: row.id, decision: "approve", reviewerId: "admin-1" });
     expect(outcome).toMatchObject({ ok: true, status: "APPROVED", createdUrl: true });
     const url = store.cases.get(caseA.id)!.urls.find((u) => u.source === "CRAWLER")!;
@@ -405,7 +449,7 @@ describe("analyst review", () => {
 
   it("after a withdrawal and a new authorisation, a re-reported copy is a new finding that can be approved onto a new link", async () => {
     const page = "https://www.instagram.com/p/placeholder-resign";
-    const first = await oneFinding({ distance: 4, pageUrl: page });
+    const first = await oneFinding({ distance: 4, pageUrl: page, sourceId: igSource });
     expect(await reviewCrawlFinding({ findingId: first.id, decision: "approve", reviewerId: "admin-1" })).toMatchObject({ ok: true, createdUrl: true });
     const oldLink = store.cases.get(caseA.id)!.urls.find((u) => u.crawlFindingId === first.id)!;
 
@@ -419,15 +463,16 @@ describe("analyst review", () => {
     fp = poolId("hs-1");
 
     // Same copy, reported again: a new finding under the new authorisation.
-    const { body } = await report([finding({ fingerprintId: fp, distance: 4, pageUrl: page })], "run-2");
-    expect(body.results).toEqual([{ status: "created" }]);
+    const { body } = await report([finding({ fingerprintId: fp, distance: 4, pageUrl: page, sourceId: igSource })], "run-2");
+    expect(body.results).toEqual([{ status: "accepted" }]);
     const rows = await listCrawlFindings({ caseId: caseA.id });
     expect(rows).toHaveLength(2);
     const second = rows.find((row) => row.id !== first.id)!;
     expect(crawlMemory().findings.get(second.id)).toMatchObject({ crawlConsentId: newConsentId, reviewStatus: "CANDIDATE" });
 
     // A repeat under the same new authorisation still merges.
-    expect((await report([finding({ fingerprintId: fp, distance: 4, pageUrl: page })], "run-3")).body.results).toEqual([{ status: "duplicate" }]);
+    expect((await report([finding({ fingerprintId: fp, distance: 4, pageUrl: page, sourceId: igSource })], "run-3")).body.results).toEqual([{ status: "accepted" }]);
+    expect(await listCrawlFindings({ caseId: caseA.id })).toHaveLength(2);
 
     // Approval gives it its own link; the old one stays stopped and bound to the old finding.
     const approved = await reviewCrawlFinding({ findingId: second.id, decision: "approve", reviewerId: "admin-1" });

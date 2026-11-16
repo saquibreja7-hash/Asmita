@@ -7,8 +7,10 @@ import { logSecurityEvent } from "@/lib/security-log";
 // A malformed envelope (not JSON, bad runId, not 1..50 findings, unknown
 // field) is refused whole with 400. Each finding is then checked on its own
 // (shape, http(s) URL, distance 0..31, media-like payload, private host,
-// source, fingerprint) and a bad one is "rejected" in its own result,
-// index-aligned with the input.
+// source, page on the source's host or a subdomain, fingerprint) and a bad
+// one is "rejected" with a reason in its own result, index-aligned with the
+// input. A stored finding is "accepted", new or merged alike, so the crawler
+// cannot tell whether two pool ids belong to one case.
 export const dynamic = "force-dynamic";
 
 const FINDING_REQUESTS_PER_HOUR = 600;
