@@ -10,7 +10,7 @@
 import sharp, { type Metadata } from "sharp";
 import { CrawlError } from "../errors.ts";
 import { computePdqHash } from "../pdq.ts";
-import { DEFAULT_LIMIT_INPUT_PIXELS, prepareForPdq } from "../prepare.ts";
+import { DEFAULT_LIMIT_INPUT_PIXELS, FAIL_ON, prepareForPdq } from "../prepare.ts";
 
 // libvips keeps an operation cache in memory; we never re-use results.
 sharp.cache(false);
@@ -55,13 +55,15 @@ export async function hashImage(bytes: Buffer, opts: HashOptions): Promise<HashR
 
   let meta: Metadata;
   try {
-    meta = await sharp(bytes, { failOn: "none", limitInputPixels, animated: false }).metadata();
+    meta = await sharp(bytes, { failOn: FAIL_ON, limitInputPixels, animated: false }).metadata();
   } catch (err) {
     // sharp checks the header against limitInputPixels before decoding.
     if (isPixelLimit(err)) throw new CrawlError("image_too_many_pixels");
     throw new CrawlError("image_decode_failed");
   }
   if (!meta.format || !SHARP_FORMAT[format].includes(meta.format)) throw new CrawlError("image_format");
+  // An "ftypavif" brand must really be AV1; HEIC (HEVC) is not on the allowlist.
+  if (format === "avif" && meta.compression !== "av1") throw new CrawlError("image_format");
   const w = meta.autoOrient?.width ?? meta.width;
   const h = meta.autoOrient?.height ?? meta.height;
   if (!w || !h) throw new CrawlError("image_decode_failed");
@@ -75,6 +77,7 @@ export async function hashImage(bytes: Buffer, opts: HashOptions): Promise<HashR
     input = await prepareForPdq(bytes, { limitInputPixels });
   } catch (err) {
     if (isPixelLimit(err)) throw new CrawlError("image_too_many_pixels");
+    if (isTruncated(err)) throw new CrawlError("image_truncated");
     throw new CrawlError("image_decode_failed");
   }
   const { hash, quality } = computePdqHash(input);
@@ -83,4 +86,9 @@ export async function hashImage(bytes: Buffer, opts: HashOptions): Promise<HashR
 
 function isPixelLimit(err: unknown): boolean {
   return err instanceof Error && /pixel limit/i.test(err.message);
+}
+
+/** libjpeg "premature end", libspng read errors, libwebp/libheif truncation. */
+function isTruncated(err: unknown): boolean {
+  return err instanceof Error && /premature end|truncat|read error|unexpected end|not enough data/i.test(err.message);
 }

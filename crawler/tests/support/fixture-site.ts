@@ -130,6 +130,8 @@ export async function buildFixture(): Promise<Fixture> {
       .png()
       .toBuffer(), // quality 0: below 50, skipped even though in pool
     tinyReal: await patternImage(140, 40, 40, "png"), // under MIN_IMAGE_SIDE (64)
+    avif: await patternImage(141, 320, 240, "avif"),
+    truncFull: await patternImage(142, 640, 480, "jpeg"), // served truncated; its FULL hash is in the pool
     bomb: await pixelBombPng(30_000, 30_000),
   };
 
@@ -165,6 +167,8 @@ export async function buildFixture(): Promise<Fixture> {
       fp("fp-deep", h.deepMatch!),
       fp("fp-flat", h.flat!),
       fp("fp-tiny", h.tinyReal!),
+      fp("fp-avif", h.avif!),
+      fp("fp-truncated", h.truncFull!), // must not match: the served copy is cut short
       ...Array.from({ length: 200 }, (_, i) => fp(`fp-rand-${i}`, randomFingerprint(5000 + i))),
     ],
   };
@@ -182,6 +186,7 @@ export async function buildFixture(): Promise<Fixture> {
     { fingerprintId: "fp-gzipped", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/gz.png" },
     { fingerprintId: "fp-two-1", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/two.png" },
     { fingerprintId: "fp-two-2", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/two.png" },
+    { fingerprintId: "fp-avif", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/pic.avif" },
   ];
 
   // ---- robots ----
@@ -275,7 +280,7 @@ export async function buildFixture(): Promise<Fixture> {
   site.route(
     `www.${S}`,
     "/sub",
-    sendHtml(html(`<img src="/img/gz.png"><img src="/img/two.png"><a href="/">home</a>`)),
+    sendHtml(html(`<img src="/img/gz.png"><img src="/img/two.png"><img src="/img/pic.avif"><img src="/img/cut.jpg"><a href="/">home</a>`)),
   );
 
   // ---- images on the source ----
@@ -332,6 +337,9 @@ export async function buildFixture(): Promise<Fixture> {
     res.end(gz);
   });
   site.route(`www.${S}`, "/img/two.png", sendBytes(img.twoIds, "image/png"));
+  site.route(`www.${S}`, "/img/pic.avif", sendBytes(img.avif, "image/avif"));
+  // 97% of a JPEG whose complete version is in the pool.
+  site.route(`www.${S}`, "/img/cut.jpg", sendBytes(Buffer.from(img.truncFull.subarray(0, Math.floor(img.truncFull.length * 0.97))), "image/jpeg"));
 
   // ---- CDN ----
   site.route(CDN_HOST, "/c.png", sendBytes(img.matchC, "image/png"));

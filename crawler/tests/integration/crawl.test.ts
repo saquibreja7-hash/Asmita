@@ -102,6 +102,7 @@ describe("fixture crawl", () => {
     expect(skipped.too_small).toBe(2); // 40x40 image + 8x8 lazy-load placeholder
     expect(skipped.too_many_pixels).toBe(1);
     expect(skipped.not_image).toBe(1);
+    expect(skipped.truncated).toBe(1); // cut.jpg: rejected, as createImageBitmap would
     expect(skipped.svg).toBeGreaterThanOrEqual(2);
     expect(skipped.data_uri).toBe(1);
     expect(skipped.tiny_declared).toBe(1);

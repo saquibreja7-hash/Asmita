@@ -28,9 +28,24 @@ main.ts -> cli.ts (config, signals, exit codes)
   -> run_summary log line, exit code
 ```
 
-Exit codes: `0` finished (also when the crawler is switched off, on SIGTERM,
-time limit or budget), `1` bad configuration or unexpected failure, `2` the
-API rejected the service key, `64` bad command line.
+### Exit codes
+
+A run exits 0 only when nothing needs an operator's attention. The code is
+also in the `run_summary` log line (`exitCode`, plus a `problems` object).
+When several apply, the first row in this table wins.
+
+| Code | Meaning |
+|---|---|
+| 0 | Clean run (including SIGTERM, time limit, budget reached), or the crawler is switched off on the server (503), even if findings were then left unsent |
+| 2 | The API rejected the service key (401/403), at load or mid-run |
+| 4 | Contract error: the server refused a request as malformed (400) and the batch was dropped |
+| 3 | Findings were still undelivered at exit (API down past all retries) |
+| 5 | The pool could not be re-synced within 60 minutes, so the run stopped early |
+| 1 | Invalid configuration or an unexpected failure |
+| 64 | Bad command line |
+
+A failing source (site down, DNS failure, robots.txt unreachable, timeouts)
+is not a run failure; it is counted in the summary only.
 
 ## Safety guarantees and the tests that enforce them
 
@@ -38,11 +53,12 @@ API rejected the service key, `64` bad command line.
 |---|---|---|
 | **No SSRF.** Only http/https on ports 80/443, no credentials in URLs; every resolved address must be public (private, loopback, link-local, CGNAT, multicast, reserved, IPv4-mapped/compatible IPv6, NAT64, 6to4, Teredo, ULA incl. `fd00:ec2::254`, metadata `169.254.169.254`, `100.100.100.200`). | `net/policy.ts`, `net/ip.ts` (IPv6 is an allowlist: only `2000::/3` minus special ranges). | `tests/unit/ssrf.test.ts` (84 cases: decimal/octal/hex/short IPv4, IPv6 forms, mapped, NAT64, schemes, ports, credentials) |
 | **No DNS rebinding.** The address checked is the address dialled. | undici custom connector: resolves ALL addresses itself, rejects if any is blocked, then connects to the validated IP literal with the original hostname as TLS `servername` (SNI + certificate check) and Host header. Not a pre-check followed by a normal fetch. | `ssrf.test.ts` "SafeFetcher connects only to the address it validated" (resolver called once per connection; rebinding answer refused; mixed public/private records refused) |
+| **TLS on the pinned IP.** SNI, the certificate hostname check and Host use the hostname; verification is never disabled. | Same connector; tests trust an in-memory CA through a test-only fetcher option that production wiring never sets. | `tests/unit/tls.test.ts` (matching cert succeeds with SNI = hostname; wrong-name cert, untrusted issuer and un-injected CA fail with `tls_failed`; HTTPS redirects to private/metadata/mapped addresses refused); `config-policy.test.ts` |
 | **Redirects re-validated.** Manual, max 5, each hop re-checked (scheme, port, credentials, address, robots, page scope). | `SafeFetcher.fetch` loop + `beforeHop`. | `ssrf.test.ts` redirect cases; `tests/integration/crawl.test.ts` (redirect to 10.0.0.1 and 169.254.169.254, loop, off-domain page redirect) |
 | **Byte caps** (10 MB images, 2 MB HTML, 500 KiB robots.txt) while streaming AND after decompression; stacked/unknown encodings refused. | `readCapped`, `decode` (`maxOutputLength`). | `tests/unit/bytes.test.ts` (gzip/brotli/deflate bombs, declared length, chunked stream, timeouts) |
 | **Timeouts**: connect, headers, body idle, and an overall per-request deadline (stops slow drips). | undici options + `AbortSignal.timeout`. | `bytes.test.ts`, fixture `/img/slow.png` |
 | **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active); `tests/unit/config-policy.test.ts` |
-| **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree; 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded. | `image/hash-image.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files) |
+| **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files rejected. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, truncated JPEG/PNG, AVIF); fixture `cut.jpg` and `pic.avif` |
 | **Service key only to Asmita.** | `AsmitaClient` has its own agent, builds URLs only from `ASMITA_API_URL`, refuses redirects. The crawl fetcher sends no auth or cookie headers. | `crawl.test.ts` "never sends credentials or cookies to crawled hosts"; `client-findings.test.ts` "refuses redirects" |
 | **No URLs, hostnames, fingerprints or bodies in logs.** Field allowlist, string sanitiser, errors reduced to fixed codes; uncaught errors and Node warnings routed through the logger. | `log.ts`, `errors.ts`, `cli.ts`. | `crawl.test.ts` log scan; `tests/integration/process.test.ts` runs the real `runMain` in a child process and scans all of stdout and stderr |
 | **Politeness.** robots.txt per origin (cached for the run), `Crawl-delay` honoured up to a cap, meta robots / `X-Robots-Tag` / `rel` nofollow, per-host delay, global concurrency cap, retries with exponential backoff and full jitter, `Retry-After`. | `crawl/robots.ts`, `crawl/limits.ts`, `retry.ts`. | `url-robots-extract.test.ts`, `log-retry-limits.test.ts`, `crawl.test.ts` |
@@ -74,7 +90,7 @@ need the app tree. Dihedral (rotated/flipped) variants are not generated:
 Decoding follows `src/prepare.ts`, copied from the PDQ agreement experiment
 (`tools/pdq-agreement/src/prepare.ts`, commit `876ad33`, branch
 `feat/crawler-pdq-agreement`) and kept as one swappable module: sharp with
-`failOn: "none"`, `limitInputPixels: 25_000_000`, `animated: false` ->
+`failOn: "truncated"`, `limitInputPixels: 25_000_000`, `animated: false` ->
 `.rotate()` -> `.toColourspace("srgb")` -> `.ensureAlpha()` -> `.raw()`, no
 resize, canvas alpha round-trip emulation, and a naive CMYK conversion for CMYK
 images without an ICC profile.
@@ -82,8 +98,20 @@ images without an ICC profile.
 Measured agreement with browser-computed hashes on 74 synthetic images:
 maximum distance 10, p95 0, 71 exact matches (verdict: go for Node + sharp +
 pdq.ts). Caveats: the fixtures were synthetic, the browser side was Chromium on
-Windows only, and CMYK is best-effort. `failOn: "none"` was kept because the
-numbers were measured with it and browsers render truncated images too.
+Windows only, and CMYK is best-effort.
+
+**Truncated images (`failOn: "truncated"`, the one change from the harness
+copy).** Re-measured with the harness's Chromium on 2026-11-16: the
+well-formed fixtures give identical results under `none`, `truncated`,
+`error` and `warning`, so the numbers above still hold. For 30 truncated files
+(JPEG cut at 99/90/60/20% or missing only its EOI marker, PNG and WebP cut
+short), Chromium's `createImageBitmap`, which is what survivors' browsers use
+to fingerprint, rejected every one. `failOn: "none"` hashed them anyway (one
+90%-truncated photo landed at distance 4 from the full image), while
+`"truncated"` rejected exactly the files Chromium rejected. An `<img>`
+element does paint truncated JPEGs partially, but that is not the path that
+produces survivor fingerprints. Truncated images are skipped with reason
+`truncated`.
 
 Matching: images with PDQ quality below 50 are skipped; brute-force Hamming
 over a packed `Uint32Array` with SWAR popcount; threshold = pool `threshold`
@@ -213,6 +241,5 @@ Nothing here has been deployed.
   bypasses logins, paywalls, CAPTCHAs or robots.txt.
 - CMYK images are best-effort; JPEG/WebP decoders differ slightly from
   Chromium's (see the agreement numbers above).
-- The TLS path (SNI and certificate name check against the original hostname
-  while dialling a pinned IP) follows undici's connector code but is not
-  exercised by a test: all fixtures use plain HTTP on loopback.
+- AVIF is accepted (AV1 only); HEIC/HEVC is not, since this libvips build
+  cannot be relied on to decode it and browsers' support varies.

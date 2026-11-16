@@ -73,7 +73,7 @@ export function patternRgba(seed: number, width: number, height: number): Uint8C
   return out;
 }
 
-export type EncodeFormat = "png" | "jpeg" | "webp" | "gif";
+export type EncodeFormat = "png" | "jpeg" | "webp" | "gif" | "avif";
 
 export async function patternImage(
   seed: number,
@@ -91,6 +91,8 @@ export async function patternImage(
       return img.webp({ lossless: true }).toBuffer();
     case "gif":
       return img.gif().toBuffer();
+    case "avif":
+      return img.avif({ quality: 80 }).toBuffer();
   }
 }
 

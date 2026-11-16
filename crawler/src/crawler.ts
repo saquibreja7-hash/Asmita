@@ -306,7 +306,9 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
               ? "too_many_pixels"
               : err.code === "image_format"
                 ? "format"
-                : "decode_failed";
+                : err.code === "image_truncated"
+                  ? "truncated"
+                  : "decode_failed";
       return metrics.skip(reason);
     }
     metrics.imagesHashed++;

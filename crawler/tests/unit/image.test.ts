@@ -34,6 +34,28 @@ describe("sniffImage", () => {
   });
 });
 
+describe("truncated and AVIF images", () => {
+  it("rejects truncated JPEGs (also when only the EOI marker is missing), like createImageBitmap", async () => {
+    const full = await patternImage(61, 640, 480, "jpeg");
+    expect((await hashImage(full, { minSide: 1 })).hash).toMatch(/^[0-9a-f]{64}$/);
+    for (const cut of [full.subarray(0, full.length - 2), full.subarray(0, Math.floor(full.length * 0.99)), full.subarray(0, Math.floor(full.length * 0.6))]) {
+      expect(await code(hashImage(Buffer.from(cut), { minSide: 1 }))).toBe("image_truncated");
+    }
+  });
+  it("rejects truncated PNGs", async () => {
+    const full = await patternImage(62, 320, 240, "png");
+    expect(await code(hashImage(Buffer.from(full.subarray(0, Math.floor(full.length * 0.9))), { minSide: 1 }))).toBe("image_truncated");
+  });
+  it("hashes AVIF (sniffed by brand, decoded as AV1) close to the same picture as PNG", async () => {
+    const avif = await patternImage(63, 320, 240, "avif");
+    expect(sniffImage(avif)).toBe("avif");
+    const a = await hashImage(avif, { minSide: 1 });
+    const p = await hashImage(await patternImage(63, 320, 240, "png"), { minSide: 1 });
+    expect(a.format).toBe("avif");
+    expect(hammingDistance(a.hash, p.hash)).toBeLessThanOrEqual(31);
+  });
+});
+
 describe("hashImage", () => {
   it("hashes PNG/JPEG/WebP/GIF of the same picture to nearby fingerprints", async () => {
     const png = await hashImage(await patternImage(7, 320, 240, "png"), { minSide: 64 });
