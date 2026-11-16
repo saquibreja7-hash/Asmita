@@ -356,6 +356,71 @@ describe("findings: source binding and a neutral result", () => {
     expect([...crawlMemory().findings.values()].filter((f) => f.caseId === record.id)).toHaveLength(2);
   });
 
+  it("host check is not fooled by lookalike, suffix, dotted, cased, ported, userinfo or IDN hosts", async () => {
+    const record = await store.createCase("user-r3b");
+    seedFingerprint("hs-r3b", record.id, PDQ_A);
+    await consent(record.id, ["hs-r3b"]);
+    const fp = poolId("hs-r3b");
+    const cases: Array<[string, string]> = [
+      // lookalikes and suffix tricks: never in scope
+      ["https://evil-forum.example.com/x", "page_not_in_source"],
+      ["https://evilforum.example.com/x", "page_not_in_source"],
+      ["https://forum-example.com/x", "page_not_in_source"],
+      ["https://forum.example.com.evil.org/x", "page_not_in_source"],
+      ["https://forum.example.com.evil.org./x", "page_not_in_source"],
+      ["https://example.com/x", "page_not_in_source"],
+      // userinfo: refused outright (the host would be what follows the @)
+      ["https://forum.example.com@evil.org/x", "invalid_url"],
+      ["https://forum.example.com:pw@evil.org/x", "invalid_url"],
+      // IDN lookalike (Cyrillic a) becomes punycode, a different host
+      ["https://forum.exаmple.com/x", "page_not_in_source"],
+      ["https://xn--forum-9cf.example.com/x", "page_not_in_source"],
+      // the same host, written differently
+      ["https://FORUM.Example.COM/x", "accepted"],
+      ["https://forum.example.com./x", "accepted"],
+      ["https://M.FORUM.EXAMPLE.COM/x", "accepted"],
+    ];
+    const { body } = await report(cases.map(([pageUrl]) => finding({ fingerprintId: fp, pageUrl })));
+    expect(body.results.map((r: { status: string; reason?: string }) => r.reason ?? r.status)).toEqual(cases.map(([, want]) => want));
+  });
+
+  it("a page or image address with a port or credentials is refused: the crawler never sends one", async () => {
+    const record = await store.createCase("user-r3c");
+    seedFingerprint("hs-r3c", record.id, PDQ_A);
+    await consent(record.id, ["hs-r3c"]);
+    const fp = poolId("hs-r3c");
+    const { body } = await report([
+      finding({ fingerprintId: fp, pageUrl: "https://forum.example.com:8443/x" }),
+      finding({ fingerprintId: fp, pageUrl: "https://user:pw@forum.example.com/x" }),
+      finding({ fingerprintId: fp, imageUrl: "https://user@cdn.example.net/i.jpg" }),
+      finding({ fingerprintId: fp, imageUrl: "https://cdn.example.net:8080/i.jpg" }),
+      finding({ fingerprintId: fp, pageUrl: "https://forum.example.com:443/x" }), // default port: same address
+    ]);
+    expect(body.results).toEqual([
+      ...Array(4).fill({ status: "rejected", reason: "invalid_url" }),
+      { status: "accepted" },
+    ]);
+  });
+
+  it("an IDN source matches its page whether written in Unicode or punycode", async () => {
+    // Sources are entered in punycode; a Unicode host name is refused.
+    expect((await createCrawlSource({ domain: "bücher.example.com", pageBudget: 10, delayMs: 1000, enabled: true }, "admin-1")).ok).toBe(false);
+    const created = await createCrawlSource({ domain: "xn--bcher-kva.example.com", pageBudget: 10, delayMs: 1000, enabled: true }, "admin-1");
+    expect(created.ok).toBe(true);
+    const idnSource = (created as { source: { id: string; domain: string } }).source;
+    expect(idnSource.domain).toBe("xn--bcher-kva.example.com");
+    const record = await store.createCase("user-r3d");
+    seedFingerprint("hs-r3d", record.id, PDQ_A);
+    await consent(record.id, ["hs-r3d"]);
+    const fp = poolId("hs-r3d");
+    const { body } = await report([
+      finding({ fingerprintId: fp, sourceId: idnSource.id, pageUrl: "https://bücher.example.com/a" }),
+      finding({ fingerprintId: fp, sourceId: idnSource.id, pageUrl: "https://xn--bcher-kva.example.com/b" }),
+      finding({ fingerprintId: fp, sourceId: idnSource.id, pageUrl: "https://bucher.example.com/c" }),
+    ]);
+    expect(body.results.map((r: { status: string; reason?: string }) => r.reason ?? r.status)).toEqual(["accepted", "accepted", "page_not_in_source"]);
+  });
+
   it("answers the same 'accepted' for a new finding and a repeat, so two pool ids cannot be linked to one case", async () => {
     const record = await store.createCase("user-r5");
     seedFingerprint("hs-r5a", record.id, PDQ_A);

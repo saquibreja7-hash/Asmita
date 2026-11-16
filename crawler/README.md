@@ -242,7 +242,7 @@ Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
 - `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality }] }`
 - `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs }] }`
-- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and already-known findings alike, so the crawler cannot tell whether two pool ids belong to one case; the old `"created"` / `"duplicate"` are still tolerated and counted as accepted. A page must be on its source's host or a subdomain (`page_not_in_source`, which also sets exit code 4); the image may be on another public host
+- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and already-known findings alike, so the crawler cannot tell whether two pool ids belong to one case; the old `"created"` / `"duplicate"` are still tolerated and counted as accepted. A page must be on its source's host or a subdomain (`page_not_in_source`, which also sets exit code 4); the image may be on another public host. A page or image address with credentials or a non-default port is refused (`invalid_url`); the crawler never fetches one
 
 Responses are validated with Zod. Findings are validated locally with the
 server's rules (strict objects, `runId` `[A-Za-z0-9_.:-]{1,64}`, integer

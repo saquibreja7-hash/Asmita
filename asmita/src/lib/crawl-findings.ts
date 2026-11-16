@@ -197,6 +197,21 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
 }
 
 /** Whether a page address is on the source's host or one of its subdomains. */
+/**
+ * The crawler never fetches an address with credentials or a non-default port
+ * (crawler/src/net: url_credentials, blocked_port), so a report carrying one
+ * is malformed or forged. Refused, so such an address never reaches a case or
+ * a notice.
+ */
+export function crawlerShapedUrl(raw: string) {
+  try {
+    const url = new URL(raw);
+    return url.username === "" && url.password === "" && url.port === "";
+  } catch {
+    return false;
+  }
+}
+
 export function pageOnSourceHost(pageUrl: string, sourceDomain: string) {
   let host: string;
   try {
@@ -239,7 +254,7 @@ export async function recordCrawlFindings(
     const item = checked.data;
     const page = parseSubmittedUrl(item.pageUrl);
     const image = parseSubmittedUrl(item.imageUrl);
-    if (!page.ok || !image.ok) {
+    if (!page.ok || !image.ok || !crawlerShapedUrl(item.pageUrl) || !crawlerShapedUrl(item.imageUrl)) {
       results.push({ status: "rejected", reason: "invalid_url" });
       continue;
     }
