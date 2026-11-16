@@ -31,7 +31,9 @@ const PDQ = "ab".repeat(32);
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
-  db.crawlConsent.findMany.mockResolvedValue([{ id: "consent-1", caseId: "c1", hashSubmissionIds: ["h1", "h2", "h3"] }]);
+  const live = { id: "consent-1", caseId: "c1", hashSubmissionIds: ["h1", "h2", "h3"], signedAt: new Date("2026-11-01T00:00:00Z") };
+  db.crawlConsent.findMany.mockResolvedValue([live]);
+  db.tx.$queryRaw.mockResolvedValue([live]);
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -84,6 +86,27 @@ describe("final approval, database path", () => {
     expect(db.tx.submittedUrl.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ caseId: "c1", crawlConsentWithdrawnAt: null }),
     }));
+  });
+
+  it("re-checks the authorisation under a lock inside the approval transaction", async () => {
+    db.crawlFinding.findUnique.mockResolvedValue({
+      id: "cf1", caseId: "c1", hashSubmissionId: "h1", crawlConsentId: "consent-1", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null, firstSeenAt: new Date(),
+      pageUrlEncrypted: encryptField("https://forum.example.com/t"), imageUrlEncrypted: encryptField("https://cdn.example.com/i.jpg"),
+    });
+    // A withdrawal committed between the first check and the transaction.
+    db.tx.$queryRaw.mockResolvedValue([]);
+    expect(await reviewCrawlFinding({ findingId: "cf1", decision: "approve", reviewerId: "admin-1" })).toEqual({ ok: false, error: "consent_withdrawn" });
+    expect((db.tx.$queryRaw.mock.calls[0][0] as string[]).join("?")).toMatch(/FOR SHARE/);
+    expect(db.tx.crawlFinding.updateMany).not.toHaveBeenCalled();
+    expect(db.tx.submittedUrl.create).not.toHaveBeenCalled();
+  });
+
+  it("a legacy finding (no crawlConsentId) first seen before the live authorisation was signed is not covered by it", async () => {
+    db.crawlFinding.findUnique.mockResolvedValue({
+      id: "cf1", caseId: "c1", hashSubmissionId: "h1", crawlConsentId: null, distance: 6, reviewStatus: "CANDIDATE", reviewedById: null, firstSeenAt: new Date("2026-10-01T00:00:00Z"),
+      pageUrlEncrypted: encryptField("https://forum.example.com/t"), imageUrlEncrypted: encryptField("https://cdn.example.com/i.jpg"),
+    });
+    expect(await reviewCrawlFinding({ findingId: "cf1", decision: "approve", reviewerId: "admin-1" })).toEqual({ ok: false, error: "consent_withdrawn" });
   });
 
   it("refuses a finding recorded under an earlier authorisation, even if the new one lists the fingerprint", async () => {

@@ -1,6 +1,7 @@
 import { buildRepresentativeHashAnnex } from "@/lib/case-hash-annex";
 import { CRAWL_AUTHORISATION_TYPE } from "@/lib/crawl-consent";
 import { findingUrlsExpired, SECOND_REVIEW_DISTANCE } from "@/lib/crawl-findings";
+import { consentCoversFinding } from "@/lib/crawl-pool";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
@@ -215,11 +216,10 @@ export async function prepareRepresentativeNotice(input: {
     where: { caseId: finding.caseId, withdrawnAt: null },
     orderBy: { signedAt: "desc" },
   });
-  if (!consent || !consent.hashSubmissionIds.includes(finding.hashSubmissionId)) return refuse(409, "consent_withdrawn");
-  // A finding recorded under an earlier authorisation is never sent under a
-  // later one (rows from before crawlConsentId existed have it null; their
-  // links were stopped by the withdrawal itself).
-  if (finding.crawlConsentId && finding.crawlConsentId !== consent.id) return refuse(409, "consent_withdrawn");
+  // It must list the matched fingerprint, and the finding must have been
+  // recorded under it: a finding from an earlier authorisation is never sent
+  // under a later one (consentCoversFinding).
+  if (!consent || !consentCoversFinding(consent, finding)) return refuse(409, "consent_withdrawn");
 
   // The authorisation text she signed is still that text, and still reviewed.
   const authorisationTemplate = await db.noticeTemplate.findUnique({ where: { id: consent.templateId } });

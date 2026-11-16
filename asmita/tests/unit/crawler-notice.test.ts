@@ -330,6 +330,15 @@ describe("representative notice: gates (each with its own code)", () => {
     seed();
     state.findings.get("cf-1")!.crawlConsentId = "consent-1";
     expect((await previewRepresentativeNotice(base)).ok).toBe(true);
+    // A row without crawlConsentId, first seen before the live authorisation was signed.
+    seed();
+    state.findings.get("cf-1")!.firstSeenAt = new Date("2026-11-09T00:00:00Z");
+    vi.useFakeTimers({ now: new Date("2026-11-20T00:00:00Z"), toFake: ["Date"] });
+    try {
+      await expectRefusal("consent_withdrawn");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("authorisation text changed since she signed: authorisation_template_changed", async () => {

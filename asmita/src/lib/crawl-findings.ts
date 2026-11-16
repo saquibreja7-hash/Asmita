@@ -3,7 +3,7 @@ import { sql } from "kysely";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { crawlMemory, type MemoryCrawlFinding } from "@/lib/crawl-store";
-import { findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
+import { consentCoversFinding, findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
 import { enabledCrawlSourceDomain } from "@/lib/crawl-sources";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
@@ -602,6 +602,11 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
     : null;
 
   const outcome = await db.$transaction(async (tx) => {
+    // Checked again under a lock in this transaction: a withdrawal either
+    // committed first (refused here) or waits for this approval and then
+    // stops the link it creates.
+    const live = await tx.$queryRaw<Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date }>>`SELECT "id", "hashSubmissionIds", "signedAt" FROM "CrawlConsent" WHERE "caseId" = ${finding.caseId} AND "withdrawnAt" IS NULL FOR SHARE`;
+    if (!live.some((consent) => consentCoversFinding({ ...consent, signedAt: new Date(consent.signedAt) }, finding))) return "consent_withdrawn" as const;
     const claimed = await tx.crawlFinding.updateMany({ where: unchanged, data: { reviewStatus: "APPROVED", ...reviewerFields } });
     if (claimed.count === 0) return null;
     // The survivor may already have reported the same link herself, or an
@@ -627,6 +632,7 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
     });
     return { submittedUrlId: created.id, createdUrl: true };
   });
+  if (outcome === "consent_withdrawn") return { ok: false, error: "consent_withdrawn" };
   if (!outcome) return { ok: false, error: "already_reviewed" };
   await auditReview("CRAWL_FINDING_APPROVED", finding, input.reviewerId, { stage: "final", second: plan.second, submittedUrlId: outcome.submittedUrlId, createdUrl: outcome.createdUrl });
   return { ok: true, status: "APPROVED", ...outcome };
