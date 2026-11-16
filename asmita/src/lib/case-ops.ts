@@ -7,6 +7,8 @@ import { parseSubmittedUrl } from "@/lib/url-parser";
 import { findPlatformByDomain } from "@/lib/platforms";
 import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
+import { crawlerFindingsVisibleToSurvivor, survivorActableLinkWhere, survivorMayActOnLink } from "@/lib/crawler-flags";
+import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { logSecurityEvent } from "@/lib/security-log";
 import { randomUUID } from "node:crypto";
@@ -26,6 +28,22 @@ export type DisplayUrl = {
   hasSignedNotice?: boolean;
   flaggedForReview?: boolean;
   flagReason?: string | null;
+  /**
+   * SURVIVOR: she reported it. CRAWLER: Asmita's crawler found it and an
+   * analyst approved it; Asmita sends its notice as her representative and
+   * she never signs it. No finding detail is ever exposed here. Every
+   * case-ops backend sets it (optional in the type only so older fixtures
+   * still type-check).
+   */
+  source?: "SURVIVOR" | "CRAWLER";
+  /** Crawler links: she withdrew her crawl authorisation before a notice went out, so none will. */
+  crawlConsentWithdrawn?: boolean;
+  /**
+   * Crawler links: when Asmita's representative notice went out. Kept apart
+   * from noticeSentAt because that notice states no removal deadline, so the
+   * escalation ladder (which noticeSentAt starts) does not apply to it.
+   */
+  representativeNoticeSentAt?: string | null;
   /** The escalation ladder's inputs (src/lib/escalation-ladder.ts). */
   platformFiledAt?: string | null;
   noticeSentAt?: string | null;
@@ -46,6 +64,10 @@ export type DisplayCase = {
   urls: DisplayUrl[];
 };
 
+export function urlSource(source: string | null | undefined): DisplayUrl["source"] {
+  return source === "CRAWLER" ? "CRAWLER" : "SURVIVOR";
+}
+
 function toDisplayUrl(url: {
   id: string;
   domain: string;
@@ -56,9 +78,13 @@ function toDisplayUrl(url: {
   flaggedForReview: boolean;
   flagReason: string | null;
   platformFiledAt?: Date | string | null;
+  source?: string | null;
+  crawlConsentWithdrawnAt?: Date | string | null;
   notices?: OriginalNotice[];
 }): DisplayUrl {
   const notice = url.notices?.[0];
+  const source = urlSource(url.source);
+  const sentAt = iso(notice?.sentAt);
   return {
     id: url.id,
     domain: url.domain,
@@ -70,9 +96,30 @@ function toDisplayUrl(url: {
     flaggedForReview: url.flaggedForReview,
     flagReason: url.flagReason,
     platformFiledAt: iso(url.platformFiledAt),
-    noticeSentAt: iso(notice?.sentAt),
+    source,
+    ...(source === "CRAWLER"
+      ? { crawlConsentWithdrawn: Boolean(url.crawlConsentWithdrawnAt), representativeNoticeSentAt: sentAt, noticeSentAt: null }
+      : { noticeSentAt: sentAt }),
     responseType: notice?.responseType ?? null,
     responseAt: iso(notice?.responseReceivedAt),
+  };
+}
+
+/** A memory-store link as the survivor sees it: never the finding id or other internals. */
+export function memoryDisplayUrl(url: store.UrlRecord): DisplayUrl {
+  const source = urlSource(url.source);
+  return {
+    id: url.id,
+    domain: url.domain,
+    platformName: url.platformName,
+    status: url.status,
+    urlHash: url.urlHash,
+    platformId: url.platformId,
+    flaggedForReview: url.flaggedForReview,
+    flagReason: url.flagReason ?? null,
+    platformFiledAt: url.platformFiledAt ?? null,
+    source,
+    ...(source === "CRAWLER" ? { crawlConsentWithdrawn: Boolean(url.crawlConsentWithdrawnAt), representativeNoticeSentAt: null } : {}),
   };
 }
 
@@ -92,16 +139,18 @@ function toDisplayCase(dbCase: {
     flaggedForReview: boolean;
     flagReason: string | null;
     platformFiledAt?: Date | string | null;
+    source?: string | null;
+    crawlConsentWithdrawnAt?: Date | string | null;
     notices?: OriginalNotice[];
   }>;
-}): DisplayCase {
+}, includeFindings = true): DisplayCase {
   return {
     id: dbCase.id,
     referenceNumber: dbCase.referenceNumber,
     userId: dbCase.userId,
     createdAt: dbCase.createdAt.toISOString(),
     status: dbCase.status,
-    urls: dbCase.submittedUrls.map(toDisplayUrl),
+    urls: dbCase.submittedUrls.filter((url) => includeFindings || urlSource(url.source) !== "CRAWLER").map(toDisplayUrl),
   };
 }
 
@@ -415,17 +464,38 @@ export async function registerCaseWithUrls(
   throw new Error("case_reference_collision_exhausted");
 }
 
-export async function getCaseForUser(caseId: string, userId: string): Promise<DisplayCase | null> {
+/**
+ * Whether a survivor-facing read lists the links Asmita's crawler found.
+ * Default: CRAWLER_SHOW_FINDINGS_TO_SURVIVOR (crawler-flags.ts). Her data
+ * export passes includeFindings: true, because it is her right of access to
+ * her own data and must not depend on what the case page shows. Admin views
+ * (listAllCases, admin-cases.ts) do not read through here.
+ */
+export type CaseReadOptions = { includeFindings?: boolean };
+
+function includesFindings(options?: CaseReadOptions) {
+  return options?.includeFindings ?? crawlerFindingsVisibleToSurvivor();
+}
+
+function memoryDisplayCase(rec: store.CaseRecord, includeFindings: boolean): DisplayCase {
+  const urls = includeFindings ? rec.urls : rec.urls.filter((url) => urlSource(url.source) !== "CRAWLER");
+  return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: urls.map(memoryDisplayUrl) };
+}
+
+export async function getCaseForUser(caseId: string, userId: string, options?: CaseReadOptions): Promise<DisplayCase | null> {
+  const includeFindings = includesFindings(options);
   if (isDevNoDb()) {
     const rec = store.cases.get(caseId);
     if (!rec || rec.userId !== userId) return null;
-    return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls };
+    return memoryDisplayCase(rec, includeFindings);
   }
   if (usesWorkerKysely()) {
     const workerDb = getWorkerDb();
     const record = await workerDb.selectFrom("Case").selectAll().where("id", "=", caseId).where("userId", "=", userId).executeTakeFirst();
     if (!record) return null;
-    const urls = await workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", caseId).orderBy("submittedAt", "asc").execute();
+    let urlQuery = workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", caseId);
+    if (!includeFindings) urlQuery = urlQuery.where("source", "!=", "CRAWLER");
+    const urls = await urlQuery.orderBy("submittedAt", "asc").execute();
     // The original notice per link (not its follow-ups) feeds the escalation ladder.
     const notices = urls.length
       ? await workerDb.selectFrom("Notice").select(["urlId", "sentAt", "responseType", "responseReceivedAt"])
@@ -440,13 +510,14 @@ export async function getCaseForUser(caseId: string, userId: string): Promise<Di
         submittedAt: new Date(url.submittedAt),
         notices: notices.filter((notice) => notice.urlId === url.id),
       })),
-    });
+    }, includeFindings);
   }
   const db = await getPrismaDb();
   const dbCase = await db.case.findFirst({
     where: { id: caseId, userId },
     include: {
       submittedUrls: {
+        ...(includeFindings ? {} : { where: { source: { not: "CRAWLER" as const } } }),
         orderBy: { submittedAt: "asc" },
         include: {
           notices: {
@@ -459,30 +530,33 @@ export async function getCaseForUser(caseId: string, userId: string): Promise<Di
       },
     },
   });
-  return dbCase ? toDisplayCase(dbCase) : null;
+  return dbCase ? toDisplayCase(dbCase, includeFindings) : null;
 }
 
-export async function listCasesForUser(userId: string): Promise<DisplayCase[]> {
+export async function listCasesForUser(userId: string, options?: CaseReadOptions): Promise<DisplayCase[]> {
+  const includeFindings = includesFindings(options);
   if (isDevNoDb()) {
     return Array.from(store.cases.values())
       .filter((rec) => rec.userId === userId)
-      .map((rec) => ({ id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls }));
+      .map((rec) => memoryDisplayCase(rec, includeFindings));
   }
   if (usesWorkerKysely()) {
     const workerDb = getWorkerDb();
     const records = await workerDb.selectFrom("Case").selectAll().where("userId", "=", userId).orderBy("createdAt", "desc").execute();
     return Promise.all(records.map(async (record) => {
-      const urls = await workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", record.id).orderBy("submittedAt", "asc").execute();
-      return toDisplayCase({ ...record, submittedUrls: urls });
+      let urlQuery = workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", record.id);
+      if (!includeFindings) urlQuery = urlQuery.where("source", "!=", "CRAWLER");
+      const urls = await urlQuery.orderBy("submittedAt", "asc").execute();
+      return toDisplayCase({ ...record, submittedUrls: urls }, includeFindings);
     }));
   }
   const db = await getPrismaDb();
   const dbCases = await db.case.findMany({
     where: { userId },
-    include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
+    include: { submittedUrls: { ...(includeFindings ? {} : { where: { source: { not: "CRAWLER" as const } } }), orderBy: { submittedAt: "asc" } } },
     orderBy: { createdAt: "desc" },
   });
-  return dbCases.map(toDisplayCase);
+  return dbCases.map((dbCase) => toDisplayCase(dbCase, includeFindings));
 }
 
 export type AddUrlResult =
@@ -490,12 +564,55 @@ export type AddUrlResult =
   | { ok: true; duplicate: true; url: DisplayUrl }
   | { ok: true; duplicate: false; url: DisplayUrl };
 
+type ExistingLink = { source: string; representativeNoticePdf: string | null; crawlConsentWithdrawnAt: Date | string | null; sent: boolean };
+
+/**
+ * Which existing row a survivor's report of an address meets, newest first:
+ * her own link if she has one; else, if any crawler link for the address had
+ * a representative notice sent or claimed, that link (her report is then a
+ * duplicate: Asmita already noticed it); else the live crawler link, or the
+ * newest stopped one, which becomes hers. At most one crawler link per
+ * address is ever live, so the ones left behind stay stopped.
+ */
+export function pickExistingLink<T extends ExistingLink>(rows: T[]): T | undefined {
+  const own = rows.find((row) => row.source !== "CRAWLER");
+  if (own) return own;
+  const noticed = rows.find((row) => row.sent || row.representativeNoticePdf !== null);
+  if (noticed) return noticed;
+  return rows.find((row) => !row.crawlConsentWithdrawnAt) ?? rows[0];
+}
+
+/**
+ * The echo of her own report. When the address she reported is one Asmita's
+ * crawler already holds and findings are hidden from her, the echo must not
+ * carry the finding's state: no source, consent, notice dates or response.
+ */
+function withoutFindingState(results: AddUrlResult[]): AddUrlResult[] {
+  if (crawlerFindingsVisibleToSurvivor()) return results;
+  return results.map((result) => {
+    if (!result.ok || urlSource(result.url.source) !== "CRAWLER") return result;
+    const { id, domain, platformName, status, urlHash, platformId, flaggedForReview, flagReason } = result.url;
+    return { ...result, url: { id, domain, platformName, status, urlHash, platformId, flaggedForReview, flagReason } };
+  });
+}
+
 export async function addUrlsToCase(
   caseId: string,
   rawUrls: string[],
   options?: { flagReasons?: string[] },
 ): Promise<AddUrlResult[]> {
-  if (isDevNoDb()) return store.addUrlsToCase(caseId, rawUrls, options);
+  return withoutFindingState(await addUrlsToCaseUnfiltered(caseId, rawUrls, options));
+}
+
+async function addUrlsToCaseUnfiltered(
+  caseId: string,
+  rawUrls: string[],
+  options?: { flagReasons?: string[] },
+): Promise<AddUrlResult[]> {
+  if (isDevNoDb()) {
+    return (await store.addUrlsToCase(caseId, rawUrls, options)).map((result) =>
+      result.ok ? ({ ...result, url: memoryDisplayUrl(result.url) } as AddUrlResult) : (result as AddUrlResult));
+  }
   const db = await getPrismaDb();
   const flaggedForReview = Boolean(options?.flagReasons?.length);
   const results: AddUrlResult[] = [];
@@ -504,12 +621,6 @@ export async function addUrlsToCase(
     const parsed = parseSubmittedUrl(rawUrl);
     if (!parsed.ok) {
       results.push({ ok: false, rawUrl, error: parsed.error });
-      continue;
-    }
-
-    const existing = await db.submittedUrl.findFirst({ where: { caseId, urlHash: parsed.urlHash } });
-    if (existing) {
-      results.push({ ok: true, duplicate: true, url: toDisplayUrl(existing) });
       continue;
     }
 
@@ -525,19 +636,79 @@ export async function addUrlsToCase(
         })
       : null;
 
-    const created = await db.submittedUrl.create({
-      data: {
-        caseId,
-        urlEncrypted: encryptField(parsed.normalizedUrl),
-        urlHash: parsed.urlHash,
-        domain: parsed.domain,
-        platformId: dbPlatform?.id ?? null,
-        status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
-        flaggedForReview,
-        flagReason: options?.flagReasons?.join(",") ?? null,
-      },
+    const outcome = await db.$transaction(async (tx) => {
+      // First statement: lock the case row, so a crawler finding approved at
+      // the same moment cannot insert a link for this address between the
+      // check and the insert below (case-link-lock.ts, with the lock order).
+      if (!(await lockCaseForLinkWrite(tx, caseId))) return { kind: "case_not_found" as const };
+      // Her own link wins over a crawler link for the same address while no
+      // representative notice was sent or claimed for it (pickExistingLink).
+      // A case can hold several crawler links for one address (one per
+      // authorisation, ADR 006), so every row for the address is looked at.
+      const sameAddress = await tx.submittedUrl.findMany({
+        where: { caseId, urlHash: parsed.urlHash },
+        include: { notices: { select: { sentAt: true, responseType: true, responseReceivedAt: true }, orderBy: { createdAt: "asc" }, take: 1 } },
+        orderBy: { submittedAt: "desc" },
+      });
+      const existing = pickExistingLink(sameAddress.map((row) => ({ ...row, sent: row.notices.length > 0 })));
+
+      if (existing?.source === "CRAWLER" && !existing.sent && existing.representativeNoticePdf === null) {
+        // She reported a link Asmita's crawler had found: it becomes her link and
+        // enters her own sign flow. Conditional on nothing having been sent or
+        // claimed, so a representative notice in flight is never undercut. The
+        // finding keeps its own record and audit history.
+        const converted = await tx.submittedUrl.updateMany({
+          where: { id: existing.id, source: "CRAWLER", representativeNoticePdf: null, notices: { none: {} } },
+          data: {
+            source: "SURVIVOR",
+            crawlFindingId: null,
+            crawlConsentWithdrawnAt: null,
+            platformId: dbPlatform?.id ?? null,
+            status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
+            flaggedForReview,
+            flagReason: options?.flagReasons?.join(",") ?? null,
+          },
+        });
+        const current = await tx.submittedUrl.findUnique({ where: { id: existing.id } });
+        return { kind: "converted" as const, existing, current, converted: converted.count === 1 && current !== null };
+      }
+      if (existing) return { kind: "duplicate" as const, existing };
+
+      const created = await tx.submittedUrl.create({
+        data: {
+          caseId,
+          urlEncrypted: encryptField(parsed.normalizedUrl),
+          urlHash: parsed.urlHash,
+          domain: parsed.domain,
+          platformId: dbPlatform?.id ?? null,
+          status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
+          flaggedForReview,
+          flagReason: options?.flagReasons?.join(",") ?? null,
+        },
+      });
+      return { kind: "created" as const, created };
     });
-    results.push({ ok: true, duplicate: false, url: toDisplayUrl(created) });
+
+    if (outcome.kind === "case_not_found") {
+      results.push({ ok: false, rawUrl, error: "case_not_found" });
+    } else if (outcome.kind === "converted") {
+      const { existing, current } = outcome;
+      if (outcome.converted && current) {
+        await writeAuditLog({
+          eventType: "URL_SUBMITTED",
+          entityType: "SubmittedUrl",
+          entityId: existing.id,
+          data: { caseId, reportedBySurvivor: true, crawlFindingId: existing.crawlFindingId },
+        });
+        results.push({ ok: true, duplicate: false, url: toDisplayUrl(current) });
+      } else {
+        results.push({ ok: true, duplicate: true, url: toDisplayUrl(current ?? existing) });
+      }
+    } else if (outcome.kind === "duplicate") {
+      results.push({ ok: true, duplicate: true, url: toDisplayUrl(outcome.existing) });
+    } else {
+      results.push({ ok: true, duplicate: false, url: toDisplayUrl(outcome.created) });
+    }
   }
 
   await writeAuditLog({
@@ -554,7 +725,8 @@ export async function markUrlResolved(caseId: string, userId: string, urlId?: st
   if (isDevNoDb()) {
     const record = store.cases.get(caseId);
     if (!record || record.userId !== userId) throw new Error("case_not_found");
-    const url = urlId ? record.urls.find((item) => item.id === urlId) : record.urls[0];
+    const actable = record.urls.filter(survivorMayActOnLink);
+    const url = urlId ? actable.find((item) => item.id === urlId) : actable[0];
     if (!url) throw new Error("url_not_found");
     url.status = "REMOVED";
     await writeAuditLog({ eventType: "CONTENT_REMOVED", entityType: "SubmittedUrl", entityId: url.id, actorId: userId });
@@ -565,8 +737,8 @@ export async function markUrlResolved(caseId: string, userId: string, urlId?: st
   if (!dbCase) throw new Error("case_not_found");
 
   const url = urlId
-    ? await db.submittedUrl.findFirst({ where: { id: urlId, caseId } })
-    : await db.submittedUrl.findFirst({ where: { caseId }, orderBy: { submittedAt: "asc" } });
+    ? await db.submittedUrl.findFirst({ where: { id: urlId, caseId, ...survivorActableLinkWhere() } })
+    : await db.submittedUrl.findFirst({ where: { caseId, ...survivorActableLinkWhere() }, orderBy: { submittedAt: "asc" } });
 
   if (!url) throw new Error("url_not_found");
 
@@ -579,14 +751,14 @@ export async function markPlatformFiled(caseId: string, userId: string, urlId: s
   if (isDevNoDb()) {
     const record = store.cases.get(caseId);
     if (!record || record.userId !== userId) throw new Error("case_not_found");
-    const url = record.urls.find((item) => item.id === urlId);
+    const url = record.urls.find((item) => item.id === urlId && survivorMayActOnLink(item));
     if (!url) throw new Error("url_not_found");
     url.platformFiledAt ??= filedAt.toISOString();
     return;
   }
   const db = await getPrismaDb();
   const url = await db.submittedUrl.findFirst({
-    where: { id: urlId, caseId, case: { userId } },
+    where: { id: urlId, caseId, case: { userId }, ...survivorActableLinkWhere() },
     select: { id: true },
   });
   if (!url) throw new Error("url_not_found");
@@ -674,14 +846,24 @@ export async function vouchCase(
 }
 
 export async function deactivateUser(userId: string): Promise<{ deactivatedAt: string; hardDeleteAfter: string }> {
-  if (isDevNoDb()) return store.deactivateUser(userId);
+  // A deletion request stops the crawler search at once (crawl-consent.ts):
+  // during the 30-day grace period her sessions are refused, so she could
+  // not withdraw herself, and no notice may go out in her name.
+  const { withdrawCrawlConsentsForDeletion } = await import("@/lib/crawl-consent");
+  if (isDevNoDb()) {
+    await withdrawCrawlConsentsForDeletion([...store.cases.values()].filter((c) => c.userId === userId).map((c) => c.id), userId);
+    return store.deactivateUser(userId);
+  }
   const db = await getPrismaDb();
   const deactivatedAt = new Date();
   const hardDeleteAfter = new Date(deactivatedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+  // Withdraw first: if it fails, she is not left locked out with the search live.
+  const cases = await db.case.findMany({ where: { userId }, select: { id: true } });
+  await withdrawCrawlConsentsForDeletion(cases.map((c) => c.id), userId);
+
   await db.user.update({ where: { id: userId }, data: { deactivatedAt } });
 
-  const cases = await db.case.findMany({ where: { userId }, select: { id: true } });
   if (cases.length > 0) {
     await db.deletionJob.createMany({
       data: cases.map((c) => ({ caseId: c.id, scheduledAt: hardDeleteAfter, status: "SCHEDULED" })),
@@ -696,7 +878,7 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
 export const HARD_DELETE_RETAINED = {
   user: "id, role, verification flags, declared age and created date; no email or email hash",
   case: "id, reference number, status CLOSED, NGO-verified flag and created/updated dates",
-  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice)",
+  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool",
   deletionJob: "id, case id, dates and status",
   adminAccessLog: "which admin opened which case or link, and when; the reason text is cleared",
   auditLog: "earlier entries are append-only and unchanged",
@@ -715,11 +897,14 @@ export type HardDeleteCounts = {
   feedback: number;
   sessions: number;
   otpCodes: number;
+  crawlFindings: number;
+  crawlConsents: number;
 };
 
 function emptyHardDeleteCounts(cases: number): HardDeleteCounts {
   return {
     cases, links: 0, notices: 0, escalations: 0, deliveryProofs: 0, feedback: 0, sessions: 0, otpCodes: 0,
+    crawlFindings: 0, crawlConsents: 0,
   };
 }
 
@@ -787,11 +972,16 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
       await tx.deleteFrom("UrlPortalToken").where("urlId", "in", urlIds).execute();
       counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
     }
+    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    const findingIds = (await tx.selectFrom("CrawlFinding").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
+    counts.crawlFindings = deleted(await tx.deleteFrom("CrawlFinding").where("caseId", "in", caseIds).execute());
+    counts.crawlConsents = deleted(await tx.deleteFrom("CrawlConsent").where("caseId", "in", caseIds).execute());
+    await tx.updateTable("HashSubmission").set({ crawlPoolId: null }).where("caseId", "in", caseIds).execute();
     counts.feedback = deleted(await tx.deleteFrom("Feedback").where((eb) => eb.or([
       eb("caseId", "in", caseIds),
       eb("caseReference", "in", caseRows.map((row) => row.referenceNumber)),
     ])).execute());
-    await tx.updateTable("AdminAccessLog").set({ reason: null }).where("entityId", "in", [...caseIds, ...urlIds]).execute();
+    await tx.updateTable("AdminAccessLog").set({ reason: null }).where("entityId", "in", [...caseIds, ...urlIds, ...findingIds]).execute();
     await tx.updateTable("Case").set({
       status: "CLOSED", registrationKeyHash: null, state: null, city: null, ngoVerifierId: null,
       declarationSignedAt: null, declarationIpHash: null, firPackageGeneratedAt: null,
@@ -845,10 +1035,15 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     counts.notices = (await tx.notice.deleteMany({ where: { id: { in: noticeIds } } })).count;
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: urlIds } } });
     counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
+    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    const findingIds = (await tx.crawlFinding.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
+    counts.crawlFindings = (await tx.crawlFinding.deleteMany({ where: { caseId: { in: caseIds } } })).count;
+    counts.crawlConsents = (await tx.crawlConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
+    await tx.hashSubmission.updateMany({ where: { caseId: { in: caseIds } }, data: { crawlPoolId: null } });
     counts.feedback = (await tx.feedback.deleteMany({
       where: { OR: [{ caseId: { in: caseIds } }, { caseReference: { in: caseRows.map((row) => row.referenceNumber) } }] },
     })).count;
-    await tx.adminAccessLog.updateMany({ where: { entityId: { in: [...caseIds, ...urlIds] } }, data: { reason: null } });
+    await tx.adminAccessLog.updateMany({ where: { entityId: { in: [...caseIds, ...urlIds, ...findingIds] } }, data: { reason: null } });
     await tx.case.updateMany({
       where: { id: { in: caseIds } },
       data: {
@@ -958,7 +1153,7 @@ export async function listAllCases(): Promise<DisplayCase[]> {
         userId: record.userId,
         createdAt: record.createdAt,
         status: record.status,
-        urls: record.urls.map((url) => ({ ...url, flagReason: url.flagReason ?? null })),
+        urls: record.urls.map(memoryDisplayUrl),
       }));
   }
   const db = await getPrismaDb();
@@ -966,5 +1161,5 @@ export async function listAllCases(): Promise<DisplayCase[]> {
     include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
     orderBy: { createdAt: "desc" },
   });
-  return dbCases.map(toDisplayCase);
+  return dbCases.map((dbCase) => toDisplayCase(dbCase));
 }

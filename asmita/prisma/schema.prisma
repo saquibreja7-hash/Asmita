@@ -82,6 +82,25 @@ enum TemplateType {
   ESCALATION_L2
   FIR_PACKAGE
   HASH_ADVISORY
+  CRAWL_AUTHORISATION
+  CRAWL_REPRESENTATIVE_NOTICE
+}
+
+// Where a SubmittedUrl came from: the survivor, or an analyst-approved
+// crawler finding (CrawlFinding).
+enum UrlSource {
+  SURVIVOR
+  CRAWLER
+}
+
+enum CrawlFindingStatus {
+  CANDIDATE
+  APPROVED
+  DISMISSED
+}
+
+enum CrawlSourceKind {
+  SITE
 }
 
 enum HashAlgorithm {
@@ -129,6 +148,11 @@ enum AuditEventType {
   URL_PORTAL_ACCESSED
   PLATFORM_FORM_FILED
   URL_REVEALED
+  CRAWL_CONSENT_SIGNED
+  CRAWL_CONSENT_WITHDRAWN
+  CRAWL_FINDING_RECORDED
+  CRAWL_FINDING_APPROVED
+  CRAWL_FINDING_DISMISSED
 }
 
 enum DeletionJobStatus {
@@ -189,6 +213,8 @@ model Case {
   feedback        Feedback[]
   deletionJobs    DeletionJob[]
   hashSubmissions HashSubmission[]
+  crawlConsents   CrawlConsent[]
+  crawlFindings   CrawlFinding[]
 
   @@unique([userId, registrationKeyHash])
   @@index([createdAt])
@@ -213,10 +239,16 @@ model HashSubmission {
   reviewedAt          DateTime?
   reviewedById        String?
   requestedPlatformId String?
+  // Opaque id the crawler pool lists this fingerprint under. Random, set
+  // when a crawl authorisation covering it is signed and cleared when it is
+  // withdrawn, so it says nothing about the case and a withdrawn id never
+  // matches again (src/lib/crawl-pool.ts).
+  crawlPoolId         String?              @unique
 
   case              Case           @relation(fields: [caseId], references: [id])
   requestedPlatform Platform?      @relation("HashSubmissionPlatform", fields: [requestedPlatformId], references: [id])
   dispatches        HashDispatch[]
+  crawlFindings     CrawlFinding[]
 
   @@unique([caseId, hashDigest])
   @@index([status])
@@ -305,13 +337,118 @@ model SubmittedUrl {
   // When the survivor said she filed a form-only platform's own form. Starts
   // the escalation ladder for links Asmita cannot email (docs/product/escalation-ladder.md).
   platformFiledAt  DateTime?
+  source           UrlSource @default(SURVIVOR)
+  // Set when the link came from an approved crawler finding.
+  crawlFindingId   String?   @unique
+  // Crawler links only (src/lib/crawl-notice.ts). The notice Asmita sends as
+  // the survivor's authorised representative, never signed by her: the
+  // encrypted PDF of record, a digest of what the analyst previewed, the
+  // CRAWL_REPRESENTATIVE_NOTICE template and its text digest, the
+  // authorisation (CrawlConsent) it relies on, who sent it and who approved
+  // the finding. Kept apart from signedNoticePdf so a representative notice
+  // can never pass for a survivor signature.
+  representativeNoticePdf      String?
+  representativeNoticeDigest   String?
+  representativeTemplateId     String?
+  representativeTemplateDigest String?
+  representativeConsentId      String?
+  representativeSentById       String?
+  representativeApprovedById   String?
+  // Set on an unsent crawler link when the survivor withdrew her crawl
+  // authorisation. Permanent: a later authorisation never revives it.
+  crawlConsentWithdrawnAt      DateTime?
 
   case         Case             @relation(fields: [caseId], references: [id])
   platform     Platform?        @relation(fields: [platformId], references: [id])
+  crawlFinding CrawlFinding?    @relation(fields: [crawlFindingId], references: [id], onDelete: SetNull)
   notices      Notice[]
   portalTokens UrlPortalToken[]
 
   @@index([caseId])
+}
+
+// A survivor's signed authorisation for Asmita's crawler to look for her
+// approved fingerprints on public pages. One live (not withdrawn) row per
+// case; withdrawn rows stay as the record. The signed PDF is encrypted at
+// rest, like every signed document.
+model CrawlConsent {
+  id                 String    @id @default(uuid())
+  caseId             String
+  signedPdfEncrypted String
+  // Fingerprints listed in the signed authorisation; only these are searched.
+  hashSubmissionIds  String[]  @default([])
+  // The CRAWL_AUTHORISATION template signed and a digest of its text.
+  templateId         String
+  templateDigest     String
+  signedAt           DateTime  @default(now())
+  withdrawnAt        DateTime?
+
+  case Case @relation(fields: [caseId], references: [id])
+
+  @@index([caseId])
+}
+
+// A possible copy found by the crawler. URLs are encrypted and, like
+// SubmittedUrl, blanked 30 days after firstSeenAt. urlDigest is only for
+// dedup within the case and is cleared (NULL) with the URLs.
+model CrawlFinding {
+  id                String             @id @default(uuid())
+  caseId            String
+  hashSubmissionId  String
+  // The live authorisation (CrawlConsent) the crawler matched under. Part of
+  // the dedup digest, so a copy re-reported after she withdrew and signed
+  // again becomes a new finding instead of merging into the old one, which
+  // stays as the record. Null only for rows written before this column.
+  crawlConsentId    String?
+  pageUrlEncrypted  String
+  imageUrlEncrypted String
+  urlDigest         String?
+  distance          Int
+  quality           Int
+  firstSeenAt       DateTime           @default(now())
+  lastSeenAt        DateTime           @default(now())
+  sourceId          String
+  runId             String
+  reviewStatus      CrawlFindingStatus @default(CANDIDATE)
+  reviewedById      String?
+  reviewedAt        DateTime?
+  // A second, different analyst confirms an approval before anything acts on it.
+  secondReviewedById String?
+  secondReviewedAt   DateTime?
+
+  case           Case           @relation(fields: [caseId], references: [id])
+  hashSubmission HashSubmission @relation(fields: [hashSubmissionId], references: [id])
+  source         CrawlSource    @relation(fields: [sourceId], references: [id])
+  submittedUrl   SubmittedUrl?
+
+  @@unique([caseId, urlDigest])
+  @@index([reviewStatus])
+  @@index([firstSeenAt])
+}
+
+// A public site the crawler may visit, approved by a human.
+model CrawlSource {
+  id         String          @id @default(uuid())
+  kind       CrawlSourceKind @default(SITE)
+  domain     String          @unique
+  pageBudget Int
+  delayMs    Int
+  enabled    Boolean         @default(false)
+  approvedBy String?
+  createdAt  DateTime        @default(now())
+
+  findings CrawlFinding[]
+}
+
+// Bearer keys for the crawler service. Only a sha256 of the key is stored
+// (scripts/issue-crawler-service-key.mjs).
+model CrawlServiceKey {
+  id         String    @id @default(uuid())
+  name       String
+  keyHash    String    @unique
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
 }
 
 // One-time access tokens for URLs sent in notice emails. The raw URL never

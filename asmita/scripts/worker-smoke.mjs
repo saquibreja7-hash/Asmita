@@ -6,6 +6,12 @@
 //
 //   npm run build:vinext && node scripts/prepare-production-wrangler.mjs
 //   E2E_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5433/asmita_e2e node scripts/worker-smoke.mjs
+//
+// SMOKE_CRAWLER=1 adds the crawler routes on the Worker (Kysely) path: it
+// switches ENABLE_CRAWLER on for this local Worker only, issues a throwaway
+// service key into the e2e database, reads sources and the pool, and reports
+// one finding for an unknown source (refused, nothing stored). Off by default
+// until it has been run once in CI; it does not race a withdrawal.
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
@@ -33,6 +39,8 @@ const vars = {
   SARVAM_API_KEY: "",
   SARVAM_CHAT_KEY: "",
 };
+const smokeCrawler = process.env.SMOKE_CRAWLER === "1";
+if (smokeCrawler) vars.ENABLE_CRAWLER = "true";
 
 // Refuse to start if something already answers on the port: the checks
 // would otherwise run against that process, not this build.
@@ -91,6 +99,46 @@ async function sendWebhook() {
     headers: { "content-type": "application/json", "svix-id": id, "svix-timestamp": timestamp, "svix-signature": `v1,${signature}` },
   });
   return { status: response.status, messageId: JSON.parse(body).data.email_id };
+}
+
+/** Crawler routes in workerd with a real key lookup (SMOKE_CRAWLER=1 only). */
+async function crawlerSmoke() {
+  const key = `cwk_${randomBytes(24).toString("hex")}`;
+  const keyId = randomUUID();
+  const client = new pg.Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    await client.query(`INSERT INTO "CrawlServiceKey" ("id", "name", "keyHash") VALUES ($1, $2, $3)`, [
+      keyId, "worker-smoke", createHash("sha256").update(key).digest("hex"),
+    ]);
+    const headers = { authorization: `Bearer ${key}`, "content-type": "application/json" };
+    const base = `http://127.0.0.1:${port}/api/crawler`;
+    const noKey = await fetch(`${base}/sources`);
+    if (noKey.status !== 401) throw new Error(`/api/crawler/sources without a key returned ${noKey.status}, expected 401`);
+    const sources = await fetch(`${base}/sources`, { headers });
+    if (sources.status !== 200 || !Array.isArray((await sources.json()).sources)) throw new Error(`/api/crawler/sources returned ${sources.status}:
+${output.slice(-3000)}`);
+    const pool = await fetch(`${base}/pool`, { headers });
+    if (pool.status !== 200 || !Array.isArray((await pool.json()).fingerprints)) throw new Error(`/api/crawler/pool returned ${pool.status}:
+${output.slice(-3000)}`);
+    const findings = await fetch(`${base}/findings`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        runId: "worker-smoke",
+        findings: [{
+          fingerprintId: "fp_worker_smoke", pageUrl: "https://forum.example.com/t/1", imageUrl: "https://cdn.example.net/i/1.jpg",
+          distance: 3, quality: 80, observedAt: new Date().toISOString(), sourceId: randomUUID(),
+        }],
+      }),
+    });
+    const body = findings.status === 200 ? await findings.json() : null;
+    if (body?.results?.[0]?.reason !== "unknown_source") throw new Error(`/api/crawler/findings returned ${findings.status} ${JSON.stringify(body)}:
+${output.slice(-3000)}`);
+  } finally {
+    await client.query(`DELETE FROM "CrawlServiceKey" WHERE "id" = $1`, [keyId]).catch(() => {});
+    await client.end();
+  }
 }
 
 let exitCode = 1;
@@ -161,6 +209,8 @@ ${output.slice(-3000)}`);
   const counted = await buckets.query(`SELECT count(*)::int AS n FROM "RateLimitBucket" WHERE "key" = $1`, [globalKey]);
   await buckets.end();
   if (counted.rows[0].n !== 1) throw new Error("The voice daily cap was not counted in Postgres");
+
+  if (smokeCrawler) await crawlerSmoke();
 
   console.log("Worker smoke passed: Prisma runs in workerd, each request gets its own connection, the provenance check is off, and voice headers, session limits and the chat route work.");
   exitCode = 0;

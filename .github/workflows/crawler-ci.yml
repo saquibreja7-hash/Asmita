@@ -1,0 +1,69 @@
+name: Crawler CI
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "crawler/**"
+      - "asmita/src/lib/pdq/**"
+      - "asmita/src/app/api/crawler/**"
+      - "asmita/src/lib/crawl-*.ts"
+      - ".github/workflows/crawler-ci.yml"
+  pull_request:
+    paths:
+      - "crawler/**"
+      - "asmita/src/lib/pdq/**"
+      - "asmita/src/app/api/crawler/**"
+      - "asmita/src/lib/crawl-*.ts"
+      - ".github/workflows/crawler-ci.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: crawler
+
+jobs:
+  checks:
+    name: Lint, types, tests, build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crawler/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+      # Includes the pdq.ts contract test: a change to asmita/src/lib/pdq
+      # that alters exports or output fails here.
+      - run: npm run test
+      - run: npm run build
+      - name: Matcher benchmark (100k fingerprints)
+        run: npm run -s bench:matcher
+
+  image:
+    name: Container image (build only, never pushed)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build -f crawler/Dockerfile -t asmita-crawler:ci .
+      - name: sharp decodes in memory on a read-only filesystem (unwritable TMPDIR)
+        run: >
+          docker run --rm --read-only --network none --entrypoint /nodejs/bin/node asmita-crawler:ci
+          --input-type=module -e "import sharp from 'sharp';
+          const png = await sharp({ create: { width: 3000, height: 3000, channels: 3, background: '#336699' } }).png().toBuffer();
+          const { info } = await sharp(png, { failOn: 'none', limitInputPixels: 25000000 }).rotate().toColourspace('srgb').ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+          if (info.channels !== 4 || info.width !== 3000) process.exit(1);"
+      - name: Fails closed without configuration
+        run: |
+          set +e
+          docker run --rm --read-only --network none asmita-crawler:ci run
+          test $? -eq 1

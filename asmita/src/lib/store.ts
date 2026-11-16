@@ -4,6 +4,7 @@ import { decryptField, encryptField } from "@/lib/encryption";
 import { hashEmail, sha256 } from "@/lib/hash";
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { writeAuditLog } from "@/lib/audit";
+import { eraseCrawlMemoryForCases } from "@/lib/crawl-store";
 
 export type CaseRecord = {
   id: string;
@@ -27,6 +28,11 @@ export type UrlRecord = {
   flaggedForReview?: boolean;
   flagReason?: string;
   platformFiledAt?: string | null;
+  /** CRAWLER when the link came from an approved crawler finding (crawl-findings.ts). */
+  source?: "SURVIVOR" | "CRAWLER";
+  crawlFindingId?: string;
+  /** Crawler links: set when the survivor withdrew her crawl authorisation before a notice went out. */
+  crawlConsentWithdrawnAt?: string | null;
 };
 
 type StoreGlobals = {
@@ -107,7 +113,28 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
     if (!parsed.ok) {
       return { ok: false as const, rawUrl, error: parsed.error };
     }
-    const duplicate = record.urls.find((url) => url.urlHash === parsed.urlHash);
+    // As case-ops pickExistingLink: her own link first, else the live crawler
+    // link, else the newest stopped one (nothing is ever sent from memory).
+    const sameAddress = record.urls.filter((url) => url.urlHash === parsed.urlHash).reverse();
+    const duplicate =
+      sameAddress.find((url) => url.source !== "CRAWLER") ??
+      sameAddress.find((url) => !url.crawlConsentWithdrawnAt) ??
+      sameAddress[0];
+    // Her own report of a link the crawler found makes it hers (see
+    // case-ops addUrlsToCase). Nothing is ever sent from the memory store, so
+    // no crawler link here has a representative notice.
+    if (duplicate && duplicate.source === "CRAWLER") {
+      Object.assign(duplicate, {
+        source: "SURVIVOR" as const,
+        crawlFindingId: undefined,
+        crawlConsentWithdrawnAt: null,
+        platformName: parsed.platform?.name || "Unknown - will be reviewed",
+        status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
+        flaggedForReview,
+        flagReason: options?.flagReasons?.join(","),
+      });
+      return { ok: true as const, duplicate: false, url: duplicate };
+    }
     if (duplicate) {
       return { ok: true as const, duplicate: true, url: duplicate };
     }
@@ -229,13 +256,16 @@ export async function hardDeleteDueUsers(now = new Date()) {
     users.delete(userId);
     let caseCount = 0;
     let links = 0;
+    const erasedCaseIds: string[] = [];
     for (const [caseId, record] of cases.entries()) {
       if (record.userId === userId) {
         caseCount += 1;
         links += record.urls.length;
+        erasedCaseIds.push(caseId);
         cases.delete(caseId);
       }
     }
+    eraseCrawlMemoryForCases(erasedCaseIds);
     deactivatedUsers.delete(userId);
     deletedUserIds.push(userId);
     await writeAuditLog({

@@ -7,8 +7,10 @@ export type RevealReason = (typeof REVEAL_REASONS)[number];
 
 export type AdminAccessEvent = {
   adminId: string;
-  action: "case_viewed" | "url_revealed";
-  entityType: "Case" | "SubmittedUrl";
+  // finding_notice_previewed: the representative notice preview shows the
+  // page and image addresses, so it is a reveal (crawl-notice.ts).
+  action: "case_viewed" | "url_revealed" | "finding_revealed" | "finding_notice_previewed";
+  entityType: "Case" | "SubmittedUrl" | "CrawlFinding";
   entityId: string;
   reason?: string;
 };

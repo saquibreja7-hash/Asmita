@@ -4,6 +4,10 @@ import { AppShell } from "@/components/layout/AppShell";
 import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
+import { CrawlConsent } from "./CrawlConsent";
+import { FoundByAsmita } from "./FoundByAsmita";
+import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
+import { splitUrls } from "./crawl-consent-logic";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { MarkRemovedButton } from "./MarkRemovedButton";
 import { EscalationLadder } from "./EscalationLadder";
@@ -137,7 +141,12 @@ export default async function CasePage({
     );
   }
 
-  const standing = standingOf(record.urls, hashSubmissions.length);
+  // Links Asmita's search found are kept apart from the ones she submitted.
+  const { own: ownUrls, found: foundUrls } = splitUrls(record.urls);
+  // Where things stand is about the links she reported: Asmita's own notices
+  // for found links promise no follow-up, so they never say "we follow up".
+  const standing = standingOf(ownUrls, hashSubmissions.length);
+  const showFound = crawlerFindingsVisibleToSurvivor();
   const created = new Date(record.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 
   return (
@@ -185,11 +194,11 @@ export default async function CasePage({
 
             <section id="urls" aria-labelledby="case-links-title" className="scroll-mt-24">
               <h2 id="case-links-title" className="subsection-title">{t(locale, "case.urls.title")}</h2>
-              {record.urls.length === 0 ? (
+              {ownUrls.length === 0 ? (
                 <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.urls.empty")}</p>
               ) : (
                 <ul className="mt-4 divide-y divide-[var(--line)] overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
-                  {record.urls.map((url) => {
+                  {ownUrls.map((url) => {
                     const entry = findPlatformByDomain(url.domain);
                     const live = url.status !== "REMOVED" && url.status !== "REJECTED";
                     const startedAt = url.noticeSentAt ?? url.platformFiledAt ?? null;
@@ -233,6 +242,8 @@ export default async function CasePage({
               )}
             </section>
 
+            {showFound && <FoundByAsmita urls={foundUrls} locale={locale} badge={(status) => <StatusBadge status={status} locale={locale} />} />}
+
             {hashUploadEnabled && hashSubmissions.length > 0 && (
               <section id="fingerprints" aria-labelledby="case-fingerprints-title" className="scroll-mt-24">
                 <h2 id="case-fingerprints-title" className="subsection-title">{t(locale, "case.fingerprints.title")}</h2>
@@ -246,6 +257,8 @@ export default async function CasePage({
                 </ul>
               </section>
             )}
+
+            {hashUploadEnabled && hashSubmissions.length > 0 && <CrawlConsent caseId={record.id} locale={locale} />}
 
             <div className="space-y-3">
               <FoldedSection id="actions" title={t(locale, "case.actions.title")} hint={t(locale, "case.actions.hint")}>

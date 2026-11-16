@@ -3,6 +3,7 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { z } from "zod";
 import type { UrlStatus } from "@prisma/client";
 import { verifyCsrfRequest } from "@/lib/csrf";
+import { survivorActableLinkWhere } from "@/lib/crawler-flags";
 import { requireSession } from "@/lib/auth/middleware";
 import { db } from "@/lib/db";
 import { decryptField, encryptField } from "@/lib/encryption";
@@ -35,6 +36,7 @@ type UrlRow = {
   urlEncrypted: string;
   submittedAt: Date;
   signedNoticePdf: string | null;
+  source?: string;
   case: { referenceNumber: string; declarationSignedAt: Date | null };
   platform: { id: string; name: string; noticeBasis: string; isActive: boolean; lastContactVerifiedByHuman: boolean; grievanceEmail: string | null } | null;
 };
@@ -45,6 +47,7 @@ const URL_SELECT = {
   urlEncrypted: true,
   submittedAt: true,
   signedNoticePdf: true,
+  source: true,
   case: { select: { referenceNumber: true, declarationSignedAt: true } },
   platform: {
     select: { id: true, name: true, noticeBasis: true, isActive: true, lastContactVerifiedByHuman: true, grievanceEmail: true },
@@ -60,7 +63,8 @@ async function findUrl(
 ): Promise<UrlRow | null> {
   if (urlId) {
     return db.submittedUrl.findFirst({
-      where: { id: urlId, caseId, case: { userId } },
+      // A crawler link hidden from her answers exactly like a foreign id.
+      where: { id: urlId, caseId, case: { userId }, ...survivorActableLinkWhere() },
       select: URL_SELECT,
     }) as Promise<UrlRow | null>;
   }
@@ -68,6 +72,9 @@ async function findUrl(
     where: {
       caseId,
       case: { userId },
+      // The survivor signs only her own links; crawler links are sent by
+      // Asmita as her representative (src/lib/crawl-notice.ts).
+      source: "SURVIVOR",
       status: { in: allowedStatuses },
       platformId: { not: null },
       signedNoticePdf: null,
@@ -122,6 +129,9 @@ export async function POST(
   const url = await findUrl(caseId, auth.session.sub, urlId, allowedStatuses, skipLegalGate);
   if (!url) {
     return NextResponse.json({ error: "url_not_found" }, { status: 404 });
+  }
+  if (url.source === "CRAWLER") {
+    return NextResponse.json({ error: "crawler_link_not_survivor_signed" }, { status: 409 });
   }
   if (!url.urlEncrypted || isUrlExpired(url.submittedAt)) {
     return NextResponse.json({ error: "url_expired" }, { status: 410 });

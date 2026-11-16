@@ -36,7 +36,46 @@ describe("notice template seeds", () => {
       "HASH_ADVISORY",
       "ESCALATION_L1",
       "FIR_PACKAGE",
+      "CRAWL_AUTHORISATION",
+      "CRAWL_REPRESENTATIVE_NOTICE",
     ]);
+  });
+
+  it("the crawler templates are draft placeholder text with no invented law", () => {
+    for (const type of ["CRAWL_AUTHORISATION", "CRAWL_REPRESENTATIVE_NOTICE"]) {
+      const template = seed(type);
+      expect(template.subjectTemplate).toContain("[DRAFT — NOT LEGALLY REVIEWED]");
+      expect(template.bodyTemplate).toContain("[DRAFT — NOT LEGALLY REVIEWED]");
+      // The only citation is the citation-required tag until counsel drafts one.
+      expect(template.legalCitations).toEqual(["[CITATION REQUIRED - verify with legal advisor]"]);
+      expect(template.bodyTemplate).not.toMatch(/\bRule \d|\bsection \d|\bAct, \d{4}/i);
+    }
+    expect(seed("CRAWL_AUTHORISATION").bodyTemplate).not.toContain("{{url}}");
+  });
+
+  it("the crawl authorisation says what the survivor is agreeing to", () => {
+    const body = seed("CRAWL_AUTHORISATION").bodyTemplate;
+    expect(body).toMatch(/compare the fingerprints/);
+    expect(body).toMatch(/on my behalf and as my authorised representative/);
+    expect(body).toMatch(/withdraw this authorisation at any time/);
+  });
+
+  it("the crawler templates render into a signable PDF", async () => {
+    const { generateNoticePdf } = await import("@/lib/notice-pdf");
+    for (const type of ["CRAWL_AUTHORISATION", "CRAWL_REPRESENTATIVE_NOTICE"]) {
+      const template = seed(type);
+      const pdf = await generateNoticePdf({
+        platformName: "Asmita",
+        caseReference: sampleVariables.caseReference,
+        noticeSubject: renderNoticeTemplate(template.subjectTemplate, sampleVariables),
+        noticeBody: renderNoticeTemplate(template.bodyTemplate, sampleVariables),
+        date: "16 November 2026",
+        survivorName: "Test Person",
+        survivorContact: "person@example.org",
+        signature: "Test Person",
+      });
+      expect(pdf.length).toBeGreaterThan(1000);
+    }
   });
 
   it("Indian templates demand removal within two hours under Rule 3(2)(b), as amended in 2026", () => {
@@ -86,7 +125,10 @@ describe("notice template seeds", () => {
         const rendered = renderNoticeTemplate(template.bodyTemplate, sampleVariables);
         expect(() => assertNoticeBodySafe(rendered)).not.toThrow();
         expect(rendered).toContain(sampleVariables.caseReference);
-        expect(rendered).toContain(sampleVariables.platformName);
+        // The crawl authorisation is addressed to Asmita, not to a platform.
+        if (template.templateType !== "CRAWL_AUTHORISATION") {
+          expect(rendered).toContain(sampleVariables.platformName);
+        }
         if (template.bodyTemplate.includes("{{url}}")) {
           expect(rendered).toContain(sampleVariables.url);
         }
@@ -153,5 +195,19 @@ describe("notice template seeds", () => {
     expect(dmca).toBeDefined();
     expect(dmca!.legalCitations.some((c) => c.includes("512"))).toBe(true);
     expect(dmca!.legalCitations.some((c) => c.includes("6851"))).toBe(true);
+  });
+});
+
+describe("crawler drafts agree with each other (R6)", () => {
+  it("the notice's consent statement rests on a declaration the authorisation actually contains", async () => {
+    const { templateSeeds } = await import("../../prisma/template-seeds");
+    const body = (type: string) => templateSeeds.find((t) => t.templateType === type)!.bodyTemplate;
+    const authorisation = body("CRAWL_AUTHORISATION");
+    const notice = body("CRAWL_REPRESENTATIVE_NOTICE");
+    expect(authorisation).toMatch(/intimate images of me/);
+    expect(authorisation).toMatch(/did not consent to any copy of them being shared or published/);
+    expect(notice).toMatch(/In the signed authorisation referred to above, the Complainant has declared/);
+    expect(notice).toMatch(/did not consent to any copy of them being shared or published/);
+    for (const text of [authorisation, notice]) expect(text).toContain("[DRAFT — NOT LEGALLY REVIEWED]");
   });
 });

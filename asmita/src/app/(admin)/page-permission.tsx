@@ -11,6 +11,8 @@ const NEEDS: Record<AdminPermission, string> = {
   "metrics:read": "read metrics",
   "users:manage": "manage admins",
   "audit:read": "read the audit log",
+  "findings:review": "review crawler findings",
+  "crawler:manage": "manage crawler sites",
 };
 
 /**
@@ -28,4 +30,11 @@ export async function deniedFor(permission: AdminPermission): Promise<React.Reac
       <p className="muted mt-6 text-sm">Your admin role cannot {NEEDS[permission]}.</p>
     </section>
   );
+}
+
+/** As deniedFor, also giving the signed-in admin's id for per-admin views. */
+export async function adminFor(permission: AdminPermission): Promise<{ denied: React.ReactNode | null; adminId: string | null }> {
+  const auth = await requireAdminPermission(permission);
+  if (auth.ok) return { denied: null, adminId: auth.session.sub };
+  return { denied: await deniedFor(permission), adminId: null };
 }

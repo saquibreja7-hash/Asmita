@@ -9,6 +9,8 @@ const PAGE_FILES: Record<string, string> = {
   "/admin/cases": "cases/page.tsx",
   "/admin/queue": "flagged/page.tsx",
   "/admin/hashes": "hashes/page.tsx",
+  "/admin/findings": "findings/page.tsx",
+  "/admin/crawl-sources": "crawl-sources/page.tsx",
   "/admin/platforms": "platforms/page.tsx",
   "/admin/templates": "templates/page.tsx",
   "/admin/metrics": "response-rates/page.tsx",
@@ -27,7 +29,7 @@ describe("admin nav and page permissions", () => {
   it("hides a link exactly when its page refuses the role", () => {
     for (const item of items.filter((entry) => entry.permission)) {
       const source = readFileSync(join(process.cwd(), "src/app/(admin)", PAGE_FILES[item.href]), "utf8");
-      const required = source.match(/(?:deniedFor|requireAdminPermission)\("([a-z:]+)"\)/)?.[1];
+      const required = source.match(/(?:deniedFor|adminFor|requireAdminPermission)\("([a-z:]+)"\)/)?.[1];
       expect(required, item.href).toBe(item.permission);
     }
   });
