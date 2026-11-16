@@ -9,6 +9,8 @@ export type SkipReason =
   | "pool_stale"
   | "fetch_failed"
   | "decode_failed"
+  | "decoder_timeout"
+  | "decoder_crashed"
   | "image_hosts_capped"
   | "truncated"
   | "too_small"

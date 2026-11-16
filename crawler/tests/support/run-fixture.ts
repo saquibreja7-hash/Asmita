@@ -3,6 +3,7 @@ import { AsmitaClient } from "../../src/asmita/client.ts";
 import { loadConfig } from "../../src/config.ts";
 import { runCrawl, type RunResult } from "../../src/crawler.ts";
 import { Logger } from "../../src/log.ts";
+import { DecoderPool } from "../../src/image/decoder-pool.ts";
 import { SafeFetcher } from "../../src/net/safe-fetch.ts";
 import { fixtureEnv, FIXTURE_HOSTS, TEST_KEY, type FixtureSite } from "./fixture-site.ts";
 import type { MockAsmita } from "./mock-asmita.ts";
@@ -32,11 +33,14 @@ export async function runFixtureCrawl(
     baseDelayMs: 10,
     maxDelayMs: 50,
   });
+  // The real isolated decoder (dist/decoder-worker.js, built in global setup).
+  const decoder = new DecoderPool({ size: config.DECODE_CONCURRENCY, taskTimeoutMs: config.DECODE_TIMEOUT_MS, minSide: config.MIN_IMAGE_SIDE });
   try {
     const result = await runCrawl({
       config,
       api: client,
       fetcher,
+      decoder,
       log: new Logger({ sink: (l) => lines.push(l), level: "debug" }),
       seedUrl: (s) => `http://${s.domain}:${site.port}/`,
       stopSignal: opts.stopSignal,
@@ -47,5 +51,6 @@ export async function runFixtureCrawl(
   } finally {
     await fetcher.close();
     await client.close();
+    await decoder.close();
   }
 }

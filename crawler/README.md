@@ -128,6 +128,65 @@ best first (one picture can be in several survivors' submissions).
 `npm run bench:matcher` on a laptop (Node 22): about **0.9 ms per query at
 100,000 fingerprints** and about 13 ms at 1,000,000.
 
+## Decoder isolation
+
+Image decoding (sharp/libvips, native code fed attacker-controlled bytes) and
+PDQ hashing run in separate **child processes** (`src/image/decoder-pool.ts`,
+`src/image/decoder-worker.ts`, bundled as `dist/decoder-worker.js`). The
+crawler process holds the fingerprint pool, the matcher and the service key,
+and never loads sharp itself (`dist/main.js` contains no sharp import; tested).
+
+What crosses the boundary: the parent sends `{ id, bytes, minSide }`; the
+child answers `{ id, ok: true, pdq, quality }` or `{ id, ok: false, code }`
+with `code` from the fixed error list. Replies are validated strictly; any
+other shape, field or id kills the child as compromised.
+
+Each child:
+
+- gets a scrubbed environment (`VIPS_DISC_THRESHOLD`, `TMPDIR`/`TMP`/`TEMP`
+  only; on Windows libuv also copies its required system variables such as
+  `PATH` and `SYSTEMROOT`), so no service key or config;
+- runs under Node's permission model (`--permission`): no filesystem writes,
+  no child processes, no worker threads, filesystem reads only inside the
+  application directory;
+- has a JS heap cap (`--max-old-space-size=256`) and recycles itself after 500
+  images or above 768 MB RSS;
+- has a per-image deadline (`DECODE_TIMEOUT_MS`, default 20 s): on timeout,
+  crash or a bad reply it is SIGKILLed and replaced, and only that image is
+  skipped (`decoder_timeout` / `decoder_crashed`);
+- has stdout and stderr discarded, so crash output (which could contain image
+  bytes) never reaches the logs; only counters are reported (`decoder` in the
+  run summary).
+
+`child_process` was chosen over `worker_threads` because worker threads share
+the parent's address space: a native-code exploit there could read the pool
+directly. The process boundary costs one IPC copy per image; measured on a
+laptop (80 mixed 640x480 to 1600x1200 JPEG/PNG/WebP images, decode + PDQ +
+match against 100,000 fingerprints; `npm run bench:decode`): with one decoder
+33-39 images/s in-process vs 34-37 isolated; with two, 48 in-process vs 47-63
+isolated. The difference is within run-to-run noise. Matching itself is about
+1 ms per image at 100k fingerprints (`npm run bench:matcher`).
+
+**What this does not protect against.** sharp is a native addon, so the child
+needs `--allow-addons`, and native code is not constrained by Node's
+permission model: an attacker who achieves code execution inside libvips can
+make system calls directly, including network connections and file writes
+(the container's read-only filesystem and the unwritable `TMPDIR` still
+apply). Node 22's permission model has no network restriction at all. What
+such an attacker cannot get is the pool, the key or URLs, because they are not
+in that process's memory or environment, unless they can attack the parent
+from the same OS user (e.g. via `ptrace` or `/proc/<pid>/mem`). Running the
+decoder under a separate UID, with seccomp, or with `kernel.yama.ptrace_scope`
+of at least 1 would close that; none is configured here, and Cloud Run's gVisor
+sandbox is the outer boundary.
+
+Tests: `tests/unit/decoder-isolation.test.ts` (same hash as in-process; env
+contains no key; writes, spawning, worker threads and reads outside the app
+directory are denied; hung, crashing, malformed, wrong-id and out-of-memory
+children are killed and replaced) and `tests/integration/memory-only.test.ts`
+(full crawl through the child process with every parent `fs` writer patched to
+throw).
+
 ## Asmita API contract
 
 Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
@@ -202,7 +261,8 @@ network activity and the log names only the offending variable names. See
 | `MAX_PAGES` / `MAX_IMAGES` | 5000 / 20000 | global budgets (attempts, not successes) |
 | `MAX_DEPTH` | 5 | BFS depth from the source home page |
 | `GLOBAL_CONCURRENCY` | 4 | concurrent requests across all hosts |
-| `DECODE_CONCURRENCY` | 1 | concurrent image decodes (a 25 MP decode is ~100 MB) |
+| `DECODE_CONCURRENCY` | 1 | decoder child processes (a 25 MP decode is ~100 MB) |
+| `DECODE_TIMEOUT_MS` | 20000 | per-image decode deadline; the child is killed and replaced |
 | `MAX_HTML_BYTES` / `MAX_IMAGE_BYTES` | 2 MiB / 10 MiB | body caps (also after decompression) |
 | `MIN_IMAGE_SIDE` | 64 | smaller images are skipped |
 | `OFFSITE_HOST_DELAY_MS` | 1000 | delay per off-source image host (CDNs) |

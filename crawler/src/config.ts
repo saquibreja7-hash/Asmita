@@ -34,7 +34,10 @@ export const ConfigSchema = z.object({
   MAX_IMAGES: int(1, 5_000_000, 20_000),
   MAX_DEPTH: int(0, 50, 5),
   GLOBAL_CONCURRENCY: int(1, 32, 4),
+  /** Decoder child processes (each decodes one image at a time). */
   DECODE_CONCURRENCY: int(1, 4, 1),
+  /** Per-image decode deadline; the child is killed and replaced after it. */
+  DECODE_TIMEOUT_MS: int(1000, 120_000, 20_000),
   MAX_HTML_BYTES: int(1024, 20 * 1024 * 1024, 2 * 1024 * 1024),
   MAX_IMAGE_BYTES: int(1024, 50 * 1024 * 1024, 10 * 1024 * 1024),
   MIN_IMAGE_SIDE: int(1, 4096, 64),

@@ -13,7 +13,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "bench:matcher": "tsx scripts/bench-matcher.ts",
-    "mock": "tsx tests/support/fixture-entry.ts",
+    "bench:decode": "node scripts/build.mjs && tsx scripts/bench-decode.ts",
+    "mock": "node scripts/build.mjs && tsx tests/support/fixture-entry.ts",
     "mock:api": "tsx scripts/mock-api.ts",
     "check": "npm run lint && npm run type-check && npm run test && npm run build"
   },

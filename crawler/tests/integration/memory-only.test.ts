@@ -3,7 +3,10 @@
  * with every Node filesystem write API patched to throw and record the call.
  * The crawl must still produce its findings and no write may be attempted.
  *
- * Scope: this catches writes from JavaScript (our code and JS dependencies).
+ * Scope: this catches writes from JavaScript in the crawler process (our code
+ * and JS dependencies). Decoding happens in a child process, which cannot
+ * write at all: it runs with Node's permission model and no fs-write grant
+ * (tests/unit/decoder-isolation.test.ts proves writes are denied there).
  * libvips writes from native code would not pass through node:fs; those are
  * covered by hashing with toBuffer() only (never toFile) and, in the
  * container, VIPS_DISC_THRESHOLD, an unwritable TMPDIR and a read-only root
@@ -136,6 +139,10 @@ describe("memory-only image handling", () => {
       const { result } = await runFixtureCrawl(fx.site, api);
       findings = result.summary.findingsCreated as number;
       expect(result.summary.imagesHashed as number).toBeGreaterThan(5);
+      // Decoding really went through the isolated child process. The child
+      // itself runs under Node's permission model with no fs-write grant
+      // (proved in tests/unit/decoder-isolation.test.ts).
+      expect((result.summary.decoder as { started: number }).started).toBeGreaterThan(0);
     } finally {
       unpatch();
     }

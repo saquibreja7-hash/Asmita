@@ -35,6 +35,8 @@ export const ERROR_CODES = [
   "image_too_many_pixels",
   "image_decode_failed",
   "image_truncated",
+  "image_decode_timeout",
+  "image_decoder_crashed",
   "image_too_small",
   // API
   "api_unauthorized",

@@ -20,7 +20,7 @@ import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, RobotsCache } from "./crawl/robots.ts";
 import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
-import { hashImage } from "./image/hash-image.ts";
+import type { ImageDecoder } from "./image/decoder-pool.ts";
 import type { FetchOptions, FetchResult, SafeFetcher } from "./net/safe-fetch.ts";
 import { exitCodeFor } from "./exit-codes.ts";
 import { withRetry } from "./retry.ts";
@@ -40,6 +40,8 @@ export type CrawlDeps = {
   config: Config;
   api: AsmitaApi;
   fetcher: Pick<SafeFetcher, "fetch">;
+  /** Isolated image decoder (child processes). The caller owns its lifecycle. */
+  decoder: Pick<ImageDecoder, "hash" | "stats">;
   log: Logger;
   /** External stop request (signals). */
   stopSignal?: AbortSignal;
@@ -121,6 +123,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     const exitCode = exitCodeFor(problems);
     const summary = {
       ...base,
+      decoder: { ...deps.decoder.stats },
       exitCode,
       problems: {
         unauthorized: Number(problems.unauthorized),
@@ -216,7 +219,6 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
 
   // --- shared crawl state -------------------------------------------------
   const globalGate = new Semaphore(config.GLOBAL_CONCURRENCY);
-  const decodeGate = new Semaphore(config.DECODE_CONCURRENCY);
   const hosts = new HostScheduler(now);
   const seenImages = new Set<string>();
   const reported = new Set<string>();
@@ -327,9 +329,11 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     let hashed;
     try {
-      // The only copy of the image bytes is res.body; it is dropped when this
-      // function returns. hashImage never writes to disk.
-      hashed = await decodeGate.use(() => hashImage(res.body, { minSide: config.MIN_IMAGE_SIDE }));
+      // Decoding runs in an isolated child process (decoder-pool.ts) that
+      // receives only these bytes and returns only { pdq, quality }. The pool
+      // and matcher never leave this process. res.body is the only copy of
+      // the bytes here and is dropped when this function returns.
+      hashed = await deps.decoder.hash(res.body);
     } catch (raw) {
       const err = toCrawlError(raw);
       record(err.code);
@@ -344,7 +348,11 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
                 ? "format"
                 : err.code === "image_truncated"
                   ? "truncated"
-                  : "decode_failed";
+                  : err.code === "image_decode_timeout"
+                    ? "decoder_timeout"
+                    : err.code === "image_decoder_crashed"
+                      ? "decoder_crashed"
+                      : "decode_failed";
       return metrics.skip(reason);
     }
     metrics.imagesHashed++;
@@ -352,7 +360,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     const m = currentMatcher();
     if (!m) return metrics.skip("pool_stale");
     const observedAt = new Date(now()).toISOString();
-    for (const hit of m.match(hashed.hash)) {
+    for (const hit of m.match(hashed.pdq)) {
       const key = `${hit.fingerprintId}\n${imageUrl}`;
       if (reported.has(key)) continue;
       reported.add(key);
