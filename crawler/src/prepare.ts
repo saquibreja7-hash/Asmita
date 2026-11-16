@@ -55,6 +55,9 @@ import type { PdqInput } from "./pdq.ts";
 
 export const DEFAULT_LIMIT_INPUT_PIXELS = 25_000_000;
 
+/** sharp failOn level of the recipe; the agreement harness reports and pins it. */
+export const FAIL_ON = "none" as const;
+
 export type PrepareOptions = {
   /** Reject absurdly large inputs (decompression-bomb guard). Default 25 MP (the crawler's cap). */
   limitInputPixels?: number;
@@ -64,7 +67,7 @@ export type PrepareOptions = {
 
 export async function prepareForPdq(buffer: Buffer, opts: PrepareOptions = {}): Promise<PdqInput> {
   const sharpOpts = {
-    failOn: "none" as const,
+    failOn: FAIL_ON,
     limitInputPixels: opts.limitInputPixels ?? DEFAULT_LIMIT_INPUT_PIXELS,
     animated: false, // first frame only, like createImageBitmap
   };

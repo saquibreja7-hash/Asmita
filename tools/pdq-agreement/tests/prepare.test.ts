@@ -65,6 +65,7 @@ describe("single source of truth", () => {
     const crawler = await import("../../../crawler/src/prepare.ts");
     expect(harness.prepareForPdq).toBe(crawler.prepareForPdq);
     expect(harness.canvasAlphaRoundTrip).toBe(crawler.canvasAlphaRoundTrip);
-    expect(harness.FAIL_ON).toBe("truncated");
+    expect(harness.FAIL_ON).toBe(crawler.FAIL_ON);
+    expect(harness.FAIL_ON).toBe("none");
   });
 });
