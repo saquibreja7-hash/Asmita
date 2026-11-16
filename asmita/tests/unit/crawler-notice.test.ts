@@ -339,6 +339,11 @@ describe("representative notice: gates (each with its own code)", () => {
     await expectRefusal("fingerprint_not_approved");
   });
 
+  it("hash upload switched off: hash_upload_disabled", async () => {
+    vi.stubEnv("ENABLE_HASH_UPLOAD", "false");
+    await expectRefusal("hash_upload_disabled");
+  });
+
   it("no representative template: template_missing", async () => {
     state.templates.delete("tpl-rep");
     await expectRefusal("template_missing");
@@ -456,11 +461,65 @@ describe("representative notice: dispatch", () => {
     expect(state.sent).toHaveLength(0);
   });
 
-  it("a definite send failure releases the stored notice so it can be retried", async () => {
+  it("a failed send keeps the stored notice, and the retry resends exactly it", async () => {
     const digest = await previewDigest();
-    state.sendError = new Error("email_send_failed:validation_error");
+    state.sendError = new Error("email_send_failed:network");
     expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: false, status: 502, error: "send_failed" });
+    const stored = state.urls.get("url-1")!.representativeNoticePdf as string;
+    expect(stored).toBeTruthy();
+    state.sendError = null;
+    expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: true, dispatched: true });
+    expect(state.sent[0].attachments![0].content.equals(Buffer.from(decryptField(stored), "base64"))).toBe(true);
+  });
+
+  it("another request holding the claim: dispatch_in_progress", async () => {
+    const digest = await previewDigest();
+    const update = fakeDb.submittedUrl as { updateMany: (args: unknown) => Promise<{ count: number }> };
+    const original = update.updateMany;
+    update.updateMany = async () => ({ count: 0 });
+    try {
+      expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: false, error: "dispatch_in_progress" });
+    } finally {
+      update.updateMany = original;
+    }
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("a withdrawal landing right after the claim releases it and sends nothing", async () => {
+    const digest = await previewDigest();
+    const consents = fakeDb.crawlConsent as { findFirst: (args: { where: Record<string, unknown> }) => Promise<unknown> };
+    const original = consents.findFirst;
+    consents.findFirst = async (args) => {
+      // The post-claim re-check asks by consent id: withdraw just before it.
+      if (args.where.id) state.consents[0].withdrawnAt = new Date();
+      return original(args);
+    };
+    try {
+      expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: false, error: "consent_withdrawn" });
+    } finally {
+      consents.findFirst = original;
+    }
+    expect(state.sent).toHaveLength(0);
     expect(state.urls.get("url-1")!.representativeNoticePdf).toBeNull();
+  });
+
+  it("an earlier stored attempt is never released by a withdrawal re-check", async () => {
+    const digest = await previewDigest();
+    state.sendError = new Error("email_send_failed:network");
+    await dispatchRepresentativeNotice({ ...base, contentDigest: digest });
+    state.sendError = null;
+    const consents = fakeDb.crawlConsent as { findFirst: (args: { where: Record<string, unknown> }) => Promise<unknown> };
+    const original = consents.findFirst;
+    consents.findFirst = async (args) => {
+      if (args.where.id) state.consents[0].withdrawnAt = new Date();
+      return original(args);
+    };
+    try {
+      expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: false, error: "consent_withdrawn" });
+    } finally {
+      consents.findFirst = original;
+    }
+    expect(state.urls.get("url-1")!.representativeNoticeDigest).toBe(digest);
   });
 
   it("stays on email even with the platform API configured for the platform", async () => {

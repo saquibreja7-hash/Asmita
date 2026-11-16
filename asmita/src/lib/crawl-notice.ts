@@ -352,8 +352,10 @@ export type DispatchResult =
  * The PDF of record is stored (encrypted) on the link before sending, as a
  * claim: a retry resends the same stored bytes under the same Resend
  * idempotency key, so a send that went out but was not recorded is never
- * sent twice. The claim is released only when Resend definitely refused the
- * email.
+ * sent twice. A failed send keeps the claim: Resend's error can follow a
+ * request that reached it, so the stored PDF stays as the record and the
+ * retry resends it. Only a withdrawal noticed right after this call's own
+ * claim releases it, before anything is sent.
  */
 export async function dispatchRepresentativeNotice(input: {
   findingId: string;
@@ -369,6 +371,7 @@ export async function dispatchRepresentativeNotice(input: {
 
   const { db } = await import("@/lib/db");
   let pdf: Buffer;
+  let claimedNow = false;
   if (link.representativeNoticePdf) {
     // An earlier attempt stored a notice. The same notice is resent from the
     // stored bytes; a different one is refused, because the earlier one may
@@ -401,6 +404,7 @@ export async function dispatchRepresentativeNotice(input: {
       },
     });
     if (claimed.count === 0) return refuse(409, "dispatch_in_progress");
+    claimedNow = true;
   }
 
   const release = () =>
@@ -427,7 +431,9 @@ export async function dispatchRepresentativeNotice(input: {
     select: { id: true },
   });
   if (!consent || !stillLinked) {
-    await release();
+    // Only a claim this call made, before anything was sent. A claim from an
+    // earlier attempt may record a notice that reached the platform.
+    if (claimedNow) await release();
     return refuse(409, "consent_withdrawn");
   }
 
@@ -464,11 +470,8 @@ export async function dispatchRepresentativeNotice(input: {
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
     if (message === "email_already_sent") return refuse(409, "email_already_sent");
-    // Resend refused the email outright: nothing went out, so the claim goes.
-    if (message.startsWith("email_send_failed:")) {
-      await release();
-      return refuse(502, "send_failed");
-    }
+    // The claim stays (see above); a retry today resends the stored notice.
+    if (message.startsWith("email_send_failed:")) return refuse(502, "send_failed");
     throw err;
   }
 }

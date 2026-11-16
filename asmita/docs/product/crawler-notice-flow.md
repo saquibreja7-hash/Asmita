@@ -38,7 +38,7 @@ Both routes need `findings:review` (SUPER_ADMIN, CASE_REVIEWER), CSRF, and `ENAB
 }
 ```
 
-**Dispatch.** `POST /api/admin/findings/[id]/notice/dispatch` with `{ "caseId": "...", "contentDigest": "<from preview>" }` re-runs every gate. It sends only if the notice it would send now has the same digest, so the analyst sends exactly what they reviewed. The digest covers the recipient, subject, both bodies, the date, the template, the authorisation, the fingerprint ids and the sending admin. If another admin, or the same admin on another day, tries to send, the request is refused with `notice_changed` and they must preview again. The admin who approved the finding may also send it, and both ids are recorded. Success returns `{ dispatched, transport: "email", messageId, sentAt, contentDigest }`, where `dispatched: false` means it had already been sent. The route is limited to 60 an hour per admin.
+**Dispatch.** `POST /api/admin/findings/[id]/notice/dispatch` with `{ "caseId": "...", "contentDigest": "<from preview>" }` re-runs every gate. It sends only if the notice it would send now has the same digest, so the analyst sends exactly what they reviewed. The digest covers the recipient, subject, both bodies, the date, the template, the authorisation, the fingerprint ids and the sending admin. If another admin, or the same admin on another day, tries to send, the request is refused with `notice_changed` and they must preview again. The admin who approved the finding may also send it, and both ids are recorded. Success returns `{ dispatched, transport: "email", messageId, sentAt, contentDigest }`. `dispatched: false` means this Worker had already sent it. Where sends are recorded in the database (`NOTICE_DISPATCH_PERSISTENCE=database`, every deployed Worker), the link is then `NOTICE_SENT` and a repeat gets 409 `url_not_ready_for_dispatch`. The route is limited to 60 an hour per admin, but every send needs a preview first, so the 20-an-hour preview cap is the real limit.
 
 The notice consists of:
 
@@ -86,11 +86,11 @@ Dispatch only:
 | `dispatch_in_progress` | 409 | Another request claimed the link first |
 | `earlier_attempt_unconfirmed` | 409 | A different stored notice was never recorded as sent; it may have reached the platform. Needs a human (see open questions) |
 | `email_already_sent` | 409 | Resend already accepted this notice. Nothing is sent twice |
-| `send_failed` | 502 | Resend refused outright. The stored notice is released so the send can be retried |
+| `send_failed` | 502 | Resend returned an error. The error may come after the request reached Resend, so the stored notice is kept and a retry the same day resends it. After the date changes, the retry gets `earlier_attempt_unconfirmed` |
 
 ## Sending and retries
 
-Before sending, the encrypted PDF and digest are stored on the link as a claim. A retry resends the same stored bytes under the same Resend idempotency key, so a send that succeeded but was not recorded is never repeated. The same `Notice` row, status transition and verified-recipient check are used as for survivor notices. URL retention blanks `representativeNoticePdf` at 30 days, as it does `signedNoticePdf`.
+Before sending, the encrypted PDF and digest are stored on the link as a claim. A retry resends the same stored bytes under the same Resend idempotency key, so a send that succeeded but was not recorded is never repeated. The claim is released only when a withdrawal is noticed right after this request made it, before anything was sent. The same `Notice` row, status transition and verified-recipient check are used as for survivor notices. URL retention blanks `representativeNoticePdf` at 30 days, as it does `signedNoticePdf`.
 
 ## Withdrawal
 
@@ -105,6 +105,8 @@ When she withdraws her authorisation, every crawler link on the case with no not
 
   Bringing them in needs a reviewed representative follow-up template and a deadline counsel confirms.
 - The platform API transport.
+- A link stopped by a withdrawal stays stopped. If she signs again and the crawler reports the same copy, the report merges into the old, already approved finding, so that copy cannot be sent. A fresh finding for it needs a decision (see the open questions in the hand-off).
+- `earlier_attempt_unconfirmed` has no admin action to clear it yet.
 - The memory-store path for preview and dispatch.
 
 ## For counsel

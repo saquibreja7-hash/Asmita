@@ -153,6 +153,9 @@ export function deriveCaseWork(facts: CaseFacts, gates: Gates, now: Date): CaseW
 
   for (const link of facts.links) {
     if (link.status === "REJECTED") continue;
+    // A crawler link stopped by the survivor's withdrawal, before any notice,
+    // needs nothing more from anyone.
+    if (link.source === "CRAWLER" && link.crawlConsentWithdrawn && !noticeByUrl.has(link.id)) continue;
     if (link.status === "PENDING_REVIEW" || (link.flaggedForReview && link.status !== "REMOVED")) {
       add("review_links", new Date(link.submittedAt.getTime() + REVIEW_SLA_HOURS * HOUR));
       continue;
@@ -169,7 +172,7 @@ export function deriveCaseWork(facts: CaseFacts, gates: Gates, now: Date): CaseW
         else if (!sent.responseReceivedAt) add("awaiting_reply", null);
         continue;
       }
-      if (link.status === "NOTICE_QUEUED" && !link.crawlConsentWithdrawn) add("send_notice", null);
+      if (link.status === "NOTICE_QUEUED") add("send_notice", null);
       continue;
     }
 
