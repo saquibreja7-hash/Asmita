@@ -108,11 +108,18 @@ bytes stays within distance 10 of the intact file, cut to 90% within 28
 (match); heavier truncation drifts to 60+ (no match). Truncated WebP, and a
 JPEG with almost no data, fail to decode and are skipped (`truncated` or
 `decode_failed`). Well-formed images hash identically under every `failOn`
-setting, so the agreement numbers above are unaffected. Chromium's
-`createImageBitmap` (the survivor path) rejects truncated files outright; that
-matters for same-file agreement, not for finding copies. Stricter behaviour,
-if wanted, belongs in a policy check in `src/image/hash-image.ts`, not in the
-recipe.
+setting, so the agreement numbers above are unaffected.
+
+This deliberately differs from the survivor's browser: Chromium's
+`createImageBitmap`, which produces survivor fingerprints, rejects truncated
+files outright (measured: all 30 truncated JPEG/PNG/WebP test files), so a
+survivor never submits a fingerprint of a partial image. The crawler, by
+contrast, hashes a partial copy it finds, because that copy may still be the
+survivor's image. A truncated image gets no special treatment: it becomes a
+finding only under the normal rules (PDQ quality at least 50 and distance
+within the pool threshold, at most 31), exactly like an intact image.
+Stricter behaviour, if wanted, belongs in a policy check in
+`src/image/hash-image.ts`, not in the recipe.
 
 Matching: images with PDQ quality below 50 are skipped; brute-force Hamming
 over a packed `Uint32Array` with SWAR popcount; threshold = pool `threshold`
