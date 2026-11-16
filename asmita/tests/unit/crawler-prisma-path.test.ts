@@ -33,8 +33,11 @@ beforeEach(() => {
   vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
   const live = { id: "consent-1", caseId: "c1", hashSubmissionIds: ["h1", "h2", "h3"], signedAt: new Date("2026-11-01T00:00:00Z") };
   db.crawlConsent.findMany.mockResolvedValue([live]);
-  db.tx.$queryRaw.mockResolvedValue([live]);
+  // The case-row lock (case-link-lock.ts) finds the case; consent locks find `live`.
+  db.tx.$queryRaw.mockImplementation(async (q: string[]) => (q.join("?").includes('FROM "Case"') ? [{ id: "c1" }] : [live]));
 });
+
+const sqlOf = (call: unknown[]) => (call[0] as string[]).join("?");
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.clearAllMocks();
@@ -94,9 +97,37 @@ describe("final approval, database path", () => {
       pageUrlEncrypted: encryptField("https://forum.example.com/t"), imageUrlEncrypted: encryptField("https://cdn.example.com/i.jpg"),
     });
     // A withdrawal committed between the first check and the transaction.
-    db.tx.$queryRaw.mockResolvedValue([]);
+    db.tx.$queryRaw.mockImplementation(async (q: string[]) => (q.join("?").includes('FROM "Case"') ? [{ id: "c1" }] : []));
     expect(await reviewCrawlFinding({ findingId: "cf1", decision: "approve", reviewerId: "admin-1" })).toEqual({ ok: false, error: "consent_withdrawn" });
-    expect((db.tx.$queryRaw.mock.calls[0][0] as string[]).join("?")).toMatch(/FOR SHARE/);
+    expect(sqlOf(db.tx.$queryRaw.mock.calls[1])).toMatch(/"CrawlConsent".*FOR SHARE/);
+    expect(db.tx.crawlFinding.updateMany).not.toHaveBeenCalled();
+    expect(db.tx.submittedUrl.create).not.toHaveBeenCalled();
+  });
+
+  it("locks the case row first, before the consent lock, the existence check and the insert (F6)", async () => {
+    db.crawlFinding.findUnique.mockResolvedValue({
+      id: "cf1", caseId: "c1", hashSubmissionId: "h1", crawlConsentId: "consent-1", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null, firstSeenAt: new Date(),
+      pageUrlEncrypted: encryptField("https://forum.example.com/t"), imageUrlEncrypted: encryptField("https://cdn.example.com/i.jpg"),
+    });
+    const order: string[] = [];
+    const base = db.tx.$queryRaw.getMockImplementation()!;
+    db.tx.$queryRaw.mockImplementation(async (q: string[], ...v: unknown[]) => (order.push(q.join("?").includes('FROM "Case"') ? "case-lock" : "consent-lock"), base(q, ...v)));
+    db.tx.crawlFinding.updateMany.mockImplementation(async () => (order.push("claim"), { count: 1 }));
+    db.tx.submittedUrl.findFirst.mockImplementation(async () => (order.push("exists?"), null));
+    db.tx.submittedUrl.create.mockImplementation(async () => (order.push("insert"), { id: "url-new" }));
+    expect(await reviewCrawlFinding({ findingId: "cf1", decision: "approve", reviewerId: "admin-1" })).toMatchObject({ ok: true, createdUrl: true });
+    expect(order).toEqual(["case-lock", "consent-lock", "claim", "exists?", "insert"]);
+    expect(sqlOf(db.tx.$queryRaw.mock.calls[0])).toBe('SELECT "id" FROM "Case" WHERE "id" = ? FOR NO KEY UPDATE');
+    expect(db.tx.$queryRaw.mock.calls[0][1]).toBe("c1");
+  });
+
+  it("a case that no longer exists is refused before anything is written", async () => {
+    db.crawlFinding.findUnique.mockResolvedValue({
+      id: "cf1", caseId: "c1", hashSubmissionId: "h1", crawlConsentId: "consent-1", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null, firstSeenAt: new Date(),
+      pageUrlEncrypted: encryptField("https://forum.example.com/t"), imageUrlEncrypted: encryptField("https://cdn.example.com/i.jpg"),
+    });
+    db.tx.$queryRaw.mockResolvedValue([]);
+    expect(await reviewCrawlFinding({ findingId: "cf1", decision: "approve", reviewerId: "admin-1" })).toEqual({ ok: false, error: "case_not_found" });
     expect(db.tx.crawlFinding.updateMany).not.toHaveBeenCalled();
     expect(db.tx.submittedUrl.create).not.toHaveBeenCalled();
   });

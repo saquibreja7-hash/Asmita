@@ -8,6 +8,7 @@ import { findPlatformByDomain } from "@/lib/platforms";
 import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
+import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { logSecurityEvent } from "@/lib/security-log";
 import { randomUUID } from "node:crypto";
@@ -623,16 +624,6 @@ async function addUrlsToCaseUnfiltered(
       continue;
     }
 
-    // Her own link wins over a crawler link for the same address while no
-    // representative notice was sent or claimed for it (pickExistingLink).
-    // A case can hold several crawler links for one address (one per
-    // authorisation, ADR 006), so every row for the address is looked at.
-    const sameAddress = await db.submittedUrl.findMany({
-      where: { caseId, urlHash: parsed.urlHash },
-      include: { notices: { select: { sentAt: true, responseType: true, responseReceivedAt: true }, orderBy: { createdAt: "asc" }, take: 1 } },
-      orderBy: { submittedAt: "desc" },
-    });
-    const existing = pickExistingLink(sameAddress.map((row) => ({ ...row, sent: row.notices.length > 0 })));
     const dbPlatform = parsed.platform
       ? await db.platform.findFirst({
           where: {
@@ -645,25 +636,64 @@ async function addUrlsToCaseUnfiltered(
         })
       : null;
 
-    if (existing?.source === "CRAWLER" && !existing.sent && existing.representativeNoticePdf === null) {
-      // She reported a link Asmita's crawler had found: it becomes her link and
-      // enters her own sign flow. Conditional on nothing having been sent or
-      // claimed, so a representative notice in flight is never undercut. The
-      // finding keeps its own record and audit history.
-      const converted = await db.submittedUrl.updateMany({
-        where: { id: existing.id, source: "CRAWLER", representativeNoticePdf: null, notices: { none: {} } },
+    const outcome = await db.$transaction(async (tx) => {
+      // First statement: lock the case row, so a crawler finding approved at
+      // the same moment cannot insert a link for this address between the
+      // check and the insert below (case-link-lock.ts, with the lock order).
+      if (!(await lockCaseForLinkWrite(tx, caseId))) return { kind: "case_not_found" as const };
+      // Her own link wins over a crawler link for the same address while no
+      // representative notice was sent or claimed for it (pickExistingLink).
+      // A case can hold several crawler links for one address (one per
+      // authorisation, ADR 006), so every row for the address is looked at.
+      const sameAddress = await tx.submittedUrl.findMany({
+        where: { caseId, urlHash: parsed.urlHash },
+        include: { notices: { select: { sentAt: true, responseType: true, responseReceivedAt: true }, orderBy: { createdAt: "asc" }, take: 1 } },
+        orderBy: { submittedAt: "desc" },
+      });
+      const existing = pickExistingLink(sameAddress.map((row) => ({ ...row, sent: row.notices.length > 0 })));
+
+      if (existing?.source === "CRAWLER" && !existing.sent && existing.representativeNoticePdf === null) {
+        // She reported a link Asmita's crawler had found: it becomes her link and
+        // enters her own sign flow. Conditional on nothing having been sent or
+        // claimed, so a representative notice in flight is never undercut. The
+        // finding keeps its own record and audit history.
+        const converted = await tx.submittedUrl.updateMany({
+          where: { id: existing.id, source: "CRAWLER", representativeNoticePdf: null, notices: { none: {} } },
+          data: {
+            source: "SURVIVOR",
+            crawlFindingId: null,
+            crawlConsentWithdrawnAt: null,
+            platformId: dbPlatform?.id ?? null,
+            status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
+            flaggedForReview,
+            flagReason: options?.flagReasons?.join(",") ?? null,
+          },
+        });
+        const current = await tx.submittedUrl.findUnique({ where: { id: existing.id } });
+        return { kind: "converted" as const, existing, current, converted: converted.count === 1 && current !== null };
+      }
+      if (existing) return { kind: "duplicate" as const, existing };
+
+      const created = await tx.submittedUrl.create({
         data: {
-          source: "SURVIVOR",
-          crawlFindingId: null,
-          crawlConsentWithdrawnAt: null,
+          caseId,
+          urlEncrypted: encryptField(parsed.normalizedUrl),
+          urlHash: parsed.urlHash,
+          domain: parsed.domain,
           platformId: dbPlatform?.id ?? null,
           status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
           flaggedForReview,
           flagReason: options?.flagReasons?.join(",") ?? null,
         },
       });
-      const current = await db.submittedUrl.findUnique({ where: { id: existing.id } });
-      if (converted.count === 1 && current) {
+      return { kind: "created" as const, created };
+    });
+
+    if (outcome.kind === "case_not_found") {
+      results.push({ ok: false, rawUrl, error: "case_not_found" });
+    } else if (outcome.kind === "converted") {
+      const { existing, current } = outcome;
+      if (outcome.converted && current) {
         await writeAuditLog({
           eventType: "URL_SUBMITTED",
           entityType: "SubmittedUrl",
@@ -674,26 +704,11 @@ async function addUrlsToCaseUnfiltered(
       } else {
         results.push({ ok: true, duplicate: true, url: toDisplayUrl(current ?? existing) });
       }
-      continue;
+    } else if (outcome.kind === "duplicate") {
+      results.push({ ok: true, duplicate: true, url: toDisplayUrl(outcome.existing) });
+    } else {
+      results.push({ ok: true, duplicate: false, url: toDisplayUrl(outcome.created) });
     }
-    if (existing) {
-      results.push({ ok: true, duplicate: true, url: toDisplayUrl(existing) });
-      continue;
-    }
-
-    const created = await db.submittedUrl.create({
-      data: {
-        caseId,
-        urlEncrypted: encryptField(parsed.normalizedUrl),
-        urlHash: parsed.urlHash,
-        domain: parsed.domain,
-        platformId: dbPlatform?.id ?? null,
-        status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
-        flaggedForReview,
-        flagReason: options?.flagReasons?.join(",") ?? null,
-      },
-    });
-    results.push({ ok: true, duplicate: false, url: toDisplayUrl(created) });
   }
 
   await writeAuditLog({

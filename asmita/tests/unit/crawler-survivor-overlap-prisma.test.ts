@@ -13,6 +13,7 @@ const db = vi.hoisted(() => {
     platform: { findFirst: vi.fn() },
     submittedUrl: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
     $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
   };
   self.$transaction.mockImplementation(async (fn: (tx: typeof self) => unknown) => fn(self));
   return self;
@@ -38,6 +39,7 @@ beforeEach(() => {
   vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
   inMemoryAuditLog.splice(0, inMemoryAuditLog.length);
   db.platform.findFirst.mockResolvedValue({ id: "platform-ig" });
+  db.$queryRaw.mockResolvedValue([{ id: "c1" }]);
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -66,6 +68,27 @@ describe("R1, database path", () => {
 });
 
 describe("R2, database path", () => {
+  it("locks the case row before looking for the address and before inserting (F6)", async () => {
+    const order: string[] = [];
+    db.$queryRaw.mockImplementation(async (q: string[]) => (order.push((q as string[]).join("?")), [{ id: "c1" }]));
+    db.submittedUrl.findMany.mockImplementation(async () => (order.push("exists?"), []));
+    db.submittedUrl.create.mockImplementation(async () => (order.push("insert"), crawlerRow({ id: "url-new", source: "SURVIVOR", crawlFindingId: null, crawlConsentWithdrawnAt: null })));
+    const [result] = await addUrlsToCase("c1", [PAGE]);
+    expect(result).toMatchObject({ ok: true, duplicate: false });
+    expect(order).toEqual(['SELECT "id" FROM "Case" WHERE "id" = ? FOR NO KEY UPDATE', "exists?", "insert"]);
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    // The check and the insert ran on the transaction client, inside it.
+    expect(db.$queryRaw.mock.calls[0][1]).toBe("c1");
+  });
+
+  it("refuses a case that no longer exists without writing", async () => {
+    db.$queryRaw.mockResolvedValue([]);
+    const [result] = await addUrlsToCase("c1", [PAGE]);
+    expect(result).toEqual({ ok: false, rawUrl: PAGE, error: "case_not_found" });
+    expect(db.submittedUrl.findMany).not.toHaveBeenCalled();
+    expect(db.submittedUrl.create).not.toHaveBeenCalled();
+  });
+
   it("converts an unsent crawler link to her own, conditionally on nothing sent or claimed", async () => {
     db.submittedUrl.findMany.mockResolvedValue([crawlerRow()]);
     db.submittedUrl.updateMany.mockResolvedValue({ count: 1 });

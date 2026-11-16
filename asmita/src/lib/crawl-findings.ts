@@ -9,6 +9,7 @@ import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
 import { parseSubmittedUrl } from "@/lib/url-parser";
+import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { isUrlExpired } from "@/lib/url-retention";
 import * as store from "@/lib/store";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
@@ -602,6 +603,10 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
     : null;
 
   const outcome = await db.$transaction(async (tx) => {
+    // First statement: lock the case row so her own report of the same
+    // address cannot insert between the check and the insert below
+    // (case-link-lock.ts, which also documents the lock order).
+    if (!(await lockCaseForLinkWrite(tx, finding.caseId))) return "case_not_found" as const;
     // Checked again under a lock in this transaction: a withdrawal either
     // committed first (refused here) or waits for this approval and then
     // stops the link it creates.
@@ -633,6 +638,7 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
     return { submittedUrlId: created.id, createdUrl: true };
   });
   if (outcome === "consent_withdrawn") return { ok: false, error: "consent_withdrawn" };
+  if (outcome === "case_not_found") return { ok: false, error: "case_not_found" };
   if (!outcome) return { ok: false, error: "already_reviewed" };
   await auditReview("CRAWL_FINDING_APPROVED", finding, input.reviewerId, { stage: "final", second: plan.second, submittedUrlId: outcome.submittedUrlId, createdUrl: outcome.createdUrl });
   return { ok: true, status: "APPROVED", ...outcome };

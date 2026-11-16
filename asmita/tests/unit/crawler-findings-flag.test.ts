@@ -14,7 +14,17 @@ const mocks = vi.hoisted(() => ({
   kyselyWheres: [] as unknown[][],
 }));
 
-vi.mock("@/lib/db", () => ({ db: { case: { findFirst: mocks.caseFindFirst, findMany: mocks.caseFindMany }, submittedUrl: { findMany: mocks.urlFindMany }, platform: { findFirst: vi.fn().mockResolvedValue(null) } } }));
+vi.mock("@/lib/db", () => {
+  const db: Record<string, unknown> = {
+    case: { findFirst: mocks.caseFindFirst, findMany: mocks.caseFindMany },
+    submittedUrl: { findMany: mocks.urlFindMany },
+    platform: { findFirst: vi.fn().mockResolvedValue(null) },
+    // addUrlsToCase locks the case row in a transaction (case-link-lock.ts).
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "case-1" }]),
+  };
+  db.$transaction = async (fn: (tx: unknown) => unknown) => fn(db);
+  return { db };
+});
 vi.mock("@/lib/worker-kysely", () => ({
   usesWorkerKysely: () => mocks.kysely !== null,
   getWorkerDb: () => ({
