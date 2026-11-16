@@ -26,7 +26,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 FROM gcr.io/distroless/nodejs22-debian12:nonroot
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=build /src/crawler/dist/main.js ./dist/main.js
+# main.js (crawler) and decoder-worker.js (isolated decoder child process)
+COPY --from=build /src/crawler/dist/ ./dist/
 # "type": "module" for dist/main.js
 COPY crawler/package.json ./package.json
 ENV NODE_ENV=production \

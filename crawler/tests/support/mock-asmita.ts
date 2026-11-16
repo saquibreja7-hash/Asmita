@@ -43,6 +43,10 @@ export type MockAsmitaOptions = {
   notAccepted?: string[];
   /** Body size limit for POST /findings (default 256 KiB, 413 above). */
   bodyLimit?: number;
+  /** Answer with the pre-rollout statuses "created" / "duplicate". */
+  legacyStatuses?: boolean;
+  /** Treat this source's domain as something else (simulates a scope mismatch). */
+  sourceDomainOverride?: string;
 };
 
 export class MockAsmita {
@@ -128,11 +132,16 @@ export class MockAsmita {
       if (/^data:/i.test(f.imageUrl) || /^data:/i.test(f.pageUrl)) return { status: "rejected", reason: "media_payload_rejected" };
       if (!/^https?:\/\//.test(f.imageUrl) || !/^https?:\/\//.test(f.pageUrl)) return { status: "rejected", reason: "invalid_url" };
       if (!sourceIds.has(f.sourceId)) return { status: "rejected", reason: "unknown_source" };
+      // The server checks the page belongs to the source: same host or a subdomain.
+      const src = this.opts.sources.find((s) => s.id === f.sourceId)!;
+      const domain = (this.opts.sourceDomainOverride ?? src.domain).toLowerCase();
+      const host = new URL(f.pageUrl).hostname;
+      if (host !== domain && !host.endsWith(`.${domain}`)) return { status: "rejected", reason: "page_not_in_source" };
       if (!known.has(f.fingerprintId) || notAccepted.has(f.fingerprintId)) return { status: "rejected", reason: "fingerprint_not_accepted" };
       const key = `${f.fingerprintId}|${f.imageUrl}`;
-      if (this.created.has(key)) return { status: "duplicate" };
+      if (this.created.has(key)) return { status: this.opts.legacyStatuses ? "duplicate" : "accepted" };
       this.created.set(key, f);
-      return { status: "created" };
+      return { status: this.opts.legacyStatuses ? "created" : "accepted" };
     });
     return send(200, { results });
   }

@@ -133,13 +133,18 @@ describe("AsmitaClient", () => {
     expect(await code(client().postFindings("run", Array.from({ length: 51 }, (_, i) => f(i))))).toBe("internal");
     replies = [{ status: 200, body: { results: [{ status: "created" }] } }];
     expect(await code(client().postFindings("run", [f(1), f(2)]))).toBe("api_bad_response");
+    replies = [{ status: 200, body: { results: [{ status: "accepted" }, { status: "rejected", reason: "page_not_in_source" }] } }];
+    expect(await client().postFindings("run", [f(1), f(2)])).toEqual([{ status: "accepted" }, { status: "rejected", reason: "page_not_in_source" }]);
+    // Rollout compatibility: the old statuses still parse, as "accepted".
     replies = [{ status: 200, body: { results: [{ status: "created" }, { status: "duplicate" }] } }];
-    expect(await client().postFindings("run", [f(1), f(2)])).toEqual([{ status: "created" }, { status: "duplicate" }]);
+    expect(await client().postFindings("run", [f(1), f(2)])).toEqual([{ status: "accepted" }, { status: "accepted" }]);
+    replies = [{ status: 200, body: { results: [{ status: "pending" }, { status: "accepted" }] } }];
+    expect(await code(client().postFindings("run", [f(1), f(2)]))).toBe("api_bad_response");
   });
 });
 
 describe("FindingsSink", () => {
-  const ok = (f: Finding[]) => f.map(() => ({ status: "created" as const }));
+  const ok = (f: Finding[]) => f.map(() => ({ status: "accepted" as const }));
   const mk = (i: number, id = "f1"): Finding => ({
     fingerprintId: id,
     pageUrl: `https://site.example/p${i}`,
@@ -154,13 +159,13 @@ describe("FindingsSink", () => {
   it("posts full batches of 50 as they fill and the rest on final flush", async () => {
     const batches: number[] = [];
     const m = new RunMetrics();
-    const sink = new FindingsSink("run", async (_r, f) => (batches.push(f.length), f.map(() => ({ status: "created" as const }))), m, silent);
+    const sink = new FindingsSink("run", async (_r, f) => (batches.push(f.length), f.map(() => ({ status: "accepted" as const }))), m, silent);
     for (let i = 0; i < 120; i++) sink.add(mk(i));
     await sink.flush(false);
     expect(batches).toEqual([50, 50]);
     await sink.flush(true);
     expect(batches).toEqual([50, 50, 20]);
-    expect(m.findingsCreated).toBe(120);
+    expect(m.findingsAccepted).toBe(120);
   });
 
   it("keeps a failed batch and delivers it on the next flush", async () => {
@@ -172,7 +177,7 @@ describe("FindingsSink", () => {
       async (_r, f) => {
         if (fail) throw new CrawlError("api_http_status", { status: 500 });
         delivered.push(...f);
-        return f.map(() => ({ status: "created" as const }));
+        return f.map(() => ({ status: "accepted" as const }));
       },
       m,
       silent,
@@ -190,7 +195,7 @@ describe("FindingsSink", () => {
   it("purges queued findings for fingerprints that left the pool", async () => {
     const posted: Finding[] = [];
     const m = new RunMetrics();
-    const sink = new FindingsSink("run", async (_r, f) => (posted.push(...f), f.map(() => ({ status: "created" as const }))), m, silent);
+    const sink = new FindingsSink("run", async (_r, f) => (posted.push(...f), f.map(() => ({ status: "accepted" as const }))), m, silent);
     sink.add(mk(1, "keep"));
     sink.add(mk(2, "withdrawn"));
     sink.add(mk(3, "keep"));
@@ -242,7 +247,7 @@ describe("FindingsSink", () => {
     for (let i = 0; i < 49; i++) sink.add(long(i));
     await sink.flush(true);
     expect(sizes.every((n) => n <= 256 * 1024)).toBe(true);
-    expect(m.findingsCreated).toBe(49);
+    expect(m.findingsAccepted).toBe(49);
   });
 
   it("splits a batch on 413 and resends both halves", async () => {
@@ -262,7 +267,7 @@ describe("FindingsSink", () => {
     await sink.flush(true);
     expect(sizes.reduce((a, b) => a + b, 0)).toBe(40);
     expect(Math.max(...sizes)).toBeLessThanOrEqual(10);
-    expect(m.findingsCreated).toBe(40);
+    expect(m.findingsAccepted).toBe(40);
     expect(m.findingsUnsent).toBe(0);
   });
 
@@ -289,7 +294,7 @@ describe("FindingsSink", () => {
   it("counts rejections by reason and withdraws fingerprints not accepted", async () => {
     const withdrawn: string[] = [];
     const m = new RunMetrics();
-    const reasons = ["fingerprint_not_accepted", "invalid_url", "unknown_source", "something_new"];
+    const reasons = ["fingerprint_not_accepted", "invalid_url", "page_not_in_source", "something_new"];
     let first = true;
     const posted: string[] = [];
     const sink = new FindingsSink(
@@ -312,7 +317,7 @@ describe("FindingsSink", () => {
     sink.add(mk(5, "gone")); // refused: withdrawn ids are never queued again
     sink.add(mk(6, "a"));
     expect(withdrawn).toEqual(["gone"]);
-    expect(m.rejectedByReason).toEqual({ fingerprint_not_accepted: 1, invalid_url: 1, unknown_source: 1, other: 1 });
+    expect(m.rejectedByReason).toEqual({ fingerprint_not_accepted: 1, invalid_url: 1, page_not_in_source: 1, other: 1 });
     await sink.flush(true);
     expect(posted.slice(4)).toEqual(["a"]);
     expect(m.findingsWithdrawn).toBe(1);

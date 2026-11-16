@@ -38,6 +38,7 @@ export type Fixture = {
 export class FixtureSite {
   readonly requests: SeenRequest[] = [];
   private readonly routes = new Map<string, Handler>();
+  private readonly fallbacks = new Map<string, (path: string) => Handler>();
   private server: Server | null = null;
 
   get port(): number {
@@ -52,12 +53,17 @@ export class FixtureSite {
     this.routes.set(`${host}${path}`, handler);
   }
 
+  /** Handler for any path on `host` without an exact route. */
+  routeAny(host: string, make: (path: string) => Handler): void {
+    this.fallbacks.set(host, make);
+  }
+
   async start(): Promise<this> {
     this.server = createServer((req, res) => {
       const host = (req.headers.host ?? "").replace(/:\d+$/, "");
       const path = req.url ?? "/";
       this.requests.push({ host, path, headers: req.headers });
-      const h = this.routes.get(`${host}${path}`);
+      const h = this.routes.get(`${host}${path}`) ?? this.fallbacks.get(host)?.(path);
       if (!h) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
@@ -132,6 +138,12 @@ export async function buildFixture(): Promise<Fixture> {
     tinyReal: await patternImage(140, 40, 40, "png"), // under MIN_IMAGE_SIDE (64)
     avif: await patternImage(141, 320, 240, "avif"),
     truncFull: await patternImage(142, 640, 480, "jpeg"), // served truncated; its FULL hash is in the pool
+    // Scope fixture (blog.fixture.test is approved on its own in scope tests).
+    blog: await patternImage(150, 300, 300, "png"),
+    blogDeep: await patternImage(151, 300, 300, "png"),
+    shop: await patternImage(152, 300, 300, "png"),
+    offA: await patternImage(153, 300, 300, "png"), // on an off-scope CDN host, in the pool
+    flood: await patternImage(154, 300, 300, "png"), // on the link-flood site, in the pool
     bomb: await pixelBombPng(30_000, 30_000),
   };
 
@@ -168,7 +180,13 @@ export async function buildFixture(): Promise<Fixture> {
       fp("fp-flat", h.flat!),
       fp("fp-tiny", h.tinyReal!),
       fp("fp-avif", h.avif!),
-      fp("fp-truncated", h.truncFull!), // must not match: the served copy is cut short
+      // Served twice, cut short: at 97% it still matches (failOn "none"); at 40% it must not.
+      fp("fp-truncated", h.truncFull!),
+      fp("fp-blog", h.blog!),
+      fp("fp-blog-deep", h.blogDeep!),
+      fp("fp-shop", h.shop!), // only on the sibling host: must never be found from the blog source
+      fp("fp-off-a", h.offA!),
+      fp("fp-flood", h.flood!),
       ...Array.from({ length: 200 }, (_, i) => fp(`fp-rand-${i}`, randomFingerprint(5000 + i))),
     ],
   };
@@ -187,6 +205,7 @@ export async function buildFixture(): Promise<Fixture> {
     { fingerprintId: "fp-two-1", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/two.png" },
     { fingerprintId: "fp-two-2", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/two.png" },
     { fingerprintId: "fp-avif", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/pic.avif" },
+    { fingerprintId: "fp-truncated", pagePath: "/sub", imageHost: `www.${S}`, imagePath: "/img/cut.jpg" },
   ];
 
   // ---- robots ----
@@ -280,7 +299,7 @@ export async function buildFixture(): Promise<Fixture> {
   site.route(
     `www.${S}`,
     "/sub",
-    sendHtml(html(`<img src="/img/gz.png"><img src="/img/two.png"><img src="/img/pic.avif"><img src="/img/cut.jpg"><a href="/">home</a>`)),
+    sendHtml(html(`<img src="/img/gz.png"><img src="/img/two.png"><img src="/img/pic.avif"><img src="/img/cut.jpg"><img src="/img/cut-heavy.jpg"><a href="/">home</a>`)),
   );
 
   // ---- images on the source ----
@@ -340,6 +359,7 @@ export async function buildFixture(): Promise<Fixture> {
   site.route(`www.${S}`, "/img/pic.avif", sendBytes(img.avif, "image/avif"));
   // 97% of a JPEG whose complete version is in the pool.
   site.route(`www.${S}`, "/img/cut.jpg", sendBytes(Buffer.from(img.truncFull.subarray(0, Math.floor(img.truncFull.length * 0.97))), "image/jpeg"));
+  site.route(`www.${S}`, "/img/cut-heavy.jpg", sendBytes(Buffer.from(img.truncFull.subarray(0, Math.floor(img.truncFull.length * 0.4))), "image/jpeg"));
 
   // ---- CDN ----
   site.route(CDN_HOST, "/c.png", sendBytes(img.matchC, "image/png"));
@@ -347,6 +367,58 @@ export async function buildFixture(): Promise<Fixture> {
   // ---- off-domain site (must never be requested) ----
   site.route(OFFSITE_HOST, "/page", sendHtml(html(`<img src="/offsite.png">`)));
   site.route(OFFSITE_HOST, "/offsite.png", sendBytes(img.offsiteMatch, "image/png"));
+
+  // ---- scope fixture: approve blog.fixture.test only ----
+  const B = `blog.${S}`;
+  site.route(
+    B,
+    "/",
+    sendHtml(
+      html(`
+        <img src="/img/blog.png">
+        <a href="${o(S)}/">parent domain</a>
+        <a href="${o(`shop.${S}`)}/">sibling host</a>
+        <a href="${o(`a.${B}`)}/deep">subdomain of the approved host</a>
+        <a href="/jump">redirects to the sibling host</a>
+      `),
+    ),
+  );
+  site.route(B, "/img/blog.png", sendBytes(img.blog, "image/png"));
+  site.route(B, "/jump", redirect(`${o(`shop.${S}`)}/landing`));
+  site.route(`a.${B}`, "/deep", sendHtml(html(`<img src="/deep.png">`)));
+  site.route(`a.${B}`, "/deep.png", sendBytes(img.blogDeep, "image/png"));
+  site.route(`shop.${S}`, "/", sendHtml(html(`<img src="/shop.png">`)));
+  site.route(`shop.${S}`, "/landing", sendHtml(html(`<img src="/shop.png">`)));
+  site.route(`shop.${S}`, "/shop.png", sendBytes(img.shop, "image/png"));
+
+  // ---- off-scope image hosts: approve gallery.fixture.test ----
+  // Images on h1..h5.cdn.imgcdn.test, plus an in-scope image that redirects
+  // to h6. With MAX_OFFSITE_IMAGE_HOSTS=3 only h1..h3 may ever be contacted.
+  const G = `gallery.${S}`;
+  const offHosts = [1, 2, 3, 4, 5].map((i) => `h${i}.${CDN_HOST}`);
+  site.route(
+    G,
+    "/",
+    sendHtml(html(`${offHosts.map((hst, i) => `<img src="${o(hst)}/p${i}.png">`).join("")}<img src="/img/bounce.png">`)),
+  );
+  site.route(G, "/img/bounce.png", redirect(`${o(`h6.${CDN_HOST}`)}/p6.png`));
+  offHosts.forEach((hst, i) => site.route(hst, `/p${i}.png`, sendBytes(i === 0 ? img.offA : img.decoy, "image/png")));
+  site.route(`h6.${CDN_HOST}`, "/p6.png", sendBytes(img.decoy, "image/png"));
+
+  // ---- link flood: approve flood.fixture.test ----
+  // Every page is ~1.6 MB of links to 40,000 further pages (a hostile site
+  // trying to exhaust the frontier). The home page also has one real image.
+  const F = `flood.${S}`;
+  const floodPage = (seed: number, withImage: boolean) =>
+    html(
+      (withImage ? `<img src="/img/flood.png">` : "") +
+        Array.from({ length: 40_000 }, (_, i) => `<a href="/p/${seed}-${i}">x</a>`).join(""),
+    );
+  const home = floodPage(0, true);
+  site.route(F, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(F, "/", sendHtml(home));
+  site.route(F, "/img/flood.png", sendBytes(img.flood, "image/png"));
+  site.routeAny(F, (path) => sendHtml(floodPage(Number(path.split("-")[1] ?? 0) + 1, false)));
 
   return { site, pool, expected, allHashes: Object.values(h) };
 }

@@ -9,6 +9,10 @@ export type SkipReason =
   | "pool_stale"
   | "fetch_failed"
   | "decode_failed"
+  | "per_page_cap"
+  | "decoder_timeout"
+  | "decoder_crashed"
+  | "image_hosts_capped"
   | "truncated"
   | "too_small"
   | "too_many_pixels"
@@ -26,13 +30,24 @@ export class RunMetrics {
   pagesFetched = 0;
   pagesNonHtml = 0;
   pagesOutOfScope = 0;
+  /** Links beyond MAX_LINKS_PER_PAGE on a page. */
+  linksDropped = 0;
+  /** Links not queued because the frontier was full for the remaining budget. */
+  linksNotQueued = 0;
+  /** Largest page queue and seen-URL set of any source (memory bound check). */
+  queuePeak = 0;
+  seenPeak = 0;
   imagesSeen = 0;
   imagesHashed = 0;
+  /** Images whose fetch touched a host outside the source's scope (CDNs). */
+  imagesOffHost = 0;
+  /** Images refused because the source hit MAX_OFFSITE_IMAGE_HOSTS. */
+  imageHostsCapped = 0;
   matches = 0;
   findingsQueued = 0;
   findingsPosted = 0;
-  findingsCreated = 0;
-  findingsDuplicate = 0;
+  /** Accepted by the server (new or already known: it no longer says which). */
+  findingsAccepted = 0;
   findingsRejected = 0;
   findingsUnsent = 0;
   findingsWithdrawn = 0;
@@ -70,14 +85,19 @@ export class RunMetrics {
       pagesAttempted: this.pagesAttempted,
       pagesFetched: this.pagesFetched,
       pagesNonHtml: this.pagesNonHtml,
+      linksDropped: this.linksDropped,
+      linksNotQueued: this.linksNotQueued,
+      queuePeak: this.queuePeak,
+      seenPeak: this.seenPeak,
       imagesSeen: this.imagesSeen,
       imagesHashed: this.imagesHashed,
+      imagesOffHost: this.imagesOffHost,
+      imageHostsCapped: this.imageHostsCapped,
       imagesSkipped: { ...this.imagesSkipped } as Record<string, number>,
       matches: this.matches,
       findingsQueued: this.findingsQueued,
       findingsPosted: this.findingsPosted,
-      findingsCreated: this.findingsCreated,
-      findingsDuplicate: this.findingsDuplicate,
+      findingsAccepted: this.findingsAccepted,
       findingsRejected: this.findingsRejected,
       findingsUnsent: this.findingsUnsent,
       findingsWithdrawn: this.findingsWithdrawn,

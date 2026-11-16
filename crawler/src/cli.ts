@@ -16,6 +16,7 @@ import { toCrawlError } from "./errors.ts";
 import { EXIT } from "./exit-codes.ts";
 import { Logger, type LogSink } from "./log.ts";
 import { productionPolicy, type NetPolicy } from "./net/policy.ts";
+import { DecoderPool } from "./image/decoder-pool.ts";
 import { SafeFetcher } from "./net/safe-fetch.ts";
 
 export type MainOptions = {
@@ -70,8 +71,16 @@ export async function runMain(opts: MainOptions): Promise<number> {
     maxDelayMs: 20_000,
   });
 
+  // Image decoding runs in isolated child processes that never see the pool,
+  // the service key or URLs (src/image/decoder-pool.ts).
+  const decoder = new DecoderPool({
+    size: config.DECODE_CONCURRENCY,
+    taskTimeoutMs: config.DECODE_TIMEOUT_MS,
+    minSide: config.MIN_IMAGE_SIDE,
+  });
+
   try {
-    const result = await runCrawl({ config, api, fetcher, log, stopSignal: stop.signal, seedUrl: opts.seedUrl });
+    const result = await runCrawl({ config, api, fetcher, decoder, log, stopSignal: stop.signal, seedUrl: opts.seedUrl });
     return result.exitCode;
   } catch (raw) {
     // Only the initial load throws (the run itself reports via exitCode).
@@ -82,7 +91,7 @@ export async function runMain(opts: MainOptions): Promise<number> {
     return exitCode;
   } finally {
     cleanupSignals();
-    await Promise.all([fetcher.close(), api.close()]);
+    await Promise.all([fetcher.close(), api.close(), decoder.close()]);
   }
 }
 

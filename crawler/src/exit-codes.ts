@@ -13,7 +13,10 @@ export const EXIT = {
   FAILURE: 1,
   /** The Asmita API rejected the service key (401/403), at load or mid-run. */
   UNAUTHORIZED: 2,
-  /** A request the server refused as malformed (400): a contract bug. */
+  /**
+   * A contract bug: the server refused a request as malformed (400), or
+   * rejected a finding as `page_not_in_source` (a crawler scope bug).
+   */
   CONTRACT_ERROR: 4,
   /** Findings could not be delivered before exit. */
   FINDINGS_UNDELIVERED: 3,
@@ -27,6 +30,8 @@ export type RunProblems = {
   unauthorized: boolean;
   /** Findings dropped because the server called the request malformed. */
   contractErrors: number;
+  /** Findings rejected as page_not_in_source. */
+  scopeErrors: number;
   findingsUnsent: number;
   poolStale: boolean;
   /** The server switched the crawler off (503). */
@@ -35,7 +40,7 @@ export type RunProblems = {
 
 export function exitCodeFor(p: RunProblems): number {
   if (p.unauthorized) return EXIT.UNAUTHORIZED;
-  if (p.contractErrors > 0) return EXIT.CONTRACT_ERROR;
+  if (p.contractErrors > 0 || p.scopeErrors > 0) return EXIT.CONTRACT_ERROR;
   // Switched off on purpose: undelivered findings are expected, not a fault.
   if (p.findingsUnsent > 0 && !p.disabled) return EXIT.FINDINGS_UNDELIVERED;
   if (p.poolStale) return EXIT.POOL_STALE;

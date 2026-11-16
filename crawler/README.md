@@ -38,7 +38,7 @@ When several apply, the first row in this table wins.
 |---|---|
 | 0 | Clean run (including SIGTERM, time limit, budget reached), or the crawler is switched off on the server (503), even if findings were then left unsent |
 | 2 | The API rejected the service key (401/403), at load or mid-run |
-| 4 | Contract error: the server refused a request as malformed (400) and the batch was dropped |
+| 4 | Contract error: the server refused a request as malformed (400) and the batch was dropped, or rejected a finding as `page_not_in_source` (a crawler scope bug) |
 | 3 | Findings were still undelivered at exit (API down past all retries) |
 | 5 | The pool could not be re-synced within 60 minutes, so the run stopped early |
 | 1 | Invalid configuration or an unexpected failure |
@@ -58,12 +58,14 @@ is not a run failure; it is counted in the summary only.
 | **Byte caps** (10 MB images, 2 MB HTML, 500 KiB robots.txt) while streaming AND after decompression; stacked/unknown encodings refused. | `readCapped`, `decode` (`maxOutputLength`). | `tests/unit/bytes.test.ts` (gzip/brotli/deflate bombs, declared length, chunked stream, timeouts) |
 | **Timeouts**: connect, headers, body idle, and an overall per-request deadline (stops slow drips). | undici options + `AbortSignal.timeout`. | `bytes.test.ts`, fixture `/img/slow.png` |
 | **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active); `tests/unit/config-policy.test.ts` |
-| **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files rejected. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, truncated JPEG/PNG, AVIF); fixture `cut.jpg` and `pic.avif` |
+| **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files decode tolerantly (`failOn: "none"`) but stay bounded by the byte cap and pixel limit. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, light and heavy truncation, AVIF); fixtures `cut.jpg` (matches), `cut-heavy.jpg` (does not) and `pic.avif` |
 | **Service key only to Asmita.** | `AsmitaClient` has its own agent, builds URLs only from `ASMITA_API_URL`, refuses redirects. The crawl fetcher sends no auth or cookie headers. | `crawl.test.ts` "never sends credentials or cookies to crawled hosts"; `client-findings.test.ts` "refuses redirects" |
 | **No URLs, hostnames, fingerprints or bodies in logs.** Field allowlist, string sanitiser, errors reduced to fixed codes; uncaught errors and Node warnings routed through the logger. | `log.ts`, `errors.ts`, `cli.ts`. | `crawl.test.ts` log scan; `tests/integration/process.test.ts` runs the real `runMain` in a child process and scans all of stdout and stderr |
 | **Politeness.** robots.txt per origin (cached for the run), `Crawl-delay` honoured up to a cap, meta robots / `X-Robots-Tag` / `rel` nofollow, per-host delay, global concurrency cap, retries with exponential backoff and full jitter, `Retry-After`. | `crawl/robots.ts`, `crawl/limits.ts`, `retry.ts`. | `url-robots-extract.test.ts`, `log-retry-limits.test.ts`, `crawl.test.ts` |
 | **Real addresses.** URLs are fetched and reported as the site wrote them (fragment removed, query untouched, so signed CDN URLs work); tracking-param stripping and sorting apply only to the dedup key. | `crawl/url.ts` (`normalizeUrl` vs `urlKey`). | `url-robots-extract.test.ts` |
-| **Scope.** Pages only within the source's registrable domain (private suffixes on, so `x.blogspot.com` stays `x.blogspot.com`), BFS to `MAX_DEPTH`, `pageBudget` per source. Image hosts may differ (CDNs) but pass every safe-fetch check. | `crawl/url.ts`, `crawler.ts`. | `crawl.test.ts` (off-domain site never requested, CDN image fetched) |
+| **Scope.** A page is in scope only if its host EQUALS the approved source `domain` or is a subdomain of it: approving `example.com` covers `www.example.com`; approving `forum.example.com` does not cover `example.com` or `shop.example.com`. Checked on every page hop including redirects. Source domains must be bare hostnames (no IP, port, path or bare public suffix). BFS to `MAX_DEPTH`, `pageBudget` per source. | `crawl/url.ts` (`sourceHost`, `inScope`), `crawler.ts`. | `url-robots-extract.test.ts`; `tests/integration/scope.test.ts` (parent, sibling, sub-subdomain, redirect to sibling) |
+| **Image hosts.** Only image candidates extracted from an in-scope page are fetched; no image URL discovered any other way is ever requested. Such an image may live on another public host (sites serve images from CDNs), but every hop still passes all safe-fetch checks and robots.txt, and each source may touch at most `MAX_OFFSITE_IMAGE_HOSTS` (default 50) distinct off-scope hosts per run; the cap is checked on every hop, before robots.txt or the image is requested, so one page cannot spray requests across the internet. Counted as `imagesOffHost` and `imageHostsCapped`. | `crawler.ts` (`processImage`, `admitHost`). | `tests/integration/scope.test.ts` (5 CDN hosts plus a redirect to a 6th, cap 3: only 3 contacted) |
+| **Bounded frontier.** At most `MAX_LINKS_PER_PAGE` (500) links and `MAX_IMAGES_PER_PAGE` (200) image candidates are taken from any page; a page is queued only while the queue is shorter than the pages the source (and the run) may still fetch, and only queued pages enter the seen set, so queue and seen set never exceed the page budget; the seen-image set only grows within `MAX_IMAGES`. Summary: `linksDropped`, `linksNotQueued`, `queuePeak`, `seenPeak`. | `crawl/extract.ts`, `crawler.ts`. | `tests/integration/frontier.test.ts` (pages of 40,000 links: queue and seen set stay within budget, the planted image is still reported); `url-robots-extract.test.ts` |
 | **Withdrawn fingerprints stop matching.** Pool re-synced at least hourly; a pool older than 60 minutes stops the run; queued findings for removed ids are dropped; a `fingerprint_not_accepted` rejection removes the id from the in-memory pool at once. | `crawler.ts`, `findings.ts`, `match/matcher.ts`. | `tests/integration/lifecycle.test.ts`, `client-findings.test.ts` |
 | **Fail closed config**, no setting that loosens the network policy. Loopback access for tests is a policy object injected in code from `tests/support/test-policy.ts`. | `config.ts`. | `config-policy.test.ts` (schema has no such key; `src/` network code never mentions loopback) |
 | **Same PDQ as the browser.** | `src/pdq.ts` re-exports `asmita/src/lib/pdq/pdq.ts` (bundled at build). | `tests/unit/pdq-contract.test.ts` (exact export list, version, types, golden hash) |
@@ -90,7 +92,7 @@ need the app tree. Dihedral (rotated/flipped) variants are not generated:
 Decoding follows `src/prepare.ts`, copied from the PDQ agreement experiment
 (`tools/pdq-agreement/src/prepare.ts`, commit `876ad33`, branch
 `feat/crawler-pdq-agreement`) and kept as one swappable module: sharp with
-`failOn: "truncated"`, `limitInputPixels: 25_000_000`, `animated: false` ->
+`failOn: "none"`, `limitInputPixels: 25_000_000`, `animated: false` ->
 `.rotate()` -> `.toColourspace("srgb")` -> `.ensureAlpha()` -> `.raw()`, no
 resize, canvas alpha round-trip emulation, and a naive CMYK conversion for CMYK
 images without an ICC profile.
@@ -100,18 +102,25 @@ maximum distance 10, p95 0, 71 exact matches (verdict: go for Node + sharp +
 pdq.ts). Caveats: the fixtures were synthetic, the browser side was Chromium on
 Windows only, and CMYK is best-effort.
 
-**Truncated images (`failOn: "truncated"`, the one change from the harness
-copy).** Re-measured with the harness's Chromium on 2026-11-16: the
-well-formed fixtures give identical results under `none`, `truncated`,
-`error` and `warning`, so the numbers above still hold. For 30 truncated files
-(JPEG cut at 99/90/60/20% or missing only its EOI marker, PNG and WebP cut
-short), Chromium's `createImageBitmap`, which is what survivors' browsers use
-to fingerprint, rejected every one. `failOn: "none"` hashed them anyway (one
-90%-truncated photo landed at distance 4 from the full image), while
-`"truncated"` rejected exactly the files Chromium rejected. An `<img>`
-element does paint truncated JPEGs partially, but that is not the path that
-produces survivor fingerprints. Truncated images are skipped with reason
-`truncated`.
+**Truncated images (`failOn: "none"`, as in the harness).** A cut-short copy
+of a survivor's image on a site is still that image, so it should still be
+found. Measured on synthetic 640x480 images: JPEG or PNG cut to 99% of its
+bytes stays within distance 10 of the intact file, cut to 90% within 28
+(match); heavier truncation drifts to 60+ (no match). Truncated WebP, and a
+JPEG with almost no data, fail to decode and are skipped (`truncated` or
+`decode_failed`). Well-formed images hash identically under every `failOn`
+setting, so the agreement numbers above are unaffected.
+
+This deliberately differs from the survivor's browser: Chromium's
+`createImageBitmap`, which produces survivor fingerprints, rejects truncated
+files outright (measured: all 30 truncated JPEG/PNG/WebP test files), so a
+survivor never submits a fingerprint of a partial image. The crawler, by
+contrast, hashes a partial copy it finds, because that copy may still be the
+survivor's image. A truncated image gets no special treatment: it becomes a
+finding only under the normal rules (PDQ quality at least 50 and distance
+within the pool threshold, at most 31), exactly like an intact image.
+Stricter behaviour, if wanted, belongs in a policy check in
+`src/image/hash-image.ts`, not in the recipe.
 
 Matching: images with PDQ quality below 50 are skipped; brute-force Hamming
 over a packed `Uint32Array` with SWAR popcount; threshold = pool `threshold`
@@ -120,13 +129,72 @@ best first (one picture can be in several survivors' submissions).
 `npm run bench:matcher` on a laptop (Node 22): about **0.9 ms per query at
 100,000 fingerprints** and about 13 ms at 1,000,000.
 
+## Decoder isolation
+
+Image decoding (sharp/libvips, native code fed attacker-controlled bytes) and
+PDQ hashing run in separate **child processes** (`src/image/decoder-pool.ts`,
+`src/image/decoder-worker.ts`, bundled as `dist/decoder-worker.js`). The
+crawler process holds the fingerprint pool, the matcher and the service key,
+and never loads sharp itself (`dist/main.js` contains no sharp import; tested).
+
+What crosses the boundary: the parent sends `{ id, bytes, minSide }`; the
+child answers `{ id, ok: true, pdq, quality }` or `{ id, ok: false, code }`
+with `code` from the fixed error list. Replies are validated strictly; any
+other shape, field or id kills the child as compromised.
+
+Each child:
+
+- gets a scrubbed environment (`VIPS_DISC_THRESHOLD`, `TMPDIR`/`TMP`/`TEMP`
+  only; on Windows libuv also copies its required system variables such as
+  `PATH` and `SYSTEMROOT`), so no service key or config;
+- runs under Node's permission model (`--permission`): no filesystem writes,
+  no child processes, no worker threads, filesystem reads only inside the
+  application directory;
+- has a JS heap cap (`--max-old-space-size=256`) and recycles itself after 500
+  images or above 768 MB RSS;
+- has a per-image deadline (`DECODE_TIMEOUT_MS`, default 20 s): on timeout,
+  crash or a bad reply it is SIGKILLed and replaced, and only that image is
+  skipped (`decoder_timeout` / `decoder_crashed`);
+- has stdout and stderr discarded, so crash output (which could contain image
+  bytes) never reaches the logs; only counters are reported (`decoder` in the
+  run summary).
+
+`child_process` was chosen over `worker_threads` because worker threads share
+the parent's address space: a native-code exploit there could read the pool
+directly. The process boundary costs one IPC copy per image; measured on a
+laptop (80 mixed 640x480 to 1600x1200 JPEG/PNG/WebP images, decode + PDQ +
+match against 100,000 fingerprints; `npm run bench:decode`): with one decoder
+33-39 images/s in-process vs 34-37 isolated; with two, 48 in-process vs 47-63
+isolated. The difference is within run-to-run noise. Matching itself is about
+1 ms per image at 100k fingerprints (`npm run bench:matcher`).
+
+**What this does not protect against.** sharp is a native addon, so the child
+needs `--allow-addons`, and native code is not constrained by Node's
+permission model: an attacker who achieves code execution inside libvips can
+make system calls directly, including network connections and file writes
+(the container's read-only filesystem and the unwritable `TMPDIR` still
+apply). Node 22's permission model has no network restriction at all. What
+such an attacker cannot get is the pool, the key or URLs, because they are not
+in that process's memory or environment, unless they can attack the parent
+from the same OS user (e.g. via `ptrace` or `/proc/<pid>/mem`). Running the
+decoder under a separate UID, with seccomp, or with `kernel.yama.ptrace_scope`
+of at least 1 would close that; none is configured here, and Cloud Run's gVisor
+sandbox is the outer boundary.
+
+Tests: `tests/unit/decoder-isolation.test.ts` (same hash as in-process; env
+contains no key; writes, spawning, worker threads and reads outside the app
+directory are denied; hung, crashing, malformed, wrong-id and out-of-memory
+children are killed and replaced) and `tests/integration/memory-only.test.ts`
+(full crawl through the child process with every parent `fs` writer patched to
+throw).
+
 ## Asmita API contract
 
 Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
 - `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality }] }`
 - `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs }] }`
-- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and merged findings alike, so the crawler cannot tell whether two pool ids belong to one case; the client still tolerates `created` / `duplicate` from older servers and counts them all as created. A page must be on its source's host or a subdomain (`page_not_in_source`); the image may be on another public host
+- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and already-known findings alike, so the crawler cannot tell whether two pool ids belong to one case; the old `"created"` / `"duplicate"` are still tolerated and counted as accepted. A page must be on its source's host or a subdomain (`page_not_in_source`, which also sets exit code 4); the image may be on another public host
 
 Responses are validated with Zod. Findings are validated locally with the
 server's rules (strict objects, `runId` `[A-Za-z0-9_.:-]{1,64}`, integer
@@ -144,14 +212,18 @@ redirects.
 | 429, 5xx, network | retry with backoff + jitter (`Retry-After` honoured); a batch still failing is retried at the final flush. Safe: the server dedups |
 | 3xx | refused (the key never follows a redirect) |
 
-Per-item rejection reasons are counted in the summary (`rejectedByReason`);
-`fingerprint_not_accepted` withdraws that fingerprint immediately.
+Per-item rejection reasons (`invalid_finding`, `media_payload_rejected`,
+`invalid_url`, `unknown_source`, `fingerprint_not_accepted`,
+`page_not_in_source`) are counted in the summary (`rejectedByReason`);
+`fingerprint_not_accepted` withdraws that fingerprint immediately, and
+`page_not_in_source` makes the run exit 4. Accepted findings are counted as
+`findingsAccepted`.
 
 ## Run summary
 
 The last log line, `run_summary`, holds: outcome, duration, sources crawled,
 pages attempted/fetched/non-HTML, images seen/hashed/skipped by reason,
-matches, findings queued/posted/created/duplicate/rejected (by reason)/
+matches, findings queued/posted/accepted/rejected (by reason)/
 withdrawn/invalid/failed/unsent, pool syncs, robots outcomes, errors by code,
 page and image budget used.
 
@@ -193,11 +265,14 @@ network activity and the log names only the offending variable names. See
 | `MAX_RUN_MINUTES` | 50 | wall-clock limit, then graceful stop |
 | `MAX_PAGES` / `MAX_IMAGES` | 5000 / 20000 | global budgets (attempts, not successes) |
 | `MAX_DEPTH` | 5 | BFS depth from the source home page |
+| `MAX_LINKS_PER_PAGE` / `MAX_IMAGES_PER_PAGE` | 500 / 200 | candidates taken from one page |
 | `GLOBAL_CONCURRENCY` | 4 | concurrent requests across all hosts |
-| `DECODE_CONCURRENCY` | 1 | concurrent image decodes (a 25 MP decode is ~100 MB) |
+| `DECODE_CONCURRENCY` | 1 | decoder child processes (a 25 MP decode is ~100 MB) |
+| `DECODE_TIMEOUT_MS` | 20000 | per-image decode deadline; the child is killed and replaced |
 | `MAX_HTML_BYTES` / `MAX_IMAGE_BYTES` | 2 MiB / 10 MiB | body caps (also after decompression) |
 | `MIN_IMAGE_SIDE` | 64 | smaller images are skipped |
 | `OFFSITE_HOST_DELAY_MS` | 1000 | delay per off-source image host (CDNs) |
+| `MAX_OFFSITE_IMAGE_HOSTS` | 50 | distinct off-scope image hosts per source per run |
 | `MAX_CRAWL_DELAY_MS` | 30000 | cap on honoured robots `Crawl-delay` |
 | `POOL_RESYNC_MINUTES` | 30 | 1..60 |
 | `CONNECT_TIMEOUT_MS`, `HEADERS_TIMEOUT_MS`, `BODY_TIMEOUT_MS`, `REQUEST_TIMEOUT_MS` | 10s, 15s, 15s, 30s | fetch timeouts |

@@ -127,7 +127,7 @@ describe("run lifecycle", () => {
     const api = await mock({ failFirst: { findings: 1 } });
     const { result } = await runFixtureCrawl(fx.site, api, { env: { API_ATTEMPTS: "3" } });
     expect(api.created.size).toBe(fx.expected.length);
-    expect(result.summary.findingsCreated).toBe(fx.expected.length);
+    expect(result.summary.findingsAccepted).toBe(fx.expected.length);
     expect(result.summary.findingsUnsent).toBe(0);
   }, 30_000);
 
@@ -180,6 +180,23 @@ describe("run lifecycle", () => {
       expect(result.exitCode).toBe(EXIT.CONTRACT_ERROR);
       expect((result.summary.problems as Record<string, number>).contractErrors).toBe(fx.expected.length);
     }, 30_000);
+
+    it("4 when the server rejects findings as page_not_in_source (a scope bug)", async () => {
+      const api = await mock({ sourceDomainOverride: "elsewhere.test" });
+      const { result } = await runFixtureCrawl(fx.site, api);
+      expect((result.summary.rejectedByReason as Record<string, number>).page_not_in_source).toBe(fx.expected.length);
+      expect((result.summary.problems as Record<string, number>).scopeErrors).toBe(fx.expected.length);
+      expect(result.exitCode).toBe(EXIT.CONTRACT_ERROR);
+    }, 30_000);
+
+    it("0 and every finding accepted against a server still sending created/duplicate", async () => {
+      const api = await mock({ legacyStatuses: true });
+      const first = await runFixtureCrawl(fx.site, api);
+      const second = await runFixtureCrawl(fx.site, api); // all duplicates now
+      expect(first.result.summary.findingsAccepted).toBe(fx.expected.length);
+      expect(second.result.summary.findingsAccepted).toBe(fx.expected.length);
+      expect(second.result.exitCode).toBe(EXIT.OK);
+    }, 60_000);
 
     it("0 when the crawler is switched off mid-run, even with findings unsent", async () => {
       const api = await mock({ status: { findings: 503 } });

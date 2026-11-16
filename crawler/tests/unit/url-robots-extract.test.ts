@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CrawlError } from "../../src/errors.ts";
 import { extract, largestFromSrcset } from "../../src/crawl/extract.ts";
 import { parseRobots, RobotsCache } from "../../src/crawl/robots.ts";
-import { inScope, normalizeUrl, registrableDomain, urlKey } from "../../src/crawl/url.ts";
+import { inScope, normalizeUrl, registrableDomain, sourceHost, urlKey } from "../../src/crawl/url.ts";
 import type { FetchResult } from "../../src/net/safe-fetch.ts";
 
 describe("normalizeUrl", () => {
@@ -40,14 +40,32 @@ describe("scope", () => {
     expect(registrableDomain("127.0.0.1")).toBeNull();
     expect(registrableDomain("co.uk")).toBeNull();
   });
-  it("allows subdomains of the source and nothing else", () => {
-    const scope = registrableDomain("example.com")!;
-    expect(inScope(new URL("https://example.com/"), scope)).toBe(true);
-    expect(inScope(new URL("https://a.b.example.com/"), scope)).toBe(true);
-    expect(inScope(new URL("https://example.com.evil.net/"), scope)).toBe(false);
-    expect(inScope(new URL("https://notexample.com/"), scope)).toBe(false);
-    const blog = registrableDomain("someone.blogspot.com")!;
+  it("scopes pages to the approved host and its subdomains only", () => {
+    const apex = sourceHost("example.com")!;
+    expect(inScope(new URL("https://example.com/"), apex)).toBe(true);
+    expect(inScope(new URL("https://www.example.com/"), apex)).toBe(true);
+    expect(inScope(new URL("https://a.b.example.com/"), apex)).toBe(true);
+    expect(inScope(new URL("https://example.com.evil.net/"), apex)).toBe(false);
+    expect(inScope(new URL("https://notexample.com/"), apex)).toBe(false);
+    expect(inScope(new URL("https://evilexample.com/"), apex)).toBe(false);
+
+    const forum = sourceHost("forum.example.com")!;
+    expect(inScope(new URL("https://forum.example.com/t/1"), forum)).toBe(true);
+    expect(inScope(new URL("https://m.forum.example.com/"), forum)).toBe(true);
+    expect(inScope(new URL("https://example.com/"), forum)).toBe(false); // parent
+    expect(inScope(new URL("https://shop.example.com/"), forum)).toBe(false); // sibling
+    expect(inScope(new URL("https://www.example.com/"), forum)).toBe(false);
+    expect(inScope(new URL("https://xforum.example.com/"), forum)).toBe(false);
+
+    const blog = sourceHost("someone.blogspot.com")!;
     expect(inScope(new URL("https://other.blogspot.com/"), blog)).toBe(false);
+  });
+  it("accepts only bare, non-suffix hostnames as source domains", () => {
+    expect(sourceHost("Example.COM.")).toBe("example.com");
+    expect(sourceHost("bücher.example")).toBe("xn--bcher-kva.example");
+    for (const bad of ["", "co.uk", "blogspot.com", "127.0.0.1", "[::1]", "example.com/path", "example.com:8080", "user@example.com", "exa mple.com", "example.com\\x", "%65xample.com"]) {
+      expect(sourceHost(bad), bad).toBeNull();
+    }
   });
 });
 
@@ -181,6 +199,13 @@ describe("extract", () => {
     expect(extract(`<meta name="robots" content="nofollow"><img src="/i.png">`, page).images).toHaveLength(1);
   });
 
+  it("caps links and image candidates per page and counts the rest", () => {
+    const body = Array.from({ length: 50 }, (_, i) => `<a href="/l${i}">l</a><img src="/i${i}.png">`).join("");
+    const ex = extract(body, page, "", { maxLinks: 10, maxImages: 5 });
+    expect(ex.links).toHaveLength(10);
+    expect(ex.images).toHaveLength(5);
+    expect(ex.dropped).toEqual({ links: 40, images: 45 });
+  });
   it("drops fragments and dedups links", () => {
     const ex = extract(`<a href="/x#1">1</a><a href="/x#2">2</a><a href="/x?utm_campaign=q">3</a><a href="mailto:a@b.c">m</a>`, page);
     expect(paths(ex.links)).toEqual(["https://example.com/x"]); // first occurrence kept

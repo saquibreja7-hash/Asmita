@@ -10,7 +10,10 @@
 import sharp, { type Metadata } from "sharp";
 import { CrawlError } from "../errors.ts";
 import { computePdqHash } from "../pdq.ts";
-import { DEFAULT_LIMIT_INPUT_PIXELS, FAIL_ON, prepareForPdq } from "../prepare.ts";
+import { DEFAULT_LIMIT_INPUT_PIXELS, prepareForPdq } from "../prepare.ts";
+
+/** Same tolerance as the prepareForPdq recipe: a cut-short copy still hashes. */
+const FAIL_ON = "none" as const;
 
 // libvips keeps an operation cache in memory; we never re-use results.
 sharp.cache(false);
