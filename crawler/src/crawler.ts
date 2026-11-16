@@ -51,6 +51,14 @@ export type CrawlDeps = {
   poolResyncMs?: number;
 };
 
+type SourceCtx = {
+  source: Source;
+  /** Approved host; pages must equal it or be a subdomain (inScope). */
+  scopeHost: string;
+  /** Distinct off-scope hosts images were fetched from, for the per-source cap. */
+  offHosts: Set<string>;
+};
+
 export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget" | "unauthorized";
 
 export type RunResult = {
@@ -257,7 +265,20 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const record = (code: ErrorCode) => metrics.error(code);
 
   // --- per image ------------------------------------------------------------
-  const processImage = async (img: URL, pageUrl: URL, source: Source, scopeHost: string): Promise<void> => {
+  /**
+   * Fetch, hash and match one image candidate. Only called with candidates
+   * extracted from an in-scope page (crawlSource), never with URLs found any
+   * other way. The image may live on another public host (sites serve images
+   * from CDNs); every hop still passes the safe fetcher, and the number of
+   * distinct off-scope hosts per source is capped (MAX_OFFSITE_IMAGE_HOSTS).
+   */
+  const processImage = async (img: URL, pageUrl: URL, ctx: SourceCtx): Promise<void> => {
+    const { source, scopeHost, offHosts } = ctx;
+    if (!inScope(pageUrl, scopeHost)) {
+      // Unreachable by construction; refuse rather than fetch on a bug.
+      record("out_of_scope");
+      return;
+    }
     if (seenImages.has(urlKey(img))) return metrics.skip("duplicate_url");
     seenImages.add(urlKey(img));
     if (metrics.imagesSeen >= config.MAX_IMAGES) {
@@ -266,6 +287,15 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     metrics.imagesSeen++;
     const delay = inScope(img, scopeHost) ? source.delayMs : Math.max(source.delayMs, config.OFFSITE_HOST_DELAY_MS);
+    let touchedOffHost = false;
+    /** Runs on every hop before robots.txt or the request itself. */
+    const admitHost = (u: URL) => {
+      if (inScope(u, scopeHost)) return;
+      touchedOffHost = true;
+      if (offHosts.has(u.hostname)) return;
+      if (offHosts.size >= config.MAX_OFFSITE_IMAGE_HOSTS) throw new CrawlError("image_host_cap");
+      offHosts.add(u.hostname);
+    };
     let res: FetchResult;
     try {
       res = await fetchWithRetry(img, {
@@ -274,13 +304,19 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         accept: IMAGE_ACCEPT,
         signal: hard.signal,
         gate,
-        beforeHop: politeHop(delay),
+        beforeHop: politeHop(delay, admitHost),
       });
     } catch (raw) {
       const err = toCrawlError(raw);
+      if (err.code === "image_host_cap") {
+        metrics.imageHostsCapped++;
+        return metrics.skip("image_hosts_capped");
+      }
+      if (touchedOffHost) metrics.imagesOffHost++;
       record(err.code);
       return metrics.skip(err.code === "robots_disallowed" ? "robots" : "fetch_failed");
     }
+    if (touchedOffHost) metrics.imagesOffHost++;
     // The image is reported at the address it was actually fetched from
     // (after redirects); mark that address seen too.
     const imageUrl = res.url.href;
@@ -348,6 +384,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     const started = now();
     const queue: { url: URL; depth: number }[] = [{ url: seed, depth: 0 }];
     const seen = new Set<string>([urlKey(seed)]);
+    const ctx: SourceCtx = { source, scopeHost, offHosts: new Set<string>() };
     let pages = 0;
 
     while (queue.length > 0 && pages < source.pageBudget && !stop.signal.aborted) {
@@ -386,6 +423,11 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         metrics.pagesNonHtml++;
         continue;
       }
+      if (!inScope(page.url, scopeHost)) {
+        // Redirect hops are already checked in beforeHop; belt and braces.
+        record("out_of_scope");
+        continue;
+      }
       metrics.pagesFetched++;
       const ex = extract(page.body.toString("utf8"), page.url, page.xRobotsTag);
       metrics.skip("data_uri", ex.skipped.data_uri);
@@ -402,7 +444,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       for (const img of ex.images) {
         if (stop.signal.aborted) break;
         // pageUrl is the page address as crawled (before any redirect).
-        await processImage(img, url, source, scopeHost);
+        await processImage(img, url, ctx);
       }
     }
     slog.info("source_done", { pages, durationMs: now() - started });

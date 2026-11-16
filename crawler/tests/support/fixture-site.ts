@@ -136,6 +136,7 @@ export async function buildFixture(): Promise<Fixture> {
     blog: await patternImage(150, 300, 300, "png"),
     blogDeep: await patternImage(151, 300, 300, "png"),
     shop: await patternImage(152, 300, 300, "png"),
+    offA: await patternImage(153, 300, 300, "png"), // on an off-scope CDN host, in the pool
     bomb: await pixelBombPng(30_000, 30_000),
   };
 
@@ -177,6 +178,7 @@ export async function buildFixture(): Promise<Fixture> {
       fp("fp-blog", h.blog!),
       fp("fp-blog-deep", h.blogDeep!),
       fp("fp-shop", h.shop!), // only on the sibling host: must never be found from the blog source
+      fp("fp-off-a", h.offA!),
       ...Array.from({ length: 200 }, (_, i) => fp(`fp-rand-${i}`, randomFingerprint(5000 + i))),
     ],
   };
@@ -380,6 +382,20 @@ export async function buildFixture(): Promise<Fixture> {
   site.route(`shop.${S}`, "/", sendHtml(html(`<img src="/shop.png">`)));
   site.route(`shop.${S}`, "/landing", sendHtml(html(`<img src="/shop.png">`)));
   site.route(`shop.${S}`, "/shop.png", sendBytes(img.shop, "image/png"));
+
+  // ---- off-scope image hosts: approve gallery.fixture.test ----
+  // Images on h1..h5.cdn.imgcdn.test, plus an in-scope image that redirects
+  // to h6. With MAX_OFFSITE_IMAGE_HOSTS=3 only h1..h3 may ever be contacted.
+  const G = `gallery.${S}`;
+  const offHosts = [1, 2, 3, 4, 5].map((i) => `h${i}.${CDN_HOST}`);
+  site.route(
+    G,
+    "/",
+    sendHtml(html(`${offHosts.map((hst, i) => `<img src="${o(hst)}/p${i}.png">`).join("")}<img src="/img/bounce.png">`)),
+  );
+  site.route(G, "/img/bounce.png", redirect(`${o(`h6.${CDN_HOST}`)}/p6.png`));
+  offHosts.forEach((hst, i) => site.route(hst, `/p${i}.png`, sendBytes(i === 0 ? img.offA : img.decoy, "image/png")));
+  site.route(`h6.${CDN_HOST}`, "/p6.png", sendBytes(img.decoy, "image/png"));
 
   return { site, pool, expected, allHashes: Object.values(h) };
 }

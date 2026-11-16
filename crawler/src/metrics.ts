@@ -9,6 +9,7 @@ export type SkipReason =
   | "pool_stale"
   | "fetch_failed"
   | "decode_failed"
+  | "image_hosts_capped"
   | "truncated"
   | "too_small"
   | "too_many_pixels"
@@ -28,6 +29,10 @@ export class RunMetrics {
   pagesOutOfScope = 0;
   imagesSeen = 0;
   imagesHashed = 0;
+  /** Images whose fetch touched a host outside the source's scope (CDNs). */
+  imagesOffHost = 0;
+  /** Images refused because the source hit MAX_OFFSITE_IMAGE_HOSTS. */
+  imageHostsCapped = 0;
   matches = 0;
   findingsQueued = 0;
   findingsPosted = 0;
@@ -72,6 +77,8 @@ export class RunMetrics {
       pagesNonHtml: this.pagesNonHtml,
       imagesSeen: this.imagesSeen,
       imagesHashed: this.imagesHashed,
+      imagesOffHost: this.imagesOffHost,
+      imageHostsCapped: this.imageHostsCapped,
       imagesSkipped: { ...this.imagesSkipped } as Record<string, number>,
       matches: this.matches,
       findingsQueued: this.findingsQueued,

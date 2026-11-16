@@ -4,7 +4,7 @@
  * cannot take a page fetch out of scope.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildFixture, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
+import { buildFixture, CDN_HOST, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
 import { MockAsmita } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 
@@ -39,5 +39,26 @@ describe("page scope", () => {
     expect(ids).toEqual(["fp-blog", "fp-blog-deep"]);
     expect((result.summary.errors as Record<string, number>).out_of_scope).toBe(1); // the /jump redirect
     for (const f of api.posted) expect(new URL(f.pageUrl).hostname.endsWith(BLOG)).toBe(true);
+  }, 30_000);
+
+  it("fetches images from off-scope hosts only up to the per-source host cap", async () => {
+    const gallery = await new MockAsmita({
+      key: TEST_KEY,
+      pool: fx.pool,
+      sources: [{ id: "src-gallery", kind: "site", domain: `gallery.${SOURCE_DOMAIN}`, pageBudget: 5, delayMs: 0 }],
+    }).start();
+    try {
+      const before = fx.site.requests.length;
+      const { result } = await runFixtureCrawl(fx.site, gallery, { env: { MAX_OFFSITE_IMAGE_HOSTS: "3" } });
+      const contacted = new Set(fx.site.requests.slice(before).map((r) => r.host).filter((h) => h.endsWith(CDN_HOST)));
+      expect([...contacted].sort()).toEqual([1, 2, 3].map((i) => `h${i}.${CDN_HOST}`));
+      expect(result.summary.imagesOffHost).toBe(3);
+      expect(result.summary.imageHostsCapped).toBe(3); // h4, h5 and the redirect to h6
+      expect((result.summary.imagesSkipped as Record<string, number>).image_hosts_capped).toBe(3);
+      // An off-scope CDN image embedded by an in-scope page is still matched.
+      expect(gallery.posted.map((f) => f.fingerprintId)).toEqual(["fp-off-a"]);
+    } finally {
+      await gallery.stop();
+    }
   }, 30_000);
 });
