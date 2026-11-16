@@ -74,9 +74,14 @@ function stripComments(code: string): string {
 describe("static guarantees in src/", () => {
   const files = sources(SRC);
   it("finds the source files", () => expect(files.length).toBeGreaterThan(10));
-  it("never imports node:fs or calls sharp toFile / temp-file APIs", () => {
+  it("never imports node:fs (except main.ts reading the key file) or calls sharp toFile / temp-file APIs", () => {
+    const KEY_FILE_IMPORT = 'import { readFileSync } from "node:fs";';
+    const main = files.find((f) => /[\\/]main\.ts$/.test(f.path))!;
+    expect(main.text).toContain(KEY_FILE_IMPORT);
+    expect(main.text.match(/readFileSync/g)).toHaveLength(2); // the import and the one key-file read
     for (const f of files) {
-      expect(f.text, f.path).not.toMatch(/from\s+["'](node:)?fs(\/promises)?["']/);
+      const text = f === main ? f.text.replace(KEY_FILE_IMPORT, "") : f.text;
+      expect(text, f.path).not.toMatch(/from\s+["'](node:)?fs(\/promises)?["']/);
       expect(f.text, f.path).not.toMatch(/require\(["'](node:)?fs/);
       expect(f.text, f.path).not.toMatch(/\.toFile\(|mkdtemp|tmpdir\(|createWriteStream/);
     }

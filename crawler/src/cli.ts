@@ -18,6 +18,7 @@ import { Logger, type LogSink } from "./log.ts";
 import { productionPolicy, type NetPolicy } from "./net/policy.ts";
 import { DecoderPool } from "./image/decoder-pool.ts";
 import { SafeFetcher } from "./net/safe-fetch.ts";
+import { takeSecrets } from "./secrets.ts";
 
 export type MainOptions = {
   argv: string[];
@@ -26,6 +27,11 @@ export type MainOptions = {
   /** Production passes nothing; only tests inject a loopback-capable policy. */
   policy?: NetPolicy;
   seedUrl?: CrawlDeps["seedUrl"];
+  /**
+   * Reads CRAWLER_SERVICE_KEY_FILE. Only main.ts passes one (src/ has no other
+   * filesystem access); without it the key-file method is refused.
+   */
+  readFile?: (path: string) => string;
   /** Process signals are wired when true (the real binary). */
   handleSignals?: boolean;
   stopSignal?: AbortSignal;
@@ -41,7 +47,9 @@ export async function runMain(opts: MainOptions): Promise<number> {
 
   let config;
   try {
-    config = loadConfig(opts.env);
+    // Takes the key out of opts.env (the real environment in production) before any
+    // decoder child can exist; see src/secrets.ts for what that does not do.
+    config = loadConfig(takeSecrets(opts.env, opts.readFile));
   } catch (err) {
     const keys = err instanceof ConfigError ? Object.fromEntries(err.keys.map((k) => [k, 1])) : {};
     bootLog.error("config_invalid", { invalidKeys: keys, exitCode: EXIT.FAILURE });

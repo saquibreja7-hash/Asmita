@@ -138,23 +138,30 @@ crawler process holds the fingerprint pool, the matcher and the service key,
 and never loads sharp itself (`dist/main.js` contains no sharp import; tested).
 
 What crosses the boundary: the parent sends `{ id, bytes, minSide }`; the
-child answers `{ id, ok: true, pdq, quality }` or `{ id, ok: false, code }`
-with `code` from the fixed error list. Replies are validated strictly; any
-other shape, field or id kills the child as compromised.
+child answers `{ id, ok: true, pdq, quality, rss }` or
+`{ id, ok: false, code, rss }` with `code` from the fixed error list and `rss`
+its resident memory in bytes. Replies are validated strictly; any other
+shape, field or id kills the child as compromised.
 
 Each child:
 
 - gets a scrubbed environment (`VIPS_DISC_THRESHOLD`, `TMPDIR`/`TMP`/`TEMP`
   only; on Windows libuv also copies its required system variables such as
-  `PATH` and `SYSTEMROOT`), so no service key or config;
+  `PATH` and `SYSTEMROOT`), so no service key or config, and nothing secret on
+  its argv;
 - runs under Node's permission model (`--permission`): no filesystem writes,
-  no child processes, no worker threads, filesystem reads only inside the
-  application directory;
-- has a JS heap cap (`--max-old-space-size=256`) and recycles itself after 500
-  images or above 768 MB RSS;
+  no child processes, no worker threads, and filesystem reads only of its own
+  bundle (`dist/decoder-worker.js`) and `node_modules/{sharp,@img,detect-libc,semver}`
+  (not `package.json`, `src/`, `dist/main.js` or a local `.env`);
+- has a JS heap cap (`--max-old-space-size=256`);
+- is recycled by the parent after 500 answered images or when the RSS it
+  reports is above 768 MB, before it is handed another image, so no image is
+  lost to a recycle; this also bounds how long a compromised child lives;
 - has a per-image deadline (`DECODE_TIMEOUT_MS`, default 20 s): on timeout,
-  crash or a bad reply it is SIGKILLed and replaced, and only that image is
-  skipped (`decoder_timeout` / `decoder_crashed`);
+  crash or a bad reply it is SIGKILLed and replaced. An image whose child
+  died before answering is retried once on a fresh child (never twice, so a
+  poison image cannot loop); a timeout or bad reply is not retried. Skipped
+  images are counted (`decoder_timeout` / `decoder_crashed`);
 - has stdout and stderr discarded, so crash output (which could contain image
   bytes) never reaches the logs; only counters are reported (`decoder` in the
   run summary).
@@ -168,25 +175,66 @@ match against 100,000 fingerprints; `npm run bench:decode`): with one decoder
 isolated. The difference is within run-to-run noise. Matching itself is about
 1 ms per image at 100k fingerprints (`npm run bench:matcher`).
 
+**What the isolation gives.** The pool, the matcher and URLs are only in the
+parent's memory, never sent to a child; the key is never in a child's
+environment, argv or messages. Code that stays inside JavaScript in the child
+cannot write files, spawn processes or read outside its bundle and sharp. A
+child is a separate address space, so a bug that only lets an attacker read
+the decoder's own memory gets one image's bytes, not the pool.
+
 **What this does not protect against.** sharp is a native addon, so the child
 needs `--allow-addons`, and native code is not constrained by Node's
-permission model: an attacker who achieves code execution inside libvips can
-make system calls directly, including network connections and file writes
-(the container's read-only filesystem and the unwritable `TMPDIR` still
-apply). Node 22's permission model has no network restriction at all. What
-such an attacker cannot get is the pool, the key or URLs, because they are not
-in that process's memory or environment, unless they can attack the parent
-from the same OS user (e.g. via `ptrace` or `/proc/<pid>/mem`). Running the
-decoder under a separate UID, with seccomp, or with `kernel.yama.ptrace_scope`
-of at least 1 would close that; none is configured here, and Cloud Run's gVisor
-sandbox is the outer boundary.
+permission model at all: `--allow-fs-read` binds only Node's own file APIs.
+The child also runs as the **same OS user** as the parent. So an attacker who
+achieves code execution inside libvips can make system calls directly:
+
+- open network connections (Node 22's permission model has no network
+  restriction; the crawler needs outbound internet, so the container has it);
+- read any file that user can read, including `/proc/<parent pid>/environ`
+  and the key file. On Linux `/proc/<pid>/environ` is the process's
+  **initial** environment: `runMain` deletes `CRAWLER_SERVICE_KEY` from the
+  live environment before any child exists (`src/secrets.ts`), but if the key
+  was given as an env var it is still readable there. Giving it as a file
+  (`CRAWLER_SERVICE_KEY_FILE`) keeps it out of every environment, but the
+  file is still readable by that user;
+- attach to or read the parent's memory (`ptrace`, `/proc/<pid>/mem`), and so
+  the pool, wherever the kernel allows same-user tracing of a non-descendant
+  (Yama `ptrace_scope` 0, or no Yama). Not tested here;
+- write wherever that user may write (the read-only image filesystem and the
+  unwritable `TMPDIR` still apply).
+
+Parent-side recycling (above) limits how long one compromised child lives;
+it does not prevent any of these within that time.
+
+Deployment hardening that closes the rest (none of it is configured or tested
+here):
+
+1. Run the decoder children as a **different UID** from the parent, with the
+   key file readable only by the parent's UID, or put them in a syscall
+   sandbox (seccomp/gVisor/nsjail) that denies `ptrace`, `open` outside the
+   bundle and `socket`. This needs a launcher change (Node's `fork` has `uid`
+   and `gid` options, which need the parent to have `CAP_SETUID`).
+2. Give the decoder **no network**: a separate network namespace or a seccomp
+   rule against `socket`/`connect`. Cloud Run offers no per-process egress
+   control, so on Cloud Run this needs (1).
+3. Provide the key **as a file** from Secret Manager (below), never an env
+   var, so `/proc/<pid>/environ` holds nothing.
+4. Where possible, set `kernel.yama.ptrace_scope` to at least 1.
+
+Cloud Run's own sandbox wraps the whole container (the first generation
+execution environment is gVisor, the second a microVM; check which one the
+job uses). Either way it separates the container from the host, not the
+decoder child from the parent inside it.
 
 Tests: `tests/unit/decoder-isolation.test.ts` (same hash as in-process; env
-contains no key; writes, spawning, worker threads and reads outside the app
-directory are denied; hung, crashing, malformed, wrong-id and out-of-memory
-children are killed and replaced) and `tests/integration/memory-only.test.ts`
-(full crawl through the child process with every parent `fs` writer patched to
-throw).
+and argv contain no key; writes, spawning, worker threads and reads outside
+the bundle and sharp are denied; hung, crashing, malformed, wrong-id and
+out-of-memory children are killed and replaced; parent-side recycling by
+task count and reported RSS; a dying child's image is retried once, a poison
+image only once), `tests/unit/secrets.test.ts` (key deleted from the given
+environment before anything else; key file) and
+`tests/integration/memory-only.test.ts` (full crawl through the child process
+with every parent `fs` writer patched to throw).
 
 ## Asmita API contract
 
@@ -260,7 +308,8 @@ network activity and the log names only the offending variable names. See
 | Variable | Default | Meaning |
 |---|---|---|
 | `ASMITA_API_URL` | required | https origin of the Asmita app (http only for a loopback mock) |
-| `CRAWLER_SERVICE_KEY` | required | bearer key, 32-512 printable chars |
+| `CRAWLER_SERVICE_KEY_FILE` | one of these two | path to a file holding only the key (one trailing newline is dropped). Recommended in production |
+| `CRAWLER_SERVICE_KEY` | one of these two | the key itself, 32-512 printable chars; for local runs. Setting both is refused. Either is deleted from the environment at startup |
 | `CRAWLER_USER_AGENT` | required | `Token/version (+contact URL)`; the token is matched in robots.txt |
 | `MAX_RUN_MINUTES` | 50 | wall-clock limit, then graceful stop |
 | `MAX_PAGES` / `MAX_IMAGES` | 5000 / 20000 | global budgets (attempts, not successes) |
@@ -293,10 +342,14 @@ Nothing here has been deployed.
 - Region `asia-south1` (Mumbai). Create a Cloud Run **job**, not a service:
   `gcloud run jobs create asmita-crawler --region asia-south1 --image <image> --tasks 1 --max-retries 0 --task-timeout 3600s --memory 2Gi --cpu 1`.
   Keep `MAX_RUN_MINUTES` below the task timeout so the run ends gracefully.
-- Secrets: store `CRAWLER_SERVICE_KEY` in Secret Manager and mount it as an env
-  var (`--set-secrets CRAWLER_SERVICE_KEY=crawler-service-key:latest`); give the
-  job's service account only `roles/secretmanager.secretAccessor` on that
-  secret. Other settings as plain env vars.
+- Secrets: store the key in Secret Manager and mount it **as a file**, then
+  point `CRAWLER_SERVICE_KEY_FILE` at it (for example
+  `--set-secrets /secrets/crawler-service-key=crawler-service-key:latest` with
+  `CRAWLER_SERVICE_KEY_FILE=/secrets/crawler-service-key`; check the exact
+  flag form against the Cloud Run docs, not verified here). Not as an env
+  var: see "What this does not protect against". Give the job's service
+  account only `roles/secretmanager.secretAccessor` on that secret. Other
+  settings as plain env vars.
 - Filesystem: the process writes nothing. Cloud Run's filesystem is in-memory
   and cannot be made read-only, so verify with `docker run --read-only` (CI
   does) and rely on the unwritable `TMPDIR` in the image.

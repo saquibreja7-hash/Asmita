@@ -54,7 +54,8 @@ Crawler (Cloud Run job env vars; placeholders in `crawler/.env.example`):
 | Variable | Notes |
 |-|-|
 | `ASMITA_API_URL` | The production origin, `https` only |
-| `CRAWLER_SERVICE_KEY` | From Secret Manager, never a plain env var |
+| `CRAWLER_SERVICE_KEY_FILE` | Path of the key file mounted from Secret Manager (section 4). The production method |
+| `CRAWLER_SERVICE_KEY` | The key itself. Local runs only: on Linux an env var stays readable in `/proc/<pid>/environ` even after the crawler deletes it at startup. Setting both is refused |
 | `CRAWLER_USER_AGENT` | Identifies Asmita and links to a page explaining the crawler |
 | `MAX_RUN_MINUTES` | Keep below the job's task timeout (default 50 with a 60-minute timeout) |
 | Limits | `MAX_PAGES`, `MAX_IMAGES`, `MAX_DEPTH`, byte caps, timeouts, concurrency: defaults in `crawler/README.md`, "Configuration" |
@@ -83,9 +84,13 @@ Region: Mumbai, `asia-south1` (the pool is survivor data and stays in India, ADR
      --image asia-south1-docker.pkg.dev/<project>/asmita/crawler:<git sha> \
      --service-account asmita-crawler@<project>.iam.gserviceaccount.com \
      --tasks 1 --max-retries 0 --task-timeout 3600s --memory 2Gi --cpu 1 \
-     --set-secrets CRAWLER_SERVICE_KEY=crawler-service-key:latest \
-     --set-env-vars ASMITA_API_URL=https://<production origin>,CRAWLER_USER_AGENT="<agent>",MAX_RUN_MINUTES=50
+     --set-secrets /secrets/crawler-service-key=crawler-service-key:latest \
+     --set-env-vars CRAWLER_SERVICE_KEY_FILE=/secrets/crawler-service-key,ASMITA_API_URL=https://<production origin>,CRAWLER_USER_AGENT="<agent>",MAX_RUN_MINUTES=50
    ```
+
+   The key is mounted as a file, not an env var. The `--set-secrets <path>=<secret>:<version>` file form is written from memory and has not been run: check it against the current Cloud Run jobs documentation before use.
+
+   What the decoder isolation gives and does not give (`crawler/README.md`, "Decoder isolation"): decoder children never receive the pool, the key or URLs, cannot write files or spawn processes from JavaScript, and are recycled by the parent. They run as the same OS user as the crawler, and native code in an exploited decoder is not bound by Node's permission model, so it could reach the network, read the key file and, where the kernel allows same-user tracing, the parent's memory. Before go-live, harden the deployment (checklist below): run the decoder children under a separate UID or a syscall sandbox (seccomp, gVisor, nsjail) with no network, the key file readable only by the crawler's own UID. Cloud Run's sandbox (gVisor in the first-generation execution environment, a microVM in the second) wraps the whole container; it does not separate the decoder from the crawler inside it, and Cloud Run has no per-process egress control.
 
    Read-only filesystem: the image is built for `docker run --read-only` (non-root, distroless, `TMPDIR` pointing at a path that does not exist), and the process never writes. Cloud Run's own filesystem is in-memory and cannot be mounted read-only, so the guarantee comes from the image and the tests, verified with `--read-only` in CI. Do not attach the job to a VPC with private routes.
 
@@ -156,7 +161,8 @@ Every item, in writing, before a real fingerprint enters the pool, a real site i
 - [ ] Hindi crawl strings reviewed by a native speaker (`src/i18n/hi-review-status.json`).
 - [ ] Migrations `20261116000000_crawler_backend`, `20261116010000_crawler_representative_notice` and `20261116020000_crawl_finding_consent` applied to a real Postgres, and the Kysely and Prisma paths exercised there (ingest, review, preview, dispatch, withdrawal, deletion request). So far only mocks and the memory store have run them.
 - [ ] `tests/e2e/crawler-journey.spec.ts` run green against a local Postgres.
-- [ ] Crawler CI green on Linux and the Docker image built and run with `--read-only`.
+- [ ] Crawler CI green on Linux and the Docker image built and run with `--read-only`, including a real decode in the container (the decoder child's narrowed `--allow-fs-read` list has been tested on Windows only).
+- [ ] Decoder hardening decided and in place (section 4): decoder children under a separate UID or a syscall sandbox, without network, and the key given as a file (`CRAWLER_SERVICE_KEY_FILE`), never an env var. Not configured or tested today.
 - [ ] Hosting confirmed in India (`asia-south1`) and the job set up as in section 4.
 - [ ] Owner decisions recorded: survivors see found links (`CRAWLER_SHOW_FINDINGS_TO_SURVIVOR`); embedded images from other hosts; whether dismissed or sent findings may recur after the 30-day purge; the same-day limit on retrying a failed send.
 - [ ] The MeitY SOP date discrepancy (October 2025 in `CLAUDE.md`, November 2025 in ADR 006) checked by a human against the SOP.
