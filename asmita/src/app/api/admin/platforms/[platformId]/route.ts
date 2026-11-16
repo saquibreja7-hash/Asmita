@@ -12,7 +12,14 @@ const fieldSchema = z
     grievanceName: z.string().min(1).max(120).nullable().optional(),
     grievanceAddress: z.string().min(1).max(500).nullable().optional(),
     formUrl: z.string().url().nullable().optional(),
-    apiEndpoint: z.string().url().nullable().optional(),
+    // Partner endpoints receive signed notices and survivor fingerprints:
+    // HTTPS only.
+    apiEndpoint: z
+      .string()
+      .url()
+      .refine((value) => /^https:\/\//i.test(value), { message: "https_required" })
+      .nullable()
+      .optional(),
   })
   .strict();
 
@@ -82,8 +89,10 @@ export async function POST(
   }
 
   // An edit never arrives verified: the same write that changes the contact
-  // withdraws the verification and records who changed it, so a different
-  // admin has to verify it before anything is sent there again.
+  // (including a new API endpoint, which is a new recipient of signed notices
+  // and survivor fingerprints) withdraws the verification and records who
+  // changed it, so a different admin has to verify it before anything is sent
+  // there again.
   updateData.lastContactVerifiedByHuman = false;
   updateData.lastContactVerifiedAt = null;
   updateData.contactChangedBy = auth.session.emailHash;

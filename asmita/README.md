@@ -31,7 +31,7 @@ npm run test:e2e
 - Image provenance can be checked locally; the optional deeper check forwards a selected image to its provider only with explicit consent and keeps no server copy.
 - Do not store Aadhaar numbers.
 - Do not send real notices until platform contacts, sender domains, and templates are human-verified.
-- Adults can generate PDQ fingerprints on their device and submit the hash code with a case. Platform API dispatch remains disabled until its contacts and integration are verified.
+- Adults can generate PDQ fingerprints on their device and submit the hash code with a case. The Platform API transport is built (docs/api/platform-api.md); dispatch stays disabled until each partner integration is verified.
 
 ## Operational Docs
 

@@ -408,4 +408,66 @@ describe("edit then verify, end to end over the two routes", () => {
     expect(row.lastContactVerifiedAt).toBeNull();
     expect(row.contactChangedBy).toBe("hash-admin-2");
   });
+
+  it("changing the API endpoint resets the human-verification gate", async () => {
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
+    vi.mocked(db.platform.findUnique).mockResolvedValue({
+      id: "p-1",
+      name: "Example",
+      grievanceEmail: "go@example.com",
+      grievanceName: null,
+      grievanceAddress: null,
+      formUrl: null,
+      apiEndpoint: null,
+      lastContactVerifiedByHuman: true,
+    } as never);
+
+    const res = await POST(
+      csrfPost("p-1", {
+        sourceUrl: "https://platform.com/partner-api",
+        markVerified: false,
+        fields: { apiEndpoint: "https://api.partner.example/removals" },
+      }),
+      makeParams("p-1"),
+    );
+    expect(res.status).toBe(200);
+    expect(db.platform.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "p-1" },
+        data: expect.objectContaining({
+          apiEndpoint: "https://api.partner.example/removals",
+          lastContactVerifiedByHuman: false,
+          lastContactVerifiedAt: null,
+        }),
+      }),
+    );
+  });
+
+  it("an edit cannot verify its own new API endpoint: a second admin must", async () => {
+    vi.mocked(requireAdminPermission).mockResolvedValue(okAdmin);
+    vi.mocked(db.platform.findUnique).mockResolvedValue({
+      id: "p-1",
+      name: "Example",
+      grievanceEmail: "go@example.com",
+      grievanceName: null,
+      grievanceAddress: null,
+      formUrl: null,
+      apiEndpoint: null,
+      lastContactVerifiedByHuman: false,
+    } as never);
+
+    const res = await POST(
+      csrfPost("p-1", {
+        sourceUrl: "https://platform.com/partner-api",
+        markVerified: true,
+        fields: { apiEndpoint: "https://api.partner.example/removals" },
+      }),
+      makeParams("p-1"),
+    );
+    // Two-person rule: the editor can never verify in the same request, so a
+    // new endpoint cannot be both set and trusted by one person.
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "verify_separately" });
+    expect(db.platform.update).not.toHaveBeenCalled();
+  });
 });
