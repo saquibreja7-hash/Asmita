@@ -26,7 +26,7 @@ export async function GET(_request: Request, context: { params: Promise<{ caseId
         domain: url.domain,
         platformName: url.platformName,
         status: url.status,
-        sentAt: url.noticeSentAt ?? url.platformFiledAt ?? null,
+        sentAt: url.noticeSentAt ?? url.representativeNoticeSentAt ?? url.platformFiledAt ?? null,
       })),
     });
   } catch (err) {

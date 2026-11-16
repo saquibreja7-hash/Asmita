@@ -26,6 +26,22 @@ export type DisplayUrl = {
   hasSignedNotice?: boolean;
   flaggedForReview?: boolean;
   flagReason?: string | null;
+  /**
+   * SURVIVOR: she reported it. CRAWLER: Asmita's crawler found it and an
+   * analyst approved it; Asmita sends its notice as her representative and
+   * she never signs it. No finding detail is ever exposed here. Every
+   * case-ops backend sets it (optional in the type only so older fixtures
+   * still type-check).
+   */
+  source?: "SURVIVOR" | "CRAWLER";
+  /** Crawler links: she withdrew her crawl authorisation before a notice went out, so none will. */
+  crawlConsentWithdrawn?: boolean;
+  /**
+   * Crawler links: when Asmita's representative notice went out. Kept apart
+   * from noticeSentAt because that notice states no removal deadline, so the
+   * escalation ladder (which noticeSentAt starts) does not apply to it.
+   */
+  representativeNoticeSentAt?: string | null;
   /** The escalation ladder's inputs (src/lib/escalation-ladder.ts). */
   platformFiledAt?: string | null;
   noticeSentAt?: string | null;
@@ -46,6 +62,10 @@ export type DisplayCase = {
   urls: DisplayUrl[];
 };
 
+export function urlSource(source: string | null | undefined): DisplayUrl["source"] {
+  return source === "CRAWLER" ? "CRAWLER" : "SURVIVOR";
+}
+
 function toDisplayUrl(url: {
   id: string;
   domain: string;
@@ -56,9 +76,13 @@ function toDisplayUrl(url: {
   flaggedForReview: boolean;
   flagReason: string | null;
   platformFiledAt?: Date | string | null;
+  source?: string | null;
+  crawlConsentWithdrawnAt?: Date | string | null;
   notices?: OriginalNotice[];
 }): DisplayUrl {
   const notice = url.notices?.[0];
+  const source = urlSource(url.source);
+  const sentAt = iso(notice?.sentAt);
   return {
     id: url.id,
     domain: url.domain,
@@ -70,9 +94,30 @@ function toDisplayUrl(url: {
     flaggedForReview: url.flaggedForReview,
     flagReason: url.flagReason,
     platformFiledAt: iso(url.platformFiledAt),
-    noticeSentAt: iso(notice?.sentAt),
+    source,
+    ...(source === "CRAWLER"
+      ? { crawlConsentWithdrawn: Boolean(url.crawlConsentWithdrawnAt), representativeNoticeSentAt: sentAt, noticeSentAt: null }
+      : { noticeSentAt: sentAt }),
     responseType: notice?.responseType ?? null,
     responseAt: iso(notice?.responseReceivedAt),
+  };
+}
+
+/** A memory-store link as the survivor sees it: never the finding id or other internals. */
+export function memoryDisplayUrl(url: store.UrlRecord): DisplayUrl {
+  const source = urlSource(url.source);
+  return {
+    id: url.id,
+    domain: url.domain,
+    platformName: url.platformName,
+    status: url.status,
+    urlHash: url.urlHash,
+    platformId: url.platformId,
+    flaggedForReview: url.flaggedForReview,
+    flagReason: url.flagReason ?? null,
+    platformFiledAt: url.platformFiledAt ?? null,
+    source,
+    ...(source === "CRAWLER" ? { crawlConsentWithdrawn: Boolean(url.crawlConsentWithdrawnAt), representativeNoticeSentAt: null } : {}),
   };
 }
 
@@ -92,6 +137,8 @@ function toDisplayCase(dbCase: {
     flaggedForReview: boolean;
     flagReason: string | null;
     platformFiledAt?: Date | string | null;
+    source?: string | null;
+    crawlConsentWithdrawnAt?: Date | string | null;
     notices?: OriginalNotice[];
   }>;
 }): DisplayCase {
@@ -419,7 +466,7 @@ export async function getCaseForUser(caseId: string, userId: string): Promise<Di
   if (isDevNoDb()) {
     const rec = store.cases.get(caseId);
     if (!rec || rec.userId !== userId) return null;
-    return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls };
+    return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls.map(memoryDisplayUrl) };
   }
   if (usesWorkerKysely()) {
     const workerDb = getWorkerDb();
@@ -466,7 +513,7 @@ export async function listCasesForUser(userId: string): Promise<DisplayCase[]> {
   if (isDevNoDb()) {
     return Array.from(store.cases.values())
       .filter((rec) => rec.userId === userId)
-      .map((rec) => ({ id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls }));
+      .map((rec) => ({ id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls.map(memoryDisplayUrl) }));
   }
   if (usesWorkerKysely()) {
     const workerDb = getWorkerDb();
@@ -495,7 +542,10 @@ export async function addUrlsToCase(
   rawUrls: string[],
   options?: { flagReasons?: string[] },
 ): Promise<AddUrlResult[]> {
-  if (isDevNoDb()) return store.addUrlsToCase(caseId, rawUrls, options);
+  if (isDevNoDb()) {
+    return (await store.addUrlsToCase(caseId, rawUrls, options)).map((result) =>
+      result.ok ? ({ ...result, url: memoryDisplayUrl(result.url) } as AddUrlResult) : (result as AddUrlResult));
+  }
   const db = await getPrismaDb();
   const flaggedForReview = Boolean(options?.flagReasons?.length);
   const results: AddUrlResult[] = [];
@@ -696,7 +746,7 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
 export const HARD_DELETE_RETAINED = {
   user: "id, role, verification flags, declared age and created date; no email or email hash",
   case: "id, reference number, status CLOSED, NGO-verified flag and created/updated dates",
-  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice)",
+  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool",
   deletionJob: "id, case id, dates and status",
   adminAccessLog: "which admin opened which case or link, and when; the reason text is cleared",
   auditLog: "earlier entries are append-only and unchanged",
@@ -715,11 +765,14 @@ export type HardDeleteCounts = {
   feedback: number;
   sessions: number;
   otpCodes: number;
+  crawlFindings: number;
+  crawlConsents: number;
 };
 
 function emptyHardDeleteCounts(cases: number): HardDeleteCounts {
   return {
     cases, links: 0, notices: 0, escalations: 0, deliveryProofs: 0, feedback: 0, sessions: 0, otpCodes: 0,
+    crawlFindings: 0, crawlConsents: 0,
   };
 }
 
@@ -787,11 +840,16 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
       await tx.deleteFrom("UrlPortalToken").where("urlId", "in", urlIds).execute();
       counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
     }
+    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    const findingIds = (await tx.selectFrom("CrawlFinding").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
+    counts.crawlFindings = deleted(await tx.deleteFrom("CrawlFinding").where("caseId", "in", caseIds).execute());
+    counts.crawlConsents = deleted(await tx.deleteFrom("CrawlConsent").where("caseId", "in", caseIds).execute());
+    await tx.updateTable("HashSubmission").set({ crawlPoolId: null }).where("caseId", "in", caseIds).execute();
     counts.feedback = deleted(await tx.deleteFrom("Feedback").where((eb) => eb.or([
       eb("caseId", "in", caseIds),
       eb("caseReference", "in", caseRows.map((row) => row.referenceNumber)),
     ])).execute());
-    await tx.updateTable("AdminAccessLog").set({ reason: null }).where("entityId", "in", [...caseIds, ...urlIds]).execute();
+    await tx.updateTable("AdminAccessLog").set({ reason: null }).where("entityId", "in", [...caseIds, ...urlIds, ...findingIds]).execute();
     await tx.updateTable("Case").set({
       status: "CLOSED", registrationKeyHash: null, state: null, city: null, ngoVerifierId: null,
       declarationSignedAt: null, declarationIpHash: null, firPackageGeneratedAt: null,
@@ -845,10 +903,15 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     counts.notices = (await tx.notice.deleteMany({ where: { id: { in: noticeIds } } })).count;
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: urlIds } } });
     counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
+    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    const findingIds = (await tx.crawlFinding.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
+    counts.crawlFindings = (await tx.crawlFinding.deleteMany({ where: { caseId: { in: caseIds } } })).count;
+    counts.crawlConsents = (await tx.crawlConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
+    await tx.hashSubmission.updateMany({ where: { caseId: { in: caseIds } }, data: { crawlPoolId: null } });
     counts.feedback = (await tx.feedback.deleteMany({
       where: { OR: [{ caseId: { in: caseIds } }, { caseReference: { in: caseRows.map((row) => row.referenceNumber) } }] },
     })).count;
-    await tx.adminAccessLog.updateMany({ where: { entityId: { in: [...caseIds, ...urlIds] } }, data: { reason: null } });
+    await tx.adminAccessLog.updateMany({ where: { entityId: { in: [...caseIds, ...urlIds, ...findingIds] } }, data: { reason: null } });
     await tx.case.updateMany({
       where: { id: { in: caseIds } },
       data: {
@@ -958,7 +1021,7 @@ export async function listAllCases(): Promise<DisplayCase[]> {
         userId: record.userId,
         createdAt: record.createdAt,
         status: record.status,
-        urls: record.urls.map((url) => ({ ...url, flagReason: url.flagReason ?? null })),
+        urls: record.urls.map(memoryDisplayUrl),
       }));
   }
   const db = await getPrismaDb();

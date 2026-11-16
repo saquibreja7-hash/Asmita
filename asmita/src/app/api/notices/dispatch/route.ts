@@ -75,6 +75,11 @@ export async function POST(request: Request) {
   if (submittedUrl.status !== "NOTICE_QUEUED") {
     return NextResponse.json({ error: "url_not_ready_for_dispatch" }, { status: 409 });
   }
+  // A crawler-found link is never signed by the survivor. It is sent by Asmita
+  // as her representative through /api/admin/findings/[id]/notice/dispatch.
+  if (submittedUrl.source === "CRAWLER") {
+    return NextResponse.json({ error: "crawler_link_not_survivor_signed" }, { status: 409 });
+  }
   // Notice integrity: nothing goes out in the survivor's name that they have
   // not reviewed and signed.
   if (!submittedUrl.signedNoticePdf) {

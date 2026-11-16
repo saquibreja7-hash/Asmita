@@ -6,12 +6,14 @@ import { signableHashIds } from "@/lib/case-hash-annex";
 
 /**
  * Find an unsigned notice that can actually be previewed and signed, with the
- * template it would be previewed and signed with.
+ * template it would be previewed and signed with. Survivor links only: a link
+ * the crawler found is never signed by the survivor; Asmita sends it as her
+ * representative (src/lib/crawl-notice.ts).
  */
 export async function findSignableNotice(caseId: string, skipLegalGate: boolean, urlId?: string) {
   const urls = await db.submittedUrl.findMany({
     where: {
-      caseId, ...(urlId ? { id: urlId } : {}),
+      caseId, ...(urlId ? { id: urlId } : {}), source: "SURVIVOR",
       status: skipLegalGate ? { in: ["NOTICE_QUEUED", "PENDING_REVIEW"] } : "NOTICE_QUEUED",
       platformId: { not: null }, signedNoticePdf: null,
       urlEncrypted: { not: "" }, submittedAt: { gt: urlRetentionCutoff() },
@@ -25,6 +27,7 @@ export async function findSignableNotice(caseId: string, skipLegalGate: boolean,
     orderBy: { submittedAt: "asc" },
   });
   for (const url of urls) {
+    if (url.source === "CRAWLER") continue;
     if (!url.platform?.grievanceEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(url.platform.grievanceEmail)) continue;
     const templateType = templateTypeForNoticeBasis(url.platform.noticeBasis);
     if (!templateType) continue;

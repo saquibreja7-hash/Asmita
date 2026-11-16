@@ -24,6 +24,10 @@ const fake = vi.hoisted(() => {
     ["escalation", "noticeId", "notice", "RESTRICT"],
     ["hashDispatch", "noticeId", "notice", "SET NULL"],
     ["hashDispatch", "hashSubmissionId", "hashSubmission", "RESTRICT"],
+    ["crawlConsent", "caseId", "case", "RESTRICT"],
+    ["crawlFinding", "caseId", "case", "RESTRICT"],
+    ["crawlFinding", "hashSubmissionId", "hashSubmission", "RESTRICT"],
+    ["submittedUrl", "crawlFindingId", "crawlFinding", "SET NULL"],
   ];
 
   function matches(row: Row, where: Where = {}): boolean {
@@ -165,7 +169,7 @@ function seed() {
     ],
     submittedUrl: [
       { id: "url1", caseId: "c1", urlEncrypted: "enc:link-1", urlHash: "link-hash-1", signedNoticePdf: "enc:notice-pdf-1" },
-      { id: "url2", caseId: "c1", urlEncrypted: "enc:link-2", urlHash: "link-hash-2", signedNoticePdf: null },
+      { id: "url2", caseId: "c1", urlEncrypted: "enc:link-2", urlHash: "link-hash-2", signedNoticePdf: null, crawlFindingId: "cf1" },
       { id: "url3", caseId: "c2", urlEncrypted: "enc:link-3", urlHash: "link-hash-3", signedNoticePdf: null },
     ],
     notice: [
@@ -176,8 +180,18 @@ function seed() {
     escalation: [{ id: "e1", noticeId: "n1" }],
     urlPortalToken: [{ id: "t1", urlId: "url2" }],
     hashSubmission: [
-      { id: "h1", caseId: "c1", hashEncrypted: "enc:fingerprint-1", hashDigest: "digest-1" },
-      { id: "h2", caseId: "c1", hashEncrypted: "enc:fingerprint-2", hashDigest: "digest-2" },
+      { id: "h1", caseId: "c1", hashEncrypted: "enc:fingerprint-1", hashDigest: "digest-1", crawlPoolId: "fp_pool-1" },
+      { id: "h2", caseId: "c1", hashEncrypted: "enc:fingerprint-2", hashDigest: "digest-2", crawlPoolId: null },
+      { id: "h3", caseId: "c2", hashEncrypted: "enc:fingerprint-3", hashDigest: "digest-3", crawlPoolId: "fp_pool-3" },
+    ],
+    crawlConsent: [
+      { id: "cc1", caseId: "c1", signedPdfEncrypted: "enc:crawl-consent-pdf", hashSubmissionIds: ["h1"], withdrawnAt: null },
+      { id: "cc2", caseId: "c2", signedPdfEncrypted: "enc:other-consent-pdf", hashSubmissionIds: ["h3"], withdrawnAt: null },
+    ],
+    crawlFinding: [
+      { id: "cf1", caseId: "c1", hashSubmissionId: "h1", pageUrlEncrypted: "enc:found-page-1", imageUrlEncrypted: "enc:found-image-1", reviewStatus: "APPROVED" },
+      { id: "cf2", caseId: "c1", hashSubmissionId: "h1", pageUrlEncrypted: "enc:found-page-2", imageUrlEncrypted: "enc:found-image-2", reviewStatus: "CANDIDATE" },
+      { id: "cf3", caseId: "c2", hashSubmissionId: "h3", pageUrlEncrypted: "enc:found-page-3", imageUrlEncrypted: "enc:found-image-3", reviewStatus: "CANDIDATE" },
     ],
     hashDispatch: [
       { id: "d1", hashSubmissionId: "h1", platformId: "p1", noticeId: null },
@@ -200,6 +214,7 @@ function seed() {
     adminAccessLog: [
       { id: "l1", entityId: "url1", reason: "placeholder reveal reason" },
       { id: "l2", entityId: "url3", reason: "other case reason" },
+      { id: "l3", entityId: "cf1", reason: "finding reveal reason" },
     ],
     sessionToken: [{ id: "s1", userId: "u1" }, { id: "s2", userId: "u2" }],
     otpToken: [{ id: "o1", emailHash: "email-hash-u1" }, { id: "o2", emailHash: "email-hash-u2" }],
@@ -246,7 +261,12 @@ describe("hardDeleteDueUsers (database path)", () => {
     expect(fake.tables.adminAccessLog).toEqual([
       { id: "l1", entityId: "url1", reason: null },
       { id: "l2", entityId: "url3", reason: "other case reason" },
+      { id: "l3", entityId: "cf1", reason: null },
     ]);
+    // Crawler authorisations and findings go; kept fingerprints leave the pool.
+    expect(fake.tables.crawlConsent.map((r) => r.id)).toEqual(["cc2"]);
+    expect(fake.tables.crawlFinding.map((r) => r.id)).toEqual(["cf3"]);
+    expect(fake.tables.hashSubmission.map((r) => [r.id, r.crawlPoolId])).toEqual([["h1", null], ["h2", null], ["h3", "fp_pool-3"]]);
 
     expect(fake.tables.case.find((c) => c.id === "c1")).toMatchObject({
       id: "c1", referenceNumber: "ASM-TEST-0001", userId: "u1", status: "CLOSED", registrationKeyHash: null,
@@ -271,6 +291,7 @@ describe("hardDeleteDueUsers (database path)", () => {
     for (const secret of [
       "email-hash-u1", "enc:email-u1", "enc:link-1", "link-hash-1", "enc:notice-pdf-1", "enc:advisory-pdf", "Placeholder State", "Placeholder City", "reg-hash", "ip-hash",
       "enc:comment", "placeholder reveal reason", "msg-notice-1", "msg-followup-1",
+      "enc:crawl-consent-pdf", "enc:found-page-1", "enc:found-image-2", "fp_pool-1", "finding reveal reason",
     ]) {
       expect(serialized).not.toContain(secret);
     }
@@ -287,6 +308,7 @@ describe("hardDeleteDueUsers (database path)", () => {
         removed: {
           cases: 1, links: 2, notices: 2, escalations: 1,
           deliveryProofs: 3, feedback: 1, sessions: 1, otpCodes: 1,
+          crawlFindings: 2, crawlConsents: 1,
         },
         retained: HARD_DELETE_RETAINED,
       },

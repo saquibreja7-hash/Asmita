@@ -131,6 +131,14 @@ export async function dispatchTier2Notice(input: {
   // Fingerprints in the annex; recorded in the audit log, never their values.
   fingerprintIds?: string[];
   templateId?: string;
+  /** Who sent it, for the audit log. */
+  actorId?: string;
+  /**
+   * Extra audit fields (ids only, never a URL or a fingerprint value). The
+   * representative path (crawl-notice.ts) records its source, finding and
+   * authorisation here.
+   */
+  auditData?: Record<string, string | number | boolean | string[] | null>;
 }) {
   assertVerifiedNoticeRecipient(input.recipientEmail);
   const idempotencyKey = sha256(`${input.caseId}:${input.urlId}:${input.recipientEmail}`);
@@ -173,7 +181,9 @@ export async function dispatchTier2Notice(input: {
     eventType: "NOTICE_SENT",
     entityType: "SubmittedUrl",
     entityId: input.urlId,
+    ...(input.actorId ? { actorId: input.actorId } : {}),
     data: {
+      ...input.auditData,
       caseId: input.caseId,
       messageId: notice.messageId,
       idempotencyKey,

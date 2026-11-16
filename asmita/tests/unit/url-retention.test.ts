@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn(), findingUpdateMany: vi.fn() }));
 vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => false }));
 vi.mock("@/lib/db", () => ({
-  db: { $transaction: (fn: (tx: unknown) => unknown) => fn({
+  db: { crawlFinding: { updateMany: mocks.findingUpdateMany }, $transaction: (fn: (tx: unknown) => unknown) => fn({
     submittedUrl: { findMany: mocks.findMany, updateMany: mocks.updateMany },
     urlPortalToken: { deleteMany: mocks.deleteMany },
   }) },
 }));
 
-import { isUrlExpired, purgeExpiredUrls, URL_RETENTION_MS } from "@/lib/url-retention";
+import { isUrlExpired, purgeExpiredCrawlFindings, purgeExpiredUrls, URL_RETENTION_MS } from "@/lib/url-retention";
 
 describe("reported URL retention", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -42,5 +42,17 @@ describe("reported URL retention", () => {
     expect(await purgeExpiredUrls()).toBe(0);
     expect(mocks.deleteMany).not.toHaveBeenCalled();
     expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("blanks crawler finding URLs on the same 30-day schedule, from first seen", async () => {
+    vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
+    const now = new Date("2026-11-01T12:00:00Z");
+    mocks.findingUpdateMany.mockResolvedValue({ count: 2 });
+    expect(await purgeExpiredCrawlFindings(now)).toBe(2);
+    expect(mocks.findingUpdateMany).toHaveBeenCalledWith({
+      where: { firstSeenAt: { lte: new Date(now.getTime() - URL_RETENTION_MS + 60 * 60 * 1000) }, pageUrlEncrypted: { not: "" } },
+      data: { pageUrlEncrypted: "", imageUrlEncrypted: "", urlDigest: null },
+    });
+    vi.unstubAllEnvs();
   });
 });

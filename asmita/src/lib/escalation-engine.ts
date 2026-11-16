@@ -94,7 +94,8 @@ export type SkipReason =
   | "blocked_decrypt_failed"
   | "blocked_audit_only"
   | "blocked_platform_answered"
-  | "blocked_template_changed";
+  | "blocked_template_changed"
+  | "representative_notice";
 
 export type DueEscalationSummary = {
   swept: number;
@@ -120,6 +121,7 @@ const candidateSelect = {
       status: true,
       domain: true,
       signedTemplateDigest: true,
+      source: true,
       platform: { select: { name: true, grievanceEmail: true, lastContactVerifiedByHuman: true } },
       case: {
         select: {
@@ -148,6 +150,8 @@ type CandidateNotice = {
     domain: string;
     /** Digest of the template text signed and sent; null for notices signed before pinning. */
     signedTemplateDigest?: string | null;
+    /** CRAWLER: a representative notice (crawl-notice.ts), never followed up here. */
+    source?: string | null;
     platform: { name: string; grievanceEmail: string | null; lastContactVerifiedByHuman: boolean } | null;
     case: { id: string; referenceNumber: string; user: { id: string; emailEncrypted: string; preferredLocale: string | null } | null };
   };
@@ -195,25 +199,27 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
       .leftJoin("NoticeTemplate as t", "t.id", "n.templateId")
       .select([
         "n.id as noticeId", "n.sentAt", "n.escalationLevel", "n.responseType", "n.templateId",
-        "u.id as urlId", "u.caseId", "u.status as urlStatus", "u.domain", "u.signedTemplateDigest",
+        "u.id as urlId", "u.caseId", "u.status as urlStatus", "u.domain", "u.signedTemplateDigest", "u.source",
         "p.name as platformName", "p.grievanceEmail", "p.lastContactVerifiedByHuman",
         "c.id as caseIdValue", "c.referenceNumber", "usr.id as userId", "usr.emailEncrypted", "usr.preferredLocale",
         "t.bodyTemplate", "t.subjectTemplate", "t.reviewedByLegal",
       ])
       .where("n.sentAt", "<=", cutoff).where("n.escalationLevel", "<", 3).where("n.removedAt", "is", null)
       // Follow-ups are rows too; only the original notice climbs the ladder.
-      .where("n.followUpOf", "is", null).execute())
+      .where("n.followUpOf", "is", null)
+      // Representative notices for crawler links are not followed up (below).
+      .where("u.source", "!=", "CRAWLER").execute())
       .map((row) => ({
         id: row.noticeId, sentAt: row.sentAt, escalationLevel: row.escalationLevel, responseType: row.responseType, templateId: row.templateId,
         submittedUrl: {
-          id: row.urlId, caseId: row.caseId, status: row.urlStatus, domain: row.domain, signedTemplateDigest: row.signedTemplateDigest,
+          id: row.urlId, caseId: row.caseId, status: row.urlStatus, domain: row.domain, signedTemplateDigest: row.signedTemplateDigest, source: row.source,
           platform: row.platformName ? { name: row.platformName, grievanceEmail: row.grievanceEmail, lastContactVerifiedByHuman: row.lastContactVerifiedByHuman ?? false } : null,
           case: { id: row.caseIdValue, referenceNumber: row.referenceNumber, user: row.userId && row.emailEncrypted ? { id: row.userId, emailEncrypted: row.emailEncrypted, preferredLocale: row.preferredLocale } : null },
         },
         template: row.bodyTemplate && row.subjectTemplate && row.reviewedByLegal != null ? { bodyTemplate: row.bodyTemplate, subjectTemplate: row.subjectTemplate, reviewedByLegal: row.reviewedByLegal } : null,
       }))
     : await (await getPrismaDb()).notice.findMany({
-      where: { sentAt: { not: null, lte: cutoff }, escalationLevel: { lt: 3 }, removedAt: null, followUpOf: null },
+      where: { sentAt: { not: null, lte: cutoff }, escalationLevel: { lt: 3 }, removedAt: null, followUpOf: null, submittedUrl: { source: { not: "CRAWLER" } } },
       select: candidateSelect,
     });
 
@@ -221,6 +227,19 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
 
   for (const notice of candidates) {
     if (!notice.sentAt) continue;
+    /*
+     * A representative notice (crawler link, crawl-notice.ts) is excluded
+     * from every automated step for now: the follow-up cover (ESCALATION_L1)
+     * restates the notice as a complaint "on behalf of the Complainant" under
+     * Rule 3(2)(b) with a two-hour deadline, which the representative notice
+     * does not state, and the 48-hour and 7-day survivor emails tell her a
+     * deadline passed. Nothing is recorded, so including them later needs no
+     * data repair. The query filters them out too; this is the backstop.
+     */
+    if (notice.submittedUrl.source === "CRAWLER") {
+      summary.skipped.push({ noticeId: notice.id, reason: "representative_notice" });
+      continue;
+    }
     try {
       if (
         shouldStopFutureEscalation({
