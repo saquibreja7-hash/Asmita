@@ -132,6 +132,10 @@ export async function buildFixture(): Promise<Fixture> {
     tinyReal: await patternImage(140, 40, 40, "png"), // under MIN_IMAGE_SIDE (64)
     avif: await patternImage(141, 320, 240, "avif"),
     truncFull: await patternImage(142, 640, 480, "jpeg"), // served truncated; its FULL hash is in the pool
+    // Scope fixture (blog.fixture.test is approved on its own in scope tests).
+    blog: await patternImage(150, 300, 300, "png"),
+    blogDeep: await patternImage(151, 300, 300, "png"),
+    shop: await patternImage(152, 300, 300, "png"),
     bomb: await pixelBombPng(30_000, 30_000),
   };
 
@@ -170,6 +174,9 @@ export async function buildFixture(): Promise<Fixture> {
       fp("fp-avif", h.avif!),
       // Served twice, cut short: at 97% it still matches (failOn "none"); at 40% it must not.
       fp("fp-truncated", h.truncFull!),
+      fp("fp-blog", h.blog!),
+      fp("fp-blog-deep", h.blogDeep!),
+      fp("fp-shop", h.shop!), // only on the sibling host: must never be found from the blog source
       ...Array.from({ length: 200 }, (_, i) => fp(`fp-rand-${i}`, randomFingerprint(5000 + i))),
     ],
   };
@@ -350,6 +357,29 @@ export async function buildFixture(): Promise<Fixture> {
   // ---- off-domain site (must never be requested) ----
   site.route(OFFSITE_HOST, "/page", sendHtml(html(`<img src="/offsite.png">`)));
   site.route(OFFSITE_HOST, "/offsite.png", sendBytes(img.offsiteMatch, "image/png"));
+
+  // ---- scope fixture: approve blog.fixture.test only ----
+  const B = `blog.${S}`;
+  site.route(
+    B,
+    "/",
+    sendHtml(
+      html(`
+        <img src="/img/blog.png">
+        <a href="${o(S)}/">parent domain</a>
+        <a href="${o(`shop.${S}`)}/">sibling host</a>
+        <a href="${o(`a.${B}`)}/deep">subdomain of the approved host</a>
+        <a href="/jump">redirects to the sibling host</a>
+      `),
+    ),
+  );
+  site.route(B, "/img/blog.png", sendBytes(img.blog, "image/png"));
+  site.route(B, "/jump", redirect(`${o(`shop.${S}`)}/landing`));
+  site.route(`a.${B}`, "/deep", sendHtml(html(`<img src="/deep.png">`)));
+  site.route(`a.${B}`, "/deep.png", sendBytes(img.blogDeep, "image/png"));
+  site.route(`shop.${S}`, "/", sendHtml(html(`<img src="/shop.png">`)));
+  site.route(`shop.${S}`, "/landing", sendHtml(html(`<img src="/shop.png">`)));
+  site.route(`shop.${S}`, "/shop.png", sendBytes(img.shop, "image/png"));
 
   return { site, pool, expected, allHashes: Object.values(h) };
 }

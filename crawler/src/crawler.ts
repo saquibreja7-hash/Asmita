@@ -19,7 +19,7 @@ import type { Finding, FindingResult, Pool, Source } from "./asmita/client.ts";
 import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, RobotsCache } from "./crawl/robots.ts";
-import { inScope, normalizeUrl, registrableDomain, urlKey } from "./crawl/url.ts";
+import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
 import { hashImage } from "./image/hash-image.ts";
 import type { FetchOptions, FetchResult, SafeFetcher } from "./net/safe-fetch.ts";
 import { exitCodeFor } from "./exit-codes.ts";
@@ -257,7 +257,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const record = (code: ErrorCode) => metrics.error(code);
 
   // --- per image ------------------------------------------------------------
-  const processImage = async (img: URL, pageUrl: URL, source: Source, registrable: string): Promise<void> => {
+  const processImage = async (img: URL, pageUrl: URL, source: Source, scopeHost: string): Promise<void> => {
     if (seenImages.has(urlKey(img))) return metrics.skip("duplicate_url");
     seenImages.add(urlKey(img));
     if (metrics.imagesSeen >= config.MAX_IMAGES) {
@@ -265,7 +265,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       return metrics.skip("budget");
     }
     metrics.imagesSeen++;
-    const delay = inScope(img, registrable) ? source.delayMs : Math.max(source.delayMs, config.OFFSITE_HOST_DELAY_MS);
+    const delay = inScope(img, scopeHost) ? source.delayMs : Math.max(source.delayMs, config.OFFSITE_HOST_DELAY_MS);
     let res: FetchResult;
     try {
       res = await fetchWithRetry(img, {
@@ -336,10 +336,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   // --- per source -----------------------------------------------------------
   const crawlSource = async (source: Source): Promise<void> => {
     const slog = log.child({ sourceId: source.id });
-    const domain = source.domain.trim().toLowerCase().replace(/\.$/, "");
-    const registrable = registrableDomain(domain);
-    const seed = normalizeUrl(deps.seedUrl ? deps.seedUrl(source) : `https://${domain}/`);
-    if (!registrable || !seed || !inScope(seed, registrable)) {
+    // Pages are limited to this exact host and its subdomains (see inScope).
+    const scopeHost = sourceHost(source.domain);
+    const seed = scopeHost ? normalizeUrl(deps.seedUrl ? deps.seedUrl(source) : `https://${scopeHost}/`) : null;
+    if (!scopeHost || !seed || !inScope(seed, scopeHost)) {
       metrics.sourcesInvalid++;
       slog.warn("source_invalid", { code: "invalid_url" });
       return;
@@ -373,7 +373,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
           gate,
           beforeHop: politeHop(source.delayMs, (u) => {
             // A redirect may not take a page fetch off the source's domain.
-            if (!inScope(u, registrable)) throw new CrawlError("out_of_scope");
+            if (!inScope(u, scopeHost)) throw new CrawlError("out_of_scope");
           }),
         });
       } catch (raw) {
@@ -394,7 +394,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       metrics.skip("invalid_url", ex.skipped.invalid);
       if (depth < config.MAX_DEPTH) {
         for (const link of ex.links) {
-          if (seen.has(urlKey(link)) || !inScope(link, registrable)) continue;
+          if (seen.has(urlKey(link)) || !inScope(link, scopeHost)) continue;
           seen.add(urlKey(link));
           queue.push({ url: link, depth: depth + 1 });
         }
@@ -402,7 +402,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       for (const img of ex.images) {
         if (stop.signal.aborted) break;
         // pageUrl is the page address as crawled (before any redirect).
-        await processImage(img, url, source, registrable);
+        await processImage(img, url, source, scopeHost);
       }
     }
     slog.info("source_done", { pages, durationMs: now() - started });
