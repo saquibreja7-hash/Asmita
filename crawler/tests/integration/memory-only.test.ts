@@ -121,7 +121,7 @@ describe("memory-only image handling", () => {
   it("crawls, hashes and reports with every fs write API throwing", async () => {
     const attempts: string[] = [];
     const unpatch = patchFs(attempts);
-    let findings = 0;
+    let findings: number | undefined;
     try {
       // Control: the patch really is in force, for both the CJS object and
       // the ESM named exports other modules import.

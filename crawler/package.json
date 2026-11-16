@@ -13,7 +13,9 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "bench:matcher": "tsx scripts/bench-matcher.ts",
-    "mock": "tsx scripts/run-against-mock.ts"
+    "mock": "tsx tests/support/fixture-entry.ts",
+    "mock:api": "tsx scripts/mock-api.ts",
+    "check": "npm run lint && npm run type-check && npm run test && npm run build"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

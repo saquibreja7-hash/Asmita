@@ -36,9 +36,9 @@ export class MockAsmita {
     return `http://127.0.0.1:${a.port}`;
   }
 
-  async start(): Promise<this> {
+  async start(port = 0): Promise<this> {
     this.server = createServer((req, res) => void this.handle(req, res));
-    await new Promise<void>((r) => this.server!.listen(0, "127.0.0.1", r));
+    await new Promise<void>((r) => this.server!.listen(port, "127.0.0.1", r));
     return this;
   }
 
@@ -51,7 +51,7 @@ export class MockAsmita {
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
     const raw = Buffer.concat(chunks).toString("utf8");
-    let body: unknown = undefined;
+    let body: unknown;
     try {
       body = raw ? JSON.parse(raw) : undefined;
     } catch {
