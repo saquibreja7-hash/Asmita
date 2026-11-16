@@ -50,3 +50,36 @@ export async function purgeExpiredUrls(now = new Date()): Promise<number> {
     return result.count;
   });
 }
+
+/**
+ * Crawler findings follow the same 30 days, counted from when the crawler
+ * first saw the copy. The page and image URLs and the dedup digest are
+ * blanked; the row (distance, review status, dates) stays as the record.
+ * Independent of purgeExpiredUrls so neither can skip the other.
+ */
+export async function purgeExpiredCrawlFindings(now = new Date()): Promise<number> {
+  const cutoff = new Date(urlRetentionCutoff(now).getTime() + SWEEP_LEAD_MS);
+  const blank = { pageUrlEncrypted: "", imageUrlEncrypted: "", urlDigest: null };
+  if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
+    const { crawlMemory } = await import("@/lib/crawl-store");
+    let count = 0;
+    for (const finding of crawlMemory().findings.values()) {
+      if (finding.firstSeenAt.getTime() <= cutoff.getTime() && finding.pageUrlEncrypted !== "") {
+        Object.assign(finding, blank);
+        count += 1;
+      }
+    }
+    return count;
+  }
+  if (usesWorkerKysely()) {
+    const result = await getWorkerDb().updateTable("CrawlFinding").set(blank)
+      .where("firstSeenAt", "<=", cutoff).where("pageUrlEncrypted", "!=", "").executeTakeFirst();
+    return Number(result.numUpdatedRows);
+  }
+  const { db } = await import("@/lib/db");
+  const result = await db.crawlFinding.updateMany({
+    where: { firstSeenAt: { lte: cutoff }, pageUrlEncrypted: { not: "" } },
+    data: blank,
+  });
+  return result.count;
+}

@@ -4,6 +4,7 @@ import { decryptField, encryptField } from "@/lib/encryption";
 import { hashEmail, sha256 } from "@/lib/hash";
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { writeAuditLog } from "@/lib/audit";
+import { eraseCrawlMemoryForCases } from "@/lib/crawl-store";
 
 export type CaseRecord = {
   id: string;
@@ -27,6 +28,9 @@ export type UrlRecord = {
   flaggedForReview?: boolean;
   flagReason?: string;
   platformFiledAt?: string | null;
+  /** CRAWLER when the link came from an approved crawler finding (crawl-findings.ts). */
+  source?: "SURVIVOR" | "CRAWLER";
+  crawlFindingId?: string;
 };
 
 type StoreGlobals = {
@@ -229,13 +233,16 @@ export async function hardDeleteDueUsers(now = new Date()) {
     users.delete(userId);
     let caseCount = 0;
     let links = 0;
+    const erasedCaseIds: string[] = [];
     for (const [caseId, record] of cases.entries()) {
       if (record.userId === userId) {
         caseCount += 1;
         links += record.urls.length;
+        erasedCaseIds.push(caseId);
         cases.delete(caseId);
       }
     }
+    eraseCrawlMemoryForCases(erasedCaseIds);
     deactivatedUsers.delete(userId);
     deletedUserIds.push(userId);
     await writeAuditLog({

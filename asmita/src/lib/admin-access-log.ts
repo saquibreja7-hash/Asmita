@@ -7,8 +7,8 @@ export type RevealReason = (typeof REVEAL_REASONS)[number];
 
 export type AdminAccessEvent = {
   adminId: string;
-  action: "case_viewed" | "url_revealed";
-  entityType: "Case" | "SubmittedUrl";
+  action: "case_viewed" | "url_revealed" | "finding_revealed";
+  entityType: "Case" | "SubmittedUrl" | "CrawlFinding";
   entityId: string;
   reason?: string;
 };

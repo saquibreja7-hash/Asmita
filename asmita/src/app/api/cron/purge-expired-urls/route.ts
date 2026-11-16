@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { safeEqual } from "@/lib/safe-equal";
-import { purgeExpiredUrls } from "@/lib/url-retention";
+import { purgeExpiredCrawlFindings, purgeExpiredUrls } from "@/lib/url-retention";
 import { sendOnCallAlertFireAndForget } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
-    return NextResponse.json({ expiredUrlsPurged: await purgeExpiredUrls() });
+    const expiredUrlsPurged = await purgeExpiredUrls();
+    const expiredFindingsPurged = await purgeExpiredCrawlFindings();
+    return NextResponse.json({ expiredUrlsPurged, expiredFindingsPurged });
   } catch {
     sendOnCallAlertFireAndForget({
       severity: "critical",

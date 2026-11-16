@@ -696,7 +696,7 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
 export const HARD_DELETE_RETAINED = {
   user: "id, role, verification flags, declared age and created date; no email or email hash",
   case: "id, reference number, status CLOSED, NGO-verified flag and created/updated dates",
-  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice)",
+  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool",
   deletionJob: "id, case id, dates and status",
   adminAccessLog: "which admin opened which case or link, and when; the reason text is cleared",
   auditLog: "earlier entries are append-only and unchanged",
@@ -715,11 +715,14 @@ export type HardDeleteCounts = {
   feedback: number;
   sessions: number;
   otpCodes: number;
+  crawlFindings: number;
+  crawlConsents: number;
 };
 
 function emptyHardDeleteCounts(cases: number): HardDeleteCounts {
   return {
     cases, links: 0, notices: 0, escalations: 0, deliveryProofs: 0, feedback: 0, sessions: 0, otpCodes: 0,
+    crawlFindings: 0, crawlConsents: 0,
   };
 }
 
@@ -787,11 +790,16 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
       await tx.deleteFrom("UrlPortalToken").where("urlId", "in", urlIds).execute();
       counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
     }
+    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    const findingIds = (await tx.selectFrom("CrawlFinding").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
+    counts.crawlFindings = deleted(await tx.deleteFrom("CrawlFinding").where("caseId", "in", caseIds).execute());
+    counts.crawlConsents = deleted(await tx.deleteFrom("CrawlConsent").where("caseId", "in", caseIds).execute());
+    await tx.updateTable("HashSubmission").set({ crawlPoolId: null }).where("caseId", "in", caseIds).execute();
     counts.feedback = deleted(await tx.deleteFrom("Feedback").where((eb) => eb.or([
       eb("caseId", "in", caseIds),
       eb("caseReference", "in", caseRows.map((row) => row.referenceNumber)),
     ])).execute());
-    await tx.updateTable("AdminAccessLog").set({ reason: null }).where("entityId", "in", [...caseIds, ...urlIds]).execute();
+    await tx.updateTable("AdminAccessLog").set({ reason: null }).where("entityId", "in", [...caseIds, ...urlIds, ...findingIds]).execute();
     await tx.updateTable("Case").set({
       status: "CLOSED", registrationKeyHash: null, state: null, city: null, ngoVerifierId: null,
       declarationSignedAt: null, declarationIpHash: null, firPackageGeneratedAt: null,
@@ -845,10 +853,15 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     counts.notices = (await tx.notice.deleteMany({ where: { id: { in: noticeIds } } })).count;
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: urlIds } } });
     counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
+    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    const findingIds = (await tx.crawlFinding.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
+    counts.crawlFindings = (await tx.crawlFinding.deleteMany({ where: { caseId: { in: caseIds } } })).count;
+    counts.crawlConsents = (await tx.crawlConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
+    await tx.hashSubmission.updateMany({ where: { caseId: { in: caseIds } }, data: { crawlPoolId: null } });
     counts.feedback = (await tx.feedback.deleteMany({
       where: { OR: [{ caseId: { in: caseIds } }, { caseReference: { in: caseRows.map((row) => row.referenceNumber) } }] },
     })).count;
-    await tx.adminAccessLog.updateMany({ where: { entityId: { in: [...caseIds, ...urlIds] } }, data: { reason: null } });
+    await tx.adminAccessLog.updateMany({ where: { entityId: { in: [...caseIds, ...urlIds, ...findingIds] } }, data: { reason: null } });
     await tx.case.updateMany({
       where: { id: { in: caseIds } },
       data: {
