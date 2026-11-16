@@ -6,7 +6,7 @@ import { getCaseForUser } from "@/lib/case-ops";
 import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
 import { CrawlConsent } from "./CrawlConsent";
 import { FoundByAsmita } from "./FoundByAsmita";
-import { splitUrls } from "./crawl-consent-logic";
+import { showFindingsToSurvivor, splitUrls } from "./crawl-consent-logic";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { MarkRemovedButton } from "./MarkRemovedButton";
 import { EscalationLadder } from "./EscalationLadder";
@@ -142,7 +142,10 @@ export default async function CasePage({
 
   // Links Asmita's search found are kept apart from the ones she submitted.
   const { own: ownUrls, found: foundUrls } = splitUrls(record.urls);
-  const standing = standingOf(record.urls, hashSubmissions.length);
+  // Where things stand is about the links she reported: Asmita's own notices
+  // for found links promise no follow-up, so they never say "we follow up".
+  const standing = standingOf(ownUrls, hashSubmissions.length);
+  const showFound = showFindingsToSurvivor();
   const created = new Date(record.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 
   return (
@@ -238,7 +241,7 @@ export default async function CasePage({
               )}
             </section>
 
-            <FoundByAsmita urls={foundUrls} locale={locale} badge={(status) => <StatusBadge status={status} locale={locale} />} />
+            {showFound && <FoundByAsmita urls={foundUrls} locale={locale} badge={(status) => <StatusBadge status={status} locale={locale} />} />}
 
             {hashUploadEnabled && hashSubmissions.length > 0 && (
               <section id="fingerprints" aria-labelledby="case-fingerprints-title" className="scroll-mt-24">

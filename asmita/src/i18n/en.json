@@ -947,5 +947,7 @@
   "crawl.error.stop": "We could not stop the search. Please try again.",
   "crawl.error.timeout": "That took too long. Please check your connection and try again.",
   "case.found.title": "Found by Asmita",
-  "case.found.sub": "These are copies Asmita found on public websites and a reviewer confirmed. Asmita deals with the takedown notice for each one, and you do not need to sign anything. Only the website name is shown here, not the link."
+  "case.found.sub": "These are copies Asmita found on public websites and a reviewer confirmed. Asmita deals with the takedown notice for each one, and you do not need to sign anything. Only the website name is shown here, not the link.",
+  "case.found.withdrawn": "Stopped: you withdrew permission",
+  "case.found.sentOn": "Asmita sent the takedown notice on"
 }

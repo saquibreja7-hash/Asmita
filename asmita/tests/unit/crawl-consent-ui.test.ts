@@ -9,7 +9,9 @@ import hi from "@/i18n/hi.json";
 import status from "@/i18n/hi-review-status.json";
 import { CrawlConsent } from "@/app/(victim)/case/[caseId]/CrawlConsent";
 import { FoundByAsmita } from "@/app/(victim)/case/[caseId]/FoundByAsmita";
-import { consentView, requestSign, requestStop, signOutcome, splitUrls, type ConsentState } from "@/app/(victim)/case/[caseId]/crawl-consent-logic";
+import { consentView, foundLinkView, isCrawlerFound, requestSign, requestStop, showFindingsToSurvivor, signOutcome, splitUrls, type ConsentState } from "@/app/(victim)/case/[caseId]/crawl-consent-logic";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const draft = { subject: "Authorisation for case X", body: "Body of the authorisation text", templateRef: "ref-1" };
 const off: ConsentState = { status: "none", available: true, draft };
@@ -116,6 +118,59 @@ describe("FoundByAsmita", () => {
 
   it("shows nothing when there are none", () => {
     expect(draw([])).toBe("");
+  });
+
+  it("a withdrawn link says it was stopped, not that a notice is coming", () => {
+    const html = draw([{ id: "u2", domain: "example.test", platformName: "X", status: "NOTICE_QUEUED", crawlConsentWithdrawn: true, representativeNoticeSentAt: null }]);
+    expect(html).toContain("Stopped: you withdrew permission");
+    expect(html).not.toContain("status:NOTICE_QUEUED");
+  });
+
+  it("a sent link shows the date Asmita sent its notice, and no escalation ladder", () => {
+    const html = draw([{ id: "u3", domain: "example.test", platformName: "X", status: "NOTICE_SENT", crawlConsentWithdrawn: false, representativeNoticeSentAt: "2026-11-15T20:00:00.000Z" }]);
+    expect(html).toContain("Asmita sent the takedown notice on");
+    expect(html).toContain("16 Nov 2026");
+    expect(html).toContain("status:NOTICE_SENT");
+    expect(html).not.toMatch(/ladder|deadline|follow/i);
+  });
+});
+
+describe("found links: typed source, status and the survivor switch", () => {
+  it("uses the typed DisplayUrl.source, with no cast", () => {
+    expect(isCrawlerFound({ source: "CRAWLER" })).toBe(true);
+    expect(isCrawlerFound({ source: "SURVIVOR" })).toBe(false);
+    expect(isCrawlerFound({})).toBe(false);
+    const source = readFileSync(join(process.cwd(), "src/app/(victim)/case/[caseId]/crawl-consent-logic.ts"), "utf8");
+    expect(source).not.toMatch(/ as \{ source/);
+  });
+
+  it("chooses a true badge for each state", () => {
+    expect(foundLinkView({ status: "NOTICE_QUEUED", crawlConsentWithdrawn: true, representativeNoticeSentAt: null })).toEqual({ kind: "withdrawn" });
+    expect(foundLinkView({ status: "NOTICE_SENT", crawlConsentWithdrawn: false, representativeNoticeSentAt: "2026-11-16T00:00:00.000Z" }))
+      .toEqual({ kind: "sent", sentAt: "2026-11-16T00:00:00.000Z", status: "NOTICE_SENT" });
+    expect(foundLinkView({ status: "NOTICE_QUEUED", crawlConsentWithdrawn: false, representativeNoticeSentAt: null })).toEqual({ kind: "status", status: "NOTICE_QUEUED" });
+    expect(foundLinkView({ status: "REMOVED", crawlConsentWithdrawn: true, representativeNoticeSentAt: null })).toEqual({ kind: "status", status: "REMOVED" });
+  });
+
+  it("the status words a found link can get make no promise of a follow-up", () => {
+    const E = en as Record<string, string>;
+    for (const key of ["case.urlStatus.queued", "case.urlStatus.sent", "case.urlStatus.pendingReview", "case.urlStatus.resolved"]) {
+      expect(E[key]).not.toMatch(/follow|deadline|hours/i);
+    }
+  });
+
+  it("the case page draws no ladder for found links and keeps them out of where-things-stand", () => {
+    const page = readFileSync(join(process.cwd(), "src/app/(victim)/case/[caseId]/page.tsx"), "utf8");
+    expect(page).toContain("standingOf(ownUrls,");
+    expect(page).toMatch(/showFound && <FoundByAsmita/);
+    const found = readFileSync(join(process.cwd(), "src/app/(victim)/case/[caseId]/FoundByAsmita.tsx"), "utf8");
+    expect(found).not.toContain("EscalationLadder");
+  });
+
+  it("CRAWLER_SHOW_FINDINGS_TO_SURVIVOR is on unless set to false", () => {
+    expect(showFindingsToSurvivor({})).toBe(true);
+    expect(showFindingsToSurvivor({ CRAWLER_SHOW_FINDINGS_TO_SURVIVOR: "true" })).toBe(true);
+    expect(showFindingsToSurvivor({ CRAWLER_SHOW_FINDINGS_TO_SURVIVOR: "false" })).toBe(false);
   });
 });
 

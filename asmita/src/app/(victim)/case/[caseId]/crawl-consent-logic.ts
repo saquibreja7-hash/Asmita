@@ -3,6 +3,8 @@
  * they can be unit tested without a browser.
  */
 
+import type { DisplayUrl } from "@/lib/case-ops";
+
 export type Draft = { subject: string; body: string; templateRef: string };
 export type ConsentState = { status: "none" | "signed" | "withdrawn"; available: boolean; draft: Draft | null };
 
@@ -52,15 +54,42 @@ export async function requestStop(fetcher: Fetcher, caseId: string): Promise<boo
   return data.error === "not_signed";
 }
 
-/**
- * Whether a link was found by Asmita's search. The case API's DisplayUrl may
- * not carry `source` yet; the cast lives only here and goes when the typed
- * field lands.
- */
-export function isCrawlerFound(url: object): boolean {
-  return (url as { source?: string }).source === "CRAWLER";
+type Sourced = Pick<DisplayUrl, "source">;
+
+/** Whether a link was found by Asmita's search (DisplayUrl.source; absent means hers). */
+export function isCrawlerFound(url: Sourced): boolean {
+  return url.source === "CRAWLER";
 }
 
-export function splitUrls<T extends object>(urls: T[]): { own: T[]; found: T[] } {
+export function splitUrls<T extends Sourced>(urls: T[]): { own: T[]; found: T[] } {
   return { own: urls.filter((u) => !isCrawlerFound(u)), found: urls.filter(isCrawlerFound) };
+}
+
+/**
+ * Whether the case page shows her the links Asmita found (by website name
+ * only). CRAWLER_SHOW_FINDINGS_TO_SURVIVOR is a server-side switch, on unless
+ * set to "false": showing them is the approved plan, and whether to is an
+ * open owner decision (ADR 006).
+ */
+export function showFindingsToSurvivor(env: Record<string, string | undefined> = process.env) {
+  return env.CRAWLER_SHOW_FINDINGS_TO_SURVIVOR !== "false";
+}
+
+export type FoundLinkView =
+  /** She withdrew her authorisation before a notice went out: none will. */
+  | { kind: "withdrawn" }
+  /** Asmita's representative notice went out on this date. */
+  | { kind: "sent"; sentAt: string; status: string }
+  /** Any other state, shown with the ordinary status wording. */
+  | { kind: "status"; status: string };
+
+/**
+ * What a found link's badge says. A crawler link never has a survivor
+ * notice or an escalation ladder: "sent" comes from
+ * representativeNoticeSentAt, and no follow-up is promised.
+ */
+export function foundLinkView(url: Pick<DisplayUrl, "status" | "crawlConsentWithdrawn" | "representativeNoticeSentAt">): FoundLinkView {
+  if (url.representativeNoticeSentAt) return { kind: "sent", sentAt: url.representativeNoticeSentAt, status: url.status };
+  if (url.crawlConsentWithdrawn && url.status !== "REMOVED") return { kind: "withdrawn" };
+  return { kind: "status", status: url.status };
 }
