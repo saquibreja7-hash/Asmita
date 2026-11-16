@@ -45,7 +45,7 @@ App (Worker vars in `asmita/wrangler.jsonc` or secrets; see `asmita/.env.example
 |-|-|-|
 | `ENABLE_CRAWLER` | `false` until go-live | The kill switch (section 7). Read only in `src/lib/crawler-auth.ts` |
 | `ENABLE_HASH_UPLOAD` | `true` | Needed for fingerprints, the authorisation and the notice annex |
-| `CRAWLER_SHOW_FINDINGS_TO_SURVIVOR` | unset (on) | `false` hides "Found by Asmita" on her case page. Open owner decision |
+| `CRAWLER_SHOW_FINDINGS_TO_SURVIVOR` | unset (on) | `false` hides found links from her: case page and case APIs (counts too). Her data export still lists them, labelled "Found by Asmita"; admin views unaffected. Read only in `src/lib/crawler-flags.ts`. Open owner decision |
 | `NOTICE_DISPATCH_PERSISTENCE` | `database` | As for every deployed Worker; needed so a sent notice is recorded |
 | `DEV_SKIP_LEGAL_REVIEW` | never set | Dev only; production ignores it (`src/lib/dev-flags.ts`) |
 

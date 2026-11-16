@@ -140,7 +140,9 @@ export async function generateFirPackagePdf(input: {
   // platform's own form. A link keeps an earlier status in some cases (the
   // survivor page treats a filed link as sent too), so this fact wins over a
   // "prepared, not sent yet" status.
-  urls: Array<{ domain: string; platformName?: string; status: string; sentAt?: string | null }>;
+  // foundByAsmita: Asmita's search found this link (not hers). It is listed
+  // and labelled, never with any finding detail.
+  urls: Array<{ domain: string; platformName?: string; status: string; sentAt?: string | null; foundByAsmita?: boolean }>;
 }) {
   assertCleanField("referenceNumber", input.referenceNumber);
   for (const url of input.urls) {
@@ -164,13 +166,18 @@ export async function generateFirPackagePdf(input: {
   page.drawText(`${dateLabel}: ${when}`, { x: LEFT, y: 724, size: 10, font });
   page.drawText("Submitted links are stored encrypted.", { x: LEFT, y: 698, size: 10, font });
 
+  if (input.urls.some((url) => url.foundByAsmita)) {
+    page.drawText("Links marked [Found by Asmita] were found by Asmita's search, not submitted by you.", { x: LEFT, y: 684, size: 9, font });
+  }
+
   let y = LIST_TOP;
   let listed = 0;
   for (const [index, url] of input.urls.slice(0, MAX_URLS_PER_PAGE).entries()) {
     const sent = Boolean(url.sentAt) && (url.status === "NOTICE_QUEUED" || url.status === "PENDING_REVIEW" || url.status === "NOTICE_SENT");
     const label = statusLabel(sent ? "NOTICE_SENT" : url.status);
     const sentOn = sent && url.sentAt ? ` (${formatPdfDateTime(url.sentAt)})` : "";
-    const text = `${index + 1}. ${printable(url.platformName || url.domain)} - ${printable(`${label}${sentOn}`)}`;
+    const found = url.foundByAsmita ? " [Found by Asmita]" : "";
+    const text = `${index + 1}. ${printable(url.platformName || url.domain)}${found} - ${printable(`${label}${sentOn}`)}`;
     const wrapped = wrapText(
       text,
       font,

@@ -7,6 +7,7 @@ import { parseSubmittedUrl } from "@/lib/url-parser";
 import { findPlatformByDomain } from "@/lib/platforms";
 import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
+import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { logSecurityEvent } from "@/lib/security-log";
 import { randomUUID } from "node:crypto";
@@ -141,14 +142,14 @@ function toDisplayCase(dbCase: {
     crawlConsentWithdrawnAt?: Date | string | null;
     notices?: OriginalNotice[];
   }>;
-}): DisplayCase {
+}, includeFindings = true): DisplayCase {
   return {
     id: dbCase.id,
     referenceNumber: dbCase.referenceNumber,
     userId: dbCase.userId,
     createdAt: dbCase.createdAt.toISOString(),
     status: dbCase.status,
-    urls: dbCase.submittedUrls.map(toDisplayUrl),
+    urls: dbCase.submittedUrls.filter((url) => includeFindings || urlSource(url.source) !== "CRAWLER").map(toDisplayUrl),
   };
 }
 
@@ -462,17 +463,38 @@ export async function registerCaseWithUrls(
   throw new Error("case_reference_collision_exhausted");
 }
 
-export async function getCaseForUser(caseId: string, userId: string): Promise<DisplayCase | null> {
+/**
+ * Whether a survivor-facing read lists the links Asmita's crawler found.
+ * Default: CRAWLER_SHOW_FINDINGS_TO_SURVIVOR (crawler-flags.ts). Her data
+ * export passes includeFindings: true, because it is her right of access to
+ * her own data and must not depend on what the case page shows. Admin views
+ * (listAllCases, admin-cases.ts) do not read through here.
+ */
+export type CaseReadOptions = { includeFindings?: boolean };
+
+function includesFindings(options?: CaseReadOptions) {
+  return options?.includeFindings ?? crawlerFindingsVisibleToSurvivor();
+}
+
+function memoryDisplayCase(rec: store.CaseRecord, includeFindings: boolean): DisplayCase {
+  const urls = includeFindings ? rec.urls : rec.urls.filter((url) => urlSource(url.source) !== "CRAWLER");
+  return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: urls.map(memoryDisplayUrl) };
+}
+
+export async function getCaseForUser(caseId: string, userId: string, options?: CaseReadOptions): Promise<DisplayCase | null> {
+  const includeFindings = includesFindings(options);
   if (isDevNoDb()) {
     const rec = store.cases.get(caseId);
     if (!rec || rec.userId !== userId) return null;
-    return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls.map(memoryDisplayUrl) };
+    return memoryDisplayCase(rec, includeFindings);
   }
   if (usesWorkerKysely()) {
     const workerDb = getWorkerDb();
     const record = await workerDb.selectFrom("Case").selectAll().where("id", "=", caseId).where("userId", "=", userId).executeTakeFirst();
     if (!record) return null;
-    const urls = await workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", caseId).orderBy("submittedAt", "asc").execute();
+    let urlQuery = workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", caseId);
+    if (!includeFindings) urlQuery = urlQuery.where("source", "!=", "CRAWLER");
+    const urls = await urlQuery.orderBy("submittedAt", "asc").execute();
     // The original notice per link (not its follow-ups) feeds the escalation ladder.
     const notices = urls.length
       ? await workerDb.selectFrom("Notice").select(["urlId", "sentAt", "responseType", "responseReceivedAt"])
@@ -487,13 +509,14 @@ export async function getCaseForUser(caseId: string, userId: string): Promise<Di
         submittedAt: new Date(url.submittedAt),
         notices: notices.filter((notice) => notice.urlId === url.id),
       })),
-    });
+    }, includeFindings);
   }
   const db = await getPrismaDb();
   const dbCase = await db.case.findFirst({
     where: { id: caseId, userId },
     include: {
       submittedUrls: {
+        ...(includeFindings ? {} : { where: { source: { not: "CRAWLER" as const } } }),
         orderBy: { submittedAt: "asc" },
         include: {
           notices: {
@@ -506,30 +529,33 @@ export async function getCaseForUser(caseId: string, userId: string): Promise<Di
       },
     },
   });
-  return dbCase ? toDisplayCase(dbCase) : null;
+  return dbCase ? toDisplayCase(dbCase, includeFindings) : null;
 }
 
-export async function listCasesForUser(userId: string): Promise<DisplayCase[]> {
+export async function listCasesForUser(userId: string, options?: CaseReadOptions): Promise<DisplayCase[]> {
+  const includeFindings = includesFindings(options);
   if (isDevNoDb()) {
     return Array.from(store.cases.values())
       .filter((rec) => rec.userId === userId)
-      .map((rec) => ({ id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: rec.urls.map(memoryDisplayUrl) }));
+      .map((rec) => memoryDisplayCase(rec, includeFindings));
   }
   if (usesWorkerKysely()) {
     const workerDb = getWorkerDb();
     const records = await workerDb.selectFrom("Case").selectAll().where("userId", "=", userId).orderBy("createdAt", "desc").execute();
     return Promise.all(records.map(async (record) => {
-      const urls = await workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", record.id).orderBy("submittedAt", "asc").execute();
-      return toDisplayCase({ ...record, submittedUrls: urls });
+      let urlQuery = workerDb.selectFrom("SubmittedUrl").selectAll().where("caseId", "=", record.id);
+      if (!includeFindings) urlQuery = urlQuery.where("source", "!=", "CRAWLER");
+      const urls = await urlQuery.orderBy("submittedAt", "asc").execute();
+      return toDisplayCase({ ...record, submittedUrls: urls }, includeFindings);
     }));
   }
   const db = await getPrismaDb();
   const dbCases = await db.case.findMany({
     where: { userId },
-    include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
+    include: { submittedUrls: { ...(includeFindings ? {} : { where: { source: { not: "CRAWLER" as const } } }), orderBy: { submittedAt: "asc" } } },
     orderBy: { createdAt: "desc" },
   });
-  return dbCases.map(toDisplayCase);
+  return dbCases.map((dbCase) => toDisplayCase(dbCase, includeFindings));
 }
 
 export type AddUrlResult =
@@ -555,7 +581,29 @@ export function pickExistingLink<T extends ExistingLink>(rows: T[]): T | undefin
   return rows.find((row) => !row.crawlConsentWithdrawnAt) ?? rows[0];
 }
 
+/**
+ * The echo of her own report. When the address she reported is one Asmita's
+ * crawler already holds and findings are hidden from her, the echo must not
+ * carry the finding's state: no source, consent, notice dates or response.
+ */
+function withoutFindingState(results: AddUrlResult[]): AddUrlResult[] {
+  if (crawlerFindingsVisibleToSurvivor()) return results;
+  return results.map((result) => {
+    if (!result.ok || urlSource(result.url.source) !== "CRAWLER") return result;
+    const { id, domain, platformName, status, urlHash, platformId, flaggedForReview, flagReason } = result.url;
+    return { ...result, url: { id, domain, platformName, status, urlHash, platformId, flaggedForReview, flagReason } };
+  });
+}
+
 export async function addUrlsToCase(
+  caseId: string,
+  rawUrls: string[],
+  options?: { flagReasons?: string[] },
+): Promise<AddUrlResult[]> {
+  return withoutFindingState(await addUrlsToCaseUnfiltered(caseId, rawUrls, options));
+}
+
+async function addUrlsToCaseUnfiltered(
   caseId: string,
   rawUrls: string[],
   options?: { flagReasons?: string[] },
@@ -1097,5 +1145,5 @@ export async function listAllCases(): Promise<DisplayCase[]> {
     include: { submittedUrls: { orderBy: { submittedAt: "asc" } } },
     orderBy: { createdAt: "desc" },
   });
-  return dbCases.map(toDisplayCase);
+  return dbCases.map((dbCase) => toDisplayCase(dbCase));
 }

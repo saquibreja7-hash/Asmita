@@ -11,7 +11,10 @@ export async function GET(_request: Request, context: { params: Promise<{ caseId
   }
 
   const { caseId } = await context.params;
-  const record = await getCaseForUser(caseId, auth.session.sub);
+  // Her data export is her right of access: it lists every link on her case,
+  // including the ones Asmita's search found, whatever the case page shows
+  // (CRAWLER_SHOW_FINDINGS_TO_SURVIVOR). Found links are labelled as such.
+  const record = await getCaseForUser(caseId, auth.session.sub, { includeFindings: true });
   if (!record) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -27,6 +30,7 @@ export async function GET(_request: Request, context: { params: Promise<{ caseId
         platformName: url.platformName,
         status: url.status,
         sentAt: url.noticeSentAt ?? url.representativeNoticeSentAt ?? url.platformFiledAt ?? null,
+        foundByAsmita: url.source === "CRAWLER",
       })),
     });
   } catch (err) {

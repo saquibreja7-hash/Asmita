@@ -655,7 +655,7 @@
   "privacy.s09.i6.detail": "A live integrity check verifies that the application does not make outbound HTTP requests to user-submitted URLs. If it ever did, alerting fires immediately.",
   "privacy.s10.intro": "The Digital Personal Data Protection Act, 2023 gives you a set of rights over your own data. Asmita honours each of them without charge.",
   "privacy.s10.i1.bold": "Right to access.",
-  "privacy.s10.i1.detail": "You can download every piece of data we hold about you, at any time, from your case dashboard.",
+  "privacy.s10.i1.detail": "You can download every piece of data we hold about you, at any time, from your case dashboard. The download always lists every link on your case, including links Asmita found by searching the internet, which it labels \"Found by Asmita\", even if your case page does not show those links.",
   "privacy.s10.i2.bold": "Right to correction.",
   "privacy.s10.i2.detail": "You can edit your email address, declaration text, and any free-text fields in your case. URL submissions can be withdrawn but not edited (so the audit trail stays sound).",
   "privacy.s10.i3.bold": "Right to erasure.",

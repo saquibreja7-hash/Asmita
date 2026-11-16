@@ -9,7 +9,8 @@ import hi from "@/i18n/hi.json";
 import status from "@/i18n/hi-review-status.json";
 import { CrawlConsent } from "@/app/(victim)/case/[caseId]/CrawlConsent";
 import { FoundByAsmita } from "@/app/(victim)/case/[caseId]/FoundByAsmita";
-import { consentView, foundLinkView, isCrawlerFound, requestSign, requestStop, showFindingsToSurvivor, signOutcome, splitUrls, type ConsentState } from "@/app/(victim)/case/[caseId]/crawl-consent-logic";
+import { consentView, foundLinkView, isCrawlerFound, requestSign, requestStop, signOutcome, splitUrls, type ConsentState } from "@/app/(victim)/case/[caseId]/crawl-consent-logic";
+import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -169,9 +170,9 @@ describe("found links: typed source, status and the survivor switch", () => {
   });
 
   it("CRAWLER_SHOW_FINDINGS_TO_SURVIVOR is on unless set to false", () => {
-    expect(showFindingsToSurvivor({})).toBe(true);
-    expect(showFindingsToSurvivor({ CRAWLER_SHOW_FINDINGS_TO_SURVIVOR: "true" })).toBe(true);
-    expect(showFindingsToSurvivor({ CRAWLER_SHOW_FINDINGS_TO_SURVIVOR: "false" })).toBe(false);
+    expect(crawlerFindingsVisibleToSurvivor({})).toBe(true);
+    expect(crawlerFindingsVisibleToSurvivor({ CRAWLER_SHOW_FINDINGS_TO_SURVIVOR: "true" })).toBe(true);
+    expect(crawlerFindingsVisibleToSurvivor({ CRAWLER_SHOW_FINDINGS_TO_SURVIVOR: "false" })).toBe(false);
   });
 });
 

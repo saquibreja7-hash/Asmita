@@ -35,7 +35,7 @@ Both URL takedown and image fingerprint (hash) submission are live and deployed.
 | Hash upload (PDQ fingerprinting) | `ENABLE_HASH_UPLOAD=true` | Built, deployed (Worker vars in `wrangler.jsonc`) |
 | Platform API (StopNCII, I4C) | `ENABLE_PLATFORM_API=true` | Transport built (URL notices + hash advisories; see `asmita/docs/api/platform-api.md`); off everywhere, no partner enabled. Enabling one needs a partner agreement, an HTTPS endpoint verified by a second admin, and the env switches |
 | Provenance check | `ENABLE_PROVENANCE_CHECK=true` | Off; production builds force it off until ADR 002 is accepted |
-| Crawler (hash matching, ADR 006) | `ENABLE_CRAWLER=true` | Built (app side, `crawler/` service, admin console, survivor opt-in); off everywhere. Non-intimate test fixtures only; real-case use gated on legal review (ADR 006 go-live gates, `asmita/docs/ops/crawler-runbook.md`). `CRAWLER_SHOW_FINDINGS_TO_SURVIVOR` (default on) controls whether her case page lists found links |
+| Crawler (hash matching, ADR 006) | `ENABLE_CRAWLER=true` | Built (app side, `crawler/` service, admin console, survivor opt-in); off everywhere. Non-intimate test fixtures only; real-case use gated on legal review (ADR 006 go-live gates, `asmita/docs/ops/crawler-runbook.md`). `CRAWLER_SHOW_FINDINGS_TO_SURVIVOR` (default on, read only in `src/lib/crawler-flags.ts`) controls whether she sees found links on her case page and case APIs; her data export always lists them, labelled, and admin views are unaffected |
 | Scheduled work | none | Cron Triggers plus database sweeps. BullMQ/Redis removed (2026-10-31) |
 
 ## Survivor Paths

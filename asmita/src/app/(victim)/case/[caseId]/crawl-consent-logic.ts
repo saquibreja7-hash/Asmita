@@ -65,16 +65,6 @@ export function splitUrls<T extends Sourced>(urls: T[]): { own: T[]; found: T[] 
   return { own: urls.filter((u) => !isCrawlerFound(u)), found: urls.filter(isCrawlerFound) };
 }
 
-/**
- * Whether the case page shows her the links Asmita found (by website name
- * only). CRAWLER_SHOW_FINDINGS_TO_SURVIVOR is a server-side switch, on unless
- * set to "false": showing them is the approved plan, and whether to is an
- * open owner decision (ADR 006).
- */
-export function showFindingsToSurvivor(env: Record<string, string | undefined> = process.env) {
-  return env.CRAWLER_SHOW_FINDINGS_TO_SURVIVOR !== "false";
-}
-
 export type FoundLinkView =
   /** She withdrew her authorisation before a notice went out: none will. */
   | { kind: "withdrawn" }

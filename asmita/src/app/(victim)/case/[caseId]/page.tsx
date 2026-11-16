@@ -6,7 +6,8 @@ import { getCaseForUser } from "@/lib/case-ops";
 import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
 import { CrawlConsent } from "./CrawlConsent";
 import { FoundByAsmita } from "./FoundByAsmita";
-import { showFindingsToSurvivor, splitUrls } from "./crawl-consent-logic";
+import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
+import { splitUrls } from "./crawl-consent-logic";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { MarkRemovedButton } from "./MarkRemovedButton";
 import { EscalationLadder } from "./EscalationLadder";
@@ -145,7 +146,7 @@ export default async function CasePage({
   // Where things stand is about the links she reported: Asmita's own notices
   // for found links promise no follow-up, so they never say "we follow up".
   const standing = standingOf(ownUrls, hashSubmissions.length);
-  const showFound = showFindingsToSurvivor();
+  const showFound = crawlerFindingsVisibleToSurvivor();
   const created = new Date(record.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 
   return (
