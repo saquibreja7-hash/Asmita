@@ -59,7 +59,7 @@ Goal: turn the takedown form into a response centre. Most of this touches no med
 | # | Feature | Maps to / build | Gate |
 |---|---|---|---|
 | 1 | Guided "Get Help Now" triage | New `(public)` flow feeding case creation; decision tree, not a long form | **Built (2026-11):** `/get-help` hub + `/eligibility` wizard |
-| 2 | Safe access + Quick Exit | New global component: Quick Exit button, double-Escape, neutral tab title/favicon, session timeout, `noindex` on dashboards, no sensitive text in emails/notifications | **Not built — next up.** Safety-critical. |
+| 2 | Safe access + Quick Exit | New global component: Quick Exit button, double-Escape, neutral tab title/favicon, session timeout, `noindex` on dashboards, no sensitive text in emails/notifications | **Mostly built (2026-11-16, PR #57):** Quick Exit button + double-Escape (sign out, land on the home page), neutral tab title, 20-minute idle sign-out, `noindex` on victim and admin pages. Still open: neutral favicon, Quick Exit on `/start`, `/minor-support`, `/check-image` and the chat pages, and a check of email/notification text. |
 | 3 | Anonymous / pseudonymous case creation | Extend case model + auth: random case ID, password/passkey, optional contact, recovery code, three modes (self-help / anonymous assisted / verified legal) | Review data model against DPDP minimisation. |
 | 4 | Case dashboard | Extend `(victim)` dashboard into a clear timeline with per-URL status, references, escalation deadlines, no vague "processing" | None. |
 | 5 | URL + evidence collection (text only) | Extend URL intake to capture usernames, timestamps, threat text, payment demands as text/hashes. No image storage in Phase 1. | Keep to text + hashes to stay inside current charter. |
@@ -116,7 +116,7 @@ Goal: after partnerships and governance. Highest risk, most governance.
 
 1. **Stop the Cloudflare deepfake-detection container work.** It is a Phase 3 supporting feature, not the centre. The client-side reader already shipped is enough until then.
 2. **Start counsel review of ADR 002.** Everything media-related in Phase 2 and 3 waits on it, so the clock should start now.
-3. **Build Phase 1, item 2 next: safe access + Quick Exit.** Item 1 (triage front door) shipped at `/get-help` + `/eligibility`. Item 2 is the remaining safety-critical gap — verified in code 2026-11-12: no Quick Exit button, no double-Escape, no `noindex` on victim/admin dashboards, and a fixed 4-hour survivor session cookie with no idle timeout.
+3. **Finish Phase 1, item 2: safe access + Quick Exit.** Item 1 (triage front door) shipped at `/get-help` + `/eligibility`. Item 2's core shipped on 2026-11-16 (PR #57): Quick Exit button, double-Escape, `noindex` on victim/admin pages, and a 20-minute idle sign-out. Remaining: Quick Exit on the pre-sign-in pages (`/start`, `/minor-support`, `/check-image`, chat), a neutral favicon, and a review of email/notification text for anything sensitive.
 4. Keep the existing "no media, ever" lint tests and no-fetch monitor in force for the takedown and notice pipelines. The new media paths are separate and get their own tests.
 
 ## Sources
