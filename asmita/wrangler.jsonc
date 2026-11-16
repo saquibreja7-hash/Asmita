@@ -27,6 +27,8 @@
   "env": {
     "production": {
       "name": "asmita-production",
+      "workers_dev": false,
+      "preview_urls": false,
       "placement": {
         "region": "aws:ap-south-1"
       },

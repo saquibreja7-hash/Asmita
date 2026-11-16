@@ -191,6 +191,12 @@ export function getVerifiedUserEmail(userId: string) {
   return decryptField(user.emailEncrypted);
 }
 
+export function getUserStatus(userId: string): "active" | "deactivated" | "gone" {
+  assertDevOrTest();
+  if (!users.has(userId)) return "gone";
+  return deactivatedUsers.has(userId) ? "deactivated" : "active";
+}
+
 export function deactivateUser(userId: string) {
   assertDevOrTest();
   const deactivatedAt = new Date();
@@ -203,6 +209,12 @@ export function deactivateUser(userId: string) {
   return deactivatedUsers.get(userId)!;
 }
 
+/** Signing in during the pending period cancels a deletion. True if one was pending. */
+export function cancelUserDeletion(userId: string) {
+  assertDevOrTest();
+  return deactivatedUsers.delete(userId);
+}
+
 export async function hardDeleteDueUsers(now = new Date()) {
   assertDevOrTest();
   const deletedUserIds: string[] = [];
@@ -211,9 +223,16 @@ export async function hardDeleteDueUsers(now = new Date()) {
       continue;
     }
 
+    // Same outcome as the database path (case-ops.ts): the user's links,
+    // signed PDFs and contact are gone; fingerprints are kept (the hash store
+    // is left alone). Memory keeps no tombstones.
     users.delete(userId);
+    let caseCount = 0;
+    let links = 0;
     for (const [caseId, record] of cases.entries()) {
       if (record.userId === userId) {
+        caseCount += 1;
+        links += record.urls.length;
         cases.delete(caseId);
       }
     }
@@ -223,7 +242,7 @@ export async function hardDeleteDueUsers(now = new Date()) {
       eventType: "CASE_HARD_DELETED",
       entityType: "User",
       entityId: userId,
-      data: { retained: "audit_metadata_only" },
+      data: { removed: { cases: caseCount, links }, retained: { fingerprints: "kept so platforms can keep blocking matching images", auditLog: "earlier entries are append-only and unchanged" } },
     });
   }
   return deletedUserIds;

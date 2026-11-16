@@ -16,16 +16,24 @@ export async function GET(_request: Request, context: { params: Promise<{ caseId
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const pdf = await generateFirPackagePdf({
-    referenceNumber: record.referenceNumber,
-    createdAt: record.createdAt,
-    language: "en",
-    urls: record.urls.map((url) => ({
-      domain: url.domain,
-      platformName: url.platformName,
-      status: url.status,
-    })),
-  });
+  let pdf: Awaited<ReturnType<typeof generateFirPackagePdf>>;
+  try {
+    pdf = await generateFirPackagePdf({
+      referenceNumber: record.referenceNumber,
+      createdAt: record.createdAt,
+      language: "en",
+      urls: record.urls.map((url) => ({
+        domain: url.domain,
+        platformName: url.platformName,
+        status: url.status,
+        sentAt: url.noticeSentAt ?? url.platformFiledAt ?? null,
+      })),
+    });
+  } catch (err) {
+    // The error name only: a message could carry a piece of the case.
+    console.error("Case export PDF could not be built", { error: err instanceof Error ? err.name : "unknown" });
+    return NextResponse.json({ error: "export_failed" }, { status: 409 });
+  }
 
   await writeAuditLog({
     eventType: "CASE_EXPORT",

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
+import { isPdfSafeText } from "@/lib/pdf-text";
 import { FormHandoff } from "@/components/FormHandoff";
 import { platformDirectory } from "@/lib/platforms";
 import { checkLink, matchPlatform } from "@/lib/link-check";
@@ -45,6 +46,29 @@ async function pathAfterNotices(caseId: string, preview: Response) {
   return `/case/${caseId}`;
 }
 
+// The preview names the exact template text it shows; signing sends that
+// reference back and is refused if the text changed in between.
+function noticeRef(preview: Response) {
+  return preview.ok ? preview.headers.get("x-notice-template-ref") : null;
+}
+
+function noticePreviewUrl(caseId: string, urlId: string, ref: string) {
+  return `/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(urlId)}&templateRef=${encodeURIComponent(ref)}`;
+}
+
+function advisoryPreviewUrl(caseId: string, ref: string | null) {
+  const base = `/api/cases/${caseId}/preview-hash-advisory`;
+  return ref ? `${base}?templateRef=${encodeURIComponent(ref)}` : base;
+}
+
+function signErrorMessage(locale: Locale, error: string | undefined) {
+  if (error === "notice_changed_since_preview") return t(locale, "review.sign.error.noticeChanged");
+  if (error === "already_signed") return t(locale, "review.sign.error.alreadySigned");
+  if (error === "name_script_unsupported") return t(locale, "review.sign.error.nameScript");
+  if (error === "notice_pdf_failed") return t(locale, "review.sign.error.pdf");
+  return t(locale, "review.sign.error.timeout");
+}
+
 function CheckItem({ heading, detail }: { heading: string; detail: string }) {
   return (
     <div className="flex items-start gap-3">
@@ -72,6 +96,8 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
   const [previewUrl, setPreviewUrl] = useState("");
   // The link whose notice is on screen; signing sends it so the two match.
   const [noticeUrlId, setNoticeUrlId] = useState("");
+  // Which template text is on screen (from the preview); signing sends it.
+  const [templateRef, setTemplateRef] = useState("");
   const [pendingFormPlatforms, setPendingFormPlatforms] = useState<{ id: string; name: string; formUrl: string }[]>([]);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
@@ -164,7 +190,10 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
             }
             sessionStorage.removeItem(DRAFT_KEY);
             setCaseId(newCaseId);
-            setPreviewUrl(`/api/cases/${newCaseId}/preview-hash-advisory`);
+            const advisory = await fetch(`/api/cases/${newCaseId}/preview-hash-advisory`);
+            const ref = noticeRef(advisory);
+            setTemplateRef(ref ?? "");
+            setPreviewUrl(advisoryPreviewUrl(newCaseId, ref));
             setStep("hash-sign");
           } else {
             // Form-only platforms only — show all of them inline
@@ -187,9 +216,11 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
 
       const previewRes = await fetch(`/api/cases/${newCaseId}/preview-notice`);
       const firstUrlId = previewRes.headers.get("x-notice-url-id");
-      if (previewRes.ok && firstUrlId) {
+      const firstRef = noticeRef(previewRes);
+      if (firstUrlId && firstRef) {
         setNoticeUrlId(firstUrlId);
-        setPreviewUrl(`/api/cases/${newCaseId}/preview-notice?urlId=${encodeURIComponent(firstUrlId)}`);
+        setTemplateRef(firstRef);
+        setPreviewUrl(noticePreviewUrl(newCaseId, firstUrlId, firstRef));
         setStep("sign");
       } else {
         // Nothing to sign yet: she already confirmed on the review step, so
@@ -212,15 +243,21 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
       const res = await csrfFetch(`/api/cases/${caseId}/sign-notice`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ urlId: noticeUrlId, name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
+        body: JSON.stringify({ urlId: noticeUrlId, templateRef, name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(
-          data.error === "already_signed"
-            ? t(locale, "review.sign.error.alreadySigned")
-            : t(locale, "review.sign.error.timeout"),
-        );
+        if (data.error === "notice_changed_since_preview") {
+          // Show the current text and ask for a fresh review and confirmation.
+          const current = await fetch(`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(noticeUrlId)}`);
+          const ref = noticeRef(current);
+          if (ref) {
+            setTemplateRef(ref);
+            setPreviewUrl(noticePreviewUrl(caseId, noticeUrlId, ref));
+          }
+          setAgreed(false);
+        }
+        setError(signErrorMessage(locale, data.error));
         setStep("sign");
         return;
       }
@@ -228,12 +265,14 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
       // the signature and confirmation are given again for every notice.
       const next = await fetch(`/api/cases/${caseId}/preview-notice`);
       const nextUrlId = next.headers.get("x-notice-url-id");
-      if (next.ok && nextUrlId) {
+      const nextRef = noticeRef(next);
+      if (nextUrlId && nextRef) {
         setSignedCount(signedCount + 1);
         setSignature("");
         setAgreed(false);
         setNoticeUrlId(nextUrlId);
-        setPreviewUrl(`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(nextUrlId)}`);
+        setTemplateRef(nextRef);
+        setPreviewUrl(noticePreviewUrl(caseId, nextUrlId, nextRef));
         setStep("sign");
         return;
       }
@@ -259,15 +298,21 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
           contact: contact.trim(),
           signature: signature.trim(),
           platformIds: draft.emailPlatformIds,
+          templateRef,
         }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(
-          data.error === "already_signed"
-            ? t(locale, "review.sign.error.alreadySigned")
-            : t(locale, "review.sign.error.timeout"),
-        );
+        if (data.error === "notice_changed_since_preview") {
+          const current = await fetch(`/api/cases/${caseId}/preview-hash-advisory`);
+          const ref = noticeRef(current);
+          if (ref) {
+            setTemplateRef(ref);
+            setPreviewUrl(advisoryPreviewUrl(caseId, ref));
+          }
+          setAgreed(false);
+        }
+        setError(signErrorMessage(locale, data.error));
         setStep("hash-sign");
         return;
       }
@@ -284,8 +329,13 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
     }
   }
 
+  // The notice PDF shows Latin letters only; say so before signing.
+  const nameUnsupported = !isPdfSafeText(name.trim().normalize("NFC"));
+  const signatureUnsupported = !isPdfSafeText(signature.trim().normalize("NFC"));
   const canSign =
     name.trim().length > 0 &&
+    !nameUnsupported &&
+    !signatureUnsupported &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) &&
     signature.trim().length > 0 &&
     agreed &&
@@ -535,7 +585,11 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
               onChange={(e) => setName(e.target.value)}
               maxLength={100}
               autoComplete="name"
+              aria-invalid={nameUnsupported || undefined}
             />
+            {nameUnsupported && (
+              <p role="alert" className="mt-2 text-sm font-medium text-[var(--danger)]">{t(locale, "review.sign.error.nameScript")}</p>
+            )}
           </div>
 
           <div>
@@ -579,7 +633,11 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
             onChange={(e) => setSignature(e.target.value)}
             maxLength={100}
             autoComplete="off"
+            aria-invalid={signatureUnsupported || undefined}
           />
+          {signatureUnsupported && !nameUnsupported && (
+            <p role="alert" className="text-sm font-medium text-[var(--danger)]">{t(locale, "review.sign.error.nameScript")}</p>
+          )}
           </div>
         </section>
 

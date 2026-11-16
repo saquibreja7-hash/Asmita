@@ -7,12 +7,14 @@ vi.mock("@/lib/db", () => ({
     notice: { findMany: vi.fn() },
     hashSubmission: { groupBy: vi.fn(), findMany: vi.fn() },
     platform: { findMany: vi.fn() },
-    noticeTemplate: { findMany: vi.fn(), findFirst: vi.fn() },
+    noticeTemplate: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
+    hashDispatch: { count: vi.fn() },
     auditLog: { findMany: vi.fn() },
   },
 }));
 
 import { db } from "@/lib/db";
+import { templateDigest } from "@/lib/signed-template";
 import { PLATFORM_DEADLINE_HOURS } from "@/lib/escalation-ladder";
 import {
   deriveCaseWork,
@@ -125,6 +127,23 @@ describe("deriveCaseWork", () => {
     );
   });
 
+  it("does not ask to send a link whose signed template dispatch would refuse", () => {
+    for (const templateRefusal of ["signed_template_changed", "signed_template_not_dispatchable"] as const) {
+      expect(
+        deriveCaseWork(facts({ links: [link({ signed: true, templateRefusal })] }), gates(), now).nextAction,
+      ).toBe("blocked_legal_review");
+    }
+    // One sendable link and one refused link: the sendable one still comes first, counted alone.
+    const work = deriveCaseWork(
+      facts({
+        links: [link({ id: "ok", signed: true }), link({ id: "refused", signed: true, templateRefusal: "signed_template_changed" })],
+      }),
+      gates(),
+      now,
+    );
+    expect(work).toMatchObject({ nextAction: "send_notice", actionCount: 1 });
+  });
+
   it("tracks a sent notice against the platform deadline and the ladder", () => {
     const work = deriveCaseWork(
       facts({
@@ -233,6 +252,57 @@ describe("listAdminCases", () => {
       ),
     );
   }
+
+  it("queues a link whose signed template was withdrawn as blocked, with one template query for the whole list", async () => {
+    const template = {
+      id: "t-signed",
+      platformId: null,
+      templateType: "IT_RULES_2021",
+      subjectTemplate: "Notice",
+      bodyTemplate: "Signed text",
+      isActive: false,
+      reviewedByLegal: true,
+    };
+    mocked.case.findMany.mockResolvedValue(
+      ["c1", "c2"].map((id) => ({
+        id,
+        referenceNumber: `ASMITA-2026-${id.toUpperCase()}`,
+        status: "OPEN",
+        createdAt: hoursAgo(5),
+        updatedAt: hoursAgo(1),
+        declarationSignedAt: hoursAgo(2),
+      })),
+    );
+    mocked.submittedUrl.findMany.mockImplementation(({ where }: { where: Record<string, unknown> }) =>
+      Promise.resolve(
+        where.signedNoticePdf
+          ? ["l1", "l2"].map((id) => ({
+              id,
+              signedTemplateId: "t-signed",
+              signedTemplateDigest: templateDigest(template),
+            }))
+          : ["l1", "l2"].map((id, index) => ({
+              id,
+              caseId: `c${index + 1}`,
+              status: "NOTICE_QUEUED",
+              flaggedForReview: false,
+              submittedAt: hoursAgo(4),
+              platformId: "yt",
+              platformFiledAt: null,
+            })),
+      ),
+    );
+    mocked.noticeTemplate.findMany.mockImplementation(({ where }: { where: Record<string, unknown> }) =>
+      Promise.resolve(where.id ? [template] : [{ templateType: "IT_RULES_2021", platformId: null }]),
+    );
+
+    const page = await listAdminCases({}, { now });
+
+    expect(page.rows.map((row) => row.nextAction)).toEqual(["blocked_legal_review", "blocked_legal_review"]);
+    // Gates query plus one lookup by id, however many links are signed.
+    expect(mocked.noticeTemplate.findMany).toHaveBeenCalledTimes(2);
+    expect(mocked.noticeTemplate.findUnique).not.toHaveBeenCalled();
+  });
 
   it("sorts by due time and pages with a cursor that survives rows leaving", async () => {
     seed(5);
@@ -415,6 +485,98 @@ describe("getAdminCaseDetail", () => {
 
     expect(detail?.work.nextAction).toBe("awaiting_reply");
     expect(detail?.links[0]).toMatchObject({ noticeSent: true, dispatch: null, ladderStep: 1 });
+  });
+
+  describe("a signature pinned to the template it was signed with", () => {
+    const pinnedTemplate = {
+      id: "t-signed",
+      platformId: null,
+      templateType: "IT_RULES_2021",
+      subjectTemplate: "Notice {{caseReference}}",
+      bodyTemplate: "Signed text {{url}}",
+      version: 2,
+      isActive: true,
+      reviewedByLegal: true,
+      reviewedAt: hoursAgo(72),
+      reviewedByName: "Earlier Reviewer",
+    };
+
+    function pinLink(digest = templateDigest(pinnedTemplate)) {
+      const rows = mocked.submittedUrl.findMany.getMockImplementation() as (args: unknown) => Promise<unknown>;
+      mocked.submittedUrl.findMany.mockImplementation((args: { where: Record<string, unknown> }) =>
+        args.where.signedNoticePdf
+          ? Promise.resolve([{ id: "l1", signedTemplateId: "t-signed", signedTemplateDigest: digest }])
+          : rows(args),
+      );
+    }
+
+    it("labels Send notice with the pinned template, not the newest one", async () => {
+      mockSignedYoutubeCase();
+      pinLink();
+      mocked.noticeTemplate.findUnique.mockResolvedValue(pinnedTemplate);
+
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+
+      expect(detail?.links[0]).toMatchObject({
+        dispatch: { templateVersion: 2, reviewedByName: "Earlier Reviewer", pinned: true },
+        dispatchRefusal: null,
+      });
+      expect(mocked.noticeTemplate.findUnique).toHaveBeenCalledWith({ where: { id: "t-signed" } });
+      // The newest-template lookup is only for links signed before pinning.
+      expect(mocked.noticeTemplate.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("shows the refusal instead of Send notice when the signed template was withdrawn", async () => {
+      mockSignedYoutubeCase();
+      pinLink();
+      mocked.noticeTemplate.findUnique.mockResolvedValue({ ...pinnedTemplate, isActive: false });
+
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+
+      expect(detail?.links[0]).toMatchObject({ dispatch: null, dispatchRefusal: "signed_template_not_dispatchable" });
+      // The case's next action agrees with the link: not "send_notice".
+      expect(detail?.work.nextAction).toBe("blocked_legal_review");
+    });
+
+    it("shows the refusal when the signed text was edited in place", async () => {
+      mockSignedYoutubeCase();
+      pinLink("digest-of-other-text");
+      mocked.noticeTemplate.findUnique.mockResolvedValue(pinnedTemplate);
+
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+
+      expect(detail?.links[0]).toMatchObject({ dispatch: null, dispatchRefusal: "signed_template_changed" });
+    });
+
+    it("reports a refused hash advisory and whether any platform received it", async () => {
+      mockSignedYoutubeCase();
+      const advisory = { ...pinnedTemplate, id: "advisory-1", templateType: "HASH_ADVISORY" };
+      mocked.case.findUnique.mockResolvedValue({
+        id: "c1",
+        referenceNumber: "ASMITA-2026-AAAAAA",
+        status: "OPEN",
+        createdAt: hoursAgo(12),
+        updatedAt: hoursAgo(1),
+        declarationSignedAt: hoursAgo(2),
+        ngoVerified: false,
+        hashAdvisorySignedHashIds: ["h1"],
+        hashAdvisorySignedTemplateId: "advisory-1",
+        hashAdvisorySignedTemplateDigest: templateDigest(advisory),
+      });
+      mocked.noticeTemplate.findUnique.mockResolvedValue({ ...advisory, reviewedByLegal: false });
+      mocked.hashDispatch.count.mockResolvedValue(0);
+
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+
+      expect(detail?.hashAdvisoryRefusal).toEqual({ reason: "signed_template_not_dispatchable", sent: false });
+    });
+
+    it("has no advisory refusal when the advisory is not signed", async () => {
+      mockSignedYoutubeCase();
+      const detail = await getAdminCaseDetail("ASMITA-2026-AAAAAA", now);
+      expect(detail?.hashAdvisoryRefusal).toBeNull();
+      expect(mocked.hashDispatch.count).not.toHaveBeenCalled();
+    });
   });
 });
 

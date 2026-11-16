@@ -8,6 +8,9 @@ import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { countActionableCases } from "@/lib/admin-cases";
 import { ADMIN_NAV } from "./admin-nav";
 
+// The console is staff-only and case-bearing: never indexable.
+export const metadata = { robots: { index: false, follow: false } };
+
 export default async function AdminLayout({
   children,
 }: {
@@ -22,8 +25,8 @@ export default async function AdminLayout({
     return <AdminLoginPage />;
   }
 
-  // Sessions minted before sub-roles existed are founders (require-admin.ts).
-  const role = auth.session.adminRole ?? "SUPER_ADMIN";
+  // The role as configured now (require-admin.ts), not as signed in.
+  const role = auth.session.adminRole;
   const groups = ADMIN_NAV.map((group) => ({
     ...group,
     items: group.items.filter((item) => !item.permission || hasAdminPermission(role, item.permission)),

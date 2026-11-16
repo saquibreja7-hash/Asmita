@@ -19,11 +19,15 @@ const fieldSchema = z
 const bodySchema = z
   .object({
     sourceUrl: z.string().url(),
-    markVerified: z.boolean().default(false),
+    // Verification is a separate action by a second admin
+    // (POST ./verify). Kept in the schema only to refuse it clearly.
+    markVerified: z.boolean().optional(),
     fields: fieldSchema,
   })
   .strict();
 
+// Every tracked field is part of the verified contact record, so changing any
+// of them withdraws the verification.
 const TRACKED_FIELDS = [
   "grievanceEmail",
   "grievanceName",
@@ -52,6 +56,9 @@ export async function POST(
     return NextResponse.json({ error: "invalid_payload", issues: parsed.error.issues }, { status: 400 });
   }
   const { sourceUrl, markVerified, fields } = parsed.data;
+  if (markVerified) {
+    return NextResponse.json({ error: "verify_separately" }, { status: 400 });
+  }
 
   const current = await db.platform.findUnique({ where: { id: platformId } });
   if (!current) {
@@ -70,14 +77,17 @@ export async function POST(
     updateData[field] = incoming;
   }
 
-  if (diffs.length === 0 && !markVerified) {
+  if (diffs.length === 0) {
     return NextResponse.json({ success: true, changed: 0, message: "no_changes" });
   }
 
-  if (markVerified) {
-    updateData.lastContactVerifiedAt = new Date();
-    updateData.lastContactVerifiedByHuman = true;
-  }
+  // An edit never arrives verified: the same write that changes the contact
+  // withdraws the verification and records who changed it, so a different
+  // admin has to verify it before anything is sent there again.
+  updateData.lastContactVerifiedByHuman = false;
+  updateData.lastContactVerifiedAt = null;
+  updateData.contactChangedBy = auth.session.emailHash;
+  updateData.contactChangedAt = new Date();
 
   await db.$transaction([
     db.platform.update({ where: { id: platformId }, data: updateData }),
@@ -104,7 +114,7 @@ export async function POST(
     data: {
       platformName: current.name,
       sourceUrl,
-      markVerified,
+      verificationWithdrawn: current.lastContactVerifiedByHuman,
       changes: diffs.map((diff) => ({
         field: diff.field,
         previousValue: diff.oldValue,
@@ -113,5 +123,5 @@ export async function POST(
     },
   });
 
-  return NextResponse.json({ success: true, changed: diffs.length, markVerified });
+  return NextResponse.json({ success: true, changed: diffs.length, needsVerification: true });
 }

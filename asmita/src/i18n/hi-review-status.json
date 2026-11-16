@@ -54,5 +54,12 @@
       "about page Sarvam line",
       "footer helpline label"
     ]
+  },
+  "pendingNativeReview": {
+    "note": "Drafted without a native-speaker review; review before treating as final.",
+    "keys": [
+      "quickexit.button",
+      "quickexit.buttonAria"
+    ]
   }
 }

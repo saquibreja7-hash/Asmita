@@ -18,6 +18,7 @@ describe("finding an actionable notice", () => {
     vi.mocked(db.noticeTemplate.findFirst).mockResolvedValue({ bodyTemplate: "Secure Content Locator: {{url}}" } as never);
     expect(await findSignableNotice("case-1", false)).toBeNull();
     vi.mocked(db.noticeTemplate.findFirst).mockResolvedValue({ bodyTemplate: "Reported URL: {{url}}" } as never);
-    expect(await findSignableNotice("case-1", false)).toEqual(url);
+    // The template comes back with the link, so the preview shows exactly it.
+    expect(await findSignableNotice("case-1", false)).toEqual({ ...url, template: { bodyTemplate: "Reported URL: {{url}}" } });
   });
 });
