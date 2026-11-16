@@ -8,6 +8,9 @@ import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { countActionableCases } from "@/lib/admin-cases";
 import { ADMIN_NAV } from "./admin-nav";
 
+// The console is staff-only and case-bearing: never indexable.
+export const metadata = { robots: { index: false, follow: false } };
+
 export default async function AdminLayout({
   children,
 }: {
