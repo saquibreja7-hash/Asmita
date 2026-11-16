@@ -114,6 +114,8 @@ export const NOTICE_ERRORS: Record<string, string> = {
   notice_changed: "The notice changed since you previewed it (another day, another admin, or new details). Preview it again before sending. Nothing was sent.",
   dispatch_in_progress:
     "Another send of this notice is in progress, or was interrupted. Nothing was sent by this request. Reload in a minute; if it then shows an unconfirmed attempt, follow the runbook.",
+  link_now_survivor_owned:
+    "The survivor reported this page herself just now, so the link is hers and goes through her own signed notice. No representative notice is sent. Nothing was sent.",
   earlier_attempt_unconfirmed: `An earlier attempt to send this notice was stored but never confirmed as sent, and it may have reached the platform. Nothing was sent. Do not try again: ask the SUPER_ADMIN to resolve it (${RUNBOOK}, "Unconfirmed send").`,
   email_already_sent: "The email provider already accepted this notice, so nothing was sent again. Reload to see whether it is recorded as sent.",
   send_failed: "The email provider returned an error. The notice is kept as it was; you may try again today. It may still have been delivered.",

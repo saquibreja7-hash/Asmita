@@ -139,6 +139,7 @@ There is no admin action to resolve an unconfirmed send, for crawler notices or 
 What the codes mean:
 
 - `dispatch_in_progress`: another request holds the claim. Usually a double click or two analysts at once; wait a minute and reload.
+- `link_now_survivor_owned`: the survivor reported the same page herself just before the send, so the link became hers. Nothing was sent; she signs her own notice for it. Not an unconfirmed send.
 - `email_already_sent`: Resend already accepted this exact notice under its idempotency key. Nothing is sent twice. If the link still shows as not sent after a reload, it reached Resend without being recorded.
 - `earlier_attempt_unconfirmed`: a notice was stored on the link as a claim (`representativeNoticePdf`, `representativeNoticeDigest`) but never recorded as sent, and the notice the analyst would send now differs (usually because the date changed). It may have reached the platform.
 

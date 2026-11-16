@@ -406,7 +406,19 @@ export async function dispatchRepresentativeNotice(input: {
         representativeApprovedById: notice.secondApprovedById ?? notice.approvedById,
       },
     });
-    if (claimed.count === 0) return refuse(409, "dispatch_in_progress");
+    if (claimed.count === 0) {
+      // Say why the claim lost. Her own report of the same page may have
+      // converted the link to hers (case-ops addUrlsToCase) between the gates
+      // above and the claim: that is not a send in progress.
+      const current = await db.submittedUrl.findUnique({
+        where: { id: link.id },
+        select: { source: true, crawlConsentWithdrawnAt: true },
+      });
+      if (!current) return refuse(409, "crawler_link_not_found");
+      if (current.source !== "CRAWLER") return refuse(409, "link_now_survivor_owned");
+      if (current.crawlConsentWithdrawnAt) return refuse(409, "consent_withdrawn");
+      return refuse(409, "dispatch_in_progress");
+    }
     claimedNow = true;
   }
 

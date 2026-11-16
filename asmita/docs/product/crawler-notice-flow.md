@@ -84,6 +84,7 @@ Dispatch only:
 |-|-|-|
 | `notice_changed` | 409 | The digest differs from the preview |
 | `dispatch_in_progress` | 409 | Another request claimed the link first |
+| `link_now_survivor_owned` | 409 | Between the checks and the claim, the survivor reported the same page herself and the link became hers. She signs her own notice for it; no representative notice is sent. (A link that disappeared gets `crawler_link_not_found`, one a withdrawal stopped `consent_withdrawn`) |
 | `earlier_attempt_unconfirmed` | 409 | A different stored notice was never recorded as sent; it may have reached the platform. Needs a human: `docs/ops/crawler-runbook.md`, "Unconfirmed send" |
 | `email_already_sent` | 409 | Resend already accepted this notice. Nothing is sent twice |
 | `send_failed` | 502 | Resend returned an error. The error may come after the request reached Resend, so the stored notice is kept and a retry the same day resends it. After the date changes, the retry gets `earlier_attempt_unconfirmed` |

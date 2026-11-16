@@ -69,6 +69,7 @@ const fakeDb = vi.hoisted(() => {
         return { count };
       },
       count: async ({ where }: { where: Row }) => [...s().urls.values()].filter((u) => matches(u, where)).length,
+      findUnique: async ({ where }: { where: { id: string } }) => s().urls.get(where.id) ?? null,
     },
     crawlConsent: {
       findFirst: async ({ where }: { where: Row }) => s().consents.filter((c) => matches(c, where))
@@ -496,6 +497,39 @@ describe("representative notice: dispatch", () => {
     update.updateMany = async () => ({ count: 0 });
     try {
       expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: false, error: "dispatch_in_progress" });
+    } finally {
+      update.updateMany = original;
+    }
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("her own report converting the link just before the claim: link_now_survivor_owned, not dispatch_in_progress", async () => {
+    const digest = await previewDigest();
+    const update = fakeDb.submittedUrl as { updateMany: (args: unknown) => Promise<{ count: number }> };
+    const original = update.updateMany;
+    // Her conversion (case-ops addUrlsToCase) wins the row between the gates and the claim.
+    update.updateMany = async () => {
+      Object.assign(state.urls.get("url-1")!, { source: "SURVIVOR", crawlFindingId: null });
+      return { count: 0 };
+    };
+    try {
+      expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: false, status: 409, error: "link_now_survivor_owned" });
+    } finally {
+      update.updateMany = original;
+    }
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("a link gone, or stopped by a withdrawal, when the claim loses: crawler_link_not_found / consent_withdrawn", async () => {
+    const digest = await previewDigest();
+    const update = fakeDb.submittedUrl as { updateMany: (args: unknown) => Promise<{ count: number }> };
+    const original = update.updateMany;
+    try {
+      update.updateMany = async () => (Object.assign(state.urls.get("url-1")!, { crawlConsentWithdrawnAt: new Date() }), { count: 0 });
+      expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: false, error: "consent_withdrawn" });
+      state.urls.get("url-1")!.crawlConsentWithdrawnAt = null;
+      update.updateMany = async () => (state.urls.delete("url-1"), { count: 0 });
+      expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: false, error: "crawler_link_not_found" });
     } finally {
       update.updateMany = original;
     }
