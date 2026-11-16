@@ -44,6 +44,8 @@ export type CrawlDeps = {
   seedUrl?: (source: Source) => string;
   now?: () => number;
   runId?: string;
+  /** Overrides POOL_RESYNC_MINUTES (tests only need sub-minute intervals). */
+  poolResyncMs?: number;
 };
 
 export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget";
@@ -143,7 +145,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       resyncing = false;
     }
   };
-  const resyncTimer = setInterval(() => void resync(), config.POOL_RESYNC_MINUTES * 60_000);
+  const resyncTimer = setInterval(() => void resync(), deps.poolResyncMs ?? config.POOL_RESYNC_MINUTES * 60_000);
   resyncTimer.unref();
 
   /** The matcher, or null once the pool is too old to trust. */

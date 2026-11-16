@@ -17,6 +17,8 @@ export type MockAsmitaOptions = {
   status?: Partial<Record<"pool" | "sources" | "findings", number>>;
   /** Fail the first N calls of a route with 500. */
   failFirst?: Partial<Record<"pool" | "sources" | "findings", number>>;
+  /** Pool served from the second pool request on (simulates a re-sync change). */
+  poolAfterFirst?: Pool;
 };
 
 export class MockAsmita {
@@ -76,11 +78,14 @@ export class MockAsmita {
     this.calls[route] = (this.calls[route] ?? 0) + 1;
     if ((this.opts.failFirst?.[route] ?? 0) >= this.calls[route]) return send(500, { error: "flaky" });
 
-    if (route === "pool") return send(200, this.opts.pool);
+    if (route === "pool") {
+      const later = this.opts.poolAfterFirst;
+      return send(200, later && this.calls.pool! > 1 ? later : this.opts.pool);
+    }
     if (route === "sources") return send(200, { sources: this.opts.sources });
     const { findings } = body as { runId: string; findings: Finding[] };
     if (!Array.isArray(findings) || findings.length > 50) return send(400, { error: "bad_batch" });
-    const known = new Set(this.opts.pool.fingerprints.map((f) => f.id));
+    const known = new Set((this.opts.poolAfterFirst ?? this.opts.pool).fingerprints.map((f) => f.id));
     const results = findings.map((f) => {
       this.posted.push(f);
       if (!known.has(f.fingerprintId)) return { status: "rejected", reason: "unknown_fingerprint" };

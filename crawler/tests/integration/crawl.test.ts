@@ -6,14 +6,10 @@
  * that the log contains no URL, hostname or fingerprint.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { AsmitaClient } from "../../src/asmita/client.ts";
-import { loadConfig } from "../../src/config.ts";
-import { runCrawl, type RunResult } from "../../src/crawler.ts";
-import { Logger } from "../../src/log.ts";
-import { SafeFetcher } from "../../src/net/safe-fetch.ts";
-import { buildFixture, CDN_HOST, fixtureEnv, FIXTURE_HOSTS, OFFSITE_HOST, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
+import type { RunResult } from "../../src/crawler.ts";
+import { buildFixture, CDN_HOST, FIXTURE_HOSTS, OFFSITE_HOST, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
 import { MockAsmita } from "../support/mock-asmita.ts";
-import { loopbackTestPolicy } from "../support/test-policy.ts";
+import { runFixtureCrawl } from "../support/run-fixture.ts";
 import { assertCleanLog } from "../support/log-scan.ts";
 
 let fx: Fixture;
@@ -28,33 +24,7 @@ beforeAll(async () => {
     pool: fx.pool,
     sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 0 }],
   }).start();
-  const config = loadConfig(fixtureEnv(api.url, TEST_KEY));
-  const fetcher = new SafeFetcher(loopbackTestPolicy(FIXTURE_HOSTS, fx.site.port), {
-    userAgent: config.CRAWLER_USER_AGENT,
-    connectTimeoutMs: config.CONNECT_TIMEOUT_MS,
-    headersTimeoutMs: config.HEADERS_TIMEOUT_MS,
-    bodyTimeoutMs: config.BODY_TIMEOUT_MS,
-    totalTimeoutMs: config.REQUEST_TIMEOUT_MS,
-    maxRedirects: 5,
-  });
-  const client = new AsmitaClient({
-    baseUrl: config.ASMITA_API_URL,
-    serviceKey: config.CRAWLER_SERVICE_KEY,
-    userAgent: config.CRAWLER_USER_AGENT,
-    timeoutMs: 5000,
-    attempts: 2,
-    baseDelayMs: 10,
-    maxDelayMs: 50,
-  });
-  result = await runCrawl({
-    config,
-    api: client,
-    fetcher,
-    log: new Logger({ sink: (l) => logLines.push(l), level: "debug" }),
-    seedUrl: (s) => `http://${s.domain}:${fx.site.port}/`,
-  });
-  await fetcher.close();
-  await client.close();
+  ({ result } = await runFixtureCrawl(fx.site, api, { lines: logLines }));
 }, 60_000);
 
 afterAll(async () => {
