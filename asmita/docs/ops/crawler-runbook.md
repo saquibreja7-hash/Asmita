@@ -120,7 +120,8 @@ At `/admin/findings` (`findings:review`). Interim safety guidance is on every fi
 
 - An address is shown only after a reason is given; each reveal is logged and audited and limited to 20 an hour.
 - Above distance 20 a second, different analyst must approve.
-- The notice preview shows both addresses, so it counts as a reveal (logged, audited, 20 an hour). The analyst confirms that before previewing; nothing previews by itself. Send sends exactly the previewed notice.
+- The notice preview shows both addresses, so it counts as a reveal (logged, audited, 20 an hour). The analyst confirms that before previewing; nothing previews by itself. Send sends exactly the previewed notice, and only while the preview is on screen: it is cleared, PDF included, after 2 minutes without activity.
+- Downloading the PDF asks for confirmation first: it holds both addresses and must not be kept on a personal device. The file name carries no case reference. Copying a revealed address carries the same caution.
 
 ## 7. Kill switch
 
@@ -161,6 +162,9 @@ Every item, in writing, before a real fingerprint enters the pool, a real site i
 - [ ] An analyst welfare rule: limits on viewing, support, and who may review.
 - [ ] Hindi crawl strings reviewed by a native speaker (`src/i18n/hi-review-status.json`).
 - [ ] Migrations `20261116000000_crawler_backend`, `20261116010000_crawler_representative_notice` and `20261116020000_crawl_finding_consent` applied to a real Postgres, and the Kysely and Prisma paths exercised there (ingest, review, preview, dispatch, withdrawal, deletion request). So far only mocks and the memory store have run them.
+- [ ] **Blocking, NOT YET VERIFIED:** the Worker (Kysely) path against a real Postgres. Every crawler unit test mocks `usesWorkerKysely` to false, and the default Worker smoke makes no crawler call, so the Worker ingest path, its `FOR SHARE` consent lock racing a withdrawal, and the Case-row lock that serialises a final approval with her own report of the same page (`src/lib/case-link-lock.ts`) have never run against Postgres. Run the migrations, then a Postgres-backed test that races a finding ingest against a withdrawal and an approval against her report, and check the outcomes and that no deadlock occurs.
+- [ ] **Blocking:** the Worker smoke with the crawler step: `SMOKE_CRAWLER=1` with `scripts/worker-smoke.mjs` (key lookup, sources, pool and a refused finding in workerd against the e2e database). Written, never run; turn it on in CI once it passes.
+- [ ] **Blocking:** the legal reviewer also reviews the privacy-policy sentence about the data export (`privacy.s10.i1.detail` in `src/i18n/en.json` and `hi.json`: the download lists every link on the case, including links Asmita found, labelled "Found by Asmita", even when her case page does not show them), alongside the two draft templates above.
 - [ ] `tests/e2e/crawler-journey.spec.ts` run green against a local Postgres.
 - [ ] Crawler CI green on Linux and the Docker image built and run with `--read-only`, including a real decode in the container (the decoder child's narrowed `--allow-fs-read` list has been tested on Windows only).
 - [ ] Decoder hardening decided and in place (section 4): decoder children under a separate UID or a syscall sandbox, without network, and the key given as a file (`CRAWLER_SERVICE_KEY_FILE`), never an env var. Not configured or tested today.
