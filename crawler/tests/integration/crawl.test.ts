@@ -94,6 +94,8 @@ describe("fixture crawl", () => {
   it("counts skips and errors by reason in the summary", () => {
     const s = result.summary;
     expect(result.outcome).toBe("completed");
+    expect(result.exitCode).toBe(0);
+    expect(s.problems).toEqual({ unauthorized: 0, contractErrors: 0, findingsUnsent: 0, poolStale: 0 });
     const skipped = s.imagesSkipped as Record<string, number>;
     const errors = s.errors as Record<string, number>;
     expect(skipped.low_quality).toBe(1);

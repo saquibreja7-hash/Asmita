@@ -22,6 +22,7 @@ import { ROBOTS_MAX_BYTES, RobotsCache } from "./crawl/robots.ts";
 import { inScope, normalizeUrl, registrableDomain, urlKey } from "./crawl/url.ts";
 import { hashImage } from "./image/hash-image.ts";
 import type { FetchOptions, FetchResult, SafeFetcher } from "./net/safe-fetch.ts";
+import { exitCodeFor } from "./exit-codes.ts";
 import { withRetry } from "./retry.ts";
 
 /** Pool older than this is never matched against (withdrawn ids must stop matching). */
@@ -50,9 +51,15 @@ export type CrawlDeps = {
   poolResyncMs?: number;
 };
 
-export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget";
+export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget" | "unauthorized";
 
-export type RunResult = { runId: string; outcome: RunOutcome; summary: ReturnType<RunMetrics["summary"]> };
+export type RunResult = {
+  runId: string;
+  outcome: RunOutcome;
+  /** Process exit code for this run (see src/exit-codes.ts). */
+  exitCode: number;
+  summary: ReturnType<RunMetrics["summary"]> & { exitCode: number; problems: Record<string, number> };
+};
 
 const HTML_TYPES = new Set(["text/html", "application/xhtml+xml"]);
 const IMAGE_ACCEPT = "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.1";
@@ -65,6 +72,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const log = deps.log.child({ runId });
   const metrics = new RunMetrics(now());
   let outcome: RunOutcome = "completed";
+  /** Set when the API rejected the key after the initial load. */
+  let unauthorized = false;
 
   // stop = no new work; hard = abort in-flight (after the grace period).
   const stop = new AbortController();
@@ -88,14 +97,32 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   wallClock.unref();
 
   const summarize = (): RunResult => {
-    const summary = metrics.summary({
+    const base = metrics.summary({
       now: now(),
       budgetPages: config.MAX_PAGES,
       budgetImages: config.MAX_IMAGES,
       outcome,
     });
+    const problems = {
+      unauthorized,
+      contractErrors: metrics.findingsFailed,
+      findingsUnsent: metrics.findingsUnsent,
+      poolStale: outcome === "pool_stale",
+      disabled: outcome === "disabled",
+    };
+    const exitCode = exitCodeFor(problems);
+    const summary = {
+      ...base,
+      exitCode,
+      problems: {
+        unauthorized: Number(problems.unauthorized),
+        contractErrors: problems.contractErrors,
+        findingsUnsent: problems.findingsUnsent,
+        poolStale: Number(problems.poolStale),
+      },
+    };
     log.info("run_summary", { summary: summary as never });
-    return { runId, outcome, summary };
+    return { runId, outcome, exitCode, summary };
   };
 
   log.info("run_start", {});
@@ -159,7 +186,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       metrics.error(err.code);
       log.warn("pool_resync_failed", { code: err.code });
       if (err.code === "api_disabled") requestStop("disabled");
-      else if (err.code === "api_unauthorized") requestStop("stopped");
+      else if (err.code === "api_unauthorized") {
+        unauthorized = true;
+        requestStop("unauthorized");
+      }
     } finally {
       resyncing = false;
     }
@@ -320,7 +350,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
 
     while (queue.length > 0 && pages < source.pageBudget && !stop.signal.aborted) {
       if (sink.disabled || sink.unauthorized) {
-        requestStop(sink.disabled ? "disabled" : "stopped");
+        if (sink.unauthorized) unauthorized = true;
+        requestStop(sink.disabled ? "disabled" : "unauthorized");
         break;
       }
       if (metrics.pagesAttempted >= config.MAX_PAGES) {
@@ -399,13 +430,16 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   // Final flush deadline: short after a signal (the platform kills the
   // process soon after SIGTERM), longer for a normal end of run.
   const flushDeadline = AbortSignal.timeout((outcome as RunOutcome) === "stopped" ? 3_000 : config.API_TIMEOUT_MS * 2);
-  if (sink.disabled && outcome === "completed") outcome = "disabled";
   await sink.flush(true, flushDeadline);
   sink.finish();
   cleanup();
-  const result = summarize();
-  if (sink.unauthorized) throw new CrawlError("api_unauthorized");
-  return result;
+  // The final flush may be what discovers a switch-off or a revoked key.
+  if (sink.disabled) outcome = "disabled";
+  if (sink.unauthorized) {
+    unauthorized = true;
+    outcome = "unauthorized";
+  }
+  return summarize();
 
   function cleanup() {
     clearTimeout(wallClock);

@@ -1,9 +1,9 @@
 /**
  * Process-level wiring: config, logger, signals, exit codes.
  *
- * Exit codes: 0 run finished (including "crawler switched off" and graceful
- * stops), 1 configuration error or unexpected failure, 2 the Asmita API
- * rejected the service key, 64 bad command line.
+ * Exit codes: see src/exit-codes.ts (0 clean or switched off, 1 config or
+ * unexpected failure, 2 key rejected, 3 findings undelivered, 4 contract
+ * error, 5 pool stale, 64 bad command line).
  *
  * Everything this process prints goes through the sanitising Logger,
  * including uncaught errors and Node warnings, so stdout/stderr never carry a
@@ -13,6 +13,7 @@ import { AsmitaClient } from "./asmita/client.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import { runCrawl, type CrawlDeps } from "./crawler.ts";
 import { toCrawlError } from "./errors.ts";
+import { EXIT } from "./exit-codes.ts";
 import { Logger, type LogSink } from "./log.ts";
 import { productionPolicy, type NetPolicy } from "./net/policy.ts";
 import { SafeFetcher } from "./net/safe-fetch.ts";
@@ -33,8 +34,8 @@ export async function runMain(opts: MainOptions): Promise<number> {
   const bootLog = new Logger({ sink: opts.sink });
   const command = opts.argv[0];
   if (command !== "run") {
-    bootLog.error("usage", { reason: "expected_command_run", exitCode: 64 });
-    return 64;
+    bootLog.error("usage", { reason: "expected_command_run", exitCode: EXIT.USAGE });
+    return EXIT.USAGE;
   }
 
   let config;
@@ -42,8 +43,8 @@ export async function runMain(opts: MainOptions): Promise<number> {
     config = loadConfig(opts.env);
   } catch (err) {
     const keys = err instanceof ConfigError ? Object.fromEntries(err.keys.map((k) => [k, 1])) : {};
-    bootLog.error("config_invalid", { invalidKeys: keys, exitCode: 1 });
-    return 1;
+    bootLog.error("config_invalid", { invalidKeys: keys, exitCode: EXIT.FAILURE });
+    return EXIT.FAILURE;
   }
   const log = new Logger({ sink: opts.sink, level: config.LOG_LEVEL });
 
@@ -70,11 +71,13 @@ export async function runMain(opts: MainOptions): Promise<number> {
   });
 
   try {
-    await runCrawl({ config, api, fetcher, log, stopSignal: stop.signal, seedUrl: opts.seedUrl });
-    return 0;
+    const result = await runCrawl({ config, api, fetcher, log, stopSignal: stop.signal, seedUrl: opts.seedUrl });
+    return result.exitCode;
   } catch (raw) {
+    // Only the initial load throws (the run itself reports via exitCode).
     const err = toCrawlError(raw);
-    const exitCode = err.code === "api_unauthorized" ? 2 : 1;
+    const exitCode =
+      err.code === "api_unauthorized" ? EXIT.UNAUTHORIZED : err.code === "api_bad_request" ? EXIT.CONTRACT_ERROR : EXIT.FAILURE;
     log.error("run_failed", { code: err.code, exitCode });
     return exitCode;
   } finally {

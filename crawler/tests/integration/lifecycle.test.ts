@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Pool, Source } from "../../src/asmita/client.ts";
 import { runMain } from "../../src/cli.ts";
 import { POOL_MAX_AGE_MS } from "../../src/crawler.ts";
+import { EXIT } from "../../src/exit-codes.ts";
 import { buildFixture, fixtureEnv, FIXTURE_HOSTS, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
 import { MockAsmita, type MockAsmitaOptions } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
@@ -118,6 +119,8 @@ describe("run lifecycle", () => {
     const { result } = await runFixtureCrawl(fx.site, api, { now });
     expect(result.outcome).toBe("pool_stale");
     expect(api.posted.length).toBe(0);
+    expect(result.exitCode).toBe(EXIT.POOL_STALE);
+    expect(result.summary.exitCode).toBe(5);
   }, 30_000);
 
   it("retries a flaky findings endpoint without losing or duplicating findings", async () => {
@@ -135,4 +138,54 @@ describe("run lifecycle", () => {
     expect(result.summary.pagesAttempted).toBe(2);
     expect(result.summary.imagesSeen).toBe(3);
   }, 30_000);
+
+  describe("exit codes", () => {
+    it("0 for a clean run, even when one source is unreachable", async () => {
+      const down: Source = { id: "src-down", kind: "site", domain: "unreachable.test", pageBudget: 5, delayMs: 0 };
+      const api = await mock({ sources: [source(), down] });
+      const { result } = await runFixtureCrawl(fx.site, api);
+      expect(result.exitCode).toBe(EXIT.OK);
+      expect(result.summary.exitCode).toBe(0);
+      // Its robots.txt could not be fetched, so it was treated as disallow-all.
+      expect((result.summary.robots as Record<string, number>).unreachable).toBeGreaterThan(0);
+      expect((result.summary.errors as Record<string, number>).robots_disallowed).toBeGreaterThan(0);
+      expect(api.created.size).toBe(fx.expected.length);
+    }, 30_000);
+
+    it("2 when the key is rejected mid-run (findings endpoint 401)", async () => {
+      const api = await mock({ status: { findings: 401 } });
+      const lines: string[] = [];
+      const code = await runMain({
+        argv: ["run"],
+        env: fixtureEnv(api.url, TEST_KEY),
+        policy: loopbackTestPolicy(FIXTURE_HOSTS, fx.site.port),
+        seedUrl: (s) => `http://${s.domain}:${fx.site.port}/`,
+        sink: (l) => lines.push(l),
+      });
+      expect(code).toBe(EXIT.UNAUTHORIZED);
+      expect(lines.some((l) => l.includes('"outcome":"unauthorized"'))).toBe(true);
+    }, 30_000);
+
+    it("3 when findings are still undelivered at exit", async () => {
+      const api = await mock({ status: { findings: 502 } });
+      const { result } = await runFixtureCrawl(fx.site, api, { env: { API_ATTEMPTS: "1" } });
+      expect(result.summary.findingsUnsent).toBe(fx.expected.length);
+      expect(result.exitCode).toBe(EXIT.FINDINGS_UNDELIVERED);
+    }, 30_000);
+
+    it("4 when the server refuses a batch as malformed (400)", async () => {
+      const api = await mock({ status: { findings: 400 } });
+      const { result } = await runFixtureCrawl(fx.site, api);
+      expect(result.summary.findingsFailed).toBe(fx.expected.length);
+      expect(result.exitCode).toBe(EXIT.CONTRACT_ERROR);
+      expect((result.summary.problems as Record<string, number>).contractErrors).toBe(fx.expected.length);
+    }, 30_000);
+
+    it("0 when the crawler is switched off mid-run, even with findings unsent", async () => {
+      const api = await mock({ status: { findings: 503 } });
+      const { result } = await runFixtureCrawl(fx.site, api);
+      expect(result.outcome).toBe("disabled");
+      expect(result.exitCode).toBe(EXIT.OK);
+    }, 30_000);
+  });
 });
