@@ -403,6 +403,46 @@ describe("analyst review", () => {
     expect(store.cases.get(caseA.id)!.urls).toHaveLength(1);
   });
 
+  it("after a withdrawal and a new authorisation, a re-reported copy is a new finding that can be approved onto a new link", async () => {
+    const page = "https://www.instagram.com/p/placeholder-resign";
+    const first = await oneFinding({ distance: 4, pageUrl: page });
+    expect(await reviewCrawlFinding({ findingId: first.id, decision: "approve", reviewerId: "admin-1" })).toMatchObject({ ok: true, createdUrl: true });
+    const oldLink = store.cases.get(caseA.id)!.urls.find((u) => u.crawlFindingId === first.id)!;
+
+    expect(await withdrawCrawlConsent(caseA.id, "user-a")).toMatchObject({ ok: true });
+    expect(oldLink.crawlConsentWithdrawnAt).toBeTruthy();
+    const oldConsentId = crawlMemory().findings.get(first.id)!.crawlConsentId;
+
+    await consent(caseA.id, ["hs-1"]);
+    const newConsentId = crawlMemory().consents.find((c) => !c.withdrawnAt)!.id;
+    expect(newConsentId).not.toBe(oldConsentId);
+    fp = poolId("hs-1");
+
+    // Same copy, reported again: a new finding under the new authorisation.
+    const { body } = await report([finding({ fingerprintId: fp, distance: 4, pageUrl: page })], "run-2");
+    expect(body.results).toEqual([{ status: "created" }]);
+    const rows = await listCrawlFindings({ caseId: caseA.id });
+    expect(rows).toHaveLength(2);
+    const second = rows.find((row) => row.id !== first.id)!;
+    expect(crawlMemory().findings.get(second.id)).toMatchObject({ crawlConsentId: newConsentId, reviewStatus: "CANDIDATE" });
+
+    // A repeat under the same new authorisation still merges.
+    expect((await report([finding({ fingerprintId: fp, distance: 4, pageUrl: page })], "run-3")).body.results).toEqual([{ status: "duplicate" }]);
+
+    // Approval gives it its own link; the old one stays stopped and bound to the old finding.
+    const approved = await reviewCrawlFinding({ findingId: second.id, decision: "approve", reviewerId: "admin-1" });
+    expect(approved).toMatchObject({ ok: true, status: "APPROVED", createdUrl: true });
+    const links = store.cases.get(caseA.id)!.urls.filter((u) => u.source === "CRAWLER");
+    expect(links).toHaveLength(2);
+    expect(oldLink).toMatchObject({ crawlFindingId: first.id });
+    expect(oldLink.crawlConsentWithdrawnAt).toBeTruthy();
+    const newLink = links.find((u) => u.crawlFindingId === second.id)!;
+    expect(newLink.crawlConsentWithdrawnAt).toBeFalsy();
+    expect(newLink.status).toBe("NOTICE_QUEUED");
+    // The old finding is still the record of the first authorisation.
+    expect(crawlMemory().findings.get(first.id)).toMatchObject({ reviewStatus: "APPROVED", crawlConsentId: oldConsentId });
+  });
+
   it("the review list carries no URL", async () => {
     await oneFinding({ pageUrl: "https://forum.example.com/thread/list-secret" });
     const rows = await listCrawlFindings();

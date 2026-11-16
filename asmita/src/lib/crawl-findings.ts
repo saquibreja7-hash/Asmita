@@ -3,7 +3,7 @@ import { sql } from "kysely";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { crawlMemory, type MemoryCrawlFinding } from "@/lib/crawl-store";
-import { fingerprintStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
+import { findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
 import { isEnabledCrawlSource } from "@/lib/crawl-sources";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
@@ -19,8 +19,11 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * - URLs are only ever strings here: validated with the same link rules as
  *   survivor links, encrypted at rest, never fetched, never logged, never in
  *   audit data. They are blanked 30 days after first seen (url-retention.ts).
- * - Dedup is per case on a digest of the normalised page and image URLs. A
- *   repeat sighting moves lastSeenAt and keeps the lowest distance.
+ * - Dedup is per case and per authorisation on a digest of the normalised
+ *   page and image URLs. A repeat sighting moves lastSeenAt and keeps the
+ *   lowest distance. After she withdraws and signs again, the same copy is a
+ *   new finding under the new authorisation: the old finding and its stopped
+ *   link stay untouched as the record, and are never revived.
  * - Review: one analyst approves or dismisses. A match with distance above
  *   SECOND_REVIEW_DISTANCE needs a second, different analyst before it is
  *   APPROVED. Final approval re-checks that the survivor's authorisation is
@@ -73,13 +76,14 @@ export type CrawlFindingResult = { status: "created" | "duplicate" | "rejected";
 // unknown id from a withdrawn or unapproved one.
 const FINGERPRINT_REFUSED = "fingerprint_not_accepted";
 
-function findingDigest(caseId: string, pageUrl: string, imageUrl: string) {
-  return sha256(`crawl-finding\u0000${caseId}\u0000${pageUrl}\u0000${imageUrl}`);
+function findingDigest(caseId: string, consentId: string, pageUrl: string, imageUrl: string) {
+  return sha256(`crawl-finding\u0000${caseId}\u0000${consentId}\u0000${pageUrl}\u0000${imageUrl}`);
 }
 
 type NewFinding = {
   caseId: string;
   hashSubmissionId: string;
+  crawlConsentId: string;
   pageUrl: string;
   imageUrl: string;
   urlDigest: string;
@@ -108,7 +112,7 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
       return { id: existing.id, created: false };
     }
     const row: MemoryCrawlFinding = {
-      id: randomUUID(), caseId: input.caseId, hashSubmissionId: input.hashSubmissionId,
+      id: randomUUID(), caseId: input.caseId, hashSubmissionId: input.hashSubmissionId, crawlConsentId: input.crawlConsentId,
       pageUrlEncrypted: encryptField(input.pageUrl), imageUrlEncrypted: encryptField(input.imageUrl),
       urlDigest: input.urlDigest, distance: input.distance, quality: input.quality, firstSeenAt: now, lastSeenAt: now,
       sourceId: input.sourceId, runId: input.runId, reviewStatus: "CANDIDATE",
@@ -121,7 +125,7 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
   if (usesWorkerKysely()) {
     // One statement, so concurrent reports of the same copy cannot race.
     const row = await getWorkerDb().insertInto("CrawlFinding").values({
-      id: randomUUID(), caseId: input.caseId, hashSubmissionId: input.hashSubmissionId,
+      id: randomUUID(), caseId: input.caseId, hashSubmissionId: input.hashSubmissionId, crawlConsentId: input.crawlConsentId,
       pageUrlEncrypted: encryptField(input.pageUrl), imageUrlEncrypted: encryptField(input.imageUrl),
       urlDigest: input.urlDigest, distance: input.distance, quality: input.quality,
       firstSeenAt: now, lastSeenAt: now, sourceId: input.sourceId, runId: input.runId,
@@ -157,7 +161,7 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
   try {
     const created = await db.crawlFinding.create({
       data: {
-        caseId: input.caseId, hashSubmissionId: input.hashSubmissionId,
+        caseId: input.caseId, hashSubmissionId: input.hashSubmissionId, crawlConsentId: input.crawlConsentId,
         pageUrlEncrypted: encryptField(input.pageUrl), imageUrlEncrypted: encryptField(input.imageUrl),
         urlDigest: input.urlDigest, distance: input.distance, quality: input.quality,
         firstSeenAt: now, lastSeenAt: now, sourceId: input.sourceId, runId: input.runId,
@@ -220,9 +224,10 @@ export async function recordCrawlFindings(
     const { id, created } = await upsertFinding({
       caseId: fingerprint.caseId,
       hashSubmissionId: fingerprint.hashSubmissionId,
+      crawlConsentId: fingerprint.consentId,
       pageUrl: page.normalizedUrl,
       imageUrl: image.normalizedUrl,
-      urlDigest: findingDigest(fingerprint.caseId, page.normalizedUrl, image.normalizedUrl),
+      urlDigest: findingDigest(fingerprint.caseId, fingerprint.consentId, page.normalizedUrl, image.normalizedUrl),
       distance: item.distance,
       quality: item.quality,
       sourceId: item.sourceId,
@@ -388,7 +393,7 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
     return { ok: true, status: "AWAITING_SECOND_REVIEW" };
   }
 
-  if (!(await fingerprintStillConsented(finding.caseId, finding.hashSubmissionId))) return { ok: false, error: "consent_withdrawn" };
+  if (!(await findingStillConsented(finding))) return { ok: false, error: "consent_withdrawn" };
   if (findingUrlsExpired(finding, now)) return { ok: false, error: "finding_expired" };
   const parsed = parseSubmittedUrl(decryptField(finding.pageUrlEncrypted));
   if (!parsed.ok) return { ok: false, error: "invalid_url" };
@@ -402,8 +407,13 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
   const outcome = await db.$transaction(async (tx) => {
     const claimed = await tx.crawlFinding.updateMany({ where: unchanged, data: { reviewStatus: "APPROVED", ...reviewerFields } });
     if (claimed.count === 0) return null;
-    // The survivor may already have reported the same link herself.
-    const existing = await tx.submittedUrl.findFirst({ where: { caseId: finding.caseId, urlHash: parsed.urlHash }, select: { id: true } });
+    // The survivor may already have reported the same link herself, or an
+    // earlier finding may have added it. A crawler link a withdrawal stopped
+    // is never reused: it stays stopped, and this finding gets its own link.
+    const existing = await tx.submittedUrl.findFirst({
+      where: { caseId: finding.caseId, urlHash: parsed.urlHash, crawlConsentWithdrawnAt: null },
+      select: { id: true },
+    });
     if (existing) return { submittedUrlId: existing.id, createdUrl: false };
     const created = await tx.submittedUrl.create({
       data: {
@@ -445,7 +455,7 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
     await auditReview("CRAWL_FINDING_APPROVED", finding, reviewerId, { stage: "first_of_two" });
     return { ok: true, status: "AWAITING_SECOND_REVIEW" };
   }
-  if (!(await fingerprintStillConsented(finding.caseId, finding.hashSubmissionId))) return { ok: false, error: "consent_withdrawn" };
+  if (!(await findingStillConsented(finding))) return { ok: false, error: "consent_withdrawn" };
   if (findingUrlsExpired(finding, now)) return { ok: false, error: "finding_expired" };
   const parsed = parseSubmittedUrl(decryptField(finding.pageUrlEncrypted));
   if (!parsed.ok) return { ok: false, error: "invalid_url" };
@@ -453,7 +463,7 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
   if (!record) return { ok: false, error: "case_not_found" };
   stamp();
   finding.reviewStatus = "APPROVED";
-  const existing = record.urls.find((url) => url.urlHash === parsed.urlHash);
+  const existing = record.urls.find((url) => url.urlHash === parsed.urlHash && !url.crawlConsentWithdrawnAt);
   let submittedUrlId = existing?.id;
   if (!existing) {
     submittedUrlId = randomUUID();

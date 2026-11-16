@@ -96,6 +96,8 @@ Before sending, the encrypted PDF and digest are stored on the link as a claim. 
 
 When she withdraws her authorisation, every crawler link on the case with no notice sent gets `crawlConsentWithdrawnAt`. The UI can show this through `crawlConsentWithdrawn` on the case views. Those links can never be sent, even under a later authorisation. Notices already sent are untouched. Unreviewed findings are deleted, as before.
 
+If she later signs a new authorisation, findings are deduplicated per authorisation: each finding records the authorisation it was matched under (`CrawlFinding.crawlConsentId`), and the dedup digest includes it. A copy reported again under the new authorisation is a new finding that analysts review from the start. On final approval it gets its own `CRAWLER` link, because approval never reuses a link a withdrawal stopped. The old finding and its stopped link stay as they were, as the record of the first authorisation. A finding recorded under one authorisation is refused under another (`consent_withdrawn`). A copy whose notice was already sent under the old authorisation is not sent again: approval of the new finding reuses that sent link, which has no representative notice of its own to send (`crawler_link_not_found`). Dismissed findings can likewise reappear under a new authorisation.
+
 ## Not covered yet
 
 - **Follow-ups and escalation.** Representative notices are excluded from the hourly sweep (24h follow-up, 48h and 7-day survivor emails) and from the ladder:
@@ -105,7 +107,6 @@ When she withdraws her authorisation, every crawler link on the case with no not
 
   Bringing them in needs a reviewed representative follow-up template and a deadline counsel confirms.
 - The platform API transport.
-- A link stopped by a withdrawal stays stopped. If she signs again and the crawler reports the same copy, the report merges into the old, already approved finding, so that copy cannot be sent. A fresh finding for it needs a decision (see the open questions in the hand-off).
 - `earlier_attempt_unconfirmed` has no admin action to clear it yet.
 - The memory-store path for preview and dispatch.
 

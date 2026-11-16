@@ -33,6 +33,7 @@ export type MemoryCrawlFinding = {
   id: string;
   caseId: string;
   hashSubmissionId: string;
+  crawlConsentId: string | null;
   pageUrlEncrypted: string;
   imageUrlEncrypted: string;
   urlDigest: string | null;

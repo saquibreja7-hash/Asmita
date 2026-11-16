@@ -29,7 +29,7 @@ const PDQ = "ab".repeat(32);
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
-  db.crawlConsent.findMany.mockResolvedValue([{ caseId: "c1", hashSubmissionIds: ["h1", "h2", "h3"] }]);
+  db.crawlConsent.findMany.mockResolvedValue([{ id: "consent-1", caseId: "c1", hashSubmissionIds: ["h1", "h2", "h3"] }]);
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -52,7 +52,7 @@ describe("crawl pool, database path", () => {
     db.hashSubmission.findUnique.mockResolvedValue({ id: "h9", caseId: "c1", crawlPoolId: "fp_9", hashEncrypted: "x", quality: 70, status: "APPROVED" });
     expect(await resolvePoolFingerprint("fp_9")).toBeNull();
     db.hashSubmission.findUnique.mockResolvedValue({ id: "h1", caseId: "c1", crawlPoolId: "fp_1", hashEncrypted: "x", quality: 70, status: "APPROVED" });
-    expect(await resolvePoolFingerprint("fp_1")).toEqual({ hashSubmissionId: "h1", caseId: "c1" });
+    expect(await resolvePoolFingerprint("fp_1")).toEqual({ hashSubmissionId: "h1", caseId: "c1", consentId: "consent-1" });
   });
 });
 
@@ -78,6 +78,19 @@ describe("final approval, database path", () => {
     // Nothing is signed or sent here: dispatch refuses a link without a signed notice.
     expect(data).not.toHaveProperty("signedNoticePdf");
     expect(data.urlEncrypted).not.toContain("instagram");
+    // A crawler link stopped by an earlier withdrawal is never reused.
+    expect(db.tx.submittedUrl.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ caseId: "c1", crawlConsentWithdrawnAt: null }),
+    }));
+  });
+
+  it("refuses a finding recorded under an earlier authorisation, even if the new one lists the fingerprint", async () => {
+    db.crawlFinding.findUnique.mockResolvedValue({
+      id: "cf1", caseId: "c1", hashSubmissionId: "h1", crawlConsentId: "consent-old", distance: 6, reviewStatus: "CANDIDATE", reviewedById: null, firstSeenAt: new Date(),
+      pageUrlEncrypted: encryptField("https://forum.example.com/t"), imageUrlEncrypted: encryptField("https://cdn.example.com/i.jpg"),
+    });
+    expect(await reviewCrawlFinding({ findingId: "cf1", decision: "approve", reviewerId: "admin-1" })).toEqual({ ok: false, error: "consent_withdrawn" });
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 
   it("refuses when the survivor's authorisation no longer covers the fingerprint", async () => {

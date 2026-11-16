@@ -324,6 +324,14 @@ describe("representative notice: gates (each with its own code)", () => {
     await expectRefusal("consent_withdrawn");
   });
 
+  it("a finding recorded under an earlier authorisation is never sent under the live one: consent_withdrawn", async () => {
+    state.findings.get("cf-1")!.crawlConsentId = "consent-old";
+    await expectRefusal("consent_withdrawn");
+    seed();
+    state.findings.get("cf-1")!.crawlConsentId = "consent-1";
+    expect((await previewRepresentativeNotice(base)).ok).toBe(true);
+  });
+
   it("authorisation text changed since she signed: authorisation_template_changed", async () => {
     state.templates.get("tpl-auth")!.bodyTemplate = "edited in place";
     await expectRefusal("authorisation_template_changed");

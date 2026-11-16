@@ -395,6 +395,11 @@ model CrawlFinding {
   id                String             @id @default(uuid())
   caseId            String
   hashSubmissionId  String
+  // The live authorisation (CrawlConsent) the crawler matched under. Part of
+  // the dedup digest, so a copy re-reported after she withdrew and signed
+  // again becomes a new finding instead of merging into the old one, which
+  // stays as the record. Null only for rows written before this column.
+  crawlConsentId    String?
   pageUrlEncrypted  String
   imageUrlEncrypted String
   urlDigest         String?

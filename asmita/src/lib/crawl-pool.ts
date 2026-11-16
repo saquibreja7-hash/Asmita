@@ -33,27 +33,29 @@ function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
 }
 
-/** Live consents, as caseId -> ids they cover. */
-async function liveCoverage(caseIds?: string[]): Promise<Map<string, Set<string>>> {
-  let rows: Array<{ caseId: string; hashSubmissionIds: string[] }>;
+type Coverage = Map<string, { consentId: string; ids: Set<string> }>;
+
+/** Live consents, as caseId -> the live consent and the ids it covers (one live consent per case). */
+async function liveCoverage(caseIds?: string[]): Promise<Coverage> {
+  let rows: Array<{ id: string; caseId: string; hashSubmissionIds: string[] }>;
   if (isDevNoDb()) {
     rows = crawlMemory().consents.filter((c) => !c.withdrawnAt && (!caseIds || caseIds.includes(c.caseId)));
   } else if (usesWorkerKysely()) {
-    let query = getWorkerDb().selectFrom("CrawlConsent").select(["caseId", "hashSubmissionIds"]).where("withdrawnAt", "is", null);
+    let query = getWorkerDb().selectFrom("CrawlConsent").select(["id", "caseId", "hashSubmissionIds"]).where("withdrawnAt", "is", null);
     if (caseIds) query = query.where("caseId", "in", caseIds.length ? caseIds : [""]);
     rows = await query.execute();
   } else {
     const { db } = await import("@/lib/db");
     rows = await db.crawlConsent.findMany({
       where: { withdrawnAt: null, ...(caseIds ? { caseId: { in: caseIds } } : {}) },
-      select: { caseId: true, hashSubmissionIds: true },
+      select: { id: true, caseId: true, hashSubmissionIds: true },
     });
   }
-  const coverage = new Map<string, Set<string>>();
+  const coverage: Coverage = new Map();
   for (const row of rows) {
-    const set = coverage.get(row.caseId) ?? new Set<string>();
-    for (const id of row.hashSubmissionIds ?? []) set.add(id);
-    coverage.set(row.caseId, set);
+    const entry = coverage.get(row.caseId) ?? { consentId: row.id, ids: new Set<string>() };
+    for (const id of row.hashSubmissionIds ?? []) entry.ids.add(id);
+    coverage.set(row.caseId, entry);
   }
   return coverage;
 }
@@ -95,17 +97,17 @@ async function fingerprintByPoolId(poolId: string): Promise<Candidate | null> {
   });
 }
 
-function inPool(candidate: Candidate, coverage: Map<string, Set<string>>): candidate is Candidate & { crawlPoolId: string } {
+function inPool(candidate: Candidate, coverage: Coverage): candidate is Candidate & { crawlPoolId: string } {
   return (
     Boolean(candidate.crawlPoolId) &&
     (POOL_STATUSES as readonly string[]).includes(candidate.status) &&
-    Boolean(coverage.get(candidate.caseId)?.has(candidate.id))
+    Boolean(coverage.get(candidate.caseId)?.ids.has(candidate.id))
   );
 }
 
 export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
   const coverage = await liveCoverage();
-  const candidates = await fingerprintsByIds([...new Set([...coverage.values()].flatMap((set) => [...set]))]);
+  const candidates = await fingerprintsByIds([...new Set([...coverage.values()].flatMap((entry) => [...entry.ids]))]);
   const fingerprints: CrawlPoolEntry[] = [];
   for (const candidate of candidates) {
     if (!inPool(candidate, coverage)) continue;
@@ -128,16 +130,27 @@ export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
  * The fingerprint behind a pool id, only while it is still in the pool.
  * Null for an unknown, withdrawn, erased or no-longer-approved id.
  */
-export async function resolvePoolFingerprint(poolId: string): Promise<{ hashSubmissionId: string; caseId: string } | null> {
+export async function resolvePoolFingerprint(poolId: string): Promise<{ hashSubmissionId: string; caseId: string; consentId: string } | null> {
   const candidate = await fingerprintByPoolId(poolId);
   if (!candidate) return null;
   const coverage = await liveCoverage([candidate.caseId]);
   if (!inPool(candidate, coverage)) return null;
-  return { hashSubmissionId: candidate.id, caseId: candidate.caseId };
+  return { hashSubmissionId: candidate.id, caseId: candidate.caseId, consentId: coverage.get(candidate.caseId)!.consentId };
 }
 
 /** Whether a fingerprint is still covered by a live authorisation on its case. */
 export async function fingerprintStillConsented(caseId: string, hashSubmissionId: string): Promise<boolean> {
   const coverage = await liveCoverage([caseId]);
-  return Boolean(coverage.get(caseId)?.has(hashSubmissionId));
+  return Boolean(coverage.get(caseId)?.ids.has(hashSubmissionId));
+}
+
+/**
+ * The live authorisation on the case, when it still lists the fingerprint.
+ * A finding recorded under an earlier authorisation (crawlConsentId) does not
+ * count as covered by a later one.
+ */
+export async function findingStillConsented(finding: { caseId: string; hashSubmissionId: string; crawlConsentId?: string | null }): Promise<boolean> {
+  const live = (await liveCoverage([finding.caseId])).get(finding.caseId);
+  if (!live || !live.ids.has(finding.hashSubmissionId)) return false;
+  return !finding.crawlConsentId || finding.crawlConsentId === live.consentId;
 }

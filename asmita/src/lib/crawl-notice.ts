@@ -216,6 +216,10 @@ export async function prepareRepresentativeNotice(input: {
     orderBy: { signedAt: "desc" },
   });
   if (!consent || !consent.hashSubmissionIds.includes(finding.hashSubmissionId)) return refuse(409, "consent_withdrawn");
+  // A finding recorded under an earlier authorisation is never sent under a
+  // later one (rows from before crawlConsentId existed have it null; their
+  // links were stopped by the withdrawal itself).
+  if (finding.crawlConsentId && finding.crawlConsentId !== consent.id) return refuse(409, "consent_withdrawn");
 
   // The authorisation text she signed is still that text, and still reviewed.
   const authorisationTemplate = await db.noticeTemplate.findUnique({ where: { id: consent.templateId } });
