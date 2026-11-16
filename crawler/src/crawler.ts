@@ -282,11 +282,13 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       return;
     }
     if (seenImages.has(urlKey(img))) return metrics.skip("duplicate_url");
-    seenImages.add(urlKey(img));
+    // Budget first, so seenImages only ever holds images we actually tried
+    // (at most two keys each: as linked and after redirects).
     if (metrics.imagesSeen >= config.MAX_IMAGES) {
       budgetHit = true;
       return metrics.skip("budget");
     }
+    seenImages.add(urlKey(img));
     metrics.imagesSeen++;
     const delay = inScope(img, scopeHost) ? source.delayMs : Math.max(source.delayMs, config.OFFSITE_HOST_DELAY_MS);
     let touchedOffHost = false;
@@ -437,17 +439,32 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         continue;
       }
       metrics.pagesFetched++;
-      const ex = extract(page.body.toString("utf8"), page.url, page.xRobotsTag);
+      const ex = extract(page.body.toString("utf8"), page.url, page.xRobotsTag, {
+        maxLinks: config.MAX_LINKS_PER_PAGE,
+        maxImages: config.MAX_IMAGES_PER_PAGE,
+      });
+      metrics.linksDropped += ex.dropped.links;
+      metrics.skip("per_page_cap", ex.dropped.images);
       metrics.skip("data_uri", ex.skipped.data_uri);
       metrics.skip("svg", ex.skipped.svg);
       metrics.skip("tiny_declared", ex.skipped.tiny);
       metrics.skip("invalid_url", ex.skipped.invalid);
       if (depth < config.MAX_DEPTH) {
         for (const link of ex.links) {
+          // Bounded frontier: never queue more pages than this source (and
+          // the run) can still fetch. Every queued page is also the only way
+          // into `seen`, so seen <= pageBudget + 1.
+          const remaining = Math.min(source.pageBudget - pages, config.MAX_PAGES - metrics.pagesAttempted);
+          if (queue.length >= remaining) {
+            metrics.linksNotQueued++;
+            continue;
+          }
           if (seen.has(urlKey(link)) || !inScope(link, scopeHost)) continue;
           seen.add(urlKey(link));
           queue.push({ url: link, depth: depth + 1 });
         }
+        metrics.queuePeak = Math.max(metrics.queuePeak, queue.length);
+        metrics.seenPeak = Math.max(metrics.seenPeak, seen.size);
       }
       for (const img of ex.images) {
         if (stop.signal.aborted) break;

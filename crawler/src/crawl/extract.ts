@@ -6,7 +6,18 @@
 import { load } from "cheerio";
 import { normalizeUrl, urlKey } from "./url.ts";
 
+export type ExtractLimits = {
+  /** Distinct links kept per page; the rest are dropped (counted). */
+  maxLinks: number;
+  /** Distinct image candidates kept per page; the rest are dropped (counted). */
+  maxImages: number;
+};
+
+export const DEFAULT_EXTRACT_LIMITS: ExtractLimits = { maxLinks: 500, maxImages: 200 };
+
 export type Extracted = {
+  /** Links and images beyond the per-page caps. */
+  dropped: { links: number; images: number };
   links: URL[];
   images: URL[];
   /** Meta robots / X-Robots-Tag said nofollow (links were not collected). */
@@ -73,9 +84,20 @@ function hasNofollow(value: string | undefined): boolean {
     .some((t) => t === "nofollow" || t === "none");
 }
 
-export function extract(html: string, pageUrl: URL, xRobotsTag = ""): Extracted {
+export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: ExtractLimits = DEFAULT_EXTRACT_LIMITS): Extracted {
   const $ = load(html);
   const skipped = { data_uri: 0, svg: 0, tiny: 0, invalid: 0 };
+  const dropped = { links: 0, images: 0 };
+  // Bounded collections: a hostile page full of links or images cannot grow
+  // these beyond the per-page caps.
+  const keepImage = (key: string, url: URL) => {
+    if (images.has(key)) return;
+    if (images.size >= limits.maxImages) {
+      dropped.images++;
+      return;
+    }
+    images.set(key, url);
+  };
 
   // <base href> applies to every relative URL in the document.
   let base: URL = pageUrl;
@@ -110,7 +132,7 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = ""): Extracted 
       return;
     }
     // First occurrence wins: keep the address as the page first wrote it.
-    if (!images.has(urlKey(url))) images.set(urlKey(url), url);
+    keepImage(urlKey(url), url);
   };
   const addSrcset = (srcset: string | undefined) => {
     if (!srcset) return;
@@ -158,12 +180,18 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = ""): Extracted 
     if (IMAGE_EXT.test(url.pathname)) {
       // A link straight to an image file is an image candidate, not a page,
       // and fetching it is not "following" the link.
-      if (!images.has(urlKey(url))) images.set(urlKey(url), url);
+      keepImage(urlKey(url), url);
       return;
     }
     if (nofollow || hasNofollow(a.attr("rel"))) return;
-    if (!links.has(urlKey(url))) links.set(urlKey(url), url);
+    const key = urlKey(url);
+    if (links.has(key)) return;
+    if (links.size >= limits.maxLinks) {
+      dropped.links++;
+      return;
+    }
+    links.set(key, url);
   });
 
-  return { links: [...links.values()], images: [...images.values()], nofollow, skipped };
+  return { links: [...links.values()], images: [...images.values()], nofollow, skipped, dropped };
 }

@@ -38,6 +38,7 @@ export type Fixture = {
 export class FixtureSite {
   readonly requests: SeenRequest[] = [];
   private readonly routes = new Map<string, Handler>();
+  private readonly fallbacks = new Map<string, (path: string) => Handler>();
   private server: Server | null = null;
 
   get port(): number {
@@ -52,12 +53,17 @@ export class FixtureSite {
     this.routes.set(`${host}${path}`, handler);
   }
 
+  /** Handler for any path on `host` without an exact route. */
+  routeAny(host: string, make: (path: string) => Handler): void {
+    this.fallbacks.set(host, make);
+  }
+
   async start(): Promise<this> {
     this.server = createServer((req, res) => {
       const host = (req.headers.host ?? "").replace(/:\d+$/, "");
       const path = req.url ?? "/";
       this.requests.push({ host, path, headers: req.headers });
-      const h = this.routes.get(`${host}${path}`);
+      const h = this.routes.get(`${host}${path}`) ?? this.fallbacks.get(host)?.(path);
       if (!h) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
@@ -137,6 +143,7 @@ export async function buildFixture(): Promise<Fixture> {
     blogDeep: await patternImage(151, 300, 300, "png"),
     shop: await patternImage(152, 300, 300, "png"),
     offA: await patternImage(153, 300, 300, "png"), // on an off-scope CDN host, in the pool
+    flood: await patternImage(154, 300, 300, "png"), // on the link-flood site, in the pool
     bomb: await pixelBombPng(30_000, 30_000),
   };
 
@@ -179,6 +186,7 @@ export async function buildFixture(): Promise<Fixture> {
       fp("fp-blog-deep", h.blogDeep!),
       fp("fp-shop", h.shop!), // only on the sibling host: must never be found from the blog source
       fp("fp-off-a", h.offA!),
+      fp("fp-flood", h.flood!),
       ...Array.from({ length: 200 }, (_, i) => fp(`fp-rand-${i}`, randomFingerprint(5000 + i))),
     ],
   };
@@ -396,6 +404,21 @@ export async function buildFixture(): Promise<Fixture> {
   site.route(G, "/img/bounce.png", redirect(`${o(`h6.${CDN_HOST}`)}/p6.png`));
   offHosts.forEach((hst, i) => site.route(hst, `/p${i}.png`, sendBytes(i === 0 ? img.offA : img.decoy, "image/png")));
   site.route(`h6.${CDN_HOST}`, "/p6.png", sendBytes(img.decoy, "image/png"));
+
+  // ---- link flood: approve flood.fixture.test ----
+  // Every page is ~1.6 MB of links to 40,000 further pages (a hostile site
+  // trying to exhaust the frontier). The home page also has one real image.
+  const F = `flood.${S}`;
+  const floodPage = (seed: number, withImage: boolean) =>
+    html(
+      (withImage ? `<img src="/img/flood.png">` : "") +
+        Array.from({ length: 40_000 }, (_, i) => `<a href="/p/${seed}-${i}">x</a>`).join(""),
+    );
+  const home = floodPage(0, true);
+  site.route(F, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(F, "/", sendHtml(home));
+  site.route(F, "/img/flood.png", sendBytes(img.flood, "image/png"));
+  site.routeAny(F, (path) => sendHtml(floodPage(Number(path.split("-")[1] ?? 0) + 1, false)));
 
   return { site, pool, expected, allHashes: Object.values(h) };
 }

@@ -9,6 +9,7 @@ export type SkipReason =
   | "pool_stale"
   | "fetch_failed"
   | "decode_failed"
+  | "per_page_cap"
   | "decoder_timeout"
   | "decoder_crashed"
   | "image_hosts_capped"
@@ -29,6 +30,13 @@ export class RunMetrics {
   pagesFetched = 0;
   pagesNonHtml = 0;
   pagesOutOfScope = 0;
+  /** Links beyond MAX_LINKS_PER_PAGE on a page. */
+  linksDropped = 0;
+  /** Links not queued because the frontier was full for the remaining budget. */
+  linksNotQueued = 0;
+  /** Largest page queue and seen-URL set of any source (memory bound check). */
+  queuePeak = 0;
+  seenPeak = 0;
   imagesSeen = 0;
   imagesHashed = 0;
   /** Images whose fetch touched a host outside the source's scope (CDNs). */
@@ -77,6 +85,10 @@ export class RunMetrics {
       pagesAttempted: this.pagesAttempted,
       pagesFetched: this.pagesFetched,
       pagesNonHtml: this.pagesNonHtml,
+      linksDropped: this.linksDropped,
+      linksNotQueued: this.linksNotQueued,
+      queuePeak: this.queuePeak,
+      seenPeak: this.seenPeak,
       imagesSeen: this.imagesSeen,
       imagesHashed: this.imagesHashed,
       imagesOffHost: this.imagesOffHost,

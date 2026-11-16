@@ -199,6 +199,13 @@ describe("extract", () => {
     expect(extract(`<meta name="robots" content="nofollow"><img src="/i.png">`, page).images).toHaveLength(1);
   });
 
+  it("caps links and image candidates per page and counts the rest", () => {
+    const body = Array.from({ length: 50 }, (_, i) => `<a href="/l${i}">l</a><img src="/i${i}.png">`).join("");
+    const ex = extract(body, page, "", { maxLinks: 10, maxImages: 5 });
+    expect(ex.links).toHaveLength(10);
+    expect(ex.images).toHaveLength(5);
+    expect(ex.dropped).toEqual({ links: 40, images: 45 });
+  });
   it("drops fragments and dedups links", () => {
     const ex = extract(`<a href="/x#1">1</a><a href="/x#2">2</a><a href="/x?utm_campaign=q">3</a><a href="mailto:a@b.c">m</a>`, page);
     expect(paths(ex.links)).toEqual(["https://example.com/x"]); // first occurrence kept

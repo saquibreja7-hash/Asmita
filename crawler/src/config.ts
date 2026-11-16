@@ -33,6 +33,10 @@ export const ConfigSchema = z.object({
   MAX_PAGES: int(1, 1_000_000, 5_000),
   MAX_IMAGES: int(1, 5_000_000, 20_000),
   MAX_DEPTH: int(0, 50, 5),
+  /** Links taken from one page (bounds memory on link-flood pages). */
+  MAX_LINKS_PER_PAGE: int(1, 10_000, 500),
+  /** Image candidates taken from one page. */
+  MAX_IMAGES_PER_PAGE: int(1, 10_000, 200),
   GLOBAL_CONCURRENCY: int(1, 32, 4),
   /** Decoder child processes (each decodes one image at a time). */
   DECODE_CONCURRENCY: int(1, 4, 1),
