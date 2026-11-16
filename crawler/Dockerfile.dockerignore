@@ -1,0 +1,12 @@
+# Used by BuildKit for crawler/Dockerfile (build context = repository root).
+# Allowlist: only what the image needs.
+*
+!crawler/package.json
+!crawler/package-lock.json
+!crawler/tsconfig.json
+!crawler/scripts/build.mjs
+!crawler/src/**
+!asmita/src/lib/pdq/pdq.ts
+**/node_modules
+**/dist
+**/.env*
