@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { idleTimeoutMs, isDoubleEscape } from "@/components/QuickExit";
+import { idleTimeoutMs, isDoubleEscape, LOGOUT_WAIT_MS, QUICK_EXIT_URL } from "@/components/QuickExit";
+
+describe("exit destination and sign-out wait", () => {
+  it("lands on Asmita's own home page, not an external site", () => {
+    expect(QUICK_EXIT_URL).toBe("/");
+  });
+
+  it("gives sign-out time for two round trips on a slow connection", () => {
+    // A sub-second cap let navigation cancel the logout, leaving the session live.
+    expect(LOGOUT_WAIT_MS).toBeGreaterThanOrEqual(3_000);
+  });
+});
 
 describe("isDoubleEscape", () => {
   it("counts a second Escape inside the window as the exit trigger", () => {

@@ -2,11 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 
 /*
  * Safe access (survivor-security roadmap, Phase 1 item 2): Quick Exit must
- * blank the screen, sign the survivor out, and land on a neutral page — via
- * the button and via double-Escape — and an idle dashboard must sign itself
- * out. The neutral destination is an internal page in this environment
- * (NEXT_PUBLIC_QUICK_EXIT_URL in playwright.config.ts) so the suite never
- * depends on the outside internet.
+ * blank the screen, sign the survivor out, and land on the public home page —
+ * via the button and via double-Escape — and an idle dashboard must sign
+ * itself out.
  */
 
 async function completeAdultRegistration(page: Page, email: string) {
@@ -44,14 +42,14 @@ async function expectSignedOut(page: Page) {
   expect(cookies.find((cookie) => cookie.name === "asmita_session")).toBeUndefined();
 }
 
-test("the Quick exit button signs the survivor out and lands on a neutral page", async ({ page }, testInfo) => {
+test("the Quick exit button signs the survivor out and lands on the home page", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await completeAdultRegistration(page, `quickexit-btn-${Date.now()}-${testInfo.workerIndex}@example.com`);
   const caseId = await createCaseAndOpenDashboard(page);
 
   await page.getByRole("button", { name: "Quick exit" }).click();
 
-  await expect(page).toHaveURL(/\/how-it-works$/, { timeout: 15_000 });
+  await expect(page).toHaveURL("/", { timeout: 15_000 });
   await expectSignedOut(page);
 
   // The signed-out case page bounces to /start: nothing is reachable again.
@@ -69,7 +67,7 @@ test("double-Escape does the same thing from any victim page", async ({ page }, 
   await expect(page).toHaveURL(/\/case\//, { timeout: 2_000 });
   await page.keyboard.press("Escape");
 
-  await expect(page).toHaveURL(/\/how-it-works$/, { timeout: 15_000 });
+  await expect(page).toHaveURL("/", { timeout: 15_000 });
   await expectSignedOut(page);
 });
 

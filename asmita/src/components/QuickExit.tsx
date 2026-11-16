@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale } from "@/lib/i18n";
 
 /*
@@ -14,22 +15,31 @@ import { t, type Locale } from "@/lib/i18n";
  *      DOM work, no round trip, so nothing sensitive is on screen even
  *      before navigation starts.
  *   2. Sign out (CSRF POST /api/auth/logout — the session cookie is
- *      httpOnly, so only the server can clear it). The wait is bounded so
- *      navigation is never delayed more than LOGOUT_WAIT_MS.
- *   3. location.replace() the neutral destination — replace keeps this page
+ *      httpOnly, so only the server can clear it). The screen is already
+ *      blank, so we wait for sign-out to actually finish (up to
+ *      LOGOUT_WAIT_MS) rather than racing it: navigating away cancels any
+ *      request still in flight, which would leave the session live on a slow
+ *      connection. The logout POST is sent with keepalive, so once it has
+ *      left the page it completes even if the tab navigates or closes.
+ *   3. location.replace() the public home page — replace keeps this page
  *      out of the current history slot.
  *
  * The idle timer signs the survivor out after inactivity and returns to the
- * public home page: an unattended machine must not keep a live case open.
+ * same public home page: an unattended machine must not keep a live case open.
  */
 
-const QUICK_EXIT_URL = process.env.NEXT_PUBLIC_QUICK_EXIT_URL || "https://www.google.co.in";
+/** Where both Quick Exit and the idle sign-out land: Asmita's public home page. */
+export const QUICK_EXIT_URL = "/";
 
 /** Two Escape presses inside this window count as "get me out". */
 export const ESCAPE_WINDOW_MS = 800;
 
-/** Sign-out is given at most this long before navigation proceeds anyway. */
-export const LOGOUT_WAIT_MS = 500;
+/**
+ * Longest we wait for sign-out before navigating anyway. Long enough for the
+ * two round trips (CSRF token, then logout) on a slow mobile connection; the
+ * screen is blank the whole time, so the wait never exposes anything.
+ */
+export const LOGOUT_WAIT_MS = 5_000;
 
 export function isDoubleEscape(now: number, previousAt: number, windowMs = ESCAPE_WINDOW_MS) {
   return previousAt > 0 && now - previousAt <= windowMs;
@@ -48,20 +58,19 @@ export function QuickExit({ locale, enableIdle = true }: { locale: Locale; enabl
 
     async function signOut() {
       try {
-        const { csrfFetch } = await import("@/lib/client-csrf");
         await Promise.race([
-          csrfFetch("/api/auth/logout", { method: "POST" }),
+          csrfFetch("/api/auth/logout", { method: "POST", keepalive: true }),
           new Promise((resolve) => setTimeout(resolve, LOGOUT_WAIT_MS)),
         ]);
       } catch {
-        // Navigation must happen even if sign-out could not complete; the
-        // survivor's next /case visit redirects to /start without a session.
+        // Offline or the server refused: navigation still happens so the
+        // screen never stays stuck. The session may then still be live.
       }
     }
 
     function neutraliseScreen() {
       // The title a passer-by reads matters more than the network call.
-      document.title = "Google";
+      document.title = "Asmita";
       const overlay = document.createElement("div");
       overlay.setAttribute("aria-hidden", "true");
       overlay.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#fff;";
@@ -76,7 +85,7 @@ export function QuickExit({ locale, enableIdle = true }: { locale: Locale; enabl
 
     async function idleExit() {
       await signOut();
-      if (!disposed) window.location.replace("/");
+      if (!disposed) window.location.replace(QUICK_EXIT_URL);
     }
 
     let lastEscapeAt = 0;
