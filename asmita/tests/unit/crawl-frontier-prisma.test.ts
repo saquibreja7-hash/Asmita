@@ -189,6 +189,34 @@ describe("purgeExpiredCrawlPages, Prisma path", () => {
     expect(where.AND[1].OR).toEqual([
       { status: { in: ["DEAD", "GONE"] } },
       { nextDueAt: { gt: NOW } },
+      // Review fix: rows of a switched-off (disabled or paused) source go too.
+      { source: { enabled: false } },
     ]);
+  });
+});
+
+describe("per-source frontier cap, Prisma path (review fix)", () => {
+  it("locks the source and stores only as many new links as the cap leaves room for", async () => {
+    vi.stubEnv("CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE", "1000");
+    db.crawlPage.findMany.mockResolvedValue([{ ...CURRENT_ROW }]);
+    db.crawlPage.count.mockResolvedValueOnce(998); // rows the source already holds
+    const links = ["a", "b", "c", "d"].map((path) => ({ url: `https://k.example/${path}`, kind: "page" as const }));
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "fetched", links }], NOW);
+    expect((db.$executeRaw.mock.calls[0]![0] as string[]).join("?")).toContain('FROM "CrawlSource" WHERE "id" = ? FOR UPDATE');
+    expect(db.crawlPage.count).toHaveBeenCalledWith({ where: { sourceId: SOURCE.id } });
+    expect(db.crawlPage.createMany).toHaveBeenCalledTimes(1);
+    expect(db.crawlPage.createMany.mock.calls[0]![0].data).toHaveLength(2);
+  });
+
+  it("stores no link once the source is full, but still schedules the page", async () => {
+    vi.stubEnv("CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE", "1000");
+    db.crawlPage.findMany.mockResolvedValue([{ ...CURRENT_ROW }]);
+    db.crawlPage.count.mockResolvedValueOnce(1000);
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", links: [{ url: "https://k.example/x", kind: "page" }] },
+    ], NOW);
+    expect(accepted).toBe(1);
+    expect(db.crawlPage.createMany).not.toHaveBeenCalled();
+    expect(db.crawlPage.update).toHaveBeenCalledTimes(1);
   });
 });

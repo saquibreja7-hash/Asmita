@@ -103,6 +103,10 @@ export async function purgeExpiredCrawlFindings(now = new Date()): Promise<numbe
  * most 14 days, so a live row past its due date means the crawler has not
  * run and its pending work must not be silently dropped. Dead rows (gone or
  * five failures) are never due again and always leave with the retention.
+ * Review fix: rows of a source that is switched off (by an admin, a block or
+ * a 30-day pause) are not waiting for a crawler, so they leave with the
+ * retention too, due or not; the per-source row cap (crawl-pages.ts) bounds
+ * the rest.
  */
 export async function purgeExpiredCrawlPages(now = new Date()): Promise<number> {
   const cutoff = new Date(urlRetentionCutoff(now).getTime() + SWEEP_LEAD_MS);
@@ -112,7 +116,8 @@ export async function purgeExpiredCrawlPages(now = new Date()): Promise<number> 
     const expired: string[] = [];
     for (const page of memory.pages.values()) {
       const last = (page.lastFetchedAt ?? page.createdAt).getTime();
-      const stillDue = page.nextDueAt.getTime() <= now.getTime() && page.status !== "DEAD" && page.status !== "GONE";
+      const sourceOn = memory.sources.get(page.sourceId)?.enabled === true;
+      const stillDue = sourceOn && page.nextDueAt.getTime() <= now.getTime() && page.status !== "DEAD" && page.status !== "GONE";
       if (last <= cutoff.getTime() && !stillDue) expired.push(page.id);
     }
     for (const id of expired) memory.pages.delete(id);
@@ -122,7 +127,11 @@ export async function purgeExpiredCrawlPages(now = new Date()): Promise<number> 
     const result = await getWorkerDb().deleteFrom("CrawlPage")
       .where((eb) => eb.and([
         eb.or([eb("lastFetchedAt", "<=", cutoff), eb.and([eb("lastFetchedAt", "is", null), eb("createdAt", "<=", cutoff)])]),
-        eb.or([eb("status", "in", ["DEAD", "GONE"]), eb("nextDueAt", ">", now)]),
+        eb.or([
+          eb("status", "in", ["DEAD", "GONE"]),
+          eb("nextDueAt", ">", now),
+          eb("sourceId", "in", eb.selectFrom("CrawlSource").select("id").where("enabled", "=", false)),
+        ]),
       ])).executeTakeFirst();
     return Number(result.numDeletedRows);
   }
@@ -140,6 +149,7 @@ export async function purgeExpiredCrawlPages(now = new Date()): Promise<number> 
           OR: [
             { status: { in: ["DEAD", "GONE"] } },
             { nextDueAt: { gt: now } },
+            { source: { enabled: false } },
           ],
         },
       ],

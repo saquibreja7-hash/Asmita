@@ -70,6 +70,18 @@ export function maxNewSitesPerDay(env: Record<string, string | undefined> = proc
 }
 
 /**
+ * Crawler v2 review fix: the most frontier rows (CrawlPage) one source may
+ * hold. Links reported beyond it are dropped, so a huge forum's backlog
+ * cannot grow without bound. Default 50,000: 25 days of the largest default
+ * budget (2000 pages a day), close to the 30-day retention, so a source
+ * rarely holds work it could not do before the rows would expire anyway.
+ * Clamped to 1000..1,000,000.
+ */
+export function maxFrontierPagesPerSource(env: Record<string, string | undefined> = process.env) {
+  return clampedInt(env, "CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE", 50_000, 1000, 1_000_000);
+}
+
+/**
  * Which of her case's links a survivor may act on. With crawler findings
  * hidden from her a crawler-found link behaves exactly as if it did not exist:
  * the same "url_not_found" as an id from another case. With them shown she

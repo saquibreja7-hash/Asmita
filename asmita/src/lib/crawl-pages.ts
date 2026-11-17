@@ -4,6 +4,7 @@ import { z } from "zod";
 import { crawlMemory, sourceDayKey, type MemoryCrawlPage } from "@/lib/crawl-store";
 import { crawlerShapedUrl, pageOnSourceHost } from "@/lib/crawl-findings";
 import { isBlockedCrawlHost } from "@/lib/crawl-sources";
+import { maxFrontierPagesPerSource } from "@/lib/crawler-flags";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
@@ -21,6 +22,11 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  *   loses at most its claimed batch, which becomes due again on its own.
  * - The claim locks rows FOR UPDATE SKIP LOCKED on both database paths, so
  *   concurrent claims disjoint. The memory path is single-threaded by design.
+ * - A source holds at most CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE rows
+ *   (crawler-flags.ts, default 50,000); new links beyond it are dropped, so
+ *   a huge site's backlog stays bounded. Some of the dropped links may be
+ *   duplicates of stored rows, so the cap can bite a few rows early; it never
+ *   lets the count exceed it.
  * - URLs are strings only here: validated, encrypted at rest, never fetched,
  *   never logged, never in audit data. A frontier row is operational state,
  *   not a record: rows leave with the same 30-day retention as findings
@@ -584,9 +590,12 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
       const row = memory.pages.get(id)!;
       Object.assign(row, { status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt, failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null });
     }
+    let room = maxFrontierPagesPerSource() - [...memory.pages.values()].filter((p) => p.sourceId === sourceId).length;
     for (const link of links) {
       const exists = [...memory.pages.values()].some((p) => p.sourceId === sourceId && p.urlDigest === link.urlDigest);
       if (exists) continue;
+      if (room <= 0) break; // the source's frontier is full
+      room -= 1;
       memory.pages.set(link.id, {
         id: link.id, sourceId: link.sourceId, urlEncrypted: link.urlEncrypted, urlDigest: link.urlDigest,
         depth: link.depth, kind: link.kind, etag: null, lastModified: null, status: "PENDING",
@@ -616,8 +625,18 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
           failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null,
         }).where("id", "=", id).where("sourceId", "=", sourceId).execute();
       }
-      for (let i = 0; i < links.length; i += LINK_INSERT_CHUNK) {
-        const chunk = links.slice(i, i + LINK_INSERT_CHUNK).map((link) => ({
+      let capped = links;
+      if (links.length > 0) {
+        // Per-source frontier cap: the source row lock serialises concurrent
+        // reports of one source, so the count stays true until commit.
+        await trx.selectFrom("CrawlSource").select("id").where("id", "=", sourceId).forUpdate().executeTakeFirst();
+        const held = await trx.selectFrom("CrawlPage")
+          .select((eb) => eb.fn.countAll<string>().as("count"))
+          .where("sourceId", "=", sourceId).executeTakeFirst();
+        capped = links.slice(0, Math.max(0, maxFrontierPagesPerSource() - Number(held?.count ?? 0)));
+      }
+      for (let i = 0; i < capped.length; i += LINK_INSERT_CHUNK) {
+        const chunk = capped.slice(i, i + LINK_INSERT_CHUNK).map((link) => ({
           id: link.id, sourceId: link.sourceId, urlEncrypted: link.urlEncrypted, urlDigest: link.urlDigest,
           depth: link.depth, kind: link.kind, status: "PENDING" as const, nextDueAt: new Date(0),
         }));
@@ -650,8 +669,15 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
         },
       });
     }
-    for (let i = 0; i < links.length; i += LINK_INSERT_CHUNK) {
-      const chunk = links.slice(i, i + LINK_INSERT_CHUNK).map((link) => ({
+    let capped = links;
+    if (links.length > 0) {
+      // Per-source frontier cap, under the source row lock (see above).
+      await tx.$executeRaw`SELECT "id" FROM "CrawlSource" WHERE "id" = ${sourceId} FOR UPDATE`;
+      const held = await tx.crawlPage.count({ where: { sourceId } });
+      capped = links.slice(0, Math.max(0, maxFrontierPagesPerSource() - held));
+    }
+    for (let i = 0; i < capped.length; i += LINK_INSERT_CHUNK) {
+      const chunk = capped.slice(i, i + LINK_INSERT_CHUNK).map((link) => ({
         id: link.id, sourceId: link.sourceId, urlEncrypted: link.urlEncrypted, urlDigest: link.urlDigest,
         depth: link.depth, kind: link.kind, status: "PENDING" as const, nextDueAt: new Date(0),
       }));

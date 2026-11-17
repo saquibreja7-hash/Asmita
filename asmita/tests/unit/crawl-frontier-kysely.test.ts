@@ -152,6 +152,20 @@ describe("claim budget under concurrency, Kysely path (review fix)", () => {
   });
 });
 
+describe("per-source frontier cap, Kysely path (review fix)", () => {
+  it("locks the source row and trims the link insert to the room the cap leaves", async () => {
+    vi.stubEnv("CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE", "1000");
+    // The fake answers the count select with the first CrawlPage row.
+    kysely.state.rows.CrawlPage = [pageRow({ count: 997 })];
+    const links = ["a", "b", "c", "d", "e"].map((path) => ({ url: `https://k.example/${path}`, kind: "page" as const }));
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "fetched", links }], NOW);
+    expect(callsOn("CrawlSource").some((call) => call.op === "select" && call.detail.forUpdate === true)).toBe(true);
+    const inserts = callsOn("CrawlPage").filter((call) => call.op === "insert");
+    expect(inserts).toHaveLength(1);
+    expect((inserts[0]!.detail.values as unknown[]).length).toBe(3);
+  });
+});
+
 describe("reportCrawlPages, Kysely path", () => {
   it("schedules the page, inserts new links once with ON CONFLICT and moves the source counters", async () => {
     kysely.state.rows.CrawlPage = [pageRow()];

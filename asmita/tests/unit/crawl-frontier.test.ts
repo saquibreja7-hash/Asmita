@@ -345,6 +345,41 @@ describe("retention", () => {
   });
 });
 
+describe("bounded frontier (review fix)", () => {
+  it("purges expired rows of a disabled or paused source even when they are due", async () => {
+    const t = nowAt(0);
+    const seed = await claimCrawlPages(sourceId, 10, t);
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/a", kind: "page" }] }], t);
+    const later = new Date(t.getTime() + 31 * DAY);
+    // Enabled: both rows are due and kept (unchanged WP3 behaviour).
+    expect(await purgeExpiredCrawlPages(later)).toBe(0);
+    // Switched off (an admin, a block or the 30-day pause): nothing will
+    // crawl them, so they leave with the retention.
+    crawlMemory().sources.get(sourceId)!.enabled = false;
+    expect(await purgeExpiredCrawlPages(later)).toBe(2);
+    expect(crawlMemory().pages.size).toBe(0);
+  });
+
+  it("caps the rows one source may hold; links beyond the cap are dropped", async () => {
+    vi.stubEnv("CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE", "1000");
+    const t = nowAt(0);
+    const seed = await claimCrawlPages(sourceId, 10, t);
+    // 499 links per page (the per-page cap is 500), reported across three pages.
+    const many = (prefix: string) => Array.from({ length: 499 }, (_, i) => ({ url: `https://forum.example.com/${prefix}${i}`, kind: "page" as const }));
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "fetched", links: many("a") }], t);
+    expect(crawlMemory().pages.size).toBe(500);
+    const batch = await claimCrawlPages(sourceId, 2, nowAt(MIN));
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: batch[0]!.id, status: "fetched", links: many("b") },
+      { id: batch[1]!.id, status: "fetched", links: many("c") },
+    ], nowAt(2 * MIN));
+    expect(crawlMemory().pages.size).toBe(1000);
+    const more = await claimCrawlPages(sourceId, 1, nowAt(3 * MIN));
+    await reportCrawlPages(sourceId, "run-1", [{ id: more[0]!.id, status: "fetched", links: many("d") }], nowAt(4 * MIN));
+    expect(crawlMemory().pages.size).toBe(1000);
+  });
+});
+
 describe("frontier routes", () => {
   it("answers 503 while ENABLE_CRAWLER is off and 401 without the key", async () => {
     vi.stubEnv("ENABLE_CRAWLER", "false");
