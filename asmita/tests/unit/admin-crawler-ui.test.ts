@@ -18,6 +18,8 @@ import { checkBudget, checkDelay, checkDomain } from "@/app/(admin)/crawl-source
 import { IMPORT_STATUS_LABELS, ImportResults, originLabel, discoveryStateLabel, SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
 import { BlockedHostsManager } from "@/app/(admin)/crawl-sources/BlockedHostsManager";
 import { CrawlerSitesTabs } from "@/app/(admin)/crawl-sources/CrawlerSitesTabs";
+import { CrawlerOverview } from "@/app/(admin)/crawler/CrawlerOverview";
+import type { CrawlerStats } from "@/lib/crawl-stats";
 import { validateCrawlDomain } from "@/lib/crawl-sources";
 import type { CrawlFindingListRow } from "@/lib/crawl-findings";
 
@@ -55,6 +57,8 @@ describe("crawler admin sources never fetch or embed addresses", () => {
     "crawl-sources/SourcesManager.tsx",
     "crawl-sources/CrawlerSitesTabs.tsx",
     "crawl-sources/BlockedHostsManager.tsx",
+    "crawler/page.tsx",
+    "crawler/CrawlerOverview.tsx",
   ];
   it("has no img, iframe or direct fetch call in these files", () => {
     for (const file of files) {
@@ -67,9 +71,11 @@ describe("crawler admin sources never fetch or embed addresses", () => {
   it("gates nav links by permission", () => {
     const find = (href: string) => ADMIN_NAV.flatMap((g) => g.items).find((i) => i.href === href);
     expect(find("/admin/findings")?.permission).toBe("findings:review");
+    expect(find("/admin/crawler")?.permission).toBe("findings:review");
     expect(find("/admin/crawl-sources")?.permission).toBe("crawler:manage");
     expect(hasAdminPermission("SUPER_ADMIN", "crawler:manage")).toBe(true);
     expect(hasAdminPermission("CASE_REVIEWER", "crawler:manage")).toBe(false);
+    expect(hasAdminPermission("CASE_REVIEWER", "findings:review")).toBe(true); // the overview page is the analysts'
   });
 });
 
@@ -397,5 +403,87 @@ describe("site form validation mirrors the server", () => {
     expect(checkDelay("60001").ok).toBe(false);
     expect(checkDelay("2000").ok).toBe(true);
     expect(checkDelay("1.5").ok).toBe(false);
+  });
+});
+
+describe("crawler overview page (WP8)", () => {
+  const stats: CrawlerStats = {
+    generatedAt: "2026-11-17T09:00:00.000Z",
+    sites: {
+      total: 6, enabled: 3, disabled: 3,
+      byOrigin: {
+        admin: { total: 2, enabled: 1, disabled: 1 },
+        reported: { total: 1, enabled: 1, disabled: 0 },
+        discovered: { total: 3, enabled: 1, disabled: 2 },
+      },
+    },
+    pagesCrawledToday: 4,
+    queue: { live: 8, pending: 3, due: 1, claimed: 2, scheduled: 5, dead: 2 },
+    discoveredSitesToday: 2,
+    findings: { awaitingReview: 2, approved: 1, dismissed: 1 },
+    pagesByStatus: { pending: 3, fetched: 2, notModified: 1, gone: 1, blocked: 1, error: 1, dead: 1 },
+    lastRun: {
+      activityAt: "2026-11-17T08:40:00.000Z",
+      findingRun: { runId: "run-2026-11-17-a1b2", firstSeenAt: "2026-11-17T07:30:00.000Z", lastSeenAt: "2026-11-17T08:40:00.000Z", findings: 3 },
+    },
+  };
+  const empty: CrawlerStats = {
+    generatedAt: "2026-11-17T09:00:00.000Z",
+    sites: { total: 0, enabled: 0, disabled: 0, byOrigin: { admin: { total: 0, enabled: 0, disabled: 0 }, reported: { total: 0, enabled: 0, disabled: 0 }, discovered: { total: 0, enabled: 0, disabled: 0 } } },
+    pagesCrawledToday: 0,
+    queue: { live: 0, pending: 0, due: 0, claimed: 0, scheduled: 0, dead: 0 },
+    discoveredSitesToday: 0,
+    findings: { awaitingReview: 0, approved: 0, dismissed: 0 },
+    pagesByStatus: { pending: 0, fetched: 0, notModified: 0, gone: 0, blocked: 0, error: 0, dead: 0 },
+    lastRun: { activityAt: null, findingRun: null },
+  };
+  const render = (props: Partial<Parameters<typeof CrawlerOverview>[0]> = {}) =>
+    renderToStaticMarkup(createElement(CrawlerOverview, { stats, ...props }));
+
+  it("shows every part the spec lists: sites by origin and state, pages today, queue, discovered today, awaiting review, last run, errors by code", () => {
+    const html = render();
+    for (const part of [
+      "Crawler overview",
+      "Sites by origin and state", "Admin", "Reported", "Discovered",
+      "Pages crawled today", "Queue", "Discovered today", "Matches awaiting review",
+      "Errors by code", "Last run",
+    ]) expect(html, part).toContain(part);
+    // Headline numbers and their details.
+    expect(html).toContain("3 switched on");
+    expect(html).toContain("1 due · 2 claimed");
+    expect(html).toContain("1 approved · 1 dismissed");
+    expect(html).toContain("since 00:00 UTC");
+    expect(html).toContain("Generated 2026-11-17 09:00 UTC");
+  });
+
+  it("renders the queue split, the outcome codes with their counts, and the last run the app saw", () => {
+    const html = render();
+    for (const row of ["Live rows", "Pending", "Due now", "Claimed", "Scheduled", "Dead"]) expect(html, row).toContain(row);
+    for (const code of ["error", "blocked", "gone", "dead", "fetched", "not_modified", "pending"]) {
+      expect(html).toMatch(new RegExp(`<td class="font-medium">${code}</td><td class="tabular-nums">\\d+</td>`));
+    }
+    expect(html).toContain("Last activity 2026-11-17 08:40 UTC");
+    expect(html).toContain("run-2026-11-17-a1b2"); // the run id, as text
+    expect(html).toContain("Newest run with matches: run-2026-11-17-a1b2");
+    expect(html).toContain("3 findings, first seen 2026-11-17 07:30 UTC, last seen 2026-11-17 08:40 UTC");
+    expect(html).toContain("leaves no run id behind"); // the honesty note about what the app cannot see
+  });
+
+  it("carries no address anywhere and offers no action", () => {
+    const html = render();
+    expect(html).not.toContain("http");
+    expect(html).not.toMatch(/<a[\s>]/i);
+    expect(html).not.toMatch(/<(img|iframe|embed|object|video|audio|source|link|script)[\s>]/i);
+    expect(html).not.toMatch(/\b(href|src|srcset|poster)\s*=/i);
+    expect(html).not.toContain("<button"); // reads only
+    expect(html).not.toContain("<form");
+  });
+
+  it("renders an empty world without breaking, and shows the switched-off banner when the crawler is off", () => {
+    const html = renderToStaticMarkup(createElement(CrawlerOverview, { stats: empty }));
+    expect(html).toContain("No crawl activity recorded yet.");
+    expect(html).toContain('data-empty="true"');
+    expect(render({ crawlerEnabled: false })).toContain("The crawler is switched off.");
+    expect(render()).not.toContain("The crawler is switched off.");
   });
 });
