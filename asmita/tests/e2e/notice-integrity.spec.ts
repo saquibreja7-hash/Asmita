@@ -106,7 +106,6 @@ async function signNextNotice(page: Page, caseId: string) {
   await page.goto(`/case/${caseId}/sign`);
   await page.getByLabel("Full name", { exact: true }).fill("Synthetic Survivor");
   await page.getByLabel("Email address").fill("survivor@example.invalid");
-  await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
   await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
   const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
   await page.getByRole("button", { name: "Sign and submit" }).click();
@@ -187,7 +186,6 @@ test.describe("notice integrity", () => {
     const signed = await post(page.request, `/api/cases/${caseId}/sign-hash-advisory`, {
       name: "Synthetic Survivor",
       contact: "survivor@example.invalid",
-      signature: "Synthetic Survivor",
       platformIds: [whatsapp],
       templateRef,
     });
@@ -240,15 +238,14 @@ test("each link gets its own notice, signed one after another on the review scre
   for (const round of [1, 2]) {
     await page.getByLabel("Full name", { exact: true }).fill("Synthetic Survivor");
     await page.getByLabel("Email address").fill("survivor@example.invalid");
-    // The signature and the confirmation are given again for every notice.
-    await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
+    // Her full name is her signature; the confirmation is given again for every notice.
     await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
     const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
     await page.getByRole("button", { name: "Sign and submit" }).click();
     expect((await signed).ok()).toBe(true);
     if (round === 1) {
       await expect(page.getByText("Signed. Here is the notice for your next link.")).toBeVisible();
-      await expect(page.getByPlaceholder("Type your full name")).toHaveValue("");
+      await expect(page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ })).not.toBeChecked();
       expect(await confirmations()).toBe(0);
     }
   }
@@ -278,7 +275,6 @@ test("a form-only link listed first does not hide the notices that can be signed
 
   await page.getByLabel("Full name", { exact: true }).fill("Synthetic Survivor");
   await page.getByLabel("Email address").fill("survivor@example.invalid");
-  await page.getByPlaceholder("Type your full name").fill("Synthetic Survivor");
   await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
   const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
   await page.getByRole("button", { name: "Sign and submit" }).click();

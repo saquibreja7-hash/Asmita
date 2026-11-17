@@ -48,7 +48,17 @@
       "review.sign.nextNote",
       "case.sign.sub",
       "ladder.*",
-      "case.now.filed.*"
+      "case.now.filed.*",
+      "sign.name.signature",
+      "crawl.checkbox",
+      "crawl.checkbox.sub",
+      "crawl.details.summary",
+      "crawl.auth.title",
+      "crawl.cta.working",
+      "crawl.error.changed",
+      "review.aside.item3.detail",
+      "review.sign.aside.item3.detail",
+      "sign.aside.item3.detail"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",

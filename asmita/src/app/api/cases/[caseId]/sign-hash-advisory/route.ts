@@ -17,7 +17,8 @@ import { writeAuditLog } from "@/lib/audit";
 
 // POST /api/cases/[caseId]/sign-hash-advisory
 // Survivor reviews the platform-agnostic hash advisory (via preview-hash-advisory),
-// then submits their name/contact/signature and the target platform IDs here.
+// then submits their name (which is their signature), contact and the target
+// platform IDs here.
 //
 // Integrity: the notice body is rendered with the same variables as preview-hash-advisory
 // (declarationReference = referenceNumber, platformName = "your service"). The signed
@@ -31,7 +32,9 @@ const schema = z
   .object({
     name: z.string().min(1).max(100),
     contact: z.string().trim().pipe(z.email().max(200)),
-    signature: z.string().min(1).max(100),
+    // Her full name is her signature. Optional, and defaults to the name;
+    // the signing forms no longer ask for it separately.
+    signature: z.string().min(1).max(100).optional(),
     platformIds: z.array(z.string().min(1)).min(1).max(20),
     // The reference preview-hash-advisory returned for the text on screen.
     templateRef: z.string().min(1).max(200),
@@ -41,7 +44,7 @@ const schema = z
     (d) =>
       !FORBIDDEN_CONTROL.test(d.name) &&
       !FORBIDDEN_CONTROL.test(d.contact) &&
-      !FORBIDDEN_CONTROL.test(d.signature),
+      !FORBIDDEN_CONTROL.test(d.signature ?? ""),
     { message: "invalid_characters" },
   );
 
@@ -80,7 +83,8 @@ export async function POST(
   const { contact, platformIds } = parsed.data;
   // NFC so an accented Latin name typed as letter plus accent is still drawable.
   const name = parsed.data.name.normalize("NFC");
-  const signature = parsed.data.signature.normalize("NFC");
+  // The signature line on the declaration is her full name unless one is sent.
+  const signature = (parsed.data.signature ?? parsed.data.name).normalize("NFC");
   // The PDF font draws Latin letters only. Ask before signing, never transliterate.
   if (!isPdfSafeText(name) || !isPdfSafeText(signature)) {
     return NextResponse.json({ error: "name_script_unsupported" }, { status: 400 });

@@ -7,6 +7,7 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { crawlerEnabled } from "@/lib/crawler-auth";
 import {
   buildCrawlAuthorisationDraft,
+  crawlAgreementRecord,
   getCrawlConsentState,
   recordCrawlConsent,
   withdrawCrawlConsent,
@@ -14,37 +15,32 @@ import {
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { encryptField } from "@/lib/encryption";
 import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
-import { isPdfSafeText } from "@/lib/pdf-text";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { templateDigest } from "@/lib/signed-template";
 
 /*
  * The survivor's crawl authorisation for one case (src/lib/crawl-consent.ts).
  *
- * GET    state, and while unsigned the exact text to sign with its templateRef
- * POST   sign: name, contact, signature and the templateRef she saw
+ * GET    state, and while off the full authorisation text with its templateRef
+ * POST   switch on: she ticked the box ({ agreed: true }) for the text whose
+ *        templateRef the page loaded. No name, contact or signature is asked
+ *        for: the stored PDF records the full text, the fingerprints and when
+ *        the account holder ticked the box.
  * DELETE withdraw: the search stops at once and unreviewed matches are deleted
  *
- * Adults only (minors never reach the case flow). Signing needs hash upload
- * and the crawler switched on, and a template reviewed by legal unless
+ * Adults only (minors never reach the case flow). Switching on needs hash
+ * upload and the crawler switched on, and a template reviewed by legal unless
  * DEV_SKIP_LEGAL_REVIEW is on. Withdrawal always works, whatever the switches.
  */
 
-const FORBIDDEN_CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 const CHANGES_PER_HOUR = 10;
 
-const signSchema = z
+const agreeSchema = z
   .object({
-    name: z.string().min(1).max(100),
-    contact: z.string().trim().pipe(z.email().max(200)),
-    signature: z.string().min(1).max(100),
+    agreed: z.literal(true),
     templateRef: z.string().min(1).max(200),
   })
-  .strict()
-  .refine(
-    (d) => !FORBIDDEN_CONTROL.test(d.name) && !FORBIDDEN_CONTROL.test(d.contact) && !FORBIDDEN_CONTROL.test(d.signature),
-    { message: "invalid_characters" },
-  );
+  .strict();
 
 type Context = { params: Promise<{ caseId: string }> };
 
@@ -88,13 +84,8 @@ export async function POST(request: Request, context: Context) {
   if (tooMany) return tooMany;
   if (!process.env.DATABASE_URL) return NextResponse.json({ error: "database_required" }, { status: 503 });
 
-  const parsed = signSchema.safeParse(await request.json().catch(() => null));
+  const parsed = agreeSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
-  const name = parsed.data.name.normalize("NFC");
-  const signature = parsed.data.signature.normalize("NFC");
-  if (!isPdfSafeText(name) || !isPdfSafeText(signature)) {
-    return NextResponse.json({ error: "name_script_unsupported" }, { status: 400 });
-  }
 
   const caseId = owned.record.id;
   if ((await getCrawlConsentState(caseId)).status === "signed") {
@@ -102,26 +93,26 @@ export async function POST(request: Request, context: Context) {
   }
   const draft = await buildCrawlAuthorisationDraft(caseId, owned.record.referenceNumber, devFlagEnabled("DEV_SKIP_LEGAL_REVIEW"));
   if ("error" in draft) return NextResponse.json({ error: draft.error }, { status: 409 });
-  // She signs only the text and fingerprints she saw.
+  // She agrees only to the text and fingerprints the page loaded.
   if (draft.templateRef !== parsed.data.templateRef) {
     return NextResponse.json({ error: "notice_changed_since_preview" }, { status: 409 });
   }
 
+  // The tick is the agreement: the PDF carries the full text and fingerprint
+  // list, then a record of when the account holder ticked the box. No name or
+  // signature, so no survivor declaration page.
+  const agreedAt = new Date();
   let pdfBytes: Buffer;
   try {
     pdfBytes = await generateNoticePdf({
       platformName: "Asmita",
       caseReference: owned.record.referenceNumber,
       noticeSubject: draft.subject,
-      noticeBody: draft.body,
-      date: noticeDate(new Date()),
-      survivorName: name,
-      survivorContact: parsed.data.contact,
-      signature,
+      noticeBody: `${draft.body}\n\n${crawlAgreementRecord({ caseReference: owned.record.referenceNumber, agreedAt })}`,
+      date: noticeDate(agreedAt),
     });
   } catch (err) {
-    const error = noticePdfErrorCode(err);
-    return NextResponse.json({ error }, { status: error === "name_script_unsupported" ? 400 : 409 });
+    return NextResponse.json({ error: noticePdfErrorCode(err) }, { status: 409 });
   }
 
   const saved = await recordCrawlConsent({
@@ -130,6 +121,7 @@ export async function POST(request: Request, context: Context) {
     hashSubmissionIds: draft.hashSubmissionIds,
     templateId: draft.template.id,
     templateDigest: templateDigest(draft.template),
+    signedAt: agreedAt,
     actorId: owned.userId,
   });
   if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 409 });

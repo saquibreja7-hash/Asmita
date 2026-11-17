@@ -9,7 +9,7 @@ import hi from "@/i18n/hi.json";
 import status from "@/i18n/hi-review-status.json";
 import { CrawlConsent } from "@/app/(victim)/case/[caseId]/CrawlConsent";
 import { FoundByAsmita } from "@/app/(victim)/case/[caseId]/FoundByAsmita";
-import { consentView, foundLinkView, isCrawlerFound, requestSign, requestStop, signOutcome, splitUrls, type ConsentState } from "@/app/(victim)/case/[caseId]/crawl-consent-logic";
+import { consentView, foundLinkView, isCrawlerFound, requestConsent, requestStop, signOutcome, splitUrls, type ConsentState } from "@/app/(victim)/case/[caseId]/crawl-consent-logic";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,49 +17,53 @@ import { join } from "node:path";
 const draft = { subject: "Authorisation for case X", body: "Body of the authorisation text", templateRef: "ref-1" };
 const off: ConsentState = { status: "none", available: true, draft };
 const on: ConsentState = { status: "signed", available: true, draft: null };
-const render = (initialConsent: ConsentState | null, initialTicked = false) =>
-  renderToStaticMarkup(createElement(CrawlConsent, { caseId: "c1", locale: "en", initialConsent, initialTicked }));
+const render = (initialConsent: ConsentState | null) =>
+  renderToStaticMarkup(createElement(CrawlConsent, { caseId: "c1", locale: "en", initialConsent }));
 const resp = (ok: boolean, body: unknown = {}) => ({ ok, json: async () => body }) as Response;
-const person = { templateRef: "ref-1", name: "A", contact: "a@example.com", signature: "A" };
 
 describe("CrawlConsent render", () => {
   it("shows nothing before the server has answered", () => {
     const html = render(null);
-    expect(html).not.toContain("Search the internet");
+    expect(html).not.toContain("search the web");
     expect(html).toContain('aria-live="polite"');
   });
 
   it("shows nothing when signing is unavailable and she has not signed", () => {
-    expect(render({ status: "none", available: false, draft: null })).not.toContain("Search the internet");
-    expect(render({ status: "none", available: true, draft: null })).not.toContain("Search the internet");
+    expect(render({ status: "none", available: false, draft: null })).not.toContain("search the web");
+    expect(render({ status: "none", available: true, draft: null })).not.toContain("search the web");
   });
 
-  it("offers an unticked box with the explanation, and no sign form", () => {
+  // Owner decision 2026-11-18: one tick, no name, signature or "Sign and
+  // switch on" step. The authorisation and how the search works stay one
+  // click away in a disclosure she never has to open.
+  it("offers one unticked box with one plain sentence, and no name or signature fields", () => {
     const html = render(off);
-    expect(html).toContain("Search the internet for more copies of my images");
-    expect(html).toContain("limited list of public websites");
+    expect(html).toContain("Also search the web for more copies of my images");
+    expect(html).toContain("compares your approved image fingerprints with images on public websites");
+    expect(html).toContain("switch this off at any time");
     expect(html).not.toContain("checked");
-    expect(html).not.toContain("Body of the authorisation text");
-    expect(html).not.toContain("crawl-signature");
+    for (const id of ["crawl-name", "crawl-contact", "crawl-signature"]) expect(html).not.toContain(id);
+    expect(html).not.toMatch(/Sign and switch on|<button/);
   });
 
-  it("ticking reveals the authorisation text and the sign fields", () => {
-    const html = render(off, true);
-    expect(html).toContain("Body of the authorisation text");
-    for (const id of ["crawl-name", "crawl-contact", "crawl-signature"]) expect(html).toContain(id);
-    expect(html).toContain("Sign and switch on");
-    expect(html).toContain("disabled");
+  it("keeps the full authorisation and the explanation in an optional disclosure", () => {
+    const html = render(off);
+    expect(html).toMatch(/<details[^>]*>\s*<summary[^>]*>Read the full authorisation<\/summary>/);
+    const inside = html.slice(html.indexOf("<details"), html.indexOf("</details>"));
+    expect(inside).toContain("Body of the authorisation text");
+    expect(inside).toContain("limited list of public websites");
+    expect(html).not.toMatch(/<details[^>]*\sopen/);
   });
 
-  it("the signed state offers Stop searching and no tick box", () => {
+  it("the on state shows the box ticked, so unticking is how she stops", () => {
     const html = render(on);
     expect(html).toContain("Searching is on");
-    expect(html).toContain("Stop searching");
-    expect(html).not.toContain("Search the internet for more copies");
+    expect(html).toMatch(/<input[^>]*id="crawl-tick"[^>]*checked/);
+    expect(html).not.toContain("Read the full authorisation");
   });
 
   it("withdraw is still offered when the crawler is switched off", () => {
-    expect(render({ status: "signed", available: false, draft: null })).toContain("Stop searching");
+    expect(render({ status: "signed", available: false, draft: null })).toMatch(/<input[^>]*id="crawl-tick"[^>]*checked/);
   });
 });
 
@@ -74,18 +78,17 @@ describe("crawl consent logic", () => {
   it("maps server errors, including the changed-text path", () => {
     expect(signOutcome("notice_changed_since_preview")).toBe("changed");
     expect(signOutcome("already_signed")).toBe("alreadySigned");
-    expect(signOutcome("name_script_unsupported")).toBe("nameScript");
     for (const e of ["crawler_disabled", "template_missing", "no_hashes", "not_found"]) expect(signOutcome(e)).toBe("unavailable");
     expect(signOutcome("anything_else")).toBe("generic");
     expect(signOutcome(undefined)).toBe("generic");
   });
 
-  it("signing posts the templateRef she saw and reports the changed text", async () => {
+  it("ticking posts only the agreement and the templateRef the page loaded, and reports the changed text", async () => {
     const fetcher = vi.fn().mockResolvedValue(resp(false, { error: "notice_changed_since_preview" }));
-    expect(await requestSign(fetcher, "c1", person)).toEqual({ ok: false, outcome: "changed" });
+    expect(await requestConsent(fetcher, "c1", "ref-1")).toEqual({ ok: false, outcome: "changed" });
     expect(fetcher.mock.calls[0][0]).toBe("/api/cases/c1/crawl-consent");
-    expect(JSON.parse(fetcher.mock.calls[0][1].body).templateRef).toBe("ref-1");
-    expect(await requestSign(vi.fn().mockResolvedValue(resp(true)), "c1", person)).toEqual({ ok: true });
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ agreed: true, templateRef: "ref-1" });
+    expect(await requestConsent(vi.fn().mockResolvedValue(resp(true)), "c1", "ref-1")).toEqual({ ok: true });
   });
 
   it("withdrawing calls DELETE; an already-stopped case counts as stopped", async () => {

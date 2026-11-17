@@ -101,7 +101,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
   const [pendingFormPlatforms, setPendingFormPlatforms] = useState<{ id: string; name: string; formUrl: string }[]>([]);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
-  const [signature, setSignature] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [signedCount, setSignedCount] = useState(0);
@@ -243,7 +242,7 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
       const res = await csrfFetch(`/api/cases/${caseId}/sign-notice`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ urlId: noticeUrlId, templateRef, name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
+        body: JSON.stringify({ urlId: noticeUrlId, templateRef, name: name.trim(), contact: contact.trim() }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -262,13 +261,12 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         return;
       }
       // Each link has its own notice. If another is ready, sign it here too;
-      // the signature and confirmation are given again for every notice.
+      // the confirmation is given again for every notice.
       const next = await fetch(`/api/cases/${caseId}/preview-notice`);
       const nextUrlId = next.headers.get("x-notice-url-id");
       const nextRef = noticeRef(next);
       if (nextUrlId && nextRef) {
         setSignedCount(signedCount + 1);
-        setSignature("");
         setAgreed(false);
         setNoticeUrlId(nextUrlId);
         setTemplateRef(nextRef);
@@ -296,7 +294,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         body: JSON.stringify({
           name: name.trim(),
           contact: contact.trim(),
-          signature: signature.trim(),
           platformIds: draft.emailPlatformIds,
           templateRef,
         }),
@@ -331,13 +328,10 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
 
   // The notice PDF shows Latin letters only; say so before signing.
   const nameUnsupported = !isPdfSafeText(name.trim().normalize("NFC"));
-  const signatureUnsupported = !isPdfSafeText(signature.trim().normalize("NFC"));
   const canSign =
     name.trim().length > 0 &&
     !nameUnsupported &&
-    !signatureUnsupported &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) &&
-    signature.trim().length > 0 &&
     agreed &&
     step !== "signing" &&
     step !== "hash-signing";
@@ -575,9 +569,10 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
               {t(locale, "review.sign.name.label")}
             </label>
             <p id="rs-name-help" className="muted mt-1 text-sm">{t(locale, "review.sign.name.sub")}</p>
+            <p id="rs-name-signature" className="muted mt-1 text-sm">{t(locale, "sign.name.signature")}</p>
             <input
               id="rs-name"
-              aria-describedby="rs-name-help"
+              aria-describedby="rs-name-help rs-name-signature"
               type="text"
               className="field mt-2"
               placeholder={t(locale, "review.sign.name.placeholder")}
@@ -610,34 +605,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
               autoComplete="email"
             />
           </div>
-          </div>
-        </section>
-
-        <section aria-labelledby="review-signature-title" className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
-          <div className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:px-7">
-            <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)] text-sm font-semibold text-[var(--brand-strong)]">2</span>
-            <h2 id="review-signature-title" className="text-base font-semibold text-[var(--ink)]">{t(locale, "review.sign.sig.title")}</h2>
-          </div>
-          <div className="space-y-4 p-5 sm:p-7">
-          <p id="rs-signature-help" className="muted text-sm leading-[1.6]">
-            {t(locale, "review.sign.sig.sub")}
-          </p>
-          <label htmlFor="rs-signature" className="block text-sm font-medium text-[var(--ink)]">{t(locale, "review.sign.sig.placeholder")}</label>
-          <input
-            id="rs-signature"
-            aria-describedby="rs-signature-help"
-            type="text"
-            className="field !mt-2 text-[18px]"
-            placeholder={t(locale, "review.sign.sig.placeholder")}
-            value={signature}
-            onChange={(e) => setSignature(e.target.value)}
-            maxLength={100}
-            autoComplete="off"
-            aria-invalid={signatureUnsupported || undefined}
-          />
-          {signatureUnsupported && !nameUnsupported && (
-            <p role="alert" className="text-sm font-medium text-[var(--danger)]">{t(locale, "review.sign.error.nameScript")}</p>
-          )}
           </div>
         </section>
 
