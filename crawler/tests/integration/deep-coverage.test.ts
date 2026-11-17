@@ -17,7 +17,7 @@ import {
   TRAP_HOST,
   type Fixture,
 } from "../support/fixture-site.ts";
-import { MockAsmita } from "../support/mock-asmita.ts";
+import { MockAsmita, siteSource } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 import { assertCleanLog } from "../support/log-scan.ts";
 
@@ -32,8 +32,8 @@ beforeAll(async () => {
     key: TEST_KEY,
     pool: fx.pool,
     sources: [
-      { id: "src-deep", kind: "site", domain: DEEP_HOST, pageBudget: 60, delayMs: 0 },
-      { id: "src-trap", kind: "site", domain: TRAP_HOST, pageBudget: 20, delayMs: 0 },
+      siteSource({ id: "src-deep", domain: DEEP_HOST, pageBudget: 60, delayMs: 0 }),
+      siteSource({ id: "src-trap", domain: TRAP_HOST, pageBudget: 20, delayMs: 0 }),
     ],
     seedUrl: fixtureSeedUrl(fx.site.port),
   }).start();

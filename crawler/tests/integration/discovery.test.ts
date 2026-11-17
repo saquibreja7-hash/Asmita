@@ -18,7 +18,7 @@ import {
   CHAIN_A, CHAIN_B, CHAIN_C, CHAIN_D, CHAIN_NEVER, CHAIN_CAP, CHAIN_PAIR, CHAIN_CAP_HOSTS, CHAIN_PAIR_HOSTS,
   type Fixture,
 } from "../support/fixture-site.ts";
-import { MockAsmita, type MockAsmitaOptions } from "../support/mock-asmita.ts";
+import { MockAsmita, type MockAsmitaOptions, siteSource } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 import { assertCleanLog } from "../support/log-scan.ts";
 
@@ -48,7 +48,7 @@ const RULES = { maxHops: 2, maxPerDay: 200, pageBudget: 5, reportedBudget: 2000,
 describe("the discovery chain a -> b -> c -> d", () => {
   it("crawls b and c automatically, stores d disabled, never touches the never-crawl host, and a match promotes c", async () => {
     const api = await mock({
-      sources: [{ id: "src-a", kind: "site", domain: CHAIN_A, pageBudget: 50, delayMs: 0 }],
+      sources: [siteSource({ id: "src-a", domain: CHAIN_A, pageBudget: 50, delayMs: 0 })],
       discovery: RULES,
     });
     const lines: string[] = [];
@@ -107,7 +107,7 @@ describe("the discovery chain a -> b -> c -> d", () => {
 describe("the per-run cap (MAX_DISCOVERY_HOSTS)", () => {
   it("reports at most the configured distinct hosts and counts the rest as capped", async () => {
     const api = await mock({
-      sources: [{ id: "src-cap", kind: "site", domain: CHAIN_CAP, pageBudget: 50, delayMs: 0 }],
+      sources: [siteSource({ id: "src-cap", domain: CHAIN_CAP, pageBudget: 50, delayMs: 0 })],
       discovery: RULES,
     });
     const { result } = await run(api, { MAX_DISCOVERY_HOSTS: "2" });
@@ -124,7 +124,7 @@ describe("the per-run cap (MAX_DISCOVERY_HOSTS)", () => {
 describe("the daily new-site cap", () => {
   it("auto-enables only the first host of the day; the rest are stored disabled and never fetched", async () => {
     const api = await mock({
-      sources: [{ id: "src-pair", kind: "site", domain: CHAIN_PAIR, pageBudget: 50, delayMs: 0 }],
+      sources: [siteSource({ id: "src-pair", domain: CHAIN_PAIR, pageBudget: 50, delayMs: 0 })],
       discovery: { ...RULES, maxPerDay: 1 },
     });
     const first = await run(api);
