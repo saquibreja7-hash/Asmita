@@ -46,7 +46,7 @@ Asmita launches on Supabase Free in Mumbai. When AWS credits arrive, the databas
 
 - **TanStack Start.** 1.0 shipped 2026-10-13; in 2026 it had a critical XSS in server functions (CVE-2026-102989) and a supply-chain compromise of 42 packages (GHSA-g7cv-rxg3-hmpx). Revisit after about 12 months of stable releases with no critical advisories.
 - **Rust backend.** On Workers Rust runs as WebAssembly (128 MB per isolate, no threads, no `sqlx`). The backend is I/O-bound, so Rust buys little at a large porting cost.
-- **D1, Durable Objects, R2, Containers for survivor data.** Jurisdictions are `eu`, `us` and `fedramp` only. Durable Objects created from Mumbai land in Singapore.
+- **D1, Durable Objects, R2, Containers for survivor data.** Jurisdictions are `eu`, `us` and `fedramp` only. Durable Objects created from Mumbai land in Singapore. One owner-approved exception (2026-11-18): the crawler service runs on Cloudflare Containers (`deploy/crawler-cloudflare/`, ADR 006), so the opted-in fingerprint pool is held in memory outside India during each pass. Nothing is stored there; the system of record stays in Mumbai.
 - **Hash bank.** Deferred. When built: runs in India, hashes envelope-encrypted at rest (AES-256-GCM, key outside the database), matched in memory. Keyed hashing or salting is not an option because it breaks Hamming matching. TypeScript first (about 9 ms per query at 1M hashes); native Rust, not wasm, past roughly 1-3M hashes.
 
 ### Revisit triggers

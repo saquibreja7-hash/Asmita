@@ -1,0 +1,14 @@
+{
+  "name": "asmita-crawler-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "types": "wrangler types",
+    "check": "wrangler types && tsc --noEmit",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "wrangler": "^4.154.0"
+  }
+}

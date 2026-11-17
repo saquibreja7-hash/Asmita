@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "asmita-crawler",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-17",
+  "observability": { "enabled": true },
+  "workers_dev": false,
+  "triggers": { "crons": ["5 * * * *"] },
+  "vars": {
+    "ASMITA_API_URL": "https://meriasmita.org",
+    "CRAWLER_USER_AGENT": "AsmitaCrawler/2.0 (+https://meriasmita.org)",
+    "MAX_RUN_MINUTES": "50",
+    "INSTANCE_TYPE": "standard-2"
+  },
+  "containers": [
+    {
+      "class_name": "CrawlerRunner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "base": {
+          "dockerfile": "../../crawler/Dockerfile",
+          "build_context": "../.."
+        }
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "CRAWLER_RUNNER", "class_name": "CrawlerRunner" }]
+  },
+  "exports": {
+    "CrawlerRunner": { "type": "durable-object", "storage": "sqlite" }
+  }
+}
