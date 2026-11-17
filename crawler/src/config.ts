@@ -42,6 +42,12 @@ export const ConfigSchema = z.object({
   DECODE_CONCURRENCY: int(1, 4, 1),
   /** Per-image decode deadline; the child is killed and replaced after it. */
   DECODE_TIMEOUT_MS: int(1000, 120_000, 20_000),
+  /**
+   * Pages claimed from the app's frontier per request (crawler v2 WP3). The
+   * crawler holds no other page state, so this bounds its frontier memory:
+   * the claimed batch and the report built from it.
+   */
+  FRONTIER_CLAIM_LIMIT: int(1, 200, 50),
   MAX_HTML_BYTES: int(1024, 20 * 1024 * 1024, 2 * 1024 * 1024),
   MAX_IMAGE_BYTES: int(1024, 50 * 1024 * 1024, 10 * 1024 * 1024),
   MIN_IMAGE_SIDE: int(1, 4096, 64),

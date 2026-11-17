@@ -17,16 +17,27 @@ behalf. Every guarantee below is enforced by a test.
 main.ts -> cli.ts (config, signals, exit codes)
   -> crawler.ts runCrawl
        AsmitaClient: GET /sources, GET /pool          (own HTTP agent, bearer key)
-       per source (parallel up to GLOBAL_CONCURRENCY), BFS within its domain:
-         SafeFetcher (pinned-IP connect, robots, per-host delay) -> HTML
+       per source (parallel up to GLOBAL_CONCURRENCY):
+         loop: POST /frontier/claim  (batch of due pages, claimed for 30 min;
+                first claim seeds https://<domain>/ app-side)
+         per claimed page: SafeFetcher (pinned-IP connect, robots, per-host
+                delay; If-None-Match / If-Modified-Since when the app has
+                validators) -> 200 HTML / 304 not modified / 404 gone / error
          extract.ts -> links (in scope, not nofollow) + image candidates
          per image: SafeFetcher -> Buffer -> hash-image.ts (sniff, sharp,
                     prepare.ts, pdq.ts) -> Matcher -> FindingsSink
+         POST /frontier/report (page outcomes + links, body-bounded chunks)
        pool re-sync every POOL_RESYNC_MINUTES (<= 60)
        FindingsSink: POST /findings in batches (<= 50 items, <= 240 KiB),
                      whenever a batch fills, every 15 s, and at once on stop
   -> run_summary log line, exit code
 ```
+
+The frontier itself lives in the app (`CrawlPage` rows): the crawler claims a
+batch, reports every outcome and keeps no page state of its own, so a second
+run resumes where the last one stopped, two crawler processes never get the
+same URL, and a killed run loses at most its claimed batch, which the app
+hands out again after the 30-minute claim window.
 
 ### Exit codes
 
@@ -65,7 +76,7 @@ is not a run failure; it is counted in the summary only.
 | **Real addresses.** URLs are fetched and reported as the site wrote them (fragment removed, query untouched, so signed CDN URLs work); tracking-param stripping and sorting apply only to the dedup key. | `crawl/url.ts` (`normalizeUrl` vs `urlKey`). | `url-robots-extract.test.ts` |
 | **Scope.** A page is in scope only if its host EQUALS the approved source `domain` or is a subdomain of it: approving `example.com` covers `www.example.com`; approving `forum.example.com` does not cover `example.com` or `shop.example.com`. Checked on every page hop including redirects. Source domains must be bare hostnames (no IP, port, path or bare public suffix). BFS to `MAX_DEPTH`, `pageBudget` per source. | `crawl/url.ts` (`sourceHost`, `inScope`), `crawler.ts`. | `url-robots-extract.test.ts`; `tests/integration/scope.test.ts` (parent, sibling, sub-subdomain, redirect to sibling) |
 | **Image hosts.** Only image candidates extracted from an in-scope page are fetched; no image URL discovered any other way is ever requested. Such an image may live on another public host (sites serve images from CDNs), but every hop still passes all safe-fetch checks and robots.txt, and per source and run at most `MAX_OFFSITE_IMAGE_HOSTS` (default 50) distinct off-scope hosts that have **returned an image** are used, plus at most `MAX_OFFSITE_HOST_FAILURES` (default 20) distinct off-scope hosts that were tried and did not. A host counts against the first cap only after it answers with an image, so junk hosts on a hostile page cannot use it up and starve the real CDN; the second cap bounds requests to junk. Both are checked on every hop, before robots.txt or the image is requested. Counted as `imagesOffHost`, `imageHostsCapped` and `imageHostFailuresCapped`. | `crawler.ts` (`processImage`, `admitHost`, `settleHosts`). | `tests/integration/scope.test.ts` (5 CDN hosts plus a redirect to a 6th, cap 3: only 3 contacted; 4 junk hosts before the real CDN with cap 1: the CDN image still matches; failure cap 2: only 2 junk hosts contacted) |
-| **Bounded frontier.** At most `MAX_LINKS_PER_PAGE` (500) links and `MAX_IMAGES_PER_PAGE` (200) image candidates are taken from any page; a page is queued only while the queue is shorter than the pages the source (and the run) may still fetch, and only queued pages enter the seen set, so queue and seen set never exceed the page budget; the seen-image set only grows within `MAX_IMAGES`. Summary: `linksDropped`, `linksNotQueued`, `queuePeak`, `seenPeak`. | `crawl/extract.ts`, `crawler.ts`. | `tests/integration/frontier.test.ts` (pages of 40,000 links: queue and seen set stay within budget, the planted image is still reported); `url-robots-extract.test.ts` |
+| **Bounded frontier.** At most `MAX_LINKS_PER_PAGE` (500) links and `MAX_IMAGES_PER_PAGE` (200) image candidates are taken from any page. The queue lives in the app: the crawler holds only the batch it claimed (at most `FRONTIER_CLAIM_LIMIT` entries) and the report built from it, split into body-bounded chunks under the server's 256 KiB limit — that is its whole frontier memory, and `batchPeak` in the summary proves it. The app dedups stored links per source on a keyed digest and caps a source at `pageBudget` pages per day. Summary: `linksDropped`, `batchPeak`. | `crawl/extract.ts`, `crawler.ts`, the app's `crawl-pages.ts`. | `tests/integration/frontier.test.ts` (pages of 40,000 links: the crawler's batch never exceeds the claim limit, the app's frontier grows by at most MAX_LINKS_PER_PAGE per fetched page, the daily budget holds, the planted image is still reported); `tests/integration/frontier-app.test.ts` (second run 304s, two processes, killed run); `url-robots-extract.test.ts` |
 | **Withdrawn fingerprints stop matching.** Pool re-synced at least hourly; a pool older than 60 minutes stops the run; queued findings for removed ids are dropped; a `fingerprint_not_accepted` rejection removes the id from the in-memory pool at once. | `crawler.ts`, `findings.ts`, `match/matcher.ts`. | `tests/integration/lifecycle.test.ts`, `client-findings.test.ts` |
 | **Fail closed config**, no setting that loosens the network policy. Loopback access for tests is a policy object injected in code from `tests/support/test-policy.ts`. | `config.ts`. | `config-policy.test.ts` (schema has no such key; `src/` network code never mentions loopback) |
 | **Same PDQ as the browser.** | `src/pdq.ts` re-exports `asmita/src/lib/pdq/pdq.ts` (bundled at build). | `tests/unit/pdq-contract.test.ts` (exact export list, version, types, golden hash) |
@@ -242,6 +253,8 @@ Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
 - `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality }] }`
 - `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs, origin: "admin" | "reported" | "discovered", hops, render: "http" | "browser" | "auto" }] }`. `origin` says how a site entered the list: an admin added it, a survivor's submitted link or an approved finding named its host (crawler v2 WP1; the app copies the host only, never the link or the case), or the crawler discovered it by following links (WP5). `hops` is how far it sits from a human-added or survivor-reported site. The crawler treats every enabled source the same whatever its origin.
+- `POST /api/crawler/frontier/claim` `{ sourceId, limit (1..200) }` -> `{ urls: [{ id, url, depth, etag?, lastModified? }] }` (crawler v2 WP3). The app's frontier: the next due pages of one source, claimed for 30 minutes so two crawler instances never get the same URL. A source with no rows yet gets its seed (`https://<domain>/`) created on the first claim. An empty batch means nothing is due (the daily `pageBudget` counts too); an unknown or disabled source answers empty, never an error.
+- `POST /api/crawler/frontier/report` `{ sourceId, runId, pages: [{ id, status: "fetched" | "not_modified" | "gone" | "blocked" | "error", etag?, lastModified?, links: [{ url, kind: "page" | "sitemap" | "feed" }] (max 500) }] }` -> `{ accepted: number }` (crawler v2 WP3). The app schedules the next visit (24 h after fetched, doubling after not_modified up to 14 days, 1 h / 6 h / 24 h after error and dead after five failures, gone dead), stores the new in-scope links deduplicated per source on a keyed digest and counts the pages against the source budget. Retry-safe: a report the server applied but the crawler never saw answered only moves schedules forward. The scope check the crawler does is repeated by the app on every link.
 - `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and already-known findings alike, so the crawler cannot tell whether two pool ids belong to one case; the old `"created"` / `"duplicate"` are still tolerated and counted as accepted. A page must be on its source's host or a subdomain (`page_not_in_source`, which also sets exit code 4); the image may be on another public host. A page or image address with credentials or a non-default port is refused (`invalid_url`); the crawler never fetches one
 
 Responses are validated with Zod. Findings are validated locally with the
@@ -270,10 +283,11 @@ Per-item rejection reasons (`invalid_finding`, `media_payload_rejected`,
 ## Run summary
 
 The last log line, `run_summary`, holds: outcome, duration, sources crawled,
-pages attempted/fetched/non-HTML, images seen/hashed/skipped by reason,
-matches, findings queued/posted/accepted/rejected (by reason)/
-withdrawn/invalid/failed/unsent, pool syncs, robots outcomes, errors by code,
-page and image budget used.
+pages attempted/fetched/not-modified/non-HTML, the largest claimed frontier
+batch (`batchPeak`), links dropped by the per-page cap, images
+seen/hashed/skipped by reason, matches, findings
+queued/posted/accepted/rejected (by reason)/withdrawn/invalid/failed/unsent,
+pool syncs, robots outcomes, errors by code, page and image budget used.
 
 ## Running locally
 
@@ -315,6 +329,7 @@ network activity and the log names only the offending variable names. See
 | `MAX_PAGES` / `MAX_IMAGES` | 5000 / 20000 | global budgets (attempts, not successes) |
 | `MAX_DEPTH` | 5 | BFS depth from the source home page |
 | `MAX_LINKS_PER_PAGE` / `MAX_IMAGES_PER_PAGE` | 500 / 200 | candidates taken from one page |
+| `FRONTIER_CLAIM_LIMIT` | 50 | pages claimed from the app's frontier per request (1..200); the crawler's whole frontier memory is one batch plus its report |
 | `GLOBAL_CONCURRENCY` | 4 | concurrent requests across all hosts |
 | `DECODE_CONCURRENCY` | 1 | decoder child processes (a 25 MP decode is ~100 MB) |
 | `DECODE_TIMEOUT_MS` | 20000 | per-image decode deadline; the child is killed and replaced |

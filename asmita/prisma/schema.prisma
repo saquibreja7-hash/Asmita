@@ -119,6 +119,26 @@ enum CrawlRenderMode {
   AUTO
 }
 
+// Crawler v2 WP3: what a frontier row is (a page to visit; sitemap and feed
+// entries arrive from WP4 on) and where it sits in the visit schedule.
+enum CrawlPageKind {
+  PAGE
+  SITEMAP
+  FEED
+}
+
+// Crawler v2 WP3: the outcome of the last visit. PENDING rows have never been
+// fetched. DEAD rows (gone, or five failed visits) are never due again.
+enum CrawlPageStatus {
+  PENDING
+  FETCHED
+  NOT_MODIFIED
+  GONE
+  BLOCKED
+  ERROR
+  DEAD
+}
+
 enum HashAlgorithm {
   PDQ
 }
@@ -465,6 +485,7 @@ model CrawlSource {
   createdAt  DateTime        @default(now())
 
   findings CrawlFinding[]
+  pages    CrawlPage[]
 }
 
 // Hosts that must never become a crawl source through the automatic paths,
@@ -477,6 +498,43 @@ model CrawlBlockedHost {
   reason    String
   addedBy   String
   createdAt DateTime @default(now())
+}
+
+// One page URL of one source waiting to be crawled (crawler v2 WP3). The app
+// owns the frontier: the crawler claims batches and reports outcomes, so a
+// second run resumes where the last one stopped instead of starting from the
+// home page. The URL is encrypted at rest (encryptField); every lookup and
+// the per-source dedup use urlDigest, a keyed digest of the URL with tracking
+// parameters stripped (crawl-pages.ts). Never fetched, never logged, never in
+// audit data; purged like findings after 30 days (url-retention.ts) except
+// rows that are still due for crawling.
+model CrawlPage {
+  id            String          @id @default(uuid())
+  sourceId      String
+  urlEncrypted  String
+  urlDigest     String
+  // BFS depth from the source seed; the crawler reports no links from a page
+  // at its MAX_DEPTH, so depths stay bounded by the crawler's own config.
+  depth         Int             @default(0)
+  kind          CrawlPageKind   @default(PAGE)
+  // Validators the crawler sent as If-None-Match / If-Modified-Since.
+  etag          String?
+  lastModified  String?
+  status        CrawlPageStatus @default(PENDING)
+  // Claimed rows are not handed out again for 30 minutes, so two crawler
+  // processes never fetch the same URL; a killed run's batch becomes due
+  // again when the claim expires.
+  claimedUntil  DateTime?
+  lastFetchedAt DateTime?
+  nextDueAt     DateTime        @default(now())
+  failCount     Int             @default(0)
+  createdAt     DateTime        @default(now())
+
+  source CrawlSource @relation(fields: [sourceId], references: [id])
+
+  @@unique([sourceId, urlDigest])
+  @@index([sourceId, nextDueAt])
+  @@index([sourceId, lastFetchedAt])
 }
 
 // Bearer keys for the crawler service. Only a sha256 of the key is stored

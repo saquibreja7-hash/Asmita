@@ -8,7 +8,7 @@ import type { Pool, Source } from "../../src/asmita/client.ts";
 import { runMain } from "../../src/cli.ts";
 import { POOL_MAX_AGE_MS } from "../../src/crawler.ts";
 import { EXIT } from "../../src/exit-codes.ts";
-import { buildFixture, fixtureEnv, FIXTURE_HOSTS, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
+import { buildFixture, fixtureEnv, fixtureSeedUrl, FIXTURE_HOSTS, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
 import { MockAsmita, type MockAsmitaOptions } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 import { loopbackTestPolicy } from "../support/test-policy.ts";
@@ -19,7 +19,7 @@ const servers: MockAsmita[] = [];
 const source = (delayMs = 0, pageBudget = 50): Source => ({ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget, delayMs });
 
 async function mock(opts: Partial<MockAsmitaOptions> = {}): Promise<MockAsmita> {
-  const m = await new MockAsmita({ key: TEST_KEY, pool: fx.pool, sources: [source()], ...opts }).start();
+  const m = await new MockAsmita({ key: TEST_KEY, pool: fx.pool, sources: [source()], seedUrl: fixtureSeedUrl(fx.site.port), ...opts }).start();
   servers.push(m);
   return m;
 }
@@ -159,7 +159,6 @@ describe("run lifecycle", () => {
         argv: ["run"],
         env: fixtureEnv(api.url, TEST_KEY),
         policy: loopbackTestPolicy(FIXTURE_HOSTS, fx.site.port),
-        seedUrl: (s) => `http://${s.domain}:${fx.site.port}/`,
         sink: (l) => lines.push(l),
       });
       expect(code).toBe(EXIT.UNAUTHORIZED);
@@ -183,6 +182,14 @@ describe("run lifecycle", () => {
 
     it("4 when the server rejects findings as page_not_in_source (a scope bug)", async () => {
       const api = await mock({ sourceDomainOverride: "elsewhere.test" });
+      // The override also applies to the frontier's link scope check, so the
+      // run would stop after the seed page; seed the page set directly (the
+      // mock's addPage) to give the findings path its full batch of work.
+      const port = fx.site.port;
+      for (const p of ["/", "/gallery", "/lazy", "/moved", "/level1", "/level2", "/doc.pdf", "/private/secret", "/nofollow-page", "/goaway"]) {
+        api.addPage("src-fixture", `http://${SOURCE_DOMAIN}:${port}${p}`, 0);
+      }
+      api.addPage("src-fixture", `http://www.${SOURCE_DOMAIN}:${port}/sub`, 0);
       const { result } = await runFixtureCrawl(fx.site, api);
       expect((result.summary.rejectedByReason as Record<string, number>).page_not_in_source).toBe(fx.expected.length);
       expect((result.summary.problems as Record<string, number>).scopeErrors).toBe(fx.expected.length);
@@ -190,9 +197,13 @@ describe("run lifecycle", () => {
     }, 30_000);
 
     it("0 and every finding accepted against a server still sending created/duplicate", async () => {
-      const api = await mock({ legacyStatuses: true });
+      let clock = Date.now();
+      const api = await mock({ legacyStatuses: true, now: () => clock });
       const first = await runFixtureCrawl(fx.site, api);
-      const second = await runFixtureCrawl(fx.site, api); // all duplicates now
+      // A second run the next day: every page is due again, the same
+      // findings are re-posted and the server answers "duplicate".
+      clock += 25 * 60 * 60 * 1000;
+      const second = await runFixtureCrawl(fx.site, api);
       expect(first.result.summary.findingsAccepted).toBe(fx.expected.length);
       expect(second.result.summary.findingsAccepted).toBe(fx.expected.length);
       expect(second.result.exitCode).toBe(EXIT.OK);

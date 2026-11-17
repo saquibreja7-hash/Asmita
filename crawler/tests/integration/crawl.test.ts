@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { RunResult } from "../../src/crawler.ts";
-import { buildFixture, CDN_HOST, FIXTURE_HOSTS, OFFSITE_HOST, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
+import { buildFixture, CDN_HOST, fixtureSeedUrl, FIXTURE_HOSTS, OFFSITE_HOST, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
 import { MockAsmita } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 import { assertCleanLog } from "../support/log-scan.ts";
@@ -23,6 +23,7 @@ beforeAll(async () => {
     key: TEST_KEY,
     pool: fx.pool,
     sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 0 }],
+    seedUrl: fixtureSeedUrl(fx.site.port),
   }).start();
   ({ result } = await runFixtureCrawl(fx.site, api, { lines: logLines }));
 }, 60_000);

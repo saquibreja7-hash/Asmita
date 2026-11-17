@@ -20,13 +20,13 @@ const api = await new MockAsmita({
   key: TEST_KEY,
   pool: fx.pool,
   sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: Number(process.env.FIXTURE_DELAY_MS ?? 0) }],
+  seedUrl: (s) => `http://${s.domain}:${fx.site.port}/`,
 }).start();
 
 const code = await runMain({
   argv: ["run"],
   env: fixtureEnv(api.url, TEST_KEY),
   policy: loopbackTestPolicy(FIXTURE_HOSTS, fx.site.port),
-  seedUrl: (s) => `http://${s.domain}:${fx.site.port}/`,
   handleSignals: true,
 });
 

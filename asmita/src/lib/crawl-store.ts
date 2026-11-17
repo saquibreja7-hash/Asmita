@@ -75,6 +75,23 @@ export type MemoryCrawlBlockedHost = {
   createdAt: Date;
 };
 
+export type MemoryCrawlPage = {
+  id: string;
+  sourceId: string;
+  urlEncrypted: string;
+  urlDigest: string;
+  depth: number;
+  kind: "PAGE" | "SITEMAP" | "FEED";
+  etag: string | null;
+  lastModified: string | null;
+  status: "PENDING" | "FETCHED" | "NOT_MODIFIED" | "GONE" | "BLOCKED" | "ERROR" | "DEAD";
+  claimedUntil: Date | null;
+  lastFetchedAt: Date | null;
+  nextDueAt: Date;
+  failCount: number;
+  createdAt: Date;
+};
+
 export type MemoryCrawlServiceKey = {
   id: string;
   name: string;
@@ -91,13 +108,15 @@ type CrawlMemory = {
   sources: Map<string, MemoryCrawlSource>;
   // Keyed by host (lookups are by host, isBlockedCrawlHost in crawl-sources.ts).
   blockedHosts: Map<string, MemoryCrawlBlockedHost>;
+  // The frontier (WP3), keyed by row id; urlDigest is unique per source.
+  pages: Map<string, MemoryCrawlPage>;
   keys: Map<string, MemoryCrawlServiceKey>;
 };
 
 const globals = globalThis as typeof globalThis & { __asmitaCrawlStore?: CrawlMemory };
 
 function emptyMemory(): CrawlMemory {
-  return { fingerprints: new Map(), consents: [], findings: new Map(), sources: new Map(), blockedHosts: new Map(), keys: new Map() };
+  return { fingerprints: new Map(), consents: [], findings: new Map(), sources: new Map(), blockedHosts: new Map(), pages: new Map(), keys: new Map() };
 }
 
 export function crawlMemory(): CrawlMemory {

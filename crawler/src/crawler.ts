@@ -1,6 +1,16 @@
 /**
- * One crawl run: load sources and pool, crawl every source within budgets,
- * hash images in memory, match, post findings, return a summary.
+ * One crawl run: load sources and pool, claim page batches from the app's
+ * frontier per source (crawler v2 WP3), fetch each page — with
+ * If-None-Match / If-Modified-Since when the app has validators — hash
+ * image candidates in memory, match, post findings, report each batch's
+ * outcomes and links back to the app, and return a summary.
+ *
+ * The crawler keeps no frontier of its own: the queue, the seen set and the
+ * scheduling live in the app (CrawlPage rows). The only page state here is
+ * the claimed batch (at most FRONTIER_CLAIM_LIMIT entries) and the report
+ * built from it, so a second run resumes where the last one stopped, and a
+ * killed run loses at most its claimed batch, which the app hands out again
+ * after the 30-minute claim window.
  *
  * Stopping: `stop` (SIGTERM/SIGINT, wall-clock limit, crawler switched off,
  * stale pool) means "start no new work". In-flight requests and decodes are
@@ -15,7 +25,7 @@ import { FindingsSink } from "./findings.ts";
 import type { Logger } from "./log.ts";
 import { MIN_QUALITY, Matcher } from "./match/matcher.ts";
 import { RunMetrics, type SkipReason } from "./metrics.ts";
-import type { Finding, FindingResult, Pool, Source } from "./asmita/client.ts";
+import type { ClaimedPage, Finding, FindingResult, Pool, ReportedPage, Source } from "./asmita/client.ts";
 import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, RobotsCache } from "./crawl/robots.ts";
@@ -34,6 +44,9 @@ export type AsmitaApi = {
   getPool(signal?: AbortSignal): Promise<Pool>;
   getSources(signal?: AbortSignal): Promise<Source[]>;
   postFindings(runId: string, findings: Finding[], signal?: AbortSignal): Promise<FindingResult[]>;
+  /** The app-backed frontier (WP3). */
+  claimFrontier(sourceId: string, limit: number, signal?: AbortSignal): Promise<ClaimedPage[]>;
+  reportFrontier(sourceId: string, runId: string, pages: ReportedPage[], signal?: AbortSignal): Promise<number>;
 };
 
 export type CrawlDeps = {
@@ -45,8 +58,6 @@ export type CrawlDeps = {
   log: Logger;
   /** External stop request (signals). */
   stopSignal?: AbortSignal;
-  /** Seed URL for a source. Production: https://<domain>/. Tests inject http + port. */
-  seedUrl?: (source: Source) => string;
   now?: () => number;
   runId?: string;
   /** Overrides POOL_RESYNC_MINUTES (tests only need sub-minute intervals). */
@@ -423,24 +434,161 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   };
 
   // --- per source -----------------------------------------------------------
+  /**
+   * Report body cap with headroom under the server's 256 KiB limit: a batch
+   * of pages with many links each is split into several reports.
+   */
+  const MAX_REPORT_BODY_BYTES = 240 * 1024;
+  const REPORT_ENVELOPE_BYTES = 128;
+
+  /**
+   * Fetches one claimed page and builds its report entry. The in-scope check
+   * runs on the claimed URL (the app's data, never trusted blindly) and on
+   * every redirect hop (beforeHop). A 304 becomes "not_modified"; 404/410
+   * "gone"; a robots block or a 401/403 answer "blocked"; anything else that
+   * fails "error" (the app backs off and eventually marks the page dead).
+   * Links are reported only under MAX_DEPTH, deduplicated per page, in scope.
+   */
+  const processPage = async (page: ClaimedPage, ctx: SourceCtx): Promise<ReportedPage | null> => {
+    const { source, scopeHost } = ctx;
+    const url = normalizeUrl(page.url);
+    if (!url || !inScope(url, scopeHost)) {
+      // The app handed us an address outside the approved host: never fetch
+      // it; report an error so the row backs off instead of sticking.
+      record("out_of_scope");
+      metrics.pagesOutOfScope++;
+      return { id: page.id, status: "error", links: [] };
+    }
+    const headers: Record<string, string> = {};
+    if (page.etag) headers["if-none-match"] = page.etag;
+    if (page.lastModified) headers["if-modified-since"] = page.lastModified;
+    let result: FetchResult;
+    try {
+      result = await fetchWithRetry(url, {
+        kind: "html",
+        maxBytes: config.MAX_HTML_BYTES,
+        accept: HTML_ACCEPT,
+        headers,
+        signal: hard.signal,
+        gate,
+        beforeHop: politeHop(source.delayMs, (u) => {
+          // A redirect may not take a page fetch off the source's domain.
+          if (!inScope(u, scopeHost)) throw new CrawlError("out_of_scope");
+        }),
+      });
+    } catch (raw) {
+      const err = toCrawlError(raw);
+      record(err.code);
+      if (err.code === "out_of_scope") metrics.pagesOutOfScope++;
+      const status: ReportedPage["status"] =
+        err.code === "http_status" && (err.status === 404 || err.status === 410)
+          ? "gone"
+          : err.code === "http_status" && (err.status === 401 || err.status === 403)
+            ? "blocked"
+            : err.code === "robots_disallowed"
+              ? "blocked"
+              : "error";
+      return { id: page.id, status, links: [] };
+    }
+    const validators = {
+      ...(result.etag !== null ? { etag: result.etag } : {}),
+      ...(result.lastModified !== null ? { lastModified: result.lastModified } : {}),
+    };
+    if (result.status === 304) {
+      metrics.pagesNotModified++;
+      return { id: page.id, status: "not_modified", ...validators, links: [] };
+    }
+    if (!HTML_TYPES.has(result.contentType)) {
+      metrics.pagesNonHtml++;
+      return { id: page.id, status: "fetched", ...validators, links: [] };
+    }
+    if (!inScope(result.url, scopeHost)) {
+      // Redirect hops are already checked in beforeHop; belt and braces.
+      record("out_of_scope");
+      metrics.pagesOutOfScope++;
+      return { id: page.id, status: "error", links: [] };
+    }
+    metrics.pagesFetched++;
+    const ex = extract(result.body.toString("utf8"), result.url, result.xRobotsTag, {
+      maxLinks: config.MAX_LINKS_PER_PAGE,
+      maxImages: config.MAX_IMAGES_PER_PAGE,
+    });
+    metrics.linksDropped += ex.dropped.links;
+    metrics.skip("per_page_cap", ex.dropped.images);
+    metrics.skip("data_uri", ex.skipped.data_uri);
+    metrics.skip("svg", ex.skipped.svg);
+    metrics.skip("tiny_declared", ex.skipped.tiny);
+    metrics.skip("invalid_url", ex.skipped.invalid);
+    for (const img of ex.images) {
+      if (stop.signal.aborted) break;
+      // pageUrl is the page address as claimed (before any redirect).
+      await processImage(img, url, ctx);
+    }
+    if (stop.signal.aborted) {
+      // The run stopped mid-page (its remaining images were skipped): drop
+      // the entry so the row stays claimed and is redone whole after the
+      // 30-minute window. A killed run loses at most its claimed batch.
+      return null;
+    }
+    const links: ReportedPage["links"] = [];
+    if (page.depth < config.MAX_DEPTH) {
+      // Per-page dedup only: cross-page dedup is the app's, on the digest.
+      const seenOnPage = new Set<string>();
+      for (const link of ex.links) {
+        if (links.length >= config.MAX_LINKS_PER_PAGE) break;
+        if (!inScope(link, scopeHost)) continue;
+        const key = urlKey(link);
+        if (seenOnPage.has(key)) continue;
+        seenOnPage.add(key);
+        links.push({ url: link.href, kind: "page" });
+      }
+    }
+    return { id: page.id, status: "fetched", ...validators, links };
+  };
+
   const crawlSource = async (source: Source): Promise<void> => {
     const slog = log.child({ sourceId: source.id });
     // Pages are limited to this exact host and its subdomains (see inScope).
     const scopeHost = sourceHost(source.domain);
-    const seed = scopeHost ? normalizeUrl(deps.seedUrl ? deps.seedUrl(source) : `https://${scopeHost}/`) : null;
-    if (!scopeHost || !seed || !inScope(seed, scopeHost)) {
+    if (!scopeHost) {
       metrics.sourcesInvalid++;
       slog.warn("source_invalid", { code: "invalid_url" });
       return;
     }
     metrics.sourcesCrawled++;
     const started = now();
-    const queue: { url: URL; depth: number }[] = [{ url: seed, depth: 0 }];
-    const seen = new Set<string>([urlKey(seed)]);
     const ctx: SourceCtx = { source, scopeHost, offHosts: new Set<string>(), failedOffHosts: new Set<string>() };
     let pages = 0;
 
-    while (queue.length > 0 && pages < source.pageBudget && !stop.signal.aborted) {
+    // Results are reported in body-bounded chunks, so a batch of link-heavy
+    // pages never builds one oversized request.
+    let pending: ReportedPage[] = [];
+    let pendingBytes = REPORT_ENVELOPE_BYTES;
+    let reportBroken = false;
+    const flushReport = async () => {
+      if (pending.length === 0) return;
+      const batch = pending;
+      pending = [];
+      pendingBytes = REPORT_ENVELOPE_BYTES;
+      try {
+        const accepted = await api.reportFrontier(source.id, runId, batch, hard.signal);
+        slog.info("frontier_reported", { count: batch.length, accepted });
+      } catch (raw) {
+        const err = toCrawlError(raw);
+        record(err.code);
+        if (err.code === "api_disabled") requestStop("disabled");
+        else if (err.code === "api_unauthorized") {
+          unauthorized = true;
+          requestStop("unauthorized");
+        }
+        // The claimed pages stay claimed; they become due again on their own
+        // after the 30-minute window, so nothing is lost by giving up here.
+        slog.warn("frontier_report_failed", { code: err.code, count: batch.length });
+        reportBroken = true;
+      }
+    };
+
+    while (!stop.signal.aborted && !reportBroken) {
       if (sink.disabled || sink.unauthorized) {
         if (sink.unauthorized) unauthorized = true;
         requestStop(sink.disabled ? "disabled" : "unauthorized");
@@ -450,71 +598,48 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         budgetHit = true;
         break;
       }
-      const { url, depth } = queue.shift()!;
-      pages++;
-      metrics.pagesAttempted++;
-      let page: FetchResult;
+      if (pages >= source.pageBudget) break; // the app enforces the same budget per day
+      const limit = Math.max(
+        1,
+        Math.min(config.FRONTIER_CLAIM_LIMIT, source.pageBudget - pages, config.MAX_PAGES - metrics.pagesAttempted),
+      );
+      let batch: ClaimedPage[];
       try {
-        page = await fetchWithRetry(url, {
-          kind: "html",
-          maxBytes: config.MAX_HTML_BYTES,
-          accept: HTML_ACCEPT,
-          signal: hard.signal,
-          gate,
-          beforeHop: politeHop(source.delayMs, (u) => {
-            // A redirect may not take a page fetch off the source's domain.
-            if (!inScope(u, scopeHost)) throw new CrawlError("out_of_scope");
-          }),
-        });
+        batch = await api.claimFrontier(source.id, limit, hard.signal);
       } catch (raw) {
         const err = toCrawlError(raw);
         record(err.code);
-        if (err.code === "out_of_scope") metrics.pagesOutOfScope++;
-        continue;
-      }
-      if (!HTML_TYPES.has(page.contentType)) {
-        metrics.pagesNonHtml++;
-        continue;
-      }
-      if (!inScope(page.url, scopeHost)) {
-        // Redirect hops are already checked in beforeHop; belt and braces.
-        record("out_of_scope");
-        continue;
-      }
-      metrics.pagesFetched++;
-      const ex = extract(page.body.toString("utf8"), page.url, page.xRobotsTag, {
-        maxLinks: config.MAX_LINKS_PER_PAGE,
-        maxImages: config.MAX_IMAGES_PER_PAGE,
-      });
-      metrics.linksDropped += ex.dropped.links;
-      metrics.skip("per_page_cap", ex.dropped.images);
-      metrics.skip("data_uri", ex.skipped.data_uri);
-      metrics.skip("svg", ex.skipped.svg);
-      metrics.skip("tiny_declared", ex.skipped.tiny);
-      metrics.skip("invalid_url", ex.skipped.invalid);
-      if (depth < config.MAX_DEPTH) {
-        for (const link of ex.links) {
-          // Bounded frontier: never queue more pages than this source (and
-          // the run) can still fetch. Every queued page is also the only way
-          // into `seen`, so seen <= pageBudget + 1.
-          const remaining = Math.min(source.pageBudget - pages, config.MAX_PAGES - metrics.pagesAttempted);
-          if (queue.length >= remaining) {
-            metrics.linksNotQueued++;
-            continue;
-          }
-          if (seen.has(urlKey(link)) || !inScope(link, scopeHost)) continue;
-          seen.add(urlKey(link));
-          queue.push({ url: link, depth: depth + 1 });
+        if (err.code === "api_disabled") requestStop("disabled");
+        else if (err.code === "api_unauthorized") {
+          unauthorized = true;
+          requestStop("unauthorized");
         }
-        metrics.queuePeak = Math.max(metrics.queuePeak, queue.length);
-        metrics.seenPeak = Math.max(metrics.seenPeak, seen.size);
+        slog.warn("frontier_claim_failed", { code: err.code });
+        break;
       }
-      for (const img of ex.images) {
-        if (stop.signal.aborted) break;
-        // pageUrl is the page address as crawled (before any redirect).
-        await processImage(img, url, ctx);
+      if (batch.length === 0) break; // nothing due: the source is done for now
+      metrics.batchPeak = Math.max(metrics.batchPeak, batch.length);
+      for (const page of batch) {
+        if (stop.signal.aborted || reportBroken) break;
+        if (sink.disabled || sink.unauthorized) break;
+        if (metrics.pagesAttempted >= config.MAX_PAGES) {
+          budgetHit = true;
+          break;
+        }
+        if (pages >= source.pageBudget) break;
+        pages++;
+        metrics.pagesAttempted++;
+        const entry = await processPage(page, ctx);
+        if (entry !== null) {
+          const bytes = Buffer.byteLength(JSON.stringify(entry)) + 1;
+          if (pendingBytes + bytes > MAX_REPORT_BODY_BYTES) await flushReport();
+          pending.push(entry);
+          pendingBytes += bytes;
+        }
       }
+      await flushReport();
     }
+    await flushReport();
     slog.info("source_done", { pages, durationMs: now() - started });
   };
 

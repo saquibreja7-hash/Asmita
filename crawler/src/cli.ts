@@ -11,7 +11,7 @@
  */
 import { AsmitaClient } from "./asmita/client.ts";
 import { ConfigError, loadConfig } from "./config.ts";
-import { runCrawl, type CrawlDeps } from "./crawler.ts";
+import { runCrawl } from "./crawler.ts";
 import { toCrawlError } from "./errors.ts";
 import { EXIT } from "./exit-codes.ts";
 import { Logger, type LogSink } from "./log.ts";
@@ -26,7 +26,6 @@ export type MainOptions = {
   sink?: LogSink;
   /** Production passes nothing; only tests inject a loopback-capable policy. */
   policy?: NetPolicy;
-  seedUrl?: CrawlDeps["seedUrl"];
   /**
    * Reads CRAWLER_SERVICE_KEY_FILE. Only main.ts passes one (src/ has no other
    * filesystem access); without it the key-file method is refused.
@@ -88,7 +87,7 @@ export async function runMain(opts: MainOptions): Promise<number> {
   });
 
   try {
-    const result = await runCrawl({ config, api, fetcher, decoder, log, stopSignal: stop.signal, seedUrl: opts.seedUrl });
+    const result = await runCrawl({ config, api, fetcher, decoder, log, stopSignal: stop.signal });
     return result.exitCode;
   } catch (raw) {
     // Only the initial load throws (the run itself reports via exitCode).

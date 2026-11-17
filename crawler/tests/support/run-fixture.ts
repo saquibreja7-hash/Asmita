@@ -42,7 +42,6 @@ export async function runFixtureCrawl(
       fetcher,
       decoder,
       log: new Logger({ sink: (l) => lines.push(l), level: "debug" }),
-      seedUrl: (s) => `http://${s.domain}:${site.port}/`,
       stopSignal: opts.stopSignal,
       now: opts.now,
       poolResyncMs: opts.poolResyncMs,

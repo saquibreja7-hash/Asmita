@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildFixture, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
+import { buildFixture, fixtureSeedUrl, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
 import { MockAsmita } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 
@@ -112,6 +112,7 @@ beforeAll(async () => {
     key: TEST_KEY,
     pool: fx.pool,
     sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 0 }],
+    seedUrl: fixtureSeedUrl(fx.site.port),
   }).start();
 }, 60_000);
 

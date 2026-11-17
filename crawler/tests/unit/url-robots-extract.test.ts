@@ -97,7 +97,7 @@ describe("robots", () => {
     }, "AsmitaCrawler");
     return { cache, calls: () => calls };
   };
-  const ok = (body: string): FetchResult => ({ url: new URL("https://x.example/robots.txt"), status: 200, contentType: "text/plain", body: Buffer.from(body), xRobotsTag: "" });
+  const ok = (body: string): FetchResult => ({ url: new URL("https://x.example/robots.txt"), status: 200, contentType: "text/plain", body: Buffer.from(body), xRobotsTag: "", etag: null, lastModified: null });
 
   it("fetches once per origin", async () => {
     const { cache, calls } = cacheWith(async () => ok("User-agent: *\nDisallow: /a"));

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { safeEqual } from "@/lib/safe-equal";
-import { purgeExpiredCrawlFindings, purgeExpiredUrls } from "@/lib/url-retention";
+import { purgeExpiredCrawlFindings, purgeExpiredCrawlPages, purgeExpiredUrls } from "@/lib/url-retention";
 import { sendOnCallAlertFireAndForget } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
@@ -12,10 +12,18 @@ export async function GET(request: NextRequest) {
   if (!safeEqual(request.headers.get("authorization"), `Bearer ${secret}`)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  // Both run even if one fails, so neither retention can block the other.
-  const [urls, findings] = await Promise.allSettled([purgeExpiredUrls(), purgeExpiredCrawlFindings()]);
-  if (urls.status === "fulfilled" && findings.status === "fulfilled") {
-    return NextResponse.json({ expiredUrlsPurged: urls.value, expiredFindingsPurged: findings.value });
+  // All run even if one fails, so no retention can block or skip the others.
+  const [urls, findings, pages] = await Promise.allSettled([
+    purgeExpiredUrls(),
+    purgeExpiredCrawlFindings(),
+    purgeExpiredCrawlPages(),
+  ]);
+  if (urls.status === "fulfilled" && findings.status === "fulfilled" && pages.status === "fulfilled") {
+    return NextResponse.json({
+      expiredUrlsPurged: urls.value,
+      expiredFindingsPurged: findings.value,
+      expiredCrawlPagesPurged: pages.value,
+    });
   }
   sendOnCallAlertFireAndForget({
     severity: "critical",

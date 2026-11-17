@@ -47,12 +47,64 @@ export const SourcesSchema = z.object({
 });
 export type Source = z.infer<typeof SourcesSchema>["sources"][number];
 
+// --- Frontier (crawler v2 WP3) ------------------------------------------------
+
+/** Run ids the app accepts on findings and frontier reports. */
+export const RUN_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+
+/** Server contract for POST /api/crawler/frontier/claim, written independently. */
+export const FrontierClaimRequestSchema = z.strictObject({
+  sourceId: ID,
+  limit: z.number().int().min(1).max(200),
+});
+export type FrontierClaimRequest = z.infer<typeof FrontierClaimRequestSchema>;
+
+export const ClaimedPageSchema = z.strictObject({
+  id: ID,
+  url: z.url({ protocol: /^https?$/ }),
+  depth: z.number().int().min(0).max(50),
+  etag: z.string().min(1).max(512).optional(),
+  lastModified: z.string().min(1).max(512).optional(),
+});
+export type ClaimedPage = z.infer<typeof ClaimedPageSchema>;
+
+export const FrontierClaimResponseSchema = z.object({
+  urls: z.array(ClaimedPageSchema).max(200),
+});
+
+/** One page outcome for POST /api/crawler/frontier/report. */
+export const ReportedPageSchema = z.strictObject({
+  id: ID,
+  status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
+  etag: z.string().min(1).max(512).optional(),
+  lastModified: z.string().min(1).max(512).optional(),
+  links: z
+    .array(
+      z.strictObject({
+        url: z.url({ protocol: /^https?$/ }),
+        kind: z.enum(["page", "sitemap", "feed"]),
+      }),
+    )
+    .max(500),
+});
+export type ReportedPage = z.infer<typeof ReportedPageSchema>;
+
+export const FrontierReportRequestSchema = z.strictObject({
+  sourceId: ID,
+  runId: z.string().regex(RUN_ID_PATTERN),
+  pages: z.array(ReportedPageSchema).min(0).max(200),
+});
+export type FrontierReportRequest = z.infer<typeof FrontierReportRequestSchema>;
+
+export const FrontierReportResponseSchema = z.object({
+  accepted: z.number().int().min(0).max(200),
+});
+
 /**
  * The server validates findings strictly (no extra fields at envelope or
  * item level). The same rules are applied here before sending, so a
  * malformed finding is dropped locally instead of failing a whole batch.
  */
-export const RUN_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 export const FindingSchema = z.strictObject({
   fingerprintId: ID,
   // No length cap beyond the batch byte limit (the contract sets none).
@@ -125,6 +177,29 @@ export class AsmitaClient {
 
   getSources(signal?: AbortSignal): Promise<Source[]> {
     return this.call("GET", "/api/crawler/sources", undefined, SourcesSchema, signal).then((r) => r.sources);
+  }
+
+  /**
+   * The next batch of due pages for one source (WP3): claimed for 30 minutes,
+   * so a second process gets different rows. An empty batch means the source
+   * has nothing due (or is unknown/disabled: the app answers empty, not 400).
+   */
+  claimFrontier(sourceId: string, limit: number, signal?: AbortSignal): Promise<ClaimedPage[]> {
+    const body = { sourceId, limit };
+    if (!FrontierClaimRequestSchema.safeParse(body).success) throw new CrawlError("internal");
+    return this.call("POST", "/api/crawler/frontier/claim", body, FrontierClaimResponseSchema, signal).then((r) => r.urls);
+  }
+
+  /**
+   * Reports one entry per claimed page. Retry-safe: a report the server
+   * applied but we never saw answered only moves schedules forward; the
+   * per-source digest dedups links. Validated locally with the server's
+   * rules so our bug never sends a 400-worthy body.
+   */
+  reportFrontier(sourceId: string, runId: string, pages: ReportedPage[], signal?: AbortSignal): Promise<number> {
+    const body = { sourceId, runId, pages };
+    if (!FrontierReportRequestSchema.safeParse(body).success) throw new CrawlError("internal");
+    return this.call("POST", "/api/crawler/frontier/report", body, FrontierReportResponseSchema, signal).then((r) => r.accepted);
   }
 
   async postFindings(runId: string, findings: Finding[], signal?: AbortSignal): Promise<FindingResult[]> {

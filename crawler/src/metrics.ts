@@ -29,15 +29,18 @@ export class RunMetrics {
   readonly startedAt: number;
   pagesAttempted = 0;
   pagesFetched = 0;
+  /** Pages the server answered 304 for (conditional GET, WP3). */
+  pagesNotModified = 0;
   pagesNonHtml = 0;
   pagesOutOfScope = 0;
   /** Links beyond MAX_LINKS_PER_PAGE on a page. */
   linksDropped = 0;
-  /** Links not queued because the frontier was full for the remaining budget. */
-  linksNotQueued = 0;
-  /** Largest page queue and seen-URL set of any source (memory bound check). */
-  queuePeak = 0;
-  seenPeak = 0;
+  /**
+   * Largest batch claimed from the app's frontier (WP3). The crawler holds no
+   * other frontier state, so this is its frontier memory bound: it can never
+   * exceed FRONTIER_CLAIM_LIMIT.
+   */
+  batchPeak = 0;
   imagesSeen = 0;
   imagesHashed = 0;
   /** Images whose fetch touched a host outside the source's scope (CDNs). */
@@ -87,11 +90,10 @@ export class RunMetrics {
       sourcesInvalid: this.sourcesInvalid,
       pagesAttempted: this.pagesAttempted,
       pagesFetched: this.pagesFetched,
+      pagesNotModified: this.pagesNotModified,
       pagesNonHtml: this.pagesNonHtml,
       linksDropped: this.linksDropped,
-      linksNotQueued: this.linksNotQueued,
-      queuePeak: this.queuePeak,
-      seenPeak: this.seenPeak,
+      batchPeak: this.batchPeak,
       imagesSeen: this.imagesSeen,
       imagesHashed: this.imagesHashed,
       imagesOffHost: this.imagesOffHost,

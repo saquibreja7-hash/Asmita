@@ -47,6 +47,13 @@ A SUPER_ADMIN (`crawler:manage`) manages hosts at `/admin/crawl-sources`.
 
 **The never-crawl list (crawler v2 WP2).** The "Never crawl" tab manages the `CrawlBlockedHost` table: add a host with a reason, remove an entry by id (`GET/POST/DELETE /api/admin/crawl-blocked-hosts`, `crawler:manage`). A blocked host blocks its subdomains too, and every change is audited (`crawl_blocked_host_added`, `crawl_blocked_host_removed`). As with the built-in list, this stops the automatic paths only; a SUPER_ADMIN can still add any host by hand.
 
+**The page frontier (crawler v2 WP3).** The app now owns the list of pages to visit, one `CrawlPage` row per page URL (encrypted at rest, deduplicated per source on a keyed digest, purged after 30 days like findings except rows still due). The crawler claims batches and reports outcomes over two new service routes, both behind the same bearer key and `ENABLE_CRAWLER` switch (503 when off), 256 KiB bodies, strict validation:
+
+- `POST /api/crawler/frontier/claim` `{ sourceId, limit }` — the next due pages, locked to one crawler for 30 minutes (`FOR UPDATE SKIP LOCKED` on Postgres, so two crawler jobs never fetch the same URL). A source's first claim creates its seed row, `https://<domain>/`. A source hands out nothing more for the day once `pageBudget` pages were fetched that day.
+- `POST /api/crawler/frontier/report` `{ sourceId, runId, pages }` — one outcome per claimed page (`fetched` with any new in-scope links, `not_modified`, `gone`, `blocked`, `error`) plus the validators the site returned. The app schedules the next visit: 24 h after a fetched page, doubling after each `not_modified` up to 14 days, 1 h / 6 h / 24 h after errors with the page marked dead after five failures, `gone` dead for good, `blocked` (robots or a 401/403 answer) rechecked after 24 h. Nothing here is audited: it is high-frequency service traffic, not an admin or case action, and the rows carry addresses only, encrypted, never a case or survivor link.
+
+What this means operationally: a killed or crashed crawler loses at most the batch it had claimed — those pages become due again on their own after 30 minutes, and a page the run was mid-way through is redone whole. An admin disabling a source mid-run makes its next claim come back empty and the run moves on. The crawler's own memory for one source is one claimed batch (`FRONTIER_CLAIM_LIMIT`, default 50) plus the report built from it; everything else — the queue, the seen set, the schedule — is the app's.
+
 ## 3. Environment variables
 
 App (Worker vars in `asmita/wrangler.jsonc` or secrets; see `asmita/.env.example`):
@@ -71,6 +78,7 @@ Crawler (Cloud Run job env vars; placeholders in `crawler/.env.example`):
 | `CRAWLER_SERVICE_KEY` | The key itself. Local runs only: on Linux an env var stays readable in `/proc/<pid>/environ` even after the crawler deletes it at startup. Setting both is refused |
 | `CRAWLER_USER_AGENT` | Identifies Asmita and links to a page explaining the crawler |
 | `MAX_RUN_MINUTES` | Keep below the job's task timeout (default 50 with a 60-minute timeout) |
+| `FRONTIER_CLAIM_LIMIT` | Pages claimed from the app's frontier per request (default 50, max 200); the crawler keeps no other frontier state |
 | Limits | `MAX_PAGES`, `MAX_IMAGES`, `MAX_DEPTH`, byte caps, timeouts, concurrency: defaults in `crawler/README.md`, "Configuration" |
 
 ## 4. Build and deploy (owner, Google Cloud)
@@ -174,7 +182,7 @@ Every item, in writing, before a real fingerprint enters the pool, a real site i
 - [ ] A written procedure for an analyst who meets suspected child sexual abuse material on a matched page: what to do, whom to report to, within what time.
 - [ ] An analyst welfare rule: limits on viewing, support, and who may review.
 - [ ] Hindi crawl strings reviewed by a native speaker (`src/i18n/hi-review-status.json`).
-- [ ] Migrations `20261116000000_crawler_backend`, `20261116010000_crawler_representative_notice`, `20261116020000_crawl_finding_consent` and `20261117000000_crawl_source_origins` applied to a real Postgres, and the Kysely and Prisma paths exercised there (ingest, review, preview, dispatch, withdrawal, deletion request, reported-source creation). So far only mocks and the memory store have run them.
+- [ ] Migrations `20261116000000_crawler_backend`, `20261116010000_crawler_representative_notice`, `20261116020000_crawl_finding_consent`, `20261117000000_crawl_source_origins` and `20261117010000_crawl_page_frontier` applied to a real Postgres, and the Kysely and Prisma paths exercised there (ingest, review, preview, dispatch, withdrawal, deletion request, reported-source creation, frontier claim and report). So far only mocks and the memory store have run them.
 - [ ] **Blocking, NOT YET VERIFIED:** the Worker (Kysely) path against a real Postgres. Every crawler unit test mocks `usesWorkerKysely` to false, and the default Worker smoke makes no crawler call, so the Worker ingest path, its `FOR SHARE` consent lock racing a withdrawal, and the Case-row lock that serialises a final approval with her own report of the same page (`src/lib/case-link-lock.ts`) have never run against Postgres. Run the migrations, then a Postgres-backed test that races a finding ingest against a withdrawal and an approval against her report, and check the outcomes and that no deadlock occurs.
 - [ ] **Blocking:** the Worker smoke with the crawler step: `SMOKE_CRAWLER=1` with `scripts/worker-smoke.mjs` (key lookup, sources, pool and a refused finding in workerd against the e2e database). Written, never run; turn it on in CI once it passes.
 - [ ] **Blocking:** the legal reviewer also reviews the privacy-policy sentence about the data export (`privacy.s10.i1.detail` in `src/i18n/en.json` and `hi.json`: the download lists every link on the case, including links Asmita found, labelled "Found by Asmita", even when her case page does not show them), alongside the two draft templates above.

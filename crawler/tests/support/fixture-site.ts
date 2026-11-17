@@ -433,8 +433,32 @@ export async function buildFixture(): Promise<Fixture> {
   site.route(F, "/img/flood.png", sendBytes(img.flood, "image/png"));
   site.routeAny(F, (path) => sendHtml(floodPage(Number(path.split("-")[1] ?? 0) + 1, false)));
 
+  // ---- conditional-GET fixture: approve etag.fixture.test ----
+  // Three pages: two that always serve the same ETag (a 304 answers the
+  // crawler's If-None-Match) and one that is gone. The handler reads the
+  // request's headers from the site's own request log (the current request
+  // is the last one recorded).
+  const E = `etag.${S}`;
+  const conditionalHtml = (tag: string, content: string): Handler => (res) => {
+    const reqHeaders = site.requests[site.requests.length - 1]?.headers ?? {};
+    if (reqHeaders["if-none-match"] === tag) {
+      res.writeHead(304, { etag: tag });
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", etag: tag });
+    res.end(content);
+  };
+  site.route(E, "/", conditionalHtml("tag-a", html(`<a href="/b">b</a><a href="/nonexistent">gone</a>`)));
+  site.route(E, "/b", conditionalHtml("tag-b", html(`<a href="/">home</a>`)));
+  site.route(E, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  // /nonexistent has no route: the site answers 404, so the page is "gone".
+
   return { site, pool, expected, allHashes: Object.values(h) };
 }
+
+/** Seed URL factory for fixture runs: the fixture server, with its port. */
+export const fixtureSeedUrl = (port: number) => (source: { domain: string }) => `http://${source.domain}:${port}/`;
 
 /** Env for a fixture run (test values only, nothing real). */
 export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, string> = {}): Record<string, string> {
