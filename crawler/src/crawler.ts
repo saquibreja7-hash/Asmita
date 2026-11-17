@@ -56,8 +56,10 @@ import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robot
 import { isNonContentUrl, QueryVariantGuard } from "./crawl/traps.ts";
 import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
 import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
+import { BrowserRenderer, type BrowserImage } from "./browser/browser-renderer.ts";
 import type { ImageDecoder } from "./image/decoder-pool.ts";
 import { decode, type FetchOptions, type FetchResult, type SafeFetcher } from "./net/safe-fetch.ts";
+import { checkUrl, type NetPolicy } from "./net/policy.ts";
 import { exitCodeFor } from "./exit-codes.ts";
 import { withRetry } from "./retry.ts";
 
@@ -92,6 +94,15 @@ export type CrawlDeps = {
   runId?: string;
   /** Overrides POOL_RESYNC_MINUTES (tests only need sub-minute intervals). */
   poolResyncMs?: number;
+  /**
+   * The network policy, shared with safe-fetch. Needed only for browser
+   * rendering (WP7), whose in-process proxy applies the same address rules;
+   * without it a source that needs a browser fails its renders (fail closed:
+   * no render is ever done outside the policy-checked proxy).
+   */
+  policy?: NetPolicy;
+  /** Where Playwright's Chromium is installed (WP7); default is ~/.cache/ms-playwright. */
+  browsersPath?: string;
 };
 
 type SourceCtx = {
@@ -375,6 +386,182 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
 
   const record = (code: ErrorCode) => metrics.error(code);
 
+  // --- browser rendering (WP7) ------------------------------------------------
+  /**
+   * Renders pages that need Chromium: sources with render = BROWSER, or
+   * AUTO pages whose HTML has scripts and no image candidates. One worker
+   * child process, one page at a time; its traffic goes through the
+   * in-process proxy built from the same policy safe-fetch uses. Without a
+   * policy no renderer exists and every render fails closed.
+   */
+  const crawlPolicy = deps.policy;
+  const browser = crawlPolicy
+    ? new BrowserRenderer({
+        policy: crawlPolicy,
+        browsersPath: deps.browsersPath,
+        log,
+        metrics,
+        config: {
+          userAgent: config.CRAWLER_USER_AGENT,
+          tmpDir: config.BROWSER_TMP_DIR,
+          pageTimeoutMs: config.BROWSER_PAGE_TIMEOUT_MS,
+          scrolls: config.BROWSER_SCROLLS,
+          scrollWaitMs: config.BROWSER_SCROLL_WAIT_MS,
+          maxRequests: config.BROWSER_MAX_REQUESTS_PER_PAGE,
+          maxPageBytes: config.BROWSER_MAX_PAGE_BYTES,
+          maxImages: config.MAX_IMAGES_PER_PAGE,
+          maxImageBytes: config.MAX_IMAGE_BYTES,
+          maxHtmlBytes: config.MAX_HTML_BYTES,
+          connectTimeoutMs: config.CONNECT_TIMEOUT_MS,
+        },
+        // The parent owns robots.txt; every request the page wants to make
+        // waits for this verdict before it may leave the browser. A URL the
+        // network policy itself would refuse (blocked scheme, port or
+        // literal address) is denied without a robots.txt fetch.
+        checkRequest: async (u) => {
+          try {
+            checkUrl(u, crawlPolicy);
+            return (await robots.rulesFor(u)).isAllowed(u);
+          } catch {
+            return false;
+          }
+        },
+      })
+    : null;
+
+  /**
+   * The shared tail of both image paths: decode in the isolated child
+   * process, match, and queue a finding for every pool hit. `imageUrl` is
+   * the address after redirects; `pageUrl` is the page as claimed.
+   */
+  const decodeMatchReport = async (bytes: Buffer, imageUrl: string, pageUrl: URL, source: Source): Promise<boolean> => {
+    let hashed;
+    try {
+      // Decoding runs in an isolated child process (decoder-pool.ts) that
+      // receives only these bytes and returns only { pdq, quality }. The
+      // pool and matcher never leave this process. The buffer passed in is
+      // the only copy of the bytes here and is dropped when this returns.
+      hashed = await deps.decoder.hash(bytes);
+    } catch (raw) {
+      const err = toCrawlError(raw);
+      record(err.code);
+      const reason: SkipReason =
+        err.code === "image_sniff_failed"
+          ? "not_image"
+          : err.code === "image_too_small"
+            ? "too_small"
+            : err.code === "image_too_many_pixels"
+              ? "too_many_pixels"
+              : err.code === "image_format"
+                ? "format"
+                : err.code === "image_truncated"
+                  ? "truncated"
+                  : err.code === "image_decode_timeout"
+                    ? "decoder_timeout"
+                    : err.code === "image_decoder_crashed"
+                      ? "decoder_crashed"
+                      : "decode_failed";
+      metrics.skip(reason);
+      return false;
+    }
+    metrics.imagesHashed++;
+    if (hashed.quality < MIN_QUALITY) {
+      metrics.skip("low_quality");
+      return false;
+    }
+    const m = currentMatcher();
+    if (!m) {
+      metrics.skip("pool_stale");
+      return false;
+    }
+    const observedAt = new Date(now()).toISOString();
+    for (const hit of m.match(hashed.pdq)) {
+      const key = `${hit.fingerprintId}\n${imageUrl}`;
+      if (reported.has(key)) continue;
+      reported.add(key);
+      metrics.matches++;
+      sink.add({
+        fingerprintId: hit.fingerprintId,
+        pageUrl: pageUrl.href,
+        imageUrl,
+        distance: hit.distance,
+        quality: hashed.quality,
+        observedAt,
+        sourceId: source.id,
+      });
+    }
+    return true;
+  };
+
+  /**
+   * One image taken from an intercepted browser response, in memory, already
+   * size-capped by the worker (re-checked by the renderer). The browser has
+   * already fetched it through the policy proxy; robots and the off-site
+   * host caps decide whether it is processed, and the bytes go through the
+   * same decoder path as every other image.
+   */
+  const processBrowserImage = async (img: BrowserImage, pageUrl: URL, ctx: SourceCtx): Promise<boolean> => {
+    const { source, scopeHost, offHosts, failedOffHosts } = ctx;
+    if (!inScope(pageUrl, scopeHost)) {
+      record("out_of_scope");
+      return true;
+    }
+    if (seenImages.has(urlKey(img.url))) {
+      metrics.skip("duplicate_url");
+      return true;
+    }
+    if (metrics.imagesSeen >= config.MAX_IMAGES) {
+      budgetHit = true;
+      metrics.skip("budget");
+      return false;
+    }
+    let allowed: boolean;
+    try {
+      allowed = (await robots.rulesFor(img.url)).isAllowed(img.url);
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) {
+      record("robots_disallowed");
+      metrics.skip("robots");
+      return true;
+    }
+    if (!img.contentType.startsWith("image/")) {
+      record("content_type");
+      metrics.skip("content_type");
+      return true;
+    }
+    const host = img.url.hostname;
+    const offScope = !inScope(img.url, scopeHost);
+    if (offScope) {
+      if (!offHosts.has(host)) {
+        if (offHosts.size >= config.MAX_OFFSITE_IMAGE_HOSTS) {
+          metrics.imageHostsCapped++;
+          metrics.skip("image_hosts_capped");
+          return true;
+        }
+        if (!failedOffHosts.has(host) && failedOffHosts.size >= config.MAX_OFFSITE_HOST_FAILURES) {
+          metrics.imageHostFailuresCapped++;
+          metrics.skip("image_host_failures_capped");
+          return true;
+        }
+      }
+    }
+    seenImages.add(urlKey(img.url));
+    metrics.imagesSeen++;
+    if (offScope) metrics.imagesOffHost++;
+    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source);
+    if (offScope) {
+      if (ok) {
+        failedOffHosts.delete(host);
+        offHosts.add(host);
+      } else if (!offHosts.has(host)) {
+        failedOffHosts.add(host);
+      }
+    }
+    return true;
+  };
+
   // --- per image ------------------------------------------------------------
   /**
    * Fetch, hash and match one image candidate. Only called with candidates
@@ -460,7 +647,6 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     if (touchedOffHost) metrics.imagesOffHost++;
     // The image is reported at the address it was actually fetched from
     // (after redirects); mark that address seen too.
-    const imageUrl = res.url.href;
     seenImages.add(urlKey(res.url));
     if (res.contentType !== "" && !res.contentType.startsWith("image/") && res.contentType !== "application/octet-stream") {
       settleHosts(null);
@@ -469,54 +655,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     // The host that served the image now counts against the cap.
     settleHosts(res.url.hostname);
-    let hashed;
-    try {
-      // Decoding runs in an isolated child process (decoder-pool.ts) that
-      // receives only these bytes and returns only { pdq, quality }. The pool
-      // and matcher never leave this process. res.body is the only copy of
-      // the bytes here and is dropped when this function returns.
-      hashed = await deps.decoder.hash(res.body);
-    } catch (raw) {
-      const err = toCrawlError(raw);
-      record(err.code);
-      const reason: SkipReason =
-        err.code === "image_sniff_failed"
-          ? "not_image"
-          : err.code === "image_too_small"
-            ? "too_small"
-            : err.code === "image_too_many_pixels"
-              ? "too_many_pixels"
-              : err.code === "image_format"
-                ? "format"
-                : err.code === "image_truncated"
-                  ? "truncated"
-                  : err.code === "image_decode_timeout"
-                    ? "decoder_timeout"
-                    : err.code === "image_decoder_crashed"
-                      ? "decoder_crashed"
-                      : "decode_failed";
-      return metrics.skip(reason);
-    }
-    metrics.imagesHashed++;
-    if (hashed.quality < MIN_QUALITY) return metrics.skip("low_quality");
-    const m = currentMatcher();
-    if (!m) return metrics.skip("pool_stale");
-    const observedAt = new Date(now()).toISOString();
-    for (const hit of m.match(hashed.pdq)) {
-      const key = `${hit.fingerprintId}\n${imageUrl}`;
-      if (reported.has(key)) continue;
-      reported.add(key);
-      metrics.matches++;
-      sink.add({
-        fingerprintId: hit.fingerprintId,
-        pageUrl: pageUrl.href,
-        imageUrl,
-        distance: hit.distance,
-        quality: hashed.quality,
-        observedAt,
-        sourceId: source.id,
-      });
-    }
+    // The image is reported at the address it was actually fetched from
+    // (after redirects); mark that address seen too (already done above) and
+    // run the shared decode -> match -> report tail.
+    await decodeMatchReport(res.body, res.url.href, pageUrl, source);
   };
 
   // --- per source -----------------------------------------------------------
@@ -528,6 +670,100 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const REPORT_ENVELOPE_BYTES = 128;
   /** The frontier contract caps a page's reported links at 500. */
   const MAX_REPORT_LINKS_PER_PAGE = 500;
+  /** A page "has scripts" when its HTML carries a script tag (AUTO rule). */
+  const HAS_SCRIPT = /<script[\s>]/i;
+
+  /**
+   * Links for the frontier report, from whichever extraction is in force
+   * (static HTML or the browser-rendered DOM, WP7). Per-page dedup only:
+   * cross-page dedup is the app's, on the digest. Pagination links (already
+   * first in ex.links) are exempt from the query-variant cap: a listing with
+   * ?page=1..N is real coverage, and depth and budgets bound a hostile
+   * "next" chain anyway (WP4). An out-of-scope candidate's host becomes a
+   * discovery report entry (WP5): hosts only, deduplicated per run.
+   */
+  const collectLinks = (ex: ReturnType<typeof extract>, page: ClaimedPage, ctx: SourceCtx): ReportedPage["links"] => {
+    const links: ReportedPage["links"] = [];
+    if (page.depth >= config.MAX_DEPTH) return links;
+    const cap = linkCap();
+    const seenOnPage = new Set<string>();
+    const admit = (candidate: URL, kind: "page" | "feed", pagination: boolean): boolean => {
+      if (!inScope(candidate, ctx.scopeHost)) {
+        noteDiscoveryHost(candidate.hostname.replace(/\.$/, ""), ctx);
+        return true;
+      }
+      if (isNonContentUrl(candidate)) {
+        metrics.linksSkippedNonContent++;
+        return true;
+      }
+      if (!pagination && !ctx.queryGuard.admit(candidate)) {
+        metrics.linksSkippedQueryCap++;
+        return true;
+      }
+      const key = urlKey(candidate);
+      if (seenOnPage.has(key)) return true;
+      if (links.length >= cap) return false;
+      seenOnPage.add(key);
+      links.push({ url: candidate.href, kind });
+      return true;
+    };
+    for (const link of ex.links) {
+      if (!admit(link, "page", ex.pagination.has(urlKey(link)))) break;
+    }
+    for (const feed of ex.feeds) {
+      if (!admit(feed, "feed", false)) break;
+    }
+    return links;
+  };
+
+  /** Static-extraction skip counters, recorded only when its images are used. */
+  const recordExtraction = (ex: ReturnType<typeof extract>): void => {
+    metrics.linksDropped += ex.dropped.links;
+    metrics.linksSkippedNonContent += ex.skippedLinks.nonContent;
+    metrics.jsonldSkipped += ex.skippedDocs.jsonld;
+    metrics.noscriptSkipped += ex.skippedDocs.noscript;
+    metrics.skip("per_page_cap", ex.dropped.images);
+    metrics.skip("data_uri", ex.skipped.data_uri);
+    metrics.skip("svg", ex.skipped.svg);
+    metrics.skip("tiny_declared", ex.skipped.tiny);
+    metrics.skip("invalid_url", ex.skipped.invalid);
+  };
+
+  /**
+   * Render one page in the browser (WP7). The in-scope check ran on the
+   * claimed URL and every redirect hop of the HTTP pre-fetch; the render
+   * itself keeps documents in scope in the worker, and every request of the
+   * page waits for the robots verdict. Intercepted image bytes are processed
+   * as they arrive. Returns "dropped" when the run stopped mid-render (the
+   * page entry is dropped so the row is redone whole), the rendered document
+   * on success, or the failure code (the caller decides what that means for
+   * BROWSER versus AUTO sources).
+   */
+  const renderPageInBrowser = async (
+    page: ClaimedPage,
+    url: URL,
+    ctx: SourceCtx,
+  ): Promise<"dropped" | { ok: true; html: string; url: URL; imagesSkipped: number } | { ok: false; code: ErrorCode }> => {
+    if (!browser) return { ok: false, code: "browser_launch_failed" };
+    // Politeness for the browser's own document request: the host slot the
+    // HTTP pre-fetch used has moved on, so this waits out the source delay
+    // (robots is already cached for this origin). Subresource bursts are
+    // bounded by the per-page request cap and the page deadline instead.
+    try {
+      await politeHop(ctx.source.delayMs)(url, 0);
+    } catch (raw) {
+      return { ok: false, code: toCrawlError(raw).code };
+    }
+    const outcome = await browser.render(
+      url,
+      ctx.scopeHost,
+      (img) => processBrowserImage(img, url, ctx),
+      hard.signal,
+    );
+    if (outcome.ok) return { ok: true, html: outcome.html, url: outcome.url, imagesSkipped: outcome.imagesSkipped };
+    if (outcome.code === "browser_aborted" && stop.signal.aborted) return "dropped";
+    return { ok: false, code: outcome.code };
+  };
 
   /**
    * The links one report entry may carry (WP4): the per-page cap and the
@@ -639,6 +875,13 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * "gone"; a robots block or a 401/403 answer "blocked"; anything else that
    * fails "error" (the app backs off and eventually marks the page dead).
    * Links are reported only under MAX_DEPTH, deduplicated per page, in scope.
+   *
+   * Pages that need a browser (render = BROWSER, or AUTO with scripts and no
+   * image candidates) are then rendered in Chromium: their images are the
+   * responses the browser intercepted, their links come from the rendered
+   * DOM, and they are reported without validators (a render is never
+   * conditional-GET-suppressed). An AUTO page whose render fails falls back
+   * to its static result; a BROWSER page reports "error" instead.
    */
   const processPage = async (page: ClaimedPage, ctx: SourceCtx): Promise<ReportedPage | null> => {
     const { source, scopeHost } = ctx;
@@ -721,19 +964,45 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       return { id: page.id, status: "error", links: [] };
     }
     metrics.pagesFetched++;
-    const ex = extract(body.toString("utf8"), result.url, result.xRobotsTag, {
+    const html = body.toString("utf8");
+    const ex = extract(html, result.url, result.xRobotsTag, {
       maxLinks: config.MAX_LINKS_PER_PAGE,
       maxImages: config.MAX_IMAGES_PER_PAGE,
     });
-    metrics.linksDropped += ex.dropped.links;
-    metrics.linksSkippedNonContent += ex.skippedLinks.nonContent;
-    metrics.jsonldSkipped += ex.skippedDocs.jsonld;
-    metrics.noscriptSkipped += ex.skippedDocs.noscript;
-    metrics.skip("per_page_cap", ex.dropped.images);
-    metrics.skip("data_uri", ex.skipped.data_uri);
-    metrics.skip("svg", ex.skipped.svg);
-    metrics.skip("tiny_declared", ex.skipped.tiny);
-    metrics.skip("invalid_url", ex.skipped.invalid);
+
+    // Does this page need a browser? (WP7)
+    const wantBrowser =
+      source.render === "browser" ||
+      (source.render === "auto" && ex.images.length === 0 && HAS_SCRIPT.test(html));
+    if (wantBrowser) {
+      const rendered = await renderPageInBrowser(page, url, ctx);
+      if (rendered === "dropped") return null; // stopped mid-render: redo whole
+      if (rendered.ok) {
+        // Belt and braces on the final rendered URL.
+        if (!inScope(rendered.url, scopeHost)) {
+          record("out_of_scope");
+          metrics.pagesOutOfScope++;
+          return { id: page.id, status: "error", links: [] };
+        }
+        metrics.skip("browser", rendered.imagesSkipped);
+        if (stop.signal.aborted) return null;
+        const ex2 = extract(rendered.html, rendered.url, result.xRobotsTag, {
+          maxLinks: config.MAX_LINKS_PER_PAGE,
+          maxImages: config.MAX_IMAGES_PER_PAGE,
+        });
+        metrics.linksDropped += ex2.dropped.links;
+        return { id: page.id, status: "fetched", links: collectLinks(ex2, page, ctx) };
+      }
+      record(rendered.code);
+      if (source.render === "browser") return { id: page.id, status: "error", links: [] };
+      // AUTO: the render was an enhancement; report the static result.
+      if (stop.signal.aborted) return null;
+      recordExtraction(ex);
+      return { id: page.id, status: "fetched", ...validators, links: collectLinks(ex, page, ctx) };
+    }
+
+    // Static path: images from the HTML, links from the HTML.
+    recordExtraction(ex);
     for (const img of ex.images) {
       if (stop.signal.aborted) break;
       // pageUrl is the page address as claimed (before any redirect).
@@ -745,46 +1014,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       // 30-minute window. A killed run loses at most its claimed batch.
       return null;
     }
-    const links: ReportedPage["links"] = [];
-    if (page.depth < config.MAX_DEPTH) {
-      // Per-page dedup only: cross-page dedup is the app's, on the digest.
-      const cap = linkCap();
-      const seenOnPage = new Set<string>();
-      /**
-       * Admit one page or feed candidate. Pagination links (already first in
-       * ex.links) are exempt from the query-variant cap: a listing with
-       * ?page=1..N is real coverage, and depth and budgets bound a hostile
-       * "next" chain anyway (WP4). An out-of-scope candidate's host becomes
-       * a discovery report entry (WP5): hosts only, deduplicated per run.
-       */
-      const admit = (candidate: URL, kind: "page" | "feed", pagination: boolean): boolean => {
-        if (!inScope(candidate, scopeHost)) {
-          noteDiscoveryHost(candidate.hostname.replace(/\.$/, ""), ctx);
-          return true;
-        }
-        if (isNonContentUrl(candidate)) {
-          metrics.linksSkippedNonContent++;
-          return true;
-        }
-        if (!pagination && !ctx.queryGuard.admit(candidate)) {
-          metrics.linksSkippedQueryCap++;
-          return true;
-        }
-        const key = urlKey(candidate);
-        if (seenOnPage.has(key)) return true;
-        if (links.length >= cap) return false;
-        seenOnPage.add(key);
-        links.push({ url: candidate.href, kind });
-        return true;
-      };
-      for (const link of ex.links) {
-        if (!admit(link, "page", ex.pagination.has(urlKey(link)))) break;
-      }
-      for (const feed of ex.feeds) {
-        if (!admit(feed, "feed", false)) break;
-      }
-    }
-    return { id: page.id, status: "fetched", ...validators, links };
+    return { id: page.id, status: "fetched", ...validators, links: collectLinks(ex, page, ctx) };
   };
 
   const crawlSource = async (source: Source): Promise<void> => {
@@ -977,6 +1207,9 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   clearInterval(resyncTimer);
   clearInterval(flushTimer);
   clearInterval(progressTimer);
+  // The browser worker and its proxy are no longer needed; this also aborts
+  // any render still pending (none should be: sources have all finished).
+  await browser?.close();
   // Final flush deadline: short after a signal (the platform kills the
   // process soon after SIGTERM), longer for a normal end of run.
   const flushDeadline = AbortSignal.timeout((outcome as RunOutcome) === "stopped" ? 3_000 : config.API_TIMEOUT_MS * 2);

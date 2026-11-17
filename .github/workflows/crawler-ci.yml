@@ -36,6 +36,9 @@ jobs:
           cache: npm
           cache-dependency-path: crawler/package-lock.json
       - run: npm ci
+      # The Chromium build pinned by the lockfile's playwright-core, plus its
+      # system libraries; browser-rendered sources are crawled in the tests.
+      - run: npx playwright-core install --with-deps chromium
       - run: npm run lint
       - run: npm run type-check
       # Includes the pdq.ts contract test: a change to asmita/src/lib/pdq
@@ -57,11 +60,21 @@ jobs:
         run: docker build -f crawler/Dockerfile -t asmita-crawler:ci .
       - name: sharp decodes in memory on a read-only filesystem (unwritable TMPDIR)
         run: >
-          docker run --rm --read-only --network none --entrypoint /nodejs/bin/node asmita-crawler:ci
+          docker run --rm --read-only --network none --entrypoint node asmita-crawler:ci
           --input-type=module -e "import sharp from 'sharp';
           const png = await sharp({ create: { width: 3000, height: 3000, channels: 3, background: '#336699' } }).png().toBuffer();
           const { info } = await sharp(png, { failOn: 'none', limitInputPixels: 25000000 }).rotate().toColourspace('srgb').ensureAlpha().raw().toBuffer({ resolveWithObject: true });
           if (info.channels !== 4 || info.width !== 3000) process.exit(1);"
+      - name: Chromium renders on a read-only filesystem (profile in tmpfs, WP7)
+        run: >
+          docker run --rm --read-only --network none --shm-size 1g --entrypoint node asmita-crawler:ci
+          --input-type=module -e "process.env.TMPDIR = '/dev/shm';
+          const { chromium } = await import('playwright-core');
+          const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+          const page = await (await browser.newContext()).newPage();
+          await page.setContent('<h1>ok</h1>');
+          if ((await page.textContent('h1')) !== 'ok') process.exit(1);
+          await browser.close();"
       - name: Fails closed without configuration
         run: |
           set +e

@@ -42,6 +42,16 @@ export const SourcesSchema = z.object({
       domain: z.string().min(1).max(253),
       pageBudget: z.number().int().min(1).max(100_000),
       delayMs: z.number().int().min(0).max(600_000),
+      /** How the site entered the list (crawler v2 WP1). */
+      origin: z.enum(["admin", "reported", "discovered"]),
+      /** Hops from a human-added or survivor-reported site (WP5). */
+      hops: z.number().int().min(0).max(50),
+      /**
+       * Rendering (WP7): "browser" pages are rendered by Chromium; "auto"
+       * pages are rendered only when their HTML has scripts and no image
+       * candidates; "http" never (the default, and the old behaviour).
+       */
+      render: z.enum(["http", "browser", "auto"]),
     }),
   ),
 });

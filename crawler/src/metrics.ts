@@ -23,7 +23,8 @@ export type SkipReason =
   | "data_uri"
   | "svg"
   | "tiny_declared"
-  | "invalid_url";
+  | "invalid_url"
+  | "browser";
 
 export class RunMetrics {
   readonly startedAt: number;
@@ -117,6 +118,8 @@ export class RunMetrics {
   poolSyncFailures = 0;
   sourcesCrawled = 0;
   sourcesInvalid = 0;
+  /** Browser rendering (WP7): renders attempted, failures, images handed over. */
+  readonly browser: { renders: number; failed: number; images: number } = { renders: 0, failed: 0, images: 0 };
   readonly imagesSkipped: Partial<Record<SkipReason, number>> = {};
   readonly errors: Partial<Record<ErrorCode, number>> = {};
   readonly robots: Record<string, number> = {};
@@ -180,6 +183,7 @@ export class RunMetrics {
       rejectedByReason: { ...this.rejectedByReason },
       poolSyncs: this.poolSyncs,
       poolSyncFailures: this.poolSyncFailures,
+      browser: { ...this.browser },
       errors: { ...this.errors } as Record<string, number>,
       robots: { ...this.robots },
       budgetPagesUsed: this.pagesAttempted,

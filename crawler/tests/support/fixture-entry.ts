@@ -19,7 +19,7 @@ const fx = await buildFixture();
 const api = await new MockAsmita({
   key: TEST_KEY,
   pool: fx.pool,
-  sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: Number(process.env.FIXTURE_DELAY_MS ?? 0) }],
+  sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: Number(process.env.FIXTURE_DELAY_MS ?? 0), origin: "admin", hops: 0, render: "http" }],
   seedUrl: (s) => `http://${s.domain}:${fx.site.port}/`,
 }).start();
 

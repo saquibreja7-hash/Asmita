@@ -22,7 +22,7 @@ beforeAll(async () => {
   api = await new MockAsmita({
     key: TEST_KEY,
     pool: fx.pool,
-    sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 0 }],
+    sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 0, origin: "admin", hops: 0, render: "http" }],
     seedUrl: fixtureSeedUrl(fx.site.port),
   }).start();
   ({ result } = await runFixtureCrawl(fx.site, api, { lines: logLines }));

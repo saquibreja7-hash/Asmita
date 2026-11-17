@@ -100,7 +100,12 @@ describe.skipIf(!crawlerDeps && !mustRun)("crawler client <-> app routes (real c
       const pool = await c.getPool();
       expect(pool.fingerprints).toEqual([{ id: expect.stringMatching(/^fp_/), pdq: "9".repeat(64), quality: 90 }]);
       const sources = await c.getSources();
-      expect(sources).toEqual([{ id: sourceId, kind: "site", domain: "forum.example.com", pageBudget: 50, delayMs: 1000 }]);
+      // origin/hops/render are the crawler v2 source fields (WP1 in the app,
+      // read by the crawler since WP7): an admin-created source reads as
+      // origin "admin", hops 0, render "http".
+      expect(sources).toEqual([
+        { id: sourceId, kind: "site", domain: "forum.example.com", pageBudget: 50, delayMs: 1000, origin: "admin", hops: 0, render: "http" },
+      ]);
     } finally {
       await c.close();
     }

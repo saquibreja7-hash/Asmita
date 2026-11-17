@@ -144,6 +144,14 @@ export async function buildFixture(): Promise<Fixture> {
     shop: await patternImage(152, 300, 300, "png"),
     offA: await patternImage(153, 300, 300, "png"), // on an off-scope CDN host, in the pool
     flood: await patternImage(154, 300, 300, "png"), // on the link-flood site, in the pool
+    // Browser-rendering fixture (WP7): js.fixture.test (render BROWSER) and
+    // auto.fixture.test (render AUTO). None of these are in fx.expected;
+    // the browser tests assert their own findings.
+    jsEarly: await patternImage(160, 320, 240, "png"), // loaded without scrolling
+    jsMid: await patternImage(161, 300, 300, "png"), // after one scroll (decoy)
+    jsDeep: await patternImage(162, 340, 260, "png"), // after two scrolls: the match
+    autoJs: await patternImage(163, 300, 300, "png"), // AUTO page image, JS-only
+    autoStatic: await patternImage(164, 300, 300, "png"), // AUTO page image, static
     bomb: await pixelBombPng(30_000, 30_000),
   };
 
@@ -187,6 +195,9 @@ export async function buildFixture(): Promise<Fixture> {
       fp("fp-shop", h.shop!), // only on the sibling host: must never be found from the blog source
       fp("fp-off-a", h.offA!),
       fp("fp-flood", h.flood!),
+      fp("fp-js-deep", h.jsDeep!),
+      fp("fp-auto-js", h.autoJs!),
+      fp("fp-auto-static", h.autoStatic!),
       ...Array.from({ length: 200 }, (_, i) => fp(`fp-rand-${i}`, randomFingerprint(5000 + i))),
     ],
   };
@@ -453,6 +464,117 @@ export async function buildFixture(): Promise<Fixture> {
   site.route(E, "/b", conditionalHtml("tag-b", html(`<a href="/">home</a>`)));
   site.route(E, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
   // /nonexistent has no route: the site answers 404, so the page is "gone".
+
+  // ---- browser rendering (WP7): js.fixture.test (render BROWSER) ----
+  // The gallery is built by JavaScript with infinite scroll: one image loads
+  // immediately, one per scroll event. The planted match (/img/js-deep.png)
+  // appears only after the second scroll, so a render without scrolling
+  // cannot find it. The page also carries a static robots-disallowed image
+  // (the browser worker must refuse to load it) and a link to /ssrf.
+  const JS = `js.${S}`;
+  site.route(JS, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\nDisallow: /img/robots.png\n"), "text/plain"));
+  const jsGallery = html(
+    `
+    <a href="/ssrf">ssrf probe</a>
+    <img src="/img/robots.png" alt="robots disallowed">
+    <div id="gallery"></div>
+    <div style="height: 6000px"></div>
+    <script>
+      (function () {
+        var added = 0;
+        var batch = ["/img/js-early.png", "/img/js-mid.png", "/img/js-deep.png"];
+        function add() {
+          if (added >= batch.length) return;
+          var img = document.createElement("img");
+          img.src = batch[added++];
+          document.getElementById("gallery").appendChild(img);
+          if (added === 1) {
+            var a = document.createElement("a");
+            a.href = "/js-only";
+            a.textContent = "js only";
+            document.body.appendChild(a);
+          }
+        }
+        add();
+        window.addEventListener("scroll", function () {
+          add();
+        });
+      })();
+    </script>
+    `,
+  );
+  site.route(JS, "/", sendHtml(jsGallery));
+  site.route(JS, "/js-only", sendHtml(html(`<p>only reachable when the rendered DOM is read</p>`)));
+  site.route(JS, "/img/js-early.png", sendBytes(img.jsEarly, "image/png"));
+  site.route(JS, "/img/js-mid.png", sendBytes(img.jsMid, "image/png"));
+  site.route(JS, "/img/js-deep.png", sendBytes(img.jsDeep, "image/png"));
+  site.route(JS, "/img/robots.png", sendBytes(img.decoy, "image/png"));
+
+  // A page whose script asks for two private addresses. Both must be refused
+  // by the in-process proxy (a SOCKS refusal reaches the page as a failed
+  // request); the page then records the outcome as a link only it would add
+  // after both answers are in, proving the render survived the refusals.
+  site.route(
+    JS,
+    "/ssrf",
+    sendHtml(
+      html(`
+      <script>
+        Promise.allSettled([
+          fetch("http://10.0.0.1/x").then(function () { return 1; }, function () { return 0; }),
+          fetch("http://metadata.test/x").then(function () { return 1; }, function () { return 0; }),
+        ]).then(function (rs) {
+          var refused = rs.every(function (r) { return r.value === 0; });
+          if (refused) {
+            var a = document.createElement("a");
+            a.href = "/after-ssrf";
+            a.textContent = "all refused";
+            document.body.appendChild(a);
+          }
+        });
+      </script>
+      `),
+    ),
+  );
+  site.route(JS, "/after-ssrf", sendHtml(html(`<p>both private fetches were refused</p>`)));
+
+  // ---- browser rendering (WP7): auto.fixture.test (render AUTO) ----
+  // /auto-a has scripts and no static images, so AUTO renders it in the
+  // browser and the JS-added image is found. /auto-b has scripts AND a
+  // static image, so AUTO never starts a browser for it.
+  const A = `auto.${S}`;
+  site.route(
+    A,
+    "/",
+    sendHtml(html(`<a href="/auto-a">script page</a><a href="/auto-b">static page</a>`)),
+  );
+  site.route(
+    A,
+    "/auto-a",
+    sendHtml(
+      html(`
+      <script>
+        window.addEventListener("load", function () {
+          var img = document.createElement("img");
+          img.src = "/img/auto-js.png";
+          document.body.appendChild(img);
+        });
+      </script>
+      `),
+    ),
+  );
+  site.route(
+    A,
+    "/auto-b",
+    sendHtml(
+      html(
+        `<img src="/img/auto-static.png"><script>/* has scripts, but static
+           image candidates exist: no browser needed */</script>`,
+      ),
+    ),
+  );
+  site.route(A, "/img/auto-js.png", sendBytes(img.autoJs, "image/png"));
+  site.route(A, "/img/auto-static.png", sendBytes(img.autoStatic, "image/png"));
 
   return { site, pool, expected, allHashes: Object.values(h) };
 }
