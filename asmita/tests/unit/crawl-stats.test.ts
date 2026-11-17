@@ -35,12 +35,13 @@ const T8 = at("2026-11-17T08:15:00.000Z");
 
 let srcA: string;
 
-/** A DISCOVERED source no code path creates yet (WP5); rows go in directly. */
+/** A DISCOVERED source, inserted directly so the test controls its fields. */
 function addDiscoveredSource(id: string, domain: string, enabled: boolean, createdAt: Date) {
   const row: MemoryCrawlSource = {
     id, kind: "SITE", domain, pageBudget: 50, delayMs: 1500, enabled, approvedBy: null,
     origin: "DISCOVERED", hops: 1, discoveredFromId: "src-a", render: "HTTP",
     lastCrawledAt: null, pagesCrawled: 0, createdAt,
+    pausedUntil: null, pauseReason: null, disabledReason: null,
   };
   crawlMemory().sources.set(id, row);
 }
