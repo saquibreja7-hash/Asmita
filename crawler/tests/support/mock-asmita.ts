@@ -112,7 +112,7 @@ export type MockAsmitaOptions = {
   poolAfterFirst?: Pool;
   /** Fingerprint ids the server answers "fingerprint_not_accepted" for. */
   notAccepted?: string[];
-  /** Body size limit for POST bodies (default 256 KiB, 413 above). */
+  /** Body size limit for POST /findings (default 256 KiB, 413 above). */
   bodyLimit?: number;
   /** Answer with the pre-rollout statuses "created" / "duplicate". */
   legacyStatuses?: boolean;
@@ -347,7 +347,6 @@ export class MockAsmita {
       return send(200, later && this.calls.pool! > 1 ? later : this.opts.pool);
     }
     if (route === "sources") return send(200, { sources: this.opts.sources });
-    if (Buffer.byteLength(raw) > (this.opts.bodyLimit ?? BODY_LIMIT)) return send(413, { error: "payload_too_large" });
 
     if (route === "claim") {
       const parsed = ServerClaim.safeParse(body);
@@ -375,6 +374,9 @@ export class MockAsmita {
       return send(200, { accepted });
     }
 
+    // The bodyLimit option is the findings route's (it drives the 413-split
+    // test); claim and report bodies are checked against the real limit.
+    if (Buffer.byteLength(raw) > (this.opts.bodyLimit ?? BODY_LIMIT)) return send(413, { error: "payload_too_large" });
     const env = ServerEnvelope.safeParse(body);
     if (!env.success) {
       this.badRequests.push("envelope");

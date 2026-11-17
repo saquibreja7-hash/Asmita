@@ -440,6 +440,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    */
   const MAX_REPORT_BODY_BYTES = 240 * 1024;
   const REPORT_ENVELOPE_BYTES = 128;
+  /** The frontier contract caps a page's reported links at 500. */
+  const MAX_REPORT_LINKS_PER_PAGE = 500;
 
   /**
    * Fetches one claimed page and builds its report entry. The in-scope check
@@ -535,7 +537,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       // Per-page dedup only: cross-page dedup is the app's, on the digest.
       const seenOnPage = new Set<string>();
       for (const link of ex.links) {
-        if (links.length >= config.MAX_LINKS_PER_PAGE) break;
+        if (links.length >= Math.min(config.MAX_LINKS_PER_PAGE, MAX_REPORT_LINKS_PER_PAGE)) break;
         if (!inScope(link, scopeHost)) continue;
         const key = urlKey(link);
         if (seenOnPage.has(key)) continue;
