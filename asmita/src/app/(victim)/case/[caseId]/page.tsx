@@ -17,6 +17,7 @@ import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
 import { findSignableHashAdvisory, findSignableNotice } from "@/lib/signable-notice";
 import { findVoidedSignatures } from "@/lib/voided-signatures";
+import { localizeRejectionReason } from "@/lib/rejection-reasons";
 
 // Wording that matches what has actually happened: "prepared" is not "sent",
 // and "sent" is not "removed".
@@ -45,6 +46,18 @@ function StatusBadge({ status, locale, unknown = false }: { status: string; loca
     <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-medium ${color}`}>
       {label}
     </span>
+  );
+}
+
+// Only a rejected link's reason is the admin's note to her; before a decision
+// the same field holds internal flag codes, which are never shown.
+function rejectedReason(stored: string | null | undefined, locale: Locale) {
+  const text = localizeRejectionReason(stored, locale);
+  if (!text) return null;
+  return (
+    <p className="mt-2 max-w-prose rounded-[var(--radius-box)] bg-[var(--page)] px-3 py-2 text-xs leading-[1.6] text-[var(--text)]">
+      <span className="font-medium text-[var(--ink)]">{t(locale, "case.rejectedReason.label")}</span> {text}
+    </p>
   );
 }
 
@@ -212,6 +225,7 @@ export default async function CasePage({
                         </Link>
                         <p className="font-mono mt-0.5 text-[12px] text-[var(--text-muted)]">{url.domain}</p>
                         {!url.urlHash && <p className="muted mt-1 text-xs">{t(locale, "case.urlExpired")}</p>}
+                        {url.status === "REJECTED" && rejectedReason(url.flagReason, locale)}
                       </div>
                       <div className="flex flex-col items-end gap-1.5">
                         {/* She filed the platform's own form: for her, it has been sent. */}
