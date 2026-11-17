@@ -2,6 +2,8 @@
 
 **Status:** Read by Asmita's assigned legal reviewer, who raised no issues (reported by the owner, 2026-11-17). On that basis the draft banners and every `[CITATION REQUIRED]` tag were removed from `template-seeds.ts`, and the two crawler templates' empty legal-basis and removal-period slots now cite Rule 3(2)(b), as the other notices do; the reviewer should confirm those two crawler sentences. Templates are still seeded `reviewedByLegal: false`: nothing is sent until the reviewer records the review on each row in production.
 
+**Update 2026-11-17:** the owner reports that the legal reviewer has also confirmed the two crawler sentences added in PR #62 (the Rule 3(2)(b) legal basis for acting as her representative, and the two-hour removal period) and the survivor's copyable wording `ladder.draft.complaint` and `ladder.draft.appeal` (English). `ESCALATION_DRAFTS_REVIEWED` is set for production. The Hindi version of that wording is machine translated (`hi-review-status.json`).
+
 **Text under review:** `asmita/prisma/template-seeds.ts`, plus the survivor's copyable wording `ladder.draft.complaint` and `ladder.draft.appeal` in `asmita/src/i18n/en.json` (Hindi machine-translated in `hi.json`). This memo supersedes the citation analysis in `notice-templates-review.md`.
 
 **Formatted pack for review:** `Asmita-Legal-Notices-2026-11.docx` (and a PDF copy) in this folder, generated from `template-seeds.ts` by `node scripts/generate-notice-pack.mjs`. Regenerate it after any template change, so the reviewed document always matches what the app sends. The older `Asmita-Legal-Notice-Templates.docx/.pdf` and `Asmita-Legal-Notices-Plain.docx`, which held the superseded text, were deleted on 2026-11-08.
