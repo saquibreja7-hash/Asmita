@@ -204,6 +204,17 @@ describe("blocked host management, Kysely path", () => {
     expect(insert.detail.values).toMatchObject({ host: "bad.example.org", reason: "owner request", addedBy: "super-1" });
   });
 
+  it("switches off the host's and its subdomains' sources in one UPDATE ... RETURNING (review fix)", async () => {
+    kysely.state.rows.CrawlSource = [{ id: "src-a" }];
+    const outcome = await addBlockedCrawlHost({ host: "bad.example.org", reason: "owner request" }, "super-1");
+    expect(outcome.ok).toBe(true);
+    const updates = callsOn("CrawlSource").filter((call) => call.op === "update");
+    expect(updates).toHaveLength(1);
+    expect(updates[0]!.detail.set).toEqual({ enabled: false, pausedUntil: null, pauseReason: null, disabledReason: "blocked_host" });
+    expect(updates[0]!.detail.returning).toBe("id");
+    expect((updates[0]!.detail.wheres as unknown[]).length).toBe(2);
+  });
+
   it("answers blocked_host_exists when the conflict does nothing", async () => {
     kysely.state.insertResult = () => [];
     const outcome = await addBlockedCrawlHost({ host: "bad.example.org", reason: "again" }, "super-1");

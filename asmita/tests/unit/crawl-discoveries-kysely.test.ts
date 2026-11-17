@@ -228,6 +228,7 @@ describe("sweepDiscoveredCrawlSources, Kysely path", () => {
 
     expect(kysely.state.calls.map((call) => `${call.op} ${call.table}`)).toEqual([
       "select CrawlSource", // expired pauses
+      "select CrawlBlockedHost", // a blocked host is never resumed (review fix)
       "update CrawlSource", // resume (or clear) them
       "select CrawlSource", // enabled discovered candidates
       "select CrawlSourceDay", // per-day fetch counters, one read for the window

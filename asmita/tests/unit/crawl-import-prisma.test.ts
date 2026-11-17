@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => {
   const fn = () => vi.fn();
   const self = {
-    crawlSource: { findMany: fn(), createMany: fn() },
+    crawlSource: { findMany: fn(), createMany: fn(), updateMany: fn() },
     crawlBlockedHost: { findMany: fn(), findFirst: fn(), create: fn(), deleteMany: fn() },
     auditLog: { findFirst: fn(), createMany: fn() },
     $transaction: fn(),
@@ -128,6 +128,26 @@ describe("blocked host management, Prisma path", () => {
 
     db.crawlBlockedHost.create.mockRejectedValueOnce(Object.assign(new Error("duplicate"), { code: "P2002" }));
     expect(await addBlockedCrawlHost({ host: "bad.example.org", reason: "again" }, "super-1")).toEqual({ ok: false, error: "blocked_host_exists" });
+  });
+
+  it("switches off the host's and its subdomains' sources with a reason when blocking (review fix)", async () => {
+    db.crawlSource.findMany.mockResolvedValueOnce([{ id: "src-a" }, { id: "src-b" }]);
+    db.crawlSource.updateMany.mockResolvedValue({ count: 2 });
+    const outcome = await addBlockedCrawlHost({ host: "bad.example.org", reason: "owner request" }, "super-1");
+    expect(outcome.ok).toBe(true);
+    expect(db.crawlSource.findMany).toHaveBeenCalledWith({
+      where: {
+        AND: [
+          { OR: [{ domain: "bad.example.org" }, { domain: { endsWith: ".bad.example.org" } }] },
+          { OR: [{ enabled: true }, { pauseReason: { not: null } }] },
+        ],
+      },
+      select: { id: true },
+    });
+    expect(db.crawlSource.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["src-a", "src-b"] } },
+      data: { enabled: false, pausedUntil: null, pauseReason: null, disabledReason: "blocked_host" },
+    });
   });
 
   it("removes by id after reading the host, and answers blocked_host_not_found otherwise", async () => {

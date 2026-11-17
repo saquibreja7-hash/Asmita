@@ -14,7 +14,9 @@ import { createCsrfPair } from "@/lib/csrf";
 import { inMemoryAuditLog } from "@/lib/audit";
 import { crawlMemory, resetCrawlMemory } from "@/lib/crawl-store";
 import { addBlockedCrawlHost, listBlockedCrawlHosts, removeBlockedCrawlHost } from "@/lib/crawl-blocked-hosts";
-import { ensureCrawlSourceForReportedHost } from "@/lib/crawl-sources";
+import { createCrawlSource, ensureCrawlSourceForReportedHost, listEnabledCrawlSources, updateCrawlSource } from "@/lib/crawl-sources";
+import { claimCrawlPages } from "@/lib/crawl-pages";
+import { DISCOVERY_PAUSE_MS, PAUSE_REASON_NO_MATCH, sweepDiscoveredCrawlSources } from "@/lib/crawl-discoveries";
 import * as blockedRoute from "@/app/api/admin/crawl-blocked-hosts/route";
 
 function admin(sub: string, adminRole = "SUPER_ADMIN") {
@@ -103,6 +105,56 @@ describe("a blocked host stops the automatic paths, for it and its subdomains", 
     const blocked = [...crawlMemory().blockedHosts.values()][0];
     await removeBlockedCrawlHost(blocked.id, "super-1");
     expect(await ensureCrawlSourceForReportedHost("report.example.org")).toMatchObject({ created: true });
+  });
+});
+
+describe("blocking a host switches off its existing sources (review fix)", () => {
+  const NOW = new Date("2026-11-17T09:00:00Z");
+
+  async function source(domain: string, enabled = true) {
+    const created = await createCrawlSource({ domain, pageBudget: 10, delayMs: 500, enabled }, "admin-1");
+    if (!created.ok) throw new Error("source");
+    return created.source.id;
+  }
+
+  it("disables sources for the host and its subdomains with a reason, audits their ids, and leaves others alone", async () => {
+    const exact = await source("bad.example.org");
+    const sub = await source("forum.bad.example.org");
+    const other = await source("good.example.org");
+    const lookalike = await source("notbad.example.org");
+
+    const outcome = await addBlockedCrawlHost({ host: "bad.example.org", reason: "owner request" }, "super-1");
+    expect(outcome.ok).toBe(true);
+    for (const id of [exact, sub]) {
+      expect(crawlMemory().sources.get(id)).toMatchObject({ enabled: false, disabledReason: "blocked_host", pausedUntil: null, pauseReason: null });
+    }
+    for (const id of [other, lookalike]) expect(crawlMemory().sources.get(id)).toMatchObject({ enabled: true, disabledReason: null });
+    expect((await listEnabledCrawlSources()).map((s) => s.domain)).toEqual(["good.example.org", "notbad.example.org"]);
+    const entry = blockedAudit("crawl_blocked_host_added")[0];
+    expect((entry.data as { disabledSourceIds: string[] }).disabledSourceIds.sort()).toEqual([exact, sub].sort());
+  });
+
+  it("a source on a blocked host claims nothing, even if an admin switches it back on", async () => {
+    const id = await source("bad.example.org");
+    await addBlockedCrawlHost({ host: "example.org", reason: "parent block" }, "super-1");
+    await updateCrawlSource({ id, enabled: true }, "admin-1");
+    expect(crawlMemory().sources.get(id)!.enabled).toBe(true);
+    expect(await claimCrawlPages(id, 10, NOW)).toEqual([]);
+    expect(crawlMemory().pages.size).toBe(0); // not even a seed row
+  });
+
+  it("the pause sweep never resumes a paused source on a blocked host", async () => {
+    const id = await source("paused.example.org", false);
+    const row = crawlMemory().sources.get(id)!;
+    Object.assign(row, { origin: "DISCOVERED", hops: 1, pausedUntil: new Date(NOW.getTime() + DISCOVERY_PAUSE_MS), pauseReason: PAUSE_REASON_NO_MATCH });
+    await addBlockedCrawlHost({ host: "paused.example.org", reason: "owner request" }, "super-1");
+    expect(row).toMatchObject({ enabled: false, pauseReason: null, disabledReason: "blocked_host" });
+
+    // Even with a pause left behind (a block that predates the source row's
+    // pause), the sweep checks the list before resuming.
+    Object.assign(row, { pausedUntil: new Date(NOW.getTime() - 1), pauseReason: PAUSE_REASON_NO_MATCH });
+    expect(await sweepDiscoveredCrawlSources(NOW)).toEqual({ paused: 0, resumed: 0 });
+    expect(row.enabled).toBe(false);
   });
 });
 

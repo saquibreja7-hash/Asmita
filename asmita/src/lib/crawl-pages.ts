@@ -3,6 +3,7 @@ import { sql } from "kysely";
 import { z } from "zod";
 import { crawlMemory, sourceDayKey, type MemoryCrawlPage } from "@/lib/crawl-store";
 import { crawlerShapedUrl, pageOnSourceHost } from "@/lib/crawl-findings";
+import { isBlockedCrawlHost } from "@/lib/crawl-sources";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
@@ -242,12 +243,16 @@ type DueRow = {
  * within the UTC day) or are out with a crawler, nothing more is handed out,
  * and a claim never crosses the remaining budget (claimDue). If the source has no rows yet, the seed row
  * (https://<domain>/) is created first, so the first run starts at the home
- * page. Unknown or disabled sources claim nothing (the crawler treats an
- * empty batch as "source done").
+ * page. Unknown or disabled sources, and sources whose host is on the
+ * never-crawl list, claim nothing (the crawler treats an empty batch as
+ * "source done").
  */
 export async function claimCrawlPages(sourceId: string, limit: number, now = new Date()): Promise<ClaimedCrawlPage[]> {
   const source = await sourceRow(sourceId);
   if (!source || !source.enabled) return [];
+  // A blocked host (never-crawl list, including a parent domain) hands out
+  // nothing, even if its source is still switched on (review fix).
+  if (await isBlockedCrawlHost(source.domain)) return [];
   if (await hasPages(sourceId)) {
     return claimDue(source, Math.min(limit, FRONTIER_CLAIM_LIMIT_MAX), now);
   }

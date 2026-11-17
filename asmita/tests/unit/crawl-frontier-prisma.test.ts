@@ -13,6 +13,7 @@ const db = vi.hoisted(() => {
     crawlSource: { findUnique: fn(), update: fn() },
     crawlPage: { count: fn(), create: fn(), findMany: fn(), update: fn(), createMany: fn(), updateMany: fn(), deleteMany: fn() },
     crawlSourceDay: { upsert: fn() },
+    crawlBlockedHost: { findFirst: fn() },
     $queryRaw: fn(),
     $executeRaw: fn(),
     $transaction: fn(),
@@ -53,6 +54,7 @@ beforeEach(() => {
   db.crawlPage.deleteMany.mockResolvedValue({ count: 0 });
   db.crawlSource.update.mockResolvedValue({});
   db.crawlSourceDay.upsert.mockResolvedValue({});
+  db.crawlBlockedHost.findFirst.mockResolvedValue(null);
   db.$queryRaw.mockResolvedValue([]);
   db.$transaction.mockImplementation(async (run: (tx: typeof db) => unknown) => run(db));
 });

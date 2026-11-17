@@ -498,21 +498,29 @@ export async function sweepDiscoveredCrawlSources(now = new Date()): Promise<{ p
   // switched off and nobody touched since is resumed: still disabled, still
   // carrying its pause. An admin's switch (on or off) clears the pause fields
   // (crawl-sources.ts updateCrawlSource), so an admin's "off" is never undone.
+  // A host blocked meanwhile is never resumed (review fix); blocking clears
+  // the pause of its sources anyway, this guards a host blocked through a
+  // parent domain or a built-in entry added later.
+  const notBlocked = async <T extends { domain: string }>(rows: T[]): Promise<T[]> => {
+    if (rows.length === 0) return rows;
+    const blocked = await blockedHostRows(rows.map((row) => row.domain));
+    return rows.filter((row) => !isNeverCrawlHost(row.domain) && !hostAndParents(row.domain).some((name) => blocked.has(name)));
+  };
   const expired: SweepCandidate[] = [];
   if (isDevNoDb()) {
-    for (const source of crawlMemory().sources.values()) {
-      if (source.origin === "DISCOVERED" && !source.enabled && source.pauseReason !== null && source.pausedUntil && source.pausedUntil <= now) {
-        expired.push({ id: source.id, domain: source.domain, pageBudget: source.pageBudget });
-        source.enabled = true;
-        source.pausedUntil = null;
-        source.pauseReason = null;
-      }
+    const due = [...crawlMemory().sources.values()].filter((source) =>
+      source.origin === "DISCOVERED" && !source.enabled && source.pauseReason !== null && source.pausedUntil && source.pausedUntil <= now);
+    for (const source of await notBlocked(due)) {
+      expired.push({ id: source.id, domain: source.domain, pageBudget: source.pageBudget });
+      source.enabled = true;
+      source.pausedUntil = null;
+      source.pauseReason = null;
     }
   } else if (usesWorkerKysely()) {
-    const rows = await getWorkerDb().selectFrom("CrawlSource")
+    const rows = await notBlocked(await getWorkerDb().selectFrom("CrawlSource")
       .select(["id", "domain", "pageBudget"])
       .where("origin", "=", "DISCOVERED").where("enabled", "=", false).where("pauseReason", "is not", null)
-      .where("pausedUntil", "<=", now).execute();
+      .where("pausedUntil", "<=", now).execute());
     if (rows.length > 0) {
       await getWorkerDb().updateTable("CrawlSource")
         .set({ enabled: true, pausedUntil: null, pauseReason: null })
@@ -522,10 +530,10 @@ export async function sweepDiscoveredCrawlSources(now = new Date()): Promise<{ p
     }
   } else {
     const { db } = await import("@/lib/db");
-    const rows = await db.crawlSource.findMany({
+    const rows = await notBlocked(await db.crawlSource.findMany({
       where: { origin: "DISCOVERED", enabled: false, pauseReason: { not: null }, pausedUntil: { lte: now } },
       select: { id: true, domain: true, pageBudget: true },
-    });
+    }));
     if (rows.length > 0) {
       await db.crawlSource.updateMany({
         where: { id: { in: rows.map((row) => row.id) }, enabled: false, pauseReason: { not: null } },

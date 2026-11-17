@@ -15,9 +15,17 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * SUPER_ADMIN only (crawler:manage), every change audited. While
  * ENABLE_CRAWLER is off the list still reads and changes are refused with
  * 503 crawler_disabled (the routes). The list stops the automatic paths
- * only (a survivor's reported link, an approved finding, from WP5 a
- * discovered link); a SUPER_ADMIN can still add any host by hand.
+ * (a survivor's reported link, an approved finding, from WP5 a discovered
+ * link). Blocking a host also switches off every existing source for it or a
+ * subdomain of it, whatever its origin (disabledReason "blocked_host", any
+ * automatic pause cleared so the sweep cannot resume it), and the frontier
+ * hands out no pages for a blocked host (crawl-pages.ts) — a SUPER_ADMIN can
+ * still add such a host by hand, but it is not crawled while blocked.
+ * Unblocking switches nothing back on: an admin decides.
  */
+
+/** Why a source was switched off when its host was blocked. */
+export const DISABLED_REASON_BLOCKED_HOST = "blocked_host";
 
 export const blockedHostSchema = z.object({
   host: z.string().min(1).max(253),
@@ -98,14 +106,57 @@ export async function addBlockedCrawlHost(
       throw err;
     }
   }
+  const disabledSourceIds = await disableSourcesForBlockedHost(view.host);
   await writeAuditLog({
     eventType: "ADMIN_ACTION",
     entityType: "CrawlBlockedHost",
     entityId: view.id,
     actorId,
-    data: { action: "crawl_blocked_host_added", host: view.host, reason },
+    data: { action: "crawl_blocked_host_added", host: view.host, reason, ...(disabledSourceIds.length > 0 ? { disabledSourceIds } : {}) },
   });
   return { ok: true, host: view };
+}
+
+/**
+ * Switches off every source on `host` or a subdomain of it that is enabled
+ * or carries an automatic pause, with disabledReason "blocked_host" and the
+ * pause cleared (so the hourly sweep can never switch it back on). Returns
+ * the ids changed, for the blocking admin's audit entry.
+ */
+async function disableSourcesForBlockedHost(host: string): Promise<string[]> {
+  const off = { enabled: false, pausedUntil: null, pauseReason: null, disabledReason: DISABLED_REASON_BLOCKED_HOST };
+  const suffix = `.${host}`;
+  if (isDevNoDb()) {
+    const ids: string[] = [];
+    for (const source of crawlMemory().sources.values()) {
+      if (source.domain !== host && !source.domain.endsWith(suffix)) continue;
+      if (!source.enabled && source.pauseReason === null) continue;
+      Object.assign(source, off);
+      ids.push(source.id);
+    }
+    return ids;
+  }
+  if (usesWorkerKysely()) {
+    const rows = await getWorkerDb().updateTable("CrawlSource").set(off)
+      .where((eb) => eb.or([eb("domain", "=", host), eb("domain", "like", `%${suffix}`)]))
+      .where((eb) => eb.or([eb("enabled", "=", true), eb("pauseReason", "is not", null)]))
+      .returning("id").execute();
+    return rows.map((row) => row.id);
+  }
+  const { db } = await import("@/lib/db");
+  const rows = await db.crawlSource.findMany({
+    where: {
+      AND: [
+        { OR: [{ domain: host }, { domain: { endsWith: suffix } }] },
+        { OR: [{ enabled: true }, { pauseReason: { not: null } }] },
+      ],
+    },
+    select: { id: true },
+  });
+  if (rows.length === 0) return [];
+  const ids = rows.map((row) => row.id);
+  await db.crawlSource.updateMany({ where: { id: { in: ids } }, data: off });
+  return ids;
 }
 
 export async function removeBlockedCrawlHost(
