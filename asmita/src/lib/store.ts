@@ -33,6 +33,13 @@ export type UrlRecord = {
   crawlFindingId?: string;
   /** Crawler links: set when the survivor withdrew her crawl authorisation before a notice went out. */
   crawlConsentWithdrawnAt?: string | null;
+  /**
+   * false until the hourly sweep looked at this link's host for a REPORTED
+   * crawl source (crawl-sources.ts createReportedSourcesFromSubmittedUrls).
+   * Absent on demo and older rows, which read as already checked, like the
+   * database column's existing rows.
+   */
+  crawlSourceChecked?: boolean;
 };
 
 type StoreGlobals = {
@@ -147,6 +154,7 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
       platformId: null,
       flaggedForReview,
       flagReason: options?.flagReasons?.join(","),
+      crawlSourceChecked: false,
     };
     record.urls.push(url);
     return { ok: true as const, duplicate: false, url };

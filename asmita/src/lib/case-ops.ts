@@ -8,7 +8,6 @@ import { findPlatformByDomain } from "@/lib/platforms";
 import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
 import { crawlerFindingsVisibleToSurvivor, survivorActableLinkWhere, survivorMayActOnLink } from "@/lib/crawler-flags";
-import { ensureCrawlSourceForReportedHost } from "@/lib/crawl-sources";
 import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { logSecurityEvent } from "@/lib/security-log";
@@ -335,13 +334,11 @@ export async function registerCaseWithUrls(
   | { ok: false; errors: RegisterUrlError[] }
   | { ok: true; id: string; referenceNumber: string; accepted: number; replayed?: true }
 > {
-  const outcome = await registerCaseWithUrlsUnfiltered(userId, rawUrls, options);
-  if (outcome.ok && "domains" in outcome) {
-    const { domains, ...registered } = outcome;
-    await ensureReportedCrawlSources(domains);
-    return registered;
-  }
-  return outcome;
+  // The hosts are not turned into crawl sources here: the hourly sweep does
+  // that later, in a batch with no actor (crawl-sources.ts
+  // createReportedSourcesFromSubmittedUrls), so nothing in the audit log sits
+  // next to her CASE_CREATED / URL_SUBMITTED entries.
+  return registerCaseWithUrlsUnfiltered(userId, rawUrls, options);
 }
 
 async function registerCaseWithUrlsUnfiltered(
@@ -351,7 +348,7 @@ async function registerCaseWithUrlsUnfiltered(
 ): Promise<
   | { ok: false; errors: RegisterUrlError[] }
   | { ok: true; id: string; referenceNumber: string; accepted: number; replayed: true }
-  | { ok: true; id: string; referenceNumber: string; accepted: number; domains: string[] }
+  | { ok: true; id: string; referenceNumber: string; accepted: number }
 > {
   const errors: RegisterUrlError[] = [];
   const parsedUrls = rawUrls.map((rawUrl, index) => {
@@ -384,7 +381,7 @@ async function registerCaseWithUrlsUnfiltered(
       store.cases.delete(record.id);
       throw error;
     }
-    return { ok: true, id: record.id, referenceNumber: record.referenceNumber, accepted: uniqueUrls.length, domains: uniqueUrls.map((parsed) => parsed.domain) };
+    return { ok: true, id: record.id, referenceNumber: record.referenceNumber, accepted: uniqueUrls.length };
   }
 
   const flaggedForReview = Boolean(options?.flagReasons?.length);
@@ -415,7 +412,7 @@ async function registerCaseWithUrlsUnfiltered(
         });
         await writeAuditLog({ eventType: "CASE_CREATED", entityType: "Case", entityId: record.id, actorId: userId });
         await writeAuditLog({ eventType: "URL_SUBMITTED", entityType: "Case", entityId: record.id, actorId: userId, data: { accepted: uniqueUrls.length } });
-        return { ok: true, ...record, accepted: uniqueUrls.length, domains: uniqueUrls.map((parsed) => parsed.domain) };
+        return { ok: true, ...record, accepted: uniqueUrls.length };
       } catch (error) {
         if (options?.registrationKeyHash && (error as { code?: string }).code === "23505") {
           const existing = await getRegisteredCaseByKey(userId, options.registrationKeyHash);
@@ -471,7 +468,7 @@ async function registerCaseWithUrlsUnfiltered(
         actorId: userId,
         data: { accepted: uniqueUrls.length },
       });
-      return { ok: true, ...record, accepted: uniqueUrls.length, domains: uniqueUrls.map((parsed) => parsed.domain) };
+      return { ok: true, ...record, accepted: uniqueUrls.length };
     } catch (error) {
       if ((error as { code?: string }).code !== "P2002") throw error;
       if (options?.registrationKeyHash) {
@@ -615,31 +612,14 @@ function withoutFindingState(results: AddUrlResult[]): AddUrlResult[] {
   });
 }
 
-/**
- * A survivor's link was stored (addUrlsToCase, registerCaseWithUrls): make
- * sure a REPORTED crawl source exists for its host (full-crawler spec WP1,
- * crawl-sources.ts). Only the host is ever copied and never-crawl hosts are
- * skipped there; a failure here must never fail the action that triggered
- * it — her link report already succeeded.
- */
-async function ensureReportedCrawlSources(domains: Iterable<string>) {
-  for (const domain of new Set(domains)) {
-    try {
-      await ensureCrawlSourceForReportedHost(domain);
-    } catch {
-      // A fixed code only: never the host, never anything from her report.
-      console.error("crawl_source_reported_failed");
-    }
-  }
-}
-
 export async function addUrlsToCase(
   caseId: string,
   rawUrls: string[],
   options?: { flagReasons?: string[] },
 ): Promise<AddUrlResult[]> {
+  // Reported crawl sources for these hosts are created by the hourly sweep,
+  // never inline in her request (see registerCaseWithUrls).
   const results = await addUrlsToCaseUnfiltered(caseId, rawUrls, options);
-  await ensureReportedCrawlSources(results.flatMap((result) => (result.ok ? [result.url.domain] : [])));
   return withoutFindingState(results);
 }
 

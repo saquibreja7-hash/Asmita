@@ -10,6 +10,7 @@ const kysely = vi.hoisted(() => {
   const state = {
     rows: {} as Record<string, Array<Record<string, unknown>>>,
     calls: [] as Array<{ op: string; table: string; detail: Record<string, unknown> }>,
+    insertReturns: {} as Record<string, Array<Record<string, unknown>>>,
   };
 
   function builder(op: string, table: string, detail: Record<string, unknown>) {
@@ -17,7 +18,9 @@ const kysely = vi.hoisted(() => {
       {},
       {
         get(_target, prop) {
-          if (prop === "execute") return async () => (state.rows[table] ?? []).map((row) => ({ ...row }));
+          // An insert answers state.insertReturns[table] when a test sets it
+          // (rows RETURNING gives back), else the table's rows as before.
+          if (prop === "execute") return async () => ((op === "insert" ? state.insertReturns[table] : undefined) ?? state.rows[table] ?? []).map((row) => ({ ...row }));
           if (prop === "executeTakeFirst") return async () => (state.rows[table] ?? [])[0];
           if (prop === "executeTakeFirstOrThrow") return async () => (state.rows[table] ?? [])[0];
           if (prop === "then") return undefined;
@@ -55,7 +58,7 @@ const kysely = vi.hoisted(() => {
 vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => true, getWorkerDb: () => kysely.db }));
 vi.mock("@/lib/db", () => ({ db: new Proxy({}, { get: () => { throw new Error("prisma path must not run here"); } }) }));
 
-import { ensureCrawlSourceForReportedHost, listEnabledCrawlSources } from "@/lib/crawl-sources";
+import { createReportedSourcesFromSubmittedUrls, ensureCrawlSourceForReportedHost, listEnabledCrawlSources } from "@/lib/crawl-sources";
 import { registerCaseWithUrls, hardDeleteDueUsers } from "@/lib/case-ops";
 import { inMemoryAuditLog } from "@/lib/audit";
 
@@ -64,6 +67,7 @@ const PAGE = "https://forum.example.com/thread/1";
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
   kysely.state.rows = {};
+  kysely.state.insertReturns = {};
   kysely.state.calls.length = 0;
   inMemoryAuditLog.splice(0, inMemoryAuditLog.length);
 });
@@ -136,14 +140,37 @@ describe("listEnabledCrawlSources, Kysely path", () => {
 });
 
 describe("registerCaseWithUrls, Kysely path", () => {
-  it("stores the case and its links, then inserts one REPORTED source per host", async () => {
+  it("stores the case and its links without touching CrawlSource; the sweep then inserts one REPORTED source per host", async () => {
     kysely.state.rows.Case = [{ id: "case-1", referenceNumber: "ASMITA-2026-00001" }];
-    kysely.state.rows.CrawlSource = [{ id: "src-1" }];
     const outcome = await registerCaseWithUrls("user-1", [PAGE, "https://other.example.org/a"]);
     expect(outcome).toMatchObject({ ok: true, accepted: 2 });
     expect(callsOn("SubmittedUrl")).toHaveLength(2);
-    const inserted = callsOn("CrawlSource").map((call) => (call.detail.values as { domain: string }).domain);
-    expect(inserted).toEqual(["forum.example.com", "other.example.org"]);
+    expect(callsOn("CrawlSource")).toHaveLength(0);
+    expect(callsOn("CrawlBlockedHost")).toHaveLength(0);
+
+    kysely.state.calls.length = 0;
+    kysely.state.rows.SubmittedUrl = [{ id: "u1", domain: "other.example.org" }, { id: "u2", domain: "forum.example.com" }];
+    kysely.state.rows.CrawlSource = [];
+    kysely.state.insertReturns.CrawlSource = [{ id: "s1", domain: "forum.example.com" }, { id: "s2", domain: "other.example.org" }];
+    const now = new Date("2026-11-17T10:00:00Z");
+    expect(await createReportedSourcesFromSubmittedUrls(now)).toEqual({ checked: 2, created: 2 });
+    const select = callsOn("SubmittedUrl").find((call) => call.op === "select")!;
+    expect((select.detail.wheres as unknown[][])[0]).toEqual(["crawlSourceChecked", "=", false]);
+    const insert = callsOn("CrawlSource").find((call) => call.op === "insert")!;
+    expect(insert.detail.onConflict).toBe(true);
+    const values = insert.detail.values as Array<Record<string, unknown>>;
+    expect(values.map((row) => row.domain)).toEqual(["forum.example.com", "other.example.org"]);
+    for (const row of values) {
+      expect(row).toMatchObject({ origin: "REPORTED", enabled: true, approvedBy: null, createdAt: now });
+      expect(row).not.toHaveProperty("caseId");
+    }
+    const mark = callsOn("SubmittedUrl").find((call) => call.op === "update")!;
+    expect(mark.detail.set).toEqual({ crawlSourceChecked: true });
+    expect((mark.detail.wheres as unknown[][])[0]).toEqual(["id", "in", ["u1", "u2"]]);
+    // The audit entries carry no actor.
+    const entries = inMemoryAuditLog.filter((e) => e.eventType === "CRAWL_SOURCE_REPORTED");
+    expect(entries).toHaveLength(2);
+    for (const entry of entries) expect(entry.actorId).toBeUndefined();
   });
 });
 

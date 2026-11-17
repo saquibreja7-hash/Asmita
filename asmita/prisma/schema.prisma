@@ -398,6 +398,12 @@ model SubmittedUrl {
   // Set on an unsent crawler link when the survivor withdrew her crawl
   // authorisation. Permanent: a later authorisation never revives it.
   crawlConsentWithdrawnAt      DateTime?
+  // Crawler v2 review fix: whether the hourly sweep has already looked at
+  // this link's host for a REPORTED crawl source. Sources are never created
+  // inline in her request (that would sit next to her audit entries); the
+  // sweep batches unchecked rows, then sets this. Rows that existed before
+  // the column were checked by the old inline path, so they read true.
+  crawlSourceChecked           Boolean   @default(false)
 
   case         Case             @relation(fields: [caseId], references: [id])
   platform     Platform?        @relation(fields: [platformId], references: [id])
@@ -406,6 +412,7 @@ model SubmittedUrl {
   portalTokens UrlPortalToken[]
 
   @@index([caseId])
+  @@index([crawlSourceChecked])
 }
 
 // A survivor's signed authorisation for Asmita's crawler to look for her

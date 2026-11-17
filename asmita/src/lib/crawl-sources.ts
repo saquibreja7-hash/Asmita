@@ -17,12 +17,14 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * change is audited (ADMIN_ACTION, action crawl_source_*).
  *
  * Crawler v2 (full-crawler spec WP1): sources now carry an origin. REPORTED
- * rows are created automatically when a survivor's submitted link or an
- * approved crawler finding names their host (ensureCrawlSourceForReportedHost
- * below) — enabled from birth, the host only, never the link or the case, and
- * never for a host on the never-crawl list (crawl-never.ts and
- * CrawlBlockedHost). They have no admin approver and nothing that ties them to
- * the survivor: erasing her account leaves them in place.
+ * rows are created automatically for the hosts of survivors' submitted links
+ * (by the hourly sweep, createReportedSourcesFromSubmittedUrls below — never
+ * inline in her request) and of approved crawler findings
+ * (ensureCrawlSourceForReportedHost) — enabled from birth, the host only,
+ * never the link or the case, and never for a host on the never-crawl list
+ * (crawl-never.ts and CrawlBlockedHost). They have no admin approver and
+ * nothing that ties them to the survivor: erasing her account leaves them in
+ * place.
  *
  * Crawler v2 (full-crawler spec WP2): hosts can be imported in bulk
  * (importCrawlSources below), one request up to 1000 entries, each reported
@@ -503,14 +505,14 @@ export type ReportedSourceOutcome =
   | { created: false; reason: "exists" | "never_crawl" | "invalid_domain" };
 
 /**
- * Makes sure a CrawlSource exists for a host a survivor's submitted link or
- * an approved crawler finding named: origin REPORTED, hops 0, enabled from
+ * Makes sure a CrawlSource exists for a host an approved crawler finding
+ * named (a survivor's own links go through the hourly sweep instead,
+ * createReportedSourcesFromSubmittedUrls): origin REPORTED, hops 0, enabled from
  * birth, the default budget and delay (crawler-flags.ts). Only the host is
  * ever copied — not the link, not the case, nothing that identifies her — and
  * hosts on the never-crawl list are skipped. Idempotent: if a source for the
  * host exists, whatever its origin, nothing is written. Callers never let a
- * failure here break the action that triggered it (case-ops.ts,
- * crawl-findings.ts).
+ * failure here break the action that triggered it (crawl-findings.ts).
  */
 export async function ensureCrawlSourceForReportedHost(rawHost: string): Promise<ReportedSourceOutcome> {
   const host = normalizeNeverCrawlHost(rawHost);
@@ -571,4 +573,154 @@ async function insertReportedSource(domain: string, pageBudget: number, delayMs:
     if ((err as { code?: string }).code === "P2002") return null;
     throw err;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Reported sources from survivors' links, created by the hourly sweep
+
+/** At most this many submitted links are looked at per sweep; the rest wait an hour. */
+export const REPORTED_SWEEP_BATCH = 1000;
+
+/**
+ * Creates the REPORTED sources for the hosts of survivors' submitted links
+ * (full-crawler spec WP1), from the hourly retention cron — never inline in
+ * her request. Created inline, the CRAWL_SOURCE_REPORTED entry sat right
+ * after her CASE_CREATED / URL_SUBMITTED entries in the append-only audit
+ * log (adjacent sequence numbers, the same instant, her actor id on the
+ * neighbours), which tied her to the host long after the link was purged and
+ * her account erased. Here the work is a batch: up to REPORTED_SWEEP_BATCH
+ * unchecked links (SubmittedUrl.crawlSourceChecked = false) from any number
+ * of cases, hosts deduplicated and sorted, one source row per new host with
+ * createdAt = the sweep time, one batched audit write with no actor and no
+ * case, then the links are marked checked. Only the host is read from a link.
+ *
+ * Same rules as ensureCrawlSourceForReportedHost: never-crawl hosts (the
+ * built-in list and CrawlBlockedHost rows, including parent domains),
+ * invalid and private hosts and hosts that already have a source are
+ * skipped. Idempotent: a crash between the insert and the marker re-runs
+ * harmlessly, since existing hosts are skipped.
+ */
+export async function createReportedSourcesFromSubmittedUrls(now = new Date()): Promise<{ checked: number; created: number }> {
+  const pending = await uncheckedSubmittedUrls();
+  if (pending.length === 0) return { checked: 0, created: 0 };
+
+  const hosts = new Set<string>();
+  for (const { domain } of pending) {
+    const host = normalizeNeverCrawlHost(domain);
+    if (!host || isNeverCrawlHost(host)) continue;
+    const checked = validateCrawlDomain(host);
+    if (checked.ok && !isNeverCrawlHost(checked.domain)) hosts.add(checked.domain);
+  }
+  const candidates = [...hosts].sort();
+  let created: Array<{ id: string; domain: string }> = [];
+  const pageBudget = reportedSourcePageBudget();
+  const delayMs = defaultSourceDelayMs();
+  if (candidates.length > 0) {
+    const existing = await existingSourceDomains(candidates);
+    const blocked = await blockedHostRows(candidates);
+    const toCreate = candidates.filter((host) => !existing.has(host) && !blockedByRows(host, blocked));
+    if (toCreate.length > 0) created = await insertReportedSources(toCreate, pageBudget, delayMs, now);
+  }
+
+  // No actor, no case, no link: nothing in these entries ties a source to her.
+  await writeAuditLogs(created.map((row) => ({
+    eventType: "CRAWL_SOURCE_REPORTED" as const,
+    entityType: "CrawlSource",
+    entityId: row.id,
+    data: { action: "crawl_source_reported", domain: row.domain, pageBudget, delayMs },
+  })));
+  await markSubmittedUrlsChecked(pending.map((row) => row.id));
+  return { checked: pending.length, created: created.length };
+}
+
+async function uncheckedSubmittedUrls(): Promise<Array<{ id: string; domain: string }>> {
+  if (isDevNoDb()) {
+    const store = await import("@/lib/store");
+    const rows: Array<{ id: string; domain: string }> = [];
+    for (const record of store.cases.values()) {
+      for (const url of record.urls) {
+        if (url.crawlSourceChecked === false) rows.push({ id: url.id, domain: url.domain });
+        if (rows.length >= REPORTED_SWEEP_BATCH) return rows;
+      }
+    }
+    return rows;
+  }
+  if (usesWorkerKysely()) {
+    return getWorkerDb().selectFrom("SubmittedUrl").select(["id", "domain"])
+      .where("crawlSourceChecked", "=", false)
+      .orderBy("submittedAt", "asc").limit(REPORTED_SWEEP_BATCH).execute();
+  }
+  const { db } = await import("@/lib/db");
+  return db.submittedUrl.findMany({
+    where: { crawlSourceChecked: false },
+    select: { id: true, domain: true },
+    orderBy: { submittedAt: "asc" },
+    take: REPORTED_SWEEP_BATCH,
+  });
+}
+
+async function markSubmittedUrlsChecked(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  if (isDevNoDb()) {
+    const wanted = new Set(ids);
+    const store = await import("@/lib/store");
+    for (const record of store.cases.values()) {
+      for (const url of record.urls) if (wanted.has(url.id)) url.crawlSourceChecked = true;
+    }
+    return;
+  }
+  if (usesWorkerKysely()) {
+    await getWorkerDb().updateTable("SubmittedUrl").set({ crawlSourceChecked: true }).where("id", "in", ids).execute();
+    return;
+  }
+  const { db } = await import("@/lib/db");
+  await db.submittedUrl.updateMany({ where: { id: { in: ids } }, data: { crawlSourceChecked: true } });
+}
+
+/**
+ * Inserts the REPORTED sources of one sweep and returns the rows this call
+ * created. A host another request created meanwhile (unique domain) is
+ * skipped. On the Prisma path the ids are generated here, so the re-read
+ * after createMany returns exactly this call's rows.
+ */
+async function insertReportedSources(
+  domains: string[],
+  pageBudget: number,
+  delayMs: number,
+  now: Date,
+): Promise<Array<{ id: string; domain: string }>> {
+  if (isDevNoDb()) {
+    const memory = crawlMemory();
+    const created: Array<{ id: string; domain: string }> = [];
+    for (const domain of domains) {
+      if ([...memory.sources.values()].some((source) => source.domain === domain)) continue;
+      const row: MemoryCrawlSource = {
+        id: randomUUID(), kind: "SITE", domain, pageBudget, delayMs, enabled: true, approvedBy: null,
+        origin: "REPORTED", hops: 0, discoveredFromId: null, render: "HTTP", lastCrawledAt: null, pagesCrawled: 0,
+        pausedUntil: null, pauseReason: null, disabledReason: null,
+        createdAt: now,
+      };
+      memory.sources.set(row.id, row);
+      created.push({ id: row.id, domain });
+    }
+    return created;
+  }
+  const rows = domains.map((domain) => ({
+    id: randomUUID(), kind: "SITE" as const, domain, pageBudget, delayMs, enabled: true, approvedBy: null,
+    origin: "REPORTED" as const, hops: 0, discoveredFromId: null, render: "HTTP" as const,
+    lastCrawledAt: null, pagesCrawled: 0, createdAt: now,
+  }));
+  if (usesWorkerKysely()) {
+    const inserted = await getWorkerDb().insertInto("CrawlSource").values(rows)
+      .onConflict((oc) => oc.column("domain").doNothing())
+      .returning(["id", "domain"]).execute();
+    return inserted.map((row) => ({ id: row.id, domain: row.domain }));
+  }
+  const { db } = await import("@/lib/db");
+  await db.crawlSource.createMany({ data: rows, skipDuplicates: true });
+  const created = await db.crawlSource.findMany({
+    where: { id: { in: rows.map((row) => row.id) } },
+    select: { id: true, domain: true },
+  });
+  return created.map((row) => ({ id: row.id, domain: row.domain }));
 }
