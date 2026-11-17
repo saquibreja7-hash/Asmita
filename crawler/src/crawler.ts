@@ -733,12 +733,24 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     return links;
   };
 
-  /** Static-extraction skip counters, recorded only when its images are used. */
-  const recordExtraction = (ex: ReturnType<typeof extract>): void => {
+  /**
+   * Link and document skip counters of the extraction whose links are
+   * reported (the static one, or the browser-rendered DOM's).
+   */
+  const recordLinkExtraction = (ex: ReturnType<typeof extract>): void => {
     metrics.linksDropped += ex.dropped.links;
     metrics.linksSkippedNonContent += ex.skippedLinks.nonContent;
     metrics.jsonldSkipped += ex.skippedDocs.jsonld;
     metrics.noscriptSkipped += ex.skippedDocs.noscript;
+  };
+
+  /**
+   * Static-extraction skip counters, recorded only when its images are used
+   * (a browser-rendered page's images are the intercepted responses, so its
+   * extraction records only the link counters above).
+   */
+  const recordExtraction = (ex: ReturnType<typeof extract>): void => {
+    recordLinkExtraction(ex);
     metrics.skip("per_page_cap", ex.dropped.images);
     metrics.skip("data_uri", ex.skipped.data_uri);
     metrics.skip("svg", ex.skipped.svg);
@@ -1012,7 +1024,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
           maxLinks: config.MAX_LINKS_PER_PAGE,
           maxImages: config.MAX_IMAGES_PER_PAGE,
         });
-        metrics.linksDropped += ex2.dropped.links;
+        recordLinkExtraction(ex2);
         return { id: page.id, status: "fetched", links: collectLinks(ex2, page, ctx) };
       }
       record(rendered.code);
