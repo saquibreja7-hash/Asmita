@@ -38,13 +38,70 @@ export const ConfigSchema = z.object({
   /** Image candidates taken from one page. */
   MAX_IMAGES_PER_PAGE: int(1, 10_000, 200),
   GLOBAL_CONCURRENCY: int(1, 32, 4),
+  /**
+   * Sources crawled concurrently (crawler v2 WP6); each source is still
+   * sequential and every request still passes the GLOBAL_CONCURRENCY gate and
+   * the per-host delay. A slow or failing source occupies only its own slot.
+   */
+  CRAWLER_SOURCE_CONCURRENCY: int(1, 32, 8),
+  /**
+   * `run --loop` (crawler v2 WP6): seconds to sleep after a pass that found
+   * nothing due anywhere, before listing sources and claiming again.
+   */
+  LOOP_IDLE_SECONDS: int(1, 3600, 60),
+  /** Seconds between the periodic run_progress log lines (crawler v2 WP6). */
+  PROGRESS_LOG_SECONDS: int(1, 3600, 60),
   /** Decoder child processes (each decodes one image at a time). */
   DECODE_CONCURRENCY: int(1, 4, 1),
   /** Per-image decode deadline; the child is killed and replaced after it. */
   DECODE_TIMEOUT_MS: int(1000, 120_000, 20_000),
+  /**
+   * Pages claimed from the app's frontier per request (crawler v2 WP3). The
+   * crawler holds no other page state, so this bounds its frontier memory:
+   * the claimed batch and the report built from it.
+   */
+  FRONTIER_CLAIM_LIMIT: int(1, 200, 50),
+  // --- browser rendering (crawler v2 WP7) -----------------------------------
+  // Sources with render = BROWSER, or AUTO pages with scripts and no image
+  // candidates, are rendered by headless Chromium in a child process whose
+  // traffic goes through the in-process proxy (net/browser-proxy.ts).
+  /** Overall deadline for one rendered page, including scrolls. */
+  BROWSER_PAGE_TIMEOUT_MS: int(1000, 300_000, 30_000),
+  /** Scroll steps per page to trigger lazy loading (infinite scroll). */
+  BROWSER_SCROLLS: int(0, 20, 5),
+  /** Wait after each scroll for late responses to land. */
+  BROWSER_SCROLL_WAIT_MS: int(0, 30_000, 500),
+  /** Requests one page may make; the rest are aborted before the network. */
+  BROWSER_MAX_REQUESTS_PER_PAGE: int(1, 10_000, 300),
+  /** Total bytes one page may move through the proxy (tunnels summed). */
+  BROWSER_MAX_PAGE_BYTES: int(1_000_000, 2_000_000_000, 64 * 1024 * 1024),
+  /**
+   * Memory-backed directory for Chromium's throwaway profile and shared
+   * memory. Must be a tmpfs in production (the container documents the
+   * flags); the crawler itself never writes to it.
+   */
+  BROWSER_TMP_DIR: z.string().min(1).max(1024).default("/dev/shm"),
   MAX_HTML_BYTES: int(1024, 20 * 1024 * 1024, 2 * 1024 * 1024),
   MAX_IMAGE_BYTES: int(1024, 50 * 1024 * 1024, 10 * 1024 * 1024),
   MIN_IMAGE_SIDE: int(1, 4096, 64),
+  /**
+   * Addresses taken from one sitemap or feed document (crawler v2 WP4):
+   * page <loc>, child sitemap <loc>, <image:loc> and feed entries all count.
+   * Size is capped by MAX_HTML_BYTES, compressed and inflated alike.
+   */
+  MAX_SITEMAP_URLS: int(1, 100_000, 5000),
+  /**
+   * Distinct query variants reported per path (crawler v2 WP4); pagination
+   * links are exempt. Bounds query-string traps (session/view keys).
+   */
+  MAX_QUERY_VARIANTS_PER_PATH: int(1, 1000, 8),
+  /**
+   * Distinct out-of-scope hosts reported as discoveries per run (crawler v2
+   * WP5); 0 switches discovery off. Bounds the run-wide host set, so a
+   * hostile approved page full of external links cannot grow it without
+   * limit.
+   */
+  MAX_DISCOVERY_HOSTS: int(0, 100_000, 1000),
   /** Delay between requests to image hosts outside the source (CDNs). */
   OFFSITE_HOST_DELAY_MS: int(0, 600_000, 1_000),
   /**

@@ -141,6 +141,23 @@ describe("AsmitaClient", () => {
     replies = [{ status: 200, body: { results: [{ status: "pending" }, { status: "accepted" }] } }];
     expect(await code(client().postFindings("run", [f(1), f(2)]))).toBe("api_bad_response");
   });
+  it("reports discovery hosts to the right path, and never an empty or oversized batch", async () => {
+    // An empty list is not sent at all.
+    const before = seen.length;
+    expect(await client().reportDiscoveries("s1", "run", [])).toBe(0);
+    expect(seen.length).toBe(before);
+    // More than the contract's 200 hosts is our bug: refused locally.
+    const many = Array.from({ length: 201 }, (_, i) => `h${i}.example`);
+    expect(await code(client().reportDiscoveries("s1", "run", many))).toBe("internal");
+    expect(seen.length).toBe(before);
+    // A valid report carries the strict body and parses the accepted count.
+    replies = [{ status: 200, body: { accepted: 2 } }];
+    expect(await client().reportDiscoveries("s1", "run-7", ["a.example", "b.example"])).toBe(2);
+    expect(seen.at(-1)!.path).toBe("/api/crawler/discoveries");
+    // A response without the accepted count is not the contract.
+    replies = [{ status: 200, body: { stored: 2 } }];
+    expect(await code(client().reportDiscoveries("s1", "run-7", ["a.example"]))).toBe("api_bad_response");
+  });
 });
 
 describe("FindingsSink", () => {

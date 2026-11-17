@@ -4,7 +4,7 @@
  * cannot take a page fetch out of scope.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildFixture, CDN_HOST, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
+import { buildFixture, CDN_HOST, fixtureSeedUrl, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
 import { MockAsmita } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 
@@ -17,7 +17,8 @@ beforeAll(async () => {
   api = await new MockAsmita({
     key: TEST_KEY,
     pool: fx.pool,
-    sources: [{ id: "src-blog", kind: "site", domain: BLOG, pageBudget: 20, delayMs: 0 }],
+    sources: [{ id: "src-blog", kind: "site", domain: BLOG, pageBudget: 20, delayMs: 0, origin: "admin", hops: 0, render: "http" }],
+    seedUrl: fixtureSeedUrl(fx.site.port),
   }).start();
 }, 60_000);
 
@@ -45,7 +46,8 @@ describe("page scope", () => {
     const gallery = await new MockAsmita({
       key: TEST_KEY,
       pool: fx.pool,
-      sources: [{ id: "src-gallery", kind: "site", domain: `gallery.${SOURCE_DOMAIN}`, pageBudget: 5, delayMs: 0 }],
+      sources: [{ id: "src-gallery", kind: "site", domain: `gallery.${SOURCE_DOMAIN}`, pageBudget: 5, delayMs: 0, origin: "admin", hops: 0, render: "http" }],
+      seedUrl: fixtureSeedUrl(fx.site.port),
     }).start();
     try {
       const before = fx.site.requests.length;
@@ -66,7 +68,8 @@ describe("page scope", () => {
     const junk = await new MockAsmita({
       key: TEST_KEY,
       pool: fx.pool,
-      sources: [{ id: "src-junk", kind: "site", domain: `junk.${SOURCE_DOMAIN}`, pageBudget: 2, delayMs: 0 }],
+      sources: [{ id: "src-junk", kind: "site", domain: `junk.${SOURCE_DOMAIN}`, pageBudget: 2, delayMs: 0, origin: "admin", hops: 0, render: "http" }],
+      seedUrl: fixtureSeedUrl(fx.site.port),
     }).start();
     try {
       const before = fx.site.requests.length;

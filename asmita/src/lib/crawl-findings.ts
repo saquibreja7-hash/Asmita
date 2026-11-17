@@ -4,7 +4,8 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { crawlMemory, type MemoryCrawlFinding } from "@/lib/crawl-store";
 import { consentCoversFinding, findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
-import { enabledCrawlSourceDomain } from "@/lib/crawl-sources";
+import { enabledCrawlSourceDomain, ensureCrawlSourceForReportedHost } from "@/lib/crawl-sources";
+import { promoteDiscoveredSource } from "@/lib/crawl-discoveries";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
@@ -293,6 +294,14 @@ export async function recordCrawlFindings(
       results.push({ status: "rejected", reason: FINGERPRINT_REFUSED });
       continue;
     }
+    // A match under a discovered site promotes it (full-crawler spec WP5):
+    // hops to 0 and the reported-source budget. Never allowed to lose or
+    // fail the finding it proves.
+    try {
+      await promoteDiscoveredSource(item.sourceId, keyId);
+    } catch {
+      console.error("crawl_source_promotion_failed");
+    }
     if (stored.created) {
       // Never the URLs or the fingerprint.
       await writeAuditLog({
@@ -577,6 +586,20 @@ function crawlerUrlStatus(parsed: Extract<ReturnType<typeof parseSubmittedUrl>, 
   return parsed.platform ? ("NOTICE_QUEUED" as const) : ("PENDING_REVIEW" as const);
 }
 
+/**
+ * An analyst approved a finding, so the host its page lives on is proven
+ * relevant: it must stay on the source list as a REPORTED site
+ * (full-crawler spec WP1). Idempotent, and never allowed to fail the
+ * approval, which is already committed when this runs.
+ */
+async function ensureSourceForApprovedFinding(host: string) {
+  try {
+    await ensureCrawlSourceForReportedHost(host);
+  } catch {
+    console.error("crawl_source_reported_failed");
+  }
+}
+
 export async function reviewCrawlFinding(input: { findingId: string; decision: ReviewDecision; reviewerId: string; now?: Date }): Promise<ReviewOutcome> {
   const now = input.now ?? new Date();
   if (isDevNoDb()) return reviewInMemory(input.findingId, input.decision, input.reviewerId, now);
@@ -656,6 +679,7 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
   if (outcome === "case_not_found") return { ok: false, error: "case_not_found" };
   if (!outcome) return { ok: false, error: "already_reviewed" };
   await auditReview("CRAWL_FINDING_APPROVED", finding, input.reviewerId, { stage: "final", second: plan.second, submittedUrlId: outcome.submittedUrlId, createdUrl: outcome.createdUrl });
+  await ensureSourceForApprovedFinding(parsed.domain);
   return { ok: true, status: "APPROVED", ...outcome };
 }
 
@@ -704,6 +728,7 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
     });
   }
   await auditReview("CRAWL_FINDING_APPROVED", finding, reviewerId, { stage: "final", second: plan.second, submittedUrlId, createdUrl: !existing });
+  await ensureSourceForApprovedFinding(parsed.domain);
   return { ok: true, status: "APPROVED", submittedUrlId: submittedUrlId!, createdUrl: !existing };
 }
 

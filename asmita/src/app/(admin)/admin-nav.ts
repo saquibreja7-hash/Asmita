@@ -14,6 +14,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/admin/queue", label: "Flagged links", permission: "cases:read" },
       { href: "/admin/hashes", label: "Fingerprints", permission: "cases:read" },
       { href: "/admin/findings", label: "Findings", permission: "findings:review" },
+      { href: "/admin/crawler", label: "Crawler overview", permission: "findings:review" },
     ],
   },
   {

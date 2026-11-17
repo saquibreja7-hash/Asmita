@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildFixture, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
+import { buildFixture, fixtureSeedUrl, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
 import { MockAsmita } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 
@@ -105,19 +105,29 @@ function patchFs(attempts: string[]): () => void {
 
 let fx: Fixture;
 let api: MockAsmita;
+let apiJs: MockAsmita;
 
 beforeAll(async () => {
   fx = await buildFixture();
   api = await new MockAsmita({
     key: TEST_KEY,
     pool: fx.pool,
-    sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 0 }],
+    sources: [{ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 0, origin: "admin", hops: 0, render: "http" }],
+    seedUrl: fixtureSeedUrl(fx.site.port),
+  }).start();
+  // A browser-rendered source (WP7) for the no-disk-write test below.
+  apiJs = await new MockAsmita({
+    key: TEST_KEY,
+    pool: fx.pool,
+    sources: [{ id: "src-js", kind: "site", domain: `js.${SOURCE_DOMAIN}`, pageBudget: 20, delayMs: 0, origin: "admin", hops: 0, render: "browser" }],
+    seedUrl: fixtureSeedUrl(fx.site.port),
   }).start();
 }, 60_000);
 
 afterAll(async () => {
   await fx?.site.stop();
   await api?.stop();
+  await apiJs?.stop();
 });
 
 describe("memory-only image handling", () => {
@@ -150,4 +160,32 @@ describe("memory-only image handling", () => {
     expect(attempts).toEqual([]);
     expect(findings).toBe(fx.expected.length);
   }, 60_000);
+
+  it("renders a browser page with every fs write API throwing (WP7)", async () => {
+    // The browser path as far as Node can observe it: the crawler process
+    // (the parent, the proxy, the decoder and browser workers' IPC) must
+    // attempt no filesystem write while a Chromium-rendered page is crawled,
+    // hashed and reported. What this test cannot observe is documented in
+    // README "Browser rendering": the browser worker child process makes
+    // Chromium's throwaway profile inside the memory-backed TMPDIR its
+    // environment points at (Playwright creates and deletes it), and
+    // Chromium's own writes to that tmpfs — none of it reaches Node's fs
+    // API in this process, and none of it is disk.
+    const attempts: string[] = [];
+    const unpatch = patchFs(attempts);
+    let findings: number;
+    try {
+      expect(() => fs.writeFileSync("never-written.txt", "x")).toThrow(/blocked/);
+      attempts.length = 0;
+      const { result } = await runFixtureCrawl(fx.site, apiJs);
+      findings = apiJs.created.size;
+      expect(result.summary.browser as { renders: number }).toMatchObject({ failed: 0 });
+      expect((result.summary.browser as { renders: number }).renders).toBeGreaterThan(0);
+    } finally {
+      unpatch();
+    }
+    expect(attempts).toEqual([]);
+    // The JS-gallery match was found through the real Chromium.
+    expect(findings).toBe(1);
+  }, 180_000);
 });

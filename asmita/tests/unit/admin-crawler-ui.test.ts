@@ -15,7 +15,11 @@ import { SafetyNote } from "@/app/(admin)/findings/SafetyNote";
 import { messageFor, NOTICE_ERRORS, REVIEW_ERRORS, type NoticePreview, type SendResult } from "@/app/(admin)/findings/findings-client";
 import { noticeGate, noticeLabel, platformLabel, reviewLabel, sortFindings, type NoticeGateInput } from "@/app/(admin)/findings/finding-view";
 import { checkBudget, checkDelay, checkDomain } from "@/app/(admin)/crawl-sources/source-validation";
-import { SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
+import { IMPORT_STATUS_LABELS, ImportResults, originLabel, discoveryStateLabel, SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
+import { BlockedHostsManager } from "@/app/(admin)/crawl-sources/BlockedHostsManager";
+import { CrawlerSitesTabs } from "@/app/(admin)/crawl-sources/CrawlerSitesTabs";
+import { CrawlerOverview } from "@/app/(admin)/crawler/CrawlerOverview";
+import type { CrawlerStats } from "@/lib/crawl-stats";
 import { validateCrawlDomain } from "@/lib/crawl-sources";
 import type { CrawlFindingListRow } from "@/lib/crawl-findings";
 
@@ -51,6 +55,10 @@ describe("crawler admin sources never fetch or embed addresses", () => {
     "findings/[id]/page.tsx",
     "crawl-sources/page.tsx",
     "crawl-sources/SourcesManager.tsx",
+    "crawl-sources/CrawlerSitesTabs.tsx",
+    "crawl-sources/BlockedHostsManager.tsx",
+    "crawler/page.tsx",
+    "crawler/CrawlerOverview.tsx",
   ];
   it("has no img, iframe or direct fetch call in these files", () => {
     for (const file of files) {
@@ -63,9 +71,11 @@ describe("crawler admin sources never fetch or embed addresses", () => {
   it("gates nav links by permission", () => {
     const find = (href: string) => ADMIN_NAV.flatMap((g) => g.items).find((i) => i.href === href);
     expect(find("/admin/findings")?.permission).toBe("findings:review");
+    expect(find("/admin/crawler")?.permission).toBe("findings:review");
     expect(find("/admin/crawl-sources")?.permission).toBe("crawler:manage");
     expect(hasAdminPermission("SUPER_ADMIN", "crawler:manage")).toBe(true);
     expect(hasAdminPermission("CASE_REVIEWER", "crawler:manage")).toBe(false);
+    expect(hasAdminPermission("CASE_REVIEWER", "findings:review")).toBe(true); // the overview page is the analysts'
   });
 });
 
@@ -243,7 +253,7 @@ describe("safety note and list helpers", () => {
 });
 
 describe("sources manager", () => {
-  const source = { id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false, approvedBy: "super-1", createdAt: "2026-11-16T00:00:00.000Z" };
+  const source = { id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false, approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, discoveredFromDomain: null, render: "HTTP" as const, pagesCrawled: 0, lastCrawledAt: null, pausedUntil: null, pauseReason: null, disabledReason: null, createdAt: "2026-11-16T00:00:00.000Z" };
   it("offers to edit a host's page budget and delay, and speaks of hosts", () => {
     const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [source] }));
     expect(html).toContain("Edit page budget and delay for news.example-site.org");
@@ -255,6 +265,127 @@ describe("sources manager", () => {
     for (const label of ["Edit page budget", "Switch on crawling"]) {
       expect(html).toMatch(new RegExp(`<button[^>]*aria-label="${label}[^"]*"[^>]*disabled=""|<button[^>]*disabled=""[^>]*aria-label="${label}`));
     }
+  });
+});
+
+describe("bulk import box and results table (WP2)", () => {
+  it("offers the paste-a-list import box", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [] }));
+    expect(html).toContain("Import a list of hosts");
+    expect(html).toMatch(/<textarea[^>]*aria-label="Hosts to import"/);
+    expect(html).toContain("Up to 1000 entries");
+    expect(html).toMatch(/<button[^>]*type="submit">Import hosts<\/button>/);
+  });
+  it("reports each entry with a sentence, and shows addresses only as text", () => {
+    const html = renderToStaticMarkup(createElement(ImportResults, { results: [
+      { input: "forum.example.org", status: "created", host: "forum.example.org" },
+      { input: "https://shop.example.org/x", status: "exists", host: "shop.example.org" },
+      { input: "facebook.com", status: "blocked", host: "facebook.com" },
+      { input: "10.0.0.1", status: "invalid", reason: "invalid_domain" },
+      { input: "db.internal", status: "invalid", reason: "private_domain" },
+    ] }));
+    expect(IMPORT_STATUS_LABELS).toEqual({ created: "Added", exists: "Already listed", blocked: "Never crawl", invalid: "Invalid" });
+    expect(html).toContain("Added");
+    expect(html).toContain("Already listed");
+    expect(html).toContain("Never crawl");
+    expect(html).toContain("Invalid (not a public host name)");
+    expect(html).toContain("Invalid (private or reserved name)");
+    expect(html).toContain("https://shop.example.org/x");
+    expect(html).not.toMatch(/<a[\s>]/i);
+    expect(html).not.toMatch(/\b(href|src|srcset)\s*=/i);
+  });
+  it("disables the import while the crawler is off", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [], crawlerEnabled: false }));
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Import hosts</);
+  });
+});
+
+describe("origin, hops and crawl progress columns (WP2)", () => {
+  const sourceWith = (over: Partial<Parameters<typeof SourcesManager>[0]["sources"][number]>) => ({
+    id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false,
+    approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, discoveredFromDomain: null, render: "HTTP" as const,
+    pagesCrawled: 0, lastCrawledAt: null, pausedUntil: null, pauseReason: null, disabledReason: null,
+    createdAt: "2026-11-16T00:00:00.000Z", ...over,
+  });
+  it("shows origin, hops, pages crawled and last crawled for every site, with an origin filter", () => {
+    expect(originLabel("ADMIN")).toBe("Admin");
+    expect(originLabel("REPORTED")).toBe("Reported");
+    expect(originLabel("DISCOVERED")).toBe("Discovered");
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [
+      sourceWith({ origin: "REPORTED", pagesCrawled: 42, lastCrawledAt: "2026-11-16T05:30:00.000Z" }),
+      sourceWith({ id: "s2", domain: "far.example-site.org", origin: "DISCOVERED", hops: 2, pagesCrawled: 5 }),
+    ] }));
+    for (const heading of ["Origin", "Hops", "Pages crawled", "Last crawled"]) expect(html).toContain(heading);
+    expect(html).toContain("Admin");
+    expect(html).toContain("Reported");
+    expect(html).toContain("Discovered");
+    expect(html).toContain("42");
+    expect(html).toContain("2026-11-16 05:30");
+    expect(html).toContain("Never");
+    expect(html).toMatch(/<select[^>]*aria-label="Filter sites by origin"/);
+    expect(html).toContain("All origins");
+  });
+});
+
+describe("never crawl tab (WP2)", () => {
+  const blockedHost = { id: "bh-1", host: "forum.example.org", reason: "owner request", addedBy: "super-1", createdAt: "2026-11-16T05:30:00.000Z" };
+  it("offers both tabs, with the sites view shown first", () => {
+    const html = renderToStaticMarkup(createElement(CrawlerSitesTabs, { sources: [], blockedHosts: [blockedHost] }));
+    expect(html).toContain("Sites");
+    expect(html).toContain("Never crawl");
+    expect(html).toContain("Add a host");
+    expect(html).not.toContain("Never crawl a host");
+  });
+  it("lists blocked hosts as text with reason, adder, date and a remove button, never as links", () => {
+    const html = renderToStaticMarkup(createElement(BlockedHostsManager, { blockedHosts: [blockedHost] }));
+    expect(html).toContain("forum.example.org");
+    expect(html).toContain("owner request");
+    expect(html).toContain("super-1");
+    expect(html).toContain("2026-11-16 05:30");
+    expect(html).toMatch(new RegExp(`<button[^>]*aria-label="Remove forum.example.org from the never-crawl list"`));
+    expect(html).toContain("Never crawl a host");
+    expect(html).not.toMatch(/<a[\s>]/i);
+    expect(html).not.toMatch(/\b(href|src|srcset)\s*=/i);
+  });
+  it("disables every change while the crawler is off", () => {
+    const html = renderToStaticMarkup(createElement(BlockedHostsManager, { blockedHosts: [blockedHost], crawlerEnabled: false }));
+    expect(html).toMatch(new RegExp(`<button[^>]*aria-label="Remove forum.example.org from the never-crawl list"[^>]*disabled=""|<button[^>]*disabled=""[^>]*aria-label="Remove forum.example.org from the never-crawl list"`));
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Never crawl this host</);
+  });
+});
+
+describe("discovered sites: parent and pause state (WP5)", () => {
+  const sourceWith = (over: Partial<Parameters<typeof SourcesManager>[0]["sources"][number]>) => ({
+    id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false,
+    approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, discoveredFromDomain: null, render: "HTTP" as const,
+    pagesCrawled: 0, lastCrawledAt: null, pausedUntil: null, pauseReason: null, disabledReason: null,
+    createdAt: "2026-11-16T00:00:00.000Z", ...over,
+  });
+  it("shows a discovered site's parent domain, never as a link", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [
+      sourceWith({ id: "parent", domain: "seed.example-site.org", enabled: true }),
+      sourceWith({ id: "child", domain: "found.example-site.org", origin: "DISCOVERED", hops: 2, enabled: true, discoveredFromId: "parent", discoveredFromDomain: "seed.example-site.org" }),
+      sourceWith({ id: "orphan", domain: "gone-parent.example-site.org", origin: "DISCOVERED", hops: 1, discoveredFromId: "missing", discoveredFromDomain: null }),
+    ] }));
+    for (const heading of ["Found via", "State"]) expect(html).toContain(heading);
+    expect(html).toContain("seed.example-site.org");
+    expect(html).toContain("a source that is gone");
+    expect(html).not.toMatch(/<a[\s>]/i);
+  });
+  it("says why a discovered site is paused or stored disabled", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [
+      sourceWith({ id: "p1", domain: "paused.example-site.org", origin: "DISCOVERED", hops: 1, enabled: false, pausedUntil: "2026-12-17T09:30:00.000Z", pauseReason: "no_match_budget_spent" }),
+      sourceWith({ id: "p2", domain: "deep.example-site.org", origin: "DISCOVERED", hops: 3, enabled: false, disabledReason: "max_hops" }),
+      sourceWith({ id: "p3", domain: "capped.example-site.org", origin: "DISCOVERED", hops: 1, enabled: false, disabledReason: "daily_cap" }),
+      sourceWith({ id: "p4", domain: "admin-off.example-site.org", enabled: false }),
+    ] }));
+    expect(html).toContain("Paused until 2026-12-17 — no match with its budget spent 3 days running");
+    expect(html).toContain("Off — beyond the discovery-hop limit");
+    expect(html).toContain("Off — the daily new-site cap was reached");
+  });
+  it("labels an enabled discovered site with no state note", () => {
+    expect(discoveryStateLabel({ enabled: true, pausedUntil: null, pauseReason: null, disabledReason: null })).toBeNull();
+    expect(discoveryStateLabel({ enabled: true, pausedUntil: "2026-12-17T09:30:00.000Z", pauseReason: "no_match_budget_spent", disabledReason: null })).toContain("Paused until 2026-12-17");
   });
 });
 
@@ -272,5 +403,87 @@ describe("site form validation mirrors the server", () => {
     expect(checkDelay("60001").ok).toBe(false);
     expect(checkDelay("2000").ok).toBe(true);
     expect(checkDelay("1.5").ok).toBe(false);
+  });
+});
+
+describe("crawler overview page (WP8)", () => {
+  const stats: CrawlerStats = {
+    generatedAt: "2026-11-17T09:00:00.000Z",
+    sites: {
+      total: 6, enabled: 3, disabled: 3,
+      byOrigin: {
+        admin: { total: 2, enabled: 1, disabled: 1 },
+        reported: { total: 1, enabled: 1, disabled: 0 },
+        discovered: { total: 3, enabled: 1, disabled: 2 },
+      },
+    },
+    pagesCrawledToday: 4,
+    queue: { live: 8, pending: 3, due: 1, claimed: 2, scheduled: 5, dead: 2 },
+    discoveredSitesToday: 2,
+    findings: { awaitingReview: 2, approved: 1, dismissed: 1 },
+    pagesByStatus: { pending: 3, fetched: 2, notModified: 1, gone: 1, blocked: 1, error: 1, dead: 1 },
+    lastRun: {
+      activityAt: "2026-11-17T08:40:00.000Z",
+      findingRun: { runId: "run-2026-11-17-a1b2", firstSeenAt: "2026-11-17T07:30:00.000Z", lastSeenAt: "2026-11-17T08:40:00.000Z", findings: 3 },
+    },
+  };
+  const empty: CrawlerStats = {
+    generatedAt: "2026-11-17T09:00:00.000Z",
+    sites: { total: 0, enabled: 0, disabled: 0, byOrigin: { admin: { total: 0, enabled: 0, disabled: 0 }, reported: { total: 0, enabled: 0, disabled: 0 }, discovered: { total: 0, enabled: 0, disabled: 0 } } },
+    pagesCrawledToday: 0,
+    queue: { live: 0, pending: 0, due: 0, claimed: 0, scheduled: 0, dead: 0 },
+    discoveredSitesToday: 0,
+    findings: { awaitingReview: 0, approved: 0, dismissed: 0 },
+    pagesByStatus: { pending: 0, fetched: 0, notModified: 0, gone: 0, blocked: 0, error: 0, dead: 0 },
+    lastRun: { activityAt: null, findingRun: null },
+  };
+  const render = (props: Partial<Parameters<typeof CrawlerOverview>[0]> = {}) =>
+    renderToStaticMarkup(createElement(CrawlerOverview, { stats, ...props }));
+
+  it("shows every part the spec lists: sites by origin and state, pages today, queue, discovered today, awaiting review, last run, errors by code", () => {
+    const html = render();
+    for (const part of [
+      "Crawler overview",
+      "Sites by origin and state", "Admin", "Reported", "Discovered",
+      "Pages crawled today", "Queue", "Discovered today", "Matches awaiting review",
+      "Errors by code", "Last run",
+    ]) expect(html, part).toContain(part);
+    // Headline numbers and their details.
+    expect(html).toContain("3 switched on");
+    expect(html).toContain("1 due · 2 claimed");
+    expect(html).toContain("1 approved · 1 dismissed");
+    expect(html).toContain("since 00:00 UTC");
+    expect(html).toContain("Generated 2026-11-17 09:00 UTC");
+  });
+
+  it("renders the queue split, the outcome codes with their counts, and the last run the app saw", () => {
+    const html = render();
+    for (const row of ["Live rows", "Pending", "Due now", "Claimed", "Scheduled", "Dead"]) expect(html, row).toContain(row);
+    for (const code of ["error", "blocked", "gone", "dead", "fetched", "not_modified", "pending"]) {
+      expect(html).toMatch(new RegExp(`<td class="font-medium">${code}</td><td class="tabular-nums">\\d+</td>`));
+    }
+    expect(html).toContain("Last activity 2026-11-17 08:40 UTC");
+    expect(html).toContain("run-2026-11-17-a1b2"); // the run id, as text
+    expect(html).toContain("Newest run with matches: run-2026-11-17-a1b2");
+    expect(html).toContain("3 findings, first seen 2026-11-17 07:30 UTC, last seen 2026-11-17 08:40 UTC");
+    expect(html).toContain("leaves no run id behind"); // the honesty note about what the app cannot see
+  });
+
+  it("carries no address anywhere and offers no action", () => {
+    const html = render();
+    expect(html).not.toContain("http");
+    expect(html).not.toMatch(/<a[\s>]/i);
+    expect(html).not.toMatch(/<(img|iframe|embed|object|video|audio|source|link|script)[\s>]/i);
+    expect(html).not.toMatch(/\b(href|src|srcset|poster)\s*=/i);
+    expect(html).not.toContain("<button"); // reads only
+    expect(html).not.toContain("<form");
+  });
+
+  it("renders an empty world without breaking, and shows the switched-off banner when the crawler is off", () => {
+    const html = renderToStaticMarkup(createElement(CrawlerOverview, { stats: empty }));
+    expect(html).toContain("No crawl activity recorded yet.");
+    expect(html).toContain('data-empty="true"');
+    expect(render({ crawlerEnabled: false })).toContain("The crawler is switched off.");
+    expect(render()).not.toContain("The crawler is switched off.");
   });
 });

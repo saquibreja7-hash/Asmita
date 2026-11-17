@@ -50,6 +50,14 @@ export const ERROR_CODES = [
   "api_payload_too_large",
   "finding_invalid",
   "pool_stale",
+  // browser rendering (WP7)
+  "browser_launch_failed",
+  "browser_failed",
+  "browser_aborted",
+  "browser_timeout",
+  "browser_protocol",
+  /** The browser proxy refused a tunnel opened outside any render. */
+  "browser_no_render",
   // other
   "robots_disallowed",
   "internal",

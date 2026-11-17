@@ -28,16 +28,36 @@ const robotsParser = robotsParserModule as unknown as (url: string, text: string
 
 export const ROBOTS_MAX_BYTES = 500 * 1024;
 
+/** At most this many Sitemap: lines are taken from one robots.txt (WP4). */
+export const ROBOTS_SITEMAP_CAP = 50;
+
 export type RobotsRules = {
   isAllowed(url: URL): boolean;
   /** Crawl-delay in ms, if the file sets one for us. */
   crawlDelayMs: number | undefined;
+  /**
+   * Absolute URLs from the file's Sitemap: lines (WP4), raw as written;
+   * the caller resolves and scope-checks them. Capped, never logged.
+   */
+  sitemaps: string[];
 };
 
-const DISALLOW_ALL: RobotsRules = { isAllowed: () => false, crawlDelayMs: undefined };
-const ALLOW_ALL: RobotsRules = { isAllowed: () => true, crawlDelayMs: undefined };
+const DISALLOW_ALL: RobotsRules = { isAllowed: () => false, crawlDelayMs: undefined, sitemaps: [] };
+const ALLOW_ALL: RobotsRules = { isAllowed: () => true, crawlDelayMs: undefined, sitemaps: [] };
 
 export type RobotsFetch = (url: URL) => Promise<FetchResult>;
+
+/** The Sitemap: lines of a robots.txt (RFC 9309), parsed independently of robots-parser. */
+export function robotsSitemaps(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^\s*sitemap\s*:\s*(\S+)\s*$/i.exec(line);
+    if (m === null) continue;
+    out.push(m[1]!);
+    if (out.length >= ROBOTS_SITEMAP_CAP) break;
+  }
+  return out;
+}
 
 export function parseRobots(robotsUrl: string, text: string, uaToken: string): RobotsRules {
   const robot = robotsParser(robotsUrl, text);
@@ -47,6 +67,7 @@ export function parseRobots(robotsUrl: string, text: string, uaToken: string): R
       const d = robot.getCrawlDelay(uaToken);
       return typeof d === "number" && Number.isFinite(d) && d > 0 ? d * 1000 : undefined;
     })(),
+    sitemaps: robotsSitemaps(text),
   };
 }
 

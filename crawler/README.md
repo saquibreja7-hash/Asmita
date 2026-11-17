@@ -1,6 +1,7 @@
 # Asmita crawler
 
-A small, targeted crawler that runs as a scheduled one-shot job. It visits an
+A small, targeted crawler that runs as a scheduled one-shot job or as an
+always-on loop (`run --loop`, crawler v2 WP6). It visits an
 admin-approved list of sites, finds image addresses in their HTML, downloads
 each image **into memory only**, computes its PDQ fingerprint with the same
 code survivors' browsers run, compares it against the pool of fingerprints
@@ -14,19 +15,61 @@ behalf. Every guarantee below is enforced by a test.
 ## How a run works
 
 ```
-main.ts -> cli.ts (config, signals, exit codes)
-  -> crawler.ts runCrawl
+main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
+                 passes forever, sleeping LOOP_IDLE_SECONDS when a pass
+                 found nothing due — any non-zero exit code ends the loop)
+  -> crawler.ts runCrawl (one pass)
        AsmitaClient: GET /sources, GET /pool          (own HTTP agent, bearer key)
-       per source (parallel up to GLOBAL_CONCURRENCY), BFS within its domain:
-         SafeFetcher (pinned-IP connect, robots, per-host delay) -> HTML
-         extract.ts -> links (in scope, not nofollow) + image candidates
+       per source (parallel up to CRAWLER_SOURCE_CONCURRENCY, WP6; every
+                request still passes the GLOBAL_CONCURRENCY gate and the
+                per-host delay, so a slow or failing source holds only its
+                own worker slot):
+         loop: POST /frontier/claim  (batch of due pages, claimed for 30 min;
+                first claim seeds https://<domain>/ app-side; the source's
+                robots.txt Sitemap: lines ride on the first report)
+         per claimed page: SafeFetcher (pinned-IP connect, robots, per-host
+                delay; If-None-Match / If-Modified-Since when the app has
+                validators) -> 200 HTML / 304 not modified / 404 gone / error
+         pages that need a browser (render = BROWSER, or AUTO with scripts
+                and no image candidates): BrowserRenderer -> browser worker
+                child (Playwright Chromium, all traffic through the
+                in-process SOCKS proxy; images from intercepted responses)
+                XML documents (WP4): sitemap indexes, urlsets (a .gz body is
+                inflated in memory) and RSS/Atom feeds, sniffed by root
+                element, become more frontier rows; image sitemap entries
+                are hashed for their page
+         extract.ts -> links (pagination markers first; login, cart, search
+                and calendar links skipped) + image candidates (lazy attrs,
+                srcset, background-image, video poster, image_src, JSON-LD,
+                noscript, thumbnail hrefs)
          per image: SafeFetcher -> Buffer -> hash-image.ts (sniff, sharp,
                     prepare.ts, pdq.ts) -> Matcher -> FindingsSink
+         POST /frontier/report (page outcomes + links of kinds page,
+                sitemap and feed, body-bounded chunks)
+         POST /discoveries (the out-of-scope hosts the pages linked,
+                hosts only, deduplicated per run, chunks of 200)
        pool re-sync every POOL_RESYNC_MINUTES (<= 60)
+       run_progress line every PROGRESS_LOG_SECONDS (WP6): sources active,
+                pages claimed/fetched/not-modified, new URLs, new hosts
+                reported, images hashed, matches — counts only
        FindingsSink: POST /findings in batches (<= 50 items, <= 240 KiB),
                      whenever a batch fills, every 15 s, and at once on stop
   -> run_summary log line, exit code
 ```
+
+The frontier itself lives in the app (`CrawlPage` rows): the crawler claims a
+batch, reports every outcome and keeps no page state of its own, so a second
+run resumes where the last one stopped, two crawler processes never get the
+same URL, and a killed run loses at most its claimed batch, which the app
+hands out again after the 30-minute claim window. Sitemap, sitemap-index and
+feed documents are frontier rows like any page (kinds `sitemap` / `feed`),
+fetched through the same claimed-row path — there is no second fetch path,
+and they cost page budget like any page.
+
+Pages that need a browser (WP7) are rendered by one more child process
+(`dist/browser-worker.js`, Playwright Chromium, one page at a time), whose
+every network request leaves through an in-process SOCKS proxy that applies
+the same address policy as `safe-fetch`. See "Browser rendering" below.
 
 ### Exit codes
 
@@ -44,6 +87,14 @@ When several apply, the first row in this table wins.
 | 1 | Invalid configuration or an unexpected failure |
 | 64 | Bad command line |
 
+In `--loop` mode the same table decides the process: a pass that ends 0
+(including SIGTERM, the time limit, the budgets, and the crawler being
+switched off on the server) starts the next pass after
+`LOOP_IDLE_SECONDS` when nothing was due, so a switched-off crawler simply
+polls; any non-zero code ends the loop with that code, and an always-on
+deployment's restart policy decides when to try again. Sources switched on
+in the app are picked up on the next pass's `GET /sources`.
+
 A failing source (site down, DNS failure, robots.txt unreachable, timeouts)
 is not a run failure; it is counted in the summary only.
 
@@ -57,7 +108,8 @@ is not a run failure; it is counted in the summary only.
 | **Redirects re-validated.** Manual, max 5, each hop re-checked (scheme, port, credentials, address, robots, page scope). | `SafeFetcher.fetch` loop + `beforeHop`. | `ssrf.test.ts` redirect cases; `tests/integration/crawl.test.ts` (redirect to 10.0.0.1 and 169.254.169.254, loop, off-domain page redirect) |
 | **Byte caps** (10 MB images, 2 MB HTML, 500 KiB robots.txt) while streaming AND after decompression; stacked/unknown encodings refused. | `readCapped`, `decode` (`maxOutputLength`). | `tests/unit/bytes.test.ts` (gzip/brotli/deflate bombs, declared length, chunked stream, timeouts) |
 | **Timeouts**: connect, headers, body idle, and an overall per-request deadline (stops slow drips). | undici options + `AbortSignal.timeout`. | `bytes.test.ts`, fixture `/img/slow.png` |
-| **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active); `tests/unit/config-policy.test.ts` |
+| **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active; since WP7 also a full browser-rendered crawl under the same patch); `tests/unit/config-policy.test.ts` |
+| **Browser traffic is policy-checked too (WP7).** Chromium's every request leaves through an in-process SOCKS proxy that applies the same address policy as `safe-fetch` (resolve every address, refuse if any is blocked, dial the validated address, same port and scheme rules); no direct browser egress (Chromium is launched with `--proxy-bypass-list=<-loopback>` so even loopback destinations go through the proxy, and the fixture hostnames exist only in the test policy's DNS, so a successful render proves the proxy resolved them). | `net/browser-proxy.ts`, `browser/browser-renderer.ts`. | `tests/unit/browser-proxy.test.ts` (raw SOCKS client: tunnel, private-literal refusal, literal-as-domain refusal, hostname-to-private-address refusal, bad port, BIND, bad greeting, per-render byte account destroying over-budget tunnels, no tunnel while no render account is active, an ended account tearing its tunnels down, an established tunnel outliving the handshake timeout); `tests/integration/browser.test.ts` (a page script's private-address requests are all refused and the render survives; a robots-disallowed image inside a rendered page is never requested); `tests/integration/browser-escape.test.ts` (a browser-only redirect off scope never contacts the other site and credits nothing, an image redirect to a robots-disallowed path is never followed, an allowed image redirect is reported under the address that served it, popups never load, WebSockets never connect); `tests/unit/browser-renderer.test.ts` (WebRTC limited to proxied traffic, no `/proc` read for the worker, deadline SIGKILL, stale render messages ignored, graceful stop) |
 | **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files decode tolerantly (`failOn: "none"`) but stay bounded by the byte cap and pixel limit. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, light and heavy truncation, AVIF); fixtures `cut.jpg` (matches), `cut-heavy.jpg` (does not) and `pic.avif` |
 | **Service key only to Asmita.** | `AsmitaClient` has its own agent, builds URLs only from `ASMITA_API_URL`, refuses redirects. The crawl fetcher sends no auth or cookie headers. | `crawl.test.ts` "never sends credentials or cookies to crawled hosts"; `client-findings.test.ts` "refuses redirects" |
 | **No URLs, hostnames, fingerprints or bodies in logs.** Field allowlist, string sanitiser, errors reduced to fixed codes; uncaught errors and Node warnings routed through the logger. | `log.ts`, `errors.ts`, `cli.ts`. | `crawl.test.ts` log scan; `tests/integration/process.test.ts` runs the real `runMain` in a child process and scans all of stdout and stderr |
@@ -65,7 +117,10 @@ is not a run failure; it is counted in the summary only.
 | **Real addresses.** URLs are fetched and reported as the site wrote them (fragment removed, query untouched, so signed CDN URLs work); tracking-param stripping and sorting apply only to the dedup key. | `crawl/url.ts` (`normalizeUrl` vs `urlKey`). | `url-robots-extract.test.ts` |
 | **Scope.** A page is in scope only if its host EQUALS the approved source `domain` or is a subdomain of it: approving `example.com` covers `www.example.com`; approving `forum.example.com` does not cover `example.com` or `shop.example.com`. Checked on every page hop including redirects. Source domains must be bare hostnames (no IP, port, path or bare public suffix). BFS to `MAX_DEPTH`, `pageBudget` per source. | `crawl/url.ts` (`sourceHost`, `inScope`), `crawler.ts`. | `url-robots-extract.test.ts`; `tests/integration/scope.test.ts` (parent, sibling, sub-subdomain, redirect to sibling) |
 | **Image hosts.** Only image candidates extracted from an in-scope page are fetched; no image URL discovered any other way is ever requested. Such an image may live on another public host (sites serve images from CDNs), but every hop still passes all safe-fetch checks and robots.txt, and per source and run at most `MAX_OFFSITE_IMAGE_HOSTS` (default 50) distinct off-scope hosts that have **returned an image** are used, plus at most `MAX_OFFSITE_HOST_FAILURES` (default 20) distinct off-scope hosts that were tried and did not. A host counts against the first cap only after it answers with an image, so junk hosts on a hostile page cannot use it up and starve the real CDN; the second cap bounds requests to junk. Both are checked on every hop, before robots.txt or the image is requested. Counted as `imagesOffHost`, `imageHostsCapped` and `imageHostFailuresCapped`. | `crawler.ts` (`processImage`, `admitHost`, `settleHosts`). | `tests/integration/scope.test.ts` (5 CDN hosts plus a redirect to a 6th, cap 3: only 3 contacted; 4 junk hosts before the real CDN with cap 1: the CDN image still matches; failure cap 2: only 2 junk hosts contacted) |
-| **Bounded frontier.** At most `MAX_LINKS_PER_PAGE` (500) links and `MAX_IMAGES_PER_PAGE` (200) image candidates are taken from any page; a page is queued only while the queue is shorter than the pages the source (and the run) may still fetch, and only queued pages enter the seen set, so queue and seen set never exceed the page budget; the seen-image set only grows within `MAX_IMAGES`. Summary: `linksDropped`, `linksNotQueued`, `queuePeak`, `seenPeak`. | `crawl/extract.ts`, `crawler.ts`. | `tests/integration/frontier.test.ts` (pages of 40,000 links: queue and seen set stay within budget, the planted image is still reported); `url-robots-extract.test.ts` |
+| **Bounded frontier.** At most `MAX_LINKS_PER_PAGE` (500) links and `MAX_IMAGES_PER_PAGE` (200) image candidates are taken from any page (extract keeps three link buckets — pagination, pages, feeds — each bounded by that cap). The queue lives in the app: the crawler holds only the batch it claimed (at most `FRONTIER_CLAIM_LIMIT` entries) and the report built from it, split into body-bounded chunks under the server's 256 KiB limit — that is its whole frontier memory, and `batchPeak` in the summary proves it. WP4 adds two small bounded per-source structures: the query-variant guard (at most 4096 tracked paths × `MAX_QUERY_VARIANTS_PER_PATH` 16-byte hashes, never a URL; kept across `run --loop` passes for at most 64 sources, least recently used dropped first, so a trap gets no fresh allowance each pass) and the one-shot robots sitemap stash (at most 50 URLs, attached to one report). WP5 adds one run-wide structure: the discovery host set, at most `MAX_DISCOVERY_HOSTS` (default 1000) distinct out-of-scope hostnames, deduplicated per run and reported in chunks of 200; hosts dropped beyond the cap are counted (`discoveryHostsCapped`). The app dedups stored links per source on a keyed digest and caps a source at `pageBudget` pages per day. Summary: `linksDropped`, `batchPeak`, `sourcesActive`, `pagesClaimed`, `newUrls`, `discoveryHostsSeen`, `discoveryHostsReported`, `discoveryHostsCapped`. | `crawl/extract.ts`, `crawl/traps.ts`, `crawler.ts`, the app's `crawl-pages.ts`. | `tests/integration/frontier.test.ts` (pages of 40,000 links: the crawler's batch never exceeds the claim limit, the app's frontier grows by at most MAX_LINKS_PER_PAGE per fetched page, the daily budget holds, the planted image is still reported); `tests/integration/frontier-app.test.ts` (second run 304s, two processes, killed run); `tests/integration/discovery.test.ts` (the per-run cap holds); `url-robots-extract.test.ts` |
+| **Deep coverage.** robots.txt `Sitemap:` lines (capped at 50), sitemap indexes, gzipped sitemaps and RSS/Atom feeds enter the frontier as `sitemap`/`feed` rows through the same claim/report path — no second fetch path, page budget included. A document is what its root element says (`<urlset>`, `<sitemapindex>`, `<rss>`, `<feed>`), never what its URL or Content-Type claims; a `.gz` body is inflated in memory under the same `MAX_HTML_BYTES` cap. Bodies are parsed by a bounded event scanner (no DOM, no dependency, no temp file): at most `MAX_SITEMAP_URLS` addresses per document and a hard markup-event cap, so a hostile "sitemap" can neither spin nor balloon memory; `<image:loc>` entries are hashed for their page. Pagination links (rel=next, next/older/page-N text or class) are collected first, so a link flood cannot push them past the cap; login, cart, search-result and calendar URLs (path segments, date paths, date query keys) are never reported or fetched, whatever markup marks them; distinct query variants of one path are capped at `MAX_QUERY_VARIANTS_PER_PATH` (page-number and tracking parameters do not count). | `crawl/robots.ts` (Sitemap:), `crawl/xml-docs.ts`, `crawl/traps.ts`, `crawl/extract.ts`, `crawler.ts`. | `tests/unit/xml-docs.test.ts`, `tests/unit/traps.test.ts`, `tests/unit/deep-extract.test.ts`; `tests/integration/deep-coverage.test.ts` (sitemap index + gzipped sitemap + Atom feed + 30 paginated pages fully covered within budget, every planted image found exactly once; infinite-calendar and query-trap fixtures stay inside their caps) |
+| **Discovery never fetches (WP5).** The hosts of out-of-scope links on in-scope pages are reported to the app — hostnames only, no URL, deduplicated per run, capped by `MAX_DISCOVERY_HOSTS` — and the crawler itself never requests one of them, not even robots.txt, until the app lists it as a source on a later run. Off-scope sitemap/feed entries do not become discoveries: only anchors on fetched HTML pages do, the same candidates that were already being read for links. A stored-disabled discovery (beyond the app's hop limit or its daily new-site cap) is therefore never fetched. | `crawler.ts` (`noteDiscoveryHost`, `flushDiscoveries`), the app's `crawl-discoveries.ts`. | `tests/integration/discovery.test.ts` (a.test -> b.test -> c.test -> d.test: b and c are crawled once the app lists them, d and a never-crawl host are never requested); `client-findings.test.ts` (the client never sends an empty or oversized discovery batch) |
+| **Parallel sources, continuous running (WP6).** Up to `CRAWLER_SOURCE_CONCURRENCY` (default 8) sources are crawled at once; each source stays sequential and every request still passes the `GLOBAL_CONCURRENCY` gate, robots.txt and the per-host delay, so one slow or failing source holds only its own worker slot. `run --loop` repeats full passes until stopped: a pass ending 0 starts the next one, after `LOOP_IDLE_SECONDS` when nothing was due; any other exit code ends the loop, and a deployment's restart policy decides the retry. A source switched on in the app mid-run is picked up on the next pass's `GET /sources`. | `crawler.ts` (source worker pool), `cli.ts` (loop). | `tests/integration/continuous.test.ts` (20 mixed-speed sources finish within a bound a serial run cannot meet; a hanging source does not delay the others — its error report is the last one the run sends; the loop sleeps when nothing is due, picks up a source enabled mid-run, exits 0 on SIGTERM and ends with the fatal code when the key is revoked between passes; the `run_progress` line carries counts only) |
 | **Withdrawn fingerprints stop matching.** Pool re-synced at least hourly; a pool older than 60 minutes stops the run; queued findings for removed ids are dropped; a `fingerprint_not_accepted` rejection removes the id from the in-memory pool at once. | `crawler.ts`, `findings.ts`, `match/matcher.ts`. | `tests/integration/lifecycle.test.ts`, `client-findings.test.ts` |
 | **Fail closed config**, no setting that loosens the network policy. Loopback access for tests is a policy object injected in code from `tests/support/test-policy.ts`. | `config.ts`. | `config-policy.test.ts` (schema has no such key; `src/` network code never mentions loopback) |
 | **Same PDQ as the browser.** | `src/pdq.ts` re-exports `asmita/src/lib/pdq/pdq.ts` (bundled at build). | `tests/unit/pdq-contract.test.ts` (exact export list, version, types, golden hash) |
@@ -236,12 +291,151 @@ environment before anything else; key file) and
 `tests/integration/memory-only.test.ts` (full crawl through the child process
 with every parent `fs` writer patched to throw).
 
+## Browser rendering (WP7)
+
+Sources with `render = BROWSER` — and `AUTO` pages whose HTML carries a
+script tag and yields no image candidates — are rendered by headless
+Chromium, because a page that builds its gallery with JavaScript and lazy
+loading is invisible to the static extractor. Rendering is the exception,
+not the default: `render = http` (the default) never launches a browser, and
+a run whose sources need none never spawns the worker.
+
+**Architecture.** A third child process, `dist/browser-worker.js`, hosts
+Playwright Chromium (bundled like the decoder, `playwright-core` external).
+The parent (which owns the pool, the matcher and the service key) talks to
+it over a strictly validated IPC protocol (`browser/protocol.ts`): the same
+rule as the decoder — any unexpected shape, field or id marks the worker as
+misbehaving, and the parent kills and replaces it. One page is rendered at
+a time, always; two browser sources crawling in parallel simply share the
+worker's queue.
+
+**The proxy.** All browser traffic goes through an in-process SOCKS5 proxy
+(`net/browser-proxy.ts`) started by the parent with the same `NetPolicy`
+object safe-fetch uses. Chromium is configured with
+`--proxy-server=socks5://...` and `--proxy-bypass-list=<-loopback>`; with a
+SOCKS proxy Chromium hands the proxy the hostname (remote DNS), so the proxy
+resolves every destination, refuses when any resolved address is blocked,
+and dials the validated address — the address that is checked is the address
+that is connected. A literal destination (a page script asking for
+`10.0.0.1`) is checked directly against the blocklist. There is no second
+network path and no direct browser egress: in the tests, the fixture
+hostnames exist only in the test policy's DNS table, so a successful render
+proves every request went through the proxy.
+
+**Robots and scope.** The worker intercepts every request the page wants to
+make before it leaves: a per-page request cap aborts the excess, navigation
+requests must stay inside the source's host (or a subdomain), and every
+request — including subresources — waits for the parent's verdict, which is
+robots.txt checked (the parent owns the robots cache; a URL the network
+policy itself would refuse is denied without a robots fetch). The honest
+User-Agent is Chromium's own with the crawler's appended; there are no
+stealth plugins, no fingerprint spoofing, no proxies beyond this
+policy-enforcing one, and no logins or CAPTCHA solving.
+
+**Caps per page.** A deadline (`BROWSER_PAGE_TIMEOUT_MS`, default 30 s), a
+bounded number of scroll steps (`BROWSER_SCROLLS`, default 5) to trigger
+lazy loading, a request cap (`BROWSER_MAX_REQUESTS_PER_PAGE`, default 300,
+excess aborted before the network), a byte budget at the proxy
+(`BROWSER_MAX_PAGE_BYTES`, default 64 MiB over all tunnels; the render is
+aborted and the page reported as an error when it is exceeded), and the
+usual image caps (per-image `MAX_IMAGE_BYTES`, per-page
+`MAX_IMAGES_PER_PAGE`).
+
+**Nothing on disk.** No persistent profile (Playwright's throwaway profile
+lives under the worker's `TMPDIR`, which the parent points at
+`BROWSER_TMP_DIR`, a tmpfs — `/dev/shm` in the container, which must be
+given enough space: run with `--shm-size=1g` or `--tmpfs /dev/shm:size=1g`);
+disk cache disabled, downloads refused, service workers blocked. Image
+bytes are taken from intercepted responses in memory, size-capped, and go
+through the same decoder path as every other image. The main process still
+writes nothing.
+
+**The worker's isolation.** The browser worker gets a scrubbed environment
+(no key, no config), runs under Node's permission model (`--permission`:
+reads confined to its own bundle, `playwright-core` and the browser
+directory plus read-only system metadata; writes confined to the memory
+temp dir; child processes allowed because it must spawn Chromium; no
+worker threads, no native addons) and has stdout/stderr discarded — crash
+output never reaches the logs. What that does NOT protect against is the
+same as for the decoder, plus one more: Chromium is native code, so Node's
+permission model does not bind it (its writes go to the tmpfs its
+environment points at), and `--no-sandbox` is passed. Chromium's own
+sandbox does not need a setuid helper on current Linux: it uses
+unprivileged user namespaces, and those are what a container may not grant
+(Docker's default seccomp profile refuses them; Cloud Run may as well, not
+verified). Without it a Chromium renderer exploit runs as the worker's
+user, which is the crawler's user: it can read whatever that user can,
+including the key file and `/proc/<pid>/environ` of the parent (so an
+inline `CRAWLER_SERVICE_KEY` would be exposed; use
+`CRAWLER_SERVICE_KEY_FILE`). The worker's own Node code is not granted
+`/proc` reads. **Browser rendering stays off for real sites (no source with
+`render = BROWSER` or `AUTO`) until the worker runs sandboxed** (Chromium's
+sandbox enabled in a runtime that grants user namespaces, or a syscall
+sandbox such as gVisor/nsjail around the worker) **or under a separate
+UID** that cannot read the key file. Deployment hardening is otherwise the
+decoder's list: no egress except through the parent's proxy if the
+platform allows it, and the key as a file.
+
+**Rendered pages stay inside the rules.** Every request of the browser
+context (the page, its frames, popups) is routed through the worker, which
+fetches it hop by hop with redirects off: Chromium follows a redirect it is
+handed without consulting the route again, so the worker never hands it
+one. Each hop is counted against the request cap, navigation hops must stay
+in scope, and each hop waits for the parent's robots.txt verdict. A
+main-frame redirect makes the render navigate to the checked target itself;
+a subresource's redirect is followed in the worker (at most 5 hops) and the
+image is reported under the address that served it. Popups are closed and
+their requests refused, WebSockets are refused inside the browser (they
+would skip robots.txt and the request cap), and WebRTC is limited to
+proxied traffic (`--force-webrtc-ip-handling-policy` /
+`--webrtc-ip-handling-policy=disable_non_proxied_udp`; the proxy offers no
+UDP). The parent holds a render's findings back until the final rendered
+URL passed the scope check. The proxy refuses any tunnel opened while no
+render is active and tears a render's tunnels down when it ends.
+
+**Stopping a render.** Each render's state lives with that render in the
+worker: an abort closes its browser context, and a render still unwinding
+cannot send for, or clear, the next one (the parent drops late messages
+under an old id and answers their robots questions "no"). Every step of a
+render is bounded by its deadline (scrolling `page.evaluate` included); if
+the deadline plus a grace is overrun, the parent SIGKILLs the worker
+whatever it answers, and the next render starts a fresh one. At the end of
+a run the parent asks the worker to stop (it closes Chromium, which removes
+its throwaway profile) and SIGKILLs it after 5 s. A killed worker leaves
+its profile directory behind in `BROWSER_TMP_DIR` (Playwright cannot clean
+up after SIGKILL); the parent does not delete it, because `src/` has no
+filesystem access by rule (memory-only guarantee). It is freed when the
+container ends; a long `run --loop` with many killed renders should be
+restarted periodically or given a larger tmpfs.
+
+**What the no-disk test can and cannot observe.** The memory-only test
+patches Node's `fs` in the crawler process and now also runs a full
+browser-rendered crawl under the patch: no write is attempted there. It
+cannot observe the worker child's own filesystem use, which is: Playwright
+creating and deleting the throwaway profile under the memory temp dir
+(Node fs in the child, invisible to the patch), and Chromium's own writes
+into that tmpfs (native code, invisible to any Node-level patch). None of
+it is disk while `BROWSER_TMP_DIR` is a tmpfs; that is a container
+guarantee (the Dockerfile documents the flags), not something a test in
+this repository can enforce.
+
+**Findings from rendered pages.** The page is reported `pageUrl` as claimed
+and the image as the browser fetched it (after redirects), with the image
+bytes that response carried. Links come from the rendered DOM. A rendered
+page reports no ETag/Last-Modified — a render is never conditional-GET
+suppressed, so browser pages are revisited at the 24 h base interval. A
+BROWSER page whose render fails reports `error` (the app backs off); an AUTO
+page whose render fails falls back to its static result.
+
 ## Asmita API contract
 
 Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
 - `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality }] }`
-- `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs }] }`
+- `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs, origin: "admin" | "reported" | "discovered", hops, render: "http" | "browser" | "auto" }] }`. `origin` says how a site entered the list: an admin added it, a survivor's submitted link or an approved finding named its host (crawler v2 WP1; the app copies the host only, never the link or the case), or the crawler discovered it by following links (WP5). `hops` is how far it sits from a human-added or survivor-reported site. `render` (WP7) says how its pages are fetched: `http` never launches a browser, `browser` renders every page in Chromium, `auto` renders only pages whose HTML has scripts and no image candidates. The crawler treats every enabled source the same whatever its origin.
+- `POST /api/crawler/frontier/claim` `{ sourceId, limit (1..200) }` -> `{ urls: [{ id, url, depth, etag?, lastModified? }] }` (crawler v2 WP3). The app's frontier: the next due pages of one source, claimed for 30 minutes so two crawler instances never get the same URL. A source with no rows yet gets its seed (`https://<domain>/`) created on the first claim. An empty batch means nothing is due (the daily `pageBudget` counts too); an unknown or disabled source answers empty, never an error.
+- `POST /api/crawler/frontier/report` `{ sourceId, runId, pages: [{ id, status: "fetched" | "not_modified" | "gone" | "blocked" | "error", etag?, lastModified?, links: [{ url, kind: "page" | "sitemap" | "feed" }] (max 500) }] }` -> `{ accepted: number }` (crawler v2 WP3). The app schedules the next visit (24 h after fetched, doubling after not_modified up to 14 days, 1 h / 6 h / 24 h after error and dead after five failures, gone dead), stores the new in-scope links deduplicated per source on a keyed digest and counts the pages against the source budget. Retry-safe: a report the server applied but the crawler never saw answered only moves schedules forward. The scope check the crawler does is repeated by the app on every link.
+- `POST /api/crawler/discoveries` `{ sourceId, runId, hosts: [string] (max 200) }` -> `{ accepted: number }` (crawler v2 WP5). The out-of-scope hosts linked from in-scope pages — hosts only, deduplicated per run by the crawler. The app applies the discovery rules: never-crawl hosts and hosts that are already sources are skipped; the rest become `DISCOVERED` sources one hop deeper than the reporting source, switched on automatically while within `CRAWLER_MAX_DISCOVERY_HOPS` (default 2) and at most `CRAWLER_MAX_NEW_SITES_PER_DAY` (default 200) per UTC day — everything else is stored switched off for an admin to enable. A discovered site that later produces a match is promoted (hops 0, reported-source budget); one that spends its page budget three days running without a match is paused for 30 days by the hourly sweep. `accepted` counts the hosts stored as sources, enabled or not. Best-effort for the crawler: a failed report only delays discovery to the next run.
 - `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and already-known findings alike, so the crawler cannot tell whether two pool ids belong to one case; the old `"created"` / `"duplicate"` are still tolerated and counted as accepted. A page must be on its source's host or a subdomain (`page_not_in_source`, which also sets exit code 4); the image may be on another public host. A page or image address with credentials or a non-default port is refused (`invalid_url`); the crawler never fetches one
 
 Responses are validated with Zod. Findings are validated locally with the
@@ -269,11 +463,24 @@ Per-item rejection reasons (`invalid_finding`, `media_payload_rejected`,
 
 ## Run summary
 
-The last log line, `run_summary`, holds: outcome, duration, sources crawled,
-pages attempted/fetched/non-HTML, images seen/hashed/skipped by reason,
-matches, findings queued/posted/accepted/rejected (by reason)/
-withdrawn/invalid/failed/unsent, pool syncs, robots outcomes, errors by code,
-page and image budget used.
+The last log line of each pass, `run_summary`, holds: outcome, duration,
+sources crawled, sources active (those that claimed work, WP6), pages
+claimed (every page the app handed out, WP6), pages
+attempted/fetched/not-modified/non-HTML, browser renders
+attempted/failed/images (WP7), new URLs reported to the frontier
+(WP6), pages that were sitemap or feed documents (`pagesXml`) with the
+sitemap and feed addresses taken from them, the largest claimed frontier
+batch (`batchPeak`), links dropped by the per-page cap or skipped as
+non-content / by the query-variant cap, distinct out-of-scope hosts
+seen/reported/capped as discoveries (`discoveryHostsSeen`,
+`discoveryHostsReported`, `discoveryHostsCapped`), images
+seen/hashed/skipped by reason, matches, findings
+queued/posted/accepted/rejected (by reason)/withdrawn/invalid/failed/unsent,
+pool syncs, robots outcomes, errors by code, page and image budget used.
+Every `PROGRESS_LOG_SECONDS` a `run_progress` line (WP6) carries the
+mid-run view of the same counters: sources active, pages
+claimed/fetched/not-modified, new URLs, new hosts reported, images hashed,
+matches. Counts only, like every line.
 
 ## Running locally
 
@@ -315,7 +522,20 @@ network activity and the log names only the offending variable names. See
 | `MAX_PAGES` / `MAX_IMAGES` | 5000 / 20000 | global budgets (attempts, not successes) |
 | `MAX_DEPTH` | 5 | BFS depth from the source home page |
 | `MAX_LINKS_PER_PAGE` / `MAX_IMAGES_PER_PAGE` | 500 / 200 | candidates taken from one page |
+| `MAX_SITEMAP_URLS` | 5000 | addresses taken from one sitemap or feed document: page `<loc>`, child sitemap, `<image:loc>`, feed entry (bodies obey `MAX_HTML_BYTES`, compressed and inflated) |
+| `MAX_QUERY_VARIANTS_PER_PATH` | 8 | distinct query variants of one path reported per source per run; page-number (`page`, `paged`, `pg`, `start`, `offset`, `from`) and tracking parameters do not count, and pagination-marked links are exempt |
+| `MAX_DISCOVERY_HOSTS` | 1000 | distinct out-of-scope hosts reported as discoveries per run (WP5); 0 switches discovery reporting off entirely |
+| `FRONTIER_CLAIM_LIMIT` | 50 | pages claimed from the app's frontier per request (1..200); the crawler's whole frontier memory is one batch plus its report |
+| `BROWSER_PAGE_TIMEOUT_MS` | 30000 | deadline for one rendered page, scrolls included (WP7) |
+| `BROWSER_SCROLLS` | 5 | scroll steps per rendered page, to trigger lazy loading (0..20) |
+| `BROWSER_SCROLL_WAIT_MS` | 500 | wait after each scroll for late responses |
+| `BROWSER_MAX_REQUESTS_PER_PAGE` | 300 | requests one rendered page may make; the rest are aborted before the network |
+| `BROWSER_MAX_PAGE_BYTES` | 67108864 | bytes one rendered page may move through the proxy (all tunnels summed) |
+| `BROWSER_TMP_DIR` | /dev/shm | memory-backed directory for Chromium's throwaway profile; must be a tmpfs |
 | `GLOBAL_CONCURRENCY` | 4 | concurrent requests across all hosts |
+| `CRAWLER_SOURCE_CONCURRENCY` | 8 | sources crawled at once (WP6); each source is sequential, and every request still passes `GLOBAL_CONCURRENCY` and the per-host delay, so a slow or failing source holds only its own worker slot |
+| `LOOP_IDLE_SECONDS` | 60 | `run --loop` only (WP6): seconds to sleep after a pass that found nothing due, before listing sources and claiming again (1..3600) |
+| `PROGRESS_LOG_SECONDS` | 60 | seconds between the periodic `run_progress` log lines (WP6) |
 | `DECODE_CONCURRENCY` | 1 | decoder child processes (a 25 MP decode is ~100 MB) |
 | `DECODE_TIMEOUT_MS` | 20000 | per-image decode deadline; the child is killed and replaced |
 | `MAX_HTML_BYTES` / `MAX_IMAGE_BYTES` | 2 MiB / 10 MiB | body caps (also after decompression) |
@@ -338,11 +558,25 @@ The source's own `delayMs` applies to its hosts; `pageBudget` caps its pages.
 Nothing here has been deployed.
 
 - Build from the repository root: `docker build -f crawler/Dockerfile -t asmita-crawler .`
-  (BuildKit picks up `crawler/Dockerfile.dockerignore`). Image: distroless
-  `nodejs22-debian12:nonroot`, runs as non-root, sharp's prebuilt libvips.
+  (BuildKit picks up `crawler/Dockerfile.dockerignore`). Since WP7 the
+  runtime image is `node:22-bookworm-slim` (was distroless): Chromium needs
+  its shared-library set, and it is installed by playwright-core's own CLI
+  (`npx playwright-core install --with-deps chromium`), so the browser
+  revision is pinned by the lockfile. Runs as the non-root `node` user,
+  sharp's prebuilt libvips, Chromium at `/app/browsers`
+  (`PLAYWRIGHT_BROWSERS_PATH`).
 - Region `asia-south1` (Mumbai). Create a Cloud Run **job**, not a service:
   `gcloud run jobs create asmita-crawler --region asia-south1 --image <image> --tasks 1 --max-retries 0 --task-timeout 3600s --memory 2Gi --cpu 1`.
   Keep `MAX_RUN_MINUTES` below the task timeout so the run ends gracefully.
+  Chromium makes the image bigger and the job hungrier: give it more memory
+  when browser-rendered sources are enabled, and remember `/dev/shm` (the
+  browser's profile lives there): run with `--shm-size=1g` where the
+  platform allows it, or set `BROWSER_TMP_DIR` to another tmpfs mount. The
+  read-only root filesystem of Cloud Run's container sandbox is fine
+  because the crawler and the worker write nothing to disk. `--no-sandbox`
+  makes rendering run, but it is not enough to render real sites: see
+  "The worker's isolation" (rendering stays off until the worker is
+  sandboxed or under a separate UID).
 - Secrets: store the key in Secret Manager and mount it **as a file**, then
   point `CRAWLER_SERVICE_KEY_FILE` at it (for example
   `--set-secrets /secrets/crawler-service-key=crawler-service-key:latest` with
@@ -361,9 +595,27 @@ Nothing here has been deployed.
 - On SIGTERM (Cloud Run gives 10 s) the crawler stops new work, gives
   in-flight work `SHUTDOWN_GRACE_MS`, flushes findings and exits 0.
 
+Two ways to run it (crawler v2 WP6; the procedures, including the VM
+container variant, are in the runbook):
+
+- **Scheduled one-shot:** the Cloud Run job above runs
+  `node dist/main.js run`, one pass per invocation, exit codes as in the
+  table above. Best when sources are crawled rarely and the daily page
+  budgets are small.
+- **Always-on loop:** `node dist/main.js run --loop` runs as a Cloud Run
+  *service* (or a VM container with `restart: unless-stopped`). The loop
+  keeps claiming work across all enabled sources, picks up sources switched
+  on in the app on the next pass, and sleeps `LOOP_IDLE_SECONDS` when a
+  pass finds nothing due. SIGTERM ends the current pass cleanly (exit 0) and
+  the platform restarts the container; any non-zero exit code also ends the
+  loop, so the restart policy is the retry cadence. `MAX_RUN_MINUTES`
+  bounds one pass, not the process.
+
 ## Known limits
 
-- No JavaScript execution: content rendered client-side is invisible.
+- JavaScript is executed only for sources with `render = BROWSER` or `AUTO`
+  (WP7); for `render = http` (the default) client-side content is invisible
+  by design.
 - PDQ does not survive crops, rotations, flips, heavy overlays or large
   borders; only near-duplicates are found.
 - Public pages only. The crawler never logs in, never sends cookies, and never

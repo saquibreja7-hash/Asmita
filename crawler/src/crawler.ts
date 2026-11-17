@@ -1,6 +1,40 @@
 /**
- * One crawl run: load sources and pool, crawl every source within budgets,
- * hash images in memory, match, post findings, return a summary.
+ * One crawl run: load sources and pool, claim page batches from the app's
+ * frontier per source (crawler v2 WP3), fetch each page — with
+ * If-None-Match / If-Modified-Since when the app has validators — hash
+ * image candidates in memory, match, post findings, report each batch's
+ * outcomes and links back to the app, and return a summary.
+ *
+ * Deep coverage (crawler v2 WP4): robots.txt Sitemap: lines, sitemap
+ * indexes, gzipped sitemaps and RSS/Atom feeds are followed through the
+ * same claimed-row path as pages (no second fetch path); pagination links
+ * get priority; more image candidates are extracted (background-image,
+ * video poster, image_src, JSON-LD, noscript, thumbnail hrefs); and
+ * obvious non-content URLs (login, cart, search, calendar) and query-string
+ * traps are skipped.
+ *
+ * Discovery (crawler v2 WP5): the out-of-scope hosts linked from in-scope
+ * pages are reported to the app (hosts only, deduplicated per run, capped
+ * by MAX_DISCOVERY_HOSTS); the app decides which become crawl sources. The
+ * crawler itself never fetches a discovered host until the app lists it.
+ *
+ * Parallel sources (crawler v2 WP6): up to CRAWLER_SOURCE_CONCURRENCY
+ * sources are crawled at once, each still sequential, every request still
+ * through the GLOBAL_CONCURRENCY gate and the per-host delay, so a slow or
+ * failing source occupies only its own worker slot. Continuous running
+ * (`run --loop`, src/cli.ts) drives this function pass after pass: a pass
+ * that claimed nothing sleeps LOOP_IDLE_SECONDS before the next one, and any
+ * non-zero exit code ends the loop. A periodic run_progress line (every
+ * PROGRESS_LOG_SECONDS) reports the same counters as the summary.
+ *
+ * The crawler keeps no frontier of its own: the queue, the seen set and the
+ * scheduling live in the app (CrawlPage rows). The only page state here is
+ * the claimed batch (at most FRONTIER_CLAIM_LIMIT entries) and the report
+ * built from it — plus two small bounded per-source structures (WP4): the
+ * query-variant guard (path/variant hashes) and the one-shot robots sitemap
+ * stash — so a second run resumes where the last one stopped, and a killed
+ * run loses at most its claimed batch, which the app hands out again after
+ * the 30-minute claim window.
  *
  * Stopping: `stop` (SIGTERM/SIGINT, wall-clock limit, crawler switched off,
  * stale pool) means "start no new work". In-flight requests and decodes are
@@ -15,13 +49,17 @@ import { FindingsSink } from "./findings.ts";
 import type { Logger } from "./log.ts";
 import { MIN_QUALITY, Matcher } from "./match/matcher.ts";
 import { RunMetrics, type SkipReason } from "./metrics.ts";
-import type { Finding, FindingResult, Pool, Source } from "./asmita/client.ts";
+import type { ClaimedPage, Finding, FindingResult, Pool, ReportedPage, Source } from "./asmita/client.ts";
 import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
-import { ROBOTS_MAX_BYTES, RobotsCache } from "./crawl/robots.ts";
+import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robots.ts";
+import { isNonContentUrl, QueryGuardStore, type QueryVariantGuard } from "./crawl/traps.ts";
 import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
+import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
+import { BrowserRenderer, type BrowserImage } from "./browser/browser-renderer.ts";
 import type { ImageDecoder } from "./image/decoder-pool.ts";
-import type { FetchOptions, FetchResult, SafeFetcher } from "./net/safe-fetch.ts";
+import { decode, type FetchOptions, type FetchResult, type SafeFetcher } from "./net/safe-fetch.ts";
+import { checkUrl, type NetPolicy } from "./net/policy.ts";
 import { exitCodeFor } from "./exit-codes.ts";
 import { withRetry } from "./retry.ts";
 
@@ -29,11 +67,30 @@ import { withRetry } from "./retry.ts";
 export const POOL_MAX_AGE_MS = 60 * 60 * 1000;
 /** Queued findings are posted at least this often. */
 export const FLUSH_INTERVAL_MS = 15_000;
+/** Distinct paths the per-source query-variant guard tracks (WP4); bounded state. */
+const QUERY_PATH_TRACK_CAP = 4096;
+/** Sources whose query-variant guards are kept across `run --loop` passes. */
+const QUERY_GUARD_SOURCES_CAP = 64;
+
+/**
+ * The query-variant guards for a sequence of passes (`run --loop`): one
+ * store, passed to every runCrawl, so a trap's allowance is not renewed
+ * each pass. Bounded (QUERY_GUARD_SOURCES_CAP sources, least recently used
+ * dropped first).
+ */
+export function newQueryGuardStore(config: Pick<Config, "MAX_QUERY_VARIANTS_PER_PATH">): QueryGuardStore {
+  return new QueryGuardStore(config.MAX_QUERY_VARIANTS_PER_PATH, QUERY_PATH_TRACK_CAP, QUERY_GUARD_SOURCES_CAP);
+}
 
 export type AsmitaApi = {
   getPool(signal?: AbortSignal): Promise<Pool>;
   getSources(signal?: AbortSignal): Promise<Source[]>;
   postFindings(runId: string, findings: Finding[], signal?: AbortSignal): Promise<FindingResult[]>;
+  /** The app-backed frontier (WP3). */
+  claimFrontier(sourceId: string, limit: number, signal?: AbortSignal): Promise<ClaimedPage[]>;
+  reportFrontier(sourceId: string, runId: string, pages: ReportedPage[], signal?: AbortSignal): Promise<number>;
+  /** Out-of-scope hosts seen on in-scope pages (WP5); the app makes sources. */
+  reportDiscoveries(sourceId: string, runId: string, hosts: string[], signal?: AbortSignal): Promise<number>;
 };
 
 export type CrawlDeps = {
@@ -45,12 +102,24 @@ export type CrawlDeps = {
   log: Logger;
   /** External stop request (signals). */
   stopSignal?: AbortSignal;
-  /** Seed URL for a source. Production: https://<domain>/. Tests inject http + port. */
-  seedUrl?: (source: Source) => string;
   now?: () => number;
   runId?: string;
   /** Overrides POOL_RESYNC_MINUTES (tests only need sub-minute intervals). */
   poolResyncMs?: number;
+  /**
+   * The network policy, shared with safe-fetch. Needed only for browser
+   * rendering (WP7), whose in-process proxy applies the same address rules;
+   * without it a source that needs a browser fails its renders (fail closed:
+   * no render is ever done outside the policy-checked proxy).
+   */
+  policy?: NetPolicy;
+  /** Where Playwright's Chromium is installed (WP7); default is ~/.cache/ms-playwright. */
+  browsersPath?: string;
+  /**
+   * Query-variant guards shared by consecutive passes (`run --loop`); a
+   * single run without it gets a fresh store.
+   */
+  queryGuards?: QueryGuardStore;
 };
 
 type SourceCtx = {
@@ -69,6 +138,24 @@ type SourceCtx = {
    * requests either. A host leaves this set when it later returns an image.
    */
   failedOffHosts: Set<string>;
+  /**
+   * Per-source cap on distinct query variants of one path (WP4), kept
+   * across `run --loop` passes (deps.queryGuards). Holds bounded path/variant
+   * hashes only, never URLs; a killed process simply loses it and the app's
+   * per-source digest dedups any repeat.
+   */
+  queryGuard: QueryVariantGuard;
+  /**
+   * Sitemap URLs named by the source's robots.txt (WP4), loaded once after
+   * the first claim and attached to the source's first reported page entry;
+   * null until the first claim of the run.
+   */
+  robotsSitemaps: URL[] | null;
+  /**
+   * Out-of-scope hosts this source's in-scope pages linked (WP5), reported
+   * once per batch and cleared; the run-wide dedup and cap live in the run.
+   */
+  discoveredHosts: string[];
 };
 
 export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget" | "unauthorized";
@@ -91,6 +178,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const runId = deps.runId ?? randomUUID();
   const log = deps.log.child({ runId });
   const metrics = new RunMetrics(now());
+  /** Per-source query-variant guards: shared across --loop passes when given. */
+  const queryGuards = deps.queryGuards ?? newQueryGuardStore(config);
   let outcome: RunOutcome = "completed";
   /** Set when the API rejected the key after the initial load. */
   let unauthorized = false;
@@ -174,6 +263,27 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   metrics.poolSyncs++;
   log.info("pool_loaded", { poolSize: matcher.size, count: sources.length });
 
+  // --- progress heartbeat (WP6) ---------------------------------------------
+  // Counts only, like every other line: a mid-run view of the same counters
+  // the run summary carries. unref'd so a one-shot run never waits on it.
+  const progressTimer = setInterval(
+    () =>
+      log.info("run_progress", {
+        elapsedMs: now() - metrics.startedAt,
+        sourcesActive: metrics.sourcesActive,
+        pagesClaimed: metrics.pagesClaimed,
+        pagesFetched: metrics.pagesFetched,
+        pagesNotModified: metrics.pagesNotModified,
+        newUrls: metrics.newUrls,
+        hostsReported: metrics.discoveryHostsReported,
+        imagesHashed: metrics.imagesHashed,
+        matches: metrics.matches,
+        poolSize: matcher.size,
+      }),
+    config.PROGRESS_LOG_SECONDS * 1000,
+  );
+  progressTimer.unref();
+
   // Fingerprints the server stopped accepting during this run stay excluded
   // even if a later pool re-sync still lists them.
   const withdrawnIds = new Set<string>();
@@ -237,6 +347,24 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   let budgetHit = false;
   const gate = <T>(fn: () => Promise<T>) => globalGate.use(fn);
 
+  // --- discovery (WP5) ------------------------------------------------------
+  // Hosts only, never URLs: an out-of-scope link's hostname, deduplicated per
+  // run and capped by MAX_DISCOVERY_HOSTS so a hostile page full of external
+  // links cannot grow this set without bound. Each host is reported under the
+  // first source whose pages linked it; the app decides what becomes a source.
+  const discoverySeen = new Set<string>();
+  const noteDiscoveryHost = (host: string, ctx: SourceCtx): void => {
+    if (config.MAX_DISCOVERY_HOSTS === 0) return; // discovery switched off
+    if (discoverySeen.has(host)) return;
+    if (discoverySeen.size >= config.MAX_DISCOVERY_HOSTS) {
+      metrics.discoveryHostsCapped++;
+      return;
+    }
+    discoverySeen.add(host);
+    metrics.discoveryHostsSeen++;
+    ctx.discoveredHosts.push(host);
+  };
+
   const robots = new RobotsCache(
     (url) =>
       fetcher.fetch(url, {
@@ -277,6 +405,199 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     });
 
   const record = (code: ErrorCode) => metrics.error(code);
+
+  // --- browser rendering (WP7) ------------------------------------------------
+  /**
+   * Renders pages that need Chromium: sources with render = BROWSER, or
+   * AUTO pages whose HTML has scripts and no image candidates. One worker
+   * child process, one page at a time; its traffic goes through the
+   * in-process proxy built from the same policy safe-fetch uses. Without a
+   * policy no renderer exists and every render fails closed.
+   */
+  const crawlPolicy = deps.policy;
+  const browser = crawlPolicy
+    ? new BrowserRenderer({
+        policy: crawlPolicy,
+        browsersPath: deps.browsersPath,
+        log,
+        metrics,
+        config: {
+          userAgent: config.CRAWLER_USER_AGENT,
+          tmpDir: config.BROWSER_TMP_DIR,
+          pageTimeoutMs: config.BROWSER_PAGE_TIMEOUT_MS,
+          scrolls: config.BROWSER_SCROLLS,
+          scrollWaitMs: config.BROWSER_SCROLL_WAIT_MS,
+          maxRequests: config.BROWSER_MAX_REQUESTS_PER_PAGE,
+          maxPageBytes: config.BROWSER_MAX_PAGE_BYTES,
+          maxImages: config.MAX_IMAGES_PER_PAGE,
+          maxImageBytes: config.MAX_IMAGE_BYTES,
+          maxHtmlBytes: config.MAX_HTML_BYTES,
+          connectTimeoutMs: config.CONNECT_TIMEOUT_MS,
+        },
+        // The parent owns robots.txt; every request the page wants to make
+        // waits for this verdict before it may leave the browser. A URL the
+        // network policy itself would refuse (blocked scheme, port or
+        // literal address) is denied without a robots.txt fetch.
+        checkRequest: async (u) => {
+          try {
+            checkUrl(u, crawlPolicy);
+            return (await robots.rulesFor(u)).isAllowed(u);
+          } catch {
+            return false;
+          }
+        },
+      })
+    : null;
+
+  /**
+   * The shared tail of both image paths: decode in the isolated child
+   * process, match, and queue a finding for every pool hit. `imageUrl` is
+   * the address after redirects; `pageUrl` is the page as claimed.
+   */
+  const decodeMatchReport = async (
+    bytes: Buffer,
+    imageUrl: string,
+    pageUrl: URL,
+    source: Source,
+    deferred?: Finding[],
+  ): Promise<boolean> => {
+    let hashed;
+    try {
+      // Decoding runs in an isolated child process (decoder-pool.ts) that
+      // receives only these bytes and returns only { pdq, quality }. The
+      // pool and matcher never leave this process. The buffer passed in is
+      // the only copy of the bytes here and is dropped when this returns.
+      hashed = await deps.decoder.hash(bytes);
+    } catch (raw) {
+      const err = toCrawlError(raw);
+      record(err.code);
+      const reason: SkipReason =
+        err.code === "image_sniff_failed"
+          ? "not_image"
+          : err.code === "image_too_small"
+            ? "too_small"
+            : err.code === "image_too_many_pixels"
+              ? "too_many_pixels"
+              : err.code === "image_format"
+                ? "format"
+                : err.code === "image_truncated"
+                  ? "truncated"
+                  : err.code === "image_decode_timeout"
+                    ? "decoder_timeout"
+                    : err.code === "image_decoder_crashed"
+                      ? "decoder_crashed"
+                      : "decode_failed";
+      metrics.skip(reason);
+      return false;
+    }
+    metrics.imagesHashed++;
+    if (hashed.quality < MIN_QUALITY) {
+      metrics.skip("low_quality");
+      return false;
+    }
+    const m = currentMatcher();
+    if (!m) {
+      metrics.skip("pool_stale");
+      return false;
+    }
+    const observedAt = new Date(now()).toISOString();
+    for (const hit of m.match(hashed.pdq)) {
+      const finding: Finding = {
+        fingerprintId: hit.fingerprintId,
+        pageUrl: pageUrl.href,
+        imageUrl,
+        distance: hit.distance,
+        quality: hashed.quality,
+        observedAt,
+        sourceId: source.id,
+      };
+      // A browser render's findings wait until its final URL passed the
+      // scope check (releaseFindings); everything else is queued now.
+      if (deferred) deferred.push(finding);
+      else releaseFindings([finding]);
+    }
+    return true;
+  };
+
+  /** Queue findings for delivery, once per fingerprint and image address. */
+  const releaseFindings = (findings: Finding[]): void => {
+    for (const finding of findings) {
+      const key = `${finding.fingerprintId}\n${finding.imageUrl}`;
+      if (reported.has(key)) continue;
+      reported.add(key);
+      metrics.matches++;
+      sink.add(finding);
+    }
+  };
+
+  /**
+   * One image taken from an intercepted browser response, in memory, already
+   * size-capped by the worker (re-checked by the renderer). The browser has
+   * already fetched it through the policy proxy; robots and the off-site
+   * host caps decide whether it is processed, and the bytes go through the
+   * same decoder path as every other image.
+   */
+  const processBrowserImage = async (img: BrowserImage, pageUrl: URL, ctx: SourceCtx, deferred: Finding[]): Promise<boolean> => {
+    const { source, scopeHost, offHosts, failedOffHosts } = ctx;
+    if (!inScope(pageUrl, scopeHost)) {
+      record("out_of_scope");
+      return true;
+    }
+    if (seenImages.has(urlKey(img.url))) {
+      metrics.skip("duplicate_url");
+      return true;
+    }
+    if (metrics.imagesSeen >= config.MAX_IMAGES) {
+      budgetHit = true;
+      metrics.skip("budget");
+      return false;
+    }
+    let allowed: boolean;
+    try {
+      allowed = (await robots.rulesFor(img.url)).isAllowed(img.url);
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) {
+      record("robots_disallowed");
+      metrics.skip("robots");
+      return true;
+    }
+    if (!img.contentType.startsWith("image/")) {
+      record("content_type");
+      metrics.skip("content_type");
+      return true;
+    }
+    const host = img.url.hostname;
+    const offScope = !inScope(img.url, scopeHost);
+    if (offScope) {
+      if (!offHosts.has(host)) {
+        if (offHosts.size >= config.MAX_OFFSITE_IMAGE_HOSTS) {
+          metrics.imageHostsCapped++;
+          metrics.skip("image_hosts_capped");
+          return true;
+        }
+        if (!failedOffHosts.has(host) && failedOffHosts.size >= config.MAX_OFFSITE_HOST_FAILURES) {
+          metrics.imageHostFailuresCapped++;
+          metrics.skip("image_host_failures_capped");
+          return true;
+        }
+      }
+    }
+    seenImages.add(urlKey(img.url));
+    metrics.imagesSeen++;
+    if (offScope) metrics.imagesOffHost++;
+    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source, deferred);
+    if (offScope) {
+      if (ok) {
+        failedOffHosts.delete(host);
+        offHosts.add(host);
+      } else if (!offHosts.has(host)) {
+        failedOffHosts.add(host);
+      }
+    }
+    return true;
+  };
 
   // --- per image ------------------------------------------------------------
   /**
@@ -363,7 +684,6 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     if (touchedOffHost) metrics.imagesOffHost++;
     // The image is reported at the address it was actually fetched from
     // (after redirects); mark that address seen too.
-    const imageUrl = res.url.href;
     seenImages.add(urlKey(res.url));
     if (res.contentType !== "" && !res.contentType.startsWith("image/") && res.contentType !== "application/octet-stream") {
       settleHosts(null);
@@ -372,75 +692,469 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     // The host that served the image now counts against the cap.
     settleHosts(res.url.hostname);
-    let hashed;
-    try {
-      // Decoding runs in an isolated child process (decoder-pool.ts) that
-      // receives only these bytes and returns only { pdq, quality }. The pool
-      // and matcher never leave this process. res.body is the only copy of
-      // the bytes here and is dropped when this function returns.
-      hashed = await deps.decoder.hash(res.body);
-    } catch (raw) {
-      const err = toCrawlError(raw);
-      record(err.code);
-      const reason: SkipReason =
-        err.code === "image_sniff_failed"
-          ? "not_image"
-          : err.code === "image_too_small"
-            ? "too_small"
-            : err.code === "image_too_many_pixels"
-              ? "too_many_pixels"
-              : err.code === "image_format"
-                ? "format"
-                : err.code === "image_truncated"
-                  ? "truncated"
-                  : err.code === "image_decode_timeout"
-                    ? "decoder_timeout"
-                    : err.code === "image_decoder_crashed"
-                      ? "decoder_crashed"
-                      : "decode_failed";
-      return metrics.skip(reason);
-    }
-    metrics.imagesHashed++;
-    if (hashed.quality < MIN_QUALITY) return metrics.skip("low_quality");
-    const m = currentMatcher();
-    if (!m) return metrics.skip("pool_stale");
-    const observedAt = new Date(now()).toISOString();
-    for (const hit of m.match(hashed.pdq)) {
-      const key = `${hit.fingerprintId}\n${imageUrl}`;
-      if (reported.has(key)) continue;
-      reported.add(key);
-      metrics.matches++;
-      sink.add({
-        fingerprintId: hit.fingerprintId,
-        pageUrl: pageUrl.href,
-        imageUrl,
-        distance: hit.distance,
-        quality: hashed.quality,
-        observedAt,
-        sourceId: source.id,
-      });
-    }
+    // The image is reported at the address it was actually fetched from
+    // (after redirects); mark that address seen too (already done above) and
+    // run the shared decode -> match -> report tail.
+    await decodeMatchReport(res.body, res.url.href, pageUrl, source);
   };
 
   // --- per source -----------------------------------------------------------
+  /**
+   * Report body cap with headroom under the server's 256 KiB limit: a batch
+   * of pages with many links each is split into several reports.
+   */
+  const MAX_REPORT_BODY_BYTES = 240 * 1024;
+  const REPORT_ENVELOPE_BYTES = 128;
+  /** The frontier contract caps a page's reported links at 500. */
+  const MAX_REPORT_LINKS_PER_PAGE = 500;
+  /** A page "has scripts" when its HTML carries a script tag (AUTO rule). */
+  const HAS_SCRIPT = /<script[\s>]/i;
+
+  /**
+   * Links for the frontier report, from whichever extraction is in force
+   * (static HTML or the browser-rendered DOM, WP7). Per-page dedup only:
+   * cross-page dedup is the app's, on the digest. Pagination links (already
+   * first in ex.links) are exempt from the query-variant cap: a listing with
+   * ?page=1..N is real coverage, and depth and budgets bound a hostile
+   * "next" chain anyway (WP4). An out-of-scope candidate's host becomes a
+   * discovery report entry (WP5): hosts only, deduplicated per run.
+   */
+  const collectLinks = (ex: ReturnType<typeof extract>, page: ClaimedPage, ctx: SourceCtx): ReportedPage["links"] => {
+    const links: ReportedPage["links"] = [];
+    if (page.depth >= config.MAX_DEPTH) return links;
+    const cap = linkCap();
+    const seenOnPage = new Set<string>();
+    const admit = (candidate: URL, kind: "page" | "feed", pagination: boolean): boolean => {
+      if (!inScope(candidate, ctx.scopeHost)) {
+        noteDiscoveryHost(candidate.hostname.replace(/\.$/, ""), ctx);
+        return true;
+      }
+      if (isNonContentUrl(candidate)) {
+        metrics.linksSkippedNonContent++;
+        return true;
+      }
+      if (!pagination && !ctx.queryGuard.admit(candidate)) {
+        metrics.linksSkippedQueryCap++;
+        return true;
+      }
+      const key = urlKey(candidate);
+      if (seenOnPage.has(key)) return true;
+      if (links.length >= cap) return false;
+      seenOnPage.add(key);
+      links.push({ url: candidate.href, kind });
+      return true;
+    };
+    for (const link of ex.links) {
+      if (!admit(link, "page", ex.pagination.has(urlKey(link)))) break;
+    }
+    for (const feed of ex.feeds) {
+      if (!admit(feed, "feed", false)) break;
+    }
+    return links;
+  };
+
+  /**
+   * Link and document skip counters of the extraction whose links are
+   * reported (the static one, or the browser-rendered DOM's).
+   */
+  const recordLinkExtraction = (ex: ReturnType<typeof extract>): void => {
+    metrics.linksDropped += ex.dropped.links;
+    metrics.linksSkippedNonContent += ex.skippedLinks.nonContent;
+    metrics.jsonldSkipped += ex.skippedDocs.jsonld;
+    metrics.noscriptSkipped += ex.skippedDocs.noscript;
+  };
+
+  /**
+   * Static-extraction skip counters, recorded only when its images are used
+   * (a browser-rendered page's images are the intercepted responses, so its
+   * extraction records only the link counters above).
+   */
+  const recordExtraction = (ex: ReturnType<typeof extract>): void => {
+    recordLinkExtraction(ex);
+    metrics.skip("per_page_cap", ex.dropped.images);
+    metrics.skip("data_uri", ex.skipped.data_uri);
+    metrics.skip("svg", ex.skipped.svg);
+    metrics.skip("tiny_declared", ex.skipped.tiny);
+    metrics.skip("invalid_url", ex.skipped.invalid);
+  };
+
+  /**
+   * Render one page in the browser (WP7). The in-scope check ran on the
+   * claimed URL and every redirect hop of the HTTP pre-fetch; the render
+   * itself keeps documents in scope in the worker, and every request of the
+   * page waits for the robots verdict. Intercepted image bytes are processed
+   * as they arrive. Returns "dropped" when the run stopped mid-render (the
+   * page entry is dropped so the row is redone whole), the rendered document
+   * on success, or the failure code (the caller decides what that means for
+   * BROWSER versus AUTO sources).
+   */
+  const renderPageInBrowser = async (
+    page: ClaimedPage,
+    url: URL,
+    ctx: SourceCtx,
+  ): Promise<"dropped" | { ok: true; html: string; url: URL; imagesSkipped: number; findings: Finding[] } | { ok: false; code: ErrorCode }> => {
+    if (!browser) return { ok: false, code: "browser_launch_failed" };
+    // Politeness for the browser's own document request: the host slot the
+    // HTTP pre-fetch used has moved on, so this waits out the source delay
+    // (robots is already cached for this origin). Subresource bursts are
+    // bounded by the per-page request cap and the page deadline instead.
+    try {
+      await politeHop(ctx.source.delayMs)(url, 0);
+    } catch (raw) {
+      return { ok: false, code: toCrawlError(raw).code };
+    }
+    // Findings are held back until the caller has checked the render's
+    // final URL: a render that ended up off scope credits nothing.
+    const findings: Finding[] = [];
+    const outcome = await browser.render(
+      url,
+      ctx.scopeHost,
+      (img) => processBrowserImage(img, url, ctx, findings),
+      hard.signal,
+    );
+    if (outcome.ok) return { ok: true, html: outcome.html, url: outcome.url, imagesSkipped: outcome.imagesSkipped, findings };
+    if (outcome.code === "browser_aborted" && stop.signal.aborted) return "dropped";
+    return { ok: false, code: outcome.code };
+  };
+
+  /**
+   * The links one report entry may carry (WP4): the per-page cap and the
+   * contract cap, whichever is smaller.
+   */
+  const linkCap = (): number => Math.min(config.MAX_LINKS_PER_PAGE, MAX_REPORT_LINKS_PER_PAGE);
+
+  /**
+   * A claimed page that answered with a sitemap or feed document (WP4).
+   * Sitemap <loc> pages, index children and feed entries become frontier
+   * rows; image sitemap <image:loc> candidates are hashed right away,
+   * attributed to their page (the <loc>), which must be in scope like any
+   * page. Returns the entry's links; bounded by the caps inside.
+   */
+  const xmlLinks = async (ctx: SourceCtx, docUrl: URL, body: Buffer, kind: XmlDocumentKind, depth: number): Promise<ReportedPage["links"]> => {
+    const links: ReportedPage["links"] = [];
+    const cap = linkCap();
+    const seen = new Set<string>();
+    /** Add one candidate; false only when the entry is full. */
+    const admit = (candidate: URL, linkKind: "page" | "sitemap" | "feed"): boolean => {
+      if (!inScope(candidate, ctx.scopeHost)) return true;
+      if (isNonContentUrl(candidate)) {
+        metrics.linksSkippedNonContent++;
+        return true;
+      }
+      if (!ctx.queryGuard.admit(candidate)) {
+        metrics.linksSkippedQueryCap++;
+        return true;
+      }
+      const key = urlKey(candidate);
+      if (seen.has(key)) return true;
+      if (links.length >= cap) return false;
+      seen.add(key);
+      links.push({ url: candidate.href, kind: linkKind });
+      return true;
+    };
+    if (kind === "urlset" || kind === "sitemapindex") {
+      const parsed = parseSitemap(body, docUrl, kind, config.MAX_SITEMAP_URLS);
+      metrics.sitemapDocs++;
+      if (parsed.truncated) metrics.docsTruncated++;
+      if (kind === "sitemapindex") {
+        metrics.sitemapUrlsTaken += parsed.children.length;
+        if (depth < config.MAX_DEPTH) {
+          for (const child of parsed.children) {
+            if (!admit(child, "sitemap")) break;
+          }
+        }
+      } else {
+        metrics.sitemapUrlsTaken += parsed.pages.length;
+        metrics.sitemapImages += parsed.pages.reduce((n, p) => n + p.images.length, 0);
+        if (depth < config.MAX_DEPTH) {
+          for (const p of parsed.pages) {
+            if (!admit(p.loc, "page")) break;
+          }
+        }
+        for (const p of parsed.pages) {
+          if (stop.signal.aborted) break;
+          // The image belongs to its page: the page must be in scope (and
+          // not obvious non-content) for the image to be a candidate.
+          if (!inScope(p.loc, ctx.scopeHost) || isNonContentUrl(p.loc)) continue;
+          for (const image of p.images) {
+            if (stop.signal.aborted) break;
+            await processImage(image, p.loc, ctx);
+          }
+        }
+      }
+      return links;
+    }
+    const parsed = parseFeed(body, docUrl, kind, config.MAX_SITEMAP_URLS);
+    metrics.feedsParsed++;
+    metrics.feedEntriesTaken += parsed.entries.length;
+    if (parsed.truncated) metrics.docsTruncated++;
+    if (depth < config.MAX_DEPTH) {
+      for (const entry of parsed.entries) {
+        if (!admit(entry, "page")) break;
+      }
+    }
+    return links;
+  };
+
+  /**
+   * Attaches the Sitemap: URLs the source's robots.txt named (WP4) to its
+   * first reported page entry, once per source per run; later entries get an
+   * empty stash. The same scope, non-content and query-cap rules apply.
+   */
+  const attachRobotsSitemaps = (entry: ReportedPage, ctx: SourceCtx): void => {
+    const stash = ctx.robotsSitemaps;
+    if (stash === null) return;
+    ctx.robotsSitemaps = [];
+    for (const s of stash) {
+      if (entry.links.length >= linkCap()) break;
+      if (!inScope(s, ctx.scopeHost)) continue;
+      if (isNonContentUrl(s)) {
+        metrics.linksSkippedNonContent++;
+        continue;
+      }
+      if (!ctx.queryGuard.admit(s)) {
+        metrics.linksSkippedQueryCap++;
+        continue;
+      }
+      entry.links.push({ url: s.href, kind: "sitemap" });
+    }
+  };
+
+  /**
+   * Fetches one claimed page and builds its report entry. The in-scope check
+   * runs on the claimed URL (the app's data, never trusted blindly) and on
+   * every redirect hop (beforeHop). A 304 becomes "not_modified"; 404/410
+   * "gone"; a robots block or a 401/403 answer "blocked"; anything else that
+   * fails "error" (the app backs off and eventually marks the page dead).
+   * Links are reported only under MAX_DEPTH, deduplicated per page, in scope.
+   *
+   * Pages that need a browser (render = BROWSER, or AUTO with scripts and no
+   * image candidates) are then rendered in Chromium: their images are the
+   * responses the browser intercepted, their links come from the rendered
+   * DOM, and they are reported without validators (a render is never
+   * conditional-GET-suppressed). An AUTO page whose render fails falls back
+   * to its static result; a BROWSER page reports "error" instead.
+   */
+  const processPage = async (page: ClaimedPage, ctx: SourceCtx): Promise<ReportedPage | null> => {
+    const { source, scopeHost } = ctx;
+    const url = normalizeUrl(page.url);
+    if (!url || !inScope(url, scopeHost)) {
+      // The app handed us an address outside the approved host: never fetch
+      // it; report an error so the row backs off instead of sticking.
+      record("out_of_scope");
+      metrics.pagesOutOfScope++;
+      return { id: page.id, status: "error", links: [] };
+    }
+    const headers: Record<string, string> = {};
+    if (page.etag) headers["if-none-match"] = page.etag;
+    if (page.lastModified) headers["if-modified-since"] = page.lastModified;
+    let result: FetchResult;
+    try {
+      result = await fetchWithRetry(url, {
+        kind: "html",
+        maxBytes: config.MAX_HTML_BYTES,
+        accept: HTML_ACCEPT,
+        headers,
+        signal: hard.signal,
+        gate,
+        beforeHop: politeHop(source.delayMs, (u) => {
+          // A redirect may not take a page fetch off the source's domain.
+          if (!inScope(u, scopeHost)) throw new CrawlError("out_of_scope");
+        }),
+      });
+    } catch (raw) {
+      const err = toCrawlError(raw);
+      record(err.code);
+      if (err.code === "out_of_scope") metrics.pagesOutOfScope++;
+      const status: ReportedPage["status"] =
+        err.code === "http_status" && (err.status === 404 || err.status === 410)
+          ? "gone"
+          : err.code === "http_status" && (err.status === 401 || err.status === 403)
+            ? "blocked"
+            : err.code === "robots_disallowed"
+              ? "blocked"
+              : "error";
+      return { id: page.id, status, links: [] };
+    }
+    const validators = {
+      ...(result.etag !== null ? { etag: result.etag } : {}),
+      ...(result.lastModified !== null ? { lastModified: result.lastModified } : {}),
+    };
+    if (result.status === 304) {
+      metrics.pagesNotModified++;
+      return { id: page.id, status: "not_modified", ...validators, links: [] };
+    }
+    // Sitemap or feed documents (WP4): a gzipped body (sitemap.xml.gz served
+    // without Content-Encoding) is inflated in memory under the same byte
+    // cap, and the kind is sniffed from the root element — never from the
+    // URL or the Content-Type, which sites routinely get wrong.
+    let body = result.body;
+    if (isGzipBody(body)) {
+      try {
+        body = await decode(body, "gzip", config.MAX_HTML_BYTES);
+      } catch (raw) {
+        const err = toCrawlError(raw);
+        record(err.code);
+        return { id: page.id, status: "error", links: [] };
+      }
+    }
+    const docKind = sniffXmlDoc(body);
+    if (docKind !== null) {
+      metrics.pagesXml++;
+      const links = await xmlLinks(ctx, result.url, body, docKind, page.depth);
+      if (stop.signal.aborted) return null; // redone whole after the claim window
+      return { id: page.id, status: "fetched", ...validators, links };
+    }
+    if (!HTML_TYPES.has(result.contentType)) {
+      metrics.pagesNonHtml++;
+      return { id: page.id, status: "fetched", ...validators, links: [] };
+    }
+    if (!inScope(result.url, scopeHost)) {
+      // Redirect hops are already checked in beforeHop; belt and braces.
+      record("out_of_scope");
+      metrics.pagesOutOfScope++;
+      return { id: page.id, status: "error", links: [] };
+    }
+    metrics.pagesFetched++;
+    const html = body.toString("utf8");
+    const ex = extract(html, result.url, result.xRobotsTag, {
+      maxLinks: config.MAX_LINKS_PER_PAGE,
+      maxImages: config.MAX_IMAGES_PER_PAGE,
+    });
+
+    // Does this page need a browser? (WP7)
+    const wantBrowser =
+      source.render === "browser" ||
+      (source.render === "auto" && ex.images.length === 0 && HAS_SCRIPT.test(html));
+    if (wantBrowser) {
+      const rendered = await renderPageInBrowser(page, url, ctx);
+      if (rendered === "dropped") return null; // stopped mid-render: redo whole
+      if (rendered.ok) {
+        // Belt and braces on the final rendered URL; the render's findings
+        // are released only after it passed.
+        if (!inScope(rendered.url, scopeHost)) {
+          record("out_of_scope");
+          metrics.pagesOutOfScope++;
+          return { id: page.id, status: "error", links: [] };
+        }
+        releaseFindings(rendered.findings);
+        metrics.skip("browser", rendered.imagesSkipped);
+        if (stop.signal.aborted) return null;
+        const ex2 = extract(rendered.html, rendered.url, result.xRobotsTag, {
+          maxLinks: config.MAX_LINKS_PER_PAGE,
+          maxImages: config.MAX_IMAGES_PER_PAGE,
+        });
+        recordLinkExtraction(ex2);
+        return { id: page.id, status: "fetched", links: collectLinks(ex2, page, ctx) };
+      }
+      record(rendered.code);
+      if (source.render === "browser") return { id: page.id, status: "error", links: [] };
+      // AUTO: the render was an enhancement; report the static result.
+      if (stop.signal.aborted) return null;
+      recordExtraction(ex);
+      return { id: page.id, status: "fetched", ...validators, links: collectLinks(ex, page, ctx) };
+    }
+
+    // Static path: images from the HTML, links from the HTML.
+    recordExtraction(ex);
+    for (const img of ex.images) {
+      if (stop.signal.aborted) break;
+      // pageUrl is the page address as claimed (before any redirect).
+      await processImage(img, url, ctx);
+    }
+    if (stop.signal.aborted) {
+      // The run stopped mid-page (its remaining images were skipped): drop
+      // the entry so the row stays claimed and is redone whole after the
+      // 30-minute window. A killed run loses at most its claimed batch.
+      return null;
+    }
+    return { id: page.id, status: "fetched", ...validators, links: collectLinks(ex, page, ctx) };
+  };
+
   const crawlSource = async (source: Source): Promise<void> => {
     const slog = log.child({ sourceId: source.id });
     // Pages are limited to this exact host and its subdomains (see inScope).
     const scopeHost = sourceHost(source.domain);
-    const seed = scopeHost ? normalizeUrl(deps.seedUrl ? deps.seedUrl(source) : `https://${scopeHost}/`) : null;
-    if (!scopeHost || !seed || !inScope(seed, scopeHost)) {
+    if (!scopeHost) {
       metrics.sourcesInvalid++;
       slog.warn("source_invalid", { code: "invalid_url" });
       return;
     }
     metrics.sourcesCrawled++;
     const started = now();
-    const queue: { url: URL; depth: number }[] = [{ url: seed, depth: 0 }];
-    const seen = new Set<string>([urlKey(seed)]);
-    const ctx: SourceCtx = { source, scopeHost, offHosts: new Set<string>(), failedOffHosts: new Set<string>() };
+    const ctx: SourceCtx = {
+      source,
+      scopeHost,
+      offHosts: new Set<string>(),
+      failedOffHosts: new Set<string>(),
+      queryGuard: queryGuards.guardFor(source.id),
+      robotsSitemaps: null,
+      discoveredHosts: [],
+    };
     let pages = 0;
+    /** Set once this source claims real work (WP6: sourcesActive). */
+    let active = false;
 
-    while (queue.length > 0 && pages < source.pageBudget && !stop.signal.aborted) {
+    // Results are reported in body-bounded chunks, so a batch of link-heavy
+    // pages never builds one oversized request.
+    let pending: ReportedPage[] = [];
+    let pendingBytes = REPORT_ENVELOPE_BYTES;
+    let reportBroken = false;
+    const flushReport = async () => {
+      if (pending.length === 0) return;
+      const batch = pending;
+      pending = [];
+      pendingBytes = REPORT_ENVELOPE_BYTES;
+      try {
+        const accepted = await api.reportFrontier(source.id, runId, batch, hard.signal);
+        metrics.newUrls += batch.reduce((n, p) => n + p.links.length, 0);
+        slog.info("frontier_reported", { count: batch.length, accepted });
+      } catch (raw) {
+        const err = toCrawlError(raw);
+        record(err.code);
+        if (err.code === "api_disabled") requestStop("disabled");
+        else if (err.code === "api_unauthorized") {
+          unauthorized = true;
+          requestStop("unauthorized");
+        }
+        // The claimed pages stay claimed; they become due again on their own
+        // after the 30-minute window, so nothing is lost by giving up here.
+        slog.warn("frontier_report_failed", { code: err.code, count: batch.length });
+        reportBroken = true;
+      }
+    };
+
+    /**
+     * Reports the out-of-scope hosts this batch's pages linked (WP5), in
+     * chunks of the contract's 200. Best-effort: a failed report only costs
+     * these hosts this run — the pages that linked them stay in the
+     * frontier, so a later run reports them again. 503/401 stop the run
+     * like every other API call.
+     */
+    const flushDiscoveries = async () => {
+      while (ctx.discoveredHosts.length > 0) {
+        const chunk = ctx.discoveredHosts.splice(0, 200);
+        try {
+          const accepted = await api.reportDiscoveries(source.id, runId, chunk, hard.signal);
+          metrics.discoveryHostsReported += chunk.length;
+          slog.info("discoveries_reported", { count: chunk.length, accepted });
+        } catch (raw) {
+          const err = toCrawlError(raw);
+          record(err.code);
+          if (err.code === "api_disabled") requestStop("disabled");
+          else if (err.code === "api_unauthorized") {
+            unauthorized = true;
+            requestStop("unauthorized");
+          }
+          // The hosts are lost for this run; nothing else breaks.
+          slog.warn("discoveries_report_failed", { code: err.code, count: chunk.length });
+          ctx.discoveredHosts.length = 0;
+          return;
+        }
+      }
+    };
+
+    while (!stop.signal.aborted && !reportBroken) {
       if (sink.disabled || sink.unauthorized) {
         if (sink.unauthorized) unauthorized = true;
         requestStop(sink.disabled ? "disabled" : "unauthorized");
@@ -450,76 +1164,83 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         budgetHit = true;
         break;
       }
-      const { url, depth } = queue.shift()!;
-      pages++;
-      metrics.pagesAttempted++;
-      let page: FetchResult;
+      if (pages >= source.pageBudget) break; // the app enforces the same budget per day
+      const limit = Math.max(
+        1,
+        Math.min(config.FRONTIER_CLAIM_LIMIT, source.pageBudget - pages, config.MAX_PAGES - metrics.pagesAttempted),
+      );
+      let batch: ClaimedPage[];
       try {
-        page = await fetchWithRetry(url, {
-          kind: "html",
-          maxBytes: config.MAX_HTML_BYTES,
-          accept: HTML_ACCEPT,
-          signal: hard.signal,
-          gate,
-          beforeHop: politeHop(source.delayMs, (u) => {
-            // A redirect may not take a page fetch off the source's domain.
-            if (!inScope(u, scopeHost)) throw new CrawlError("out_of_scope");
-          }),
-        });
+        batch = await api.claimFrontier(source.id, limit, hard.signal);
       } catch (raw) {
         const err = toCrawlError(raw);
         record(err.code);
-        if (err.code === "out_of_scope") metrics.pagesOutOfScope++;
-        continue;
-      }
-      if (!HTML_TYPES.has(page.contentType)) {
-        metrics.pagesNonHtml++;
-        continue;
-      }
-      if (!inScope(page.url, scopeHost)) {
-        // Redirect hops are already checked in beforeHop; belt and braces.
-        record("out_of_scope");
-        continue;
-      }
-      metrics.pagesFetched++;
-      const ex = extract(page.body.toString("utf8"), page.url, page.xRobotsTag, {
-        maxLinks: config.MAX_LINKS_PER_PAGE,
-        maxImages: config.MAX_IMAGES_PER_PAGE,
-      });
-      metrics.linksDropped += ex.dropped.links;
-      metrics.skip("per_page_cap", ex.dropped.images);
-      metrics.skip("data_uri", ex.skipped.data_uri);
-      metrics.skip("svg", ex.skipped.svg);
-      metrics.skip("tiny_declared", ex.skipped.tiny);
-      metrics.skip("invalid_url", ex.skipped.invalid);
-      if (depth < config.MAX_DEPTH) {
-        for (const link of ex.links) {
-          // Bounded frontier: never queue more pages than this source (and
-          // the run) can still fetch. Every queued page is also the only way
-          // into `seen`, so seen <= pageBudget + 1.
-          const remaining = Math.min(source.pageBudget - pages, config.MAX_PAGES - metrics.pagesAttempted);
-          if (queue.length >= remaining) {
-            metrics.linksNotQueued++;
-            continue;
-          }
-          if (seen.has(urlKey(link)) || !inScope(link, scopeHost)) continue;
-          seen.add(urlKey(link));
-          queue.push({ url: link, depth: depth + 1 });
+        if (err.code === "api_disabled") requestStop("disabled");
+        else if (err.code === "api_unauthorized") {
+          unauthorized = true;
+          requestStop("unauthorized");
         }
-        metrics.queuePeak = Math.max(metrics.queuePeak, queue.length);
-        metrics.seenPeak = Math.max(metrics.seenPeak, seen.size);
+        slog.warn("frontier_claim_failed", { code: err.code });
+        break;
       }
-      for (const img of ex.images) {
-        if (stop.signal.aborted) break;
-        // pageUrl is the page address as crawled (before any redirect).
-        await processImage(img, url, ctx);
+      if (batch.length === 0) break; // nothing due: the source is done for now
+      metrics.pagesClaimed += batch.length;
+      if (!active) {
+        active = true;
+        metrics.sourcesActive++;
       }
+      metrics.batchPeak = Math.max(metrics.batchPeak, batch.length);
+      // The source's robots.txt can name sitemaps (WP4). Load it once per
+      // run, through the same polite fetch path as every other request, and
+      // keep its in-scope Sitemap: URLs for the first reported entry.
+      if (ctx.robotsSitemaps === null) {
+        const first = normalizeUrl(batch[0]!.url);
+        if (first === null) {
+          ctx.robotsSitemaps = [];
+        } else {
+          const rules = await robots.rulesFor(first);
+          const seen = new Set<string>();
+          const list: URL[] = [];
+          for (const raw of rules.sitemaps.slice(0, ROBOTS_SITEMAP_CAP)) {
+            const s = normalizeUrl(raw, first);
+            if (s === null || seen.has(urlKey(s))) continue;
+            seen.add(urlKey(s));
+            list.push(s);
+          }
+          ctx.robotsSitemaps = list;
+        }
+      }
+      for (const page of batch) {
+        if (stop.signal.aborted || reportBroken) break;
+        if (sink.disabled || sink.unauthorized) break;
+        if (metrics.pagesAttempted >= config.MAX_PAGES) {
+          budgetHit = true;
+          break;
+        }
+        if (pages >= source.pageBudget) break;
+        pages++;
+        metrics.pagesAttempted++;
+        const entry = await processPage(page, ctx);
+        if (entry !== null) {
+          attachRobotsSitemaps(entry, ctx);
+          const bytes = Buffer.byteLength(JSON.stringify(entry)) + 1;
+          if (pendingBytes + bytes > MAX_REPORT_BODY_BYTES) await flushReport();
+          pending.push(entry);
+          pendingBytes += bytes;
+        }
+      }
+      await flushReport();
+      await flushDiscoveries();
     }
+    await flushReport();
+    await flushDiscoveries();
     slog.info("source_done", { pages, durationMs: now() - started });
   };
 
-  // Sources run in parallel up to the global cap; each source is sequential.
-  const workers = Math.min(config.GLOBAL_CONCURRENCY, sources.length);
+  // Sources run in parallel up to the source cap (WP6); each source is
+  // sequential, and every request still passes the global gate, so the
+  // GLOBAL_CONCURRENCY request cap and the per-host delays still hold.
+  const workers = Math.min(config.CRAWLER_SOURCE_CONCURRENCY, sources.length);
   let next = 0;
   await Promise.all(
     Array.from({ length: workers }, async () => {
@@ -539,6 +1260,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   if (budgetHit && outcome === "completed") outcome = "budget";
   clearInterval(resyncTimer);
   clearInterval(flushTimer);
+  clearInterval(progressTimer);
+  // The browser worker and its proxy are no longer needed; this also aborts
+  // any render still pending (none should be: sources have all finished).
+  await browser?.close();
   // Final flush deadline: short after a signal (the platform kills the
   // process soon after SIGTERM), longer for a normal end of run.
   const flushDeadline = AbortSignal.timeout((outcome as RunOutcome) === "stopped" ? 3_000 : config.API_TIMEOUT_MS * 2);

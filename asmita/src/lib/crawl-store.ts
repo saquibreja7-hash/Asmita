@@ -58,6 +58,42 @@ export type MemoryCrawlSource = {
   delayMs: number;
   enabled: boolean;
   approvedBy: string | null;
+  origin: "ADMIN" | "REPORTED" | "DISCOVERED";
+  hops: number;
+  discoveredFromId: string | null;
+  render: "HTTP" | "BROWSER" | "AUTO";
+  lastCrawledAt: Date | null;
+  pagesCrawled: number;
+  /** Crawler v2 WP5: the automatic pause of an unproductive discovered site. */
+  pausedUntil: Date | null;
+  pauseReason: string | null;
+  /** Why a discovered site was stored disabled at birth: "max_hops" | "daily_cap". */
+  disabledReason: string | null;
+  createdAt: Date;
+};
+
+export type MemoryCrawlBlockedHost = {
+  id: string;
+  host: string;
+  reason: string;
+  addedBy: string;
+  createdAt: Date;
+};
+
+export type MemoryCrawlPage = {
+  id: string;
+  sourceId: string;
+  urlEncrypted: string;
+  urlDigest: string;
+  depth: number;
+  kind: "PAGE" | "SITEMAP" | "FEED";
+  etag: string | null;
+  lastModified: string | null;
+  status: "PENDING" | "FETCHED" | "NOT_MODIFIED" | "GONE" | "BLOCKED" | "ERROR" | "DEAD";
+  claimedUntil: Date | null;
+  lastFetchedAt: Date | null;
+  nextDueAt: Date;
+  failCount: number;
   createdAt: Date;
 };
 
@@ -75,13 +111,20 @@ type CrawlMemory = {
   consents: MemoryCrawlConsent[];
   findings: Map<string, MemoryCrawlFinding>;
   sources: Map<string, MemoryCrawlSource>;
+  // Keyed by host (lookups are by host, isBlockedCrawlHost in crawl-sources.ts).
+  blockedHosts: Map<string, MemoryCrawlBlockedHost>;
+  // The frontier (WP3), keyed by row id; urlDigest is unique per source.
+  pages: Map<string, MemoryCrawlPage>;
   keys: Map<string, MemoryCrawlServiceKey>;
+  // Pages fetched per source per UTC day (CrawlSourceDay), keyed by
+  // sourceDayKey below.
+  sourceDays: Map<string, number>;
 };
 
 const globals = globalThis as typeof globalThis & { __asmitaCrawlStore?: CrawlMemory };
 
 function emptyMemory(): CrawlMemory {
-  return { fingerprints: new Map(), consents: [], findings: new Map(), sources: new Map(), keys: new Map() };
+  return { fingerprints: new Map(), consents: [], findings: new Map(), sources: new Map(), blockedHosts: new Map(), pages: new Map(), keys: new Map(), sourceDays: new Map() };
 }
 
 export function crawlMemory(): CrawlMemory {
@@ -89,7 +132,14 @@ export function crawlMemory(): CrawlMemory {
     throw new Error("[crawl-store.ts] In-memory crawler state cannot be used in production.");
   }
   globals.__asmitaCrawlStore ??= emptyMemory();
+  // A store created before the per-day counters existed (dev hot reload).
+  globals.__asmitaCrawlStore.sourceDays ??= new Map();
   return globals.__asmitaCrawlStore;
+}
+
+/** The memory key of one source's counter for the UTC day starting at `day`. */
+export function sourceDayKey(sourceId: string, day: Date): string {
+  return `${sourceId}|${day.toISOString()}`;
 }
 
 export function resetCrawlMemory() {
@@ -107,4 +157,6 @@ export function eraseCrawlMemoryForCases(caseIds: string[]) {
   for (const fingerprint of memory.fingerprints.values()) {
     if (ids.has(fingerprint.caseId)) fingerprint.crawlPoolId = null;
   }
+  // Sources stay, including REPORTED ones her links created: they carry her
+  // host only, never her link or case, so erasing her must not touch them.
 }

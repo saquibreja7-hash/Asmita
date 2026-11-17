@@ -57,6 +57,11 @@ export type FetchOptions = {
   accept: string;
   signal?: AbortSignal | undefined;
   /**
+   * Extra request headers (conditional GET validators: If-None-Match,
+   * If-Modified-Since). Never cookies or authorisation.
+   */
+  headers?: Record<string, string>;
+  /**
    * Called before every hop, including the first. Throw to refuse the hop
    * (scope, robots); await to wait for the host's politeness slot.
    */
@@ -75,7 +80,14 @@ export type FetchResult = {
   contentType: string;
   body: Buffer;
   xRobotsTag: string;
+  /** The response's ETag, when it sent one (bounded length, else null). */
+  etag: string | null;
+  /** The response's Last-Modified, when it sent one (bounded length, else null). */
+  lastModified: string | null;
 };
+
+/** Conditional-GET validators are stored, so their length is bounded. */
+const MAX_VALIDATOR_BYTES = 512;
 
 export class SafeFetcher {
   private readonly agent: Agent;
@@ -151,6 +163,7 @@ export class SafeFetcher {
           "user-agent": this.config.userAgent,
           accept: opts.accept,
           "accept-encoding": "gzip, deflate, br",
+          ...(opts.headers ?? {}),
         },
         signal,
       });
@@ -163,6 +176,23 @@ export class SafeFetcher {
         const location = header(headers.location);
         if (!location) throw new CrawlError("redirect_invalid");
         return { kind: "redirect", location };
+      }
+      // 304 Not Modified: only reachable in practice when we sent validators
+      // (If-None-Match / If-Modified-Since). The page is unchanged; there is
+      // no body to read and nothing to decode.
+      if (statusCode === 304) {
+        return {
+          kind: "done",
+          value: {
+            url,
+            status: statusCode,
+            contentType: "",
+            body: Buffer.alloc(0),
+            xRobotsTag: (header(headers["x-robots-tag"]) ?? "").toLowerCase(),
+            etag: validator(headers.etag),
+            lastModified: validator(headers["last-modified"]),
+          },
+        };
       }
       if (statusCode < 200 || statusCode >= 300) {
         throw new CrawlError("http_status", {
@@ -183,6 +213,8 @@ export class SafeFetcher {
           contentType: (header(headers["content-type"]) ?? "").split(";")[0]!.trim().toLowerCase(),
           body: decoded,
           xRobotsTag: (header(headers["x-robots-tag"]) ?? "").toLowerCase(),
+          etag: validator(headers.etag),
+          lastModified: validator(headers["last-modified"]),
         },
       };
     } catch (err) {
@@ -202,6 +234,14 @@ export class SafeFetcher {
 
 function header(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
+}
+
+/** A response validator (ETag / Last-Modified) of bounded length, else null. */
+function validator(v: string | string[] | undefined): string | null {
+  const value = header(v);
+  if (value === undefined || value === "") return null;
+  if (Buffer.byteLength(value) > MAX_VALIDATOR_BYTES) return null;
+  return value;
 }
 
 /** Read a body stream into memory, aborting as soon as it exceeds maxBytes. */

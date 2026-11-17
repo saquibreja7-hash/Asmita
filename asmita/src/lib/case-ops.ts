@@ -334,6 +334,22 @@ export async function registerCaseWithUrls(
   | { ok: false; errors: RegisterUrlError[] }
   | { ok: true; id: string; referenceNumber: string; accepted: number; replayed?: true }
 > {
+  // The hosts are not turned into crawl sources here: the hourly sweep does
+  // that later, in a batch with no actor (crawl-sources.ts
+  // createReportedSourcesFromSubmittedUrls), so nothing in the audit log sits
+  // next to her CASE_CREATED / URL_SUBMITTED entries.
+  return registerCaseWithUrlsUnfiltered(userId, rawUrls, options);
+}
+
+async function registerCaseWithUrlsUnfiltered(
+  userId: string,
+  rawUrls: string[],
+  options?: { flagReasons?: string[]; registrationKeyHash?: string },
+): Promise<
+  | { ok: false; errors: RegisterUrlError[] }
+  | { ok: true; id: string; referenceNumber: string; accepted: number; replayed: true }
+  | { ok: true; id: string; referenceNumber: string; accepted: number }
+> {
   const errors: RegisterUrlError[] = [];
   const parsedUrls = rawUrls.map((rawUrl, index) => {
     const parsed = parseSubmittedUrl(rawUrl);
@@ -601,7 +617,10 @@ export async function addUrlsToCase(
   rawUrls: string[],
   options?: { flagReasons?: string[] },
 ): Promise<AddUrlResult[]> {
-  return withoutFindingState(await addUrlsToCaseUnfiltered(caseId, rawUrls, options));
+  // Reported crawl sources for these hosts are created by the hourly sweep,
+  // never inline in her request (see registerCaseWithUrls).
+  const results = await addUrlsToCaseUnfiltered(caseId, rawUrls, options);
+  return withoutFindingState(results);
 }
 
 async function addUrlsToCaseUnfiltered(

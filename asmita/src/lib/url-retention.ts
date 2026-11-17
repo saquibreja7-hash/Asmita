@@ -93,3 +93,67 @@ export async function purgeExpiredCrawlFindings(now = new Date()): Promise<numbe
   });
   return result.count;
 }
+
+/**
+ * Frontier rows (crawler v2 WP3) follow the same 30 days as findings, counted
+ * from the last visit (or creation, if never visited). A frontier row is
+ * operational state, not a record, so it is deleted, not blanked — a row
+ * without its URL can never be crawled again. Rows still due for crawling
+ * are kept: their work has not happened yet, and the schedule window is at
+ * most 14 days, so a live row past its due date means the crawler has not
+ * run and its pending work must not be silently dropped. Dead rows (gone or
+ * five failures) are never due again and always leave with the retention.
+ * Review fix: rows of a source that is switched off (by an admin, a block or
+ * a 30-day pause) are not waiting for a crawler, so they leave with the
+ * retention too, due or not; the per-source row cap (crawl-pages.ts) bounds
+ * the rest.
+ */
+export async function purgeExpiredCrawlPages(now = new Date()): Promise<number> {
+  const cutoff = new Date(urlRetentionCutoff(now).getTime() + SWEEP_LEAD_MS);
+  if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
+    const { crawlMemory } = await import("@/lib/crawl-store");
+    const memory = crawlMemory();
+    const expired: string[] = [];
+    for (const page of memory.pages.values()) {
+      const last = (page.lastFetchedAt ?? page.createdAt).getTime();
+      const sourceOn = memory.sources.get(page.sourceId)?.enabled === true;
+      const stillDue = sourceOn && page.nextDueAt.getTime() <= now.getTime() && page.status !== "DEAD" && page.status !== "GONE";
+      if (last <= cutoff.getTime() && !stillDue) expired.push(page.id);
+    }
+    for (const id of expired) memory.pages.delete(id);
+    return expired.length;
+  }
+  if (usesWorkerKysely()) {
+    const result = await getWorkerDb().deleteFrom("CrawlPage")
+      .where((eb) => eb.and([
+        eb.or([eb("lastFetchedAt", "<=", cutoff), eb.and([eb("lastFetchedAt", "is", null), eb("createdAt", "<=", cutoff)])]),
+        eb.or([
+          eb("status", "in", ["DEAD", "GONE"]),
+          eb("nextDueAt", ">", now),
+          eb("sourceId", "in", eb.selectFrom("CrawlSource").select("id").where("enabled", "=", false)),
+        ]),
+      ])).executeTakeFirst();
+    return Number(result.numDeletedRows);
+  }
+  const { db } = await import("@/lib/db");
+  const result = await db.crawlPage.deleteMany({
+    where: {
+      AND: [
+        {
+          OR: [
+            { lastFetchedAt: { lte: cutoff } },
+            { lastFetchedAt: null, createdAt: { lte: cutoff } },
+          ],
+        },
+        {
+          OR: [
+            { status: { in: ["DEAD", "GONE"] } },
+            { nextDueAt: { gt: now } },
+            { source: { enabled: false } },
+          ],
+        },
+      ],
+    },
+  });
+  return result.count;
+}

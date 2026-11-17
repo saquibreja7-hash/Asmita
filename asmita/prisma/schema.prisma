@@ -103,6 +103,42 @@ enum CrawlSourceKind {
   SITE
 }
 
+// How a source entered the list. ADMIN: a SUPER_ADMIN added it. REPORTED: a
+// survivor's submitted link or an approved crawler finding named its host.
+// DISCOVERED (crawler v2 WP5): an in-scope page linked it.
+enum CrawlSourceOrigin {
+  ADMIN
+  REPORTED
+  DISCOVERED
+}
+
+// How the crawler fetches a source's pages (crawler v2; HTTP today).
+enum CrawlRenderMode {
+  HTTP
+  BROWSER
+  AUTO
+}
+
+// Crawler v2 WP3: what a frontier row is (a page to visit; sitemap and feed
+// entries arrive from WP4 on) and where it sits in the visit schedule.
+enum CrawlPageKind {
+  PAGE
+  SITEMAP
+  FEED
+}
+
+// Crawler v2 WP3: the outcome of the last visit. PENDING rows have never been
+// fetched. DEAD rows (gone, or five failed visits) are never due again.
+enum CrawlPageStatus {
+  PENDING
+  FETCHED
+  NOT_MODIFIED
+  GONE
+  BLOCKED
+  ERROR
+  DEAD
+}
+
 enum HashAlgorithm {
   PDQ
 }
@@ -153,6 +189,11 @@ enum AuditEventType {
   CRAWL_FINDING_RECORDED
   CRAWL_FINDING_APPROVED
   CRAWL_FINDING_DISMISSED
+  CRAWL_SOURCE_REPORTED
+  CRAWL_SOURCE_DISCOVERED
+  CRAWL_SOURCE_PROMOTED
+  CRAWL_SOURCE_PAUSED
+  CRAWL_SOURCE_RESUMED
 }
 
 enum DeletionJobStatus {
@@ -357,6 +398,12 @@ model SubmittedUrl {
   // Set on an unsent crawler link when the survivor withdrew her crawl
   // authorisation. Permanent: a later authorisation never revives it.
   crawlConsentWithdrawnAt      DateTime?
+  // Crawler v2 review fix: whether the hourly sweep has already looked at
+  // this link's host for a REPORTED crawl source. Sources are never created
+  // inline in her request (that would sit next to her audit entries); the
+  // sweep batches unchecked rows, then sets this. Rows that existed before
+  // the column were checked by the old inline path, so they read true.
+  crawlSourceChecked           Boolean   @default(false)
 
   case         Case             @relation(fields: [caseId], references: [id])
   platform     Platform?        @relation(fields: [platformId], references: [id])
@@ -365,6 +412,7 @@ model SubmittedUrl {
   portalTokens UrlPortalToken[]
 
   @@index([caseId])
+  @@index([crawlSourceChecked])
 }
 
 // A survivor's signed authorisation for Asmita's crawler to look for her
@@ -424,9 +472,13 @@ model CrawlFinding {
   @@unique([caseId, urlDigest])
   @@index([reviewStatus])
   @@index([firstSeenAt])
+  @@index([sourceId])
 }
 
-// A public site the crawler may visit, approved by a human.
+// A public site the crawler may visit. ADMIN rows are approved by a human
+// (crawl-sources.ts); REPORTED rows are created automatically when a survivor's
+// submitted link or an approved crawler finding names their host — the host
+// only, never the link or the case (full-crawler spec WP1).
 model CrawlSource {
   id         String          @id @default(uuid())
   kind       CrawlSourceKind @default(SITE)
@@ -435,9 +487,94 @@ model CrawlSource {
   delayMs    Int
   enabled    Boolean         @default(false)
   approvedBy String?
+  origin     CrawlSourceOrigin @default(ADMIN)
+  hops       Int             @default(0)
+  // The source a DISCOVERED row was found through (WP5); REPORTED rows set nothing.
+  discoveredFromId String?
+  render     CrawlRenderMode @default(HTTP)
+  lastCrawledAt DateTime?
+  pagesCrawled  Int          @default(0)
+  // Crawler v2 WP5: automatic lifecycle of a discovered site. Paused = the
+  // hourly sweep switched it off for 30 days after its page budget was spent
+  // three days running with no match; pauseReason is a fixed code for the
+  // admin page. disabledReason records why a discovered site was stored
+  // disabled at birth ("max_hops" beyond the hop limit, "daily_cap" beyond
+  // the new-sites-per-day cap); both clear when an admin switches it on.
+  pausedUntil    DateTime?
+  pauseReason    String?
+  disabledReason String?
   createdAt  DateTime        @default(now())
 
   findings CrawlFinding[]
+  pages    CrawlPage[]
+  days     CrawlSourceDay[]
+}
+
+// Pages a source fetched per UTC day, counted when the crawler reports them
+// (crawler v2 review fix). CrawlPage.lastFetchedAt is overwritten by every
+// revisit, so it cannot say how many pages a source fetched on an earlier
+// day; the discovered-site pause ("budget spent three days running") reads
+// these counters instead. Counts only, no address. The hourly sweep prunes
+// rows older than a week.
+model CrawlSourceDay {
+  sourceId     String
+  // Start of the UTC day.
+  day          DateTime
+  pagesFetched Int      @default(0)
+
+  source CrawlSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([sourceId, day])
+  @@index([day])
+}
+
+// Hosts that must never become a crawl source through the automatic paths,
+// on top of the built-in list in src/lib/crawl-never.ts. Managed by admins
+// (crawler v2 WP2). A host is blocked if it equals a row's host or is a
+// subdomain of one.
+model CrawlBlockedHost {
+  id        String   @id @default(uuid())
+  host      String   @unique
+  reason    String
+  addedBy   String
+  createdAt DateTime @default(now())
+}
+
+// One page URL of one source waiting to be crawled (crawler v2 WP3). The app
+// owns the frontier: the crawler claims batches and reports outcomes, so a
+// second run resumes where the last one stopped instead of starting from the
+// home page. The URL is encrypted at rest (encryptField); every lookup and
+// the per-source dedup use urlDigest, a keyed digest of the URL with tracking
+// parameters stripped (crawl-pages.ts). Never fetched, never logged, never in
+// audit data; purged like findings after 30 days (url-retention.ts) except
+// rows that are still due for crawling.
+model CrawlPage {
+  id            String          @id @default(uuid())
+  sourceId      String
+  urlEncrypted  String
+  urlDigest     String
+  // BFS depth from the source seed; the crawler reports no links from a page
+  // at its MAX_DEPTH, so depths stay bounded by the crawler's own config.
+  depth         Int             @default(0)
+  kind          CrawlPageKind   @default(PAGE)
+  // Validators the crawler sent as If-None-Match / If-Modified-Since.
+  etag          String?
+  lastModified  String?
+  status        CrawlPageStatus @default(PENDING)
+  // Claimed rows are not handed out again for 30 minutes, so two crawler
+  // processes never fetch the same URL; a killed run's batch becomes due
+  // again when the claim expires.
+  claimedUntil  DateTime?
+  lastFetchedAt DateTime?
+  nextDueAt     DateTime        @default(now())
+  failCount     Int             @default(0)
+  createdAt     DateTime        @default(now())
+
+  source CrawlSource @relation(fields: [sourceId], references: [id])
+
+  @@unique([sourceId, urlDigest])
+  @@index([sourceId, nextDueAt])
+  @@index([sourceId, lastFetchedAt])
 }
 
 // Bearer keys for the crawler service. Only a sha256 of the key is stored
