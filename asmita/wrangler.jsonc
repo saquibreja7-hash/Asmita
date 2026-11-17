@@ -66,7 +66,8 @@
         "ENABLE_HASH_UPLOAD": "true",
         "ENABLE_PLATFORM_API": "false",
         "ENABLE_PROVENANCE_CHECK": "false",
-        "ESCALATION_DRAFTS_REVIEWED": "true"
+        "ESCALATION_DRAFTS_REVIEWED": "true",
+        "ENABLE_CRAWLER": "true"
       }
     }
   }
