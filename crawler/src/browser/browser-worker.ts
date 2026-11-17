@@ -83,6 +83,8 @@ type Task = {
   imagesSkipped: number;
   /** A main-frame redirect target the render should navigate to itself. */
   mainRedirect: string | null;
+  /** Requests still being fetched (their images may not have been sent yet). */
+  inflight: Set<Promise<void>>;
 };
 
 const tasks = new Map<number, Task>();
@@ -277,6 +279,7 @@ async function handleRender(msg: RenderMessage): Promise<void> {
     imagesSent: 0,
     imagesSkipped: 0,
     mainRedirect: null,
+    inflight: new Set(),
   };
   tasks.set(msg.id, task);
   // The render's own deadline; the parent SIGKILLs this process if even
@@ -298,7 +301,9 @@ async function handleRender(msg: RenderMessage): Promise<void> {
     // WebSocket is ever connected (no connectToServer: the server is never
     // contacted).
     await context.route("**/*", (route) => {
-      void handleRoute(task, route).catch(() => route.abort("blockedbyclient").catch(() => undefined));
+      const handled = handleRoute(task, route).catch(() => route.abort("blockedbyclient").catch(() => undefined));
+      task.inflight.add(handled);
+      void handled.finally(() => task.inflight.delete(handled));
     });
     await context.routeWebSocket(/.*/, (ws) => {
       void ws.close().catch(() => undefined);
@@ -334,8 +339,10 @@ async function handleRender(msg: RenderMessage): Promise<void> {
       await bounded(task, page.evaluate("window.scrollBy(0, Math.max(window.innerHeight, 400))"), EVALUATE_TIMEOUT_MS);
       if (msg.scrollWaitMs > 0) await page.waitForTimeout(Math.min(msg.scrollWaitMs, remaining(task)));
     }
-    // Let late responses land.
+    // Let late responses land, then wait (within the deadline) for requests
+    // still being fetched, so their images are not lost.
     if (msg.scrollWaitMs > 0 && !task.done) await page.waitForTimeout(Math.min(msg.scrollWaitMs, remaining(task)));
+    if (task.inflight.size > 0 && !task.done) await bounded(task, Promise.all([...task.inflight]), remaining(task)).catch(() => undefined);
 
     const html = await bounded(task, page.content(), EVALUATE_TIMEOUT_MS);
     const truncated = html.length > msg.maxHtmlBytes;
