@@ -243,7 +243,7 @@ describe("safety note and list helpers", () => {
 });
 
 describe("sources manager", () => {
-  const source = { id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false, approvedBy: "super-1", createdAt: "2026-11-16T00:00:00.000Z" };
+  const source = { id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false, approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, render: "HTTP" as const, pagesCrawled: 0, lastCrawledAt: null, createdAt: "2026-11-16T00:00:00.000Z" };
   it("offers to edit a host's page budget and delay, and speaks of hosts", () => {
     const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [source] }));
     expect(html).toContain("Edit page budget and delay for news.example-site.org");

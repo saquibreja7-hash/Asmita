@@ -189,7 +189,10 @@ describe("GET /api/crawler/sources", () => {
   it("lists enabled sites only, in the contract shape", async () => {
     await createCrawlSource({ domain: "disabled.example.org", pageBudget: 5, delayMs: 2000 }, "admin-1");
     const body = await (await getSources(crawlerRequest("sources"))).json();
-    expect(body).toEqual({ sources: [{ id: sourceId, kind: "site", domain: "forum.example.com", pageBudget: 100, delayMs: 1000 }] });
+    // Crawler v2: sources also carry origin, hops and render (lowercase).
+    expect(body).toEqual({
+      sources: [{ id: sourceId, kind: "site", domain: "forum.example.com", pageBudget: 100, delayMs: 1000, origin: "admin", hops: 0, render: "http" }],
+    });
   });
 });
 

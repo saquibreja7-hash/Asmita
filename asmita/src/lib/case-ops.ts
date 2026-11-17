@@ -8,6 +8,7 @@ import { findPlatformByDomain } from "@/lib/platforms";
 import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
 import { crawlerFindingsVisibleToSurvivor, survivorActableLinkWhere, survivorMayActOnLink } from "@/lib/crawler-flags";
+import { ensureCrawlSourceForReportedHost } from "@/lib/crawl-sources";
 import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { logSecurityEvent } from "@/lib/security-log";
@@ -334,6 +335,24 @@ export async function registerCaseWithUrls(
   | { ok: false; errors: RegisterUrlError[] }
   | { ok: true; id: string; referenceNumber: string; accepted: number; replayed?: true }
 > {
+  const outcome = await registerCaseWithUrlsUnfiltered(userId, rawUrls, options);
+  if (outcome.ok && "domains" in outcome) {
+    const { domains, ...registered } = outcome;
+    await ensureReportedCrawlSources(domains);
+    return registered;
+  }
+  return outcome;
+}
+
+async function registerCaseWithUrlsUnfiltered(
+  userId: string,
+  rawUrls: string[],
+  options?: { flagReasons?: string[]; registrationKeyHash?: string },
+): Promise<
+  | { ok: false; errors: RegisterUrlError[] }
+  | { ok: true; id: string; referenceNumber: string; accepted: number; replayed: true }
+  | { ok: true; id: string; referenceNumber: string; accepted: number; domains: string[] }
+> {
   const errors: RegisterUrlError[] = [];
   const parsedUrls = rawUrls.map((rawUrl, index) => {
     const parsed = parseSubmittedUrl(rawUrl);
@@ -365,7 +384,7 @@ export async function registerCaseWithUrls(
       store.cases.delete(record.id);
       throw error;
     }
-    return { ok: true, id: record.id, referenceNumber: record.referenceNumber, accepted: uniqueUrls.length };
+    return { ok: true, id: record.id, referenceNumber: record.referenceNumber, accepted: uniqueUrls.length, domains: uniqueUrls.map((parsed) => parsed.domain) };
   }
 
   const flaggedForReview = Boolean(options?.flagReasons?.length);
@@ -396,7 +415,7 @@ export async function registerCaseWithUrls(
         });
         await writeAuditLog({ eventType: "CASE_CREATED", entityType: "Case", entityId: record.id, actorId: userId });
         await writeAuditLog({ eventType: "URL_SUBMITTED", entityType: "Case", entityId: record.id, actorId: userId, data: { accepted: uniqueUrls.length } });
-        return { ok: true, ...record, accepted: uniqueUrls.length };
+        return { ok: true, ...record, accepted: uniqueUrls.length, domains: uniqueUrls.map((parsed) => parsed.domain) };
       } catch (error) {
         if (options?.registrationKeyHash && (error as { code?: string }).code === "23505") {
           const existing = await getRegisteredCaseByKey(userId, options.registrationKeyHash);
@@ -452,7 +471,7 @@ export async function registerCaseWithUrls(
         actorId: userId,
         data: { accepted: uniqueUrls.length },
       });
-      return { ok: true, ...record, accepted: uniqueUrls.length };
+      return { ok: true, ...record, accepted: uniqueUrls.length, domains: uniqueUrls.map((parsed) => parsed.domain) };
     } catch (error) {
       if ((error as { code?: string }).code !== "P2002") throw error;
       if (options?.registrationKeyHash) {
@@ -596,12 +615,32 @@ function withoutFindingState(results: AddUrlResult[]): AddUrlResult[] {
   });
 }
 
+/**
+ * A survivor's link was stored (addUrlsToCase, registerCaseWithUrls): make
+ * sure a REPORTED crawl source exists for its host (full-crawler spec WP1,
+ * crawl-sources.ts). Only the host is ever copied and never-crawl hosts are
+ * skipped there; a failure here must never fail the action that triggered
+ * it — her link report already succeeded.
+ */
+async function ensureReportedCrawlSources(domains: Iterable<string>) {
+  for (const domain of new Set(domains)) {
+    try {
+      await ensureCrawlSourceForReportedHost(domain);
+    } catch {
+      // A fixed code only: never the host, never anything from her report.
+      console.error("crawl_source_reported_failed");
+    }
+  }
+}
+
 export async function addUrlsToCase(
   caseId: string,
   rawUrls: string[],
   options?: { flagReasons?: string[] },
 ): Promise<AddUrlResult[]> {
-  return withoutFindingState(await addUrlsToCaseUnfiltered(caseId, rawUrls, options));
+  const results = await addUrlsToCaseUnfiltered(caseId, rawUrls, options);
+  await ensureReportedCrawlSources(results.flatMap((result) => (result.ok ? [result.url.domain] : [])));
+  return withoutFindingState(results);
 }
 
 async function addUrlsToCaseUnfiltered(

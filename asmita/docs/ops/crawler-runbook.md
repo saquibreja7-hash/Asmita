@@ -37,6 +37,12 @@ A SUPER_ADMIN (`crawler:manage`) manages hosts at `/admin/crawl-sources`.
 - While `ENABLE_CRAWLER` is off, the list can be read but nothing can be changed (503 `crawler_disabled`).
 - Before go-live: test fixture sites only. Never add a real third-party site until the checklist is complete.
 
+**Sites from survivor reports (crawler v2 WP1).** Every source also records how it entered the list (`origin`):
+
+- `admin`: a SUPER_ADMIN added it, as above.
+- `reported`: created automatically when a survivor's submitted link, or an analyst-approved crawler finding, names its host. Only the host is ever copied — never the link, the case or anything identifying her — and the row carries no approver. These sources are enabled from birth with the default budget and delay (section 3), idempotent per host, and they survive the erasure of her account: nothing links them to her. An audit entry (`CRAWL_SOURCE_REPORTED`, on the source itself) records each creation with no actor. Analysing or disabling them works exactly as for admin sources.
+- Hosts on the never-crawl list are never created automatically: the built-in list in `asmita/src/lib/crawl-never.ts` (major social platforms, search engines, app stores, webmail, banks and payment sites, government `*.gov.*` and `*.nic.in`, news wires, Asmita's own domains) plus the admin-managed `CrawlBlockedHost` table, where a host matches if it equals an entry or is a subdomain of one. The list is a floor: it stops the automatic paths only, never a SUPER_ADMIN adding a host by hand.
+
 ## 3. Environment variables
 
 App (Worker vars in `asmita/wrangler.jsonc` or secrets; see `asmita/.env.example`):
@@ -46,6 +52,9 @@ App (Worker vars in `asmita/wrangler.jsonc` or secrets; see `asmita/.env.example
 | `ENABLE_CRAWLER` | `false` until go-live | The kill switch (section 7). Read only in `src/lib/crawler-auth.ts` |
 | `ENABLE_HASH_UPLOAD` | `true` | Needed for fingerprints, the authorisation and the notice annex |
 | `CRAWLER_SHOW_FINDINGS_TO_SURVIVOR` | unset (on) | `false` hides found links from her: case page and case APIs (counts too), and her link actions (mark removed, platform filed, sign, preview) answer such a link's id exactly like an id not on her case. Her data export still lists them, labelled "Found by Asmita"; admin views unaffected. Read only in `src/lib/crawler-flags.ts`. Open owner decision |
+| `CRAWLER_REPORTED_PAGE_BUDGET` | unset (2000) | Page budget of a source created automatically when a survivor's link or an approved finding names its host (WP1). Clamped to the admin bounds (1..10,000); an unset or invalid value falls back to the default. Read only in `src/lib/crawler-flags.ts` |
+| `CRAWLER_DISCOVERED_PAGE_BUDGET` | unset (200) | Same, for sites the crawler will discover by following links (used from WP5 on) |
+| `CRAWLER_DEFAULT_DELAY_MS` | unset (1500) | Delay between pages of any automatically created source (WP1). Clamped to 500..60,000 ms |
 | `NOTICE_DISPATCH_PERSISTENCE` | `database` | As for every deployed Worker; needed so a sent notice is recorded |
 | `DEV_SKIP_LEGAL_REVIEW` | never set | Dev only; production ignores it (`src/lib/dev-flags.ts`) |
 
@@ -161,7 +170,7 @@ Every item, in writing, before a real fingerprint enters the pool, a real site i
 - [ ] A written procedure for an analyst who meets suspected child sexual abuse material on a matched page: what to do, whom to report to, within what time.
 - [ ] An analyst welfare rule: limits on viewing, support, and who may review.
 - [ ] Hindi crawl strings reviewed by a native speaker (`src/i18n/hi-review-status.json`).
-- [ ] Migrations `20261116000000_crawler_backend`, `20261116010000_crawler_representative_notice` and `20261116020000_crawl_finding_consent` applied to a real Postgres, and the Kysely and Prisma paths exercised there (ingest, review, preview, dispatch, withdrawal, deletion request). So far only mocks and the memory store have run them.
+- [ ] Migrations `20261116000000_crawler_backend`, `20261116010000_crawler_representative_notice`, `20261116020000_crawl_finding_consent` and `20261117000000_crawl_source_origins` applied to a real Postgres, and the Kysely and Prisma paths exercised there (ingest, review, preview, dispatch, withdrawal, deletion request, reported-source creation). So far only mocks and the memory store have run them.
 - [ ] **Blocking, NOT YET VERIFIED:** the Worker (Kysely) path against a real Postgres. Every crawler unit test mocks `usesWorkerKysely` to false, and the default Worker smoke makes no crawler call, so the Worker ingest path, its `FOR SHARE` consent lock racing a withdrawal, and the Case-row lock that serialises a final approval with her own report of the same page (`src/lib/case-link-lock.ts`) have never run against Postgres. Run the migrations, then a Postgres-backed test that races a finding ingest against a withdrawal and an approval against her report, and check the outcomes and that no deadlock occurs.
 - [ ] **Blocking:** the Worker smoke with the crawler step: `SMOKE_CRAWLER=1` with `scripts/worker-smoke.mjs` (key lookup, sources, pool and a refused finding in workerd against the e2e database). Written, never run; turn it on in CI once it passes.
 - [ ] **Blocking:** the legal reviewer also reviews the privacy-policy sentence about the data export (`privacy.s10.i1.detail` in `src/i18n/en.json` and `hi.json`: the download lists every link on the case, including links Asmita found, labelled "Found by Asmita", even when her case page does not show them), alongside the two draft templates above.
@@ -172,5 +181,5 @@ Every item, in writing, before a real fingerprint enters the pool, a real site i
 - [ ] Owner decisions recorded: survivors see found links (`CRAWLER_SHOW_FINDINGS_TO_SURVIVOR`); embedded images from other hosts; whether dismissed or sent findings may recur after the 30-day purge; the same-day limit on retrying a failed send.
 - [ ] The MeitY SOP date discrepancy (October 2025 in `CLAUDE.md`, November 2025 in ADR 006) checked by a human against the SOP.
 - [ ] Grievance contacts used have `lastContactVerifiedByHuman`.
-- [ ] Each source added by a SUPER_ADMIN with a recorded reason.
+- [ ] Each source added by a SUPER_ADMIN with a recorded reason; each automatic (reported) source accounted for in the review, with the never-crawl list (built-in and `CrawlBlockedHost`) reviewed by a human before any real site is touched.
 - [ ] First run on test fingerprints and test sites only, with the results checked, before any real fingerprint is in the pool.

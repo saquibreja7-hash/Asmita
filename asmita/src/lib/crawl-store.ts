@@ -58,6 +58,20 @@ export type MemoryCrawlSource = {
   delayMs: number;
   enabled: boolean;
   approvedBy: string | null;
+  origin: "ADMIN" | "REPORTED" | "DISCOVERED";
+  hops: number;
+  discoveredFromId: string | null;
+  render: "HTTP" | "BROWSER" | "AUTO";
+  lastCrawledAt: Date | null;
+  pagesCrawled: number;
+  createdAt: Date;
+};
+
+export type MemoryCrawlBlockedHost = {
+  id: string;
+  host: string;
+  reason: string;
+  addedBy: string;
   createdAt: Date;
 };
 
@@ -75,13 +89,15 @@ type CrawlMemory = {
   consents: MemoryCrawlConsent[];
   findings: Map<string, MemoryCrawlFinding>;
   sources: Map<string, MemoryCrawlSource>;
+  // Keyed by host (lookups are by host, isBlockedCrawlHost in crawl-sources.ts).
+  blockedHosts: Map<string, MemoryCrawlBlockedHost>;
   keys: Map<string, MemoryCrawlServiceKey>;
 };
 
 const globals = globalThis as typeof globalThis & { __asmitaCrawlStore?: CrawlMemory };
 
 function emptyMemory(): CrawlMemory {
-  return { fingerprints: new Map(), consents: [], findings: new Map(), sources: new Map(), keys: new Map() };
+  return { fingerprints: new Map(), consents: [], findings: new Map(), sources: new Map(), blockedHosts: new Map(), keys: new Map() };
 }
 
 export function crawlMemory(): CrawlMemory {
@@ -107,4 +123,6 @@ export function eraseCrawlMemoryForCases(caseIds: string[]) {
   for (const fingerprint of memory.fingerprints.values()) {
     if (ids.has(fingerprint.caseId)) fingerprint.crawlPoolId = null;
   }
+  // Sources stay, including REPORTED ones her links created: they carry her
+  // host only, never her link or case, so erasing her must not touch them.
 }
