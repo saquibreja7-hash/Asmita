@@ -12,25 +12,38 @@
  * dir, no worker threads, no addons).
  *
  * Hard rules implemented here, on top of the parent's proxy:
- *   - every network request of the page is intercepted first: counted
- *     against a per-page cap, navigation requests are kept inside the
- *     source's scope, and each request waits for the parent's robots.txt
- *     verdict before it is allowed to continue;
+ *   - every network request of the context (the page, its frames, and any
+ *     popup) is intercepted first and fetched hop by hop, with redirects
+ *     handled here and never by the browser: each hop is counted against a
+ *     per-page cap, navigation hops are kept inside the source's scope, and
+ *     each hop waits for the parent's robots.txt verdict before it is made.
+ *     Chromium follows a redirect it receives without consulting the route
+ *     again, so no 3xx is ever handed to it: a subresource's redirect is
+ *     followed here (up to 5 hops), and a main-frame redirect makes the
+ *     render navigate to the checked target itself;
+ *   - popups (window.open) are closed and their requests refused;
+ *   - WebSockets are refused (they would skip robots and the request cap);
  *   - nothing on disk: no persistent profile (Playwright's throwaway
  *     profile lives in the memory-backed TMPDIR the parent set), disk cache
  *     disabled, downloads refused, service workers blocked;
  *   - one honest User-Agent: Chromium's own with the crawler's appended;
  *     no stealth plugins, no fingerprint spoofing;
- *   - image bytes are taken from intercepted responses, in memory, capped
- *     per image, and handed to the parent as they arrive;
- *   - time and resource caps per page: a deadline, a bounded number of
- *     scrolls to trigger lazy loading, a request cap, and the parent's
- *     per-page byte budget at the proxy;
+ *   - image bytes are taken from the fetched responses, in memory, capped
+ *     per image, and handed to the parent as they arrive, under the address
+ *     of the hop that served them;
+ *   - time and resource caps per page: a deadline (every step is bounded by
+ *     it, and the parent SIGKILLs this process if it is overrun), a bounded
+ *     number of scrolls to trigger lazy loading, a request cap, and the
+ *     parent's per-page byte budget at the proxy;
+ *   - per-render state only: an aborted render closes its context, and
+ *     nothing it does afterwards reaches the parent or touches the next
+ *     render;
  *   - stdout and stderr are discarded by the parent: nothing this process
  *     could print (a URL, page text) reaches the logs.
  */
-import { chromium } from "playwright-core";
+import { chromium, type Browser, type BrowserContext as Context, type Page, type Route } from "playwright-core";
 import { inScope } from "../crawl/url.ts";
+import { CHROMIUM_ARGS } from "./chromium-args.ts";
 import {
   AbortMessageSchema,
   LaunchMessageSchema,
@@ -41,53 +54,111 @@ import {
   type RenderMessage,
 } from "./protocol.ts";
 
-type Browser = Awaited<ReturnType<typeof chromium.launch>>;
+
+/** Redirect hops followed per request (safe-fetch's limit). */
+const MAX_REDIRECTS = 5;
+/** A parent that does not answer a robots question within this is dead. */
+const VERDICT_TIMEOUT_MS = 10_000;
+/** Upper bound on one page.evaluate (a script can block the main thread). */
+const EVALUATE_TIMEOUT_MS = 5_000;
 
 let browser: Browser | null = null;
 let proxyPort = 0;
 let userAgentSuffix = "";
 let defaultUserAgent = "";
-let active: RenderMessage | null = null;
+
+/**
+ * One render's state. Nothing about a render is global: an aborted render
+ * that is still unwinding cannot send for, or clear, the next one.
+ */
+type Task = {
+  msg: RenderMessage;
+  /** Answered (rendered/failed) or aborted: nothing more is sent for it. */
+  done: boolean;
+  context: Context | null;
+  page: Page | null;
+  deadlineAt: number;
+  requests: number;
+  imagesSent: number;
+  imagesSkipped: number;
+  /** A main-frame redirect target the render should navigate to itself. */
+  mainRedirect: string | null;
+};
+
+const tasks = new Map<number, Task>();
 let checkSeq = 0;
-const pendingChecks = new Map<number, (allow: boolean) => void>();
-/** Settled when the active render has answered (rendered or failed). */
-let answered = true;
+const pendingChecks = new Map<number, { taskId: number; resolve: (allow: boolean) => void }>();
 
 function send(message: unknown): void {
   if (process.connected) process.send!(message);
 }
 
-function failActive(code: "browser_failed" | "browser_aborted"): void {
-  const task = active;
-  active = null;
-  if (task) send({ kind: "failed", id: task.id, code });
+/** Send for a render only while it is live. */
+function sendFor(task: Task, message: unknown): void {
+  if (!task.done) send(message);
 }
 
-/** The parent's verdict on one request the page wants to make. */
-function askVerdict(url: string, resourceType: string): Promise<boolean> {
-  const task = active;
-  if (!task) return Promise.resolve(false);
+/** The render's one answer; after it nothing more is sent for this id. */
+function answer(task: Task, message: unknown): void {
+  if (task.done) return;
+  task.done = true;
+  send(message);
+}
+
+/** End a render early: answer once, refuse its checks, close its context. */
+function endTask(task: Task, code: "browser_failed" | "browser_aborted"): void {
+  answer(task, { kind: "failed", id: task.msg.id, code });
+  for (const [seq, pending] of pendingChecks) {
+    if (pending.taskId === task.msg.id) {
+      pendingChecks.delete(seq);
+      pending.resolve(false);
+    }
+  }
+  // Closing the context makes every in-flight page operation reject.
+  void task.context?.close().catch(() => undefined);
+}
+
+const remaining = (task: Task): number => Math.max(1, task.deadlineAt - Date.now());
+
+/** A promise bounded by a timeout (and by the render's deadline). */
+function bounded<T>(task: Task, p: Promise<T>, ms: number): Promise<T> {
+  const limit = Math.min(ms, remaining(task));
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("step_timeout")), limit);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(timer);
+        reject(new Error("step_failed"));
+      },
+    );
+  });
+}
+
+/** The parent's verdict on one request hop the page wants to make. */
+function askVerdict(task: Task, url: string, resourceType: string): Promise<boolean> {
+  if (task.done) return Promise.resolve(false);
   const seq = ++checkSeq;
   return new Promise<boolean>((resolve) => {
-    pendingChecks.set(seq, resolve);
-    send({ kind: "check", id: task.id, seq, url, resourceType });
+    pendingChecks.set(seq, { taskId: task.msg.id, resolve });
+    sendFor(task, { kind: "check", id: task.msg.id, seq, url, resourceType });
     // A parent that does not answer is a dead parent: fail closed.
     setTimeout(() => {
       if (pendingChecks.delete(seq)) resolve(false);
-    }, 10_000).unref?.();
+    }, VERDICT_TIMEOUT_MS).unref?.();
   });
 }
 
 async function ensureBrowser(): Promise<Browser> {
   if (browser && browser.isConnected()) return browser;
   browser = null;
-  // Headless Chromium, no persistent profile, disk cache disabled. No
-  // stealth plugins; the sandbox flag is off because the container runs
-  // read-only without the setuid helper (documented in README).
-  browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-dev-shm-usage", "--disk-cache-size=0", "--media-cache-size=0"],
-  });
+  // Headless Chromium, no persistent profile, disk cache disabled, WebRTC
+  // confined to the proxy. No stealth plugins. Why --no-sandbox, and what
+  // has to change before real sites are rendered: chromium-args.ts.
+  browser = await chromium.launch({ headless: true, args: [...CHROMIUM_ARGS] });
   // Chromium's own User-Agent, read once from a blank page (no network).
   const probe = await browser.newContext();
   try {
@@ -110,106 +181,182 @@ async function handleLaunch(m: LaunchMessage): Promise<void> {
   }
 }
 
-async function handleRender(task: RenderMessage): Promise<void> {
-  const b = await ensureBrowser();
-  active = task;
-  answered = false;
-  let requests = 0;
-  let imagesSent = 0;
-  let imagesSkipped = 0;
-  const pendingBodies = new Set<Promise<void>>();
-  const url = task.url;
+const isRedirect = (status: number): boolean => status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 
-  const context = await b.newContext({
-    userAgent: `${defaultUserAgent} ${userAgentSuffix}`,
-    proxy: { server: `socks5://127.0.0.1:${proxyPort}`, bypass: "<-loopback>" },
-    serviceWorkers: "block",
-    acceptDownloads: false,
-  });
+/**
+ * One intercepted request, fetched here hop by hop (redirects are never
+ * left to Chromium, which would follow them unrouted). Every hop: request
+ * cap, scope for navigations, robots verdict; then a fetch through the
+ * context (the same SOCKS proxy, the same User-Agent) with redirects off.
+ */
+async function handleRoute(task: Task, route: Route): Promise<void> {
+  const req = route.request();
+  const abort = () => route.abort("blockedbyclient").catch(() => undefined);
+  if (task.done || !task.page) return void (await abort());
+  // Requests of a popup (or of anything that is not this render's page) are
+  // refused; the popup itself is closed by the context's page listener.
+  let frame;
   try {
-    const page = await context.newPage();
-    let mainStatus = 200;
-
-    // Every request is counted, scoped (documents) and robots-checked (the
-    // parent's verdict) before it may continue.
-    await page.route("**/*", (route) => {
-      void (async () => {
-        try {
-          requests += 1;
-          const req = route.request();
-          if (requests > task.maxRequests) return void route.abort("blockedbyclient");
-          if (req.resourceType() === "document" && !inScope(new URL(req.url()), task.scopeHost)) {
-            return void route.abort("blockedbyclient");
-          }
-          if (!(await askVerdict(req.url(), req.resourceType()))) return void route.abort("blockedbyclient");
-          return void route.continue();
-        } catch {
-          return void route.abort("blockedbyclient");
-        }
-      })();
-    });
-
-    page.on("response", (res) => {
-      // Image bytes are taken from the intercepted response, in memory.
-      void (async () => {
-        const type = (res.headers()["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
-        if (!type.startsWith("image/") || type === "image/svg+xml") return;
-        const target = res.url();
-        if (!/^https?:\/\//.test(target)) return;
-        if (imagesSent + imagesSkipped >= task.maxImages) {
-          imagesSkipped += 1;
-          return;
-        }
-        const done = (async () => {
-          try {
-            const body = await res.body();
-            if (body.byteLength === 0 || body.byteLength > task.maxImageBytes) {
-              imagesSkipped += 1;
-              return;
-            }
-            imagesSent += 1;
-            send({ kind: "image", id: task.id, url: target, contentType: type, bytes: new Uint8Array(body) });
-          } catch {
-            imagesSkipped += 1;
-          }
-        })();
-        pendingBodies.add(done);
-        void done.finally(() => pendingBodies.delete(done));
-      })();
-    });
-
-    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: task.timeoutMs });
-    if (response) mainStatus = response.status();
-
-    // Bounded scrolling to trigger lazy loading (infinite scroll).
-    for (let i = 0; i < task.scrolls; i++) {
-      await page.evaluate("window.scrollBy(0, Math.max(window.innerHeight, 400))");
-      if (task.scrollWaitMs > 0) await page.waitForTimeout(task.scrollWaitMs);
+    frame = req.frame();
+  } catch {
+    return void (await abort()); // no frame: a service worker's request
+  }
+  if (frame.page() !== task.page) return void (await abort());
+  const navigation = req.isNavigationRequest();
+  const mainFrame = navigation && frame === task.page.mainFrame();
+  const resourceType = req.resourceType();
+  let target = req.url();
+  for (let hop = 0; ; hop++) {
+    task.requests += 1;
+    if (task.requests > task.msg.maxRequests) return void (await abort());
+    let u: URL;
+    try {
+      u = new URL(target);
+    } catch {
+      return void (await abort());
     }
-    if (task.scrollWaitMs > 0) await page.waitForTimeout(task.scrollWaitMs); // let late responses land
-    await Promise.all([...pendingBodies]);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return void (await abort());
+    if (navigation && !inScope(u, task.msg.scopeHost)) return void (await abort());
+    if (!(await askVerdict(task, target, resourceType))) return void (await abort());
+    if (task.done) return void (await abort());
+    const response = await route.fetch({ url: target, maxRedirects: 0, timeout: remaining(task) });
+    const status = response.status();
+    const location = response.headers()["location"];
+    if (isRedirect(status) && location !== undefined) {
+      await response.dispose().catch(() => undefined);
+      if (hop >= MAX_REDIRECTS) return void (await abort());
+      let next: URL;
+      try {
+        next = new URL(location, u);
+      } catch {
+        return void (await abort());
+      }
+      next.hash = "";
+      if (mainFrame) {
+        // The main document moved: the render navigates there itself, so
+        // the new navigation is routed (scope, robots) like the first.
+        task.mainRedirect = next.href;
+        return void (await abort());
+      }
+      target = next.href;
+      continue;
+    }
+    // The final hop answered. Image bytes are taken here, in memory, under
+    // the address that actually served them.
+    const type = (response.headers()["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+    if (type.startsWith("image/") && type !== "image/svg+xml") {
+      if (task.imagesSent + task.imagesSkipped >= task.msg.maxImages) {
+        task.imagesSkipped += 1;
+      } else {
+        try {
+          const body = await response.body();
+          if (body.byteLength === 0 || body.byteLength > task.msg.maxImageBytes) {
+            task.imagesSkipped += 1;
+          } else {
+            task.imagesSent += 1;
+            sendFor(task, { kind: "image", id: task.msg.id, url: target, contentType: type, bytes: new Uint8Array(body) });
+          }
+        } catch {
+          task.imagesSkipped += 1;
+        }
+      }
+    }
+    if (task.done) return void (await abort());
+    return void (await route.fulfill({ response }));
+  }
+}
 
-    const html = await page.content();
-    const truncated = html.length > task.maxHtmlBytes;
-    if (answered) return;
-    answered = true;
-    send({
+async function handleRender(msg: RenderMessage): Promise<void> {
+  const task: Task = {
+    msg,
+    done: false,
+    context: null,
+    page: null,
+    deadlineAt: Date.now() + msg.timeoutMs,
+    requests: 0,
+    imagesSent: 0,
+    imagesSkipped: 0,
+    mainRedirect: null,
+  };
+  tasks.set(msg.id, task);
+  // The render's own deadline; the parent SIGKILLs this process if even
+  // this is overrun.
+  const deadline = setTimeout(() => endTask(task, "browser_failed"), msg.timeoutMs);
+  try {
+    const b = await ensureBrowser();
+    if (task.done) return;
+    const context = await b.newContext({
+      userAgent: `${defaultUserAgent} ${userAgentSuffix}`,
+      proxy: { server: `socks5://127.0.0.1:${proxyPort}`, bypass: "<-loopback>" },
+      serviceWorkers: "block",
+      acceptDownloads: false,
+    });
+    task.context = context;
+    if (task.done) return;
+
+    // Every request of the context (page, frames, popups) is routed; no
+    // WebSocket is ever connected (no connectToServer: the server is never
+    // contacted).
+    await context.route("**/*", (route) => {
+      void handleRoute(task, route).catch(() => route.abort("blockedbyclient").catch(() => undefined));
+    });
+    await context.routeWebSocket(/.*/, (ws) => {
+      void ws.close().catch(() => undefined);
+    });
+
+    const page = await context.newPage();
+    task.page = page;
+    // Popups: any other page of this context is closed at once.
+    context.on("page", (p) => {
+      if (p !== page) void p.close().catch(() => undefined);
+    });
+
+    // Navigate, following main-frame redirects here (each target is routed,
+    // scope- and robots-checked like the first request).
+    let target = msg.url;
+    let response = null;
+    for (let hop = 0; ; hop++) {
+      task.mainRedirect = null;
+      try {
+        response = await page.goto(target, { waitUntil: "domcontentloaded", timeout: remaining(task) });
+      } catch (err) {
+        if (task.mainRedirect === null || task.done) throw err;
+      }
+      if (task.mainRedirect === null) break;
+      if (hop >= MAX_REDIRECTS) throw new Error("too_many_redirects");
+      target = task.mainRedirect;
+    }
+    const mainStatus = response ? response.status() : 200;
+
+    // Bounded scrolling to trigger lazy loading (infinite scroll); a page
+    // script that blocks the main thread cannot hold an evaluate forever.
+    for (let i = 0; i < msg.scrolls && !task.done; i++) {
+      await bounded(task, page.evaluate("window.scrollBy(0, Math.max(window.innerHeight, 400))"), EVALUATE_TIMEOUT_MS);
+      if (msg.scrollWaitMs > 0) await page.waitForTimeout(Math.min(msg.scrollWaitMs, remaining(task)));
+    }
+    // Let late responses land.
+    if (msg.scrollWaitMs > 0 && !task.done) await page.waitForTimeout(Math.min(msg.scrollWaitMs, remaining(task)));
+
+    const html = await bounded(task, page.content(), EVALUATE_TIMEOUT_MS);
+    const truncated = html.length > msg.maxHtmlBytes;
+    answer(task, {
       kind: "rendered",
-      id: task.id,
+      id: msg.id,
       url: page.url(),
       status: mainStatus,
-      html: truncated ? html.slice(0, task.maxHtmlBytes) : html,
+      html: truncated ? html.slice(0, msg.maxHtmlBytes) : html,
       truncated,
-      stats: { requests, imagesSkipped },
+      stats: { requests: task.requests, imagesSkipped: task.imagesSkipped },
     });
   } catch {
-    if (!answered) {
-      answered = true;
-      failActive("browser_failed");
-    }
+    endTask(task, "browser_failed");
   } finally {
-    active = null;
-    await context.close().catch(() => undefined);
+    clearTimeout(deadline);
+    // Over before closing, so nothing the closing context still triggers
+    // is sent; only this render's own entry is removed.
+    task.done = true;
+    await task.context?.close().catch(() => undefined);
+    if (tasks.get(msg.id) === task) tasks.delete(msg.id);
   }
 }
 
@@ -227,30 +374,33 @@ process.on("message", (raw: unknown) => {
   }
   if (kind === "verdict") {
     const parsed = VerdictMessageSchema.safeParse(raw);
-    if (parsed.success) pendingChecks.get(parsed.data.seq)?.(parsed.data.allow);
+    if (!parsed.success) return;
+    const pending = pendingChecks.get(parsed.data.seq);
+    // A verdict for another render (or a stale one) is ignored.
+    if (!pending || pending.taskId !== parsed.data.id) return;
+    pendingChecks.delete(parsed.data.seq);
+    pending.resolve(parsed.data.allow);
     return;
   }
   if (kind === "abort") {
     const parsed = AbortMessageSchema.safeParse(raw);
-    // The parent aborts only the render it knows is active; closing the
-    // context makes every in-flight operation reject, which fails the task.
-    if (parsed.success) {
-      answered = true;
-      const task = active;
-      active = null;
-      if (task) send({ kind: "failed", id: task.id, code: "browser_aborted" });
-    }
+    if (!parsed.success) return;
+    // Answer once and close that render's context; an unknown or finished
+    // render has nothing left to abort.
+    const task = tasks.get(parsed.data.id);
+    if (task) endTask(task, "browser_aborted");
     return;
   }
   if (kind === "stop") {
     if (StopMessageSchema.safeParse(raw).success) {
+      for (const task of tasks.values()) endTask(task, "browser_aborted");
       send({ kind: "stopped" });
-      void browser?.close().finally(() => process.exit(0));
+      void (browser?.close() ?? Promise.resolve()).finally(() => process.exit(0));
     }
   }
 });
 
 // The parent is gone: nothing left to render for, and no page may outlive it.
 process.on("disconnect", () => {
-  void browser?.close().finally(() => process.exit(0));
+  void (browser?.close() ?? Promise.resolve()).finally(() => process.exit(0));
 });

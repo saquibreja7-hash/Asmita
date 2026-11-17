@@ -109,13 +109,18 @@ export const FailedMessageSchema = z.strictObject({
   code: z.enum(WORKER_FAIL_CODES),
 });
 
+/** The worker's acknowledgement of a graceful stop, sent just before it exits. */
+export const StoppedMessageSchema = z.strictObject({ kind: z.literal("stopped") });
+
 export type ReadyMessage = z.infer<typeof ReadyMessageSchema>;
 export type CheckMessage = z.infer<typeof CheckMessageSchema>;
 export type ImageMessage = z.infer<typeof ImageMessageSchema>;
 export type RenderedMessage = z.infer<typeof RenderedMessageSchema>;
 export type FailedMessage = z.infer<typeof FailedMessageSchema>;
 
-export type WorkerMessage = ReadyMessage | CheckMessage | ImageMessage | RenderedMessage | FailedMessage;
+export type StoppedMessage = z.infer<typeof StoppedMessageSchema>;
+
+export type WorkerMessage = ReadyMessage | CheckMessage | ImageMessage | RenderedMessage | FailedMessage | StoppedMessage;
 
 /** Parse one worker -> parent message; null for anything unexpected. */
 export function parseWorkerMessage(raw: unknown): WorkerMessage | null {
@@ -132,6 +137,8 @@ export function parseWorkerMessage(raw: unknown): WorkerMessage | null {
       return RenderedMessageSchema.safeParse(raw).success ? (raw as RenderedMessage) : null;
     case "failed":
       return FailedMessageSchema.safeParse(raw).success ? (raw as FailedMessage) : null;
+    case "stopped":
+      return StoppedMessageSchema.safeParse(raw).success ? (raw as StoppedMessage) : null;
     default:
       return null;
   }

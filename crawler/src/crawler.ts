@@ -434,7 +434,13 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * process, match, and queue a finding for every pool hit. `imageUrl` is
    * the address after redirects; `pageUrl` is the page as claimed.
    */
-  const decodeMatchReport = async (bytes: Buffer, imageUrl: string, pageUrl: URL, source: Source): Promise<boolean> => {
+  const decodeMatchReport = async (
+    bytes: Buffer,
+    imageUrl: string,
+    pageUrl: URL,
+    source: Source,
+    deferred?: Finding[],
+  ): Promise<boolean> => {
     let hashed;
     try {
       // Decoding runs in an isolated child process (decoder-pool.ts) that
@@ -476,11 +482,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     const observedAt = new Date(now()).toISOString();
     for (const hit of m.match(hashed.pdq)) {
-      const key = `${hit.fingerprintId}\n${imageUrl}`;
-      if (reported.has(key)) continue;
-      reported.add(key);
-      metrics.matches++;
-      sink.add({
+      const finding: Finding = {
         fingerprintId: hit.fingerprintId,
         pageUrl: pageUrl.href,
         imageUrl,
@@ -488,9 +490,24 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         quality: hashed.quality,
         observedAt,
         sourceId: source.id,
-      });
+      };
+      // A browser render's findings wait until its final URL passed the
+      // scope check (releaseFindings); everything else is queued now.
+      if (deferred) deferred.push(finding);
+      else releaseFindings([finding]);
     }
     return true;
+  };
+
+  /** Queue findings for delivery, once per fingerprint and image address. */
+  const releaseFindings = (findings: Finding[]): void => {
+    for (const finding of findings) {
+      const key = `${finding.fingerprintId}\n${finding.imageUrl}`;
+      if (reported.has(key)) continue;
+      reported.add(key);
+      metrics.matches++;
+      sink.add(finding);
+    }
   };
 
   /**
@@ -500,7 +517,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * host caps decide whether it is processed, and the bytes go through the
    * same decoder path as every other image.
    */
-  const processBrowserImage = async (img: BrowserImage, pageUrl: URL, ctx: SourceCtx): Promise<boolean> => {
+  const processBrowserImage = async (img: BrowserImage, pageUrl: URL, ctx: SourceCtx, deferred: Finding[]): Promise<boolean> => {
     const { source, scopeHost, offHosts, failedOffHosts } = ctx;
     if (!inScope(pageUrl, scopeHost)) {
       record("out_of_scope");
@@ -550,7 +567,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     seenImages.add(urlKey(img.url));
     metrics.imagesSeen++;
     if (offScope) metrics.imagesOffHost++;
-    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source);
+    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source, deferred);
     if (offScope) {
       if (ok) {
         failedOffHosts.delete(host);
@@ -743,7 +760,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     page: ClaimedPage,
     url: URL,
     ctx: SourceCtx,
-  ): Promise<"dropped" | { ok: true; html: string; url: URL; imagesSkipped: number } | { ok: false; code: ErrorCode }> => {
+  ): Promise<"dropped" | { ok: true; html: string; url: URL; imagesSkipped: number; findings: Finding[] } | { ok: false; code: ErrorCode }> => {
     if (!browser) return { ok: false, code: "browser_launch_failed" };
     // Politeness for the browser's own document request: the host slot the
     // HTTP pre-fetch used has moved on, so this waits out the source delay
@@ -754,13 +771,16 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     } catch (raw) {
       return { ok: false, code: toCrawlError(raw).code };
     }
+    // Findings are held back until the caller has checked the render's
+    // final URL: a render that ended up off scope credits nothing.
+    const findings: Finding[] = [];
     const outcome = await browser.render(
       url,
       ctx.scopeHost,
-      (img) => processBrowserImage(img, url, ctx),
+      (img) => processBrowserImage(img, url, ctx, findings),
       hard.signal,
     );
-    if (outcome.ok) return { ok: true, html: outcome.html, url: outcome.url, imagesSkipped: outcome.imagesSkipped };
+    if (outcome.ok) return { ok: true, html: outcome.html, url: outcome.url, imagesSkipped: outcome.imagesSkipped, findings };
     if (outcome.code === "browser_aborted" && stop.signal.aborted) return "dropped";
     return { ok: false, code: outcome.code };
   };
@@ -978,12 +998,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       const rendered = await renderPageInBrowser(page, url, ctx);
       if (rendered === "dropped") return null; // stopped mid-render: redo whole
       if (rendered.ok) {
-        // Belt and braces on the final rendered URL.
+        // Belt and braces on the final rendered URL; the render's findings
+        // are released only after it passed.
         if (!inScope(rendered.url, scopeHost)) {
           record("out_of_scope");
           metrics.pagesOutOfScope++;
           return { id: page.id, status: "error", links: [] };
         }
+        releaseFindings(rendered.findings);
         metrics.skip("browser", rendered.imagesSkipped);
         if (stop.signal.aborted) return null;
         const ex2 = extract(rendered.html, rendered.url, result.xRobotsTag, {

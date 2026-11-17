@@ -30,6 +30,7 @@ import {
   AbortMessageSchema,
   LaunchMessageSchema,
   RenderMessageSchema,
+  StopMessageSchema,
   VerdictMessageSchema,
   parseWorkerMessage,
   type RenderMessage,
@@ -65,7 +66,11 @@ export function browserWorkerExecArgv(workerPath: string, tmpDir: string, browse
     `--allow-fs-read=${join(appRoot, "node_modules", "playwright-core", "*")}`,
     `--allow-fs-read=${browsersPath}`,
     `--allow-fs-read=${join(browsersPath, "*")}`,
-    "--allow-fs-read=/proc/*",
+    // No /proc: the worker's Node code does not need it (Playwright's only
+    // /proc reads are WSL/Docker probes in its xdg-open helper, which catch
+    // the denial), and /proc/<pid>/environ of the parent would hold the
+    // service key if it were ever passed inline. Chromium is a separate
+    // native process and is not bound by Node's permission model either way.
     "--allow-fs-read=/etc/*",
     "--allow-fs-read=/sys/*",
     "--allow-fs-read=/dev/*",
@@ -98,6 +103,8 @@ export type BrowserRendererOptions = {
     connectTimeoutMs: number;
     /** Grace beyond the page deadline before the worker is SIGKILLed (tests lower it). */
     renderGraceMs?: number;
+    /** How long close() waits for a graceful stop before SIGKILL (tests lower it). */
+    stopGraceMs?: number;
   };
   /** Override the worker script (tests use a fake worker). */
   workerPath?: string;
@@ -115,6 +122,8 @@ const LAUNCH_TIMEOUT_MS = 30_000;
 /** Default grace beyond the page deadline, then SIGKILL. */
 const DEFAULT_RENDER_GRACE_MS = 10_000;
 const KILL_GRACE_MS = 5_000;
+/** close(): wait this long for the worker to stop gracefully, then SIGKILL. */
+const STOP_GRACE_MS = 5_000;
 
 type ActiveRender = {
   id: number;
@@ -154,16 +163,29 @@ export class BrowserRenderer {
     return result;
   }
 
-  /** Stop everything: abort the active render, kill the worker, close the proxy. */
+  /**
+   * Stop everything: abort the active render, ask the worker to stop (it
+   * closes Chromium, so Playwright removes its temporary profile), SIGKILL
+   * it if it has not exited within the grace, and close the proxy.
+   */
   async close(): Promise<void> {
     this.dead = true;
     this.failCurrent("browser_aborted");
     const child = this.child;
     this.child = null;
-    if (child && child.exitCode === null) {
+    if (child && child.exitCode === null && child.signalCode === null) {
       await new Promise<void>((resolve) => {
-        child.once("exit", () => resolve());
-        child.kill("SIGKILL");
+        const timer = setTimeout(() => child.kill("SIGKILL"), this.opts.config.stopGraceMs ?? STOP_GRACE_MS);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        try {
+          if (child.connected) child.send(StopMessageSchema.parse({ kind: "stop" }));
+          else child.kill("SIGKILL");
+        } catch {
+          child.kill("SIGKILL");
+        }
       });
     }
     await this.proxy?.stop();
@@ -265,17 +287,26 @@ export class BrowserRenderer {
       this.failCurrent("browser_protocol");
       return;
     }
+    if (msg.kind === "ready" || msg.kind === "stopped") return; // the launch wait / close() handle these
+    if (msg.kind === "failed" && msg.id === 0) return; // launch failure handled by the launch wait
+    // A render id this renderer never issued is a violation. An id it issued
+    // earlier is a stale render still unwinding in the worker (aborted or
+    // timed out): its messages are dropped, and its robots questions are
+    // answered "no", so it can neither credit images nor fail the current one.
+    if (msg.id < 1 || msg.id >= this.nextRenderId) return this.protocolViolation();
     const current = this.current;
+    if (!current || msg.id !== current.id) {
+      if (msg.kind === "check") {
+        const reply = VerdictMessageSchema.safeParse({ kind: "verdict", id: msg.id, seq: msg.seq, allow: false });
+        if (reply.success) this.child?.send(reply.data);
+      }
+      return;
+    }
     switch (msg.kind) {
-      case "ready":
-        return; // handled by the launch wait
       case "failed":
-        if (msg.id === 0) return; // launch failure handled by the launch wait
-        if (current && msg.id === current.id) this.failCurrent(msg.code === "browser_aborted" ? "browser_aborted" : "browser_failed");
-        else if (current) this.protocolViolation();
+        this.failCurrent(msg.code === "browser_aborted" ? "browser_aborted" : "browser_failed");
         return;
       case "check": {
-        if (!current || msg.id !== current.id) return this.protocolViolation();
         void (async () => {
           let allow: boolean;
           try {
@@ -290,7 +321,6 @@ export class BrowserRenderer {
         return;
       }
       case "image": {
-        if (!current || msg.id !== current.id) return this.protocolViolation();
         if (msg.bytes.byteLength === 0 || msg.bytes.byteLength > this.opts.config.maxImageBytes) {
           return this.protocolViolation();
         }
@@ -310,7 +340,6 @@ export class BrowserRenderer {
         return;
       }
       case "rendered": {
-        if (!current || msg.id !== current.id) return this.protocolViolation();
         if (msg.html.length > this.opts.config.maxHtmlBytes) return this.protocolViolation();
         const finalUrl = new URL(msg.url);
         this.finish(current, {
@@ -402,17 +431,14 @@ export class BrowserRenderer {
         settled: false,
         overBudget: false,
         deadline: setTimeout(() => {
-          // Deadline: ask the worker to abort; force-kill if it will not.
-          const abort = AbortMessageSchema.parse({ kind: "abort", id });
-          this.child?.send(abort);
-          const killTimer = setTimeout(() => {
-            if (this.current === current && !current.settled) {
-              this.killWorker();
-              this.finish(current, { ok: false, code: "browser_timeout" });
-            }
-          }, this.opts.config.renderGraceMs ?? KILL_GRACE_MS);
-          killTimer.unref?.();
-          current.killTimer = killTimer;
+          // Deadline (the worker's own deadline plus a grace) overrun: the
+          // worker is SIGKILLed whatever it would answer, so a render that
+          // ignores its deadline can never outlive it. The next render
+          // spawns a fresh worker.
+          if (this.current === current && !current.settled) {
+            this.killWorker();
+            this.finish(current, { ok: false, code: "browser_timeout" });
+          }
         }, this.opts.config.pageTimeoutMs + (this.opts.config.renderGraceMs ?? DEFAULT_RENDER_GRACE_MS)),
         killTimer: null,
       };
@@ -433,6 +459,8 @@ export class BrowserRenderer {
         if (this.current) this.abortRender(this.current);
       };
       signal.addEventListener("abort", onAbort, { once: true });
+      // A stop that came while this render waited its turn (or the launch).
+      if (signal.aborted) onAbort();
       void result.finally(() => signal.removeEventListener("abort", onAbort));
     }
     return result;
