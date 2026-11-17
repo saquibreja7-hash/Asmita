@@ -13,6 +13,7 @@ const db = vi.hoisted(() => {
     crawlSource: { findUnique: fn(), update: fn() },
     crawlPage: { count: fn(), create: fn(), findMany: fn(), update: fn(), createMany: fn(), updateMany: fn(), deleteMany: fn() },
     $queryRaw: fn(),
+    $executeRaw: fn(),
     $transaction: fn(),
   };
   return self;
@@ -97,6 +98,41 @@ describe("claimCrawlPages, Prisma path", () => {
   it("hands out nothing once the day's budget is spent", async () => {
     db.crawlPage.count.mockResolvedValueOnce(1); // hasPages
     db.crawlPage.count.mockResolvedValueOnce(50); // fetched today == pageBudget
+    expect(await claimCrawlPages(SOURCE.id, 10, NOW)).toEqual([]);
+    expect(db.$queryRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe("claim budget under concurrency, Prisma path (review fix)", () => {
+  it("locks the source row first, then subtracts fetched and still-claimed rows inside the transaction", async () => {
+    db.crawlPage.count.mockResolvedValueOnce(1); // hasPages
+    db.crawlPage.count.mockResolvedValueOnce(30); // fetched today
+    db.crawlPage.count.mockResolvedValueOnce(15); // claimed, not yet reported
+    db.$queryRaw.mockResolvedValueOnce([]);
+    await claimCrawlPages(SOURCE.id, 10, NOW);
+
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    const lock = db.$executeRaw.mock.calls[0]!;
+    expect((lock[0] as string[]).join("?")).toContain('FROM "CrawlSource" WHERE "id" = ? FOR UPDATE');
+    expect(lock[1]).toBe(SOURCE.id);
+    // The lock comes before the budget counts, which run on the transaction.
+    expect(db.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(db.crawlPage.count.mock.invocationCallOrder[1]!);
+    expect(db.crawlPage.count.mock.calls[2]![0]).toEqual({
+      where: {
+        sourceId: SOURCE.id, claimedUntil: { gt: NOW },
+        OR: [{ lastFetchedAt: null }, { lastFetchedAt: { lt: new Date("2026-11-17T00:00:00Z") } }],
+      },
+    });
+    // Budget 50 - 30 fetched - 15 out = 5, below the claim limit of 10.
+    const raw = db.$queryRaw.mock.calls[0]!;
+    expect(raw.slice(1)).toContain(5);
+    expect(raw.slice(1)).not.toContain(10);
+  });
+
+  it("claims nothing when the outstanding claims use up the rest of the budget", async () => {
+    db.crawlPage.count.mockResolvedValueOnce(1);
+    db.crawlPage.count.mockResolvedValueOnce(40);
+    db.crawlPage.count.mockResolvedValueOnce(10);
     expect(await claimCrawlPages(SOURCE.id, 10, NOW)).toEqual([]);
     expect(db.$queryRaw).not.toHaveBeenCalled();
   });

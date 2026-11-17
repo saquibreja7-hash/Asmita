@@ -131,6 +131,27 @@ describe("claimCrawlPages, Kysely path", () => {
   });
 });
 
+describe("claim budget under concurrency, Kysely path (review fix)", () => {
+  it("locks the source row FOR UPDATE before counting, and subtracts rows still claimed", async () => {
+    // The fake answers both count selects with the first CrawlPage row:
+    // 20 fetched today and 20 out with another crawler, budget 50.
+    kysely.state.rows.CrawlPage = [pageRow({ count: 20 })];
+    await claimCrawlPages(SOURCE.id, 15, NOW);
+    const ordered = kysely.state.calls.map((call) => `${call.op} ${call.table}${call.detail.forUpdate ? " for update" : ""}`);
+    const lockAt = ordered.indexOf("select CrawlSource for update");
+    expect(lockAt).toBeGreaterThan(-1);
+    const counts = kysely.state.calls
+      .map((call, index) => ({ call, index }))
+      .filter(({ call }) => call.table === "CrawlPage" && call.op === "select" && !call.detail.forUpdate && call.detail.limit === undefined);
+    // hasPages has a limit; the two budget counts come after the lock.
+    expect(counts).toHaveLength(2);
+    for (const { index } of counts) expect(index).toBeGreaterThan(lockAt);
+    expect(counts[1]!.call.detail.wheres).toEqual(expect.arrayContaining([["claimedUntil", ">", NOW]]));
+    const claim = kysely.state.calls.find((call) => call.table === "CrawlPage" && call.detail.forUpdate === true)!;
+    expect(claim.detail.limit).toBe(10); // 50 - 20 - 20
+  });
+});
+
 describe("reportCrawlPages, Kysely path", () => {
   it("schedules the page, inserts new links once with ON CONFLICT and moves the source counters", async () => {
     kysely.state.rows.CrawlPage = [pageRow()];

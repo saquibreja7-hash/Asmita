@@ -164,25 +164,31 @@ function startOfUtcDay(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
-/** Pages of one source fetched since the start of the UTC day. */
-async function pagesFetchedToday(sourceId: string, now: Date): Promise<number> {
+/**
+ * What a claim may still hand out today: the page budget minus the pages
+ * fetched since the start of the UTC day minus the rows already out with a
+ * crawler (claimed, claim not expired) that were not fetched today. The
+ * claimed rows count because their fetch will count when reported: without
+ * them, two crawler processes could each claim the full budget. A claimed
+ * row already fetched today (an error retry keeps its lastFetchedAt) is
+ * counted once, as fetched. Pure; the counts come from the callers below,
+ * read inside the claim transaction while the source row is locked.
+ */
+function remainingBudget(pageBudget: number, fetchedToday: number, outstanding: number): number {
+  return pageBudget - fetchedToday - outstanding;
+}
+
+function memoryBudgetCounts(sourceId: string, now: Date): { fetchedToday: number; outstanding: number } {
   const dayStart = startOfUtcDay(now);
-  if (isDevNoDb()) {
-    let count = 0;
-    for (const page of crawlMemory().pages.values()) {
-      if (page.sourceId === sourceId && page.lastFetchedAt && page.lastFetchedAt >= dayStart) count++;
-    }
-    return count;
+  let fetchedToday = 0;
+  let outstanding = 0;
+  for (const page of crawlMemory().pages.values()) {
+    if (page.sourceId !== sourceId) continue;
+    const fetched = page.lastFetchedAt !== null && page.lastFetchedAt >= dayStart;
+    if (fetched) fetchedToday++;
+    else if (page.claimedUntil && page.claimedUntil > now) outstanding++;
   }
-  if (usesWorkerKysely()) {
-    const row = await getWorkerDb().selectFrom("CrawlPage")
-      .select((eb) => eb.fn.countAll<string>().as("count"))
-      .where("sourceId", "=", sourceId).where("lastFetchedAt", ">=", dayStart)
-      .executeTakeFirst();
-    return Number(row?.count ?? 0);
-  }
-  const { db } = await import("@/lib/db");
-  return db.crawlPage.count({ where: { sourceId, lastFetchedAt: { gte: dayStart } } });
+  return { fetchedToday, outstanding };
 }
 
 /** Whether the source has any frontier rows yet (the seed is created on first claim). */
@@ -232,8 +238,8 @@ type DueRow = {
 /**
  * The next due pages of one source, claimed for FRONTIER_CLAIM_MS. The daily
  * budget applies: once pageBudget pages were fetched today (lastFetchedAt
- * within the UTC day), nothing more is handed out, and a claim never crosses
- * the remaining budget. If the source has no rows yet, the seed row
+ * within the UTC day) or are out with a crawler, nothing more is handed out,
+ * and a claim never crosses the remaining budget (claimDue). If the source has no rows yet, the seed row
  * (https://<domain>/) is created first, so the first run starts at the home
  * page. Unknown or disabled sources claim nothing (the crawler treats an
  * empty batch as "source done").
@@ -249,14 +255,23 @@ export async function claimCrawlPages(sourceId: string, limit: number, now = new
   return claimDue(source, Math.min(limit, FRONTIER_CLAIM_LIMIT_MAX), now);
 }
 
-/** Selects due rows and marks them claimed, as one transaction on the database paths. */
+/**
+ * Selects due rows and marks them claimed, as one transaction on the
+ * database paths. The source row is locked first (SELECT ... FOR UPDATE), so
+ * concurrent claims for one source run their budget arithmetic one after the
+ * other and each sees the rows the previous one claimed; claims for other
+ * sources are not blocked. The page rows are still taken FOR UPDATE SKIP
+ * LOCKED.
+ */
 async function claimDue(source: SourceRow, limit: number, now: Date): Promise<ClaimedCrawlPage[]> {
-  const remainingBudget = source.pageBudget - (await pagesFetchedToday(source.id, now));
-  const take = Math.min(limit, remainingBudget);
-  if (take <= 0) return [];
   const claimedUntil = new Date(now.getTime() + FRONTIER_CLAIM_MS);
+  const dayStart = startOfUtcDay(now);
 
   if (isDevNoDb()) {
+    // Single-threaded: the count and the claim cannot interleave.
+    const { fetchedToday, outstanding } = memoryBudgetCounts(source.id, now);
+    const take = Math.min(limit, remainingBudget(source.pageBudget, fetchedToday, outstanding));
+    if (take <= 0) return [];
     const memory = crawlMemory();
     const due = [...memory.pages.values()]
       .filter(
@@ -283,6 +298,22 @@ async function claimDue(source: SourceRow, limit: number, now: Date): Promise<Cl
 
   if (usesWorkerKysely()) {
     return getWorkerDb().transaction().execute(async (trx) => {
+      // Serialises claims of this source until commit; re-reads the budget
+      // and the switch under the lock.
+      const locked = await trx.selectFrom("CrawlSource").select(["id", "pageBudget", "enabled"])
+        .where("id", "=", source.id).forUpdate().executeTakeFirst();
+      if (!locked || !locked.enabled) return [];
+      const fetched = await trx.selectFrom("CrawlPage")
+        .select((eb) => eb.fn.countAll<string>().as("count"))
+        .where("sourceId", "=", source.id).where("lastFetchedAt", ">=", dayStart)
+        .executeTakeFirst();
+      const out = await trx.selectFrom("CrawlPage")
+        .select((eb) => eb.fn.countAll<string>().as("count"))
+        .where("sourceId", "=", source.id).where("claimedUntil", ">", now)
+        .where((eb) => eb.or([eb("lastFetchedAt", "is", null), eb("lastFetchedAt", "<", dayStart)]))
+        .executeTakeFirst();
+      const take = Math.min(limit, remainingBudget(locked.pageBudget, Number(fetched?.count ?? 0), Number(out?.count ?? 0)));
+      if (take <= 0) return [];
       // FOR UPDATE SKIP LOCKED: two crawler instances (or two Workers) never
       // get the same row; a concurrent claim simply takes the next ones.
       const rows = await trx.selectFrom("CrawlPage")
@@ -306,6 +337,16 @@ async function claimDue(source: SourceRow, limit: number, now: Date): Promise<Cl
 
   const { db } = await import("@/lib/db");
   return db.$transaction(async (tx) => {
+    // Serialises claims of this source until commit (see above).
+    await tx.$executeRaw`SELECT "id" FROM "CrawlSource" WHERE "id" = ${source.id} FOR UPDATE`;
+    const locked = await tx.crawlSource.findUnique({ where: { id: source.id }, select: { pageBudget: true, enabled: true } });
+    if (!locked || !locked.enabled) return [];
+    const fetchedToday = await tx.crawlPage.count({ where: { sourceId: source.id, lastFetchedAt: { gte: dayStart } } });
+    const outstanding = await tx.crawlPage.count({
+      where: { sourceId: source.id, claimedUntil: { gt: now }, OR: [{ lastFetchedAt: null }, { lastFetchedAt: { lt: dayStart } }] },
+    });
+    const take = Math.min(limit, remainingBudget(locked.pageBudget, fetchedToday, outstanding));
+    if (take <= 0) return [];
     const rows = await tx.$queryRaw<DueRow[]>`
       SELECT "id", "urlEncrypted", "depth", "etag", "lastModified" FROM "CrawlPage"
       WHERE "sourceId" = ${source.id}

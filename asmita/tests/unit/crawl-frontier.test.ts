@@ -116,6 +116,25 @@ describe("claim", () => {
     // Tomorrow the source hands out URLs again.
     expect((await claimCrawlPages(budget, 10, nowAt(DAY + 5 * MIN))).length).toBeGreaterThan(0);
   });
+
+  it("counts rows already out with another crawler against the budget (review fix)", async () => {
+    const budget = await createSource("shared.example.com", 4);
+    const seed = await claimCrawlPages(budget, 10, nowAt(0));
+    await reportCrawlPages(budget, "run-1", [{ id: seed[0]!.id, status: "fetched", links:
+      ["a", "b", "c", "d", "e", "f"].map((path) => ({ url: `https://shared.example.com/${path}`, kind: "page" as const })) }], nowAt(1 * MIN));
+    // Budget 4, one fetched: three may go out today in total, across processes.
+    const first = await claimCrawlPages(budget, 2, nowAt(2 * MIN)); // crawler A
+    expect(first).toHaveLength(2);
+    const second = await claimCrawlPages(budget, 10, nowAt(3 * MIN)); // crawler B
+    expect(second).toHaveLength(1);
+    expect(await claimCrawlPages(budget, 10, nowAt(4 * MIN))).toEqual([]);
+    // A's batch is reported: still nothing more (fetched 3 + B's 1 out = 4).
+    await reportCrawlPages(budget, "run-a", first.map((u) => ({ id: u.id, status: "fetched", links: [] })), nowAt(5 * MIN));
+    expect(await claimCrawlPages(budget, 10, nowAt(6 * MIN))).toEqual([]);
+    // B is killed: once its claim expires its slot is free again.
+    const afterExpiry = await claimCrawlPages(budget, 10, nowAt(3 * MIN + 30 * MIN + 1));
+    expect(afterExpiry).toHaveLength(1);
+  });
 });
 
 describe("report", () => {
