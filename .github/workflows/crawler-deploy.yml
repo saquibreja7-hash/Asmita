@@ -1,0 +1,89 @@
+name: Crawler deploy (Cloudflare)
+
+# Builds crawler/Dockerfile and deploys Worker asmita-crawler
+# (deploy/crawler-cloudflare/), which runs the crawler hourly on Cloudflare
+# Containers. Runs on master when crawler code or the deploy project changes,
+# after the same checks as Crawler CI; or by hand from the Actions tab.
+#
+# Run it by hand with rotate_service_key to issue a new crawler key: the key is
+# generated here, stored straight into the Worker secret CRAWLER_SERVICE_KEY,
+# masked, and never printed. Only its sha256 goes to the job summary; register
+# that hash in CrawlServiceKey (the app stores only hashes) and revoke the old
+# key with asmita/scripts/issue-crawler-service-key.mjs.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "crawler/**"
+      - "asmita/src/lib/pdq/**"
+      - "deploy/crawler-cloudflare/**"
+      - ".github/workflows/crawler-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      rotate_service_key:
+        description: "Generate a new crawler service key and store it as the Worker secret"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crawler-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Check, build and deploy
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            crawler/package-lock.json
+            deploy/crawler-cloudflare/package-lock.json
+
+      # The same checks as Crawler CI, so a deploy never ships what CI would fail.
+      - name: Crawler checks
+        working-directory: crawler
+        run: |
+          npm ci
+          npx playwright-core install --with-deps chromium
+          npm run check
+
+      - name: Deploy project checks
+        working-directory: deploy/crawler-cloudflare
+        run: |
+          npm ci
+          npm run check
+
+      - name: Build image and deploy
+        working-directory: deploy/crawler-cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      - name: Rotate crawler service key
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.rotate_service_key }}
+        working-directory: deploy/crawler-cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          KEY="cwk_$(openssl rand -hex 24)"
+          echo "::add-mask::$KEY"
+          printf '%s' "$KEY" | npx wrangler secret put CRAWLER_SERVICE_KEY
+          HASH=$(printf '%s' "$KEY" | sha256sum | cut -d' ' -f1)
+          unset KEY
+          {
+            echo "### New crawler service key"
+            echo "Stored as Worker secret CRAWLER_SERVICE_KEY. Register this sha256 in CrawlServiceKey:"
+            echo
+            echo "\`$HASH\`"
+          } >> "$GITHUB_STEP_SUMMARY"

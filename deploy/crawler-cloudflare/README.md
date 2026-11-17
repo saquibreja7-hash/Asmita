@@ -9,20 +9,22 @@ Durable Object to start a crawler container from `crawler/Dockerfile`
 Needs the Workers Paid plan (Containers) and `ENABLE_CRAWLER=true` on
 `asmita-production` (set in `asmita/wrangler.jsonc`).
 
-## First deploy
+## Deploying
 
-1. Docker running locally (wrangler builds the image from the Dockerfile).
-2. Issue a service key and store it as the Worker's secret without printing
-   it: see "Service key" below.
-3. From this folder: `npm ci && npm run check && npx wrangler deploy`.
+GitHub Actions (`.github/workflows/crawler-deploy.yml`) builds the image and
+deploys on every push to master that touches `crawler/`, `asmita/src/lib/pdq/`
+or this folder, after the same checks as Crawler CI. It can also be run by
+hand from the Actions tab. It needs two repository secrets:
+`CLOUDFLARE_API_TOKEN` (Account: Workers Scripts Edit, Containers Edit,
+Account Settings Read) and `CLOUDFLARE_ACCOUNT_ID`.
 
 ## Service key
 
-The app stores only the key's sha256 (`CrawlServiceKey`). Generate the key,
-put it in the Worker secret `CRAWLER_SERVICE_KEY` (`npx wrangler secret put
-CRAWLER_SERVICE_KEY`, reading from stdin) and insert its hash with
-`asmita/scripts/issue-crawler-service-key.mjs` or an equivalent one-off that
-never prints the key. Revoke with `issue-crawler-service-key.mjs revoke <id>`.
+Run the workflow by hand with **rotate_service_key** ticked. It generates a
+new key, stores it as the Worker secret `CRAWLER_SERVICE_KEY` and prints only
+its sha256 in the job summary; the key itself is never shown. Register that
+hash in `CrawlServiceKey` (the app stores only hashes), then revoke the old
+key with `asmita/scripts/issue-crawler-service-key.mjs revoke <id>`.
 
 ## Settings (`wrangler.jsonc` vars)
 
