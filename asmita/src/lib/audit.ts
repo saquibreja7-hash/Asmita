@@ -44,19 +44,40 @@ function canonicalize(value: unknown): string {
 }
 
 export async function writeAuditLog(event: AuditEvent) {
+  await writeAuditLogs([event]);
+}
+
+/**
+ * Writes several audit entries in one go, preserving the hash chain and the
+ * order: sequence numbers ascend and each entry hashes its predecessor,
+ * exactly as the same events written one by one. In database mode the whole
+ * batch is one transaction — one LOCK, one previous-hash lookup, one insert
+ * of all rows — so a bulk change (the crawler's host import, WP2) stays
+ * within the Worker's per-request subrequest limit instead of paying three
+ * queries per entry. A failure rejects the whole batch; nothing is written
+ * half-way.
+ */
+export async function writeAuditLogs(events: AuditEvent[]) {
+  if (events.length === 0) return;
   try {
     if (persistsToDatabase()) {
-      await persistAuditLog(event);
+      await persistAuditLogs(events);
     } else {
-      const previous = inMemoryAuditLog.at(-1);
-      const record = createAuditRecord(event, inMemoryAuditLog.length + 1, previous?.eventHash || "GENESIS");
-      const eventHash = sha256(canonicalize(record));
-      inMemoryAuditLog.push(Object.freeze({ ...record, eventHash }));
+      for (const event of events) {
+        const previous = inMemoryAuditLog.at(-1);
+        const record = createAuditRecord(event, inMemoryAuditLog.length + 1, previous?.eventHash || "GENESIS");
+        const eventHash = sha256(canonicalize(record));
+        inMemoryAuditLog.push(Object.freeze({ ...record, eventHash }));
+      }
     }
   } catch (err) {
     // Audit logging must never break the victim-facing flow, but a lost
     // entry must never be silent either.
-    console.error(`Audit write failed for ${event.eventType}`, err);
+    const first = events[0].eventType;
+    console.error(
+      events.length === 1 ? `Audit write failed for ${first}` : `Audit write failed for ${first} (+${events.length - 1} more)`,
+      err,
+    );
   }
 }
 
@@ -201,17 +222,51 @@ function createAuditRecord(event: AuditEvent, sequence: number, previousHash: st
   };
 }
 
-async function persistAuditLog(event: AuditEvent) {
+/**
+ * The audit_log rows for a batch, chained onto `previous`: the same shape
+ * and hashing as one-by-one writes, sequence ascending, each row's
+ * previousHash the row before it.
+ */
+function chainedAuditRows(
+  events: AuditEvent[],
+  previous: { sequence: number; eventHash: string } | null | undefined,
+) {
+  let sequence = previous?.sequence ?? 0;
+  let previousHash = previous?.eventHash || "GENESIS";
+  const rows: Array<{
+    id: string;
+    sequence: number;
+    eventType: AuditEventType;
+    entityType: string | null;
+    entityId: string | null;
+    actorId: string | null;
+    data: Record<string, unknown> | null;
+    ipHash: string | null;
+    previousHash: string;
+    eventHash: string;
+    createdAt: Date;
+  }> = [];
+  for (const event of events) {
+    sequence += 1;
+    const record = createAuditRecord(event, sequence, previousHash);
+    const eventHash = sha256(canonicalize(record));
+    previousHash = eventHash;
+    rows.push({
+      id: randomUUID(), sequence: record.sequence, eventType: event.eventType, entityType: event.entityType ?? null,
+      entityId: event.entityId ?? null, actorId: event.actorId ?? null, data: event.data ?? null, ipHash: event.ipHash ?? null,
+      previousHash: record.previousHash, eventHash, createdAt: new Date(record.createdAt),
+    });
+  }
+  return rows;
+}
+
+async function persistAuditLogs(events: AuditEvent[]) {
   if (usesWorkerKysely()) {
     await getWorkerDb().transaction().execute(async (tx) => {
       await sql`LOCK TABLE "audit_log" IN EXCLUSIVE MODE`.execute(tx);
       const previous = await tx.selectFrom("audit_log").select(["sequence", "eventHash"]).orderBy("sequence", "desc").executeTakeFirst();
-      const record = createAuditRecord(event, (previous?.sequence || 0) + 1, previous?.eventHash || "GENESIS");
-      await tx.insertInto("audit_log").values({
-        id: randomUUID(), sequence: record.sequence, eventType: event.eventType, entityType: event.entityType ?? null,
-        entityId: event.entityId ?? null, actorId: event.actorId ?? null, data: event.data ?? null, ipHash: event.ipHash ?? null,
-        previousHash: record.previousHash, eventHash: sha256(canonicalize(record)), createdAt: new Date(record.createdAt),
-      }).execute();
+      const rows = chainedAuditRows(events, previous);
+      if (rows.length > 0) await tx.insertInto("audit_log").values(rows).execute();
     });
     return;
   }
@@ -222,17 +277,9 @@ async function persistAuditLog(event: AuditEvent) {
       orderBy: { sequence: "desc" },
       select: { sequence: true, eventHash: true },
     });
-    const record = createAuditRecord(event, (previous?.sequence || 0) + 1, previous?.eventHash || "GENESIS");
-    const eventHash = sha256(canonicalize(record));
-    await tx.auditLog.create({
-      data: {
-        ...event,
-        sequence: record.sequence,
-        previousHash: record.previousHash,
-        eventHash,
-        createdAt: new Date(record.createdAt),
-        data: event.data as never,
-      },
-    });
+    const rows = chainedAuditRows(events, previous);
+    if (rows.length > 0) {
+      await tx.auditLog.createMany({ data: rows.map((row) => ({ ...row, data: row.data as never })) });
+    }
   });
 }

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
-import type { CrawlSourceView } from "@/lib/crawl-sources";
+import type { CrawlSourceView, ImportHostResult } from "@/lib/crawl-sources";
 import {
   checkBudget,
   checkDelay,
@@ -14,6 +14,16 @@ import {
   SOURCE_ERRORS,
 } from "./source-validation";
 
+const IMPORT_MAX_HOSTS = 1000;
+
+/** One sentence per import result status (WP2). */
+export const IMPORT_STATUS_LABELS: Record<ImportHostResult["status"], string> = {
+  created: "Added",
+  exists: "Already listed",
+  blocked: "Never crawl",
+  invalid: "Invalid",
+};
+
 async function send(method: "POST" | "PATCH", body: unknown): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
     const response = await csrfFetch("/api/admin/crawl-sources", { method, body: JSON.stringify(body) });
@@ -23,6 +33,12 @@ async function send(method: "POST" | "PATCH", body: unknown): Promise<{ ok: true
   } catch {
     return { ok: false, message: "Not saved: the request failed." };
   }
+}
+
+export function originLabel(origin: CrawlSourceView["origin"]): string {
+  if (origin === "REPORTED") return "Reported";
+  if (origin === "DISCOVERED") return "Discovered";
+  return "Admin";
 }
 
 export function SourcesManager({ sources, crawlerEnabled = true }: { sources: CrawlSourceView[]; crawlerEnabled?: boolean }) {
@@ -46,6 +62,21 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
   const [editDelay, setEditDelay] = useState("");
   const editBudgetCheck = checkBudget(editBudget);
   const editDelayCheck = checkDelay(editDelay);
+
+  // Origin filter (WP2): all sources, or one origin.
+  const [originFilter, setOriginFilter] = useState<"ALL" | CrawlSourceView["origin"]>("ALL");
+  const visibleSources = originFilter === "ALL" ? sources : sources.filter((source) => source.origin === originFilter);
+
+  // Bulk import (WP2): paste a list, get one result per entry.
+  const [importText, setImportText] = useState("");
+  const [importBudget, setImportBudget] = useState("");
+  const [importDelay, setImportDelay] = useState("");
+  const [importEnabled, setImportEnabled] = useState(false);
+  const [importTouched, setImportTouched] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResults, setImportResults] = useState<ImportHostResult[] | null>(null);
+  const importBudgetCheck = importBudget.trim() === "" ? null : checkBudget(importBudget);
+  const importDelayCheck = importDelay.trim() === "" ? null : checkDelay(importDelay);
 
   function startEdit(source: CrawlSourceView) {
     setEditing(source.id);
@@ -119,6 +150,47 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
     router.refresh();
   }
 
+  async function importHosts(event: React.FormEvent) {
+    event.preventDefault();
+    setImportTouched(true);
+    setImportError(null);
+    setNotice(null);
+    const hosts = importText.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+    if (hosts.length === 0) return setImportError("Paste at least one entry: a host name or a full URL, one per line.");
+    if (hosts.length > IMPORT_MAX_HOSTS) return setImportError(`At most ${IMPORT_MAX_HOSTS} entries at a time; split the list.`);
+    if (importBudgetCheck && !importBudgetCheck.ok) return setImportError(importBudgetCheck.message);
+    if (importDelayCheck && !importDelayCheck.ok) return setImportError(importDelayCheck.message);
+
+    const body: Record<string, unknown> = { hosts };
+    if (importBudgetCheck?.ok) body.pageBudget = importBudgetCheck.value;
+    if (importDelayCheck?.ok) body.delayMs = importDelayCheck.value;
+    if (importEnabled) body.enabled = true;
+
+    setBusy(true);
+    try {
+      const response = await csrfFetch("/api/admin/crawl-sources/import", { method: "POST", body: JSON.stringify(body) });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        setImportError(SOURCE_ERRORS[data?.error ?? ""] ?? `Not imported (${data?.error ?? `status ${response.status}`}).`);
+        return;
+      }
+      const data = (await response.json()) as { results: ImportHostResult[] };
+      setImportResults(data.results);
+      const counts: Record<string, number> = {};
+      for (const result of data.results) counts[result.status] = (counts[result.status] ?? 0) + 1;
+      setNotice(
+        `Import finished: ${counts.created ?? 0} added, ${counts.exists ?? 0} already listed, ` +
+        `${counts.blocked ?? 0} never crawl, ${counts.invalid ?? 0} invalid.`,
+      );
+      setImportText("");
+      router.refresh();
+    } catch {
+      setImportError("Not imported: the request failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="grid gap-8">
       <div aria-live="polite">
@@ -134,12 +206,34 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
         )}
       </div>
 
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="grid gap-1 text-sm">
+          <label htmlFor="origin-filter">Origin</label>
+          <select
+            aria-label="Filter sites by origin"
+            className="field"
+            id="origin-filter"
+            onChange={(event) => setOriginFilter(event.target.value as "ALL" | CrawlSourceView["origin"])}
+            value={originFilter}
+          >
+            <option value="ALL">All origins</option>
+            <option value="ADMIN">Admin</option>
+            <option value="REPORTED">Reported</option>
+            <option value="DISCOVERED">Discovered</option>
+          </select>
+        </div>
+      </div>
+
       <div className="overflow-hidden a-card">
-        <table className="a-table w-full min-w-[720px] text-left text-sm">
+        <table className="a-table w-full min-w-[1100px] text-left text-sm">
           <caption className="sr-only">Sites the crawler may visit</caption>
           <thead>
             <tr>
               <th className="eyebrow" scope="col">Host</th>
+              <th className="eyebrow" scope="col">Origin</th>
+              <th className="eyebrow" scope="col">Hops</th>
+              <th className="eyebrow" scope="col">Pages crawled</th>
+              <th className="eyebrow" scope="col">Last crawled</th>
               <th className="eyebrow" scope="col">Page budget</th>
               <th className="eyebrow" scope="col">Delay</th>
               <th className="eyebrow" scope="col">Approved by</th>
@@ -149,9 +243,15 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
             </tr>
           </thead>
           <tbody>
-            {sources.map((source) => (
+            {visibleSources.map((source) => (
               <tr key={source.id}>
                 <td className="font-mono">{source.domain}</td>
+                <td>{originLabel(source.origin)}</td>
+                <td className="tabular-nums">{source.hops}</td>
+                <td className="tabular-nums">{source.pagesCrawled}</td>
+                <td className="a-nowrap tabular-nums">
+                  {source.lastCrawledAt ? source.lastCrawledAt.slice(0, 16).replace("T", " ") : "Never"}
+                </td>
                 <td className="tabular-nums">
                   {editing === source.id ? (
                     <input
@@ -228,7 +328,9 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
             ))}
           </tbody>
         </table>
-        {sources.length === 0 && <p className="muted p-6 text-center text-sm">No sites yet.</p>}
+        {visibleSources.length === 0 && (
+          <p className="muted p-6 text-center text-sm">No sites{originFilter === "ALL" ? " yet" : " for this origin"}.</p>
+        )}
       </div>
 
       <form className="a-card grid max-w-xl gap-4 p-4" noValidate onSubmit={add}>
@@ -291,6 +393,92 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
         </div>
       </form>
 
+      <form className="a-card grid max-w-xl gap-4 p-4" noValidate onSubmit={importHosts}>
+        <h2>Import a list of hosts</h2>
+        <Field
+          error={importTouched && importText.trim() === "" ? "Paste at least one entry: a host name or a full URL, one per line." : null}
+          hint={`One entry per line: a host name or a full URL (the host is taken from it). Up to ${IMPORT_MAX_HOSTS} entries. Each entry gets its own result, so repeats, never-crawl hosts and invalid lines are reported, never rejected.`}
+          id="import-hosts"
+          label="Hosts to import"
+        >
+          <textarea
+            aria-describedby="import-hosts-hint"
+            aria-label="Hosts to import"
+            className="field font-mono"
+            id="import-hosts"
+            onChange={(event) => setImportText(event.target.value)}
+            rows={8}
+            value={importText}
+          />
+        </Field>
+        <Field
+          error={importTouched && importBudgetCheck && !importBudgetCheck.ok ? importBudgetCheck.message : null}
+          hint={`Most pages one run may fetch per imported site. Leave blank for the server default.`}
+          id="import-budget"
+          label="Page budget for imported sites"
+        >
+          <input
+            aria-describedby="import-budget-hint"
+            className="field"
+            id="import-budget"
+            inputMode="numeric"
+            onChange={(event) => setImportBudget(event.target.value)}
+            value={importBudget}
+          />
+        </Field>
+        <Field
+          error={importTouched && importDelayCheck && !importDelayCheck.ok ? importDelayCheck.message : null}
+          hint={`Wait between pages, in milliseconds (${DELAY_MIN_MS} to ${DELAY_MAX_MS}). Leave blank for the server default.`}
+          id="import-delay"
+          label="Delay for imported sites"
+        >
+          <input
+            aria-describedby="import-delay-hint"
+            className="field"
+            id="import-delay"
+            inputMode="numeric"
+            onChange={(event) => setImportDelay(event.target.value)}
+            value={importDelay}
+          />
+        </Field>
+        <div className="grid gap-1 text-sm">
+          <label className="flex items-start gap-2">
+            <input
+              checked={importEnabled}
+              className="mt-1"
+              onChange={(event) => setImportEnabled(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              Switch the imported sites on immediately
+              <span className="muted block text-xs">
+                Like switching a single host on: only tick this for sites you have decided are appropriate to crawl.
+              </span>
+            </span>
+          </label>
+        </div>
+        {importError && (
+          <p className="text-sm text-[var(--danger)]" role="alert">
+            {importError}
+          </p>
+        )}
+        <div>
+          <button
+            className="btn btn-primary"
+            disabled={
+              busy ||
+              !crawlerEnabled ||
+              (importTouched && (importText.trim() === "" || importBudgetCheck?.ok === false || importDelayCheck?.ok === false))
+            }
+            type="submit"
+          >
+            {busy ? "Importing…" : "Import hosts"}
+          </button>
+        </div>
+      </form>
+
+      {importResults && <ImportResults results={importResults} />}
+
       <dialog
         aria-labelledby="enable-source-title"
         className="m-auto w-[min(32rem,calc(100vw-2rem))] a-card p-6 text-[var(--ink)]"
@@ -321,7 +509,42 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
   );
 }
 
-function Field({
+/**
+ * The import results table (WP2): one row per pasted entry. Addresses are
+ * plain text — never links, never loaded.
+ */
+export function ImportResults({ results }: { results: ImportHostResult[] }) {
+  return (
+    <div className="a-card overflow-hidden">
+      <table className="a-table w-full min-w-[560px] text-left text-sm">
+        <caption className="sr-only">Import results, one row per entry</caption>
+        <thead>
+          <tr>
+            <th className="eyebrow" scope="col">Entered</th>
+            <th className="eyebrow" scope="col">Host</th>
+            <th className="eyebrow" scope="col">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((result, index) => (
+            <tr key={index}>
+              <td className="break-all font-mono">{result.input}</td>
+              <td className="break-all font-mono">{result.host ?? "—"}</td>
+              <td>
+                {IMPORT_STATUS_LABELS[result.status]}
+                {result.status === "invalid" && result.reason
+                  ? ` (${result.reason === "private_domain" ? "private or reserved name" : "not a public host name"})`
+                  : ""}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function Field({
   id,
   label,
   hint,

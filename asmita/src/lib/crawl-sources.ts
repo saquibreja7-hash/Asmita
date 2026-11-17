@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { writeAuditLog } from "@/lib/audit";
+import { writeAuditLog, writeAuditLogs } from "@/lib/audit";
 import { crawlMemory, type MemoryCrawlSource } from "@/lib/crawl-store";
 import { hostAndParents, isNeverCrawlHost, normalizeNeverCrawlHost } from "@/lib/crawl-never";
 import { defaultSourceDelayMs, reportedSourcePageBudget } from "@/lib/crawler-flags";
@@ -23,6 +23,11 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * never for a host on the never-crawl list (crawl-never.ts and
  * CrawlBlockedHost). They have no admin approver and nothing that ties them to
  * the survivor: erasing her account leaves them in place.
+ *
+ * Crawler v2 (full-crawler spec WP2): hosts can be imported in bulk
+ * (importCrawlSources below), one request up to 1000 entries, each reported
+ * per entry; the admin-managed half of the never-crawl list lives in
+ * crawl-blocked-hosts.ts.
  *
  * Host rule: a public DNS name with at least two labels and an alphabetic
  * top-level label, so IP literals, single-label and private hosts are
@@ -223,6 +228,224 @@ export async function updateCrawlSource(
     data: { action: "crawl_source_updated", domain: source.domain, changes },
   });
   return { ok: true, source };
+}
+
+// ---------------------------------------------------------------------------
+// Bulk import (full-crawler spec, WP2)
+
+export const importSourceSchema = z.object({
+  // Entries are bare hosts or full URLs; the host is extracted below. A
+  // blank entry is reported per entry ("invalid"), not a request error, so
+  // a pasted list with empty lines still imports.
+  hosts: z.array(z.string().max(2000)).min(1).max(1000),
+  pageBudget: z.number().int().min(1).max(CRAWL_PAGE_BUDGET_MAX).optional(),
+  delayMs: z.number().int().min(CRAWL_DELAY_MIN_MS).max(CRAWL_DELAY_MAX_MS).optional(),
+  enabled: z.boolean().optional(),
+}).strict();
+
+export type ImportHostStatus = "created" | "exists" | "blocked" | "invalid";
+
+export type ImportHostResult = {
+  input: string;
+  status: ImportHostStatus;
+  host?: string;
+  reason?: "invalid_domain" | "private_domain";
+};
+
+/**
+ * The host of one pasted entry: the entry itself, or the host name of a full
+ * URL ("https://a.example.com/x" -> "a.example.com"). Empty when the entry
+ * claims a scheme but does not parse. Anything else goes through
+ * validateCrawlDomain unchanged, so "example.com/x" (no scheme) is reported
+ * invalid, never silently repaired into a host.
+ */
+export function hostFromEntry(raw: string): string {
+  const entry = raw.trim();
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(entry)) return entry;
+  try {
+    return new URL(entry).hostname;
+  } catch {
+    return "";
+  }
+}
+
+/** Whether a blocked-host row (one of the matched row hosts) covers `host` or a parent domain of it. */
+function blockedByRows(host: string, rows: Set<string>): boolean {
+  return hostAndParents(host).some((name) => rows.has(name));
+}
+
+/**
+ * Bulk add of crawl sources (WP2): every entry is reported, none fails the
+ * request. Entries may be bare hosts or full URLs (the host is extracted)
+ * and go through exactly the same validation as a single add. A never-crawl
+ * host — the built-in list (crawl-never.ts) or a CrawlBlockedHost row,
+ * including a parent domain — answers "blocked"; a host that is already a
+ * source, or repeats an earlier entry of this request, answers "exists";
+ * everything else is created as an ADMIN source by this admin, one audit
+ * entry each (crawl_source_imported).
+ *
+ * The work is a fixed handful of queries whatever the list size — existing
+ * sources, blocked rows, one bulk insert, one batched audit write — never
+ * one query per host, so a 1000-entry import stays within the Worker's
+ * per-request subrequest limit.
+ */
+export async function importCrawlSources(
+  input: z.infer<typeof importSourceSchema>,
+  actorId: string,
+): Promise<{ results: ImportHostResult[] }> {
+  const pageBudget = input.pageBudget ?? reportedSourcePageBudget();
+  const delayMs = input.delayMs ?? defaultSourceDelayMs();
+  const enabled = input.enabled ?? false;
+
+  // Pass 1, pure: host extraction and the single-add validation, per entry.
+  const results: ImportHostResult[] = new Array(input.hosts.length);
+  const entries = new Map<string, number[]>(); // normalized host -> result indices
+  input.hosts.forEach((raw, index) => {
+    const checked = validateCrawlDomain(hostFromEntry(raw));
+    if (!checked.ok) {
+      results[index] = { input: raw, status: "invalid", reason: checked.error };
+      return;
+    }
+    const indices = entries.get(checked.domain);
+    if (indices) indices.push(index);
+    else entries.set(checked.domain, [index]);
+  });
+
+  // Built-in never-crawl hosts need no lookup at all.
+  const hosts = [...entries.keys()].filter((host) => !isNeverCrawlHost(host));
+  const existing = hosts.length > 0 ? await existingSourceDomains(hosts) : new Set<string>();
+  const blocked = hosts.length > 0 ? await blockedHostRows(hosts) : new Set<string>();
+
+  // Pass 2: one status per unique host.
+  const status = new Map<string, ImportHostStatus>();
+  const toCreate: string[] = [];
+  for (const host of entries.keys()) {
+    if (isNeverCrawlHost(host) || blockedByRows(host, blocked)) status.set(host, "blocked");
+    else if (existing.has(host)) status.set(host, "exists");
+    else {
+      toCreate.push(host);
+      status.set(host, "created"); // may become "exists" if a concurrent request wins the insert
+    }
+  }
+
+  const createdRows = toCreate.length > 0 ? await insertImportedSources(toCreate, pageBudget, delayMs, enabled, actorId) : [];
+  const created = new Set(createdRows.map((row) => row.domain));
+  for (const host of toCreate) if (!created.has(host)) status.set(host, "exists");
+
+  // Pass 3: one result per entry, in input order. A repeated entry reports
+  // the first one's outcome; when that one created the host, the repeat
+  // already finds it in the list ("exists").
+  for (const [host, indices] of entries) {
+    const hostStatus = status.get(host)!;
+    indices.forEach((index, position) => {
+      results[index] = {
+        input: input.hosts[index],
+        status: position === 0 ? hostStatus : hostStatus === "created" ? "exists" : hostStatus,
+        host,
+      };
+    });
+  }
+
+  // Every change audited like a single add, in one batched write.
+  await writeAuditLogs(createdRows.map((row) => ({
+    eventType: "ADMIN_ACTION" as const,
+    entityType: "CrawlSource",
+    entityId: row.id,
+    actorId,
+    data: { action: "crawl_source_imported", domain: row.domain, pageBudget, delayMs, enabled },
+  })));
+
+  return { results };
+}
+
+/** Existing source domains among `hosts`, in one query. */
+async function existingSourceDomains(hosts: string[]): Promise<Set<string>> {
+  if (isDevNoDb()) {
+    const wanted = new Set(hosts);
+    return new Set([...crawlMemory().sources.values()].filter((source) => wanted.has(source.domain)).map((source) => source.domain));
+  }
+  if (usesWorkerKysely()) {
+    const rows = await getWorkerDb().selectFrom("CrawlSource").select("domain").where("domain", "in", hosts).execute();
+    return new Set(rows.map((row) => row.domain));
+  }
+  const { db } = await import("@/lib/db");
+  const rows = await db.crawlSource.findMany({ where: { domain: { in: hosts } }, select: { domain: true } });
+  return new Set(rows.map((row) => row.domain));
+}
+
+/**
+ * The CrawlBlockedHost rows covering any of `hosts` (a row's host, or a
+ * parent of it), in one query over every host and every parent domain.
+ * Hosts are admin-supplied and capped at 1000 with realistic label counts,
+ * so the IN list stays far below Postgres's parameter limit.
+ */
+async function blockedHostRows(hosts: string[]): Promise<Set<string>> {
+  const candidates = new Set<string>();
+  for (const host of hosts) for (const name of hostAndParents(host)) candidates.add(name);
+  const names = [...candidates];
+  if (isDevNoDb()) {
+    const rows = new Set<string>();
+    for (const name of names) if (crawlMemory().blockedHosts.has(name)) rows.add(name);
+    return rows;
+  }
+  if (usesWorkerKysely()) {
+    const rows = await getWorkerDb().selectFrom("CrawlBlockedHost").select("host").where("host", "in", names).execute();
+    return new Set(rows.map((row) => row.host));
+  }
+  const { db } = await import("@/lib/db");
+  const rows = await db.crawlBlockedHost.findMany({ where: { host: { in: names } }, select: { host: true } });
+  return new Set(rows.map((row) => row.host));
+}
+
+/**
+ * Inserts the ADMIN sources of one import and returns the rows that were
+ * created (id and domain). A host another request created between the check
+ * and the insert is skipped, not an error; it reports "exists" above. On the
+ * Prisma path createMany returns no ids, so one read settles both which rows
+ * exist now and their ids for the audit entries.
+ */
+async function insertImportedSources(
+  domains: string[],
+  pageBudget: number,
+  delayMs: number,
+  enabled: boolean,
+  actorId: string,
+): Promise<Array<{ id: string; domain: string }>> {
+  if (isDevNoDb()) {
+    const memory = crawlMemory();
+    const created: Array<{ id: string; domain: string }> = [];
+    for (const domain of domains) {
+      if ([...memory.sources.values()].some((source) => source.domain === domain)) continue;
+      const row: MemoryCrawlSource = {
+        id: randomUUID(), kind: "SITE", domain, pageBudget, delayMs, enabled, approvedBy: actorId,
+        origin: "ADMIN", hops: 0, discoveredFromId: null, render: "HTTP", lastCrawledAt: null, pagesCrawled: 0,
+        createdAt: new Date(),
+      };
+      memory.sources.set(row.id, row);
+      created.push({ id: row.id, domain });
+    }
+    return created;
+  }
+  if (usesWorkerKysely()) {
+    const rows = domains.map((domain) => ({
+      id: randomUUID(), kind: "SITE" as const, domain, pageBudget, delayMs, enabled, approvedBy: actorId,
+      origin: "ADMIN" as const, hops: 0, discoveredFromId: null, render: "HTTP" as const,
+      lastCrawledAt: null, pagesCrawled: 0, createdAt: new Date(),
+    }));
+    // One statement: two concurrent imports of the same host cannot create
+    // two rows, and the same import needs no second round trip.
+    const inserted = await getWorkerDb().insertInto("CrawlSource").values(rows)
+      .onConflict((oc) => oc.column("domain").doNothing())
+      .returning(["id", "domain"]).execute();
+    return inserted.map((row) => ({ id: row.id, domain: row.domain }));
+  }
+  const { db } = await import("@/lib/db");
+  await db.crawlSource.createMany({
+    data: domains.map((domain) => ({ domain, pageBudget, delayMs, enabled, approvedBy: actorId })),
+    skipDuplicates: true,
+  });
+  const rows = await db.crawlSource.findMany({ where: { domain: { in: domains } }, select: { id: true, domain: true } });
+  return rows.map((row) => ({ id: row.id, domain: row.domain }));
 }
 
 // ---------------------------------------------------------------------------

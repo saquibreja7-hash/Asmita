@@ -15,7 +15,9 @@ import { SafetyNote } from "@/app/(admin)/findings/SafetyNote";
 import { messageFor, NOTICE_ERRORS, REVIEW_ERRORS, type NoticePreview, type SendResult } from "@/app/(admin)/findings/findings-client";
 import { noticeGate, noticeLabel, platformLabel, reviewLabel, sortFindings, type NoticeGateInput } from "@/app/(admin)/findings/finding-view";
 import { checkBudget, checkDelay, checkDomain } from "@/app/(admin)/crawl-sources/source-validation";
-import { SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
+import { IMPORT_STATUS_LABELS, ImportResults, originLabel, SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
+import { BlockedHostsManager } from "@/app/(admin)/crawl-sources/BlockedHostsManager";
+import { CrawlerSitesTabs } from "@/app/(admin)/crawl-sources/CrawlerSitesTabs";
 import { validateCrawlDomain } from "@/lib/crawl-sources";
 import type { CrawlFindingListRow } from "@/lib/crawl-findings";
 
@@ -51,6 +53,8 @@ describe("crawler admin sources never fetch or embed addresses", () => {
     "findings/[id]/page.tsx",
     "crawl-sources/page.tsx",
     "crawl-sources/SourcesManager.tsx",
+    "crawl-sources/CrawlerSitesTabs.tsx",
+    "crawl-sources/BlockedHostsManager.tsx",
   ];
   it("has no img, iframe or direct fetch call in these files", () => {
     for (const file of files) {
@@ -255,6 +259,91 @@ describe("sources manager", () => {
     for (const label of ["Edit page budget", "Switch on crawling"]) {
       expect(html).toMatch(new RegExp(`<button[^>]*aria-label="${label}[^"]*"[^>]*disabled=""|<button[^>]*disabled=""[^>]*aria-label="${label}`));
     }
+  });
+});
+
+describe("bulk import box and results table (WP2)", () => {
+  it("offers the paste-a-list import box", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [] }));
+    expect(html).toContain("Import a list of hosts");
+    expect(html).toMatch(/<textarea[^>]*aria-label="Hosts to import"/);
+    expect(html).toContain("Up to 1000 entries");
+    expect(html).toMatch(/<button[^>]*type="submit">Import hosts<\/button>/);
+  });
+  it("reports each entry with a sentence, and shows addresses only as text", () => {
+    const html = renderToStaticMarkup(createElement(ImportResults, { results: [
+      { input: "forum.example.org", status: "created", host: "forum.example.org" },
+      { input: "https://shop.example.org/x", status: "exists", host: "shop.example.org" },
+      { input: "facebook.com", status: "blocked", host: "facebook.com" },
+      { input: "10.0.0.1", status: "invalid", reason: "invalid_domain" },
+      { input: "db.internal", status: "invalid", reason: "private_domain" },
+    ] }));
+    expect(IMPORT_STATUS_LABELS).toEqual({ created: "Added", exists: "Already listed", blocked: "Never crawl", invalid: "Invalid" });
+    expect(html).toContain("Added");
+    expect(html).toContain("Already listed");
+    expect(html).toContain("Never crawl");
+    expect(html).toContain("Invalid (not a public host name)");
+    expect(html).toContain("Invalid (private or reserved name)");
+    expect(html).toContain("https://shop.example.org/x");
+    expect(html).not.toMatch(/<a[\s>]/i);
+    expect(html).not.toMatch(/\b(href|src|srcset)\s*=/i);
+  });
+  it("disables the import while the crawler is off", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [], crawlerEnabled: false }));
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Import hosts</);
+  });
+});
+
+describe("origin, hops and crawl progress columns (WP2)", () => {
+  const sourceWith = (over: Partial<Parameters<typeof SourcesManager>[0]["sources"][number]>) => ({
+    id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false,
+    approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, render: "HTTP" as const,
+    pagesCrawled: 0, lastCrawledAt: null, createdAt: "2026-11-16T00:00:00.000Z", ...over,
+  });
+  it("shows origin, hops, pages crawled and last crawled for every site, with an origin filter", () => {
+    expect(originLabel("ADMIN")).toBe("Admin");
+    expect(originLabel("REPORTED")).toBe("Reported");
+    expect(originLabel("DISCOVERED")).toBe("Discovered");
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [
+      sourceWith({ origin: "REPORTED", pagesCrawled: 42, lastCrawledAt: "2026-11-16T05:30:00.000Z" }),
+      sourceWith({ id: "s2", domain: "far.example-site.org", origin: "DISCOVERED", hops: 2, pagesCrawled: 5 }),
+    ] }));
+    for (const heading of ["Origin", "Hops", "Pages crawled", "Last crawled"]) expect(html).toContain(heading);
+    expect(html).toContain("Admin");
+    expect(html).toContain("Reported");
+    expect(html).toContain("Discovered");
+    expect(html).toContain("42");
+    expect(html).toContain("2026-11-16 05:30");
+    expect(html).toContain("Never");
+    expect(html).toMatch(/<select[^>]*aria-label="Filter sites by origin"/);
+    expect(html).toContain("All origins");
+  });
+});
+
+describe("never crawl tab (WP2)", () => {
+  const blockedHost = { id: "bh-1", host: "forum.example.org", reason: "owner request", addedBy: "super-1", createdAt: "2026-11-16T05:30:00.000Z" };
+  it("offers both tabs, with the sites view shown first", () => {
+    const html = renderToStaticMarkup(createElement(CrawlerSitesTabs, { sources: [], blockedHosts: [blockedHost] }));
+    expect(html).toContain("Sites");
+    expect(html).toContain("Never crawl");
+    expect(html).toContain("Add a host");
+    expect(html).not.toContain("Never crawl a host");
+  });
+  it("lists blocked hosts as text with reason, adder, date and a remove button, never as links", () => {
+    const html = renderToStaticMarkup(createElement(BlockedHostsManager, { blockedHosts: [blockedHost] }));
+    expect(html).toContain("forum.example.org");
+    expect(html).toContain("owner request");
+    expect(html).toContain("super-1");
+    expect(html).toContain("2026-11-16 05:30");
+    expect(html).toMatch(new RegExp(`<button[^>]*aria-label="Remove forum.example.org from the never-crawl list"`));
+    expect(html).toContain("Never crawl a host");
+    expect(html).not.toMatch(/<a[\s>]/i);
+    expect(html).not.toMatch(/\b(href|src|srcset)\s*=/i);
+  });
+  it("disables every change while the crawler is off", () => {
+    const html = renderToStaticMarkup(createElement(BlockedHostsManager, { blockedHosts: [blockedHost], crawlerEnabled: false }));
+    expect(html).toMatch(new RegExp(`<button[^>]*aria-label="Remove forum.example.org from the never-crawl list"[^>]*disabled=""|<button[^>]*disabled=""[^>]*aria-label="Remove forum.example.org from the never-crawl list"`));
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Never crawl this host</);
   });
 });
 
