@@ -54,6 +54,8 @@ A SUPER_ADMIN (`crawler:manage`) manages hosts at `/admin/crawl-sources`.
 
 What this means operationally: a killed or crashed crawler loses at most the batch it had claimed — those pages become due again on their own after 30 minutes, and a page the run was mid-way through is redone whole. An admin disabling a source mid-run makes its next claim come back empty and the run moves on. The crawler's own memory for one source is one claimed batch (`FRONTIER_CLAIM_LIMIT`, default 50) plus the report built from it; everything else — the queue, the seen set, the schedule — is the app's.
 
+**Deep coverage (crawler v2 WP4).** The frontier now also holds `sitemap` and `feed` rows, discovered the same way as pages: a source's robots.txt `Sitemap:` lines, sitemap indexes, gzipped sitemaps, image-sitemap entries and RSS/Atom feeds linked from pages. They are claimed, fetched and scheduled exactly like page rows (no second fetch path), so they cost `pageBudget` too — a site's sitemap is deep coverage, not a side door. Two new crawler settings bound the work (see `crawler/README.md`, "Configuration"): `MAX_SITEMAP_URLS` (default 5000 addresses per document) and `MAX_QUERY_VARIANTS_PER_PATH` (default 8; page-number parameters don't count). The crawler also skips obvious non-content (login, cart, search, calendar) and caps query-string traps, so an infinite calendar or `?session=`-style page never enters the frontier at all. Operationally: expect a source's first deep run to fetch noticeably more pages than before as its sitemap is walked; the per-source `pageBudget` still caps the day, and pages parsed as sitemap/feed documents are counted separately in the crawler's `run_summary` (`pagesXml`, `sitemapUrlsTaken`, `feedEntriesTaken`).
+
 ## 3. Environment variables
 
 App (Worker vars in `asmita/wrangler.jsonc` or secrets; see `asmita/.env.example`):
@@ -79,6 +81,7 @@ Crawler (Cloud Run job env vars; placeholders in `crawler/.env.example`):
 | `CRAWLER_USER_AGENT` | Identifies Asmita and links to a page explaining the crawler |
 | `MAX_RUN_MINUTES` | Keep below the job's task timeout (default 50 with a 60-minute timeout) |
 | `FRONTIER_CLAIM_LIMIT` | Pages claimed from the app's frontier per request (default 50, max 200); the crawler keeps no other frontier state |
+| `MAX_SITEMAP_URLS` / `MAX_QUERY_VARIANTS_PER_PATH` | Deep coverage bounds (WP4): addresses taken from one sitemap or feed document (default 5000) and distinct query variants reported per path (default 8) |
 | Limits | `MAX_PAGES`, `MAX_IMAGES`, `MAX_DEPTH`, byte caps, timeouts, concurrency: defaults in `crawler/README.md`, "Configuration" |
 
 ## 4. Build and deploy (owner, Google Cloud)

@@ -19,14 +19,23 @@ main.ts -> cli.ts (config, signals, exit codes)
        AsmitaClient: GET /sources, GET /pool          (own HTTP agent, bearer key)
        per source (parallel up to GLOBAL_CONCURRENCY):
          loop: POST /frontier/claim  (batch of due pages, claimed for 30 min;
-                first claim seeds https://<domain>/ app-side)
+                first claim seeds https://<domain>/ app-side; the source's
+                robots.txt Sitemap: lines ride on the first report)
          per claimed page: SafeFetcher (pinned-IP connect, robots, per-host
                 delay; If-None-Match / If-Modified-Since when the app has
                 validators) -> 200 HTML / 304 not modified / 404 gone / error
-         extract.ts -> links (in scope, not nofollow) + image candidates
+                XML documents (WP4): sitemap indexes, urlsets (a .gz body is
+                inflated in memory) and RSS/Atom feeds, sniffed by root
+                element, become more frontier rows; image sitemap entries
+                are hashed for their page
+         extract.ts -> links (pagination markers first; login, cart, search
+                and calendar links skipped) + image candidates (lazy attrs,
+                srcset, background-image, video poster, image_src, JSON-LD,
+                noscript, thumbnail hrefs)
          per image: SafeFetcher -> Buffer -> hash-image.ts (sniff, sharp,
                     prepare.ts, pdq.ts) -> Matcher -> FindingsSink
-         POST /frontier/report (page outcomes + links, body-bounded chunks)
+         POST /frontier/report (page outcomes + links of kinds page,
+                sitemap and feed, body-bounded chunks)
        pool re-sync every POOL_RESYNC_MINUTES (<= 60)
        FindingsSink: POST /findings in batches (<= 50 items, <= 240 KiB),
                      whenever a batch fills, every 15 s, and at once on stop
@@ -37,7 +46,10 @@ The frontier itself lives in the app (`CrawlPage` rows): the crawler claims a
 batch, reports every outcome and keeps no page state of its own, so a second
 run resumes where the last one stopped, two crawler processes never get the
 same URL, and a killed run loses at most its claimed batch, which the app
-hands out again after the 30-minute claim window.
+hands out again after the 30-minute claim window. Sitemap, sitemap-index and
+feed documents are frontier rows like any page (kinds `sitemap` / `feed`),
+fetched through the same claimed-row path — there is no second fetch path,
+and they cost page budget like any page.
 
 ### Exit codes
 
@@ -76,7 +88,8 @@ is not a run failure; it is counted in the summary only.
 | **Real addresses.** URLs are fetched and reported as the site wrote them (fragment removed, query untouched, so signed CDN URLs work); tracking-param stripping and sorting apply only to the dedup key. | `crawl/url.ts` (`normalizeUrl` vs `urlKey`). | `url-robots-extract.test.ts` |
 | **Scope.** A page is in scope only if its host EQUALS the approved source `domain` or is a subdomain of it: approving `example.com` covers `www.example.com`; approving `forum.example.com` does not cover `example.com` or `shop.example.com`. Checked on every page hop including redirects. Source domains must be bare hostnames (no IP, port, path or bare public suffix). BFS to `MAX_DEPTH`, `pageBudget` per source. | `crawl/url.ts` (`sourceHost`, `inScope`), `crawler.ts`. | `url-robots-extract.test.ts`; `tests/integration/scope.test.ts` (parent, sibling, sub-subdomain, redirect to sibling) |
 | **Image hosts.** Only image candidates extracted from an in-scope page are fetched; no image URL discovered any other way is ever requested. Such an image may live on another public host (sites serve images from CDNs), but every hop still passes all safe-fetch checks and robots.txt, and per source and run at most `MAX_OFFSITE_IMAGE_HOSTS` (default 50) distinct off-scope hosts that have **returned an image** are used, plus at most `MAX_OFFSITE_HOST_FAILURES` (default 20) distinct off-scope hosts that were tried and did not. A host counts against the first cap only after it answers with an image, so junk hosts on a hostile page cannot use it up and starve the real CDN; the second cap bounds requests to junk. Both are checked on every hop, before robots.txt or the image is requested. Counted as `imagesOffHost`, `imageHostsCapped` and `imageHostFailuresCapped`. | `crawler.ts` (`processImage`, `admitHost`, `settleHosts`). | `tests/integration/scope.test.ts` (5 CDN hosts plus a redirect to a 6th, cap 3: only 3 contacted; 4 junk hosts before the real CDN with cap 1: the CDN image still matches; failure cap 2: only 2 junk hosts contacted) |
-| **Bounded frontier.** At most `MAX_LINKS_PER_PAGE` (500) links and `MAX_IMAGES_PER_PAGE` (200) image candidates are taken from any page. The queue lives in the app: the crawler holds only the batch it claimed (at most `FRONTIER_CLAIM_LIMIT` entries) and the report built from it, split into body-bounded chunks under the server's 256 KiB limit — that is its whole frontier memory, and `batchPeak` in the summary proves it. The app dedups stored links per source on a keyed digest and caps a source at `pageBudget` pages per day. Summary: `linksDropped`, `batchPeak`. | `crawl/extract.ts`, `crawler.ts`, the app's `crawl-pages.ts`. | `tests/integration/frontier.test.ts` (pages of 40,000 links: the crawler's batch never exceeds the claim limit, the app's frontier grows by at most MAX_LINKS_PER_PAGE per fetched page, the daily budget holds, the planted image is still reported); `tests/integration/frontier-app.test.ts` (second run 304s, two processes, killed run); `url-robots-extract.test.ts` |
+| **Bounded frontier.** At most `MAX_LINKS_PER_PAGE` (500) links and `MAX_IMAGES_PER_PAGE` (200) image candidates are taken from any page (extract keeps three link buckets — pagination, pages, feeds — each bounded by that cap). The queue lives in the app: the crawler holds only the batch it claimed (at most `FRONTIER_CLAIM_LIMIT` entries) and the report built from it, split into body-bounded chunks under the server's 256 KiB limit — that is its whole frontier memory, and `batchPeak` in the summary proves it. WP4 adds two small bounded per-source structures: the query-variant guard (at most 4096 tracked paths × `MAX_QUERY_VARIANTS_PER_PATH` 16-byte hashes, never a URL) and the one-shot robots sitemap stash (at most 50 URLs, attached to one report). The app dedups stored links per source on a keyed digest and caps a source at `pageBudget` pages per day. Summary: `linksDropped`, `batchPeak`. | `crawl/extract.ts`, `crawl/traps.ts`, `crawler.ts`, the app's `crawl-pages.ts`. | `tests/integration/frontier.test.ts` (pages of 40,000 links: the crawler's batch never exceeds the claim limit, the app's frontier grows by at most MAX_LINKS_PER_PAGE per fetched page, the daily budget holds, the planted image is still reported); `tests/integration/frontier-app.test.ts` (second run 304s, two processes, killed run); `url-robots-extract.test.ts` |
+| **Deep coverage.** robots.txt `Sitemap:` lines (capped at 50), sitemap indexes, gzipped sitemaps and RSS/Atom feeds enter the frontier as `sitemap`/`feed` rows through the same claim/report path — no second fetch path, page budget included. A document is what its root element says (`<urlset>`, `<sitemapindex>`, `<rss>`, `<feed>`), never what its URL or Content-Type claims; a `.gz` body is inflated in memory under the same `MAX_HTML_BYTES` cap. Bodies are parsed by a bounded event scanner (no DOM, no dependency, no temp file): at most `MAX_SITEMAP_URLS` addresses per document and a hard markup-event cap, so a hostile "sitemap" can neither spin nor balloon memory; `<image:loc>` entries are hashed for their page. Pagination links (rel=next, next/older/page-N text or class) are collected first, so a link flood cannot push them past the cap; login, cart, search-result and calendar URLs (path segments, date paths, date query keys) are never reported or fetched, whatever markup marks them; distinct query variants of one path are capped at `MAX_QUERY_VARIANTS_PER_PATH` (page-number and tracking parameters do not count). | `crawl/robots.ts` (Sitemap:), `crawl/xml-docs.ts`, `crawl/traps.ts`, `crawl/extract.ts`, `crawler.ts`. | `tests/unit/xml-docs.test.ts`, `tests/unit/traps.test.ts`, `tests/unit/deep-extract.test.ts`; `tests/integration/deep-coverage.test.ts` (sitemap index + gzipped sitemap + Atom feed + 30 paginated pages fully covered within budget, every planted image found exactly once; infinite-calendar and query-trap fixtures stay inside their caps) |
 | **Withdrawn fingerprints stop matching.** Pool re-synced at least hourly; a pool older than 60 minutes stops the run; queued findings for removed ids are dropped; a `fingerprint_not_accepted` rejection removes the id from the in-memory pool at once. | `crawler.ts`, `findings.ts`, `match/matcher.ts`. | `tests/integration/lifecycle.test.ts`, `client-findings.test.ts` |
 | **Fail closed config**, no setting that loosens the network policy. Loopback access for tests is a policy object injected in code from `tests/support/test-policy.ts`. | `config.ts`. | `config-policy.test.ts` (schema has no such key; `src/` network code never mentions loopback) |
 | **Same PDQ as the browser.** | `src/pdq.ts` re-exports `asmita/src/lib/pdq/pdq.ts` (bundled at build). | `tests/unit/pdq-contract.test.ts` (exact export list, version, types, golden hash) |
@@ -283,8 +296,10 @@ Per-item rejection reasons (`invalid_finding`, `media_payload_rejected`,
 ## Run summary
 
 The last log line, `run_summary`, holds: outcome, duration, sources crawled,
-pages attempted/fetched/not-modified/non-HTML, the largest claimed frontier
-batch (`batchPeak`), links dropped by the per-page cap, images
+pages attempted/fetched/not-modified/non-HTML, pages that were sitemap or
+feed documents (`pagesXml`) with the sitemap and feed addresses taken from
+them, the largest claimed frontier batch (`batchPeak`), links dropped by the
+per-page cap or skipped as non-content / by the query-variant cap, images
 seen/hashed/skipped by reason, matches, findings
 queued/posted/accepted/rejected (by reason)/withdrawn/invalid/failed/unsent,
 pool syncs, robots outcomes, errors by code, page and image budget used.
@@ -329,6 +344,8 @@ network activity and the log names only the offending variable names. See
 | `MAX_PAGES` / `MAX_IMAGES` | 5000 / 20000 | global budgets (attempts, not successes) |
 | `MAX_DEPTH` | 5 | BFS depth from the source home page |
 | `MAX_LINKS_PER_PAGE` / `MAX_IMAGES_PER_PAGE` | 500 / 200 | candidates taken from one page |
+| `MAX_SITEMAP_URLS` | 5000 | addresses taken from one sitemap or feed document: page `<loc>`, child sitemap, `<image:loc>`, feed entry (bodies obey `MAX_HTML_BYTES`, compressed and inflated) |
+| `MAX_QUERY_VARIANTS_PER_PATH` | 8 | distinct query variants of one path reported per source per run; page-number (`page`, `paged`, `pg`, `start`, `offset`, `from`) and tracking parameters do not count, and pagination-marked links are exempt |
 | `FRONTIER_CLAIM_LIMIT` | 50 | pages claimed from the app's frontier per request (1..200); the crawler's whole frontier memory is one batch plus its report |
 | `GLOBAL_CONCURRENCY` | 4 | concurrent requests across all hosts |
 | `DECODE_CONCURRENCY` | 1 | decoder child processes (a 25 MP decode is ~100 MB) |

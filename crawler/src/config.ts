@@ -51,6 +51,17 @@ export const ConfigSchema = z.object({
   MAX_HTML_BYTES: int(1024, 20 * 1024 * 1024, 2 * 1024 * 1024),
   MAX_IMAGE_BYTES: int(1024, 50 * 1024 * 1024, 10 * 1024 * 1024),
   MIN_IMAGE_SIDE: int(1, 4096, 64),
+  /**
+   * Addresses taken from one sitemap or feed document (crawler v2 WP4):
+   * page <loc>, child sitemap <loc>, <image:loc> and feed entries all count.
+   * Size is capped by MAX_HTML_BYTES, compressed and inflated alike.
+   */
+  MAX_SITEMAP_URLS: int(1, 100_000, 5000),
+  /**
+   * Distinct query variants reported per path (crawler v2 WP4); pagination
+   * links are exempt. Bounds query-string traps (session/view keys).
+   */
+  MAX_QUERY_VARIANTS_PER_PATH: int(1, 1000, 8),
   /** Delay between requests to image hosts outside the source (CDNs). */
   OFFSITE_HOST_DELAY_MS: int(0, 600_000, 1_000),
   /**

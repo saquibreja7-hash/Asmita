@@ -460,6 +460,223 @@ export async function buildFixture(): Promise<Fixture> {
 /** Seed URL factory for fixture runs: the fixture server, with its port. */
 export const fixtureSeedUrl = (port: number) => (source: { domain: string }) => `http://${source.domain}:${port}/`;
 
+/**
+ * The deep-coverage fixture (crawler v2 WP4): a source whose robots.txt
+ * names a sitemap index, which points at a gzipped urlset listing 30
+ * paginated listing pages plus one page with an image-sitemap entry; an
+ * Atom feed linked from the home page; and a home page that hides its
+ * planted images in lazy attributes, inline background styles, a video
+ * poster, link rel=image_src, JSON-LD, a noscript fallback and a thumbnail
+ * link. A second source is the crawler trap: an infinite calendar whose
+ * "next day" link is marked rel=next, date-archive paths, and a query-
+ * string trap page. Nothing here is in the other fixture's hosts.
+ */
+export const DEEP_HOST = `deep.${SOURCE_DOMAIN}`;
+export const TRAP_HOST = `trap.${SOURCE_DOMAIN}`;
+
+/** Listing pages that carry a planted image (the rest are imageless). */
+export const PLANTED_LISTING_PAGES = [1, 6, 11, 16, 21, 26];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export async function buildDeepFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const D = DEEP_HOST;
+  const T = TRAP_HOST;
+
+  const img = {
+    lazy: await patternImage(201, 320, 240, "png"),
+    bg: await patternImage(202, 300, 300, "png"),
+    poster: await patternImage(203, 320, 240, "jpeg"),
+    imageSrc: await patternImage(204, 300, 300, "png"),
+    jsonld: await patternImage(205, 300, 300, "png"),
+    noscript: await patternImage(206, 300, 300, "png"),
+    full: await patternImage(207, 400, 300, "jpeg"),
+    sitemap: await patternImage(208, 300, 300, "png"),
+    post1: await patternImage(209, 300, 300, "png"),
+    post2: await patternImage(210, 300, 300, "png"),
+    post3: await patternImage(211, 300, 300, "png"),
+    thumbDecoy: await patternImage(212, 120, 90, "jpeg"), // suppressed thumbnail, not in the pool
+    dot: await patternImage(213, 8, 8, "gif"), // lazy placeholder, below MIN_IMAGE_SIDE
+  };
+  const listImg: Record<number, Buffer> = {};
+  for (const n of PLANTED_LISTING_PAGES) listImg[n] = await patternImage(220 + n, 300, 300, "png");
+
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const planted: Array<{ fp: string; key: string; page: string; path: string }> = [
+    { fp: "fp-lazy", key: "lazy", page: "/", path: "/img/lazy-deep.png" },
+    { fp: "fp-bg", key: "bg", page: "/", path: "/img/bg.png" },
+    { fp: "fp-poster", key: "poster", page: "/", path: "/img/poster.png" },
+    { fp: "fp-imagesrc", key: "imageSrc", page: "/", path: "/img/image-src.png" },
+    { fp: "fp-jsonld", key: "jsonld", page: "/", path: "/img/jsonld.png" },
+    { fp: "fp-noscript", key: "noscript", page: "/", path: "/img/noscript.png" },
+    { fp: "fp-full", key: "full", page: "/", path: "/img/full.jpg" },
+    { fp: "fp-sitemap", key: "sitemap", page: "/gallery-deep", path: "/img/sitemap-image.png" },
+    { fp: "fp-post-1", key: "post1", page: "/post/1", path: "/img/post-1.png" },
+    { fp: "fp-post-2", key: "post2", page: "/post/2", path: "/img/post-2.png" },
+    { fp: "fp-post-3", key: "post3", page: "/post/3", path: "/img/post-3.png" },
+  ];
+  const allHashes: string[] = [];
+  const fingerprints: Array<{ id: string; pdq: string; quality: number }> = [];
+  const bytesOf = (key: string): Buffer =>
+    key.startsWith("list") ? listImg[Number(key.slice(4))]! : (img as unknown as Record<string, Buffer>)[key]!;
+  for (const p of [...planted, ...PLANTED_LISTING_PAGES.map((n) => ({ fp: `fp-list-${n}`, key: `list${n}`, page: `/listing?page=${n}`, path: `/img/list-${n}.png` }))]) {
+    const h = await hashOf(bytesOf(p.key));
+    allHashes.push(h);
+    fingerprints.push({ id: p.fp, pdq: h, quality: 100 });
+  }
+  const pool: Pool = { version: "deep-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints };
+
+  const expected: Expected[] = [
+    ...planted.map((p) => ({ fingerprintId: p.fp, pagePath: p.page, imageHost: D, imagePath: p.path })),
+    ...PLANTED_LISTING_PAGES.map((n) => ({ fingerprintId: `fp-list-${n}`, pagePath: `/listing?page=${n}`, imageHost: D, imagePath: `/img/list-${n}.png` })),
+  ];
+
+  // ---- deep source ----
+  site.route(
+    D,
+    "/robots.txt",
+    sendBytes(Buffer.from(`User-agent: *\nAllow: /\nSitemap: ${o(D)}/sitemap-index.xml\n`), "text/plain"),
+  );
+  site.route(
+    D,
+    "/",
+    sendHtml(
+      html(
+        `
+        <a href="/listing?page=1">Listings</a>
+        <a href="/qtrap">Query trap</a>
+        <a href="/login">Member login</a>
+        <a href="/search?q=photos">Search</a>
+        <a href="/cart">Cart</a>
+        <a href="/calendar/2026-01-01">What's on</a>
+        <img src="/img/dot.gif" data-src="/img/lazy-deep.png">
+        <div style="background-image:url('/img/bg.png')">hero</div>
+        <video poster="/img/poster.png" controls></video>
+        <a href="/img/full.jpg"><img src="/img/thumb-decoy.png"></a>
+        <noscript><img src="/img/noscript.png"></noscript>
+      `,
+        `<link rel="alternate" type="application/atom+xml" href="/feed.atom">
+         <link rel="image_src" href="/img/image-src.png">
+         <script type="application/ld+json">{"@context":"https://schema.org","@type":"ImageGallery","image":{"url":"/img/jsonld.png"}}</script>`,
+      ),
+    ),
+  );
+  site.route(
+    D,
+    "/sitemap-index.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>${o(D)}/sitemap-pages.xml.gz</loc></sitemap>
+</sitemapindex>`,
+      ),
+      "application/xml",
+    ),
+  );
+  const urlset = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${Array.from({ length: 30 }, (_, i) => `  <url><loc>${o(D)}/listing?page=${i + 1}</loc></url>`).join("\n")}
+  <url><loc>${o(D)}/gallery-deep</loc><image:image><image:loc>${o(D)}/img/sitemap-image.png</image:loc></image:image></url>
+</urlset>`;
+  const gz = gzipSync(Buffer.from(urlset));
+  site.route(
+    D,
+    "/sitemap-pages.xml.gz",
+    (res) => {
+      res.writeHead(200, { "content-type": "application/gzip", "content-length": String(gz.length) });
+      res.end(gz);
+    },
+  );
+  site.route(
+    D,
+    "/feed.atom",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Deep fixture posts</title>
+  <link rel="self" href="${o(D)}/feed.atom"/>
+${Array.from({ length: 3 }, (_, i) => `  <entry><title>Post ${i + 1}</title><link rel="alternate" href="${o(D)}/post/${i + 1}"/><link rel="self" href="${o(D)}/feed.atom"/></entry>`).join("\n")}
+</feed>`,
+      ),
+      "application/atom+xml",
+    ),
+  );
+  site.route(D, "/gallery-deep", sendHtml(html(`<p>gallery reached through the sitemap</p>`)));
+  for (let n = 1; n <= 30; n++) {
+    const plantedImg = PLANTED_LISTING_PAGES.includes(n) ? `<img src="/img/list-${n}.png">` : "";
+    const next = n < 30 ? `<a rel="next" class="next-page" href="/listing?page=${n + 1}">Next ›</a>` : "";
+    site.route(
+      D,
+      `/listing?page=${n}`,
+      sendHtml(
+        html(
+          `${plantedImg}${next}
+           <a href="/listing?page=${n}&amp;utm_source=share">share this page</a>
+           <a href="/listing?page=${n}&amp;calendar=1">calendar view</a>`,
+        ),
+      ),
+    );
+  }
+  for (let n = 1; n <= 3; n++) {
+    site.route(D, `/post/${n}`, sendHtml(html(`<img src="/img/post-${n}.png"><a href="/">home</a>`)));
+  }
+  site.route(
+    D,
+    "/qtrap",
+    sendHtml(html(Array.from({ length: 40 }, (_, k) => `<a href="/qtrap-item?v=${k + 1}">item ${k + 1}</a>`).join(""))),
+  );
+
+  const imageRoute = (path: string, bytes: Buffer, type = "image/png") => site.route(D, path, sendBytes(bytes, type));
+  imageRoute("/img/lazy-deep.png", img.lazy);
+  imageRoute("/img/bg.png", img.bg);
+  imageRoute("/img/poster.png", img.poster, "image/jpeg");
+  imageRoute("/img/image-src.png", img.imageSrc);
+  imageRoute("/img/jsonld.png", img.jsonld);
+  imageRoute("/img/noscript.png", img.noscript);
+  imageRoute("/img/full.jpg", img.full, "image/jpeg");
+  imageRoute("/img/sitemap-image.png", img.sitemap);
+  imageRoute("/img/thumb-decoy.png", img.thumbDecoy, "image/jpeg");
+  imageRoute("/img/dot.gif", img.dot, "image/gif");
+  for (const n of PLANTED_LISTING_PAGES) imageRoute(`/img/list-${n}.png`, listImg[n]!);
+  for (let n = 1; n <= 3; n++) imageRoute(`/img/post-${n}.png`, (img as unknown as Record<string, Buffer>)[`post${n}`]!);
+
+  // ---- trap source: infinite calendar, date archives, query trap ----
+  site.route(T, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(
+    T,
+    "/",
+    sendHtml(
+      html(
+        `${`<a rel="next" class="next-day" href="/cal/2026-01-01">Next day</a>`}
+         <a href="/2026/01/17">Archives</a>
+         <a href="/login">Log in</a>
+         <a href="/ok">Fine page</a>
+         ${Array.from({ length: 40 }, (_, k) => `<a href="/t?u=${k + 1}">item ${k + 1}</a>`).join("")}`,
+      ),
+    ),
+  );
+  site.route(T, "/ok", sendHtml(html(`<p>fine</p>`)));
+  site.routeAny(T, (path) => {
+    // An infinite calendar: every /cal/<date> page links the next day, with
+    // rel=next and pagination classes. If the crawler ever fetched one, the
+    // chain never ends; the non-content rules must keep it at zero.
+    const cal = /^\/cal\/(\d{4})-(\d{2})-(\d{2})/.exec(path);
+    const send = (body: string) => sendHtml(html(body));
+    if (cal) {
+      const next = new Date(Date.UTC(Number(cal[1]), Number(cal[2]) - 1, Number(cal[3])) + DAY_MS);
+      const nextPath = `/cal/${next.toISOString().slice(0, 10)}`;
+      return send(`<a rel="next" class="next-day" href="${nextPath}">Next day</a>`);
+    }
+    return send(`<p>nothing here</p>`);
+  });
+
+  return { site, pool, expected, allHashes };
+}
+
 /** Env for a fixture run (test values only, nothing real). */
 export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, string> = {}): Record<string, string> {
   return {

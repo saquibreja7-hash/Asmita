@@ -33,6 +33,31 @@ export class RunMetrics {
   pagesNotModified = 0;
   pagesNonHtml = 0;
   pagesOutOfScope = 0;
+  /**
+   * Claimed pages that answered with a parsed sitemap or feed document
+   * (WP4): the fetch cost a page budget slot like any other page.
+   */
+  pagesXml = 0;
+  /** Sitemap documents parsed (index or urlset, WP4). */
+  sitemapDocs = 0;
+  /** Addresses taken from sitemaps: page locs, child sitemaps, image locs (WP4). */
+  sitemapUrlsTaken = 0;
+  /** <image:loc> image candidates taken from sitemaps (WP4). */
+  sitemapImages = 0;
+  /** RSS/Atom feeds parsed (WP4). */
+  feedsParsed = 0;
+  /** Entry links taken from feeds (WP4). */
+  feedEntriesTaken = 0;
+  /** Sitemap/feed documents that hit the MAX_SITEMAP_URLS cap (WP4). */
+  docsTruncated = 0;
+  /** Links skipped as obvious non-content: login, cart, search, calendar (WP4). */
+  linksSkippedNonContent = 0;
+  /** Links dropped by the per-path query-variant cap (WP4). */
+  linksSkippedQueryCap = 0;
+  /** JSON-LD blocks not parsed: oversized or malformed (WP4). */
+  jsonldSkipped = 0;
+  /** <noscript> blocks not re-parsed: oversized (WP4). */
+  noscriptSkipped = 0;
   /** Links beyond MAX_LINKS_PER_PAGE on a page. */
   linksDropped = 0;
   /**
@@ -92,6 +117,17 @@ export class RunMetrics {
       pagesFetched: this.pagesFetched,
       pagesNotModified: this.pagesNotModified,
       pagesNonHtml: this.pagesNonHtml,
+      pagesXml: this.pagesXml,
+      sitemapDocs: this.sitemapDocs,
+      sitemapUrlsTaken: this.sitemapUrlsTaken,
+      sitemapImages: this.sitemapImages,
+      feedsParsed: this.feedsParsed,
+      feedEntriesTaken: this.feedEntriesTaken,
+      docsTruncated: this.docsTruncated,
+      linksSkippedNonContent: this.linksSkippedNonContent,
+      linksSkippedQueryCap: this.linksSkippedQueryCap,
+      jsonldSkipped: this.jsonldSkipped,
+      noscriptSkipped: this.noscriptSkipped,
       linksDropped: this.linksDropped,
       batchPeak: this.batchPeak,
       imagesSeen: this.imagesSeen,

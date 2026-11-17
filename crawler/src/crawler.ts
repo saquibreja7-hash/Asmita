@@ -5,12 +5,22 @@
  * image candidates in memory, match, post findings, report each batch's
  * outcomes and links back to the app, and return a summary.
  *
+ * Deep coverage (crawler v2 WP4): robots.txt Sitemap: lines, sitemap
+ * indexes, gzipped sitemaps and RSS/Atom feeds are followed through the
+ * same claimed-row path as pages (no second fetch path); pagination links
+ * get priority; more image candidates are extracted (background-image,
+ * video poster, image_src, JSON-LD, noscript, thumbnail hrefs); and
+ * obvious non-content URLs (login, cart, search, calendar) and query-string
+ * traps are skipped.
+ *
  * The crawler keeps no frontier of its own: the queue, the seen set and the
  * scheduling live in the app (CrawlPage rows). The only page state here is
  * the claimed batch (at most FRONTIER_CLAIM_LIMIT entries) and the report
- * built from it, so a second run resumes where the last one stopped, and a
- * killed run loses at most its claimed batch, which the app hands out again
- * after the 30-minute claim window.
+ * built from it — plus two small bounded per-source structures (WP4): the
+ * query-variant guard (path/variant hashes) and the one-shot robots sitemap
+ * stash — so a second run resumes where the last one stopped, and a killed
+ * run loses at most its claimed batch, which the app hands out again after
+ * the 30-minute claim window.
  *
  * Stopping: `stop` (SIGTERM/SIGINT, wall-clock limit, crawler switched off,
  * stale pool) means "start no new work". In-flight requests and decodes are
@@ -28,10 +38,12 @@ import { RunMetrics, type SkipReason } from "./metrics.ts";
 import type { ClaimedPage, Finding, FindingResult, Pool, ReportedPage, Source } from "./asmita/client.ts";
 import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
-import { ROBOTS_MAX_BYTES, RobotsCache } from "./crawl/robots.ts";
+import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robots.ts";
+import { isNonContentUrl, QueryVariantGuard } from "./crawl/traps.ts";
 import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
+import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
 import type { ImageDecoder } from "./image/decoder-pool.ts";
-import type { FetchOptions, FetchResult, SafeFetcher } from "./net/safe-fetch.ts";
+import { decode, type FetchOptions, type FetchResult, type SafeFetcher } from "./net/safe-fetch.ts";
 import { exitCodeFor } from "./exit-codes.ts";
 import { withRetry } from "./retry.ts";
 
@@ -39,6 +51,8 @@ import { withRetry } from "./retry.ts";
 export const POOL_MAX_AGE_MS = 60 * 60 * 1000;
 /** Queued findings are posted at least this often. */
 export const FLUSH_INTERVAL_MS = 15_000;
+/** Distinct paths the per-source query-variant guard tracks (WP4); bounded state. */
+const QUERY_PATH_TRACK_CAP = 4096;
 
 export type AsmitaApi = {
   getPool(signal?: AbortSignal): Promise<Pool>;
@@ -80,6 +94,18 @@ type SourceCtx = {
    * requests either. A host leaves this set when it later returns an image.
    */
   failedOffHosts: Set<string>;
+  /**
+   * Per-run, per-source cap on distinct query variants of one path (WP4).
+   * Holds bounded path/variant hashes only, never URLs; a killed run simply
+   * loses it and the app's per-source digest dedups any repeat.
+   */
+  queryGuard: QueryVariantGuard;
+  /**
+   * Sitemap URLs named by the source's robots.txt (WP4), loaded once after
+   * the first claim and attached to the source's first reported page entry;
+   * null until the first claim of the run.
+   */
+  robotsSitemaps: URL[] | null;
 };
 
 export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget" | "unauthorized";
@@ -444,6 +470,109 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const MAX_REPORT_LINKS_PER_PAGE = 500;
 
   /**
+   * The links one report entry may carry (WP4): the per-page cap and the
+   * contract cap, whichever is smaller.
+   */
+  const linkCap = (): number => Math.min(config.MAX_LINKS_PER_PAGE, MAX_REPORT_LINKS_PER_PAGE);
+
+  /**
+   * A claimed page that answered with a sitemap or feed document (WP4).
+   * Sitemap <loc> pages, index children and feed entries become frontier
+   * rows; image sitemap <image:loc> candidates are hashed right away,
+   * attributed to their page (the <loc>), which must be in scope like any
+   * page. Returns the entry's links; bounded by the caps inside.
+   */
+  const xmlLinks = async (ctx: SourceCtx, docUrl: URL, body: Buffer, kind: XmlDocumentKind, depth: number): Promise<ReportedPage["links"]> => {
+    const links: ReportedPage["links"] = [];
+    const cap = linkCap();
+    const seen = new Set<string>();
+    /** Add one candidate; false only when the entry is full. */
+    const admit = (candidate: URL, linkKind: "page" | "sitemap" | "feed"): boolean => {
+      if (!inScope(candidate, ctx.scopeHost)) return true;
+      if (isNonContentUrl(candidate)) {
+        metrics.linksSkippedNonContent++;
+        return true;
+      }
+      if (!ctx.queryGuard.admit(candidate)) {
+        metrics.linksSkippedQueryCap++;
+        return true;
+      }
+      const key = urlKey(candidate);
+      if (seen.has(key)) return true;
+      if (links.length >= cap) return false;
+      seen.add(key);
+      links.push({ url: candidate.href, kind: linkKind });
+      return true;
+    };
+    if (kind === "urlset" || kind === "sitemapindex") {
+      const parsed = parseSitemap(body, docUrl, kind, config.MAX_SITEMAP_URLS);
+      metrics.sitemapDocs++;
+      if (parsed.truncated) metrics.docsTruncated++;
+      if (kind === "sitemapindex") {
+        metrics.sitemapUrlsTaken += parsed.children.length;
+        if (depth < config.MAX_DEPTH) {
+          for (const child of parsed.children) {
+            if (!admit(child, "sitemap")) break;
+          }
+        }
+      } else {
+        metrics.sitemapUrlsTaken += parsed.pages.length;
+        metrics.sitemapImages += parsed.pages.reduce((n, p) => n + p.images.length, 0);
+        if (depth < config.MAX_DEPTH) {
+          for (const p of parsed.pages) {
+            if (!admit(p.loc, "page")) break;
+          }
+        }
+        for (const p of parsed.pages) {
+          if (stop.signal.aborted) break;
+          // The image belongs to its page: the page must be in scope (and
+          // not obvious non-content) for the image to be a candidate.
+          if (!inScope(p.loc, ctx.scopeHost) || isNonContentUrl(p.loc)) continue;
+          for (const image of p.images) {
+            if (stop.signal.aborted) break;
+            await processImage(image, p.loc, ctx);
+          }
+        }
+      }
+      return links;
+    }
+    const parsed = parseFeed(body, docUrl, kind, config.MAX_SITEMAP_URLS);
+    metrics.feedsParsed++;
+    metrics.feedEntriesTaken += parsed.entries.length;
+    if (parsed.truncated) metrics.docsTruncated++;
+    if (depth < config.MAX_DEPTH) {
+      for (const entry of parsed.entries) {
+        if (!admit(entry, "page")) break;
+      }
+    }
+    return links;
+  };
+
+  /**
+   * Attaches the Sitemap: URLs the source's robots.txt named (WP4) to its
+   * first reported page entry, once per source per run; later entries get an
+   * empty stash. The same scope, non-content and query-cap rules apply.
+   */
+  const attachRobotsSitemaps = (entry: ReportedPage, ctx: SourceCtx): void => {
+    const stash = ctx.robotsSitemaps;
+    if (stash === null) return;
+    ctx.robotsSitemaps = [];
+    for (const s of stash) {
+      if (entry.links.length >= linkCap()) break;
+      if (!inScope(s, ctx.scopeHost)) continue;
+      if (isNonContentUrl(s)) {
+        metrics.linksSkippedNonContent++;
+        continue;
+      }
+      if (!ctx.queryGuard.admit(s)) {
+        metrics.linksSkippedQueryCap++;
+        continue;
+      }
+      entry.links.push({ url: s.href, kind: "sitemap" });
+    }
+  };
+
+  /**
    * Fetches one claimed page and builds its report entry. The in-scope check
    * runs on the claimed URL (the app's data, never trusted blindly) and on
    * every redirect hop (beforeHop). A 304 becomes "not_modified"; 404/410
@@ -500,6 +629,27 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       metrics.pagesNotModified++;
       return { id: page.id, status: "not_modified", ...validators, links: [] };
     }
+    // Sitemap or feed documents (WP4): a gzipped body (sitemap.xml.gz served
+    // without Content-Encoding) is inflated in memory under the same byte
+    // cap, and the kind is sniffed from the root element — never from the
+    // URL or the Content-Type, which sites routinely get wrong.
+    let body = result.body;
+    if (isGzipBody(body)) {
+      try {
+        body = await decode(body, "gzip", config.MAX_HTML_BYTES);
+      } catch (raw) {
+        const err = toCrawlError(raw);
+        record(err.code);
+        return { id: page.id, status: "error", links: [] };
+      }
+    }
+    const docKind = sniffXmlDoc(body);
+    if (docKind !== null) {
+      metrics.pagesXml++;
+      const links = await xmlLinks(ctx, result.url, body, docKind, page.depth);
+      if (stop.signal.aborted) return null; // redone whole after the claim window
+      return { id: page.id, status: "fetched", ...validators, links };
+    }
     if (!HTML_TYPES.has(result.contentType)) {
       metrics.pagesNonHtml++;
       return { id: page.id, status: "fetched", ...validators, links: [] };
@@ -511,11 +661,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       return { id: page.id, status: "error", links: [] };
     }
     metrics.pagesFetched++;
-    const ex = extract(result.body.toString("utf8"), result.url, result.xRobotsTag, {
+    const ex = extract(body.toString("utf8"), result.url, result.xRobotsTag, {
       maxLinks: config.MAX_LINKS_PER_PAGE,
       maxImages: config.MAX_IMAGES_PER_PAGE,
     });
     metrics.linksDropped += ex.dropped.links;
+    metrics.linksSkippedNonContent += ex.skippedLinks.nonContent;
+    metrics.jsonldSkipped += ex.skippedDocs.jsonld;
+    metrics.noscriptSkipped += ex.skippedDocs.noscript;
     metrics.skip("per_page_cap", ex.dropped.images);
     metrics.skip("data_uri", ex.skipped.data_uri);
     metrics.skip("svg", ex.skipped.svg);
@@ -535,14 +688,36 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     const links: ReportedPage["links"] = [];
     if (page.depth < config.MAX_DEPTH) {
       // Per-page dedup only: cross-page dedup is the app's, on the digest.
+      const cap = linkCap();
       const seenOnPage = new Set<string>();
-      for (const link of ex.links) {
-        if (links.length >= Math.min(config.MAX_LINKS_PER_PAGE, MAX_REPORT_LINKS_PER_PAGE)) break;
-        if (!inScope(link, scopeHost)) continue;
-        const key = urlKey(link);
-        if (seenOnPage.has(key)) continue;
+      /**
+       * Admit one page or feed candidate. Pagination links (already first in
+       * ex.links) are exempt from the query-variant cap: a listing with
+       * ?page=1..N is real coverage, and depth and budgets bound a hostile
+       * "next" chain anyway (WP4).
+       */
+      const admit = (candidate: URL, kind: "page" | "feed", pagination: boolean): boolean => {
+        if (!inScope(candidate, scopeHost)) return true;
+        if (isNonContentUrl(candidate)) {
+          metrics.linksSkippedNonContent++;
+          return true;
+        }
+        if (!pagination && !ctx.queryGuard.admit(candidate)) {
+          metrics.linksSkippedQueryCap++;
+          return true;
+        }
+        const key = urlKey(candidate);
+        if (seenOnPage.has(key)) return true;
+        if (links.length >= cap) return false;
         seenOnPage.add(key);
-        links.push({ url: link.href, kind: "page" });
+        links.push({ url: candidate.href, kind });
+        return true;
+      };
+      for (const link of ex.links) {
+        if (!admit(link, "page", ex.pagination.has(urlKey(link)))) break;
+      }
+      for (const feed of ex.feeds) {
+        if (!admit(feed, "feed", false)) break;
       }
     }
     return { id: page.id, status: "fetched", ...validators, links };
@@ -559,7 +734,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     metrics.sourcesCrawled++;
     const started = now();
-    const ctx: SourceCtx = { source, scopeHost, offHosts: new Set<string>(), failedOffHosts: new Set<string>() };
+    const ctx: SourceCtx = {
+      source,
+      scopeHost,
+      offHosts: new Set<string>(),
+      failedOffHosts: new Set<string>(),
+      queryGuard: new QueryVariantGuard(config.MAX_QUERY_VARIANTS_PER_PATH, QUERY_PATH_TRACK_CAP),
+      robotsSitemaps: null,
+    };
     let pages = 0;
 
     // Results are reported in body-bounded chunks, so a batch of link-heavy
@@ -621,6 +803,26 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       }
       if (batch.length === 0) break; // nothing due: the source is done for now
       metrics.batchPeak = Math.max(metrics.batchPeak, batch.length);
+      // The source's robots.txt can name sitemaps (WP4). Load it once per
+      // run, through the same polite fetch path as every other request, and
+      // keep its in-scope Sitemap: URLs for the first reported entry.
+      if (ctx.robotsSitemaps === null) {
+        const first = normalizeUrl(batch[0]!.url);
+        if (first === null) {
+          ctx.robotsSitemaps = [];
+        } else {
+          const rules = await robots.rulesFor(first);
+          const seen = new Set<string>();
+          const list: URL[] = [];
+          for (const raw of rules.sitemaps.slice(0, ROBOTS_SITEMAP_CAP)) {
+            const s = normalizeUrl(raw, first);
+            if (s === null || seen.has(urlKey(s))) continue;
+            seen.add(urlKey(s));
+            list.push(s);
+          }
+          ctx.robotsSitemaps = list;
+        }
+      }
       for (const page of batch) {
         if (stop.signal.aborted || reportBroken) break;
         if (sink.disabled || sink.unauthorized) break;
@@ -633,6 +835,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         metrics.pagesAttempted++;
         const entry = await processPage(page, ctx);
         if (entry !== null) {
+          attachRobotsSitemaps(entry, ctx);
           const bytes = Buffer.byteLength(JSON.stringify(entry)) + 1;
           if (pendingBytes + bytes > MAX_REPORT_BODY_BYTES) await flushReport();
           pending.push(entry);

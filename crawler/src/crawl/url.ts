@@ -1,7 +1,8 @@
 /** URL parsing, dedup keys and crawl scope. */
 import { getDomain } from "tldts";
 
-const TRACKING_PARAM = /^(utm_[a-z]+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|_ga|igshid)$/i;
+/** Query parameters stripped everywhere (tracking noise, never content). */
+export const TRACKING_PARAM = /^(utm_[a-z]+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|_ga|igshid)$/i;
 
 /**
  * Parse a URL for fetching and reporting: WHATWG parsing (lower-cased scheme
@@ -25,16 +26,26 @@ export function normalizeUrl(raw: string, base?: string | URL): URL | null {
 }
 
 /**
+ * The tracking-stripped, sorted query string of a URL: the varying part of
+ * a dedup key. Shared by `urlKey` and the per-path query-variant guard
+ * (crawl/traps.ts), so both apply the same tracking-parameter rule.
+ */
+export function queryKey(url: URL): string {
+  if (!url.search) return "";
+  const params = [...new URLSearchParams(url.search).entries()].filter(([k]) => !TRACKING_PARAM.test(k));
+  params.sort(([a, av], [b, bv]) => (a === b ? (av < bv ? -1 : av > bv ? 1 : 0) : a < b ? -1 : 1));
+  return new URLSearchParams(params).toString();
+}
+
+/**
  * Dedup key only (never fetched or reported): the URL with tracking
  * parameters removed and the remaining parameters sorted, so trivially
  * different links to one resource are fetched once.
  */
 export function urlKey(url: URL): string {
   if (!url.search) return url.href;
-  const params = [...new URLSearchParams(url.search).entries()].filter(([k]) => !TRACKING_PARAM.test(k));
-  params.sort(([a, av], [b, bv]) => (a === b ? (av < bv ? -1 : av > bv ? 1 : 0) : a < b ? -1 : 1));
   const copy = new URL(url.href);
-  copy.search = new URLSearchParams(params).toString();
+  copy.search = queryKey(url);
   return copy.href;
 }
 
