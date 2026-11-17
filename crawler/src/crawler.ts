@@ -53,7 +53,7 @@ import type { ClaimedPage, Finding, FindingResult, Pool, ReportedPage, Source } 
 import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robots.ts";
-import { isNonContentUrl, QueryVariantGuard } from "./crawl/traps.ts";
+import { isNonContentUrl, QueryGuardStore, type QueryVariantGuard } from "./crawl/traps.ts";
 import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
 import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
 import { BrowserRenderer, type BrowserImage } from "./browser/browser-renderer.ts";
@@ -69,6 +69,18 @@ export const POOL_MAX_AGE_MS = 60 * 60 * 1000;
 export const FLUSH_INTERVAL_MS = 15_000;
 /** Distinct paths the per-source query-variant guard tracks (WP4); bounded state. */
 const QUERY_PATH_TRACK_CAP = 4096;
+/** Sources whose query-variant guards are kept across `run --loop` passes. */
+const QUERY_GUARD_SOURCES_CAP = 64;
+
+/**
+ * The query-variant guards for a sequence of passes (`run --loop`): one
+ * store, passed to every runCrawl, so a trap's allowance is not renewed
+ * each pass. Bounded (QUERY_GUARD_SOURCES_CAP sources, least recently used
+ * dropped first).
+ */
+export function newQueryGuardStore(config: Pick<Config, "MAX_QUERY_VARIANTS_PER_PATH">): QueryGuardStore {
+  return new QueryGuardStore(config.MAX_QUERY_VARIANTS_PER_PATH, QUERY_PATH_TRACK_CAP, QUERY_GUARD_SOURCES_CAP);
+}
 
 export type AsmitaApi = {
   getPool(signal?: AbortSignal): Promise<Pool>;
@@ -103,6 +115,11 @@ export type CrawlDeps = {
   policy?: NetPolicy;
   /** Where Playwright's Chromium is installed (WP7); default is ~/.cache/ms-playwright. */
   browsersPath?: string;
+  /**
+   * Query-variant guards shared by consecutive passes (`run --loop`); a
+   * single run without it gets a fresh store.
+   */
+  queryGuards?: QueryGuardStore;
 };
 
 type SourceCtx = {
@@ -122,9 +139,10 @@ type SourceCtx = {
    */
   failedOffHosts: Set<string>;
   /**
-   * Per-run, per-source cap on distinct query variants of one path (WP4).
-   * Holds bounded path/variant hashes only, never URLs; a killed run simply
-   * loses it and the app's per-source digest dedups any repeat.
+   * Per-source cap on distinct query variants of one path (WP4), kept
+   * across `run --loop` passes (deps.queryGuards). Holds bounded path/variant
+   * hashes only, never URLs; a killed process simply loses it and the app's
+   * per-source digest dedups any repeat.
    */
   queryGuard: QueryVariantGuard;
   /**
@@ -160,6 +178,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const runId = deps.runId ?? randomUUID();
   const log = deps.log.child({ runId });
   const metrics = new RunMetrics(now());
+  /** Per-source query-variant guards: shared across --loop passes when given. */
+  const queryGuards = deps.queryGuards ?? newQueryGuardStore(config);
   let outcome: RunOutcome = "completed";
   /** Set when the API rejected the key after the initial load. */
   let unauthorized = false;
@@ -1067,7 +1087,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       scopeHost,
       offHosts: new Set<string>(),
       failedOffHosts: new Set<string>(),
-      queryGuard: new QueryVariantGuard(config.MAX_QUERY_VARIANTS_PER_PATH, QUERY_PATH_TRACK_CAP),
+      queryGuard: queryGuards.guardFor(source.id),
       robotsSitemaps: null,
       discoveredHosts: [],
     };

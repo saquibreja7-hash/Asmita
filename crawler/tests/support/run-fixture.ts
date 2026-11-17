@@ -10,6 +10,7 @@ import { SafeFetcher } from "../../src/net/safe-fetch.ts";
 import { fixtureEnv, FIXTURE_HOSTS, TEST_KEY, type FixtureSite } from "./fixture-site.ts";
 import type { MockAsmita } from "./mock-asmita.ts";
 import { loopbackTestPolicy } from "./test-policy.ts";
+import type { QueryGuardStore } from "../../src/crawl/traps.ts";
 
 export async function runFixtureCrawl(
   site: FixtureSite,
@@ -23,6 +24,8 @@ export async function runFixtureCrawl(
     hosts?: string[];
     /** Extra fake DNS entries for the test policy (e.g. metadata hostnames). */
     extraDns?: Record<string, string[]>;
+    /** Query-variant guards shared with an earlier pass (run --loop). */
+    queryGuards?: QueryGuardStore;
   } = {},
 ): Promise<{ result: RunResult; lines: string[] }> {
   const lines = opts.lines ?? [];
@@ -64,6 +67,7 @@ export async function runFixtureCrawl(
       // one Playwright installed for this Node.
       policy,
       browsersPath: process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(homedir(), ".cache", "ms-playwright"),
+      queryGuards: opts.queryGuards,
     });
     return { result, lines };
   } finally {
