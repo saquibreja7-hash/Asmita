@@ -44,9 +44,10 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  *   days running without a single finding in that window: switched off for
  *   30 days (pausedUntil, pauseReason "no_match_budget_spent"), then resumed
  *   by the same sweep.
- * - An admin switching a paused or stored-disabled site on clears the
- *   automatic state (crawl-sources.ts updateCrawlSource); the admin owns it
- *   from there on.
+ * - An admin switching a site on or off clears an automatic pause
+ *   (crawl-sources.ts updateCrawlSource; switching on also clears the stored
+ *   disabled reason); the admin owns it from there on, and the sweep only
+ *   resumes rows that are still disabled and still carry their pause.
  *
  * Hosts only, never URLs: nothing here receives, stores or logs a link, and
  * nothing is fetched (the app never fetches, rule 5 of the spec). The daily
@@ -469,8 +470,9 @@ async function sourcesWithFindingSince(ids: string[], since: Date): Promise<Set<
 
 /**
  * The hourly lifecycle sweep of discovered sites, wired into the retention
- * cron. First it resumes every pause that has expired (and clears the fields
- * of one an admin lifted early); then it pauses each enabled discovered site
+ * cron. First it resumes every expired pause on a row that is still
+ * disabled and still paused (an admin's switch clears the pause, so it is
+ * never overridden); then it pauses each enabled discovered site
  * whose page budget was spent on every day of the three-day window without
  * one finding in the window. A paused site is simply disabled until its 30
  * days pass, so the frontier and the crawler's source list need no new
@@ -478,11 +480,14 @@ async function sourcesWithFindingSince(ids: string[], since: Date): Promise<Set<
  * until it has spent its budget on three fresh days.
  */
 export async function sweepDiscoveredCrawlSources(now = new Date()): Promise<{ paused: number; resumed: number }> {
-  // --- resume: an expired pause lifts itself, whoever switched it on.
+  // --- resume: an expired pause lifts itself. Only a row the sweep itself
+  // switched off and nobody touched since is resumed: still disabled, still
+  // carrying its pause. An admin's switch (on or off) clears the pause fields
+  // (crawl-sources.ts updateCrawlSource), so an admin's "off" is never undone.
   const expired: SweepCandidate[] = [];
   if (isDevNoDb()) {
     for (const source of crawlMemory().sources.values()) {
-      if (source.origin === "DISCOVERED" && source.pauseReason !== null && source.pausedUntil && source.pausedUntil <= now) {
+      if (source.origin === "DISCOVERED" && !source.enabled && source.pauseReason !== null && source.pausedUntil && source.pausedUntil <= now) {
         expired.push({ id: source.id, domain: source.domain, pageBudget: source.pageBudget });
         source.enabled = true;
         source.pausedUntil = null;
@@ -492,23 +497,24 @@ export async function sweepDiscoveredCrawlSources(now = new Date()): Promise<{ p
   } else if (usesWorkerKysely()) {
     const rows = await getWorkerDb().selectFrom("CrawlSource")
       .select(["id", "domain", "pageBudget"])
-      .where("origin", "=", "DISCOVERED").where("pauseReason", "is not", null)
+      .where("origin", "=", "DISCOVERED").where("enabled", "=", false).where("pauseReason", "is not", null)
       .where("pausedUntil", "<=", now).execute();
     if (rows.length > 0) {
       await getWorkerDb().updateTable("CrawlSource")
         .set({ enabled: true, pausedUntil: null, pauseReason: null })
-        .where("id", "in", rows.map((row) => row.id)).execute();
+        .where("id", "in", rows.map((row) => row.id))
+        .where("enabled", "=", false).where("pauseReason", "is not", null).execute();
       expired.push(...rows.map((row) => ({ id: row.id, domain: row.domain, pageBudget: row.pageBudget })));
     }
   } else {
     const { db } = await import("@/lib/db");
     const rows = await db.crawlSource.findMany({
-      where: { origin: "DISCOVERED", pauseReason: { not: null }, pausedUntil: { lte: now } },
+      where: { origin: "DISCOVERED", enabled: false, pauseReason: { not: null }, pausedUntil: { lte: now } },
       select: { id: true, domain: true, pageBudget: true },
     });
     if (rows.length > 0) {
       await db.crawlSource.updateMany({
-        where: { id: { in: rows.map((row) => row.id) } },
+        where: { id: { in: rows.map((row) => row.id) }, enabled: false, pauseReason: { not: null } },
         data: { enabled: true, pausedUntil: null, pauseReason: null },
       });
       expired.push(...rows.map((row) => ({ id: row.id, domain: row.domain, pageBudget: row.pageBudget })));

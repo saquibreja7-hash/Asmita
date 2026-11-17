@@ -318,6 +318,42 @@ describe("the unproductive-site pause sweep", () => {
   });
 });
 
+describe("an admin's switch overrides an automatic pause for good (review fix)", () => {
+  it("an admin switching a paused discovered site off clears the pause, so the sweep never resumes it", async () => {
+    const parent = await adminSource("seed.example.org");
+    await recordCrawlDiscoveries(parent!.id, "run-1", ["paused.example.org"], NOW);
+    const source = sourceByDomain("paused.example.org")!;
+    Object.assign(source, { enabled: false, pausedUntil: new Date(NOW.getTime() + DISCOVERY_PAUSE_MS), pauseReason: PAUSE_REASON_NO_MATCH });
+
+    const result = await updateCrawlSource({ id: source.id, enabled: false }, "admin-9");
+    expect(result.ok).toBe(true);
+    expect(sourceByDomain("paused.example.org")).toMatchObject({ enabled: false, pausedUntil: null, pauseReason: null });
+
+    const later = new Date(NOW.getTime() + DISCOVERY_PAUSE_MS + 60_000);
+    expect(await sweepDiscoveredCrawlSources(later)).toEqual({ paused: 0, resumed: 0 });
+    expect(sourceByDomain("paused.example.org")!.enabled).toBe(false);
+    expect(inMemoryAuditLog.filter((e) => e.eventType === "CRAWL_SOURCE_RESUMED")).toHaveLength(0);
+  });
+
+  it("the sweep never resumes a row that is enabled even if pause fields linger", async () => {
+    const parent = await adminSource("seed.example.org");
+    await recordCrawlDiscoveries(parent!.id, "run-1", ["lingering.example.org"], NOW);
+    const source = sourceByDomain("lingering.example.org")!;
+    Object.assign(source, { enabled: true, pausedUntil: new Date(NOW.getTime() - 60_000), pauseReason: PAUSE_REASON_NO_MATCH });
+    expect((await sweepDiscoveredCrawlSources(NOW)).resumed).toBe(0);
+  });
+
+  it("a budget-only change leaves an automatic pause in place", async () => {
+    const parent = await adminSource("seed.example.org");
+    await recordCrawlDiscoveries(parent!.id, "run-1", ["budget.example.org"], NOW);
+    const source = sourceByDomain("budget.example.org")!;
+    const until = new Date(NOW.getTime() + DISCOVERY_PAUSE_MS);
+    Object.assign(source, { enabled: false, pausedUntil: until, pauseReason: PAUSE_REASON_NO_MATCH });
+    await updateCrawlSource({ id: source.id, pageBudget: 30 }, "admin-9");
+    expect(sourceByDomain("budget.example.org")).toMatchObject({ enabled: false, pausedUntil: until, pauseReason: PAUSE_REASON_NO_MATCH });
+  });
+});
+
 describe("the admin page fields (WP5)", () => {
   it("listCrawlSources resolves a discovered site's parent domain and carries the pause state", async () => {
     const parent = (await adminSource("seed.example.org"))!;

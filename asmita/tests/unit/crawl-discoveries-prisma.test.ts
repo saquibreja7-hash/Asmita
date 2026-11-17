@@ -183,8 +183,13 @@ describe("sweepDiscoveredCrawlSources, Prisma path", () => {
       .mockResolvedValueOnce([]); // no further pause candidates
     const result = await sweepDiscoveredCrawlSources(NOW);
     expect(result).toEqual({ paused: 0, resumed: 1 });
+    // Only rows still disabled and still paused are resumed (review fix: an
+    // admin's "off" clears the pause and must never be undone by the sweep).
+    expect(db.crawlSource.findMany.mock.calls[0][0].where).toEqual({
+      origin: "DISCOVERED", enabled: false, pauseReason: { not: null }, pausedUntil: { lte: NOW },
+    });
     expect(db.crawlSource.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["disc-1"] } },
+      where: { id: { in: ["disc-1"] }, enabled: false, pauseReason: { not: null } },
       data: { enabled: true, pausedUntil: null, pauseReason: null },
     });
   });

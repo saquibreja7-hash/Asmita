@@ -228,10 +228,12 @@ export async function updateCrawlSource(
     ...(input.delayMs !== undefined ? { delayMs: input.delayMs } : {}),
     ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
   };
-  // An explicit switch-on (WP5) also lifts an automatic pause and clears the
-  // stored reason a discovered site was born with: from here the admin owns
-  // the state, and the hourly sweep must not resume it later.
-  if (input.enabled === true) Object.assign(changes, { pausedUntil: null, pauseReason: null, disabledReason: null });
+  // Any explicit switch (WP5), on or off, lifts an automatic pause: from here
+  // the admin owns the state, and the hourly sweep must never resume a site
+  // an admin switched off, nor re-touch one an admin switched on. A switch-on
+  // also clears the stored reason a discovered site was born disabled with.
+  if (input.enabled !== undefined) Object.assign(changes, { pausedUntil: null, pauseReason: null });
+  if (input.enabled === true) Object.assign(changes, { disabledReason: null });
   let source: CrawlSourceView;
   if (isDevNoDb()) {
     const row = crawlMemory().sources.get(input.id);

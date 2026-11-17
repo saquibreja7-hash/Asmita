@@ -241,6 +241,10 @@ describe("sweepDiscoveredCrawlSources, Kysely path", () => {
 
     const [resume, pause] = callsOn("CrawlSource").filter((call) => call.op === "update");
     expect(resume!.detail.set).toMatchObject({ enabled: true, pausedUntil: null, pauseReason: null });
+    // Only rows still disabled and still paused are resumed (review fix).
+    const resumeScan = callsOn("CrawlSource").find((call) => call.op === "select")!;
+    expect(resumeScan.detail.wheres).toEqual(expect.arrayContaining([["enabled", "=", false], ["pauseReason", "is not", null]]));
+    expect(resume!.detail.wheres).toEqual(expect.arrayContaining([["enabled", "=", false], ["pauseReason", "is not", null]]));
     expect(pause!.detail.set).toMatchObject({ enabled: false, pauseReason: "no_match_budget_spent" });
     expect((pause!.detail.set as Record<string, unknown>).pausedUntil).toEqual(new Date(NOW.getTime() + DISCOVERY_PAUSE_MS));
 
