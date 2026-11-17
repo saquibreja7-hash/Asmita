@@ -65,7 +65,10 @@
         "NOTICE_DISPATCH_PERSISTENCE": "database",
         "ENABLE_HASH_UPLOAD": "true",
         "ENABLE_PLATFORM_API": "false",
-        "ENABLE_PROVENANCE_CHECK": "false"
+        "ENABLE_PROVENANCE_CHECK": "false",
+        // The survivor's copyable complaint and appeal wording (ladder.draft.*),
+        // confirmed by the legal reviewer (owner, 2026-11-17).
+        "ESCALATION_DRAFTS_REVIEWED": "true"
       }
     }
   }
