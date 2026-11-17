@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { safeEqual } from "@/lib/safe-equal";
 import { purgeExpiredCrawlFindings, purgeExpiredCrawlPages, purgeExpiredUrls } from "@/lib/url-retention";
+import { sweepDiscoveredCrawlSources } from "@/lib/crawl-discoveries";
 import { sendOnCallAlertFireAndForget } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
@@ -13,16 +14,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   // All run even if one fails, so no retention can block or skip the others.
-  const [urls, findings, pages] = await Promise.allSettled([
+  // The discovered-site sweep (crawler v2 WP5) rides the same hourly cron:
+  // it resumes expired 30-day pauses and pauses sites whose page budget was
+  // spent three days running with no match.
+  const [urls, findings, pages, discovery] = await Promise.allSettled([
     purgeExpiredUrls(),
     purgeExpiredCrawlFindings(),
     purgeExpiredCrawlPages(),
+    sweepDiscoveredCrawlSources(),
   ]);
-  if (urls.status === "fulfilled" && findings.status === "fulfilled" && pages.status === "fulfilled") {
+  if (urls.status === "fulfilled" && findings.status === "fulfilled" && pages.status === "fulfilled" && discovery.status === "fulfilled") {
     return NextResponse.json({
       expiredUrlsPurged: urls.value,
       expiredFindingsPurged: findings.value,
       expiredCrawlPagesPurged: pages.value,
+      discoveredSourcesPaused: discovery.value.paused,
+      discoveredSourcesResumed: discovery.value.resumed,
     });
   }
   sendOnCallAlertFireAndForget({

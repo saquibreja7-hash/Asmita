@@ -100,6 +100,24 @@ export const FrontierReportResponseSchema = z.object({
   accepted: z.number().int().min(0).max(200),
 });
 
+// --- Discovery reporting (crawler v2 WP5) -------------------------------------
+
+/**
+ * Server contract for POST /api/crawler/discoveries, written independently:
+ * the out-of-scope hosts seen linked from in-scope pages, hosts only, at
+ * most 200 per request, deduplicated by the crawler per run.
+ */
+export const DiscoveriesRequestSchema = z.strictObject({
+  sourceId: ID,
+  runId: z.string().regex(RUN_ID_PATTERN),
+  hosts: z.array(z.string().min(1).max(253)).max(200),
+});
+export type DiscoveriesRequest = z.infer<typeof DiscoveriesRequestSchema>;
+
+export const DiscoveriesResponseSchema = z.object({
+  accepted: z.number().int().min(0).max(200),
+});
+
 /**
  * The server validates findings strictly (no extra fields at envelope or
  * item level). The same rules are applied here before sending, so a
@@ -200,6 +218,21 @@ export class AsmitaClient {
     const body = { sourceId, runId, pages };
     if (!FrontierReportRequestSchema.safeParse(body).success) throw new CrawlError("internal");
     return this.call("POST", "/api/crawler/frontier/report", body, FrontierReportResponseSchema, signal).then((r) => r.accepted);
+  }
+
+  /**
+   * Reports the out-of-scope hosts linked from in-scope pages (WP5): hosts
+   * only, at most 200 per request, deduplicated per run before this call.
+   * The app decides which become sources; an empty list is never sent.
+   * Best-effort by design: a failed report loses nothing but the chance of
+   * these hosts becoming sources this run — the pages that linked them stay
+   * in the frontier, so a later run reports them again.
+   */
+  async reportDiscoveries(sourceId: string, runId: string, hosts: string[], signal?: AbortSignal): Promise<number> {
+    if (hosts.length === 0) return 0;
+    const body = { sourceId, runId, hosts };
+    if (!DiscoveriesRequestSchema.safeParse(body).success) throw new CrawlError("internal");
+    return this.call("POST", "/api/crawler/discoveries", body, DiscoveriesResponseSchema, signal).then((r) => r.accepted);
   }
 
   async postFindings(runId: string, findings: Finding[], signal?: AbortSignal): Promise<FindingResult[]> {

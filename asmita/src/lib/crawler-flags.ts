@@ -51,6 +51,24 @@ export function defaultSourceDelayMs(env: Record<string, string | undefined> = p
   return clampedInt(env, "CRAWLER_DEFAULT_DELAY_MS", 1500, DELAY_MIN_MS, DELAY_MAX_MS);
 }
 
+/*
+ * Crawler v2 WP5: how far discovery may reach from a human-added or
+ * survivor-reported site, and how many discovered sites may be switched on
+ * per UTC day. Read in this one place, client-safe (no imports). Unset or
+ * unparseable values fall back to the defaults; out-of-range values clamp,
+ * never refuse — a discovery report must not fail on a bad knob.
+ */
+
+/** A DISCOVERED source is enabled automatically while its hops are within this. */
+export function maxDiscoveryHops(env: Record<string, string | undefined> = process.env) {
+  return clampedInt(env, "CRAWLER_MAX_DISCOVERY_HOPS", 2, 0, 10);
+}
+
+/** At most this many discovered sites are auto-enabled per UTC day. */
+export function maxNewSitesPerDay(env: Record<string, string | undefined> = process.env) {
+  return clampedInt(env, "CRAWLER_MAX_NEW_SITES_PER_DAY", 200, 0, 10_000);
+}
+
 /**
  * Which of her case's links a survivor may act on. With crawler findings
  * hidden from her a crawler-found link behaves exactly as if it did not exist:

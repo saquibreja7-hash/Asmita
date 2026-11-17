@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { crawlMemory, type MemoryCrawlFinding } from "@/lib/crawl-store";
 import { consentCoversFinding, findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
 import { enabledCrawlSourceDomain, ensureCrawlSourceForReportedHost } from "@/lib/crawl-sources";
+import { promoteDiscoveredSource } from "@/lib/crawl-discoveries";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
@@ -292,6 +293,14 @@ export async function recordCrawlFindings(
       fingerprints.set(item.fingerprintId, null);
       results.push({ status: "rejected", reason: FINGERPRINT_REFUSED });
       continue;
+    }
+    // A match under a discovered site promotes it (full-crawler spec WP5):
+    // hops to 0 and the reported-source budget. Never allowed to lose or
+    // fail the finding it proves.
+    try {
+      await promoteDiscoveredSource(item.sourceId, keyId);
+    } catch {
+      console.error("crawl_source_promotion_failed");
     }
     if (stored.created) {
       // Never the URLs or the fingerprint.

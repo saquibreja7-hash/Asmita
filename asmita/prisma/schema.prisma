@@ -190,6 +190,10 @@ enum AuditEventType {
   CRAWL_FINDING_APPROVED
   CRAWL_FINDING_DISMISSED
   CRAWL_SOURCE_REPORTED
+  CRAWL_SOURCE_DISCOVERED
+  CRAWL_SOURCE_PROMOTED
+  CRAWL_SOURCE_PAUSED
+  CRAWL_SOURCE_RESUMED
 }
 
 enum DeletionJobStatus {
@@ -461,6 +465,7 @@ model CrawlFinding {
   @@unique([caseId, urlDigest])
   @@index([reviewStatus])
   @@index([firstSeenAt])
+  @@index([sourceId])
 }
 
 // A public site the crawler may visit. ADMIN rows are approved by a human
@@ -482,6 +487,15 @@ model CrawlSource {
   render     CrawlRenderMode @default(HTTP)
   lastCrawledAt DateTime?
   pagesCrawled  Int          @default(0)
+  // Crawler v2 WP5: automatic lifecycle of a discovered site. Paused = the
+  // hourly sweep switched it off for 30 days after its page budget was spent
+  // three days running with no match; pauseReason is a fixed code for the
+  // admin page. disabledReason records why a discovered site was stored
+  // disabled at birth ("max_hops" beyond the hop limit, "daily_cap" beyond
+  // the new-sites-per-day cap); both clear when an admin switches it on.
+  pausedUntil    DateTime?
+  pauseReason    String?
+  disabledReason String?
   createdAt  DateTime        @default(now())
 
   findings CrawlFinding[]

@@ -41,6 +41,17 @@ export function originLabel(origin: CrawlSourceView["origin"]): string {
   return "Admin";
 }
 
+/** Why a discovered site is paused or stored disabled (WP5), for the admin page. */
+export function discoveryStateLabel(source: Pick<CrawlSourceView, "enabled" | "pausedUntil" | "pauseReason" | "disabledReason">): string | null {
+  if (source.pausedUntil && source.pauseReason) {
+    const until = source.pausedUntil.slice(0, 10);
+    return `Paused until ${until} — no match with its budget spent 3 days running`;
+  }
+  if (!source.enabled && source.disabledReason === "max_hops") return "Off — beyond the discovery-hop limit";
+  if (!source.enabled && source.disabledReason === "daily_cap") return "Off — the daily new-site cap was reached";
+  return null;
+}
+
 export function SourcesManager({ sources, crawlerEnabled = true }: { sources: CrawlSourceView[]; crawlerEnabled?: boolean }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -232,6 +243,8 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
               <th className="eyebrow" scope="col">Host</th>
               <th className="eyebrow" scope="col">Origin</th>
               <th className="eyebrow" scope="col">Hops</th>
+              <th className="eyebrow" scope="col">Found via</th>
+              <th className="eyebrow" scope="col">State</th>
               <th className="eyebrow" scope="col">Pages crawled</th>
               <th className="eyebrow" scope="col">Last crawled</th>
               <th className="eyebrow" scope="col">Page budget</th>
@@ -248,6 +261,12 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
                 <td className="font-mono">{source.domain}</td>
                 <td>{originLabel(source.origin)}</td>
                 <td className="tabular-nums">{source.hops}</td>
+                <td className="font-mono">
+                  {source.origin === "DISCOVERED"
+                    ? source.discoveredFromDomain ?? "a source that is gone"
+                    : "—"}
+                </td>
+                <td className="a-nowrap">{discoveryStateLabel(source) ?? "—"}</td>
                 <td className="tabular-nums">{source.pagesCrawled}</td>
                 <td className="a-nowrap tabular-nums">
                   {source.lastCrawledAt ? source.lastCrawledAt.slice(0, 16).replace("T", " ") : "Never"}

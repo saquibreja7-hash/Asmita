@@ -62,6 +62,13 @@ export const ConfigSchema = z.object({
    * links are exempt. Bounds query-string traps (session/view keys).
    */
   MAX_QUERY_VARIANTS_PER_PATH: int(1, 1000, 8),
+  /**
+   * Distinct out-of-scope hosts reported as discoveries per run (crawler v2
+   * WP5); 0 switches discovery off. Bounds the run-wide host set, so a
+   * hostile approved page full of external links cannot grow it without
+   * limit.
+   */
+  MAX_DISCOVERY_HOSTS: int(0, 100_000, 1000),
   /** Delay between requests to image hosts outside the source (CDNs). */
   OFFSITE_HOST_DELAY_MS: int(0, 600_000, 1_000),
   /**

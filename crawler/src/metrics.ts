@@ -54,6 +54,15 @@ export class RunMetrics {
   linksSkippedNonContent = 0;
   /** Links dropped by the per-path query-variant cap (WP4). */
   linksSkippedQueryCap = 0;
+  /**
+   * Distinct out-of-scope hosts recorded for discovery (WP5), after the
+   * run-wide dedup and under MAX_DISCOVERY_HOSTS.
+   */
+  discoveryHostsSeen = 0;
+  /** Out-of-scope hosts successfully reported to the app (WP5). */
+  discoveryHostsReported = 0;
+  /** Out-of-scope hosts dropped because MAX_DISCOVERY_HOSTS was reached (WP5). */
+  discoveryHostsCapped = 0;
   /** JSON-LD blocks not parsed: oversized or malformed (WP4). */
   jsonldSkipped = 0;
   /** <noscript> blocks not re-parsed: oversized (WP4). */
@@ -126,6 +135,9 @@ export class RunMetrics {
       docsTruncated: this.docsTruncated,
       linksSkippedNonContent: this.linksSkippedNonContent,
       linksSkippedQueryCap: this.linksSkippedQueryCap,
+      discoveryHostsSeen: this.discoveryHostsSeen,
+      discoveryHostsReported: this.discoveryHostsReported,
+      discoveryHostsCapped: this.discoveryHostsCapped,
       jsonldSkipped: this.jsonldSkipped,
       noscriptSkipped: this.noscriptSkipped,
       linksDropped: this.linksDropped,

@@ -64,6 +64,11 @@ export type MemoryCrawlSource = {
   render: "HTTP" | "BROWSER" | "AUTO";
   lastCrawledAt: Date | null;
   pagesCrawled: number;
+  /** Crawler v2 WP5: the automatic pause of an unproductive discovered site. */
+  pausedUntil: Date | null;
+  pauseReason: string | null;
+  /** Why a discovered site was stored disabled at birth: "max_hops" | "daily_cap". */
+  disabledReason: string | null;
   createdAt: Date;
 };
 

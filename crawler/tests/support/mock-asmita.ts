@@ -1,8 +1,9 @@
 /**
  * A mock of the Asmita crawler API on 127.0.0.1: GET pool, GET sources,
  * POST findings, and (crawler v2 WP3) the frontier routes POST
- * /api/crawler/frontier/{claim,report}. Records every request so tests can
- * assert on what the crawler sent, including the Authorization header.
+ * /api/crawler/frontier/{claim,report}, plus (WP5) POST /api/crawler/discoveries.
+ * Records every request so tests can assert on what the crawler sent,
+ * including the Authorization header.
  *
  * The frontier half mirrors the app's rules (asmita/src/lib/crawl-pages.ts)
  * on purpose: the seed created on first claim, rows claimed for 30 minutes,
@@ -54,6 +55,11 @@ const ServerReport = z.strictObject({
   runId: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/),
   pages: z.array(z.unknown()).min(0).max(200),
 });
+const ServerDiscoveries = z.strictObject({
+  sourceId: z.string().min(1),
+  runId: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/),
+  hosts: z.array(z.string().min(1).max(253)).min(0).max(200),
+});
 const BODY_LIMIT = 256 * 1024;
 
 /** The tracking-parameter rule of the app's digest key (crawl-pages.ts). */
@@ -100,14 +106,28 @@ type MockPage = {
 
 export type MockRequest = { method: string; path: string; authorization: string | undefined; body: unknown };
 
+/** The mock's mirror of the app's discovery rules (WP5). */
+export type MockDiscoveryRules = {
+  /** A discovered source is enabled while its hops are within this (app default 2). */
+  maxHops?: number;
+  /** At most this many discovered sources are auto-enabled per UTC day (app default 200). */
+  maxPerDay?: number;
+  /** Page budget of a discovered source (app default: CRAWLER_DISCOVERED_PAGE_BUDGET, 200). */
+  pageBudget?: number;
+  /** Budget a discovered source is promoted to on a match (app default: CRAWLER_REPORTED_PAGE_BUDGET, 2000). */
+  reportedBudget?: number;
+  /** Hosts the mock never stores (the app's never-crawl list, test-provided). */
+  neverCrawl?: string[];
+};
+
 export type MockAsmitaOptions = {
   key: string;
   pool: Pool;
   sources: Source[];
-  /** Override status for a route ("pool" | "sources" | "findings" | "claim" | "report"), e.g. 503. */
-  status?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report", number>>;
+  /** Override status for a route ("pool" | "sources" | "findings" | "claim" | "report" | "discoveries"), e.g. 503. */
+  status?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report" | "discoveries", number>>;
   /** Fail the first N calls of a route with 500. */
-  failFirst?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report", number>>;
+  failFirst?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report" | "discoveries", number>>;
   /** Pool served from the second pool request on (simulates a re-sync change). */
   poolAfterFirst?: Pool;
   /** Fingerprint ids the server answers "fingerprint_not_accepted" for. */
@@ -119,6 +139,11 @@ export type MockAsmitaOptions = {
   /** Treat this source's domain as something else (simulates a scope mismatch). */
   sourceDomainOverride?: string;
   /**
+   * The mock's mirror of the app's discovery rules (WP5). Without it no
+   * host reported to POST /discoveries is ever stored.
+   */
+  discovery?: MockDiscoveryRules;
+  /**
    * The frontier's clock (default Date.now). Tests advance it to prove
    * scheduling, the daily budget and the 30-minute claim window.
    */
@@ -128,6 +153,21 @@ export type MockAsmitaOptions = {
    * Fixture runs point it at their local server.
    */
   seedUrl?: (source: Source) => string;
+};
+
+export type MockDiscoveredSource = {
+  id: string;
+  domain: string;
+  hops: number;
+  discoveredFromId: string;
+  enabled: boolean;
+  pageBudget: number;
+  delayMs: number;
+  createdAt: number;
+  /** Why a stored-disabled source was not auto-enabled: "max_hops" | "daily_cap". */
+  disabledReason: "max_hops" | "daily_cap" | null;
+  /** Set when a finding under this source promoted it. */
+  promotedAt: number | null;
 };
 
 export class MockAsmita {
@@ -143,6 +183,12 @@ export class MockAsmita {
   readonly claims: Array<{ sourceId: string; limit: number }> = [];
   /** Every report, in order, with its page statuses and accepted count. */
   readonly reports: Array<{ sourceId: string; runId: string; count: number; accepted: number; statuses: Record<string, number> }> = [];
+  /** Every discovery report, in order (the app's POST /discoveries). */
+  readonly discoveryReports: Array<{ sourceId: string; runId: string; hosts: string[]; accepted: number }> = [];
+  /** The sources the mock created from discovery reports, by host (the app's DISCOVERED rows). */
+  readonly discovered = new Map<string, MockDiscoveredSource>();
+  /** Auto-enables per UTC day, by day-start timestamp (the app's daily cap). */
+  readonly autoEnabledByDay = new Map<number, number>();
   private server: Server | null = null;
   private calls: Record<string, number> = {};
   private idCounter = 0;
@@ -208,7 +254,7 @@ export class MockAsmita {
 
   /** The app's claim: seed on first claim, daily budget, 30-minute claims. Public so tests can claim directly. */
   claimFrontier(sourceId: string, limit: number): Array<{ id: string; url: string; depth: number; etag?: string; lastModified?: string }> {
-    const source = this.opts.sources.find((s) => s.id === sourceId);
+    const source = this.sourceById(sourceId);
     if (!source) return [];
     const now = this.now();
     if (this.rowsOf(sourceId).length === 0) {
@@ -234,7 +280,7 @@ export class MockAsmita {
 
   /** The app's report: scheduling, link storage with the in-scope check. */
   private report(sourceId: string, pages: unknown[]): number {
-    const source = this.opts.sources.find((s) => s.id === sourceId);
+    const source = this.sourceById(sourceId);
     if (!source) return 0;
     const now = this.now();
     const domain = (this.opts.sourceDomainOverride ?? source.domain).toLowerCase();
@@ -305,6 +351,106 @@ export class MockAsmita {
     return accepted;
   }
 
+  // --- discoveries (the app's WP5 rules, mirrored) ---------------------------
+
+  /** A source by id, as the app's contract shape: configured or discovered. */
+  private sourceById(sourceId: string): Source | null {
+    const configured = this.opts.sources.find((s) => s.id === sourceId);
+    if (configured) return configured;
+    const discovered = [...this.discovered.values()].find((s) => s.id === sourceId);
+    return discovered ? { id: discovered.id, kind: "site", domain: discovered.domain, pageBudget: discovered.pageBudget, delayMs: discovered.delayMs } : null;
+  }
+
+  /** A source by id: one the test configured, or one the mock discovered. */
+  private hopsOf(sourceId: string): number | null {
+    const discovered = [...this.discovered.values()].find((s) => s.id === sourceId);
+    if (discovered) return discovered.hops;
+    return this.opts.sources.some((s) => s.id === sourceId) ? 0 : null;
+  }
+
+  /** Whether a host is already a source, whatever its origin (the app's skip rule). */
+  private isSource(host: string): boolean {
+    return this.opts.sources.some((s) => s.domain === host) || this.discovered.has(host);
+  }
+
+  /** Start of the mock's UTC day (the app's daily-cap window). */
+  private dayStart(ts: number): number {
+    const day = new Date(ts);
+    day.setUTCHours(0, 0, 0, 0);
+    return day.getTime();
+  }
+
+  /**
+   * The app's POST /api/crawler/discoveries: skip never-crawl and
+   * already-a-source hosts, create a DISCOVERED source one hop deeper than
+   * the reporting one, enabled while within the hop limit and the day's
+   * auto-enable cap, stored disabled beyond either. `accepted` counts the
+   * hosts stored. Domain validation is the app's job (app-side tests); the
+   * mock takes the crawler's hostnames as they come.
+   */
+  reportDiscoveries(sourceId: string, hosts: string[]): number {
+    const rules = this.opts.discovery;
+    if (!rules) return 0;
+    const parentHops = this.hopsOf(sourceId);
+    if (parentHops === null) return 0; // the app requires the parent to exist
+    const now = this.now();
+    const day = this.dayStart(now);
+    const maxPerDay = rules.maxPerDay ?? 200;
+    let stored = 0;
+    const seen = new Set<string>();
+    for (const raw of [...new Set(hosts)]) {
+      const host = raw.trim().toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
+      if (!host || seen.has(host)) continue;
+      seen.add(host);
+      if ((rules.neverCrawl ?? []).some((n) => host === n || host.endsWith(`.${n}`))) continue;
+      if (this.isSource(host)) continue;
+      const hops = parentHops + 1;
+      const withinHops = hops <= (rules.maxHops ?? 2);
+      let enabled = false;
+      if (withinHops) {
+        const used = this.autoEnabledByDay.get(day) ?? 0;
+        if (used < maxPerDay) {
+          this.autoEnabledByDay.set(day, used + 1);
+          enabled = true;
+        }
+      }
+      this.idCounter += 1;
+      this.discovered.set(host, {
+        id: `disc-${this.idCounter}`,
+        domain: host,
+        hops,
+        discoveredFromId: sourceId,
+        enabled,
+        pageBudget: rules.pageBudget ?? 200,
+        delayMs: 0,
+        createdAt: now,
+        disabledReason: enabled ? null : withinHops ? "daily_cap" : "max_hops",
+        promotedAt: null,
+      });
+      stored += 1;
+    }
+    return stored;
+  }
+
+  /** A discovered source that produced a match is promoted (the app's rule). */
+  private promoteDiscovered(sourceId: string): void {
+    const rules = this.opts.discovery;
+    if (!rules) return;
+    const source = [...this.discovered.values()].find((s) => s.id === sourceId);
+    if (!source) return;
+    source.hops = 0;
+    source.pageBudget = rules.reportedBudget ?? 2000;
+    source.promotedAt = this.now();
+  }
+
+  /** What GET /sources answers: the configured sources plus enabled discoveries. */
+  private enabledSources(): Source[] {
+    const discovered = [...this.discovered.values()]
+      .filter((s) => s.enabled)
+      .map((s) => ({ id: s.id, kind: "site" as const, domain: s.domain, pageBudget: s.pageBudget, delayMs: s.delayMs }));
+    return [...this.opts.sources, ...discovered];
+  }
+
   private async handle(req: IncomingMessage, res: import("node:http").ServerResponse): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
@@ -334,7 +480,9 @@ export class MockAsmita {
               ? "claim"
               : req.method === "POST" && path === "/api/crawler/frontier/report"
                 ? "report"
-                : null;
+                : req.method === "POST" && path === "/api/crawler/discoveries"
+                  ? "discoveries"
+                  : null;
     if (!route) return send(404, { error: "not_found" });
     if (req.headers.authorization !== `Bearer ${this.opts.key}`) return send(401, { error: "unauthorized" });
     const override = this.opts.status?.[route];
@@ -346,7 +494,7 @@ export class MockAsmita {
       const later = this.opts.poolAfterFirst;
       return send(200, later && this.calls.pool! > 1 ? later : this.opts.pool);
     }
-    if (route === "sources") return send(200, { sources: this.opts.sources });
+    if (route === "sources") return send(200, { sources: this.enabledSources() });
 
     if (route === "claim") {
       const parsed = ServerClaim.safeParse(body);
@@ -374,6 +522,17 @@ export class MockAsmita {
       return send(200, { accepted });
     }
 
+    if (route === "discoveries") {
+      const parsed = ServerDiscoveries.safeParse(body);
+      if (!parsed.success) {
+        this.badRequests.push("discoveries");
+        return send(400, { error: "invalid_body" });
+      }
+      const accepted = this.reportDiscoveries(parsed.data.sourceId, parsed.data.hosts);
+      this.discoveryReports.push({ sourceId: parsed.data.sourceId, runId: parsed.data.runId, hosts: parsed.data.hosts, accepted });
+      return send(200, { accepted });
+    }
+
     // The bodyLimit option is the findings route's (it drives the 413-split
     // test); claim and report bodies are checked against the real limit.
     if (Buffer.byteLength(raw) > (this.opts.bodyLimit ?? BODY_LIMIT)) return send(413, { error: "payload_too_large" });
@@ -384,7 +543,7 @@ export class MockAsmita {
     }
     const known = new Set((this.opts.poolAfterFirst ?? this.opts.pool).fingerprints.map((f) => f.id));
     const notAccepted = new Set(this.opts.notAccepted ?? []);
-    const sourceIds = new Set(this.opts.sources.map((s) => s.id));
+    const sourceIds = new Set([...this.opts.sources, ...this.enabledSources()].map((s) => s.id));
     const results = env.data.findings.map((item) => {
       const parsed = ServerFinding.safeParse(item);
       if (!parsed.success) return { status: "rejected", reason: "invalid_finding" };
@@ -394,7 +553,7 @@ export class MockAsmita {
       if (!/^https?:\/\//.test(f.imageUrl) || !/^https?:\/\//.test(f.pageUrl)) return { status: "rejected", reason: "invalid_url" };
       if (!sourceIds.has(f.sourceId)) return { status: "rejected", reason: "unknown_source" };
       // The server checks the page belongs to the source: same host or a subdomain.
-      const src = this.opts.sources.find((s) => s.id === f.sourceId)!;
+      const src = this.sourceById(f.sourceId)!;
       const domain = (this.opts.sourceDomainOverride ?? src.domain).toLowerCase();
       const host = new URL(f.pageUrl).hostname;
       if (host !== domain && !host.endsWith(`.${domain}`)) return { status: "rejected", reason: "page_not_in_source" };
@@ -402,6 +561,8 @@ export class MockAsmita {
       const key = `${f.fingerprintId}|${f.imageUrl}`;
       if (this.created.has(key)) return { status: this.opts.legacyStatuses ? "duplicate" : "accepted" };
       this.created.set(key, f);
+      // A match under a discovered source promotes it (the app's WP5 rule).
+      this.promoteDiscovered(f.sourceId);
       return { status: this.opts.legacyStatuses ? "created" : "accepted" };
     });
     return send(200, { results });

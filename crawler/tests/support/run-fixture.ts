@@ -12,11 +12,11 @@ import { loopbackTestPolicy } from "./test-policy.ts";
 export async function runFixtureCrawl(
   site: FixtureSite,
   api: MockAsmita,
-  opts: { env?: Record<string, string>; stopSignal?: AbortSignal; now?: () => number; lines?: string[]; poolResyncMs?: number } = {},
+  opts: { env?: Record<string, string>; stopSignal?: AbortSignal; now?: () => number; lines?: string[]; poolResyncMs?: number; hosts?: string[] } = {},
 ): Promise<{ result: RunResult; lines: string[] }> {
   const lines = opts.lines ?? [];
   const config = loadConfig(fixtureEnv(api.url, TEST_KEY, opts.env));
-  const fetcher = new SafeFetcher(loopbackTestPolicy(FIXTURE_HOSTS, site.port), {
+  const fetcher = new SafeFetcher(loopbackTestPolicy(opts.hosts ?? FIXTURE_HOSTS, site.port), {
     userAgent: config.CRAWLER_USER_AGENT,
     connectTimeoutMs: config.CONNECT_TIMEOUT_MS,
     headersTimeoutMs: config.HEADERS_TIMEOUT_MS,

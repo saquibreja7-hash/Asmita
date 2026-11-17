@@ -13,6 +13,11 @@
  * obvious non-content URLs (login, cart, search, calendar) and query-string
  * traps are skipped.
  *
+ * Discovery (crawler v2 WP5): the out-of-scope hosts linked from in-scope
+ * pages are reported to the app (hosts only, deduplicated per run, capped
+ * by MAX_DISCOVERY_HOSTS); the app decides which become crawl sources. The
+ * crawler itself never fetches a discovered host until the app lists it.
+ *
  * The crawler keeps no frontier of its own: the queue, the seen set and the
  * scheduling live in the app (CrawlPage rows). The only page state here is
  * the claimed batch (at most FRONTIER_CLAIM_LIMIT entries) and the report
@@ -61,6 +66,8 @@ export type AsmitaApi = {
   /** The app-backed frontier (WP3). */
   claimFrontier(sourceId: string, limit: number, signal?: AbortSignal): Promise<ClaimedPage[]>;
   reportFrontier(sourceId: string, runId: string, pages: ReportedPage[], signal?: AbortSignal): Promise<number>;
+  /** Out-of-scope hosts seen on in-scope pages (WP5); the app makes sources. */
+  reportDiscoveries(sourceId: string, runId: string, hosts: string[], signal?: AbortSignal): Promise<number>;
 };
 
 export type CrawlDeps = {
@@ -106,6 +113,11 @@ type SourceCtx = {
    * null until the first claim of the run.
    */
   robotsSitemaps: URL[] | null;
+  /**
+   * Out-of-scope hosts this source's in-scope pages linked (WP5), reported
+   * once per batch and cleared; the run-wide dedup and cap live in the run.
+   */
+  discoveredHosts: string[];
 };
 
 export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget" | "unauthorized";
@@ -273,6 +285,24 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const reported = new Set<string>();
   let budgetHit = false;
   const gate = <T>(fn: () => Promise<T>) => globalGate.use(fn);
+
+  // --- discovery (WP5) ------------------------------------------------------
+  // Hosts only, never URLs: an out-of-scope link's hostname, deduplicated per
+  // run and capped by MAX_DISCOVERY_HOSTS so a hostile page full of external
+  // links cannot grow this set without bound. Each host is reported under the
+  // first source whose pages linked it; the app decides what becomes a source.
+  const discoverySeen = new Set<string>();
+  const noteDiscoveryHost = (host: string, ctx: SourceCtx): void => {
+    if (config.MAX_DISCOVERY_HOSTS === 0) return; // discovery switched off
+    if (discoverySeen.has(host)) return;
+    if (discoverySeen.size >= config.MAX_DISCOVERY_HOSTS) {
+      metrics.discoveryHostsCapped++;
+      return;
+    }
+    discoverySeen.add(host);
+    metrics.discoveryHostsSeen++;
+    ctx.discoveredHosts.push(host);
+  };
 
   const robots = new RobotsCache(
     (url) =>
@@ -694,10 +724,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
        * Admit one page or feed candidate. Pagination links (already first in
        * ex.links) are exempt from the query-variant cap: a listing with
        * ?page=1..N is real coverage, and depth and budgets bound a hostile
-       * "next" chain anyway (WP4).
+       * "next" chain anyway (WP4). An out-of-scope candidate's host becomes
+       * a discovery report entry (WP5): hosts only, deduplicated per run.
        */
       const admit = (candidate: URL, kind: "page" | "feed", pagination: boolean): boolean => {
-        if (!inScope(candidate, scopeHost)) return true;
+        if (!inScope(candidate, scopeHost)) {
+          noteDiscoveryHost(candidate.hostname.replace(/\.$/, ""), ctx);
+          return true;
+        }
         if (isNonContentUrl(candidate)) {
           metrics.linksSkippedNonContent++;
           return true;
@@ -741,6 +775,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       failedOffHosts: new Set<string>(),
       queryGuard: new QueryVariantGuard(config.MAX_QUERY_VARIANTS_PER_PATH, QUERY_PATH_TRACK_CAP),
       robotsSitemaps: null,
+      discoveredHosts: [],
     };
     let pages = 0;
 
@@ -769,6 +804,36 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         // after the 30-minute window, so nothing is lost by giving up here.
         slog.warn("frontier_report_failed", { code: err.code, count: batch.length });
         reportBroken = true;
+      }
+    };
+
+    /**
+     * Reports the out-of-scope hosts this batch's pages linked (WP5), in
+     * chunks of the contract's 200. Best-effort: a failed report only costs
+     * these hosts this run — the pages that linked them stay in the
+     * frontier, so a later run reports them again. 503/401 stop the run
+     * like every other API call.
+     */
+    const flushDiscoveries = async () => {
+      while (ctx.discoveredHosts.length > 0) {
+        const chunk = ctx.discoveredHosts.splice(0, 200);
+        try {
+          const accepted = await api.reportDiscoveries(source.id, runId, chunk, hard.signal);
+          metrics.discoveryHostsReported += chunk.length;
+          slog.info("discoveries_reported", { count: chunk.length, accepted });
+        } catch (raw) {
+          const err = toCrawlError(raw);
+          record(err.code);
+          if (err.code === "api_disabled") requestStop("disabled");
+          else if (err.code === "api_unauthorized") {
+            unauthorized = true;
+            requestStop("unauthorized");
+          }
+          // The hosts are lost for this run; nothing else breaks.
+          slog.warn("discoveries_report_failed", { code: err.code, count: chunk.length });
+          ctx.discoveredHosts.length = 0;
+          return;
+        }
       }
     };
 
@@ -843,8 +908,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         }
       }
       await flushReport();
+      await flushDiscoveries();
     }
     await flushReport();
+    await flushDiscoveries();
     slog.info("source_done", { pages, durationMs: now() - started });
   };
 

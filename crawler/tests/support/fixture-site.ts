@@ -460,6 +460,65 @@ export async function buildFixture(): Promise<Fixture> {
 /** Seed URL factory for fixture runs: the fixture server, with its port. */
 export const fixtureSeedUrl = (port: number) => (source: { domain: string }) => `http://${source.domain}:${port}/`;
 
+/*
+ * The discovery fixture (crawler v2 WP5): a chain of sites, each linking the
+ * next, plus the negatives. a.test is the only source a run starts with; its
+ * home page links b.test (discovered, hops 1) and never.test (on the
+ * never-crawl list the test gives the mock — never stored, never fetched).
+ * b.test links c.test (hops 2); c.test links d.test (hops 3, beyond the
+ * default hop limit: stored disabled) and carries the one planted image, so
+ * a match under it proves the promotion rule. cap.test links five distinct
+ * hosts for the per-run cap, pair.test two for the daily cap. No host here
+ * overlaps the other fixtures' hosts.
+ */
+export const CHAIN_A = "a.test";
+export const CHAIN_B = "b.test";
+export const CHAIN_C = "c.test";
+export const CHAIN_D = "d.test";
+export const CHAIN_NEVER = "never.test";
+export const CHAIN_CAP = "cap.test";
+export const CHAIN_PAIR = "pair.test";
+export const CHAIN_CAP_HOSTS = [1, 2, 3, 4, 5].map((i) => `h${i}.test`);
+export const CHAIN_PAIR_HOSTS = ["e1.test", "e2.test"];
+export const DISCOVERY_HOSTS = [
+  CHAIN_A, CHAIN_B, CHAIN_C, CHAIN_D, CHAIN_NEVER, CHAIN_CAP, CHAIN_PAIR,
+  ...CHAIN_CAP_HOSTS, ...CHAIN_PAIR_HOSTS,
+];
+
+export async function buildDiscoveryFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+
+  const planted = await patternImage(301, 320, 240, "png");
+  const plantedHash = (await hashImage(planted, { minSide: 1 })).hash;
+  const pool: Pool = {
+    version: "discovery-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [{ id: "fp-chain-c", pdq: plantedHash, quality: 100 }],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-chain-c", pagePath: "/", imageHost: CHAIN_C, imagePath: "/img/found.png" },
+  ];
+
+  site.route(CHAIN_A, "/", sendHtml(html(`
+    <a href="${o(CHAIN_B)}/page">Next site</a>
+    <a href="${o(CHAIN_NEVER)}/x">A never-crawl host</a>
+  `)));
+  site.route(CHAIN_B, "/", sendHtml(html(`<a href="${o(CHAIN_C)}/page">Next site</a>`)));
+  site.route(CHAIN_C, "/", sendHtml(html(`
+    <a href="${o(CHAIN_D)}/page">Next site</a>
+    <img src="/img/found.png" width="320" height="240">
+  `)));
+  site.route(CHAIN_C, "/img/found.png", sendBytes(planted, "image/png"));
+  site.route(CHAIN_D, "/", sendHtml(html(`<p>never fetched: stored disabled beyond the hop limit</p>`)));
+  site.route(CHAIN_NEVER, "/x", sendHtml(html(`<p>never fetched: never-crawl host</p>`)));
+  site.route(CHAIN_CAP, "/", sendHtml(html(CHAIN_CAP_HOSTS.map((host, i) => `<a href="${o(host)}/x${i}">x</a>`).join(""))));
+  site.route(CHAIN_PAIR, "/", sendHtml(html(CHAIN_PAIR_HOSTS.map((host) => `<a href="${o(host)}/x">x</a>`).join(""))));
+
+  return { site, pool, expected, allHashes: [plantedHash] };
+}
+
 /**
  * The deep-coverage fixture (crawler v2 WP4): a source whose robots.txt
  * names a sitemap index, which points at a gzipped urlset listing 30

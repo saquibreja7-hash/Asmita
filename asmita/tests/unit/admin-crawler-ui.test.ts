@@ -15,7 +15,7 @@ import { SafetyNote } from "@/app/(admin)/findings/SafetyNote";
 import { messageFor, NOTICE_ERRORS, REVIEW_ERRORS, type NoticePreview, type SendResult } from "@/app/(admin)/findings/findings-client";
 import { noticeGate, noticeLabel, platformLabel, reviewLabel, sortFindings, type NoticeGateInput } from "@/app/(admin)/findings/finding-view";
 import { checkBudget, checkDelay, checkDomain } from "@/app/(admin)/crawl-sources/source-validation";
-import { IMPORT_STATUS_LABELS, ImportResults, originLabel, SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
+import { IMPORT_STATUS_LABELS, ImportResults, originLabel, discoveryStateLabel, SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
 import { BlockedHostsManager } from "@/app/(admin)/crawl-sources/BlockedHostsManager";
 import { CrawlerSitesTabs } from "@/app/(admin)/crawl-sources/CrawlerSitesTabs";
 import { validateCrawlDomain } from "@/lib/crawl-sources";
@@ -247,7 +247,7 @@ describe("safety note and list helpers", () => {
 });
 
 describe("sources manager", () => {
-  const source = { id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false, approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, render: "HTTP" as const, pagesCrawled: 0, lastCrawledAt: null, createdAt: "2026-11-16T00:00:00.000Z" };
+  const source = { id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false, approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, discoveredFromDomain: null, render: "HTTP" as const, pagesCrawled: 0, lastCrawledAt: null, pausedUntil: null, pauseReason: null, disabledReason: null, createdAt: "2026-11-16T00:00:00.000Z" };
   it("offers to edit a host's page budget and delay, and speaks of hosts", () => {
     const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [source] }));
     expect(html).toContain("Edit page budget and delay for news.example-site.org");
@@ -297,8 +297,9 @@ describe("bulk import box and results table (WP2)", () => {
 describe("origin, hops and crawl progress columns (WP2)", () => {
   const sourceWith = (over: Partial<Parameters<typeof SourcesManager>[0]["sources"][number]>) => ({
     id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false,
-    approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, render: "HTTP" as const,
-    pagesCrawled: 0, lastCrawledAt: null, createdAt: "2026-11-16T00:00:00.000Z", ...over,
+    approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, discoveredFromDomain: null, render: "HTTP" as const,
+    pagesCrawled: 0, lastCrawledAt: null, pausedUntil: null, pauseReason: null, disabledReason: null,
+    createdAt: "2026-11-16T00:00:00.000Z", ...over,
   });
   it("shows origin, hops, pages crawled and last crawled for every site, with an origin filter", () => {
     expect(originLabel("ADMIN")).toBe("Admin");
@@ -344,6 +345,41 @@ describe("never crawl tab (WP2)", () => {
     const html = renderToStaticMarkup(createElement(BlockedHostsManager, { blockedHosts: [blockedHost], crawlerEnabled: false }));
     expect(html).toMatch(new RegExp(`<button[^>]*aria-label="Remove forum.example.org from the never-crawl list"[^>]*disabled=""|<button[^>]*disabled=""[^>]*aria-label="Remove forum.example.org from the never-crawl list"`));
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Never crawl this host</);
+  });
+});
+
+describe("discovered sites: parent and pause state (WP5)", () => {
+  const sourceWith = (over: Partial<Parameters<typeof SourcesManager>[0]["sources"][number]>) => ({
+    id: "s1", kind: "site" as const, domain: "news.example-site.org", pageBudget: 200, delayMs: 2000, enabled: false,
+    approvedBy: "super-1", origin: "ADMIN" as const, hops: 0, discoveredFromId: null, discoveredFromDomain: null, render: "HTTP" as const,
+    pagesCrawled: 0, lastCrawledAt: null, pausedUntil: null, pauseReason: null, disabledReason: null,
+    createdAt: "2026-11-16T00:00:00.000Z", ...over,
+  });
+  it("shows a discovered site's parent domain, never as a link", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [
+      sourceWith({ id: "parent", domain: "seed.example-site.org", enabled: true }),
+      sourceWith({ id: "child", domain: "found.example-site.org", origin: "DISCOVERED", hops: 2, enabled: true, discoveredFromId: "parent", discoveredFromDomain: "seed.example-site.org" }),
+      sourceWith({ id: "orphan", domain: "gone-parent.example-site.org", origin: "DISCOVERED", hops: 1, discoveredFromId: "missing", discoveredFromDomain: null }),
+    ] }));
+    for (const heading of ["Found via", "State"]) expect(html).toContain(heading);
+    expect(html).toContain("seed.example-site.org");
+    expect(html).toContain("a source that is gone");
+    expect(html).not.toMatch(/<a[\s>]/i);
+  });
+  it("says why a discovered site is paused or stored disabled", () => {
+    const html = renderToStaticMarkup(createElement(SourcesManager, { sources: [
+      sourceWith({ id: "p1", domain: "paused.example-site.org", origin: "DISCOVERED", hops: 1, enabled: false, pausedUntil: "2026-12-17T09:30:00.000Z", pauseReason: "no_match_budget_spent" }),
+      sourceWith({ id: "p2", domain: "deep.example-site.org", origin: "DISCOVERED", hops: 3, enabled: false, disabledReason: "max_hops" }),
+      sourceWith({ id: "p3", domain: "capped.example-site.org", origin: "DISCOVERED", hops: 1, enabled: false, disabledReason: "daily_cap" }),
+      sourceWith({ id: "p4", domain: "admin-off.example-site.org", enabled: false }),
+    ] }));
+    expect(html).toContain("Paused until 2026-12-17 — no match with its budget spent 3 days running");
+    expect(html).toContain("Off — beyond the discovery-hop limit");
+    expect(html).toContain("Off — the daily new-site cap was reached");
+  });
+  it("labels an enabled discovered site with no state note", () => {
+    expect(discoveryStateLabel({ enabled: true, pausedUntil: null, pauseReason: null, disabledReason: null })).toBeNull();
+    expect(discoveryStateLabel({ enabled: true, pausedUntil: "2026-12-17T09:30:00.000Z", pauseReason: "no_match_budget_spent", disabledReason: null })).toContain("Paused until 2026-12-17");
   });
 });
 

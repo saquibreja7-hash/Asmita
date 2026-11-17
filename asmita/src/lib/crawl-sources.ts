@@ -85,20 +85,30 @@ export type CrawlSourceView = {
   origin: "ADMIN" | "REPORTED" | "DISCOVERED";
   hops: number;
   discoveredFromId: string | null;
+  /** The parent source's domain, resolved for display (WP5); null when gone or not discovered. */
+  discoveredFromDomain: string | null;
   render: "HTTP" | "BROWSER" | "AUTO";
   pagesCrawled: number;
   lastCrawledAt: string | null;
+  /** Set while an unproductive discovered site is paused for 30 days (WP5). */
+  pausedUntil: string | null;
+  /** Fixed code for the admin page: why the site is paused (WP5). */
+  pauseReason: string | null;
+  /** Fixed code for the admin page: why a discovered site was stored disabled (WP5). */
+  disabledReason: string | null;
   createdAt: string;
 };
 
-type SourceRow = Omit<MemoryCrawlSource, "createdAt" | "lastCrawledAt"> & { createdAt: Date | string; lastCrawledAt: Date | string | null };
+type SourceRow = Omit<MemoryCrawlSource, "createdAt" | "lastCrawledAt" | "pausedUntil"> & { createdAt: Date | string; lastCrawledAt: Date | string | null; pausedUntil: Date | string | null };
 
-function toView(row: SourceRow): CrawlSourceView {
+function toView(row: SourceRow, discoveredFromDomain: string | null = null): CrawlSourceView {
   return {
     id: row.id, kind: "site", domain: row.domain, pageBudget: row.pageBudget, delayMs: row.delayMs,
     enabled: row.enabled, approvedBy: row.approvedBy,
-    origin: row.origin, hops: row.hops, discoveredFromId: row.discoveredFromId, render: row.render,
+    origin: row.origin, hops: row.hops, discoveredFromId: row.discoveredFromId, discoveredFromDomain, render: row.render,
     pagesCrawled: row.pagesCrawled, lastCrawledAt: row.lastCrawledAt ? new Date(row.lastCrawledAt).toISOString() : null,
+    pausedUntil: row.pausedUntil ? new Date(row.pausedUntil).toISOString() : null,
+    pauseReason: row.pauseReason, disabledReason: row.disabledReason,
     createdAt: new Date(row.createdAt).toISOString(),
   };
 }
@@ -153,9 +163,18 @@ export async function isEnabledCrawlSource(id: string): Promise<boolean> {
 }
 
 export async function listCrawlSources(): Promise<CrawlSourceView[]> {
-  if (isDevNoDb()) return [...crawlMemory().sources.values()].map(toView).sort((a, b) => a.domain.localeCompare(b.domain));
-  const { db } = await import("@/lib/db");
-  return (await db.crawlSource.findMany({ orderBy: { domain: "asc" } })).map(toView);
+  let rows: SourceRow[];
+  if (isDevNoDb()) rows = [...crawlMemory().sources.values()];
+  else {
+    const { db } = await import("@/lib/db");
+    rows = await db.crawlSource.findMany({ orderBy: { domain: "asc" } });
+  }
+  // A DISCOVERED row's parent domain, for the admin page (WP5). All rows are
+  // already loaded here, so the join is one map, never a query per source.
+  const domains = new Map(rows.map((row) => [row.id, row.domain]));
+  return rows
+    .map((row) => toView(row, row.discoveredFromId ? domains.get(row.discoveredFromId) ?? null : null))
+    .sort((a, b) => a.domain.localeCompare(b.domain));
 }
 
 export async function createCrawlSource(
@@ -172,6 +191,7 @@ export async function createCrawlSource(
       id: randomUUID(), kind: "SITE", domain: checked.domain, pageBudget: input.pageBudget, delayMs: input.delayMs,
       enabled: input.enabled ?? false, approvedBy: actorId,
       origin: "ADMIN", hops: 0, discoveredFromId: null, render: "HTTP", lastCrawledAt: null, pagesCrawled: 0,
+      pausedUntil: null, pauseReason: null, disabledReason: null,
       createdAt: new Date(),
     };
     memory.sources.set(row.id, row);
@@ -201,11 +221,15 @@ export async function updateCrawlSource(
   input: z.infer<typeof updateSourceSchema>,
   actorId: string,
 ): Promise<{ ok: true; source: CrawlSourceView } | { ok: false; error: "source_not_found" }> {
-  const changes = {
+  const changes: Record<string, unknown> = {
     ...(input.pageBudget !== undefined ? { pageBudget: input.pageBudget } : {}),
     ...(input.delayMs !== undefined ? { delayMs: input.delayMs } : {}),
     ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
   };
+  // An explicit switch-on (WP5) also lifts an automatic pause and clears the
+  // stored reason a discovered site was born with: from here the admin owns
+  // the state, and the hourly sweep must not resume it later.
+  if (input.enabled === true) Object.assign(changes, { pausedUntil: null, pauseReason: null, disabledReason: null });
   let source: CrawlSourceView;
   if (isDevNoDb()) {
     const row = crawlMemory().sources.get(input.id);
@@ -358,8 +382,8 @@ export async function importCrawlSources(
   return { results };
 }
 
-/** Existing source domains among `hosts`, in one query. */
-async function existingSourceDomains(hosts: string[]): Promise<Set<string>> {
+/** Existing source domains among `hosts`, in one query (also WP5 discoveries). */
+export async function existingSourceDomains(hosts: string[]): Promise<Set<string>> {
   if (isDevNoDb()) {
     const wanted = new Set(hosts);
     return new Set([...crawlMemory().sources.values()].filter((source) => wanted.has(source.domain)).map((source) => source.domain));
@@ -375,11 +399,12 @@ async function existingSourceDomains(hosts: string[]): Promise<Set<string>> {
 
 /**
  * The CrawlBlockedHost rows covering any of `hosts` (a row's host, or a
- * parent of it), in one query over every host and every parent domain.
- * Hosts are admin-supplied and capped at 1000 with realistic label counts,
- * so the IN list stays far below Postgres's parameter limit.
+ * parent of it), in one query over every host and every parent domain (also
+ * WP5 discoveries). Hosts are crawler-reported and capped at 200 per request
+ * with realistic label counts, so the IN list stays far below Postgres's
+ * parameter limit.
  */
-async function blockedHostRows(hosts: string[]): Promise<Set<string>> {
+export async function blockedHostRows(hosts: string[]): Promise<Set<string>> {
   const candidates = new Set<string>();
   for (const host of hosts) for (const name of hostAndParents(host)) candidates.add(name);
   const names = [...candidates];
@@ -419,6 +444,7 @@ async function insertImportedSources(
       const row: MemoryCrawlSource = {
         id: randomUUID(), kind: "SITE", domain, pageBudget, delayMs, enabled, approvedBy: actorId,
         origin: "ADMIN", hops: 0, discoveredFromId: null, render: "HTTP", lastCrawledAt: null, pagesCrawled: 0,
+        pausedUntil: null, pauseReason: null, disabledReason: null,
         createdAt: new Date(),
       };
       memory.sources.set(row.id, row);
@@ -516,6 +542,7 @@ async function insertReportedSource(domain: string, pageBudget: number, delayMs:
       id: randomUUID(), kind: "SITE", domain, pageBudget, delayMs,
       enabled: true, approvedBy: null,
       origin: "REPORTED", hops: 0, discoveredFromId: null, render: "HTTP", lastCrawledAt: null, pagesCrawled: 0,
+      pausedUntil: null, pauseReason: null, disabledReason: null,
       createdAt: new Date(),
     };
     memory.sources.set(row.id, row);
