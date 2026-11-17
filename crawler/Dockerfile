@@ -1,9 +1,13 @@
-# Asmita crawler: one-shot job image (Cloud Run job, asia-south1).
+# Asmita crawler: job image (Cloud Run job, asia-south1).
 #
 # Build from the REPOSITORY ROOT, because the bundle includes the read-only
 # PDQ module from asmita/src/lib/pdq/pdq.ts:
 #   docker build -f crawler/Dockerfile -t asmita-crawler .
 # BuildKit then uses crawler/Dockerfile.dockerignore (not the repo root's).
+#
+# The default command is the one-shot `run`; an always-on deployment
+# overrides it with `run --loop` (crawler v2 WP6). The container is the
+# same either way.
 #
 # Runs as non-root on distroless, built for `docker run --read-only`: the
 # process never writes to disk. TMPDIR points at a path that does not exist

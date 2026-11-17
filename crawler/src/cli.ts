@@ -1,6 +1,15 @@
 /**
  * Process-level wiring: config, logger, signals, exit codes.
  *
+ * `run` performs one crawl; `run --loop` (crawler v2 WP6) repeats it until
+ * stopped: pass after pass across all enabled sources, sleeping
+ * LOOP_IDLE_SECONDS whenever a pass finds nothing due, picking up sources
+ * enabled in the app mid-flight on the next pass's GET /sources. SIGTERM
+ * ends the current pass cleanly (exit 0); any non-zero run exit code ends
+ * the loop with that code, so the restart policy of an always-on deployment
+ * decides the retry cadence. Without --loop the one-shot behaviour is
+ * unchanged.
+ *
  * Exit codes: see src/exit-codes.ts (0 clean or switched off, 1 config or
  * unexpected failure, 2 key rejected, 3 findings undelivered, 4 contract
  * error, 5 pool stale, 64 bad command line).
@@ -9,6 +18,7 @@
  * including uncaught errors and Node warnings, so stdout/stderr never carry a
  * URL, hostname, fingerprint or message text.
  */
+import { setTimeout as sleep } from "node:timers/promises";
 import { AsmitaClient } from "./asmita/client.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import { runCrawl } from "./crawler.ts";
@@ -39,7 +49,8 @@ export type MainOptions = {
 export async function runMain(opts: MainOptions): Promise<number> {
   const bootLog = new Logger({ sink: opts.sink });
   const command = opts.argv[0];
-  if (command !== "run") {
+  const loop = opts.argv.length === 2 && opts.argv[1] === "--loop";
+  if (command !== "run" || opts.argv.length > 2 || (opts.argv.length === 2 && !loop)) {
     bootLog.error("usage", { reason: "expected_command_run", exitCode: EXIT.USAGE });
     return EXIT.USAGE;
   }
@@ -87,8 +98,33 @@ export async function runMain(opts: MainOptions): Promise<number> {
   });
 
   try {
-    const result = await runCrawl({ config, api, fetcher, decoder, log, stopSignal: stop.signal });
-    return result.exitCode;
+    const crawl = () => runCrawl({ config, api, fetcher, decoder, log, stopSignal: stop.signal });
+    if (!loop) {
+      const result = await crawl();
+      return result.exitCode;
+    }
+    // `run --loop` (WP6): keep claiming work across all enabled sources.
+    for (;;) {
+      const result = await crawl();
+      // Exit 0 covers a clean pass, SIGTERM, the wall-clock limit, the
+      // budgets and the crawler being switched off. Any other code is an
+      // operator signal (src/exit-codes.ts): end the loop with it and let
+      // the deployment's restart policy decide the retry.
+      if (result.exitCode !== EXIT.OK) return result.exitCode;
+      if (stop.signal.aborted) return EXIT.OK;
+      // A pass that claimed nothing means nothing is due anywhere: sleep
+      // before listing sources and claiming again. An interrupted sleep is
+      // a SIGTERM: exit cleanly.
+      if ((result.summary.pagesClaimed as number) === 0) {
+        log.info("loop_idle", { durationMs: config.LOOP_IDLE_SECONDS * 1000 });
+        try {
+          await sleep(config.LOOP_IDLE_SECONDS * 1000, undefined, { signal: stop.signal });
+        } catch {
+          // aborted
+        }
+        if (stop.signal.aborted) return EXIT.OK;
+      }
+    }
   } catch (raw) {
     // Only the initial load throws (the run itself reports via exitCode).
     const err = toCrawlError(raw);

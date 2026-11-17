@@ -83,8 +83,10 @@ Crawler (Cloud Run job env vars; placeholders in `crawler/.env.example`):
 | `CRAWLER_SERVICE_KEY_FILE` | Path of the key file mounted from Secret Manager (section 4). The production method |
 | `CRAWLER_SERVICE_KEY` | The key itself. Local runs only: on Linux an env var stays readable in `/proc/<pid>/environ` even after the crawler deletes it at startup. Setting both is refused |
 | `CRAWLER_USER_AGENT` | Identifies Asmita and links to a page explaining the crawler |
-| `MAX_RUN_MINUTES` | Keep below the job's task timeout (default 50 with a 60-minute timeout) |
+| `MAX_RUN_MINUTES` | Keep below the job's task timeout (default 50 with a 60-minute timeout). In `--loop` mode it bounds one pass, not the process |
 | `FRONTIER_CLAIM_LIMIT` | Pages claimed from the app's frontier per request (default 50, max 200); the crawler keeps no other frontier state |
+| `CRAWLER_SOURCE_CONCURRENCY` | Sources crawled at once (crawler v2 WP6, default 8). Each source is still sequential, and every request still passes the global request cap and the per-host delay, so one slow or failing site holds only its own slot |
+| `LOOP_IDLE_SECONDS` / `PROGRESS_LOG_SECONDS` | `run --loop` only (WP6): the sleep after a pass that found nothing due (default 60 s) and the interval of the `run_progress` log line (default 60 s) |
 | `MAX_SITEMAP_URLS` / `MAX_QUERY_VARIANTS_PER_PATH` | Deep coverage bounds (WP4): addresses taken from one sitemap or feed document (default 5000) and distinct query variants reported per path (default 8) |
 | `MAX_DISCOVERY_HOSTS` | Distinct out-of-scope hosts reported as discoveries per run (WP5, default 1000); 0 switches discovery reporting off entirely |
 | Limits | `MAX_PAGES`, `MAX_IMAGES`, `MAX_DEPTH`, byte caps, timeouts, concurrency: defaults in `crawler/README.md`, "Configuration" |
@@ -125,7 +127,14 @@ Region: Mumbai, `asia-south1` (the pool is survivor data and stays in India, ADR
 
 4. Schedule with Cloud Scheduler: a dedicated invoker service account with `roles/run.invoker` on the job only, calling the job's `run` endpoint once a night (IST). The pool must be re-synced at least hourly within a run, which the crawler does itself.
 
-5. Updating: build and push a new sha, then `gcloud run jobs update asmita-crawler --region asia-south1 --image <new image>`.
+5. Running it continuously (crawler v2 WP6). The crawler has a second command, `node dist/main.js run --loop`: it repeats a full pass — list sources, claim, fetch, hash, report — until stopped, picks up a source an admin switches on mid-run on the next pass's source listing, sleeps `LOOP_IDLE_SECONDS` (default 60 s) whenever a pass finds nothing due, and logs a `run_progress` line every `PROGRESS_LOG_SECONDS` (sources active, pages claimed/fetched/not-modified, new URLs, new hosts reported, images hashed, matches). SIGTERM ends the current pass cleanly (exit 0); any other exit code ends the loop with that code. Two supported shapes:
+
+   - **VM container with a restart policy** (the always-on form): a small VM in `asia-south1` running the same image with `docker run -d --restart unless-stopped --read-only --network <egress-only> ...` and the same key file, env vars and `run --loop` command. The restart policy is the retry cadence for every non-zero exit; systemd or a managed instance group can replace Docker if preferred. Nothing else changes: the process writes nothing and needs only outbound internet.
+   - **Short-cadence job (the Cloud-native form):** keep the Cloud Run *job* above and have Cloud Scheduler call it every 15–30 minutes instead of nightly. Overlapping invocations are safe by design — frontier claims are exclusive for 30 minutes (`FOR UPDATE SKIP LOCKED`, WP3) — so near-continuous coverage needs no new moving parts. Each invocation is the ordinary one-shot `run`.
+
+   A Cloud Run **service** is deliberately not offered for the loop: Cloud Run requires a service's container to listen on a port (it fails deployment otherwise), the crawler listens on nothing by design (no inbound surface), and adding a listener just to pass a health check would grow its attack surface for no crawl benefit. If that ever changes, the decision belongs in `crawler/README.md`, not here.
+
+6. Updating: build and push a new sha, then `gcloud run jobs update asmita-crawler --region asia-south1 --image <new image>`.
 
 ## 5. Exit codes and what to do
 
@@ -142,6 +151,8 @@ Each run ends with a `run_summary` log line carrying `exitCode` and a `problems`
 | 64 | Bad command line | The job's command or args were changed; restore `run` |
 
 A failing site (down, robots.txt unreachable, timeouts) is not a run failure; it is counted in the summary.
+
+For a `--loop` deployment (section 4, step 5) the same codes decide the process. Exit 0 starts the next pass — including when the app has the crawler switched off: each such pass ends immediately and the loop polls every `LOOP_IDLE_SECONDS` until the switch comes back on, so a switched-off crawler is quiet, not dead. Any other code ends the loop and the restart policy retries; a config error (1) or a bad key (2) will loop-crash until a human fixes the env or the secret, which is the intended signal.
 
 ## 6. Analyst work
 
@@ -160,7 +171,7 @@ Set `ENABLE_CRAWLER=false` (or remove it) on the Worker and deploy. At once:
 - analysts can still read findings and their history, but review, notices and source changes return 503 `crawler_disabled`;
 - survivors cannot sign a new authorisation, and can still withdraw.
 
-To stop one site only, switch its source off. To stop the job running at all, pause the Cloud Scheduler trigger. To cut off a crawler whose key may have leaked, revoke the key (section 1).
+To stop one site only, switch its source off. To stop the job running at all, pause the Cloud Scheduler trigger; to stop a `--loop` deployment, stop the VM container or the Scheduler trigger behind the short-cadence job (section 4, step 5). To cut off a crawler whose key may have leaked, revoke the key (section 1).
 
 ## 8. Unconfirmed send
 

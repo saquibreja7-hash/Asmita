@@ -736,6 +736,48 @@ ${Array.from({ length: 3 }, (_, i) => `  <entry><title>Post ${i + 1}</title><lin
   return { site, pool, expected, allHashes };
 }
 
+/**
+ * The parallel-sources fixture (crawler v2 WP6): twenty independent sites of
+ * mixed speed plus one that never answers its home page. A run against all
+ * of them proves sources are crawled concurrently (the bound a serial run
+ * cannot meet) and that a hanging source does not delay the others: every
+ * fast source finishes while the hanging one is still stuck on its first
+ * request, and the hanging source's report is the last one the run sends.
+ * Host s1.speed.test has a second page linked from its home page — the only
+ * new URL any of these sites reports. No host here overlaps the other
+ * fixtures' hosts, and no page carries an image.
+ */
+export const SPEED_HOSTS = Array.from({ length: 20 }, (_, i) => `s${i + 1}.speed.test`);
+/** Each fast source's home page takes this long to answer (100..300 ms). */
+export const SPEED_DELAYS_MS = SPEED_HOSTS.map((_, i) => 100 + (i % 5) * 50);
+export const HANG_HOST = "hang.speed.test";
+export const PARALLEL_HOSTS = [...SPEED_HOSTS, HANG_HOST];
+/** Sum of every page delay: the least a fully serial run would need. */
+export const SPEED_SERIAL_MS = SPEED_DELAYS_MS.reduce((a, b) => a + b, 0) + SPEED_DELAYS_MS[0]!;
+
+export async function buildParallelFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const robots = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+  const slowHtml = (delayMs: number, links = ""): Handler => async (res) => {
+    await new Promise((r) => setTimeout(r, delayMs));
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(html(links));
+  };
+  for (const [i, host] of SPEED_HOSTS.entries()) {
+    site.route(host, "/robots.txt", robots);
+    site.route(host, "/", slowHtml(SPEED_DELAYS_MS[i]!, i === 0 ? `<a href="/deep">second page</a>` : ""));
+  }
+  // s1's linked second page: one new URL reported per first pass, one extra
+  // page delay in the serial total.
+  site.route(SPEED_HOSTS[0]!, "/deep", slowHtml(SPEED_DELAYS_MS[0]!));
+  // The hanging source: robots.txt answers normally, the home page never
+  // does; the crawler's request deadline is what ends the hang.
+  site.route(HANG_HOST, "/robots.txt", robots);
+  site.route(HANG_HOST, "/", () => {});
+  const pool: Pool = { version: "parallel-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
+  return { site, pool, expected: [], allHashes: [] };
+}
+
 /** Env for a fixture run (test values only, nothing real). */
 export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, string> = {}): Record<string, string> {
   return {

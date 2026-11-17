@@ -1,6 +1,7 @@
 # Asmita crawler
 
-A small, targeted crawler that runs as a scheduled one-shot job. It visits an
+A small, targeted crawler that runs as a scheduled one-shot job or as an
+always-on loop (`run --loop`, crawler v2 WP6). It visits an
 admin-approved list of sites, finds image addresses in their HTML, downloads
 each image **into memory only**, computes its PDQ fingerprint with the same
 code survivors' browsers run, compares it against the pool of fingerprints
@@ -14,10 +15,15 @@ behalf. Every guarantee below is enforced by a test.
 ## How a run works
 
 ```
-main.ts -> cli.ts (config, signals, exit codes)
-  -> crawler.ts runCrawl
+main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
+                 passes forever, sleeping LOOP_IDLE_SECONDS when a pass
+                 found nothing due — any non-zero exit code ends the loop)
+  -> crawler.ts runCrawl (one pass)
        AsmitaClient: GET /sources, GET /pool          (own HTTP agent, bearer key)
-       per source (parallel up to GLOBAL_CONCURRENCY):
+       per source (parallel up to CRAWLER_SOURCE_CONCURRENCY, WP6; every
+                request still passes the GLOBAL_CONCURRENCY gate and the
+                per-host delay, so a slow or failing source holds only its
+                own worker slot):
          loop: POST /frontier/claim  (batch of due pages, claimed for 30 min;
                 first claim seeds https://<domain>/ app-side; the source's
                 robots.txt Sitemap: lines ride on the first report)
@@ -39,6 +45,9 @@ main.ts -> cli.ts (config, signals, exit codes)
          POST /discoveries (the out-of-scope hosts the pages linked,
                 hosts only, deduplicated per run, chunks of 200)
        pool re-sync every POOL_RESYNC_MINUTES (<= 60)
+       run_progress line every PROGRESS_LOG_SECONDS (WP6): sources active,
+                pages claimed/fetched/not-modified, new URLs, new hosts
+                reported, images hashed, matches — counts only
        FindingsSink: POST /findings in batches (<= 50 items, <= 240 KiB),
                      whenever a batch fills, every 15 s, and at once on stop
   -> run_summary log line, exit code
@@ -69,6 +78,14 @@ When several apply, the first row in this table wins.
 | 1 | Invalid configuration or an unexpected failure |
 | 64 | Bad command line |
 
+In `--loop` mode the same table decides the process: a pass that ends 0
+(including SIGTERM, the time limit, the budgets, and the crawler being
+switched off on the server) starts the next pass after
+`LOOP_IDLE_SECONDS` when nothing was due, so a switched-off crawler simply
+polls; any non-zero code ends the loop with that code, and an always-on
+deployment's restart policy decides when to try again. Sources switched on
+in the app are picked up on the next pass's `GET /sources`.
+
 A failing source (site down, DNS failure, robots.txt unreachable, timeouts)
 is not a run failure; it is counted in the summary only.
 
@@ -90,9 +107,10 @@ is not a run failure; it is counted in the summary only.
 | **Real addresses.** URLs are fetched and reported as the site wrote them (fragment removed, query untouched, so signed CDN URLs work); tracking-param stripping and sorting apply only to the dedup key. | `crawl/url.ts` (`normalizeUrl` vs `urlKey`). | `url-robots-extract.test.ts` |
 | **Scope.** A page is in scope only if its host EQUALS the approved source `domain` or is a subdomain of it: approving `example.com` covers `www.example.com`; approving `forum.example.com` does not cover `example.com` or `shop.example.com`. Checked on every page hop including redirects. Source domains must be bare hostnames (no IP, port, path or bare public suffix). BFS to `MAX_DEPTH`, `pageBudget` per source. | `crawl/url.ts` (`sourceHost`, `inScope`), `crawler.ts`. | `url-robots-extract.test.ts`; `tests/integration/scope.test.ts` (parent, sibling, sub-subdomain, redirect to sibling) |
 | **Image hosts.** Only image candidates extracted from an in-scope page are fetched; no image URL discovered any other way is ever requested. Such an image may live on another public host (sites serve images from CDNs), but every hop still passes all safe-fetch checks and robots.txt, and per source and run at most `MAX_OFFSITE_IMAGE_HOSTS` (default 50) distinct off-scope hosts that have **returned an image** are used, plus at most `MAX_OFFSITE_HOST_FAILURES` (default 20) distinct off-scope hosts that were tried and did not. A host counts against the first cap only after it answers with an image, so junk hosts on a hostile page cannot use it up and starve the real CDN; the second cap bounds requests to junk. Both are checked on every hop, before robots.txt or the image is requested. Counted as `imagesOffHost`, `imageHostsCapped` and `imageHostFailuresCapped`. | `crawler.ts` (`processImage`, `admitHost`, `settleHosts`). | `tests/integration/scope.test.ts` (5 CDN hosts plus a redirect to a 6th, cap 3: only 3 contacted; 4 junk hosts before the real CDN with cap 1: the CDN image still matches; failure cap 2: only 2 junk hosts contacted) |
-| **Bounded frontier.** At most `MAX_LINKS_PER_PAGE` (500) links and `MAX_IMAGES_PER_PAGE` (200) image candidates are taken from any page (extract keeps three link buckets — pagination, pages, feeds — each bounded by that cap). The queue lives in the app: the crawler holds only the batch it claimed (at most `FRONTIER_CLAIM_LIMIT` entries) and the report built from it, split into body-bounded chunks under the server's 256 KiB limit — that is its whole frontier memory, and `batchPeak` in the summary proves it. WP4 adds two small bounded per-source structures: the query-variant guard (at most 4096 tracked paths × `MAX_QUERY_VARIANTS_PER_PATH` 16-byte hashes, never a URL) and the one-shot robots sitemap stash (at most 50 URLs, attached to one report). WP5 adds one run-wide structure: the discovery host set, at most `MAX_DISCOVERY_HOSTS` (default 1000) distinct out-of-scope hostnames, deduplicated per run and reported in chunks of 200; hosts dropped beyond the cap are counted (`discoveryHostsCapped`). The app dedups stored links per source on a keyed digest and caps a source at `pageBudget` pages per day. Summary: `linksDropped`, `batchPeak`, `discoveryHostsSeen`, `discoveryHostsReported`, `discoveryHostsCapped`. | `crawl/extract.ts`, `crawl/traps.ts`, `crawler.ts`, the app's `crawl-pages.ts`. | `tests/integration/frontier.test.ts` (pages of 40,000 links: the crawler's batch never exceeds the claim limit, the app's frontier grows by at most MAX_LINKS_PER_PAGE per fetched page, the daily budget holds, the planted image is still reported); `tests/integration/frontier-app.test.ts` (second run 304s, two processes, killed run); `tests/integration/discovery.test.ts` (the per-run cap holds); `url-robots-extract.test.ts` |
+| **Bounded frontier.** At most `MAX_LINKS_PER_PAGE` (500) links and `MAX_IMAGES_PER_PAGE` (200) image candidates are taken from any page (extract keeps three link buckets — pagination, pages, feeds — each bounded by that cap). The queue lives in the app: the crawler holds only the batch it claimed (at most `FRONTIER_CLAIM_LIMIT` entries) and the report built from it, split into body-bounded chunks under the server's 256 KiB limit — that is its whole frontier memory, and `batchPeak` in the summary proves it. WP4 adds two small bounded per-source structures: the query-variant guard (at most 4096 tracked paths × `MAX_QUERY_VARIANTS_PER_PATH` 16-byte hashes, never a URL) and the one-shot robots sitemap stash (at most 50 URLs, attached to one report). WP5 adds one run-wide structure: the discovery host set, at most `MAX_DISCOVERY_HOSTS` (default 1000) distinct out-of-scope hostnames, deduplicated per run and reported in chunks of 200; hosts dropped beyond the cap are counted (`discoveryHostsCapped`). The app dedups stored links per source on a keyed digest and caps a source at `pageBudget` pages per day. Summary: `linksDropped`, `batchPeak`, `sourcesActive`, `pagesClaimed`, `newUrls`, `discoveryHostsSeen`, `discoveryHostsReported`, `discoveryHostsCapped`. | `crawl/extract.ts`, `crawl/traps.ts`, `crawler.ts`, the app's `crawl-pages.ts`. | `tests/integration/frontier.test.ts` (pages of 40,000 links: the crawler's batch never exceeds the claim limit, the app's frontier grows by at most MAX_LINKS_PER_PAGE per fetched page, the daily budget holds, the planted image is still reported); `tests/integration/frontier-app.test.ts` (second run 304s, two processes, killed run); `tests/integration/discovery.test.ts` (the per-run cap holds); `url-robots-extract.test.ts` |
 | **Deep coverage.** robots.txt `Sitemap:` lines (capped at 50), sitemap indexes, gzipped sitemaps and RSS/Atom feeds enter the frontier as `sitemap`/`feed` rows through the same claim/report path — no second fetch path, page budget included. A document is what its root element says (`<urlset>`, `<sitemapindex>`, `<rss>`, `<feed>`), never what its URL or Content-Type claims; a `.gz` body is inflated in memory under the same `MAX_HTML_BYTES` cap. Bodies are parsed by a bounded event scanner (no DOM, no dependency, no temp file): at most `MAX_SITEMAP_URLS` addresses per document and a hard markup-event cap, so a hostile "sitemap" can neither spin nor balloon memory; `<image:loc>` entries are hashed for their page. Pagination links (rel=next, next/older/page-N text or class) are collected first, so a link flood cannot push them past the cap; login, cart, search-result and calendar URLs (path segments, date paths, date query keys) are never reported or fetched, whatever markup marks them; distinct query variants of one path are capped at `MAX_QUERY_VARIANTS_PER_PATH` (page-number and tracking parameters do not count). | `crawl/robots.ts` (Sitemap:), `crawl/xml-docs.ts`, `crawl/traps.ts`, `crawl/extract.ts`, `crawler.ts`. | `tests/unit/xml-docs.test.ts`, `tests/unit/traps.test.ts`, `tests/unit/deep-extract.test.ts`; `tests/integration/deep-coverage.test.ts` (sitemap index + gzipped sitemap + Atom feed + 30 paginated pages fully covered within budget, every planted image found exactly once; infinite-calendar and query-trap fixtures stay inside their caps) |
 | **Discovery never fetches (WP5).** The hosts of out-of-scope links on in-scope pages are reported to the app — hostnames only, no URL, deduplicated per run, capped by `MAX_DISCOVERY_HOSTS` — and the crawler itself never requests one of them, not even robots.txt, until the app lists it as a source on a later run. Off-scope sitemap/feed entries do not become discoveries: only anchors on fetched HTML pages do, the same candidates that were already being read for links. A stored-disabled discovery (beyond the app's hop limit or its daily new-site cap) is therefore never fetched. | `crawler.ts` (`noteDiscoveryHost`, `flushDiscoveries`), the app's `crawl-discoveries.ts`. | `tests/integration/discovery.test.ts` (a.test -> b.test -> c.test -> d.test: b and c are crawled once the app lists them, d and a never-crawl host are never requested); `client-findings.test.ts` (the client never sends an empty or oversized discovery batch) |
+| **Parallel sources, continuous running (WP6).** Up to `CRAWLER_SOURCE_CONCURRENCY` (default 8) sources are crawled at once; each source stays sequential and every request still passes the `GLOBAL_CONCURRENCY` gate, robots.txt and the per-host delay, so one slow or failing source holds only its own worker slot. `run --loop` repeats full passes until stopped: a pass ending 0 starts the next one, after `LOOP_IDLE_SECONDS` when nothing was due; any other exit code ends the loop, and a deployment's restart policy decides the retry. A source switched on in the app mid-run is picked up on the next pass's `GET /sources`. | `crawler.ts` (source worker pool), `cli.ts` (loop). | `tests/integration/continuous.test.ts` (20 mixed-speed sources finish within a bound a serial run cannot meet; a hanging source does not delay the others — its error report is the last one the run sends; the loop sleeps when nothing is due, picks up a source enabled mid-run, exits 0 on SIGTERM and ends with the fatal code when the key is revoked between passes; the `run_progress` line carries counts only) |
 | **Withdrawn fingerprints stop matching.** Pool re-synced at least hourly; a pool older than 60 minutes stops the run; queued findings for removed ids are dropped; a `fingerprint_not_accepted` rejection removes the id from the in-memory pool at once. | `crawler.ts`, `findings.ts`, `match/matcher.ts`. | `tests/integration/lifecycle.test.ts`, `client-findings.test.ts` |
 | **Fail closed config**, no setting that loosens the network policy. Loopback access for tests is a policy object injected in code from `tests/support/test-policy.ts`. | `config.ts`. | `config-policy.test.ts` (schema has no such key; `src/` network code never mentions loopback) |
 | **Same PDQ as the browser.** | `src/pdq.ts` re-exports `asmita/src/lib/pdq/pdq.ts` (bundled at build). | `tests/unit/pdq-contract.test.ts` (exact export list, version, types, golden hash) |
@@ -299,16 +317,23 @@ Per-item rejection reasons (`invalid_finding`, `media_payload_rejected`,
 
 ## Run summary
 
-The last log line, `run_summary`, holds: outcome, duration, sources crawled,
-pages attempted/fetched/not-modified/non-HTML, pages that were sitemap or
-feed documents (`pagesXml`) with the sitemap and feed addresses taken from
-them, the largest claimed frontier batch (`batchPeak`), links dropped by the
-per-page cap or skipped as non-content / by the query-variant cap, distinct
-out-of-scope hosts seen/reported/capped as discoveries (`discoveryHostsSeen`,
+The last log line of each pass, `run_summary`, holds: outcome, duration,
+sources crawled, sources active (those that claimed work, WP6), pages
+claimed (every page the app handed out, WP6), pages
+attempted/fetched/not-modified/non-HTML, new URLs reported to the frontier
+(WP6), pages that were sitemap or feed documents (`pagesXml`) with the
+sitemap and feed addresses taken from them, the largest claimed frontier
+batch (`batchPeak`), links dropped by the per-page cap or skipped as
+non-content / by the query-variant cap, distinct out-of-scope hosts
+seen/reported/capped as discoveries (`discoveryHostsSeen`,
 `discoveryHostsReported`, `discoveryHostsCapped`), images
 seen/hashed/skipped by reason, matches, findings
 queued/posted/accepted/rejected (by reason)/withdrawn/invalid/failed/unsent,
 pool syncs, robots outcomes, errors by code, page and image budget used.
+Every `PROGRESS_LOG_SECONDS` a `run_progress` line (WP6) carries the
+mid-run view of the same counters: sources active, pages
+claimed/fetched/not-modified, new URLs, new hosts reported, images hashed,
+matches. Counts only, like every line.
 
 ## Running locally
 
@@ -355,6 +380,9 @@ network activity and the log names only the offending variable names. See
 | `MAX_DISCOVERY_HOSTS` | 1000 | distinct out-of-scope hosts reported as discoveries per run (WP5); 0 switches discovery reporting off entirely |
 | `FRONTIER_CLAIM_LIMIT` | 50 | pages claimed from the app's frontier per request (1..200); the crawler's whole frontier memory is one batch plus its report |
 | `GLOBAL_CONCURRENCY` | 4 | concurrent requests across all hosts |
+| `CRAWLER_SOURCE_CONCURRENCY` | 8 | sources crawled at once (WP6); each source is sequential, and every request still passes `GLOBAL_CONCURRENCY` and the per-host delay, so a slow or failing source holds only its own worker slot |
+| `LOOP_IDLE_SECONDS` | 60 | `run --loop` only (WP6): seconds to sleep after a pass that found nothing due, before listing sources and claiming again (1..3600) |
+| `PROGRESS_LOG_SECONDS` | 60 | seconds between the periodic `run_progress` log lines (WP6) |
 | `DECODE_CONCURRENCY` | 1 | decoder child processes (a 25 MP decode is ~100 MB) |
 | `DECODE_TIMEOUT_MS` | 20000 | per-image decode deadline; the child is killed and replaced |
 | `MAX_HTML_BYTES` / `MAX_IMAGE_BYTES` | 2 MiB / 10 MiB | body caps (also after decompression) |
@@ -399,6 +427,22 @@ Nothing here has been deployed.
   private routes it could reach; the SSRF guard blocks private ranges anyway.
 - On SIGTERM (Cloud Run gives 10 s) the crawler stops new work, gives
   in-flight work `SHUTDOWN_GRACE_MS`, flushes findings and exits 0.
+
+Two ways to run it (crawler v2 WP6; the procedures, including the VM
+container variant, are in the runbook):
+
+- **Scheduled one-shot:** the Cloud Run job above runs
+  `node dist/main.js run`, one pass per invocation, exit codes as in the
+  table above. Best when sources are crawled rarely and the daily page
+  budgets are small.
+- **Always-on loop:** `node dist/main.js run --loop` runs as a Cloud Run
+  *service* (or a VM container with `restart: unless-stopped`). The loop
+  keeps claiming work across all enabled sources, picks up sources switched
+  on in the app on the next pass, and sleeps `LOOP_IDLE_SECONDS` when a
+  pass finds nothing due. SIGTERM ends the current pass cleanly (exit 0) and
+  the platform restarts the container; any non-zero exit code also ends the
+  loop, so the restart policy is the retry cadence. `MAX_RUN_MINUTES`
+  bounds one pass, not the process.
 
 ## Known limits
 

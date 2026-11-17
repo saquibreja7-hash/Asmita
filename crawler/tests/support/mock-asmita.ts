@@ -128,6 +128,11 @@ export type MockAsmitaOptions = {
   status?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report" | "discoveries", number>>;
   /** Fail the first N calls of a route with 500. */
   failFirst?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report" | "discoveries", number>>;
+  /**
+   * Answer a route with this status once more than `after` calls reached the
+   * route (e.g. the key revoked between two passes of a --loop run).
+   */
+  statusAfter?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report" | "discoveries", { after: number; status: number }>>;
   /** Pool served from the second pool request on (simulates a re-sync change). */
   poolAfterFirst?: Pool;
   /** Fingerprint ids the server answers "fingerprint_not_accepted" for. */
@@ -489,6 +494,8 @@ export class MockAsmita {
     if (override) return send(override, { error: "override" });
     this.calls[route] = (this.calls[route] ?? 0) + 1;
     if ((this.opts.failFirst?.[route] ?? 0) >= this.calls[route]!) return send(500, { error: "flaky" });
+    const statusLater = this.opts.statusAfter?.[route];
+    if (statusLater && this.calls[route]! > statusLater.after) return send(statusLater.status, { error: "override" });
 
     if (route === "pool") {
       const later = this.opts.poolAfterFirst;

@@ -18,6 +18,15 @@
  * by MAX_DISCOVERY_HOSTS); the app decides which become crawl sources. The
  * crawler itself never fetches a discovered host until the app lists it.
  *
+ * Parallel sources (crawler v2 WP6): up to CRAWLER_SOURCE_CONCURRENCY
+ * sources are crawled at once, each still sequential, every request still
+ * through the GLOBAL_CONCURRENCY gate and the per-host delay, so a slow or
+ * failing source occupies only its own worker slot. Continuous running
+ * (`run --loop`, src/cli.ts) drives this function pass after pass: a pass
+ * that claimed nothing sleeps LOOP_IDLE_SECONDS before the next one, and any
+ * non-zero exit code ends the loop. A periodic run_progress line (every
+ * PROGRESS_LOG_SECONDS) reports the same counters as the summary.
+ *
  * The crawler keeps no frontier of its own: the queue, the seen set and the
  * scheduling live in the app (CrawlPage rows). The only page state here is
  * the claimed batch (at most FRONTIER_CLAIM_LIMIT entries) and the report
@@ -222,6 +231,27 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   let poolSyncedAt = now();
   metrics.poolSyncs++;
   log.info("pool_loaded", { poolSize: matcher.size, count: sources.length });
+
+  // --- progress heartbeat (WP6) ---------------------------------------------
+  // Counts only, like every other line: a mid-run view of the same counters
+  // the run summary carries. unref'd so a one-shot run never waits on it.
+  const progressTimer = setInterval(
+    () =>
+      log.info("run_progress", {
+        elapsedMs: now() - metrics.startedAt,
+        sourcesActive: metrics.sourcesActive,
+        pagesClaimed: metrics.pagesClaimed,
+        pagesFetched: metrics.pagesFetched,
+        pagesNotModified: metrics.pagesNotModified,
+        newUrls: metrics.newUrls,
+        hostsReported: metrics.discoveryHostsReported,
+        imagesHashed: metrics.imagesHashed,
+        matches: metrics.matches,
+        poolSize: matcher.size,
+      }),
+    config.PROGRESS_LOG_SECONDS * 1000,
+  );
+  progressTimer.unref();
 
   // Fingerprints the server stopped accepting during this run stay excluded
   // even if a later pool re-sync still lists them.
@@ -778,6 +808,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       discoveredHosts: [],
     };
     let pages = 0;
+    /** Set once this source claims real work (WP6: sourcesActive). */
+    let active = false;
 
     // Results are reported in body-bounded chunks, so a batch of link-heavy
     // pages never builds one oversized request.
@@ -791,6 +823,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       pendingBytes = REPORT_ENVELOPE_BYTES;
       try {
         const accepted = await api.reportFrontier(source.id, runId, batch, hard.signal);
+        metrics.newUrls += batch.reduce((n, p) => n + p.links.length, 0);
         slog.info("frontier_reported", { count: batch.length, accepted });
       } catch (raw) {
         const err = toCrawlError(raw);
@@ -867,6 +900,11 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         break;
       }
       if (batch.length === 0) break; // nothing due: the source is done for now
+      metrics.pagesClaimed += batch.length;
+      if (!active) {
+        active = true;
+        metrics.sourcesActive++;
+      }
       metrics.batchPeak = Math.max(metrics.batchPeak, batch.length);
       // The source's robots.txt can name sitemaps (WP4). Load it once per
       // run, through the same polite fetch path as every other request, and
@@ -915,8 +953,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     slog.info("source_done", { pages, durationMs: now() - started });
   };
 
-  // Sources run in parallel up to the global cap; each source is sequential.
-  const workers = Math.min(config.GLOBAL_CONCURRENCY, sources.length);
+  // Sources run in parallel up to the source cap (WP6); each source is
+  // sequential, and every request still passes the global gate, so the
+  // GLOBAL_CONCURRENCY request cap and the per-host delays still hold.
+  const workers = Math.min(config.CRAWLER_SOURCE_CONCURRENCY, sources.length);
   let next = 0;
   await Promise.all(
     Array.from({ length: workers }, async () => {
@@ -936,6 +976,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   if (budgetHit && outcome === "completed") outcome = "budget";
   clearInterval(resyncTimer);
   clearInterval(flushTimer);
+  clearInterval(progressTimer);
   // Final flush deadline: short after a signal (the platform kills the
   // process soon after SIGTERM), longer for a normal end of run.
   const flushDeadline = AbortSignal.timeout((outcome as RunOutcome) === "stopped" ? 3_000 : config.API_TIMEOUT_MS * 2);

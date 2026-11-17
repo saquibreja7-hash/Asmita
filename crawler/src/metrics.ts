@@ -70,6 +70,23 @@ export class RunMetrics {
   /** Links beyond MAX_LINKS_PER_PAGE on a page. */
   linksDropped = 0;
   /**
+   * Sources that claimed at least one page this run (crawler v2 WP6): the
+   * run's active sources, as opposed to sourcesCrawled (every listed source
+   * that started, work or not).
+   */
+  sourcesActive = 0;
+  /**
+   * Pages handed out by the app's frontier over all claims (crawler v2 WP6).
+   * pagesAttempted counts the ones actually processed; a page the run was
+   * stopped on mid-batch is claimed but never attempted.
+   */
+  pagesClaimed = 0;
+  /**
+   * Link entries accepted by the app's frontier over all reports (crawler
+   * v2 WP6): the new URLs this run handed the app.
+   */
+  newUrls = 0;
+  /**
    * Largest batch claimed from the app's frontier (WP3). The crawler holds no
    * other frontier state, so this is its frontier memory bound: it can never
    * exceed FRONTIER_CLAIM_LIMIT.
@@ -141,6 +158,9 @@ export class RunMetrics {
       jsonldSkipped: this.jsonldSkipped,
       noscriptSkipped: this.noscriptSkipped,
       linksDropped: this.linksDropped,
+      sourcesActive: this.sourcesActive,
+      pagesClaimed: this.pagesClaimed,
+      newUrls: this.newUrls,
       batchPeak: this.batchPeak,
       imagesSeen: this.imagesSeen,
       imagesHashed: this.imagesHashed,

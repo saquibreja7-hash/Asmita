@@ -38,6 +38,19 @@ export const ConfigSchema = z.object({
   /** Image candidates taken from one page. */
   MAX_IMAGES_PER_PAGE: int(1, 10_000, 200),
   GLOBAL_CONCURRENCY: int(1, 32, 4),
+  /**
+   * Sources crawled concurrently (crawler v2 WP6); each source is still
+   * sequential and every request still passes the GLOBAL_CONCURRENCY gate and
+   * the per-host delay. A slow or failing source occupies only its own slot.
+   */
+  CRAWLER_SOURCE_CONCURRENCY: int(1, 32, 8),
+  /**
+   * `run --loop` (crawler v2 WP6): seconds to sleep after a pass that found
+   * nothing due anywhere, before listing sources and claiming again.
+   */
+  LOOP_IDLE_SECONDS: int(1, 3600, 60),
+  /** Seconds between the periodic run_progress log lines (crawler v2 WP6). */
+  PROGRESS_LOG_SECONDS: int(1, 3600, 60),
   /** Decoder child processes (each decodes one image at a time). */
   DECODE_CONCURRENCY: int(1, 4, 1),
   /** Per-image decode deadline; the child is killed and replaced after it. */

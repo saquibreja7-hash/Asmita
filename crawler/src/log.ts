@@ -43,6 +43,15 @@ export const LOG_FIELDS = [
   "elapsedMs",
   "summary",
   "invalidKeys",
+  // The periodic run_progress line (crawler v2 WP6): the same counters the
+  // run summary carries, mid-run.
+  "sourcesActive",
+  "pagesClaimed",
+  "pagesFetched",
+  "pagesNotModified",
+  "newUrls",
+  "hostsReported",
+  "imagesHashed",
 ] as const;
 
 export type LogField = (typeof LOG_FIELDS)[number];
