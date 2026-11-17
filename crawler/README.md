@@ -109,7 +109,7 @@ is not a run failure; it is counted in the summary only.
 | **Byte caps** (10 MB images, 2 MB HTML, 500 KiB robots.txt) while streaming AND after decompression; stacked/unknown encodings refused. | `readCapped`, `decode` (`maxOutputLength`). | `tests/unit/bytes.test.ts` (gzip/brotli/deflate bombs, declared length, chunked stream, timeouts) |
 | **Timeouts**: connect, headers, body idle, and an overall per-request deadline (stops slow drips). | undici options + `AbortSignal.timeout`. | `bytes.test.ts`, fixture `/img/slow.png` |
 | **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active; since WP7 also a full browser-rendered crawl under the same patch); `tests/unit/config-policy.test.ts` |
-| **Browser traffic is policy-checked too (WP7).** Chromium's every request leaves through an in-process SOCKS proxy that applies the same address policy as `safe-fetch` (resolve every address, refuse if any is blocked, dial the validated address, same port and scheme rules); no direct browser egress (Chromium is launched with `--proxy-bypass-list=<-loopback>` so even loopback destinations go through the proxy, and the fixture hostnames exist only in the test policy's DNS, so a successful render proves the proxy resolved them). | `net/browser-proxy.ts`, `browser/browser-renderer.ts`. | `tests/unit/browser-proxy.test.ts` (raw SOCKS client: tunnel, private-literal refusal, literal-as-domain refusal, hostname-to-private-address refusal, bad port, BIND, bad greeting, per-render byte account destroying over-budget tunnels, no tunnel while no render account is active, an ended account tearing its tunnels down, an established tunnel outliving the handshake timeout); `tests/integration/browser.test.ts` (a page script's private-address requests are all refused and the render survives; a robots-disallowed image inside a rendered page is never requested) |
+| **Browser traffic is policy-checked too (WP7).** Chromium's every request leaves through an in-process SOCKS proxy that applies the same address policy as `safe-fetch` (resolve every address, refuse if any is blocked, dial the validated address, same port and scheme rules); no direct browser egress (Chromium is launched with `--proxy-bypass-list=<-loopback>` so even loopback destinations go through the proxy, and the fixture hostnames exist only in the test policy's DNS, so a successful render proves the proxy resolved them). | `net/browser-proxy.ts`, `browser/browser-renderer.ts`. | `tests/unit/browser-proxy.test.ts` (raw SOCKS client: tunnel, private-literal refusal, literal-as-domain refusal, hostname-to-private-address refusal, bad port, BIND, bad greeting, per-render byte account destroying over-budget tunnels, no tunnel while no render account is active, an ended account tearing its tunnels down, an established tunnel outliving the handshake timeout); `tests/integration/browser.test.ts` (a page script's private-address requests are all refused and the render survives; a robots-disallowed image inside a rendered page is never requested); `tests/integration/browser-escape.test.ts` (a browser-only redirect off scope never contacts the other site and credits nothing, an image redirect to a robots-disallowed path is never followed, an allowed image redirect is reported under the address that served it, popups never load, WebSockets never connect); `tests/unit/browser-renderer.test.ts` (WebRTC limited to proxied traffic, no `/proc` read for the worker, deadline SIGKILL, stale render messages ignored, graceful stop) |
 | **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files decode tolerantly (`failOn: "none"`) but stay bounded by the byte cap and pixel limit. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, light and heavy truncation, AVIF); fixtures `cut.jpg` (matches), `cut-heavy.jpg` (does not) and `pic.avif` |
 | **Service key only to Asmita.** | `AsmitaClient` has its own agent, builds URLs only from `ASMITA_API_URL`, refuses redirects. The crawl fetcher sends no auth or cookie headers. | `crawl.test.ts` "never sends credentials or cookies to crawled hosts"; `client-findings.test.ts` "refuses redirects" |
 | **No URLs, hostnames, fingerprints or bodies in logs.** Field allowlist, string sanitiser, errors reduced to fixed codes; uncaught errors and Node warnings routed through the logger. | `log.ts`, `errors.ts`, `cli.ts`. | `crawl.test.ts` log scan; `tests/integration/process.test.ts` runs the real `runMain` in a child process and scans all of stdout and stderr |
@@ -359,11 +359,54 @@ worker threads, no native addons) and has stdout/stderr discarded — crash
 output never reaches the logs. What that does NOT protect against is the
 same as for the decoder, plus one more: Chromium is native code, so Node's
 permission model does not bind it (its writes go to the tmpfs its
-environment points at), and `--no-sandbox` is passed because the container
-runs read-only without the setuid helper — a Chromium renderer exploit runs
-as the worker's user. Deployment hardening is the same list as the
-decoder's: a different UID for the worker, no egress except through the
-parent's proxy if the platform allows it, and the key as a file.
+environment points at), and `--no-sandbox` is passed. Chromium's own
+sandbox does not need a setuid helper on current Linux: it uses
+unprivileged user namespaces, and those are what a container may not grant
+(Docker's default seccomp profile refuses them; Cloud Run may as well, not
+verified). Without it a Chromium renderer exploit runs as the worker's
+user, which is the crawler's user: it can read whatever that user can,
+including the key file and `/proc/<pid>/environ` of the parent (so an
+inline `CRAWLER_SERVICE_KEY` would be exposed; use
+`CRAWLER_SERVICE_KEY_FILE`). The worker's own Node code is not granted
+`/proc` reads. **Browser rendering stays off for real sites (no source with
+`render = BROWSER` or `AUTO`) until the worker runs sandboxed** (Chromium's
+sandbox enabled in a runtime that grants user namespaces, or a syscall
+sandbox such as gVisor/nsjail around the worker) **or under a separate
+UID** that cannot read the key file. Deployment hardening is otherwise the
+decoder's list: no egress except through the parent's proxy if the
+platform allows it, and the key as a file.
+
+**Rendered pages stay inside the rules.** Every request of the browser
+context (the page, its frames, popups) is routed through the worker, which
+fetches it hop by hop with redirects off: Chromium follows a redirect it is
+handed without consulting the route again, so the worker never hands it
+one. Each hop is counted against the request cap, navigation hops must stay
+in scope, and each hop waits for the parent's robots.txt verdict. A
+main-frame redirect makes the render navigate to the checked target itself;
+a subresource's redirect is followed in the worker (at most 5 hops) and the
+image is reported under the address that served it. Popups are closed and
+their requests refused, WebSockets are refused inside the browser (they
+would skip robots.txt and the request cap), and WebRTC is limited to
+proxied traffic (`--force-webrtc-ip-handling-policy` /
+`--webrtc-ip-handling-policy=disable_non_proxied_udp`; the proxy offers no
+UDP). The parent holds a render's findings back until the final rendered
+URL passed the scope check. The proxy refuses any tunnel opened while no
+render is active and tears a render's tunnels down when it ends.
+
+**Stopping a render.** Each render's state lives with that render in the
+worker: an abort closes its browser context, and a render still unwinding
+cannot send for, or clear, the next one (the parent drops late messages
+under an old id and answers their robots questions "no"). Every step of a
+render is bounded by its deadline (scrolling `page.evaluate` included); if
+the deadline plus a grace is overrun, the parent SIGKILLs the worker
+whatever it answers, and the next render starts a fresh one. At the end of
+a run the parent asks the worker to stop (it closes Chromium, which removes
+its throwaway profile) and SIGKILLs it after 5 s. A killed worker leaves
+its profile directory behind in `BROWSER_TMP_DIR` (Playwright cannot clean
+up after SIGKILL); the parent does not delete it, because `src/` has no
+filesystem access by rule (memory-only guarantee). It is freed when the
+container ends; a long `run --loop` with many killed renders should be
+restarted periodically or given a larger tmpfs.
 
 **What the no-disk test can and cannot observe.** The memory-only test
 patches Node's `fs` in the crawler process and now also runs a full
@@ -528,10 +571,12 @@ Nothing here has been deployed.
   Chromium makes the image bigger and the job hungrier: give it more memory
   when browser-rendered sources are enabled, and remember `/dev/shm` (the
   browser's profile lives there): run with `--shm-size=1g` where the
-  platform allows it, or set `BROWSER_TMP_DIR` to another tmpfs mount. On
-  Cloud Run, `--no-sandbox` (the worker passes it) and the tmpfs suffice;
-  the read-only root filesystem of Cloud Run's container sandbox is fine
-  because the crawler and the worker write nothing to disk.
+  platform allows it, or set `BROWSER_TMP_DIR` to another tmpfs mount. The
+  read-only root filesystem of Cloud Run's container sandbox is fine
+  because the crawler and the worker write nothing to disk. `--no-sandbox`
+  makes rendering run, but it is not enough to render real sites: see
+  "The worker's isolation" (rendering stays off until the worker is
+  sandboxed or under a separate UID).
 - Secrets: store the key in Secret Manager and mount it **as a file**, then
   point `CRAWLER_SERVICE_KEY_FILE` at it (for example
   `--set-secrets /secrets/crawler-service-key=crawler-service-key:latest` with
