@@ -231,6 +231,26 @@ export async function upsertVerifiedUser(
   return user;
 }
 
+/**
+ * Looks up a survivor by email without creating one ("Track your case"). An
+ * erased account no longer matches its email hash, so it is not found.
+ */
+export async function findVerifiedUserByEmail(email: string): Promise<{ id: string; ageOver18: boolean } | null> {
+  const emailHash = hashEmail(email);
+  if (isDevNoDb()) {
+    const devUser = devUserStore().get(emailHash);
+    if (!devUser || store.getUserStatus(devUser.id) === "gone") return null;
+    return { id: devUser.id, ageOver18: true };
+  }
+  if (usesWorkerKysely()) {
+    const row = await getWorkerDb().selectFrom("User").select(["id", "ageOver18"]).where("emailHash", "=", emailHash).executeTakeFirst();
+    return row ? { id: row.id, ageOver18: row.ageOver18 === true } : null;
+  }
+  const db = await getPrismaDb();
+  const row = await db.user.findUnique({ where: { emailHash }, select: { id: true, ageOver18: true } });
+  return row ? { id: row.id, ageOver18: row.ageOver18 } : null;
+}
+
 /** Records that a pending deletion was cancelled by signing in. No PII: the user id and a count only. */
 async function auditDeletionCancelled(userId: string, cancelledJobs: number) {
   await writeAuditLog({

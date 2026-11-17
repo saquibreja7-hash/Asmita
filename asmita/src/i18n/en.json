@@ -846,8 +846,7 @@
   "submit.confirm.title": "Confirm it is you",
   "submit.trust.1": "Read as text, never opened",
   "submit.trust.2": "Photos stay on your device",
-  "submit.trust.3": "You sign before anything is sent"
-,
+  "submit.trust.3": "You sign before anything is sent",
   "review.cta.create": "Create my case",
   "case.heading": "Your case",
   "case.reference": "Reference",
@@ -949,5 +948,20 @@
   "case.found.title": "Found by Asmita",
   "case.found.sub": "These are copies Asmita found on public websites and a reviewer confirmed. Asmita deals with the takedown notice for each one, and you do not need to sign anything. Only the website name is shown here, not the link.",
   "case.found.withdrawn": "Stopped: you withdrew permission",
-  "case.found.sentOn": "Asmita sent the takedown notice on"
+  "case.found.sentOn": "Asmita sent the takedown notice on",
+  "track.eyebrow": "Already filed?",
+  "track.title": "Track your case",
+  "track.email.title": "The email you used.",
+  "track.email.sub": "Enter the email address you filed with. We will send a 6-digit code to it; no password needed.",
+  "track.noCase.title": "We could not find a case for this email.",
+  "track.noCase.sub": "Check that it is the address you used when you filed. If you have not filed yet, you can start now.",
+  "track.noCase.start": "File a complaint",
+  "myCases.title": "Your cases",
+  "myCases.sub": "Open a case to see its links, its notices and what happens next.",
+  "myCases.existing.title": "You already have a case",
+  "myCases.existing.sub": "You can add to it or follow it here. If this is about different content, start a new case.",
+  "myCases.empty": "There are no cases on this email yet.",
+  "myCases.opened": "Opened",
+  "myCases.open": "Open",
+  "myCases.new": "Start a new case"
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { forgetEligibility, hasDraft, isEligibleAdult, rememberEligibleAdult } from "@/lib/eligibility";
@@ -8,9 +9,13 @@ import { t, type Locale } from "@/lib/i18n";
 
 type Step = "age" | "email" | "otp";
 
-export function RegisterForm({ locale }: { locale: Locale }) {
+// mode "track" (Track your case) skips the age question: it only finds a case
+// this email already has, and never starts a new one.
+export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?: "file" | "track" }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("age");
+  const tracking = mode === "track";
+  const [step, setStep] = useState<Step>(tracking ? "email" : "age");
+  const [noCase, setNoCase] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState<"adult" | "minor" | "">("");
   const [ageThen, setAgeThen] = useState<"adult" | "minor" | "">("");
   const [email, setEmail] = useState("");
@@ -24,14 +29,14 @@ export function RegisterForm({ locale }: { locale: Locale }) {
   useEffect(() => {
     const id = window.setTimeout(() => {
       // Answered on the eligibility screen already: go straight to the email.
-      if (isEligibleAdult()) {
+      if (!tracking && isEligibleAdult()) {
         setAgeConfirmed("adult");
         setStep("email");
       }
       setHydrated(true);
     }, 0);
     return () => window.clearTimeout(id);
-  }, []);
+  }, [tracking]);
 
   function continueFromAge() {
     if (ageConfirmed === "minor" || ageThen === "minor") {
@@ -73,14 +78,24 @@ export function RegisterForm({ locale }: { locale: Locale }) {
       const response = await csrfFetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, otp, ageOver18: ageConfirmed === "adult" }),
+        body: JSON.stringify(tracking ? { email, otp, purpose: "track" } : { email, otp, ageOver18: ageConfirmed === "adult" }),
       });
       if (!response.ok) {
         setError(t(locale, "reg.error.codeNoMatch"));
         return;
       }
+      const result = (await response.json().catch(() => ({}))) as { redirectTo?: string; hasCases?: boolean; noCase?: boolean };
+      if (tracking) {
+        if (result.noCase) {
+          setNoCase(true);
+          return;
+        }
+        router.push(result.redirectTo ?? "/my-cases");
+        return;
+      }
       // Links added before the email code go straight to review and signing.
-      router.push(hasDraft() ? "/review-sign" : "/submit");
+      // Otherwise someone who already has a case sees it before starting another.
+      router.push(hasDraft() ? "/review-sign" : result.hasCases ? "/my-cases?existing=1" : "/submit");
     } catch {
       setError(t(locale, "reg.error.timeout"));
     } finally {
@@ -173,13 +188,30 @@ export function RegisterForm({ locale }: { locale: Locale }) {
         </div>
       )}
 
-      {step === "email" && (
+      {noCase && (
+        <div className="mt-8" role="status">
+          <h2 className="section-title">{t(locale, "track.noCase.title")}</h2>
+          <p className="muted mt-2 text-sm leading-[1.75]">{t(locale, "track.noCase.sub")}</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link className="btn btn-primary" href="/start">{t(locale, "track.noCase.start")}</Link>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => { setNoCase(false); setStep("email"); setOtpDigits(Array(6).fill("")); }}
+            >
+              {t(locale, "reg.otp.changeEmail")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!noCase && step === "email" && (
         <div className="mt-8">
           <h2 className="section-title">
-            {t(locale, "reg.email.title")}
+            {t(locale, tracking ? "track.email.title" : "reg.email.title")}
           </h2>
           <p className="muted mt-2 text-sm leading-[1.75]">
-            {t(locale, "reg.email.sub")}
+            {t(locale, tracking ? "track.email.sub" : "reg.email.sub")}
           </p>
           <p className="mt-3 rounded-[var(--radius-box)] bg-[var(--brand-soft)] px-4 py-3 text-sm leading-[1.6] text-[var(--brand-strong)]">
             {t(locale, "reg.email.safe")}
@@ -220,7 +252,7 @@ export function RegisterForm({ locale }: { locale: Locale }) {
         </div>
       )}
 
-      {step === "otp" && (
+      {!noCase && step === "otp" && (
         <div className="mt-8">
           <h2 className="section-title">
             {t(locale, "reg.otp.title")}

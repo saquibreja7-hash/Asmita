@@ -137,6 +137,8 @@ describe("POST /api/auth/verify-otp", () => {
   beforeEach(() => {
     vi.mocked(otpLib.verifyOtp).mockResolvedValue(true);
     vi.mocked(caseOps.upsertVerifiedUser).mockResolvedValue({ id: "user-1", emailHash: "hash-1" });
+    vi.mocked(caseOps.listCasesForUser).mockResolvedValue([]);
+    vi.mocked(caseOps.findVerifiedUserByEmail).mockResolvedValue(null);
   });
 
   it("returns 403 on missing CSRF", async () => {
@@ -179,6 +181,67 @@ describe("POST /api/auth/verify-otp", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ success: true, redirectTo: "/submit" });
     expect(res.headers.get("set-cookie")).toContain("asmita_session=");
+  });
+
+  const someCase = (id: string) =>
+    ({ id, referenceNumber: `ASMITA-2026-${id}`, userId: "user-1", createdAt: "2026-11-17T00:00:00.000Z", status: "OPEN", urls: [] }) as never;
+
+  it("filing tells the form whether this email already has a case", async () => {
+    let res = await verifyOtpRoute(csrfPost("/api/auth/verify-otp", { email: "v@example.com", otp: "123456", ageOver18: true }));
+    expect(await res.json()).toMatchObject({ redirectTo: "/submit", hasCases: false });
+    vi.mocked(caseOps.listCasesForUser).mockResolvedValue([someCase("c1")]);
+    res = await verifyOtpRoute(csrfPost("/api/auth/verify-otp", { email: "v@example.com", otp: "123456", ageOver18: true }));
+    expect(await res.json()).toMatchObject({ redirectTo: "/submit", hasCases: true });
+  });
+
+  it("filing still requires the age answer", async () => {
+    const res = await verifyOtpRoute(csrfPost("/api/auth/verify-otp", { email: "v@example.com", otp: "123456" }));
+    expect(res.status).toBe(400);
+  });
+
+  describe("Track your case (purpose: track)", () => {
+    const track = () => verifyOtpRoute(csrfPost("/api/auth/verify-otp", { email: "v@example.com", otp: "123456", purpose: "track" }));
+
+    it("an email with no account gets no account, no session and no case", async () => {
+      const res = await track();
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ success: true, noCase: true, redirectTo: "/start" });
+      expect(res.headers.get("set-cookie")).toBeNull();
+      expect(caseOps.upsertVerifiedUser).not.toHaveBeenCalled();
+    });
+
+    it("an account with no cases is treated the same", async () => {
+      vi.mocked(caseOps.findVerifiedUserByEmail).mockResolvedValue({ id: "user-1", ageOver18: true });
+      const res = await track();
+      expect(await res.json()).toMatchObject({ noCase: true });
+      expect(res.headers.get("set-cookie")).toBeNull();
+      expect(caseOps.upsertVerifiedUser).not.toHaveBeenCalled();
+    });
+
+    it("one case: signs her in and goes straight to it", async () => {
+      vi.mocked(caseOps.findVerifiedUserByEmail).mockResolvedValue({ id: "user-1", ageOver18: true });
+      vi.mocked(caseOps.listCasesForUser).mockResolvedValue([someCase("c1")]);
+      const res = await track();
+      expect(await res.json()).toMatchObject({ success: true, redirectTo: "/case/c1" });
+      expect(res.headers.get("set-cookie")).toContain("asmita_session=");
+    });
+
+    it("several cases: signs her in and shows the list", async () => {
+      vi.mocked(caseOps.findVerifiedUserByEmail).mockResolvedValue({ id: "user-1", ageOver18: true });
+      vi.mocked(caseOps.listCasesForUser).mockResolvedValue([someCase("c1"), someCase("c2")]);
+      const res = await track();
+      expect(await res.json()).toMatchObject({ redirectTo: "/my-cases" });
+      expect(res.headers.get("set-cookie")).toContain("asmita_session=");
+    });
+
+    it("a wrong code reveals nothing about the email", async () => {
+      vi.mocked(otpLib.verifyOtp).mockResolvedValue(false);
+      vi.mocked(caseOps.findVerifiedUserByEmail).mockResolvedValue({ id: "user-1", ageOver18: true });
+      const res = await track();
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: "invalid_otp" });
+      expect(caseOps.findVerifiedUserByEmail).not.toHaveBeenCalled();
+    });
   });
 });
 

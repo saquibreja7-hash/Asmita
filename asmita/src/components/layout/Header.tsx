@@ -38,6 +38,9 @@ export function Header({ locale }: { locale: Locale }) {
             <NavLinks groups={navGroups(locale)} />
             <div className="ml-4 flex items-center gap-3">
               <LanguageToggle initialLocale={locale} />
+              <Link href="/track" className="btn btn-secondary !min-h-[44px] !px-5">
+                {isHi ? "अपना मामला देखें" : "Track your case"}
+              </Link>
               <Link href="/get-help" className="btn btn-primary btn-arrow !min-h-[44px] !px-6">
                 {isHi ? "मदद लें" : "Get help"}
               </Link>

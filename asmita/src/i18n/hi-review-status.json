@@ -48,7 +48,9 @@
       "review.sign.nextNote",
       "case.sign.sub",
       "ladder.*",
-      "case.now.filed.*"
+      "case.now.filed.*",
+      "track.*",
+      "myCases.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
