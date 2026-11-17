@@ -8,14 +8,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Memory path (no DATABASE_URL). Placeholder hosts only.
 
 import { inMemoryAuditLog } from "@/lib/audit";
-import { crawlMemory, resetCrawlMemory, type MemoryCrawlPage } from "@/lib/crawl-store";
+import { crawlMemory, resetCrawlMemory, sourceDayKey, type MemoryCrawlPage } from "@/lib/crawl-store";
 import {
   DISCOVERY_PAUSE_MS,
   PAUSE_REASON_NO_MATCH,
   recordCrawlDiscoveries,
   sweepDiscoveredCrawlSources,
 } from "@/lib/crawl-discoveries";
-import { claimCrawlPages } from "@/lib/crawl-pages";
+import { claimCrawlPages, reportCrawlPages } from "@/lib/crawl-pages";
 import { createCrawlSource, listCrawlSources, listEnabledCrawlSources, updateCrawlSource } from "@/lib/crawl-sources";
 import { recordCrawlConsent } from "@/lib/crawl-consent";
 import { recordCrawlFindings } from "@/lib/crawl-findings";
@@ -225,6 +225,11 @@ describe("the unproductive-site pause sweep", () => {
       };
       crawlMemory().pages.set(row.id, row);
     }
+    // The per-day counter the frontier report keeps for those fetches
+    // (review fix: the pause reads it, not lastFetchedAt).
+    const day = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+    const key = sourceDayKey(sourceId, day);
+    crawlMemory().sourceDays.set(key, (crawlMemory().sourceDays.get(key) ?? 0) + pages);
   }
 
   async function discoveredSite(domain: string, budget: number) {
@@ -254,6 +259,35 @@ describe("the unproductive-site pause sweep", () => {
     expect(await claimCrawlPages(after.id, 10, NOW)).toEqual([]);
     expect((await listEnabledCrawlSources()).map((s) => s.domain)).not.toContain("spent.example.org");
     expect(inMemoryAuditLog.filter((e) => e.eventType === "CRAWL_SOURCE_PAUSED")).toHaveLength(1);
+  });
+
+  it("pauses a site that refetched the same pages every day: revisits do not hide earlier days (review fix)", async () => {
+    const source = await discoveredSite("revisit.example.org", 2);
+    // Day 1: seed plus one link, both fetched; days 2 and 3 revisit the same two pages.
+    const first = await claimCrawlPages(source.id, 2, dayStart(2));
+    await reportCrawlPages(source.id, "run-1", [{ id: first[0]!.id, status: "fetched", links: [{ url: "https://revisit.example.org/a", kind: "page" }] }], new Date(dayStart(2).getTime() + 60_000));
+    const second = await claimCrawlPages(source.id, 2, new Date(dayStart(2).getTime() + 120_000));
+    await reportCrawlPages(source.id, "run-1", second.map((u) => ({ id: u.id, status: "fetched" as const, links: [] })), new Date(dayStart(2).getTime() + 180_000));
+    for (const back of [1, 0]) {
+      const at = new Date(dayStart(back).getTime() + (10 - back * 5) * 60_000); // each visit 24 h + after the last
+      const batch = await claimCrawlPages(source.id, 2, at);
+      expect(batch).toHaveLength(2);
+      await reportCrawlPages(source.id, "run-1", batch.map((u) => ({ id: u.id, status: "fetched" as const, links: [] })), new Date(at.getTime() + 60_000));
+    }
+    // Every page's lastFetchedAt is today now, yet each day spent its budget.
+    expect([...crawlMemory().pages.values()].filter((p) => p.sourceId === source.id).every((p) => p.lastFetchedAt! >= dayStart(0))).toBe(true);
+    const result = await sweepDiscoveredCrawlSources(NOW);
+    expect(result).toEqual({ paused: 1, resumed: 0 });
+    expect(sourceByDomain("revisit.example.org")).toMatchObject({ enabled: false, pauseReason: PAUSE_REASON_NO_MATCH });
+  });
+
+  it("prunes per-day counters older than a week", async () => {
+    const source = await discoveredSite("old.example.org", 2);
+    crawlMemory().sourceDays.set(sourceDayKey(source.id, dayStart(8)), 5);
+    crawlMemory().sourceDays.set(sourceDayKey(source.id, dayStart(1)), 1);
+    await sweepDiscoveredCrawlSources(NOW);
+    expect(crawlMemory().sourceDays.has(sourceDayKey(source.id, dayStart(8)))).toBe(false);
+    expect(crawlMemory().sourceDays.get(sourceDayKey(source.id, dayStart(1)))).toBe(1);
   });
 
   it("does not pause a site with a match in the window, or one that spent only two days", async () => {

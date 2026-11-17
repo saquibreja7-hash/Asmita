@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import { z } from "zod";
 import { writeAuditLogs } from "@/lib/audit";
-import { crawlMemory, type MemoryCrawlSource } from "@/lib/crawl-store";
+import { crawlMemory, sourceDayKey, type MemoryCrawlSource } from "@/lib/crawl-store";
 import { hostAndParents, isNeverCrawlHost, normalizeNeverCrawlHost } from "@/lib/crawl-never";
 import { blockedHostRows, existingSourceDomains, validateCrawlDomain } from "@/lib/crawl-sources";
 import {
@@ -393,53 +393,67 @@ function pauseWindowDays(now: Date): Date[] {
   return [today, new Date(today.getTime() - day), new Date(today.getTime() - 2 * day)];
 }
 
-/** Pages each candidate source fetched per day of the window, [days][sourceId]. */
+/**
+ * Pages each candidate source fetched per day of the window, [days][sourceId],
+ * from the per-day counters the frontier report keeps (CrawlSourceDay). Not
+ * from CrawlPage.lastFetchedAt: a revisit overwrites it, so a site that
+ * refetches the same pages every day would look idle on every earlier day.
+ * One read for the whole window.
+ */
 async function pagesFetchedPerDay(ids: string[], days: Date[]): Promise<Array<Map<string, number>>> {
-  if (ids.length === 0) return days.map(() => new Map());
-  const dayMs = 24 * 60 * 60 * 1000;
+  const perDay = days.map(() => new Map<string, number>());
+  if (ids.length === 0) return perDay;
+  const index = new Map(days.map((day, position) => [day.getTime(), position]));
+  const add = (sourceId: string, day: Date, count: number) => {
+    const position = index.get(day.getTime());
+    if (position !== undefined) perDay[position]!.set(sourceId, count);
+  };
   if (isDevNoDb()) {
-    const perDay = days.map(() => new Map<string, number>());
-    const wanted = new Set(ids);
-    for (const page of crawlMemory().pages.values()) {
-      if (!page.lastFetchedAt || !wanted.has(page.sourceId)) continue;
-      days.forEach((start, index) => {
-        const ts = page.lastFetchedAt!.getTime();
-        if (ts >= start.getTime() && ts < start.getTime() + dayMs) {
-          const map = perDay[index]!;
-          map.set(page.sourceId, (map.get(page.sourceId) ?? 0) + 1);
-        }
-      });
+    const counters = crawlMemory().sourceDays;
+    for (const id of ids) {
+      for (const day of days) {
+        const count = counters.get(sourceDayKey(id, day));
+        if (count !== undefined) add(id, day, count);
+      }
     }
     return perDay;
   }
   if (usesWorkerKysely()) {
-    const perDay: Array<Map<string, number>> = [];
-    for (let index = 0; index < days.length; index += 1) {
-      const start = days[index]!;
-      const rows = await getWorkerDb().selectFrom("CrawlPage")
-        .select(["sourceId"])
-        .select((eb) => eb.fn.countAll<string>().as("count"))
-        .where("sourceId", "in", ids)
-        .where("lastFetchedAt", ">=", start)
-        .where("lastFetchedAt", "<", new Date(start.getTime() + dayMs))
-        .groupBy("sourceId")
-        .execute();
-      perDay.push(new Map(rows.map((row) => [row.sourceId, Number(row.count)])));
-    }
+    const rows = await getWorkerDb().selectFrom("CrawlSourceDay")
+      .select(["sourceId", "day", "pagesFetched"])
+      .where("sourceId", "in", ids).where("day", "in", days).execute();
+    for (const row of rows) add(row.sourceId, new Date(row.day), row.pagesFetched);
     return perDay;
   }
   const { db } = await import("@/lib/db");
-  const perDay: Array<Map<string, number>> = [];
-  for (let index = 0; index < days.length; index += 1) {
-    const start = days[index]!;
-    const rows = await db.crawlPage.groupBy({
-      by: ["sourceId"],
-      where: { sourceId: { in: ids }, lastFetchedAt: { gte: start, lt: new Date(start.getTime() + dayMs) } },
-      _count: { _all: true },
-    });
-    perDay.push(new Map(rows.map((row) => [row.sourceId, row._count._all])));
-  }
+  const rows = await db.crawlSourceDay.findMany({
+    where: { sourceId: { in: ids }, day: { in: days } },
+    select: { sourceId: true, day: true, pagesFetched: true },
+  });
+  for (const row of rows) add(row.sourceId, row.day, row.pagesFetched);
   return perDay;
+}
+
+/** Per-day counters are kept this long; the pause window needs three days. */
+export const SOURCE_DAY_RETENTION_DAYS = 7;
+
+/** Deletes per-day counters older than SOURCE_DAY_RETENTION_DAYS. */
+async function pruneSourceDays(now: Date): Promise<void> {
+  const cutoff = new Date(startOfUtcDay(now).getTime() - SOURCE_DAY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  if (isDevNoDb()) {
+    const counters = crawlMemory().sourceDays;
+    for (const key of [...counters.keys()]) {
+      const day = new Date(key.slice(key.lastIndexOf("|") + 1));
+      if (day < cutoff) counters.delete(key);
+    }
+    return;
+  }
+  if (usesWorkerKysely()) {
+    await getWorkerDb().deleteFrom("CrawlSourceDay").where("day", "<", cutoff).execute();
+    return;
+  }
+  const { db } = await import("@/lib/db");
+  await db.crawlSourceDay.deleteMany({ where: { day: { lt: cutoff } } });
 }
 
 /** Candidate sources with at least one finding since the window opened. */
@@ -473,8 +487,8 @@ async function sourcesWithFindingSince(ids: string[], since: Date): Promise<Set<
  * cron. First it resumes every expired pause on a row that is still
  * disabled and still paused (an admin's switch clears the pause, so it is
  * never overridden); then it pauses each enabled discovered site
- * whose page budget was spent on every day of the three-day window without
- * one finding in the window. A paused site is simply disabled until its 30
+ * whose page budget was spent on every day of the three-day window (the
+ * per-day fetch counters, CrawlSourceDay) without one finding in the window. A paused site is simply disabled until its 30
  * days pass, so the frontier and the crawler's source list need no new
  * rules; days while it was paused fetched no pages, so it cannot be re-paused
  * until it has spent its budget on three fresh days.
@@ -571,5 +585,6 @@ export async function sweepDiscoveredCrawlSources(now = new Date()): Promise<{ p
     })),
   ];
   if (events.length > 0) await writeAuditLogs(events);
+  await pruneSourceDays(now);
   return { paused: toPause.length, resumed: expired.length };
 }

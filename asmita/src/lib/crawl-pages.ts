@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "kysely";
 import { z } from "zod";
-import { crawlMemory, type MemoryCrawlPage } from "@/lib/crawl-store";
+import { crawlMemory, sourceDayKey, type MemoryCrawlPage } from "@/lib/crawl-store";
 import { crawlerShapedUrl, pageOnSourceHost } from "@/lib/crawl-findings";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
@@ -569,6 +570,9 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
   // Visited pages (fetched, not_modified, gone) move the progress counters;
   // blocked and error pages were not fetched, so they do not.
   const visited = updates.filter((u) => u.plan.lastFetchedAt !== null).length;
+  // The per-day counter (CrawlSourceDay) the discovered-site pause reads:
+  // a revisit overwrites lastFetchedAt, the counter keeps each day's total.
+  const day = startOfUtcDay(now);
   if (isDevNoDb()) {
     const memory = crawlMemory();
     for (const { id, plan } of updates) {
@@ -590,6 +594,10 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
         source.pagesCrawled += visited;
         source.lastCrawledAt = now;
       }
+    }
+    if (visited > 0) {
+      const key = sourceDayKey(sourceId, day);
+      memory.sourceDays.set(key, (memory.sourceDays.get(key) ?? 0) + visited);
     }
     return;
   }
@@ -615,6 +623,12 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
         await trx.updateTable("CrawlSource")
           .set({ pagesCrawled: (eb) => eb("pagesCrawled", "+", visited), lastCrawledAt: now })
           .where("id", "=", sourceId).execute();
+      }
+      if (visited > 0) {
+        await trx.insertInto("CrawlSourceDay").values({ sourceId, day, pagesFetched: visited })
+          .onConflict((oc) => oc.columns(["sourceId", "day"])
+            .doUpdateSet({ pagesFetched: sql<number>`"CrawlSourceDay"."pagesFetched" + ${visited}` }))
+          .execute();
       }
     });
     return;
@@ -642,6 +656,13 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
       await tx.crawlSource.update({
         where: { id: sourceId },
         data: { pagesCrawled: { increment: visited }, lastCrawledAt: now },
+      });
+    }
+    if (visited > 0) {
+      await tx.crawlSourceDay.upsert({
+        where: { sourceId_day: { sourceId, day } },
+        create: { sourceId, day, pagesFetched: visited },
+        update: { pagesFetched: { increment: visited } },
       });
     }
   });

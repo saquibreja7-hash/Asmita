@@ -12,6 +12,7 @@ const db = vi.hoisted(() => {
   const self = {
     crawlSource: { findUnique: fn(), update: fn() },
     crawlPage: { count: fn(), create: fn(), findMany: fn(), update: fn(), createMany: fn(), updateMany: fn(), deleteMany: fn() },
+    crawlSourceDay: { upsert: fn() },
     $queryRaw: fn(),
     $executeRaw: fn(),
     $transaction: fn(),
@@ -51,6 +52,7 @@ beforeEach(() => {
   db.crawlPage.updateMany.mockResolvedValue({ count: 0 });
   db.crawlPage.deleteMany.mockResolvedValue({ count: 0 });
   db.crawlSource.update.mockResolvedValue({});
+  db.crawlSourceDay.upsert.mockResolvedValue({});
   db.$queryRaw.mockResolvedValue([]);
   db.$transaction.mockImplementation(async (run: (tx: typeof db) => unknown) => run(db));
 });
@@ -158,6 +160,13 @@ describe("reportCrawlPages, Prisma path", () => {
       where: { id: SOURCE.id },
       data: { pagesCrawled: { increment: 1 }, lastCrawledAt: NOW },
     });
+    // The per-day fetch counter for the UTC day (review fix).
+    const day = new Date("2026-11-17T00:00:00Z");
+    expect(db.crawlSourceDay.upsert).toHaveBeenCalledWith({
+      where: { sourceId_day: { sourceId: SOURCE.id, day } },
+      create: { sourceId: SOURCE.id, day, pagesFetched: 1 },
+      update: { pagesFetched: { increment: 1 } },
+    });
   });
 
   it("a dead row is never resurrected and is not counted", async () => {
@@ -166,6 +175,7 @@ describe("reportCrawlPages, Prisma path", () => {
     expect(accepted).toBe(0);
     expect(db.crawlPage.update).not.toHaveBeenCalled();
     expect(db.crawlSource.update).not.toHaveBeenCalled();
+    expect(db.crawlSourceDay.upsert).not.toHaveBeenCalled();
   });
 });
 

@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // one blocked-host read, then a LOCK-protected transaction (today's
 // auto-enabled count plus one createMany with skipDuplicates plus one read
 // for the created rows), and one batched audit insert. Promotion is one
-// conditional update; the pause sweep is a bounded set of groupBy counts and
-// one updateMany each way. Placeholder hosts only.
+// conditional update; the pause sweep is one read of the per-day fetch
+// counters (CrawlSourceDay), one updateMany each way and one prune of old
+// counters. Placeholder hosts only.
 
 const db = vi.hoisted(() => {
   const fn = () => vi.fn();
@@ -14,6 +15,7 @@ const db = vi.hoisted(() => {
     crawlSource: { findUnique: fn(), findMany: fn(), count: fn(), createMany: fn(), update: fn(), updateMany: fn() },
     crawlBlockedHost: { findMany: fn(), findFirst: fn() },
     crawlPage: { groupBy: fn(), count: fn() },
+    crawlSourceDay: { findMany: fn(), deleteMany: fn() },
     crawlFinding: { findMany: fn() },
     auditLog: { findFirst: fn(), createMany: fn() },
     $transaction: fn(),
@@ -36,6 +38,8 @@ beforeEach(() => {
   db.$executeRawUnsafe.mockResolvedValue(undefined);
   db.crawlSource.findUnique.mockResolvedValue({ id: "src-1", hops: 0, enabled: true });
   db.crawlSource.findMany.mockResolvedValue([]);
+  db.crawlSourceDay.findMany.mockResolvedValue([]);
+  db.crawlSourceDay.deleteMany.mockResolvedValue({ count: 0 });
   db.crawlSource.count.mockResolvedValue(0);
   db.crawlSource.createMany.mockResolvedValue({ count: 0 });
   db.crawlSource.update.mockResolvedValue({});
@@ -144,15 +148,24 @@ describe("sweepDiscoveredCrawlSources, Prisma path", () => {
     db.crawlSource.findMany
       .mockResolvedValueOnce([]) // expired pauses
       .mockResolvedValueOnce([{ id: "disc-1", domain: "found.example.org", pageBudget: 2 }]); // candidates
-    // The fake answers each of the three day-count groupBys alike.
-    db.crawlPage.groupBy.mockResolvedValue([{ sourceId: "disc-1", _count: { _all: 2 } }]);
+    // The per-day fetch counters: the budget was spent on each of the three days.
+    const days = [0, 1, 2].map((back) => new Date(Date.UTC(2026, 10, 17 - back)));
+    db.crawlSourceDay.findMany.mockResolvedValue(days.map((day) => ({ sourceId: "disc-1", day, pagesFetched: 2 })));
     db.crawlFinding.findMany.mockResolvedValue([]);
 
     const result = await sweepDiscoveredCrawlSources(NOW);
     expect(result).toEqual({ paused: 1, resumed: 0 });
 
-    expect(db.crawlPage.groupBy).toHaveBeenCalledTimes(3);
-    expect(db.crawlPage.groupBy.mock.calls[0][0]).toMatchObject({ by: ["sourceId"], where: { sourceId: { in: ["disc-1"] }, lastFetchedAt: { gte: expect.any(Date), lt: expect.any(Date) } } });
+    // One read of the counters for the whole window, never CrawlPage.lastFetchedAt
+    // (a revisit overwrites it — review fix).
+    expect(db.crawlPage.groupBy).not.toHaveBeenCalled();
+    expect(db.crawlSourceDay.findMany).toHaveBeenCalledTimes(1);
+    expect(db.crawlSourceDay.findMany.mock.calls[0][0]).toEqual({
+      where: { sourceId: { in: ["disc-1"] }, day: { in: days } },
+      select: { sourceId: true, day: true, pagesFetched: true },
+    });
+    // Counters older than a week are pruned.
+    expect(db.crawlSourceDay.deleteMany).toHaveBeenCalledWith({ where: { day: { lt: new Date(Date.UTC(2026, 10, 10)) } } });
     expect(db.crawlFinding.findMany).toHaveBeenCalledWith({ where: { sourceId: { in: ["disc-1"] }, lastSeenAt: { gte: expect.any(Date) } }, select: { sourceId: true }, distinct: ["sourceId"] });
 
     expect(db.crawlSource.updateMany).toHaveBeenCalledTimes(1);
@@ -170,7 +183,7 @@ describe("sweepDiscoveredCrawlSources, Prisma path", () => {
     db.crawlSource.findMany
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: "disc-1", domain: "found.example.org", pageBudget: 2 }]);
-    db.crawlPage.groupBy.mockResolvedValue([{ sourceId: "disc-1", _count: { _all: 5 } }]);
+    db.crawlSourceDay.findMany.mockResolvedValue([0, 1, 2].map((back) => ({ sourceId: "disc-1", day: new Date(Date.UTC(2026, 10, 17 - back)), pagesFetched: 5 })));
     db.crawlFinding.findMany.mockResolvedValue([{ sourceId: "disc-1" }]);
     const result = await sweepDiscoveredCrawlSources(NOW);
     expect(result).toEqual({ paused: 0, resumed: 0 });

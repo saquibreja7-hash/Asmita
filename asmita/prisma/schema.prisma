@@ -507,6 +507,25 @@ model CrawlSource {
 
   findings CrawlFinding[]
   pages    CrawlPage[]
+  days     CrawlSourceDay[]
+}
+
+// Pages a source fetched per UTC day, counted when the crawler reports them
+// (crawler v2 review fix). CrawlPage.lastFetchedAt is overwritten by every
+// revisit, so it cannot say how many pages a source fetched on an earlier
+// day; the discovered-site pause ("budget spent three days running") reads
+// these counters instead. Counts only, no address. The hourly sweep prunes
+// rows older than a week.
+model CrawlSourceDay {
+  sourceId     String
+  // Start of the UTC day.
+  day          DateTime
+  pagesFetched Int      @default(0)
+
+  source CrawlSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([sourceId, day])
+  @@index([day])
 }
 
 // Hosts that must never become a crawl source through the automatic paths,

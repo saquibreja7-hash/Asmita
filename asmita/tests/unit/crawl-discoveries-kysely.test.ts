@@ -218,9 +218,9 @@ describe("sweepDiscoveredCrawlSources, Kysely path", () => {
     // The fake answers every CrawlSource select with the first row, so the
     // same row flows through both the resume scan and the candidates read.
     kysely.state.rows.CrawlSource = [{ id: "disc-1", domain: "found.example.org", origin: "DISCOVERED", enabled: true, hops: 1, pageBudget: 2 }];
-    // The fake answers every CrawlPage select with all rows; the sweep reads
-    // one grouped count per day of the window, so count-shaped rows stand in.
-    kysely.state.rows.CrawlPage = [{ sourceId: "disc-1", count: 2 }];
+    // The per-day fetch counters (review fix: not CrawlPage.lastFetchedAt,
+    // which a revisit overwrites): the budget was spent on all three days.
+    kysely.state.rows.CrawlSourceDay = [0, 1, 2].map((back) => ({ sourceId: "disc-1", day: new Date(Date.UTC(2026, 10, 17 - back)), pagesFetched: 2 }));
     kysely.state.rows.CrawlFinding = [];
 
     const result = await sweepDiscoveredCrawlSources(NOW);
@@ -230,13 +230,12 @@ describe("sweepDiscoveredCrawlSources, Kysely path", () => {
       "select CrawlSource", // expired pauses
       "update CrawlSource", // resume (or clear) them
       "select CrawlSource", // enabled discovered candidates
-      "select CrawlPage", // day 1 counts
-      "select CrawlPage", // day 2 counts
-      "select CrawlPage", // day 3 counts
+      "select CrawlSourceDay", // per-day fetch counters, one read for the window
       "select CrawlFinding", // any finding in the window
       "update CrawlSource", // pause
       "select audit_log", // the batched audit write chains onto the last row
       "insert audit_log", // one batched write, both directions
+      "delete CrawlSourceDay", // prune counters older than a week
     ]);
 
     const [resume, pause] = callsOn("CrawlSource").filter((call) => call.op === "update");

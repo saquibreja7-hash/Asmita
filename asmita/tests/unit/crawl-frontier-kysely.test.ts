@@ -177,6 +177,12 @@ describe("reportCrawlPages, Kysely path", () => {
     const sourceSet = sourceUpdate!.detail.set as Record<string, unknown>;
     expect(sourceSet.lastCrawledAt).toEqual(NOW);
     expect(typeof sourceSet.pagesCrawled).toBe("function"); // pagesCrawled + visited, in SQL
+
+    // The per-day fetch counter (review fix), one upsert for the UTC day.
+    const dayInserts = callsOn("CrawlSourceDay").filter((call) => call.op === "insert");
+    expect(dayInserts).toHaveLength(1);
+    expect(dayInserts[0]!.detail.values).toEqual({ sourceId: SOURCE.id, day: new Date("2026-11-17T00:00:00Z"), pagesFetched: 1 });
+    expect(dayInserts[0]!.detail.onConflict).toBe(true);
   });
 
   it("a 200-page report is a bounded number of statements", async () => {
