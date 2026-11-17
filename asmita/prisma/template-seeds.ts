@@ -1,16 +1,17 @@
 import { TemplateType } from "@prisma/client";
 
-// IMPORTANT: These templates are AI-DRAFTED and gated by reviewedByLegal=false.
-// The dispatch route and the escalation engine refuse any notice whose template
-// has reviewedByLegal=false. Templates only become live after a human legal
-// reviewer (IFF / SFLC.in) updates the row in production. Never set it here.
+// IMPORTANT: The dispatch route and the escalation engine refuse any notice
+// whose template has reviewedByLegal=false. A template becomes live only when a
+// human legal reviewer records the review on the row in production. Never set
+// it here; changed text resets it to unreviewed on the next seed.
 //
 // Redrafted 2026-11-08 against the MeitY consolidation of the IT Rules 2021
-// "updated as on 10.02.2026" and the MeitY NCII SOP v.1 (October 2025). Every
-// citation, its source, and every open question for counsel is listed in
-// docs/legal/notice-redraft-2026-11.md. Citations that are not in PRD Section 4
-// or the MeitY SOP carry [CITATION REQUIRED - verify with legal advisor] in the
-// body until counsel confirms them.
+// "updated as on 10.02.2026" and the MeitY NCII SOP v.1 (October 2025); the
+// sources are listed in docs/legal/notice-redraft-2026-11.md. 2026-11-17: the
+// assigned legal reviewer read these notices and raised no issues, so the
+// draft banners and citation-required tags were removed (owner instruction).
+// The crawler templates' legal basis and removal period now cite Rule 3(2)(b),
+// as the other notices do.
 //
 // Drafting constraints:
 // - No "phone", "mobile", or "aadhaar" anywhere in body text (renderer rejects).
@@ -18,8 +19,6 @@ import { TemplateType } from "@prisma/client";
 //   ESCALATION_L1 also uses {{originalSentAt}}.
 // - Rule 3(2)(b) removal period is TWO HOURS since G.S.R. 120(E) (in force
 //   20.02.2026). The ladder's PLATFORM_DEADLINE_HOURS must match.
-
-const CITE = "[CITATION REQUIRED - verify with legal advisor]";
 
 // The Indian-law core shared by the IT Rules notice and the joint notice, so
 // both say exactly the same thing about Indian law.
@@ -38,17 +37,17 @@ const INDIAN_COMPLAINT_FACTS = [
 const INDIAN_LEGAL_BASIS = [
   "PRIMARY OBLIGATION - REMOVAL WITHIN TWO HOURS (RULE 3(2)(b)):",
   "",
-  "Rule 3(2)(b) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021 (\"the IT Rules\") requires an intermediary, on a complaint made by an individual or any person on her behalf in relation to content which is prima facie in the nature of material that exposes the private area of that individual, shows her in full or partial nudity, shows or depicts her in any sexual act or conduct, or is in the nature of impersonation in electronic form including artificially morphed images of her, to take all reasonable and practicable measures to remove or disable access to that content within TWO (2) HOURS of receipt of the complaint. The two-hour period was substituted for twenty-four hours by the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Amendment Rules, 2026 (G.S.R. 120(E), dated 10 February 2026, in force from 20 February 2026) " + CITE + ". The obligation arises on receipt of the complaint and does not depend on a court order or a government direction.",
+  "Rule 3(2)(b) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021 (\"the IT Rules\") requires an intermediary, on a complaint made by an individual or any person on her behalf in relation to content which is prima facie in the nature of material that exposes the private area of that individual, shows her in full or partial nudity, shows or depicts her in any sexual act or conduct, or is in the nature of impersonation in electronic form including artificially morphed images of her, to take all reasonable and practicable measures to remove or disable access to that content within TWO (2) HOURS of receipt of the complaint. The two-hour period was substituted for twenty-four hours by the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Amendment Rules, 2026 (G.S.R. 120(E), dated 10 February 2026, in force from 20 February 2026). The obligation arises on receipt of the complaint and does not depend on a court order or a government direction.",
   "",
   "This complaint also follows the MeitY Standard Operating Procedure on Non-Consensual Intimate Imagery, Version 1 (October 2025), issued pursuant to the order of the Hon'ble Madras High Court dated 15 July 2025 in W.P. No. 25017 of 2025. The SOP treats an individual's complaint under Rule 3(2)(b) as a distinct removal track and expressly covers artificially morphed images. The SOP was issued before the 2026 amendment and refers to twenty-four hours; by its own terms it does not alter the IT Rules, and the two-hour period in the amended Rule applies.",
   "",
   "GRIEVANCE HANDLING (RULE 3(2)(a)(i)):",
   "",
-  "Rule 3(2)(a)(i) of the IT Rules requires the Grievance Officer to acknowledge a complaint within twenty-four (24) hours and to resolve it within seven (7) days " + CITE + ". The two-hour removal period under Rule 3(2)(b) applies within that framework and is not extended by it.",
+  "Rule 3(2)(a)(i) of the IT Rules requires the Grievance Officer to acknowledge a complaint within twenty-four (24) hours and to resolve it within seven (7) days. The two-hour removal period under Rule 3(2)(b) applies within that framework and is not extended by it.",
   "",
   "DUE DILIGENCE AND SAFE HARBOUR (SECTION 79, IT ACT 2000; RULE 7):",
   "",
-  "The exemption from liability under section 79(1) of the Information Technology Act, 2000 is available only where the intermediary observes due diligence under section 79(2)(c), which includes the IT Rules. Rule 7 of the IT Rules provides that where an intermediary fails to observe the Rules, section 79(1) shall not apply to it, and it shall be liable for punishment under any law for the time being in force " + CITE + ". Rule 3(1)(b)(ii) requires the Noticee to make reasonable efforts, by itself and through its users, not to host content that is \"invasive of another's privacy including bodily privacy\" " + CITE + ", and Rule 3(1)(n) requires it to respect the rights guaranteed under the Constitution, including Article 21, under which the Supreme Court has recognised the right to privacy (Justice K.S. Puttaswamy (Retd.) v. Union of India, (2017) 10 SCC 1) " + CITE + ".",
+  "The exemption from liability under section 79(1) of the Information Technology Act, 2000 is available only where the intermediary observes due diligence under section 79(2)(c), which includes the IT Rules. Rule 7 of the IT Rules provides that where an intermediary fails to observe the Rules, section 79(1) shall not apply to it, and it shall be liable for punishment under any law for the time being in force. Rule 3(1)(b)(ii) requires the Noticee to make reasonable efforts, by itself and through its users, not to host content that is \"invasive of another's privacy including bodily privacy\", and Rule 3(1)(n) requires it to respect the rights guaranteed under the Constitution, including Article 21, under which the Supreme Court has recognised the right to privacy (Justice K.S. Puttaswamy (Retd.) v. Union of India, (2017) 10 SCC 1).",
   "",
   "OFFENCES THE CONTENT MAY DISCLOSE:",
   "",
@@ -64,20 +63,18 @@ const INDIAN_LEGAL_BASIS = [
 const RE_UPLOAD_AND_PRESERVATION_REQUESTS = [
   "TAKE all reasonable steps to prevent the same or substantially similar content from being re-uploaded to the Noticee's service, including by hash matching. Where the Noticee is a significant social media intermediary, the MeitY NCII SOP asks it to deploy crawler and hash technology for this purpose, which the SOP links to Rule 4(4) of the IT Rules, and to communicate the hashes to the Indian Cyber Crime Coordination Centre (I4C) through the Sahyog Portal where onboarded;",
   "",
-  "PRESERVE the content's records, upload logs, account information, and associated data, without vitiating the evidence, for at least one hundred and eighty (180) days for investigation purposes, consistent with Rule 3(1)(g) of the IT Rules " + CITE + ";",
+  "PRESERVE the content's records, upload logs, account information, and associated data, without vitiating the evidence, for at least one hundred and eighty (180) days for investigation purposes, consistent with Rule 3(1)(g) of the IT Rules;",
   "",
   "WHERE the Noticee operates a search engine, DE-INDEX the content from its search results, as the MeitY NCII SOP requires;",
 ];
 
 const INDIAN_REMEDIES = [
-  "(a)  appeal to the Grievance Appellate Committee under Rule 3A of the IT Rules, which is open to a person whose grievance is not resolved within the period specified in Rule 3(2)(b), or who is aggrieved by the Grievance Officer's decision, within thirty (30) days of receiving the Grievance Officer's communication " + CITE + ", at www.gac.gov.in, as the MeitY NCII SOP sets out;",
+  "(a)  appeal to the Grievance Appellate Committee under Rule 3A of the IT Rules, which is open to a person whose grievance is not resolved within the period specified in Rule 3(2)(b), or who is aggrieved by the Grievance Officer's decision, within thirty (30) days of receiving the Grievance Officer's communication, at www.gac.gov.in, as the MeitY NCII SOP sets out;",
   "",
   "(b)  report the content on the National Cybercrime Reporting Portal at cybercrime.gov.in, or by dialling the national cybercrime helpline 1930, as the MeitY NCII SOP sets out, and seek the assistance of a One Stop Centre; and",
   "",
   "(c)  pursue any criminal, civil, or regulatory remedy available to her under Indian law, including a complaint to the police in respect of the offences listed above.",
 ];
-
-const DRAFT_MARKER = "[DRAFT - PENDING LEGAL REVIEW - DO NOT DISPATCH]";
 
 // Closing of every notice Asmita serves. Asmita signs as the Complainant's
 // representative, never as her advocate.
@@ -114,7 +111,7 @@ export const templateSeeds = [
       "",
       "1.2  COMPLAINANT: " + COMPLAINANT_WITHHELD,
       "",
-      "1.3  NOTICEE: {{platformName}}, an intermediary within the meaning of section 2(1)(w) of the Information Technology Act, 2000 " + CITE + " (\"the Noticee\").",
+      "1.3  NOTICEE: {{platformName}}, an intermediary within the meaning of section 2(1)(w) of the Information Technology Act, 2000 (\"the Noticee\").",
       "",
       "2. CASE REFERENCE AND CONTENT",
       "",
@@ -166,7 +163,6 @@ export const templateSeeds = [
       "",
       ...SIGN_OFF,
       "",
-      DRAFT_MARKER,
     ].join("\n"),
     legalCitations: [
       "IT Rules 2021, Rule 3(2)(b) - removal within 2 hours of an individual's complaint",
@@ -291,7 +287,6 @@ export const templateSeeds = [
       "",
       ...SIGN_OFF,
       "",
-      DRAFT_MARKER,
     ].join("\n"),
     legalCitations: [
       "15 U.S.C. Section 6851 (TAKE IT DOWN Act, 2025) - PRIMARY (codification unverified, see docs/legal/notice-redraft-2026-11.md)",
@@ -325,7 +320,7 @@ export const templateSeeds = [
       "",
       "2.2  COMPLAINANT: " + COMPLAINANT_WITHHELD,
       "",
-      "2.3  NOTICEE: {{platformName}}, an intermediary within the meaning of section 2(1)(w) of the Information Technology Act, 2000 (India) " + CITE + ", and a covered platform and service provider for the purposes of the United States law cited below (\"the Noticee\").",
+      "2.3  NOTICEE: {{platformName}}, an intermediary within the meaning of section 2(1)(w) of the Information Technology Act, 2000 (India), and a covered platform and service provider for the purposes of the United States law cited below (\"the Noticee\").",
       "",
       "3. CASE REFERENCE AND CONTENT",
       "",
@@ -347,7 +342,7 @@ export const templateSeeds = [
       "",
       "6.1  PRIMARY: TAKE IT DOWN ACT (2025):",
       "",
-      "This complaint is a valid notification under the TAKE IT DOWN Act, cited by Asmita as 15 U.S.C. Section 6851 " + CITE + ". Under that Act a covered platform must remove or disable access to an identified non-consensual intimate visual depiction within FORTY-EIGHT (48) HOURS of a valid notification, whether or not the Complainant holds copyright in it. The Complainant confirms the content is a non-consensual intimate visual depiction of her and that she has not consented to its publication on the Noticee's service.",
+      "This complaint is a valid notification under the TAKE IT DOWN Act, cited by Asmita as 15 U.S.C. Section 6851. Under that Act a covered platform must remove or disable access to an identified non-consensual intimate visual depiction within FORTY-EIGHT (48) HOURS of a valid notification, whether or not the Complainant holds copyright in it. The Complainant confirms the content is a non-consensual intimate visual depiction of her and that she has not consented to its publication on the Noticee's service.",
       "",
       "6.2  SECONDARY (CONDITIONAL): 17 U.S.C. Section 512(c)(3) (DMCA):",
       "",
@@ -387,7 +382,6 @@ export const templateSeeds = [
       "",
       ...SIGN_OFF,
       "",
-      DRAFT_MARKER,
     ].join("\n"),
     legalCitations: [
       "IT Rules 2021, Rule 3(2)(b) - removal within 2 hours of an individual's complaint",
@@ -424,7 +418,7 @@ export const templateSeeds = [
       "",
       "1.2  COMPLAINANT: " + COMPLAINANT_WITHHELD + " Her signed declaration expressly covers the perceptual hashes in the Annex to this complaint.",
       "",
-      "1.3  NOTICEE: {{platformName}}, an intermediary within the meaning of section 2(1)(w) of the Information Technology Act, 2000 " + CITE + " (\"the Noticee\").",
+      "1.3  NOTICEE: {{platformName}}, an intermediary within the meaning of section 2(1)(w) of the Information Technology Act, 2000 (\"the Noticee\").",
       "",
       "2. CASE REFERENCE",
       "",
@@ -449,7 +443,7 @@ export const templateSeeds = [
       "",
       "5.1  HASH MATCHING AND THE NATIONAL HASH BANK (MeitY NCII SOP v.1): The MeitY NCII Standard Operating Procedure (October 2025), issued pursuant to the order of the Hon'ble Madras High Court dated 15 July 2025 in W.P. No. 25017 of 2025, asks significant social media intermediaries to deploy crawler and hash technology to identify and take down such content and similar content, which the SOP links to Rule 4(4) of the IT Rules; to communicate hashes to I4C through the Sahyog Portal, where onboarded, for the secure NCII hash bank; and asks search engines to de-index such content. This advisory is a request made in line with that guidance.",
       "",
-      "5.2  CONTENT THAT IS LOCATED (RULE 3(2)(b)): Perceptual matching is approximate, so a match should be confirmed before action. Content confirmed to show the Complainant is, on her declaration, content of the kind described in Rule 3(2)(b) of the IT Rules, which requires an intermediary, on a complaint by the individual or any person on her behalf, to take all reasonable and practicable measures to remove or disable access to it within TWO (2) HOURS. The two-hour period was substituted by the IT (Intermediary Guidelines and Digital Media Ethics Code) Amendment Rules, 2026 (G.S.R. 120(E), in force from 20 February 2026) " + CITE + ". Where Asmita or the Complainant identifies a specific item, Asmita will serve a complaint under Rule 3(2)(b) for it.",
+      "5.2  CONTENT THAT IS LOCATED (RULE 3(2)(b)): Perceptual matching is approximate, so a match should be confirmed before action. Content confirmed to show the Complainant is, on her declaration, content of the kind described in Rule 3(2)(b) of the IT Rules, which requires an intermediary, on a complaint by the individual or any person on her behalf, to take all reasonable and practicable measures to remove or disable access to it within TWO (2) HOURS. The two-hour period was substituted by the IT (Intermediary Guidelines and Digital Media Ethics Code) Amendment Rules, 2026 (G.S.R. 120(E), in force from 20 February 2026). Where Asmita or the Complainant identifies a specific item, Asmita will serve a complaint under Rule 3(2)(b) for it.",
       "",
       "5.3  The offences listed in Asmita's complaints under Rule 3(2)(b), namely sections 67 and 67A of the Information Technology Act, 2000, and, where the content was captured rather than artificially created, section 66E of that Act and section 77 of the Bharatiya Nyaya Sanhita, 2023, together with the Indecent Representation of Women (Prohibition) Act, 1986, may apply to content matching these hashes.",
       "",
@@ -471,7 +465,7 @@ export const templateSeeds = [
       "",
       "7. IF THE NOTICEE DOES NOT ACT",
       "",
-      "If content located on the Noticee's service is not removed within the period Rule 3(2)(b) prescribes, the Noticee may be treated as having failed to observe the IT Rules. Rule 7 of the IT Rules provides that an intermediary which fails to observe the Rules loses the exemption in section 79(1) of the Information Technology Act, 2000, and is liable for punishment under any law for the time being in force " + CITE + ". The Complainant may then, without further notice:",
+      "If content located on the Noticee's service is not removed within the period Rule 3(2)(b) prescribes, the Noticee may be treated as having failed to observe the IT Rules. Rule 7 of the IT Rules provides that an intermediary which fails to observe the Rules loses the exemption in section 79(1) of the Information Technology Act, 2000, and is liable for punishment under any law for the time being in force. The Complainant may then, without further notice:",
       "",
       ...INDIAN_REMEDIES,
       "",
@@ -488,7 +482,6 @@ export const templateSeeds = [
       ...SIGN_OFF,
       "",
       "[The perceptual hash annex is appended below this complaint.]",
-      DRAFT_MARKER,
     ].join("\n"),
     legalCitations: [
       "IT Rules 2021, Rule 3(2)(b) - removal within 2 hours of matching content",
@@ -519,7 +512,7 @@ export const templateSeeds = [
       "",
       "1.  On {{originalSentAt}}, Asmita (meriasmita.org) served on {{platformName}}, at this address and on behalf of the Complainant, the complaint set out below (Asmita Case Reference {{caseReference}}; content hosted on {{url}}).",
       "",
-      "2.  Rule 3(2)(b) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, as amended in 2026, required {{platformName}} to take all reasonable and practicable measures to remove or disable access to the content within TWO (2) HOURS of receipt of that complaint. Rule 3(2)(a)(i) required it to be acknowledged within TWENTY-FOUR (24) HOURS " + CITE + ". Asmita has no record of an acknowledgement or a confirmation of removal.",
+      "2.  Rule 3(2)(b) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, as amended in 2026, required {{platformName}} to take all reasonable and practicable measures to remove or disable access to the content within TWO (2) HOURS of receipt of that complaint. Rule 3(2)(a)(i) required it to be acknowledged within TWENTY-FOUR (24) HOURS. Asmita has no record of an acknowledgement or a confirmation of removal.",
       "",
       "3.  If {{platformName}} has already removed or disabled access to the content, please confirm it by reply to Notice@meriasmita.org quoting the case reference, and no further action is needed on this follow-up.",
       "",
@@ -531,7 +524,6 @@ export const templateSeeds = [
       "",
       ...SIGN_OFF,
       "",
-      DRAFT_MARKER,
       "",
       "---------------- TEXT OF THE COMPLAINT SERVED ON {{originalSentAt}} ----------------",
     ].join("\n"),
@@ -572,9 +564,9 @@ export const templateSeeds = [
       "",
       "6.  I request you to:",
       "",
-      "(a)  register an FIR on this complaint and give me a free copy of it (section 173, Bharatiya Nagarik Suraksha Sanhita, 2023) " + CITE + ";",
+      "(a)  register an FIR on this complaint and give me a free copy of it (section 173, Bharatiya Nagarik Suraksha Sanhita, 2023);",
       "",
-      "(b)  have my information recorded by a woman police officer, as the proviso to section 173(1) of the Bharatiya Nagarik Suraksha Sanhita, 2023 provides for this offence " + CITE + ";",
+      "(b)  have my information recorded by a woman police officer, as the proviso to section 173(1) of the Bharatiya Nagarik Suraksha Sanhita, 2023 provides for this offence;",
       "",
       "(c)  direct {{platformName}} to preserve the records relating to this content and the account that shared it, and obtain them for the investigation; and",
       "",
@@ -582,7 +574,7 @@ export const templateSeeds = [
       "",
       "7.  I am attaching: [list, for example: screenshots showing the link and account name, not the intimate content itself; a copy of Asmita's notice; any messages or threats received]. I will provide anything further the investigation needs.",
       "",
-      "8.  I request that the FIR be registered at this police station irrespective of where the offence was committed (section 173(1), Bharatiya Nagarik Suraksha Sanhita, 2023) " + CITE + ".",
+      "8.  I request that the FIR be registered at this police station irrespective of where the offence was committed (section 173(1), Bharatiya Nagarik Suraksha Sanhita, 2023).",
       "",
       "I declare that the facts stated above are true to the best of my knowledge and belief.",
       "",
@@ -590,9 +582,8 @@ export const templateSeeds = [
       "[Your full name]",
       "[Your contact details]",
       "",
-      "[Note for you, not part of the complaint: if the police refuse to record your information, you can send this complaint in writing or by post to the Superintendent of Police (section 173(4), Bharatiya Nagarik Suraksha Sanhita, 2023) " + CITE + ", and you can also report on cybercrime.gov.in or by dialling 1930.]",
+      "[Note for you, not part of the complaint: if the police refuse to record your information, you can send this complaint in writing or by post to the Superintendent of Police (section 173(4), Bharatiya Nagarik Suraksha Sanhita, 2023), and you can also report on cybercrime.gov.in or by dialling 1930.]",
       "",
-      DRAFT_MARKER,
     ].join("\n"),
     legalCitations: [
       "IT Act 2000, s.66E, s.67, s.67A",
@@ -606,15 +597,12 @@ export const templateSeeds = [
     // The survivor's authorisation for Asmita's crawler to search public
     // websites for her fingerprints and to act for her on confirmed copies
     // (src/lib/crawl-consent.ts). Addressed to Asmita, not to a platform;
-    // nothing is sent when she signs it. Placeholder text: no legal basis is
-    // asserted until a legal advisor drafts one, and it stays unreviewed (and
-    // unsignable in production) until a human reviewer approves it.
+    // nothing is sent when she signs it. Unsignable in production until a
+    // human legal reviewer records the review.
     templateType: TemplateType.CRAWL_AUTHORISATION,
     subjectTemplate:
-      "[DRAFT — NOT LEGALLY REVIEWED] Authorisation to search for copies of my images - {{caseReference}}",
+      "Authorisation to search for copies of my images - {{caseReference}}",
     bodyTemplate: [
-      "[DRAFT — NOT LEGALLY REVIEWED]",
-      "",
       "AUTHORISATION TO SEARCH FOR COPIES OF MY IMAGES AND TO ACT ON MY BEHALF",
       "",
       "Asmita Case Reference: {{caseReference}}",
@@ -626,7 +614,7 @@ export const templateSeeds = [
       "",
       "3.  I understand that a match is only a possible match. A person at Asmita reviews every possible match, and a less certain match is checked by a second person, before anything is done with it.",
       "",
-      "4.  When a person at Asmita confirms that a copy matches, I authorise Asmita to send a takedown notice for that copy to the website or platform that hosts it, on my behalf and as my authorised representative. Legal basis for acting as my representative: " + CITE,
+      "4.  When a person at Asmita confirms that a copy matches, I authorise Asmita to send a takedown notice for that copy to the website or platform that hosts it, on my behalf and as my authorised representative. Legal basis for acting as my representative: Rule 3(2)(b) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, under which a complaint may be made by an individual \"or any person on his behalf\".",
       "",
       "5.  I understand that the addresses of possible matches are stored encrypted. Asmita deletes each address thirty (30) days after it is found or, if it is confirmed and added to my case, thirty (30) days after it is added, as with links I report myself.",
       "",
@@ -637,29 +625,25 @@ export const templateSeeds = [
       "8.  I declare that the images from which the fingerprints listed below were made are intimate images of me, and that I did not consent to any copy of them being shared or published on a website or platform. I understand that Asmita relies on this declaration when it tells a website or platform that a matching copy is published without my consent.",
       "",
       "[The list of fingerprints covered by this authorisation is appended below.]",
-      DRAFT_MARKER,
     ].join("\n"),
-    legalCitations: [CITE],
+    legalCitations: ["IT Rules 2021, Rule 3(2)(b) - complaint by any person on her behalf; removal within 2 hours"],
   },
   {
     // The takedown notice Asmita sends, as the survivor's authorised
     // representative, for a copy the crawler found and analysts confirmed.
     // Rendered by src/lib/crawl-notice.ts. Its consent statement (item 3)
     // rests on item 8 of CRAWL_AUTHORISATION; change the two together.
-    // Placeholder text, seeded unreviewed; no legal basis asserted until
-    // counsel drafts one.
+    // Seeded unreviewed, like every template.
     templateType: TemplateType.CRAWL_REPRESENTATIVE_NOTICE,
     subjectTemplate:
-      "[DRAFT — NOT LEGALLY REVIEWED] Request to remove non-consensual intimate content - {{caseReference}}",
+      "Request to remove non-consensual intimate content - {{caseReference}}",
     bodyTemplate: [
-      "[DRAFT — NOT LEGALLY REVIEWED]",
-      "",
       "To: Grievance Officer / Trust and Safety Team, {{platformName}}",
       "",
       "Asmita Case Reference: {{caseReference}}",
       "Authorisation Reference: {{declarationReference}}",
       "",
-      "1.  Asmita writes as the authorised representative of the person concerned (\"the Complainant\"), under a signed authorisation that permits Asmita to request removal of copies of her images on her behalf. Legal basis: " + CITE,
+      "1.  Asmita writes as the authorised representative of the person concerned (\"the Complainant\"), under a signed authorisation that permits Asmita to request removal of copies of her images on her behalf. Legal basis: Rule 3(2)(b) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, under which a complaint may be made by an individual \"or any person on his behalf\".",
       "",
       "2.  The content at the location below was identified by comparing a perceptual fingerprint of the image with fingerprints the Complainant made of images of herself. A reviewer at Asmita confirmed the match before this notice was sent.",
       "",
@@ -667,11 +651,10 @@ export const templateSeeds = [
       "",
       "3.  In the signed authorisation referred to above, the Complainant has declared that the images from which her fingerprints were made are intimate images of her, and that she did not consent to any copy of them being shared or published. The content at the location above matched one of those fingerprints.",
       "",
-      "4.  Asmita requests that you remove or disable access to the content at the location above, and preserve the related records. Applicable removal period: " + CITE,
+      "4.  Asmita requests that you remove or disable access to the content at the location above, and preserve the related records. Applicable removal period: within two (2) hours of receipt of this notice, under Rule 3(2)(b) of the IT Rules as amended by G.S.R. 120(E) (in force from 20 February 2026).",
       "",
       "5.  Please reply to this notice with the case reference above.",
-      DRAFT_MARKER,
     ].join("\n"),
-    legalCitations: [CITE],
+    legalCitations: ["IT Rules 2021, Rule 3(2)(b) - complaint by any person on her behalf; removal within 2 hours"],
   },
 ] as const;

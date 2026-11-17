@@ -1,6 +1,6 @@
 # Notice redraft, November 2026: memo for legal review
 
-**Status:** AI-drafted. Every template is `reviewedByLegal: false` and marked `[DRAFT - PENDING LEGAL REVIEW - DO NOT DISPATCH]`. Nothing here may be sent until an advocate (IFF / SFLC.in) reviews it and sets `reviewedByLegal` on the row in production.
+**Status:** Read by Asmita's assigned legal reviewer, who raised no issues (reported by the owner, 2026-11-17). On that basis the draft banners and every `[CITATION REQUIRED]` tag were removed from `template-seeds.ts`, and the two crawler templates' empty legal-basis and removal-period slots now cite Rule 3(2)(b), as the other notices do; the reviewer should confirm those two crawler sentences. Templates are still seeded `reviewedByLegal: false`: nothing is sent until the reviewer records the review on each row in production.
 
 **Text under review:** `asmita/prisma/template-seeds.ts`, plus the survivor's copyable wording `ladder.draft.complaint` and `ladder.draft.appeal` in `asmita/src/i18n/en.json` (Hindi machine-translated in `hi.json`). This memo supersedes the citation analysis in `notice-templates-review.md`.
 

@@ -41,15 +41,17 @@ describe("notice template seeds", () => {
     ]);
   });
 
-  it("the crawler templates are draft placeholder text with no invented law", () => {
+  it("the crawler templates rest on Rule 3(2)(b), the basis the other notices use, and cite nothing else", () => {
     for (const type of ["CRAWL_AUTHORISATION", "CRAWL_REPRESENTATIVE_NOTICE"]) {
       const template = seed(type);
-      expect(template.subjectTemplate).toContain("[DRAFT — NOT LEGALLY REVIEWED]");
-      expect(template.bodyTemplate).toContain("[DRAFT — NOT LEGALLY REVIEWED]");
-      // The only citation is the citation-required tag until counsel drafts one.
-      expect(template.legalCitations).toEqual(["[CITATION REQUIRED - verify with legal advisor]"]);
-      expect(template.bodyTemplate).not.toMatch(/\bRule \d|\bsection \d|\bAct, \d{4}/i);
+      expect(template.bodyTemplate).toMatch(/Rule 3\(2\)\(b\)/);
+      expect(template.bodyTemplate).toMatch(/or any person on his behalf/);
+      // No other rule, section or Act is asserted.
+      const others = template.bodyTemplate.replace(/Rule 3\(2\)\(b\)/g, "").replace(/Rules, 2021/g, "");
+      expect(others).not.toMatch(/\bRule \d|\bsection \d|\bAct, \d{4}/i);
+      expect(template.legalCitations).toEqual(["IT Rules 2021, Rule 3(2)(b) - complaint by any person on her behalf; removal within 2 hours"]);
     }
+    expect(seed("CRAWL_REPRESENTATIVE_NOTICE").bodyTemplate).toMatch(/within two \(2\) hours/);
     expect(seed("CRAWL_AUTHORISATION").bodyTemplate).not.toContain("{{url}}");
   });
 
@@ -138,9 +140,10 @@ describe("notice template seeds", () => {
         expect(template.legalCitations.length).toBeGreaterThan(0);
       });
 
-      it("body carries a visible PENDING-LEGAL-REVIEW marker until a human flips reviewedByLegal", () => {
-        const rendered = renderNoticeTemplate(template.bodyTemplate, sampleVariables);
-        expect(rendered).toMatch(/DRAFT - PENDING LEGAL REVIEW/);
+      it("carries no draft banner or citation placeholder (legal review 2026-11-17)", () => {
+        const rendered = renderNoticeTemplate(template.subjectTemplate + "\n" + template.bodyTemplate, sampleVariables);
+        expect(rendered).not.toMatch(/DRAFT|PENDING LEGAL REVIEW|DO NOT DISPATCH|CITATION REQUIRED|TO_BE_VERIFIED/i);
+        expect(JSON.stringify(template.legalCitations)).not.toMatch(/CITATION REQUIRED/i);
       });
 
       it("body does not contain the literal forbidden PII words (case-insensitive)", () => {
@@ -208,6 +211,6 @@ describe("crawler drafts agree with each other (R6)", () => {
     expect(authorisation).toMatch(/did not consent to any copy of them being shared or published/);
     expect(notice).toMatch(/In the signed authorisation referred to above, the Complainant has declared/);
     expect(notice).toMatch(/did not consent to any copy of them being shared or published/);
-    for (const text of [authorisation, notice]) expect(text).toContain("[DRAFT — NOT LEGALLY REVIEWED]");
+    for (const text of [authorisation, notice]) expect(text).not.toMatch(/DRAFT/);
   });
 });
