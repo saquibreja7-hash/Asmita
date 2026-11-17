@@ -87,7 +87,19 @@ export async function runMain(opts: MainOptions): Promise<number> {
   });
 
   try {
-    const result = await runCrawl({ config, api, fetcher, decoder, log, stopSignal: stop.signal });
+    const result = await runCrawl({
+      config,
+      api,
+      fetcher,
+      decoder,
+      log,
+      stopSignal: stop.signal,
+      // The same policy object safe-fetch uses; the browser proxy (WP7)
+      // applies it to all browser traffic. Chromium's location is configured
+      // by PLAYWRIGHT_BROWSERS_PATH when set.
+      policy: opts.policy ?? productionPolicy(),
+      browsersPath: opts.env.PLAYWRIGHT_BROWSERS_PATH,
+    });
     return result.exitCode;
   } catch (raw) {
     // Only the initial load throws (the run itself reports via exitCode).

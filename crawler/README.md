@@ -23,6 +23,10 @@ main.ts -> cli.ts (config, signals, exit codes)
          per claimed page: SafeFetcher (pinned-IP connect, robots, per-host
                 delay; If-None-Match / If-Modified-Since when the app has
                 validators) -> 200 HTML / 304 not modified / 404 gone / error
+         pages that need a browser (render = BROWSER, or AUTO with scripts
+                and no image candidates): BrowserRenderer -> browser worker
+                child (Playwright Chromium, all traffic through the
+                in-process SOCKS proxy; images from intercepted responses)
          extract.ts -> links (in scope, not nofollow) + image candidates
          per image: SafeFetcher -> Buffer -> hash-image.ts (sniff, sharp,
                     prepare.ts, pdq.ts) -> Matcher -> FindingsSink
@@ -38,6 +42,11 @@ batch, reports every outcome and keeps no page state of its own, so a second
 run resumes where the last one stopped, two crawler processes never get the
 same URL, and a killed run loses at most its claimed batch, which the app
 hands out again after the 30-minute claim window.
+
+Pages that need a browser (WP7) are rendered by one more child process
+(`dist/browser-worker.js`, Playwright Chromium, one page at a time), whose
+every network request leaves through an in-process SOCKS proxy that applies
+the same address policy as `safe-fetch`. See "Browser rendering" below.
 
 ### Exit codes
 
@@ -68,7 +77,8 @@ is not a run failure; it is counted in the summary only.
 | **Redirects re-validated.** Manual, max 5, each hop re-checked (scheme, port, credentials, address, robots, page scope). | `SafeFetcher.fetch` loop + `beforeHop`. | `ssrf.test.ts` redirect cases; `tests/integration/crawl.test.ts` (redirect to 10.0.0.1 and 169.254.169.254, loop, off-domain page redirect) |
 | **Byte caps** (10 MB images, 2 MB HTML, 500 KiB robots.txt) while streaming AND after decompression; stacked/unknown encodings refused. | `readCapped`, `decode` (`maxOutputLength`). | `tests/unit/bytes.test.ts` (gzip/brotli/deflate bombs, declared length, chunked stream, timeouts) |
 | **Timeouts**: connect, headers, body idle, and an overall per-request deadline (stops slow drips). | undici options + `AbortSignal.timeout`. | `bytes.test.ts`, fixture `/img/slow.png` |
-| **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active); `tests/unit/config-policy.test.ts` |
+| **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active; since WP7 also a full browser-rendered crawl under the same patch); `tests/unit/config-policy.test.ts` |
+| **Browser traffic is policy-checked too (WP7).** Chromium's every request leaves through an in-process SOCKS proxy that applies the same address policy as `safe-fetch` (resolve every address, refuse if any is blocked, dial the validated address, same port and scheme rules); no direct browser egress (Chromium is launched with `--proxy-bypass-list=<-loopback>` so even loopback destinations go through the proxy, and the fixture hostnames exist only in the test policy's DNS, so a successful render proves the proxy resolved them). | `net/browser-proxy.ts`, `browser/browser-renderer.ts`. | `tests/unit/browser-proxy.test.ts` (raw SOCKS client: tunnel, private-literal refusal, literal-as-domain refusal, hostname-to-private-address refusal, bad port, BIND, bad greeting, per-render byte account destroying over-budget tunnels); `tests/integration/browser.test.ts` (a page script's private-address requests are all refused and the render survives; a robots-disallowed image inside a rendered page is never requested) |
 | **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files decode tolerantly (`failOn: "none"`) but stay bounded by the byte cap and pixel limit. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, light and heavy truncation, AVIF); fixtures `cut.jpg` (matches), `cut-heavy.jpg` (does not) and `pic.avif` |
 | **Service key only to Asmita.** | `AsmitaClient` has its own agent, builds URLs only from `ASMITA_API_URL`, refuses redirects. The crawl fetcher sends no auth or cookie headers. | `crawl.test.ts` "never sends credentials or cookies to crawled hosts"; `client-findings.test.ts` "refuses redirects" |
 | **No URLs, hostnames, fingerprints or bodies in logs.** Field allowlist, string sanitiser, errors reduced to fixed codes; uncaught errors and Node warnings routed through the logger. | `log.ts`, `errors.ts`, `cli.ts`. | `crawl.test.ts` log scan; `tests/integration/process.test.ts` runs the real `runMain` in a child process and scans all of stdout and stderr |
@@ -247,12 +257,105 @@ environment before anything else; key file) and
 `tests/integration/memory-only.test.ts` (full crawl through the child process
 with every parent `fs` writer patched to throw).
 
+## Browser rendering (WP7)
+
+Sources with `render = BROWSER` — and `AUTO` pages whose HTML carries a
+script tag and yields no image candidates — are rendered by headless
+Chromium, because a page that builds its gallery with JavaScript and lazy
+loading is invisible to the static extractor. Rendering is the exception,
+not the default: `render = http` (the default) never launches a browser, and
+a run whose sources need none never spawns the worker.
+
+**Architecture.** A third child process, `dist/browser-worker.js`, hosts
+Playwright Chromium (bundled like the decoder, `playwright-core` external).
+The parent (which owns the pool, the matcher and the service key) talks to
+it over a strictly validated IPC protocol (`browser/protocol.ts`): the same
+rule as the decoder — any unexpected shape, field or id marks the worker as
+misbehaving, and the parent kills and replaces it. One page is rendered at
+a time, always; two browser sources crawling in parallel simply share the
+worker's queue.
+
+**The proxy.** All browser traffic goes through an in-process SOCKS5 proxy
+(`net/browser-proxy.ts`) started by the parent with the same `NetPolicy`
+object safe-fetch uses. Chromium is configured with
+`--proxy-server=socks5://...` and `--proxy-bypass-list=<-loopback>`; with a
+SOCKS proxy Chromium hands the proxy the hostname (remote DNS), so the proxy
+resolves every destination, refuses when any resolved address is blocked,
+and dials the validated address — the address that is checked is the address
+that is connected. A literal destination (a page script asking for
+`10.0.0.1`) is checked directly against the blocklist. There is no second
+network path and no direct browser egress: in the tests, the fixture
+hostnames exist only in the test policy's DNS table, so a successful render
+proves every request went through the proxy.
+
+**Robots and scope.** The worker intercepts every request the page wants to
+make before it leaves: a per-page request cap aborts the excess, navigation
+requests must stay inside the source's host (or a subdomain), and every
+request — including subresources — waits for the parent's verdict, which is
+robots.txt checked (the parent owns the robots cache; a URL the network
+policy itself would refuse is denied without a robots fetch). The honest
+User-Agent is Chromium's own with the crawler's appended; there are no
+stealth plugins, no fingerprint spoofing, no proxies beyond this
+policy-enforcing one, and no logins or CAPTCHA solving.
+
+**Caps per page.** A deadline (`BROWSER_PAGE_TIMEOUT_MS`, default 30 s), a
+bounded number of scroll steps (`BROWSER_SCROLLS`, default 5) to trigger
+lazy loading, a request cap (`BROWSER_MAX_REQUESTS_PER_PAGE`, default 300,
+excess aborted before the network), a byte budget at the proxy
+(`BROWSER_MAX_PAGE_BYTES`, default 64 MiB over all tunnels; the render is
+aborted and the page reported as an error when it is exceeded), and the
+usual image caps (per-image `MAX_IMAGE_BYTES`, per-page
+`MAX_IMAGES_PER_PAGE`).
+
+**Nothing on disk.** No persistent profile (Playwright's throwaway profile
+lives under the worker's `TMPDIR`, which the parent points at
+`BROWSER_TMP_DIR`, a tmpfs — `/dev/shm` in the container, which must be
+given enough space: run with `--shm-size=1g` or `--tmpfs /dev/shm:size=1g`);
+disk cache disabled, downloads refused, service workers blocked. Image
+bytes are taken from intercepted responses in memory, size-capped, and go
+through the same decoder path as every other image. The main process still
+writes nothing.
+
+**The worker's isolation.** The browser worker gets a scrubbed environment
+(no key, no config), runs under Node's permission model (`--permission`:
+reads confined to its own bundle, `playwright-core` and the browser
+directory plus read-only system metadata; writes confined to the memory
+temp dir; child processes allowed because it must spawn Chromium; no
+worker threads, no native addons) and has stdout/stderr discarded — crash
+output never reaches the logs. What that does NOT protect against is the
+same as for the decoder, plus one more: Chromium is native code, so Node's
+permission model does not bind it (its writes go to the tmpfs its
+environment points at), and `--no-sandbox` is passed because the container
+runs read-only without the setuid helper — a Chromium renderer exploit runs
+as the worker's user. Deployment hardening is the same list as the
+decoder's: a different UID for the worker, no egress except through the
+parent's proxy if the platform allows it, and the key as a file.
+
+**What the no-disk test can and cannot observe.** The memory-only test
+patches Node's `fs` in the crawler process and now also runs a full
+browser-rendered crawl under the patch: no write is attempted there. It
+cannot observe the worker child's own filesystem use, which is: Playwright
+creating and deleting the throwaway profile under the memory temp dir
+(Node fs in the child, invisible to the patch), and Chromium's own writes
+into that tmpfs (native code, invisible to any Node-level patch). None of
+it is disk while `BROWSER_TMP_DIR` is a tmpfs; that is a container
+guarantee (the Dockerfile documents the flags), not something a test in
+this repository can enforce.
+
+**Findings from rendered pages.** The page is reported `pageUrl` as claimed
+and the image as the browser fetched it (after redirects), with the image
+bytes that response carried. Links come from the rendered DOM. A rendered
+page reports no ETag/Last-Modified — a render is never conditional-GET
+suppressed, so browser pages are revisited at the 24 h base interval. A
+BROWSER page whose render fails reports `error` (the app backs off); an AUTO
+page whose render fails falls back to its static result.
+
 ## Asmita API contract
 
 Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
 - `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality }] }`
-- `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs, origin: "admin" | "reported" | "discovered", hops, render: "http" | "browser" | "auto" }] }`. `origin` says how a site entered the list: an admin added it, a survivor's submitted link or an approved finding named its host (crawler v2 WP1; the app copies the host only, never the link or the case), or the crawler discovered it by following links (WP5). `hops` is how far it sits from a human-added or survivor-reported site. The crawler treats every enabled source the same whatever its origin.
+- `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs, origin: "admin" | "reported" | "discovered", hops, render: "http" | "browser" | "auto" }] }`. `origin` says how a site entered the list: an admin added it, a survivor's submitted link or an approved finding named its host (crawler v2 WP1; the app copies the host only, never the link or the case), or the crawler discovered it by following links (WP5). `hops` is how far it sits from a human-added or survivor-reported site. `render` (WP7) says how its pages are fetched: `http` never launches a browser, `browser` renders every page in Chromium, `auto` renders only pages whose HTML has scripts and no image candidates. The crawler treats every enabled source the same whatever its origin.
 - `POST /api/crawler/frontier/claim` `{ sourceId, limit (1..200) }` -> `{ urls: [{ id, url, depth, etag?, lastModified? }] }` (crawler v2 WP3). The app's frontier: the next due pages of one source, claimed for 30 minutes so two crawler instances never get the same URL. A source with no rows yet gets its seed (`https://<domain>/`) created on the first claim. An empty batch means nothing is due (the daily `pageBudget` counts too); an unknown or disabled source answers empty, never an error.
 - `POST /api/crawler/frontier/report` `{ sourceId, runId, pages: [{ id, status: "fetched" | "not_modified" | "gone" | "blocked" | "error", etag?, lastModified?, links: [{ url, kind: "page" | "sitemap" | "feed" }] (max 500) }] }` -> `{ accepted: number }` (crawler v2 WP3). The app schedules the next visit (24 h after fetched, doubling after not_modified up to 14 days, 1 h / 6 h / 24 h after error and dead after five failures, gone dead), stores the new in-scope links deduplicated per source on a keyed digest and counts the pages against the source budget. Retry-safe: a report the server applied but the crawler never saw answered only moves schedules forward. The scope check the crawler does is repeated by the app on every link.
 - `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and already-known findings alike, so the crawler cannot tell whether two pool ids belong to one case; the old `"created"` / `"duplicate"` are still tolerated and counted as accepted. A page must be on its source's host or a subdomain (`page_not_in_source`, which also sets exit code 4); the image may be on another public host. A page or image address with credentials or a non-default port is refused (`invalid_url`); the crawler never fetches one
@@ -284,10 +387,11 @@ Per-item rejection reasons (`invalid_finding`, `media_payload_rejected`,
 
 The last log line, `run_summary`, holds: outcome, duration, sources crawled,
 pages attempted/fetched/not-modified/non-HTML, the largest claimed frontier
-batch (`batchPeak`), links dropped by the per-page cap, images
-seen/hashed/skipped by reason, matches, findings
-queued/posted/accepted/rejected (by reason)/withdrawn/invalid/failed/unsent,
-pool syncs, robots outcomes, errors by code, page and image budget used.
+batch (`batchPeak`), browser renders attempted/failed/images (WP7), links
+dropped by the per-page cap, images seen/hashed/skipped by reason, matches,
+findings queued/posted/accepted/rejected (by reason)/withdrawn/invalid/
+failed/unsent, pool syncs, robots outcomes, errors by code, page and image
+budget used.
 
 ## Running locally
 
@@ -330,6 +434,12 @@ network activity and the log names only the offending variable names. See
 | `MAX_DEPTH` | 5 | BFS depth from the source home page |
 | `MAX_LINKS_PER_PAGE` / `MAX_IMAGES_PER_PAGE` | 500 / 200 | candidates taken from one page |
 | `FRONTIER_CLAIM_LIMIT` | 50 | pages claimed from the app's frontier per request (1..200); the crawler's whole frontier memory is one batch plus its report |
+| `BROWSER_PAGE_TIMEOUT_MS` | 30000 | deadline for one rendered page, scrolls included (WP7) |
+| `BROWSER_SCROLLS` | 5 | scroll steps per rendered page, to trigger lazy loading (0..20) |
+| `BROWSER_SCROLL_WAIT_MS` | 500 | wait after each scroll for late responses |
+| `BROWSER_MAX_REQUESTS_PER_PAGE` | 300 | requests one rendered page may make; the rest are aborted before the network |
+| `BROWSER_MAX_PAGE_BYTES` | 67108864 | bytes one rendered page may move through the proxy (all tunnels summed) |
+| `BROWSER_TMP_DIR` | /dev/shm | memory-backed directory for Chromium's throwaway profile; must be a tmpfs |
 | `GLOBAL_CONCURRENCY` | 4 | concurrent requests across all hosts |
 | `DECODE_CONCURRENCY` | 1 | decoder child processes (a 25 MP decode is ~100 MB) |
 | `DECODE_TIMEOUT_MS` | 20000 | per-image decode deadline; the child is killed and replaced |
@@ -353,11 +463,23 @@ The source's own `delayMs` applies to its hosts; `pageBudget` caps its pages.
 Nothing here has been deployed.
 
 - Build from the repository root: `docker build -f crawler/Dockerfile -t asmita-crawler .`
-  (BuildKit picks up `crawler/Dockerfile.dockerignore`). Image: distroless
-  `nodejs22-debian12:nonroot`, runs as non-root, sharp's prebuilt libvips.
+  (BuildKit picks up `crawler/Dockerfile.dockerignore`). Since WP7 the
+  runtime image is `node:22-bookworm-slim` (was distroless): Chromium needs
+  its shared-library set, and it is installed by playwright-core's own CLI
+  (`npx playwright-core install --with-deps chromium`), so the browser
+  revision is pinned by the lockfile. Runs as the non-root `node` user,
+  sharp's prebuilt libvips, Chromium at `/app/browsers`
+  (`PLAYWRIGHT_BROWSERS_PATH`).
 - Region `asia-south1` (Mumbai). Create a Cloud Run **job**, not a service:
   `gcloud run jobs create asmita-crawler --region asia-south1 --image <image> --tasks 1 --max-retries 0 --task-timeout 3600s --memory 2Gi --cpu 1`.
   Keep `MAX_RUN_MINUTES` below the task timeout so the run ends gracefully.
+  Chromium makes the image bigger and the job hungrier: give it more memory
+  when browser-rendered sources are enabled, and remember `/dev/shm` (the
+  browser's profile lives there): run with `--shm-size=1g` where the
+  platform allows it, or set `BROWSER_TMP_DIR` to another tmpfs mount. On
+  Cloud Run, `--no-sandbox` (the worker passes it) and the tmpfs suffice;
+  the read-only root filesystem of Cloud Run's container sandbox is fine
+  because the crawler and the worker write nothing to disk.
 - Secrets: store the key in Secret Manager and mount it **as a file**, then
   point `CRAWLER_SERVICE_KEY_FILE` at it (for example
   `--set-secrets /secrets/crawler-service-key=crawler-service-key:latest` with
@@ -378,7 +500,9 @@ Nothing here has been deployed.
 
 ## Known limits
 
-- No JavaScript execution: content rendered client-side is invisible.
+- JavaScript is executed only for sources with `render = BROWSER` or `AUTO`
+  (WP7); for `render = http` (the default) client-side content is invisible
+  by design.
 - PDQ does not survive crops, rotations, flips, heavy overlays or large
   borders; only near-duplicates are found.
 - Public pages only. The crawler never logs in, never sends cookies, and never

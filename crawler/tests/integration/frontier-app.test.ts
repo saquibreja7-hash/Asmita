@@ -38,7 +38,7 @@ describe("conditional GET: a second run does not refetch unchanged pages", () =>
   it("claims nothing while pages are scheduled, then 304s instead of refetching", async () => {
     let clock = Date.parse("2026-11-17T10:00:00Z");
     const api = await mock({
-      sources: [{ id: "src-etag", kind: "site", domain: ETAG_HOST, pageBudget: 50, delayMs: 0 }],
+      sources: [{ id: "src-etag", kind: "site", domain: ETAG_HOST, pageBudget: 50, delayMs: 0, origin: "admin", hops: 0, render: "http" }],
       now: () => clock,
     });
     const site = () => fx.site.requests.filter((r) => r.host === ETAG_HOST && r.path !== "/robots.txt");
@@ -79,7 +79,7 @@ describe("conditional GET: a second run does not refetch unchanged pages", () =>
 
 describe("two crawler processes, one frontier", () => {
   it("never fetch the same URL in the same window and together find everything", async () => {
-    const api = await mock({ sources: [{ id: "src-two", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 0 }] });
+    const api = await mock({ sources: [{ id: "src-two", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 0, origin: "admin", hops: 0, render: "http" }] });
     // The page set an earlier run would have reported, so both processes
     // have real work from their first claim. The depth-2 rows keep the
     // crawler's MAX_DEPTH in force (no /level3 row may be created).
@@ -123,7 +123,7 @@ describe("two crawler processes, one frontier", () => {
 
 describe("a killed run", () => {
   it("loses at most its claimed batch, which becomes due again after 30 minutes", async () => {
-    const api = await mock({ sources: [{ id: "src-kill", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 150 }] });
+    const api = await mock({ sources: [{ id: "src-kill", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 150, origin: "admin", hops: 0, render: "http" }] });
     const isPage = (path: string) => path !== "/robots.txt" && !path.startsWith("/img/") && !path.startsWith("/assets/");
     const baseline = fx.site.requests.length;
     const pageRequests = () => fx.site.requests.slice(baseline).filter((r) => r.host === SOURCE_DOMAIN && isPage(r.path)).length; 

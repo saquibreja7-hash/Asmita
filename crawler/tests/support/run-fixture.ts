@@ -1,4 +1,6 @@
 /** Wire a crawl against the fixture site and mock API (test policy injected in code). */
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { AsmitaClient } from "../../src/asmita/client.ts";
 import { loadConfig } from "../../src/config.ts";
 import { runCrawl, type RunResult } from "../../src/crawler.ts";
@@ -12,11 +14,20 @@ import { loopbackTestPolicy } from "./test-policy.ts";
 export async function runFixtureCrawl(
   site: FixtureSite,
   api: MockAsmita,
-  opts: { env?: Record<string, string>; stopSignal?: AbortSignal; now?: () => number; lines?: string[]; poolResyncMs?: number } = {},
+  opts: {
+    env?: Record<string, string>;
+    stopSignal?: AbortSignal;
+    now?: () => number;
+    lines?: string[];
+    poolResyncMs?: number;
+    /** Extra fake DNS entries for the test policy (e.g. metadata hostnames). */
+    extraDns?: Record<string, string[]>;
+  } = {},
 ): Promise<{ result: RunResult; lines: string[] }> {
   const lines = opts.lines ?? [];
   const config = loadConfig(fixtureEnv(api.url, TEST_KEY, opts.env));
-  const fetcher = new SafeFetcher(loopbackTestPolicy(FIXTURE_HOSTS, site.port), {
+  const policy = loopbackTestPolicy(FIXTURE_HOSTS, site.port, opts.extraDns ?? {});
+  const fetcher = new SafeFetcher(policy, {
     userAgent: config.CRAWLER_USER_AGENT,
     connectTimeoutMs: config.CONNECT_TIMEOUT_MS,
     headersTimeoutMs: config.HEADERS_TIMEOUT_MS,
@@ -45,6 +56,10 @@ export async function runFixtureCrawl(
       stopSignal: opts.stopSignal,
       now: opts.now,
       poolResyncMs: opts.poolResyncMs,
+      // The same test policy drives the browser proxy (WP7); Chromium is the
+      // one Playwright installed for this Node.
+      policy,
+      browsersPath: process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(homedir(), ".cache", "ms-playwright"),
     });
     return { result, lines };
   } finally {

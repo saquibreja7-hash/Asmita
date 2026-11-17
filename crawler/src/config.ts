@@ -48,6 +48,26 @@ export const ConfigSchema = z.object({
    * the claimed batch and the report built from it.
    */
   FRONTIER_CLAIM_LIMIT: int(1, 200, 50),
+  // --- browser rendering (crawler v2 WP7) -----------------------------------
+  // Sources with render = BROWSER, or AUTO pages with scripts and no image
+  // candidates, are rendered by headless Chromium in a child process whose
+  // traffic goes through the in-process proxy (net/browser-proxy.ts).
+  /** Overall deadline for one rendered page, including scrolls. */
+  BROWSER_PAGE_TIMEOUT_MS: int(1000, 300_000, 30_000),
+  /** Scroll steps per page to trigger lazy loading (infinite scroll). */
+  BROWSER_SCROLLS: int(0, 20, 5),
+  /** Wait after each scroll for late responses to land. */
+  BROWSER_SCROLL_WAIT_MS: int(0, 30_000, 500),
+  /** Requests one page may make; the rest are aborted before the network. */
+  BROWSER_MAX_REQUESTS_PER_PAGE: int(1, 10_000, 300),
+  /** Total bytes one page may move through the proxy (tunnels summed). */
+  BROWSER_MAX_PAGE_BYTES: int(1_000_000, 2_000_000_000, 64 * 1024 * 1024),
+  /**
+   * Memory-backed directory for Chromium's throwaway profile and shared
+   * memory. Must be a tmpfs in production (the container documents the
+   * flags); the crawler itself never writes to it.
+   */
+  BROWSER_TMP_DIR: z.string().min(1).max(1024).default("/dev/shm"),
   MAX_HTML_BYTES: int(1024, 20 * 1024 * 1024, 2 * 1024 * 1024),
   MAX_IMAGE_BYTES: int(1024, 50 * 1024 * 1024, 10 * 1024 * 1024),
   MIN_IMAGE_SIDE: int(1, 4096, 64),

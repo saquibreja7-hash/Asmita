@@ -16,7 +16,7 @@ import { loopbackTestPolicy } from "../support/test-policy.ts";
 let fx: Fixture;
 const servers: MockAsmita[] = [];
 
-const source = (delayMs = 0, pageBudget = 50): Source => ({ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget, delayMs });
+const source = (delayMs = 0, pageBudget = 50): Source => ({ id: "src-fixture", kind: "site", domain: SOURCE_DOMAIN, pageBudget, delayMs, origin: "admin", hops: 0, render: "http" });
 
 async function mock(opts: Partial<MockAsmitaOptions> = {}): Promise<MockAsmita> {
   const m = await new MockAsmita({ key: TEST_KEY, pool: fx.pool, sources: [source()], seedUrl: fixtureSeedUrl(fx.site.port), ...opts }).start();
@@ -141,7 +141,7 @@ describe("run lifecycle", () => {
 
   describe("exit codes", () => {
     it("0 for a clean run, even when one source is unreachable", async () => {
-      const down: Source = { id: "src-down", kind: "site", domain: "unreachable.test", pageBudget: 5, delayMs: 0 };
+      const down: Source = { id: "src-down", kind: "site", domain: "unreachable.test", pageBudget: 5, delayMs: 0, origin: "admin", hops: 0, render: "http" };
       const api = await mock({ sources: [source(), down] });
       const { result } = await runFixtureCrawl(fx.site, api);
       expect(result.exitCode).toBe(EXIT.OK);

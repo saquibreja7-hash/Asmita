@@ -23,7 +23,7 @@ beforeAll(async () => {
   api = await new MockAsmita({
     key: TEST_KEY,
     pool: fx.pool,
-    sources: [{ id: "src-flood", kind: "site", domain: FLOOD, pageBudget: BUDGET, delayMs: 0 }],
+    sources: [{ id: "src-flood", kind: "site", domain: FLOOD, pageBudget: BUDGET, delayMs: 0, origin: "admin", hops: 0, render: "http" }],
     seedUrl: fixtureSeedUrl(fx.site.port),
   }).start();
 }, 60_000);
