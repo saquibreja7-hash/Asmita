@@ -84,7 +84,9 @@ describe("recordCrawlDiscoveries, Prisma path", () => {
       lastCrawledAt: null, pagesCrawled: 0, pausedUntil: null, pauseReason: null, disabledReason: null,
     });
     expect(db.crawlSource.createMany.mock.calls[0][0].skipDuplicates).toBe(true);
-    expect(db.crawlSource.findMany.mock.calls[1][0]).toMatchObject({ where: { domain: { in: ["one.example.org"] } } });
+    // Re-read by the ids generated for this report, never by domain (review fix).
+    const generated = db.crawlSource.createMany.mock.calls[0][0].data[0].id;
+    expect(db.crawlSource.findMany.mock.calls[1][0]).toMatchObject({ where: { id: { in: [generated] } } });
 
     // One batched, hash-chained audit write, the service key as the actor.
     expect(db.auditLog.createMany).toHaveBeenCalledTimes(1);
@@ -92,6 +94,16 @@ describe("recordCrawlDiscoveries, Prisma path", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ sequence: 8, previousHash: "previous-hash", eventType: "CRAWL_SOURCE_DISCOVERED", entityId: "disc-1", actorId: "crawler:key-3" });
     expect(rows[0].data).toMatchObject({ action: "crawl_source_discovered", domain: "one.example.org", hops: 1, enabled: true, runId: "run-9" });
+  });
+
+  it("never reports a host another request created meanwhile as its own discovery (review fix)", async () => {
+    vi.stubEnv("AUDIT_LOG_PERSISTENCE", "database");
+    const table = [{ id: "disc-theirs", domain: "one.example.org", hops: 1, enabled: true, disabledReason: null }];
+    db.crawlSource.findMany.mockResolvedValueOnce([]).mockImplementationOnce(async ({ where }: { where: { id?: { in: string[] }; domain?: { in: string[] } } }) =>
+      table.filter((row) => (where.id ? where.id.in.includes(row.id) : where.domain!.in.includes(row.domain))));
+    const { accepted } = await recordCrawlDiscoveries("src-1", "run-9", ["one.example.org"], NOW, "key-3");
+    expect(accepted).toBe(0);
+    expect(db.auditLog.createMany).not.toHaveBeenCalled();
   });
 
   it("respects the daily auto-enable cap from the count inside the lock", async () => {

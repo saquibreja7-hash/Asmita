@@ -273,18 +273,18 @@ async function insertDiscoveredSources(sourceId: string, plans: DiscoveredHostPl
     const ordered = planDiscoveredHosts(plans.map((plan) => plan.host), plans[0]!.hops - 1, alreadyEnabledToday)
       .filter((plan) => plans.some((p) => p.host === plan.host));
     if (ordered.length === 0) return [];
-    await tx.crawlSource.createMany({
-      data: ordered.map((plan) => ({
-        id: randomUUID(), kind: "SITE", domain: plan.host, pageBudget, delayMs,
-        enabled: plan.enabled, approvedBy: null,
-        origin: "DISCOVERED", hops: plan.hops, discoveredFromId: sourceId, render: "HTTP",
-        lastCrawledAt: null, pagesCrawled: 0, pausedUntil: null, pauseReason: null, disabledReason: plan.disabledReason,
-        createdAt: now,
-      })),
-      skipDuplicates: true,
-    });
+    const data = ordered.map((plan) => ({
+      id: randomUUID(), kind: "SITE" as const, domain: plan.host, pageBudget, delayMs,
+      enabled: plan.enabled, approvedBy: null,
+      origin: "DISCOVERED" as const, hops: plan.hops, discoveredFromId: sourceId, render: "HTTP" as const,
+      lastCrawledAt: null, pagesCrawled: 0, pausedUntil: null, pauseReason: null, disabledReason: plan.disabledReason,
+      createdAt: now,
+    }));
+    await tx.crawlSource.createMany({ data, skipDuplicates: true });
+    // Re-read by the ids generated here, never by domain: a row another
+    // request created for the same host is not this report's (review fix).
     const rows = await tx.crawlSource.findMany({
-      where: { domain: { in: ordered.map((plan) => plan.host) } },
+      where: { id: { in: data.map((row) => row.id) } },
       select: { id: true, domain: true, hops: true, enabled: true, disabledReason: true },
     });
     return rows.map((row) => ({

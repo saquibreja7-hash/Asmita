@@ -430,8 +430,10 @@ export async function blockedHostRows(hosts: string[]): Promise<Set<string>> {
  * Inserts the ADMIN sources of one import and returns the rows that were
  * created (id and domain). A host another request created between the check
  * and the insert is skipped, not an error; it reports "exists" above. On the
- * Prisma path createMany returns no ids, so one read settles both which rows
- * exist now and their ids for the audit entries.
+ * Prisma path createMany returns no ids, so the ids are generated here and
+ * one read by those ids settles which of this call's rows were created. A
+ * read by domain would also pick up a row a concurrent request created and
+ * attribute it to this admin (review fix).
  */
 async function insertImportedSources(
   domains: string[],
@@ -470,11 +472,9 @@ async function insertImportedSources(
     return inserted.map((row) => ({ id: row.id, domain: row.domain }));
   }
   const { db } = await import("@/lib/db");
-  await db.crawlSource.createMany({
-    data: domains.map((domain) => ({ domain, pageBudget, delayMs, enabled, approvedBy: actorId })),
-    skipDuplicates: true,
-  });
-  const rows = await db.crawlSource.findMany({ where: { domain: { in: domains } }, select: { id: true, domain: true } });
+  const data = domains.map((domain) => ({ id: randomUUID(), domain, pageBudget, delayMs, enabled, approvedBy: actorId }));
+  await db.crawlSource.createMany({ data, skipDuplicates: true });
+  const rows = await db.crawlSource.findMany({ where: { id: { in: data.map((row) => row.id) } }, select: { id: true, domain: true } });
   return rows.map((row) => ({ id: row.id, domain: row.domain }));
 }
 

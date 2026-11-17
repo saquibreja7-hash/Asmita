@@ -70,12 +70,26 @@ describe("importCrawlSources, Prisma path", () => {
 
     expect(db.crawlSource.createMany).toHaveBeenCalledTimes(1);
     expect(db.crawlSource.createMany.mock.calls[0][0]).toEqual({
-      data: [{ domain: "a.example.org", pageBudget: 250, delayMs: 900, enabled: false, approvedBy: "super-1" }],
+      data: [{ id: expect.any(String), domain: "a.example.org", pageBudget: 250, delayMs: 900, enabled: false, approvedBy: "super-1" }],
       skipDuplicates: true,
     });
-    // One read settles the created rows and their ids for the audit.
+    // One read by the ids this call generated settles the created rows (review
+    // fix: never by domain, which would pick up another request's row).
     expect(db.crawlSource.findMany).toHaveBeenCalledTimes(2);
-    expect(db.crawlSource.findMany.mock.calls[1][0]).toMatchObject({ where: { domain: { in: ["a.example.org"] } }, select: { id: true, domain: true } });
+    const generated = db.crawlSource.createMany.mock.calls[0][0].data[0].id;
+    expect(db.crawlSource.findMany.mock.calls[1][0]).toEqual({ where: { id: { in: [generated] } }, select: { id: true, domain: true } });
+  });
+
+  it("never claims a row a concurrent import created for the same host (review fix)", async () => {
+    vi.stubEnv("AUDIT_LOG_PERSISTENCE", "database");
+    // The database after the insert: the concurrent request's row won the
+    // unique domain; this call's row was skipped.
+    const table = [{ id: "src-theirs", domain: "a.example.org" }];
+    db.crawlSource.findMany.mockResolvedValueOnce([]).mockImplementationOnce(async ({ where }: { where: { id?: { in: string[] }; domain?: { in: string[] } } }) =>
+      table.filter((row) => (where.id ? where.id.in.includes(row.id) : where.domain!.in.includes(row.domain))));
+    const { results } = await importCrawlSources({ hosts: ["a.example.org"] }, "super-1");
+    expect(results.map((result) => result.status)).toEqual(["exists"]);
+    expect(db.auditLog.createMany).not.toHaveBeenCalled();
   });
 
   it("reports every attempted host as exists when a concurrent request created them first, and audits nothing", async () => {
