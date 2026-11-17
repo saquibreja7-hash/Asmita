@@ -10,6 +10,7 @@ const PAGE_FILES: Record<string, string> = {
   "/admin/queue": "flagged/page.tsx",
   "/admin/hashes": "hashes/page.tsx",
   "/admin/findings": "findings/page.tsx",
+  "/admin/crawler": "crawler/page.tsx",
   "/admin/crawl-sources": "crawl-sources/page.tsx",
   "/admin/platforms": "platforms/page.tsx",
   "/admin/templates": "templates/page.tsx",
