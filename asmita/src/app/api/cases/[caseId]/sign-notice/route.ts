@@ -21,12 +21,14 @@ const schema = z.object({
   urlId: z.string().min(1).optional(),
   name: z.string().min(1).max(100),
   contact: z.string().trim().pipe(z.email().max(200)),
-  signature: z.string().min(1).max(100),
+  // Her full name is her signature. Optional, and defaults to the name;
+  // the signing forms no longer ask for it separately.
+  signature: z.string().min(1).max(100).optional(),
   // The reference preview-notice returned for the text on screen. Required:
   // every signing form is in this repo and sends it.
   templateRef: z.string().min(1).max(200),
 }).strict().refine(
-  (d) => !FORBIDDEN_CONTROL.test(d.name) && !FORBIDDEN_CONTROL.test(d.contact) && !FORBIDDEN_CONTROL.test(d.signature),
+  (d) => !FORBIDDEN_CONTROL.test(d.name) && !FORBIDDEN_CONTROL.test(d.contact) && !FORBIDDEN_CONTROL.test(d.signature ?? ""),
   { message: "invalid_characters" },
 );
 
@@ -116,7 +118,8 @@ export async function POST(
   const { urlId, contact } = parsed.data;
   // NFC so an accented Latin name typed as letter plus accent is still drawable.
   const name = parsed.data.name.normalize("NFC");
-  const signature = parsed.data.signature.normalize("NFC");
+  // The signature line on the declaration is her full name unless one is sent.
+  const signature = (parsed.data.signature ?? parsed.data.name).normalize("NFC");
   // The PDF font draws Latin letters only. Ask before signing, never transliterate.
   if (!isPdfSafeText(name) || !isPdfSafeText(signature)) {
     return NextResponse.json({ error: "name_script_unsupported" }, { status: 400 });

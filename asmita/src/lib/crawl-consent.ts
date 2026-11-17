@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { writeAuditLog } from "@/lib/audit";
 import { crawlMemory } from "@/lib/crawl-store";
 import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
+import { noticeDate } from "@/lib/notice-date";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
 import { templateRef } from "@/lib/signed-template";
 import * as store from "@/lib/store";
@@ -16,11 +17,14 @@ import * as store from "@/lib/store";
  * out for (crawlConsentWithdrawnAt) so they can never be sent. Withdrawn
  * rows stay as the record.
  *
- * Signing follows the notice-integrity pattern: the authorisation lists the
- * fingerprints it covers (the same annex the hash advisory uses), the PDF is
- * stored encrypted with the template id and digest, and signing refuses when
- * the text or fingerprints changed since the survivor saw them (templateRef).
- * Unreviewed templates are refused unless DEV_SKIP_LEGAL_REVIEW is on.
+ * She agrees with one tick on her case page; no name or signature is asked
+ * for. The record still follows the notice-integrity pattern: the
+ * authorisation lists the fingerprints it covers (the same annex the hash
+ * advisory uses), the PDF (the full text, the fingerprint list and a record
+ * of when the account holder ticked the box) is stored encrypted with the
+ * template id and digest, and agreeing refuses when the text or fingerprints
+ * changed since the page loaded them (templateRef). Unreviewed templates are
+ * refused unless DEV_SKIP_LEGAL_REVIEW is on.
  */
 
 export const CRAWL_AUTHORISATION_TYPE = "CRAWL_AUTHORISATION" as const;
@@ -107,12 +111,35 @@ export async function buildCrawlAuthorisationDraft(
   };
 }
 
+function indiaTime(date: Date) {
+  return date.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+/**
+ * The record appended to the authorisation PDF in place of a typed name and
+ * signature: who agreed (the holder of the account the case belongs to,
+ * signed in by a one-time email code) and when. States nothing else about
+ * her, and no name, since none is asked for.
+ */
+export function crawlAgreementRecord(input: { caseReference: string; agreedAt: Date }): string {
+  return [
+    "--- RECORD OF AGREEMENT ---",
+    "",
+    `The holder of the Asmita account for case ${input.caseReference} agreed to this authorisation by ticking the box to switch on the search for more copies of her images on the case page, on ${noticeDate(input.agreedAt)} at ${indiaTime(input.agreedAt)} IST.`,
+    "The account holder was signed in with an email address verified by a one-time code. No name or signature was typed: the tick is the agreement.",
+    "",
+    "--- END RECORD ---",
+  ].join("\n");
+}
+
 export type RecordConsentInput = {
   caseId: string;
   signedPdfEncrypted: string;
   hashSubmissionIds: string[];
   templateId: string;
   templateDigest: string;
+  /** When she ticked the box; the time the authorisation PDF records. */
+  signedAt?: Date;
   actorId?: string;
 };
 
@@ -130,7 +157,7 @@ export async function recordCrawlConsent(input: RecordConsentInput): Promise<{ o
     memory.consents.push({
       id: consentId, caseId: input.caseId, signedPdfEncrypted: input.signedPdfEncrypted,
       hashSubmissionIds: [...input.hashSubmissionIds], templateId: input.templateId, templateDigest: input.templateDigest,
-      signedAt: new Date(), withdrawnAt: null,
+      signedAt: input.signedAt ?? new Date(), withdrawnAt: null,
     });
     for (const id of input.hashSubmissionIds) {
       const fingerprint = memory.fingerprints.get(id);
@@ -147,6 +174,7 @@ export async function recordCrawlConsent(input: RecordConsentInput): Promise<{ o
           data: {
             caseId: input.caseId, signedPdfEncrypted: input.signedPdfEncrypted,
             hashSubmissionIds: input.hashSubmissionIds, templateId: input.templateId, templateDigest: input.templateDigest,
+            ...(input.signedAt ? { signedAt: input.signedAt } : {}),
           },
           select: { id: true },
         });
@@ -240,7 +268,7 @@ export async function withdrawCrawlConsent(
  * hers, with the same effects as her own withdrawal (fingerprints leave the
  * pool, unreviewed matches are deleted, unsent crawler links are stopped).
  * Cancelling the deletion by signing in does not undo this: she would have to
- * sign a new authorisation to opt in again.
+ * tick the box again to opt in again.
  */
 export async function withdrawCrawlConsentsForDeletion(caseIds: string[], userId: string): Promise<number> {
   let withdrawn = 0;

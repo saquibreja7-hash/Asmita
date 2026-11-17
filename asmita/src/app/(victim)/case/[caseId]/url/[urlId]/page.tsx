@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
+import { localizeRejectionReason } from "@/lib/rejection-reasons";
 
 export default async function UrlDetailPage({
   params,
@@ -46,6 +47,9 @@ export default async function UrlDetailPage({
     );
   }
 
+  // Only a rejected link's reason is meant for her; see the case page.
+  const rejectedReason = url.status === "REJECTED" ? localizeRejectionReason(url.flagReason, locale) : null;
+
   return (
     <AppShell>
       <div className="page-canvas">
@@ -76,6 +80,11 @@ export default async function UrlDetailPage({
                 mono
               />
             </dl>
+            {rejectedReason && (
+              <p className="mx-auto mt-8 max-w-lg rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-5 py-4 text-sm leading-[1.7] text-[var(--text)]">
+                <span className="font-medium text-[var(--ink)]">{t(locale, "case.rejectedReason.label")}</span> {rejectedReason}
+              </p>
+            )}
             <p className="muted mx-auto mt-10 max-w-lg text-center text-base leading-[1.75]">
               {t(locale, "urldetail.note")}
             </p>
