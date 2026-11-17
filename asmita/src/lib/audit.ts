@@ -1,4 +1,4 @@
-import type { AuditEventType } from "@prisma/client";
+import type { AuditEventType, Prisma } from "@prisma/client";
 import { sha256 } from "@/lib/hash";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { randomUUID } from "node:crypto";
@@ -260,6 +260,17 @@ function chainedAuditRows(
   return rows;
 }
 
+/**
+ * A chained row in the shape Prisma's createMany accepts. Prisma refuses a
+ * plain `null` for a nullable Json column (it wants `Prisma.DbNull`), so an
+ * event without data omits the field, which stores SQL NULL. The hash was
+ * already computed from the event in chainedAuditRows and is not touched.
+ */
+function prismaAuditRow(row: ReturnType<typeof chainedAuditRows>[number]): Prisma.AuditLogCreateManyInput {
+  const { data, ...rest } = row;
+  return data == null ? rest : { ...rest, data: data as Prisma.InputJsonObject };
+}
+
 async function persistAuditLogs(events: AuditEvent[]) {
   if (usesWorkerKysely()) {
     await getWorkerDb().transaction().execute(async (tx) => {
@@ -279,7 +290,7 @@ async function persistAuditLogs(events: AuditEvent[]) {
     });
     const rows = chainedAuditRows(events, previous);
     if (rows.length > 0) {
-      await tx.auditLog.createMany({ data: rows.map((row) => ({ ...row, data: row.data as never })) });
+      await tx.auditLog.createMany({ data: rows.map(prismaAuditRow) });
     }
   });
 }
