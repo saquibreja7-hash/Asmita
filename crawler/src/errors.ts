@@ -56,6 +56,8 @@ export const ERROR_CODES = [
   "browser_aborted",
   "browser_timeout",
   "browser_protocol",
+  /** The browser proxy refused a tunnel opened outside any render. */
+  "browser_no_render",
   // other
   "robots_disallowed",
   "internal",

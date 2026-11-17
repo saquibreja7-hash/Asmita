@@ -21,7 +21,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { AsmitaClient } from "./asmita/client.ts";
 import { ConfigError, loadConfig } from "./config.ts";
-import { runCrawl } from "./crawler.ts";
+import { newQueryGuardStore, runCrawl } from "./crawler.ts";
 import { toCrawlError } from "./errors.ts";
 import { EXIT } from "./exit-codes.ts";
 import { Logger, type LogSink } from "./log.ts";
@@ -98,8 +98,12 @@ export async function runMain(opts: MainOptions): Promise<number> {
   });
 
   try {
+    // One store of query-variant guards for every pass of --loop, so a
+    // query-string trap is not handed a fresh allowance each pass (bounded).
+    const queryGuards = newQueryGuardStore(config);
     const crawl = () =>
       runCrawl({
+        queryGuards,
         config,
         api,
         fetcher,

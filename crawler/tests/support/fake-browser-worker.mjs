@@ -12,9 +12,17 @@
 //   /oversize   sends an image over the byte cap (protocol violation)
 //   /junk       sends a message with an unexpected shape (protocol violation)
 //   /die        exits mid-render (crashed worker)
+//   /stale      answers the abort, then keeps sending image, check and
+//               rendered messages under the aborted id (a render still
+//               unwinding in the worker)
+//   /slow-ok    a successful render answered after 200 ms
+//   /ignore-stop  renders ok, then ignores the graceful stop (close() must
+//               SIGKILL it)
 let seq = 0;
-// The render the worker is currently handling; only /abort answers aborts.
+// The render the worker is currently handling; only /abort and /stale
+// answer aborts.
 let mode = "";
+let ignoreStop = false;
 
 process.on("message", (m) => {
   if (!m || typeof m !== "object") return;
@@ -26,9 +34,20 @@ process.on("message", (m) => {
   }
   if (m.kind === "abort") {
     if (mode === "/abort") return process.send({ kind: "failed", id: m.id, code: "browser_aborted" });
+    if (mode === "/stale") {
+      process.send({ kind: "failed", id: m.id, code: "browser_aborted" });
+      const old = m.id;
+      setTimeout(() => {
+        process.send({ kind: "image", id: old, url: "http://img.example/stale.png", contentType: "image/png", bytes: new Uint8Array([9]) });
+        process.send({ kind: "check", id: old, seq: ++seq, url: "http://page.example/stale", resourceType: "image" });
+        process.send({ kind: "rendered", id: old, url: "http://page.test/stale", status: 200, html: "stale", truncated: false, stats: { requests: 1, imagesSkipped: 0 } });
+      }, 50);
+      return;
+    }
     return; // a truly stuck worker ignores the abort; the parent force-kills
   }
   if (m.kind === "stop") {
+    if (ignoreStop) return;
     process.send({ kind: "stopped" });
     return process.exit(0);
   }
@@ -73,5 +92,15 @@ process.on("message", (m) => {
       return reply({ kind: "rendered", id: task.id, url: task.url, status: 200, html: "x", truncated: false, stats: { requests: 1, imagesSkipped: 0 }, surprise: true });
     case "/die":
       return process.exit(7);
+    case "/stale":
+      return; // answered by the abort handler above
+    case "/slow-ok":
+      setTimeout(() => {
+        reply({ kind: "rendered", id: task.id, url: task.url, status: 200, html: "<p>slow</p>", truncated: false, stats: { requests: 1, imagesSkipped: 0 } });
+      }, 200);
+      return;
+    case "/ignore-stop":
+      ignoreStop = true;
+      return reply({ kind: "rendered", id: task.id, url: task.url, status: 200, html: "<p>ok</p>", truncated: false, stats: { requests: 1, imagesSkipped: 0 } });
   }
 });

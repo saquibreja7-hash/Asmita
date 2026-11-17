@@ -18,7 +18,10 @@
  *    and page budgets bound even a hostile "next" chain). The guard keeps
  *    only 16-byte hashes, never the URLs themselves, and its state is
  *    bounded (a killed run loses it; the app's per-source digest dedups any
- *    repeated report, so losing it is safe).
+ *    repeated report, so losing it is safe). `QueryGuardStore` keeps each
+ *    source's guard across the passes of `run --loop`, so a trap cannot get
+ *    a fresh allowance every pass; it holds at most `maxSources` guards and
+ *    forgets the least recently used one beyond that.
  */
 import { createHash } from "node:crypto";
 import { TRACKING_PARAM } from "./url.ts";
@@ -98,7 +101,43 @@ export function isNonContentUrl(url: URL): boolean {
 const hash16 = (s: string): string => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
 /**
- * Per-source, per-run cap on distinct query variants of one path. Bounded:
+ * Per-source guards that outlive one pass (WP4, kept across `run --loop`
+ * passes). Bounded: at most `maxSources` guards, the least recently used one
+ * is dropped first (that source simply starts a fresh allowance).
+ */
+export class QueryGuardStore {
+  private readonly guards = new Map<string, QueryVariantGuard>();
+
+  constructor(
+    private readonly maxPerPath: number,
+    private readonly maxPaths: number,
+    private readonly maxSources: number,
+  ) {}
+
+  /** The source's guard, created on first use; marks it recently used. */
+  guardFor(sourceId: string): QueryVariantGuard {
+    let guard = this.guards.get(sourceId);
+    if (guard) {
+      this.guards.delete(sourceId);
+    } else {
+      guard = new QueryVariantGuard(this.maxPerPath, this.maxPaths);
+      while (this.guards.size >= this.maxSources) {
+        const oldest = this.guards.keys().next().value;
+        if (oldest === undefined) break;
+        this.guards.delete(oldest);
+      }
+    }
+    this.guards.set(sourceId, guard);
+    return guard;
+  }
+
+  get size(): number {
+    return this.guards.size;
+  }
+}
+
+/**
+ * Per-source cap on distinct query variants of one path. Bounded:
  * at most `maxPaths` paths are tracked, each with at most `maxPerPath`
  * 16-byte variant hashes; a page link whose path is not tracked yet, once
  * the map is full, is refused like an over-capped path.

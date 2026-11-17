@@ -8,16 +8,18 @@
  * within its caps.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { RunResult } from "../../src/crawler.ts";
+import { newQueryGuardStore, type RunResult } from "../../src/crawler.ts";
+import { loadConfig } from "../../src/config.ts";
 import {
   buildDeepFixture,
   DEEP_HOST,
+  fixtureEnv,
   fixtureSeedUrl,
   TEST_KEY,
   TRAP_HOST,
   type Fixture,
 } from "../support/fixture-site.ts";
-import { MockAsmita } from "../support/mock-asmita.ts";
+import { MockAsmita, siteSource } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 import { assertCleanLog } from "../support/log-scan.ts";
 
@@ -32,8 +34,8 @@ beforeAll(async () => {
     key: TEST_KEY,
     pool: fx.pool,
     sources: [
-      { id: "src-deep", kind: "site", domain: DEEP_HOST, pageBudget: 60, delayMs: 0 },
-      { id: "src-trap", kind: "site", domain: TRAP_HOST, pageBudget: 20, delayMs: 0 },
+      siteSource({ id: "src-deep", domain: DEEP_HOST, pageBudget: 60, delayMs: 0 }),
+      siteSource({ id: "src-trap", domain: TRAP_HOST, pageBudget: 20, delayMs: 0 }),
     ],
     seedUrl: fixtureSeedUrl(fx.site.port),
   }).start();
@@ -149,4 +151,32 @@ describe("deep coverage", () => {
     const summary = logLines.map((l) => JSON.parse(l) as { event: string }).find((l) => l.event === "run_summary");
     expect(summary).toBeDefined();
   });
+});
+
+describe("the query-variant guard across --loop passes", () => {
+  it("does not give a query-string trap a fresh allowance on the next pass", async () => {
+    // A pass with the store an earlier pass of the same process left behind:
+    // the trap path's allowance is already spent, so this pass reports no
+    // new variant of it. (A fresh store per pass would admit 8 again.)
+    const loopApi = await new MockAsmita({
+      key: TEST_KEY,
+      pool: fx.pool,
+      sources: [siteSource({ id: "src-trap-loop", domain: TRAP_HOST, pageBudget: 20, delayMs: 0 })],
+      seedUrl: fixtureSeedUrl(fx.site.port),
+    }).start();
+    try {
+      const store = newQueryGuardStore(loadConfig(fixtureEnv(loopApi.url, TEST_KEY)));
+      const earlier = store.guardFor("src-trap-loop");
+      for (let i = 1; i <= 8; i++) {
+        expect(earlier.admit(new URL(`http://${TRAP_HOST}:${fx.site.port}/t?u=earlier-${i}`))).toBe(true);
+      }
+      const { result: pass } = await runFixtureCrawl(fx.site, loopApi, { env: { MAX_DEPTH: "6" }, queryGuards: store });
+      expect(pass.exitCode).toBe(0);
+      const tRows = [...loopApi.pages.values()].filter((p) => p.url.includes("/t?"));
+      expect(tRows).toHaveLength(0);
+      expect(pass.summary.linksSkippedQueryCap).toBeGreaterThanOrEqual(40);
+    } finally {
+      await loopApi.stop();
+    }
+  }, 60_000);
 });

@@ -29,6 +29,8 @@ beforeAll(async () => {
     onRefusal: (code) => refusals.push(code),
   });
   proxyPort = await proxy.start();
+  // Tunnels exist only inside a render's account (as during a real render).
+  proxy.beginAccount(1024 * 1024, () => undefined);
 }, 20_000);
 
 afterAll(async () => {
@@ -129,6 +131,8 @@ describe("browser proxy (SOCKS5)", () => {
       connectTimeoutMs: 3000,
     });
     const port = await p.start();
+    // An active render, so the refusal below is the address policy's.
+    p.beginAccount(1024 * 1024, () => undefined);
     await new Promise<void>((resolve, reject) => {
       const socket = net.connect(port, "127.0.0.1");
       socket.on("error", reject);
@@ -198,4 +202,82 @@ describe("browser proxy (SOCKS5)", () => {
     p.endAccount();
     await p.stop();
   });
+
+  it("refuses a tunnel while no render account is active", async () => {
+    const seen: ErrorCode[] = [];
+    const p = new BrowserProxy(loopbackTestPolicy(["target.test"], echoPort), {
+      maxBytes: 1024 * 1024,
+      connectTimeoutMs: 3000,
+      onRefusal: (code) => seen.push(code),
+    });
+    await p.start();
+    try {
+      // Before any render, and again after one has ended.
+      expect((await connectVia(p.listenPort, "target.test", echoPort)).rep).toBe(2);
+      p.beginAccount(1024 * 1024, () => undefined);
+      const open = await connectVia(p.listenPort, "target.test", echoPort);
+      expect(open.rep).toBe(0);
+      open.socket!.destroy();
+      p.endAccount();
+      expect((await connectVia(p.listenPort, "target.test", echoPort)).rep).toBe(2);
+      expect(seen.filter((c) => c === "browser_no_render")).toHaveLength(2);
+    } finally {
+      await p.stop();
+    }
+  });
+
+  it("tears down a render's tunnels when its account ends", async () => {
+    const p = new BrowserProxy(loopbackTestPolicy(["target.test"], echoPort), { maxBytes: 1024 * 1024, connectTimeoutMs: 3000 });
+    await p.start();
+    try {
+      p.beginAccount(1024 * 1024, () => undefined);
+      const { rep, socket } = await connectVia(p.listenPort, "target.test", echoPort);
+      expect(rep).toBe(0);
+      const closed = new Promise<void>((resolve) => socket!.on("close", () => resolve()));
+      p.endAccount();
+      await closed;
+    } finally {
+      await p.stop();
+    }
+  });
+
+  it("keeps an established tunnel past the handshake timeout", async () => {
+    const p = new BrowserProxy(loopbackTestPolicy(["target.test"], echoPort), {
+      maxBytes: 1024 * 1024,
+      connectTimeoutMs: 3000,
+      handshakeTimeoutMs: 150,
+    });
+    await p.start();
+    try {
+      p.beginAccount(1024 * 1024, () => undefined);
+      const { rep, socket } = await connectVia(p.listenPort, "target.test", echoPort);
+      expect(rep).toBe(0);
+      await new Promise((r) => setTimeout(r, 450));
+      expect(socket!.destroyed).toBe(false);
+      expect(await roundTrip(socket!, "still-open")).toBe("still-open");
+      socket!.destroy();
+    } finally {
+      await p.stop();
+    }
+  });
 });
+
+/** SOCKS5 CONNECT (domain type) to a given proxy port; the reply code and, on success, the socket. */
+function connectVia(port: number, host: string, target: number): Promise<SocksResult> {
+  return new Promise((resolve, reject) => {
+    const s = net.connect(port, "127.0.0.1");
+    s.on("error", reject);
+    s.write(Buffer.from([5, 1, 0]));
+    s.once("data", () => {
+      const name = Buffer.from(host, "latin1");
+      s.write(Buffer.concat([Buffer.from([5, 1, 0, 3, name.length]), name, Buffer.from([(target >> 8) & 0xff, target & 0xff])]));
+      s.once("data", (reply: Buffer) => {
+        if (reply[1] !== 0) {
+          s.destroy();
+          return resolve({ rep: reply[1]!, socket: null });
+        }
+        resolve({ rep: 0, socket: s });
+      });
+    });
+  });
+}

@@ -10,6 +10,7 @@ import { SafeFetcher } from "../../src/net/safe-fetch.ts";
 import { fixtureEnv, FIXTURE_HOSTS, TEST_KEY, type FixtureSite } from "./fixture-site.ts";
 import type { MockAsmita } from "./mock-asmita.ts";
 import { loopbackTestPolicy } from "./test-policy.ts";
+import type { QueryGuardStore } from "../../src/crawl/traps.ts";
 
 export async function runFixtureCrawl(
   site: FixtureSite,
@@ -23,10 +24,15 @@ export async function runFixtureCrawl(
     hosts?: string[];
     /** Extra fake DNS entries for the test policy (e.g. metadata hostnames). */
     extraDns?: Record<string, string[]>;
+    /** Query-variant guards shared with an earlier pass (run --loop). */
+    queryGuards?: QueryGuardStore;
   } = {},
 ): Promise<{ result: RunResult; lines: string[] }> {
   const lines = opts.lines ?? [];
-  const config = loadConfig(fixtureEnv(api.url, TEST_KEY, opts.env));
+  // BROWSER_TMP_DIR from the environment lets the browser tests run where
+  // /dev/shm does not exist (a developer laptop); CI uses the default.
+  const tmpDir: Record<string, string> = process.env.BROWSER_TMP_DIR ? { BROWSER_TMP_DIR: process.env.BROWSER_TMP_DIR } : {};
+  const config = loadConfig(fixtureEnv(api.url, TEST_KEY, { ...tmpDir, ...opts.env }));
   const policy = loopbackTestPolicy(opts.hosts ?? FIXTURE_HOSTS, site.port, opts.extraDns ?? {});
   const fetcher = new SafeFetcher(policy, {
     userAgent: config.CRAWLER_USER_AGENT,
@@ -61,6 +67,7 @@ export async function runFixtureCrawl(
       // one Playwright installed for this Node.
       policy,
       browsersPath: process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(homedir(), ".cache", "ms-playwright"),
+      queryGuards: opts.queryGuards,
     });
     return { result, lines };
   } finally {

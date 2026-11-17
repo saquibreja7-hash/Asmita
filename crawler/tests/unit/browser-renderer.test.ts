@@ -8,7 +8,8 @@
  */
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BrowserRenderer, type BrowserImage } from "../../src/browser/browser-renderer.ts";
+import { BrowserRenderer, browserWorkerExecArgv, type BrowserImage } from "../../src/browser/browser-renderer.ts";
+import { CHROMIUM_ARGS } from "../../src/browser/chromium-args.ts";
 import { Logger } from "../../src/log.ts";
 import { RunMetrics } from "../../src/metrics.ts";
 import { productionPolicy } from "../../src/net/policy.ts";
@@ -21,7 +22,15 @@ let lines: string[] = [];
 let images: BrowserImage[] = [];
 const checkRequests: string[] = [];
 
-function make(): BrowserRenderer {
+type Child = { pid: number; exitCode: number | null; signalCode: string | null; once: (e: string, f: () => void) => void };
+const childOf = (r: BrowserRenderer) => (r as unknown as { child: Child | null }).child;
+const exited = (c: Child) =>
+  new Promise<void>((resolve) => {
+    if (c.exitCode !== null || c.signalCode !== null) return resolve();
+    c.once("exit", () => resolve());
+  });
+
+function make(overrides: { stopGraceMs?: number } = {}): BrowserRenderer {
   metrics = new RunMetrics();
   lines = [];
   images = [];
@@ -44,6 +53,7 @@ function make(): BrowserRenderer {
       maxHtmlBytes: 64 * 1024,
       connectTimeoutMs: 2000,
       renderGraceMs: 300,
+      ...overrides,
     },
     checkRequest: async (u) => {
       checkRequests.push(u.pathname);
@@ -232,5 +242,68 @@ describe("browser renderer", () => {
     expect(child).not.toBeNull();
     await one.close();
     expect((one as unknown as { child: unknown }).child).toBeNull();
+  });
+
+  it("SIGKILLs the worker on the deadline even when it would answer the abort", async () => {
+    // /abort answers an abort politely; on the deadline the parent must not
+    // ask, it kills, so a render that overran can never keep running.
+    const before = (await render("/ok")).ok;
+    expect(before).toBe(true);
+    const child = childOf(renderer)!;
+    const result = await render("/abort");
+    expect(result).toEqual({ ok: false, code: "browser_timeout" });
+    await exited(child);
+    expect(child.signalCode).toBe("SIGKILL");
+    const good = await render("/ok");
+    expect(good.ok).toBe(true);
+  });
+
+  it("ignores a stale render's late messages instead of failing the next render", async () => {
+    const stop = new AbortController();
+    const pending = render("/stale", stop.signal);
+    stop.abort();
+    expect(await pending).toEqual({ ok: false, code: "browser_aborted" });
+    const violations = metrics.errors.browser_protocol ?? 0;
+    const imagesBefore = images.length;
+    const checksBefore = checkRequests.length;
+    // The stale messages arrive while this render is in flight.
+    const next = await render("/slow-ok");
+    expect(next.ok).toBe(true);
+    if (next.ok) expect(next.html).toBe("<p>slow</p>");
+    expect(metrics.errors.browser_protocol ?? 0).toBe(violations);
+    expect(images.length).toBe(imagesBefore); // the stale image was not credited
+    expect(checkRequests.length).toBe(checksBefore); // the stale question was refused unasked
+  });
+
+  it("close() stops the worker gracefully when it obeys", async () => {
+    const one = make();
+    expect((await one.render(new URL("http://page.test/ok"), "page.test", () => Promise.resolve(true))).ok).toBe(true);
+    const child = childOf(one)!;
+    await one.close();
+    await exited(child);
+    expect(child.exitCode).toBe(0);
+    expect(child.signalCode).toBeNull();
+  });
+
+  it("close() SIGKILLs a worker that ignores the stop", async () => {
+    const one = make({ stopGraceMs: 200 });
+    expect((await one.render(new URL("http://page.test/ignore-stop"), "page.test", () => Promise.resolve(true))).ok).toBe(true);
+    const child = childOf(one)!;
+    await one.close();
+    await exited(child);
+    expect(child.signalCode).toBe("SIGKILL");
+  });
+});
+
+describe("browser worker launch settings", () => {
+  it("keeps WebRTC off any path but the proxy (no non-proxied UDP)", () => {
+    expect(CHROMIUM_ARGS).toContain("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
+    expect(CHROMIUM_ARGS).toContain("--webrtc-ip-handling-policy=disable_non_proxied_udp");
+  });
+
+  it("does not let the worker read /proc", () => {
+    const argv = browserWorkerExecArgv("/app/dist/browser-worker.js", "/dev/shm", "/app/browsers");
+    expect(argv.some((a) => a.startsWith("--allow-fs-read=/proc"))).toBe(false);
+    expect(argv).toContain("--permission");
   });
 });

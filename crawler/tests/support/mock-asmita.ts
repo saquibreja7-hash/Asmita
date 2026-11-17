@@ -104,6 +104,16 @@ type MockPage = {
   failCount: number;
 };
 
+/**
+ * A source in the app's contract shape, with the WP7 fields defaulted the way
+ * the app defaults a human-added site: origin "admin", hops 0, render "http".
+ */
+export function siteSource(
+  fields: Pick<Source, "id" | "domain" | "pageBudget" | "delayMs"> & Partial<Pick<Source, "origin" | "hops" | "render">>,
+): Source {
+  return { kind: "site", origin: "admin", hops: 0, render: "http", ...fields };
+}
+
 export type MockRequest = { method: string; path: string; authorization: string | undefined; body: unknown };
 
 /** The mock's mirror of the app's discovery rules (WP5). */
@@ -174,6 +184,11 @@ export type MockDiscoveredSource = {
   /** Set when a finding under this source promoted it. */
   promotedAt: number | null;
 };
+
+/** A discovered row as GET /sources answers it (origin "discovered", its hops). */
+function discoveredAsSource(d: MockDiscoveredSource): Source {
+  return siteSource({ id: d.id, domain: d.domain, pageBudget: d.pageBudget, delayMs: d.delayMs, origin: "discovered", hops: d.hops });
+}
 
 export class MockAsmita {
   readonly requests: MockRequest[] = [];
@@ -363,7 +378,7 @@ export class MockAsmita {
     const configured = this.opts.sources.find((s) => s.id === sourceId);
     if (configured) return configured;
     const discovered = [...this.discovered.values()].find((s) => s.id === sourceId);
-    return discovered ? { id: discovered.id, kind: "site", domain: discovered.domain, pageBudget: discovered.pageBudget, delayMs: discovered.delayMs } : null;
+    return discovered ? discoveredAsSource(discovered) : null;
   }
 
   /** A source by id: one the test configured, or one the mock discovered. */
@@ -452,7 +467,7 @@ export class MockAsmita {
   private enabledSources(): Source[] {
     const discovered = [...this.discovered.values()]
       .filter((s) => s.enabled)
-      .map((s) => ({ id: s.id, kind: "site" as const, domain: s.domain, pageBudget: s.pageBudget, delayMs: s.delayMs }));
+      .map(discoveredAsSource);
     return [...this.opts.sources, ...discovered];
   }
 

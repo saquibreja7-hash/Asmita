@@ -53,7 +53,7 @@ import type { ClaimedPage, Finding, FindingResult, Pool, ReportedPage, Source } 
 import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robots.ts";
-import { isNonContentUrl, QueryVariantGuard } from "./crawl/traps.ts";
+import { isNonContentUrl, QueryGuardStore, type QueryVariantGuard } from "./crawl/traps.ts";
 import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
 import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
 import { BrowserRenderer, type BrowserImage } from "./browser/browser-renderer.ts";
@@ -69,6 +69,18 @@ export const POOL_MAX_AGE_MS = 60 * 60 * 1000;
 export const FLUSH_INTERVAL_MS = 15_000;
 /** Distinct paths the per-source query-variant guard tracks (WP4); bounded state. */
 const QUERY_PATH_TRACK_CAP = 4096;
+/** Sources whose query-variant guards are kept across `run --loop` passes. */
+const QUERY_GUARD_SOURCES_CAP = 64;
+
+/**
+ * The query-variant guards for a sequence of passes (`run --loop`): one
+ * store, passed to every runCrawl, so a trap's allowance is not renewed
+ * each pass. Bounded (QUERY_GUARD_SOURCES_CAP sources, least recently used
+ * dropped first).
+ */
+export function newQueryGuardStore(config: Pick<Config, "MAX_QUERY_VARIANTS_PER_PATH">): QueryGuardStore {
+  return new QueryGuardStore(config.MAX_QUERY_VARIANTS_PER_PATH, QUERY_PATH_TRACK_CAP, QUERY_GUARD_SOURCES_CAP);
+}
 
 export type AsmitaApi = {
   getPool(signal?: AbortSignal): Promise<Pool>;
@@ -103,6 +115,11 @@ export type CrawlDeps = {
   policy?: NetPolicy;
   /** Where Playwright's Chromium is installed (WP7); default is ~/.cache/ms-playwright. */
   browsersPath?: string;
+  /**
+   * Query-variant guards shared by consecutive passes (`run --loop`); a
+   * single run without it gets a fresh store.
+   */
+  queryGuards?: QueryGuardStore;
 };
 
 type SourceCtx = {
@@ -122,9 +139,10 @@ type SourceCtx = {
    */
   failedOffHosts: Set<string>;
   /**
-   * Per-run, per-source cap on distinct query variants of one path (WP4).
-   * Holds bounded path/variant hashes only, never URLs; a killed run simply
-   * loses it and the app's per-source digest dedups any repeat.
+   * Per-source cap on distinct query variants of one path (WP4), kept
+   * across `run --loop` passes (deps.queryGuards). Holds bounded path/variant
+   * hashes only, never URLs; a killed process simply loses it and the app's
+   * per-source digest dedups any repeat.
    */
   queryGuard: QueryVariantGuard;
   /**
@@ -160,6 +178,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const runId = deps.runId ?? randomUUID();
   const log = deps.log.child({ runId });
   const metrics = new RunMetrics(now());
+  /** Per-source query-variant guards: shared across --loop passes when given. */
+  const queryGuards = deps.queryGuards ?? newQueryGuardStore(config);
   let outcome: RunOutcome = "completed";
   /** Set when the API rejected the key after the initial load. */
   let unauthorized = false;
@@ -434,7 +454,13 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * process, match, and queue a finding for every pool hit. `imageUrl` is
    * the address after redirects; `pageUrl` is the page as claimed.
    */
-  const decodeMatchReport = async (bytes: Buffer, imageUrl: string, pageUrl: URL, source: Source): Promise<boolean> => {
+  const decodeMatchReport = async (
+    bytes: Buffer,
+    imageUrl: string,
+    pageUrl: URL,
+    source: Source,
+    deferred?: Finding[],
+  ): Promise<boolean> => {
     let hashed;
     try {
       // Decoding runs in an isolated child process (decoder-pool.ts) that
@@ -476,11 +502,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     const observedAt = new Date(now()).toISOString();
     for (const hit of m.match(hashed.pdq)) {
-      const key = `${hit.fingerprintId}\n${imageUrl}`;
-      if (reported.has(key)) continue;
-      reported.add(key);
-      metrics.matches++;
-      sink.add({
+      const finding: Finding = {
         fingerprintId: hit.fingerprintId,
         pageUrl: pageUrl.href,
         imageUrl,
@@ -488,9 +510,24 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         quality: hashed.quality,
         observedAt,
         sourceId: source.id,
-      });
+      };
+      // A browser render's findings wait until its final URL passed the
+      // scope check (releaseFindings); everything else is queued now.
+      if (deferred) deferred.push(finding);
+      else releaseFindings([finding]);
     }
     return true;
+  };
+
+  /** Queue findings for delivery, once per fingerprint and image address. */
+  const releaseFindings = (findings: Finding[]): void => {
+    for (const finding of findings) {
+      const key = `${finding.fingerprintId}\n${finding.imageUrl}`;
+      if (reported.has(key)) continue;
+      reported.add(key);
+      metrics.matches++;
+      sink.add(finding);
+    }
   };
 
   /**
@@ -500,7 +537,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * host caps decide whether it is processed, and the bytes go through the
    * same decoder path as every other image.
    */
-  const processBrowserImage = async (img: BrowserImage, pageUrl: URL, ctx: SourceCtx): Promise<boolean> => {
+  const processBrowserImage = async (img: BrowserImage, pageUrl: URL, ctx: SourceCtx, deferred: Finding[]): Promise<boolean> => {
     const { source, scopeHost, offHosts, failedOffHosts } = ctx;
     if (!inScope(pageUrl, scopeHost)) {
       record("out_of_scope");
@@ -550,7 +587,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     seenImages.add(urlKey(img.url));
     metrics.imagesSeen++;
     if (offScope) metrics.imagesOffHost++;
-    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source);
+    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source, deferred);
     if (offScope) {
       if (ok) {
         failedOffHosts.delete(host);
@@ -716,12 +753,24 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     return links;
   };
 
-  /** Static-extraction skip counters, recorded only when its images are used. */
-  const recordExtraction = (ex: ReturnType<typeof extract>): void => {
+  /**
+   * Link and document skip counters of the extraction whose links are
+   * reported (the static one, or the browser-rendered DOM's).
+   */
+  const recordLinkExtraction = (ex: ReturnType<typeof extract>): void => {
     metrics.linksDropped += ex.dropped.links;
     metrics.linksSkippedNonContent += ex.skippedLinks.nonContent;
     metrics.jsonldSkipped += ex.skippedDocs.jsonld;
     metrics.noscriptSkipped += ex.skippedDocs.noscript;
+  };
+
+  /**
+   * Static-extraction skip counters, recorded only when its images are used
+   * (a browser-rendered page's images are the intercepted responses, so its
+   * extraction records only the link counters above).
+   */
+  const recordExtraction = (ex: ReturnType<typeof extract>): void => {
+    recordLinkExtraction(ex);
     metrics.skip("per_page_cap", ex.dropped.images);
     metrics.skip("data_uri", ex.skipped.data_uri);
     metrics.skip("svg", ex.skipped.svg);
@@ -743,7 +792,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     page: ClaimedPage,
     url: URL,
     ctx: SourceCtx,
-  ): Promise<"dropped" | { ok: true; html: string; url: URL; imagesSkipped: number } | { ok: false; code: ErrorCode }> => {
+  ): Promise<"dropped" | { ok: true; html: string; url: URL; imagesSkipped: number; findings: Finding[] } | { ok: false; code: ErrorCode }> => {
     if (!browser) return { ok: false, code: "browser_launch_failed" };
     // Politeness for the browser's own document request: the host slot the
     // HTTP pre-fetch used has moved on, so this waits out the source delay
@@ -754,13 +803,16 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     } catch (raw) {
       return { ok: false, code: toCrawlError(raw).code };
     }
+    // Findings are held back until the caller has checked the render's
+    // final URL: a render that ended up off scope credits nothing.
+    const findings: Finding[] = [];
     const outcome = await browser.render(
       url,
       ctx.scopeHost,
-      (img) => processBrowserImage(img, url, ctx),
+      (img) => processBrowserImage(img, url, ctx, findings),
       hard.signal,
     );
-    if (outcome.ok) return { ok: true, html: outcome.html, url: outcome.url, imagesSkipped: outcome.imagesSkipped };
+    if (outcome.ok) return { ok: true, html: outcome.html, url: outcome.url, imagesSkipped: outcome.imagesSkipped, findings };
     if (outcome.code === "browser_aborted" && stop.signal.aborted) return "dropped";
     return { ok: false, code: outcome.code };
   };
@@ -978,19 +1030,21 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       const rendered = await renderPageInBrowser(page, url, ctx);
       if (rendered === "dropped") return null; // stopped mid-render: redo whole
       if (rendered.ok) {
-        // Belt and braces on the final rendered URL.
+        // Belt and braces on the final rendered URL; the render's findings
+        // are released only after it passed.
         if (!inScope(rendered.url, scopeHost)) {
           record("out_of_scope");
           metrics.pagesOutOfScope++;
           return { id: page.id, status: "error", links: [] };
         }
+        releaseFindings(rendered.findings);
         metrics.skip("browser", rendered.imagesSkipped);
         if (stop.signal.aborted) return null;
         const ex2 = extract(rendered.html, rendered.url, result.xRobotsTag, {
           maxLinks: config.MAX_LINKS_PER_PAGE,
           maxImages: config.MAX_IMAGES_PER_PAGE,
         });
-        metrics.linksDropped += ex2.dropped.links;
+        recordLinkExtraction(ex2);
         return { id: page.id, status: "fetched", links: collectLinks(ex2, page, ctx) };
       }
       record(rendered.code);
@@ -1033,7 +1087,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       scopeHost,
       offHosts: new Set<string>(),
       failedOffHosts: new Set<string>(),
-      queryGuard: new QueryVariantGuard(config.MAX_QUERY_VARIANTS_PER_PATH, QUERY_PATH_TRACK_CAP),
+      queryGuard: queryGuards.guardFor(source.id),
       robotsSitemaps: null,
       discoveredHosts: [],
     };

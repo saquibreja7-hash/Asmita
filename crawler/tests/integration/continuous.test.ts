@@ -27,7 +27,7 @@ import {
   TEST_KEY,
   type Fixture,
 } from "../support/fixture-site.ts";
-import { MockAsmita, type MockAsmitaOptions } from "../support/mock-asmita.ts";
+import { MockAsmita, type MockAsmitaOptions, siteSource } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 import { loopbackTestPolicy } from "../support/test-policy.ts";
 import { assertCleanLog } from "../support/log-scan.ts";
@@ -51,7 +51,7 @@ async function mock(opts: Omit<MockAsmitaOptions, "key" | "pool">): Promise<Mock
 }
 
 const sourcesOf = (prefix: string, hosts: string[]): Source[] =>
-  hosts.map((domain, i) => ({ id: `${prefix}-${i + 1}`, kind: "site", domain, pageBudget: 5, delayMs: 0 }));
+  hosts.map((domain, i) => siteSource({ id: `${prefix}-${i + 1}`, domain, pageBudget: 5, delayMs: 0 }));
 
 /** The fixture's request log is shared across tests: count only this test's. */
 const requestsSince = (site: Fixture["site"], baseline: number) => site.requests.slice(baseline);
@@ -159,7 +159,7 @@ describe("run --loop", () => {
     // Pass 2 finds nothing due everywhere; the loop sleeps before pass 3.
     await waitUntil(() => summaries().some((s) => s.pagesClaimed === 0), 10_000);
     // A source is switched on in the app while the loop is running.
-    api.opts.sources.push({ id: "src-l-2", kind: "site", domain: SPEED_HOSTS[1]!, pageBudget: 5, delayMs: 0 });
+    api.opts.sources.push(siteSource({ id: "src-l-2", domain: SPEED_HOSTS[1]!, pageBudget: 5, delayMs: 0 }));
     await waitUntil(seenS2Home, 10_000);
     // SIGTERM: the loop exits cleanly with 0.
     stop.abort();

@@ -5,7 +5,7 @@
  * not count as variants.
  */
 import { describe, expect, it } from "vitest";
-import { isNonContentUrl, QueryVariantGuard } from "../../src/crawl/traps.ts";
+import { isNonContentUrl, QueryGuardStore, QueryVariantGuard } from "../../src/crawl/traps.ts";
 
 const u = (s: string) => new URL(s);
 
@@ -108,5 +108,35 @@ describe("QueryVariantGuard", () => {
     const g = new QueryVariantGuard(1, 100);
     for (let i = 0; i < 100; i++) expect(g.admit(url(`/plain-${i}`))).toBe(true);
     expect(g.admit(url("/p?x=1"))).toBe(true);
+  });
+});
+
+describe("QueryGuardStore (guards kept across --loop passes)", () => {
+  const url = (path: string) => u(`https://x.example${path}`);
+
+  it("hands the same source the same guard, so a later pass gets no fresh allowance", () => {
+    const store = new QueryGuardStore(2, 100, 8);
+    const pass1 = store.guardFor("src-a");
+    expect(pass1.admit(url("/p?a=1"))).toBe(true);
+    expect(pass1.admit(url("/p?a=2"))).toBe(true);
+    const pass2 = store.guardFor("src-a");
+    expect(pass2).toBe(pass1);
+    expect(pass2.admit(url("/p?a=3"))).toBe(false);
+    expect(pass2.admit(url("/p?a=1"))).toBe(true); // seen variants stay admitted
+    // Another source has its own allowance.
+    expect(store.guardFor("src-b").admit(url("/p?a=3"))).toBe(true);
+  });
+
+  it("is bounded: beyond maxSources the least recently used guard is dropped", () => {
+    const store = new QueryGuardStore(1, 100, 2);
+    const a = store.guardFor("a");
+    store.guardFor("b");
+    store.guardFor("a"); // a is now the most recent
+    store.guardFor("c"); // evicts b
+    expect(store.size).toBe(2);
+    expect(store.guardFor("a")).toBe(a);
+    expect(store.size).toBe(2);
+    for (let i = 0; i < 50; i++) store.guardFor(`s${i}`);
+    expect(store.size).toBe(2);
   });
 });

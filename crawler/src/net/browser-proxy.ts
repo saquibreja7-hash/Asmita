@@ -24,6 +24,12 @@
  * all tunnel traffic. When it is exceeded the account's tunnels are
  * destroyed, the render is aborted, and the page is reported as an error
  * (a hostile page cannot stream forever). Time caps bound it too.
+ *
+ * No account, no tunnel: a CONNECT that arrives while no render is active
+ * (a straggling request of a finished page, or anything else that found the
+ * port) is refused, and ending an account destroys its tunnels, so no byte
+ * is relayed outside a render's budget. A tunnel whose account has ended
+ * (keep-alive reuse by the next render) is torn down on its next chunk.
  */
 import net from "node:net";
 import { isIP } from "node:net";
@@ -48,6 +54,8 @@ export type BrowserProxyOptions = {
   maxBytes: number;
   /** Connect deadline for the upstream socket. */
   connectTimeoutMs: number;
+  /** Pre-tunnel idle timeout (default 30 s; tests lower it). */
+  handshakeTimeoutMs?: number;
   /** Refusal / failure counter (codes only, never hostnames). */
   onRefusal?: (code: ErrorCode) => void;
 };
@@ -97,8 +105,13 @@ export class BrowserProxy {
     this.account = { maxBytes, total: 0, over: false, sockets: new Set(), onOver };
   }
 
+  /** End the render's account and tear down every tunnel it opened. */
   endAccount(): void {
+    const account = this.account;
     this.account = null;
+    if (!account) return;
+    for (const s of [...account.sockets]) s.destroy();
+    account.sockets.clear();
   }
 
   async stop(): Promise<void> {
@@ -118,7 +131,7 @@ export class BrowserProxy {
   private onConnection(socket: net.Socket): void {
     this.sockets.add(socket);
     socket.on("close", () => this.sockets.delete(socket));
-    socket.setTimeout(HANDSHAKE_TIMEOUT_MS, () => socket.destroy());
+    socket.setTimeout(this.opts.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS, () => socket.destroy());
     socket.on("error", () => socket.destroy());
     socket.once("data", (greeting: Buffer) => {
       if (greeting.length < 2 || greeting[0] !== SOCKS_VERSION) return void socket.destroy();
@@ -161,6 +174,13 @@ export class BrowserProxy {
     }
     const port = req.readUInt16BE(off);
 
+    // Account rule: tunnels exist only inside a render's byte budget.
+    const account = this.account;
+    if (!account || account.over) {
+      this.opts.onRefusal?.("browser_no_render");
+      return void this.replyAndClose(socket, REP_NOT_ALLOWED);
+    }
+
     // Port rule: same policy as safe-fetch, checked for both schemes (the
     // SOCKS handshake carries no scheme; 443 is https, 80 is http, and the
     // policy decides anything else).
@@ -183,7 +203,7 @@ export class BrowserProxy {
       address = name;
     } else {
       void resolveAllowed(name, this.policy).then(
-        (resolved) => void this.connect(socket, resolved.address, port),
+        (resolved) => void this.connect(socket, resolved.address, port, account),
         (err: unknown) => {
           this.opts.onRefusal?.(codeOf(err));
           this.replyAndClose(socket, REP_NOT_ALLOWED);
@@ -191,12 +211,17 @@ export class BrowserProxy {
       );
       return;
     }
-    void this.connect(socket, address, port);
+    void this.connect(socket, address, port, account);
   }
 
-  private connect(socket: net.Socket, address: string, port: number): void {
+  private connect(socket: net.Socket, address: string, port: number, account: Account): void {
     if (socket.destroyed) return;
-    const account = this.account;
+    // The render ended (or another began, or it spent its budget) while
+    // the name was resolving.
+    if (this.account !== account || account.over) {
+      this.opts.onRefusal?.("browser_no_render");
+      return void this.replyAndClose(socket, REP_NOT_ALLOWED);
+    }
     const upstream = net.connect({ host: address, port });
     const timer = setTimeout(() => {
       upstream.destroy();
@@ -211,7 +236,13 @@ export class BrowserProxy {
     });
     upstream.on("connect", () => {
       clearTimeout(timer);
-      if (socket.destroyed) return void upstream.destroy();
+      if (socket.destroyed || this.account !== account) {
+        upstream.destroy();
+        return void socket.destroy();
+      }
+      // The handshake is over: its idle timeout must not cut a live tunnel
+      // (the render's deadline and the account bound the tunnel instead).
+      socket.setTimeout(0);
       // Success reply keeps the socket open: the tunnel starts here.
       const reply = Buffer.alloc(REPLY_LEN);
       reply[0] = SOCKS_VERSION;
@@ -222,18 +253,22 @@ export class BrowserProxy {
       // Tunnel established: relay both ways, counting bytes into the
       // account, honouring backpressure so a stalled reader cannot buffer
       // without bound. No further SOCKS parsing happens on this socket.
-      account?.sockets.add(socket);
+      account.sockets.add(socket);
       const pump = (from: net.Socket, to: net.Socket) => {
         from.on("data", (chunk: Buffer) => {
-          if (account && !account.over) {
-            account.total += chunk.length;
-            if (account.total > account.maxBytes) {
-              account.over = true;
-              for (const s of [...account.sockets]) s.destroy();
-              account.sockets.clear();
-              account.onOver();
-              return;
-            }
+          if (this.account !== account || account.over) {
+            // The render this tunnel was opened for is over, or spent.
+            from.destroy();
+            to.destroy();
+            return;
+          }
+          account.total += chunk.length;
+          if (account.total > account.maxBytes) {
+            account.over = true;
+            for (const s of [...account.sockets]) s.destroy();
+            account.sockets.clear();
+            account.onOver();
+            return;
           }
           if (!to.write(chunk)) from.pause();
         });
@@ -242,6 +277,7 @@ export class BrowserProxy {
       pump(socket, upstream);
       pump(upstream, socket);
       const drop = () => {
+        account.sockets.delete(socket);
         socket.destroy();
         upstream.destroy();
       };
