@@ -55,6 +55,7 @@ import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robots.ts";
 import { isNonContentUrl, QueryGuardStore, type QueryVariantGuard } from "./crawl/traps.ts";
 import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
+import { isScriptOnlyStub } from "./crawl/page-redirects.ts";
 import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
 import { BrowserRenderer, type BrowserImage } from "./browser/browser-renderer.ts";
 import type { ImageDecoder } from "./image/decoder-pool.ts";
@@ -928,8 +929,17 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * fails "error" (the app backs off and eventually marks the page dead).
    * Links are reported only under MAX_DEPTH, deduplicated per page, in scope.
    *
+   * Redirects that live in the page (crawler v3 WP12): on the static path a
+   * qualifying `<meta http-equiv="refresh">` (up to 10 s) is followed inside
+   * the same fetch — scope-, robots- and hop-budget-checked, never
+   * off-scope — so the extracted content is the target's and findings keep
+   * the page address as claimed. A render = BROWSER page does not follow it
+   * here; Chromium follows it during the render.
+   *
    * Pages that need a browser (render = BROWSER, or AUTO with scripts and no
-   * image candidates) are then rendered in Chromium: their images are the
+   * image candidates — including a tiny script-only stub, WP12: under 2 KiB
+   * of visible text, no links, usually a JavaScript redirect or app shell)
+   * are then rendered in Chromium: their images are the
    * responses the browser intercepted, their links come from the rendered
    * DOM, and they are reported without validators (a render is never
    * conditional-GET-suppressed). An AUTO page whose render fails falls back
@@ -957,6 +967,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         headers,
         signal: hard.signal,
         gate,
+        // WP12: the static path follows a qualifying in-page meta refresh as
+        // one more redirect hop of this fetch (beforeHop re-checks scope and
+        // robots for it). Browser-rendered pages leave it to Chromium.
+        followMetaRefresh: source.render !== "browser",
         beforeHop: politeHop(source.delayMs, (u) => {
           // A redirect may not take a page fetch off the source's domain.
           if (!inScope(u, scopeHost)) throw new CrawlError("out_of_scope");
@@ -1022,10 +1036,16 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       maxImages: config.MAX_IMAGES_PER_PAGE,
     });
 
-    // Does this page need a browser? (WP7)
+    // Does this page need a browser? (WP7; WP12 adds the script-only stub.)
+    // The stub clause is the WP12 rule written out — a tiny script-only stub
+    // (under 2 KiB of visible text, no links, a script) also renders — and it
+    // sits inside the WP7 rule's reach (scripts and no image candidates);
+    // kept explicit so the stub contract has its own code and tests.
+    const stub = source.render === "auto" && isScriptOnlyStub(html, ex);
     const wantBrowser =
       source.render === "browser" ||
-      (source.render === "auto" && ex.images.length === 0 && HAS_SCRIPT.test(html));
+      (source.render === "auto" && ex.images.length === 0 && HAS_SCRIPT.test(html)) ||
+      stub;
     if (wantBrowser) {
       const rendered = await renderPageInBrowser(page, url, ctx);
       if (rendered === "dropped") return null; // stopped mid-render: redo whole

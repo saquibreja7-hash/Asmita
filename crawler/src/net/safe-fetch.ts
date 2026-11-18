@@ -11,7 +11,9 @@
  *   there is no window for DNS rebinding between check and connect.
  *
  * Every redirect hop is re-parsed and re-checked (scheme, port, credentials,
- * literal address) and its connection goes through the same connector.
+ * literal address) and its connection goes through the same connector. A
+ * qualifying in-page `<meta http-equiv="refresh">` (crawler v3 WP12) is
+ * followed as one more hop of the same loop when the caller opts in.
  * Requests carry no cookies or authorisation (undici has no cookie jar and we
  * set no such header). Bodies are capped while streaming and again after
  * decompression. This fetcher never sees the Asmita service key: the Asmita
@@ -22,6 +24,7 @@ import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { Agent, buildConnector } from "undici";
 import { CrawlError, toCrawlError } from "../errors.ts";
+import { htmlMetaRefreshTarget } from "../crawl/page-redirects.ts";
 import { parseRetryAfter } from "../retry.ts";
 import { bareHost, checkUrl, resolveAllowed, type NetPolicy } from "./policy.ts";
 
@@ -71,6 +74,15 @@ export type FetchOptions = {
    * after beforeHop, so a politeness wait does not hold a slot.
    */
   gate?: <T>(fn: () => Promise<T>) => Promise<T>;
+  /**
+   * Follow redirects that live in the page body (crawler v3 WP12): a
+   * qualifying `<meta http-equiv="refresh">` in an HTML answer becomes one
+   * more hop of this same loop, so its target is policy-checked by checkUrl,
+   * offered to beforeHop (scope, robots, delay) and counted against
+   * maxRedirects exactly like a Location header. Only HTML fetches whose
+   * caller opts in (page fetches on the static path); unset never follows.
+   */
+  followMetaRefresh?: boolean;
 };
 
 export type FetchResult = {
@@ -142,6 +154,22 @@ export class SafeFetcher {
         }
         url = checkUrl(next, this.policy);
         continue;
+      }
+      // A redirect that lives in the page body (WP12): same loop, same
+      // checks, same budget. A target that does not parse is ignored — the
+      // page itself is valid content, unlike a malformed Location header.
+      if (opts.followMetaRefresh && opts.kind === "html") {
+        const target = htmlMetaRefreshTarget(result.value.contentType, result.value.body);
+        if (target !== null) {
+          let next: URL;
+          try {
+            next = new URL(target, url);
+          } catch {
+            return result.value;
+          }
+          url = checkUrl(next, this.policy);
+          continue;
+        }
       }
       return result.value;
     }

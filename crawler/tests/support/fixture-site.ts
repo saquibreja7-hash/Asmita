@@ -900,6 +900,120 @@ export async function buildParallelFixture(): Promise<Fixture> {
   return { site, pool, expected: [], allHashes: [] };
 }
 
+/*
+ * The page-redirects fixture (crawler v3 WP12): redirects that live in the
+ * page body, not the protocol. redirects.fixture.test (render http) has a
+ * meta-refresh redirector whose target carries the planted image (the
+ * redirector's own decoy image must never be fetched), an off-scope meta
+ * refresh (away.test is never contacted, robots.txt included), an 11-second
+ * refresh that is page content instead (its own image is found), a
+ * self-refresh loop bounded by the shared redirect-hop budget, and a
+ * robots-disallowed refresh target. stub.fixture.test (render auto) carries
+ * a location.replace() stub — under 2 KiB of visible text, one script, no
+ * links, no images — whose target's image only a render can find, and a
+ * small script-less page that must never be rendered. No host overlaps the
+ * other fixtures' hosts.
+ */
+export const REDIR_HOST = `redirects.${SOURCE_DOMAIN}`;
+export const STUB_HOST = `stub.${SOURCE_DOMAIN}`;
+export const AWAY_HOST = "away.test";
+
+export async function buildPageRedirectsFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const R = REDIR_HOST;
+  const U = STUB_HOST;
+
+  const img = {
+    metaTarget: await patternImage(170, 320, 240, "png"),
+    slowOwn: await patternImage(171, 300, 300, "png"),
+    stubTarget: await patternImage(172, 320, 240, "png"),
+  };
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const planted = [
+    { id: "fp-meta", key: "metaTarget", page: "/meta-refresh", path: "/img/meta-target.png" },
+    { id: "fp-meta-slow", key: "slowOwn", page: "/meta-slow", path: "/img/slow-own.png" },
+    { id: "fp-stub", key: "stubTarget", page: "/stub", path: "/img/stub-target.png" },
+  ] as const;
+  const fingerprints: Array<{ id: string; pdq: string; quality: number }> = [];
+  const allHashes: string[] = [];
+  for (const p of planted) {
+    allHashes.push(await hashOf(img[p.key]));
+    fingerprints.push({ id: p.id, pdq: allHashes[allHashes.length - 1]!, quality: 100 });
+  }
+  const pool: Pool = { version: "redirects-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints };
+  const expected: Expected[] = planted.map((p) => ({
+    fingerprintId: p.id,
+    pagePath: p.page,
+    imageHost: p.page === "/stub" ? U : R,
+    imagePath: p.path,
+  }));
+
+  // ---- meta-refresh source (render http) ----
+  site.route(R, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nDisallow: /private/\n"), "text/plain"));
+  site.route(
+    R,
+    "/",
+    sendHtml(
+      html(`
+        <a href="/meta-refresh">meta refresh</a>
+        <a href="/meta-offsite">off-scope meta refresh</a>
+        <a href="/meta-slow">slow refresh</a>
+        <a href="/meta-loop">refresh loop</a>
+        <a href="/meta-robots">robots-disallowed target</a>
+      `),
+    ),
+  );
+  // The redirector: its own image is discarded like an HTTP redirect's page.
+  site.route(
+    R,
+    "/meta-refresh",
+    sendHtml(html(`<img src="/img/redirector-decoy.png">`, `<meta http-equiv="refresh" content="0; url=/refreshed">`)),
+  );
+  site.route(R, "/refreshed", sendHtml(html(`<img src="/img/meta-target.png"><a href="/refreshed-child">child</a>`)));
+  site.route(R, "/refreshed-child", sendHtml(html(`<p>reached through the followed refresh's links</p>`)));
+  site.route(R, "/img/meta-target.png", sendBytes(img.metaTarget, "image/png"));
+  site.route(R, "/img/redirector-decoy.png", sendBytes(img.slowOwn, "image/png"));
+  // Off-scope target: away.test must never be requested, not even robots.txt.
+  site.route(
+    R,
+    "/meta-offsite",
+    sendHtml(html(`<p>moving on&hellip;</p>`, `<meta http-equiv="refresh" content="2; url=${o(AWAY_HOST)}/page">`)),
+  );
+  site.route(AWAY_HOST, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(AWAY_HOST, "/page", sendHtml(html(`<img src="/away.png">`)));
+  // 11 seconds: too slow to be a redirect, so this page is content.
+  site.route(
+    R,
+    "/meta-slow",
+    sendHtml(html(`<img src="/img/slow-own.png">`, `<meta http-equiv="refresh" content="11; url=/never-refreshed">`)),
+  );
+  site.route(R, "/never-refreshed", sendHtml(html(`<img src="/img/meta-target.png">`)));
+  // A self-refresh chain: only the shared redirect budget ends it.
+  site.route(R, "/meta-loop", sendHtml(html(`<p>round and round</p>`, `<meta http-equiv="refresh" content="0; url=/meta-loop">`)));
+  // The target is in scope but robots-disallowed: the page reports blocked.
+  site.route(
+    R,
+    "/meta-robots",
+    sendHtml(html(`<p>nothing to see</p>`, `<meta http-equiv="refresh" content="3; url=/private/target">`)),
+  );
+  site.route(R, "/private/target", sendHtml(html(`<img src="/img/meta-target.png">`)));
+  site.route(R, "/img/slow-own.png", sendBytes(img.slowOwn, "image/png"));
+
+  // ---- script-stub source (render auto) ----
+  site.route(U, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(U, "/", sendHtml(html(`<a href="/stub">js redirect stub</a><a href="/stub-plain">plain page</a>`)));
+  // A location.replace stub: tiny, one script, no links, no images.
+  site.route(U, "/stub", sendHtml(html(`<p>Loading&hellip;</p>`, `<script>location.replace("/stub-target");</script>`)));
+  site.route(U, "/stub-target", sendHtml(html(`<img src="/img/stub-target.png"><a href="/stub-target-child">child</a>`)));
+  site.route(U, "/stub-target-child", sendHtml(html(`<p>child of the stub's target</p>`)));
+  site.route(U, "/img/stub-target.png", sendBytes(img.stubTarget, "image/png"));
+  // Tiny and script-less: never rendered.
+  site.route(U, "/stub-plain", sendHtml(html(`<p>a small page with no script</p>`)));
+
+  return { site, pool, expected, allHashes };
+}
+
 /** Env for a fixture run (test values only, nothing real). */
 export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, string> = {}): Record<string, string> {
   return {
