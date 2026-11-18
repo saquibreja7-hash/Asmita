@@ -569,6 +569,23 @@ export async function getCaseForUser(caseId: string, userId: string, options?: C
   return dbCase ? toDisplayCase(dbCase, includeFindings) : null;
 }
 
+/** Her case ids, newest first, without loading links (sign-in only needs these). */
+export async function listCaseIdsForUser(userId: string): Promise<string[]> {
+  if (isDevNoDb()) {
+    return Array.from(store.cases.values())
+      .filter((rec) => rec.userId === userId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map((rec) => rec.id);
+  }
+  if (usesWorkerKysely()) {
+    const rows = await getWorkerDb().selectFrom("Case").select("id").where("userId", "=", userId).orderBy("createdAt", "desc").execute();
+    return rows.map((row) => row.id);
+  }
+  const db = await getPrismaDb();
+  const rows = await db.case.findMany({ where: { userId }, select: { id: true }, orderBy: { createdAt: "desc" } });
+  return rows.map((row) => row.id);
+}
+
 export async function listCasesForUser(userId: string, options?: CaseReadOptions): Promise<DisplayCase[]> {
   const includeFindings = includesFindings(options);
   if (isDevNoDb()) {

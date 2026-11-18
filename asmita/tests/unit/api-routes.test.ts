@@ -137,7 +137,7 @@ describe("POST /api/auth/verify-otp", () => {
   beforeEach(() => {
     vi.mocked(otpLib.verifyOtp).mockResolvedValue(true);
     vi.mocked(caseOps.upsertVerifiedUser).mockResolvedValue({ id: "user-1", emailHash: "hash-1" });
-    vi.mocked(caseOps.listCasesForUser).mockResolvedValue([]);
+    vi.mocked(caseOps.listCaseIdsForUser).mockResolvedValue([]);
     vi.mocked(caseOps.findVerifiedUserByEmail).mockResolvedValue(null);
   });
 
@@ -183,13 +183,10 @@ describe("POST /api/auth/verify-otp", () => {
     expect(res.headers.get("set-cookie")).toContain("asmita_session=");
   });
 
-  const someCase = (id: string) =>
-    ({ id, referenceNumber: `ASMITA-2026-${id}`, userId: "user-1", createdAt: "2026-11-17T00:00:00.000Z", status: "OPEN", urls: [] }) as never;
-
   it("filing tells the form whether this email already has a case", async () => {
     let res = await verifyOtpRoute(csrfPost("/api/auth/verify-otp", { email: "v@example.com", otp: "123456", ageOver18: true }));
     expect(await res.json()).toMatchObject({ redirectTo: "/submit", hasCases: false });
-    vi.mocked(caseOps.listCasesForUser).mockResolvedValue([someCase("c1")]);
+    vi.mocked(caseOps.listCaseIdsForUser).mockResolvedValue(["c1"]);
     res = await verifyOtpRoute(csrfPost("/api/auth/verify-otp", { email: "v@example.com", otp: "123456", ageOver18: true }));
     expect(await res.json()).toMatchObject({ redirectTo: "/submit", hasCases: true });
   });
@@ -220,7 +217,7 @@ describe("POST /api/auth/verify-otp", () => {
 
     it("one case: signs her in and goes straight to it", async () => {
       vi.mocked(caseOps.findVerifiedUserByEmail).mockResolvedValue({ id: "user-1", ageOver18: true });
-      vi.mocked(caseOps.listCasesForUser).mockResolvedValue([someCase("c1")]);
+      vi.mocked(caseOps.listCaseIdsForUser).mockResolvedValue(["c1"]);
       const res = await track();
       expect(await res.json()).toMatchObject({ success: true, redirectTo: "/case/c1" });
       expect(res.headers.get("set-cookie")).toContain("asmita_session=");
@@ -228,7 +225,7 @@ describe("POST /api/auth/verify-otp", () => {
 
     it("several cases: signs her in and shows the list", async () => {
       vi.mocked(caseOps.findVerifiedUserByEmail).mockResolvedValue({ id: "user-1", ageOver18: true });
-      vi.mocked(caseOps.listCasesForUser).mockResolvedValue([someCase("c1"), someCase("c2")]);
+      vi.mocked(caseOps.listCaseIdsForUser).mockResolvedValue(["c1", "c2"]);
       const res = await track();
       expect(await res.json()).toMatchObject({ redirectTo: "/my-cases" });
       expect(res.headers.get("set-cookie")).toContain("asmita_session=");

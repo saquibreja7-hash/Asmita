@@ -3,7 +3,7 @@ import { z } from "zod";
 import { verifyOtp } from "@/lib/auth/otp";
 import { signSession } from "@/lib/auth/jwt";
 import { writeAuditLog } from "@/lib/audit";
-import { findVerifiedUserByEmail, listCasesForUser, upsertVerifiedUser } from "@/lib/case-ops";
+import { findVerifiedUserByEmail, listCaseIdsForUser, upsertVerifiedUser } from "@/lib/case-ops";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { logSecurityEvent } from "@/lib/security-log";
 import { hashEmail } from "@/lib/hash";
@@ -59,14 +59,14 @@ export async function POST(request: Request) {
     if (!existing || !existing.ageOver18) {
       return NextResponse.json({ success: true, noCase: true, redirectTo: "/start" });
     }
-    const cases = await listCasesForUser(existing.id);
-    if (cases.length === 0) {
+    const caseIds = await listCaseIdsForUser(existing.id);
+    if (caseIds.length === 0) {
       return NextResponse.json({ success: true, noCase: true, redirectTo: "/start" });
     }
     // Signing in again also cancels a pending deletion, as on the filing path.
     const user = await upsertVerifiedUser(parsed.data.email, true);
     await writeAuditLog({ eventType: "USER_VERIFIED", entityType: "User", entityId: user.emailHash });
-    const redirectTo = cases.length === 1 ? `/case/${cases[0].id}` : "/my-cases";
+    const redirectTo = caseIds.length === 1 ? `/case/${caseIds[0]}` : "/my-cases";
     return withSession({ success: true, redirectTo }, user);
   }
 
@@ -76,6 +76,6 @@ export async function POST(request: Request) {
   const user = await upsertVerifiedUser(parsed.data.email, true);
   await writeAuditLog({ eventType: "USER_VERIFIED", entityType: "User", entityId: user.emailHash });
   // hasCases lets the filing form offer her existing case instead of a duplicate.
-  const hasCases = (await listCasesForUser(user.id)).length > 0;
+  const hasCases = (await listCaseIdsForUser(user.id)).length > 0;
   return withSession({ success: true, redirectTo: "/submit", hasCases }, user);
 }
