@@ -70,16 +70,17 @@ export async function listAddedLinks(now = new Date()): Promise<AddedLinkRow[]> 
 
 // The sidebar badge runs on every console page; like the Needs action count,
 // it reuses a result for 30 seconds instead of querying on each render.
-let badgeCache: { at: number; rows: AddedLinkRow[] } | null = null;
-export async function listAddedLinksForBadge(now = new Date()): Promise<AddedLinkRow[]> {
+// Only the times are kept: no case id, reference or domain stays in memory.
+let badgeCache: { at: number; rows: { addedAt: Date }[] } | null = null;
+export async function listAddedLinksForBadge(now = new Date()): Promise<{ addedAt: Date }[]> {
   if (badgeCache && now.getTime() - badgeCache.at < 30_000) return badgeCache.rows;
-  const rows = await listAddedLinks(now);
+  const rows = (await listAddedLinks(now)).map((row) => ({ addedAt: row.addedAt }));
   badgeCache = { at: now.getTime(), rows };
   return rows;
 }
 
 /** How many were added after `seenAt` (all in the window when never opened). */
-export function countUnseen(rows: AddedLinkRow[], seenAt: Date | null): number {
+export function countUnseen(rows: { addedAt: Date }[], seenAt: Date | null): number {
   return seenAt ? rows.filter((row) => row.addedAt > seenAt).length : rows.length;
 }
 
