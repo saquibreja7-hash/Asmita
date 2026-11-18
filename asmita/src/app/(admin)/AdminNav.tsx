@@ -12,10 +12,13 @@ import type { AdminNavGroup } from "./admin-nav";
 export function AdminNav({
   groups,
   actionable,
+  newLinks = null,
   children,
 }: {
   groups: AdminNavGroup[];
   actionable: number | null;
+  /** Links survivors added to existing cases since this admin last looked. */
+  newLinks?: number | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -39,7 +42,7 @@ export function AdminNav({
           type="button"
         >
           {open ? "Close" : "Menu"}
-          {!open && actionable ? <span className="a-count">{actionable}</span> : null}
+          {!open && (actionable || newLinks) ? <span className="a-count">{(actionable ?? 0) + (newLinks ?? 0)}</span> : null}
         </button>
       </div>
       <div className="a-menu" data-open={open} id="admin-menu">
@@ -59,6 +62,12 @@ export function AdminNav({
                     <span className="a-count">
                       {actionable}
                       <span className="sr-only"> cases waiting</span>
+                    </span>
+                  ) : null}
+                  {item.href === "/admin/new-links" && newLinks ? (
+                    <span className="a-count">
+                      {newLinks}
+                      <span className="sr-only"> new links</span>
                     </span>
                   ) : null}
                 </Link>

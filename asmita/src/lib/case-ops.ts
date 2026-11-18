@@ -231,6 +231,26 @@ export async function upsertVerifiedUser(
   return user;
 }
 
+/**
+ * Looks up a survivor by email without creating one ("Track your case"). An
+ * erased account no longer matches its email hash, so it is not found.
+ */
+export async function findVerifiedUserByEmail(email: string): Promise<{ id: string; ageOver18: boolean } | null> {
+  const emailHash = hashEmail(email);
+  if (isDevNoDb()) {
+    const devUser = devUserStore().get(emailHash);
+    if (!devUser || store.getUserStatus(devUser.id) === "gone") return null;
+    return { id: devUser.id, ageOver18: true };
+  }
+  if (usesWorkerKysely()) {
+    const row = await getWorkerDb().selectFrom("User").select(["id", "ageOver18"]).where("emailHash", "=", emailHash).executeTakeFirst();
+    return row ? { id: row.id, ageOver18: row.ageOver18 === true } : null;
+  }
+  const db = await getPrismaDb();
+  const row = await db.user.findUnique({ where: { emailHash }, select: { id: true, ageOver18: true } });
+  return row ? { id: row.id, ageOver18: row.ageOver18 } : null;
+}
+
 /** Records that a pending deletion was cancelled by signing in. No PII: the user id and a count only. */
 async function auditDeletionCancelled(userId: string, cancelledJobs: number) {
   await writeAuditLog({
@@ -547,6 +567,23 @@ export async function getCaseForUser(caseId: string, userId: string, options?: C
     },
   });
   return dbCase ? toDisplayCase(dbCase, includeFindings) : null;
+}
+
+/** Her case ids, newest first, without loading links (sign-in only needs these). */
+export async function listCaseIdsForUser(userId: string): Promise<string[]> {
+  if (isDevNoDb()) {
+    return Array.from(store.cases.values())
+      .filter((rec) => rec.userId === userId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map((rec) => rec.id);
+  }
+  if (usesWorkerKysely()) {
+    const rows = await getWorkerDb().selectFrom("Case").select("id").where("userId", "=", userId).orderBy("createdAt", "desc").execute();
+    return rows.map((row) => row.id);
+  }
+  const db = await getPrismaDb();
+  const rows = await db.case.findMany({ where: { userId }, select: { id: true }, orderBy: { createdAt: "desc" } });
+  return rows.map((row) => row.id);
 }
 
 export async function listCasesForUser(userId: string, options?: CaseReadOptions): Promise<DisplayCase[]> {
