@@ -7,7 +7,7 @@ import SetupMfaPage from "@/app/admin/setup-mfa/page";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { countActionableCases } from "@/lib/admin-cases";
 import { cookies } from "next/headers";
-import { countUnseen, listAddedLinks, NEW_LINKS_SEEN_COOKIE, parseSeenCookie } from "@/lib/admin-new-links";
+import { countUnseen, listAddedLinksForBadge, NEW_LINKS_SEEN_COOKIE, parseSeenCookie } from "@/lib/admin-new-links";
 import { ADMIN_NAV } from "./admin-nav";
 
 // The console is staff-only and case-bearing: never indexable.
@@ -38,7 +38,7 @@ export default async function AdminLayout({
     : null;
   // Links survivors added to existing cases since this admin opened New links.
   const newLinks = hasAdminPermission(role, "cases:read")
-    ? await listAddedLinks()
+    ? await listAddedLinksForBadge()
         .then(async (rows) => countUnseen(rows, parseSeenCookie((await cookies()).get(NEW_LINKS_SEEN_COOKIE)?.value)))
         .catch(() => null)
     : null;
