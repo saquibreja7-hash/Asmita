@@ -977,9 +977,10 @@
   "case.fingerprints.item": "तस्वीर {n}",
   "case.close": "मेरा मामला बंद करें",
   "case.close.closing": "बंद हो रहा है...",
-  "start.track.cta": "अपना मामला देखें",
-  "start.danger.title": "क्या आप तुरंत खतरे में हैं?",
-  "start.danger.body": "सबसे पहले 112 पर कॉल करें। आपका मामला इंतज़ार कर सकता है।",
-  "start.danger.call": "112 पर कॉल करें",
-  "start.danger.callLabel": "आपातकालीन सेवा 112 पर कॉल करें"
+  "start.adult.eyebrow": "मामला शुरू कीजिए",
+  "start.adult.title": "Private case setup करते रहिए।",
+  "start.adult.body": "अपना email one-time code से verify कीजिए, digital declaration पर sign कीजिए, और links को सिर्फ़ text में submit कीजिए। इसमें क़रीब दस मिनट लगते हैं और आप कहीं भी pause करके वापस आ सकते हैं।",
+  "start.danger": "अगर आपको फ़ौरन ख़तरा है, तो फ़ोन कीजिए",
+  "start.dangerCta": "112",
+  "start.dangerSuffix": "और किसी चीज़ से पहले।"
 }

@@ -21,40 +21,55 @@ export default async function StartPage() {
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               {t(locale, "start.hero.sub")}
             </p>
-            {/* The way in sits right under the promise, where she is already reading. */}
-            <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-              <Link className="btn btn-primary btn-arrow" href="/eligibility">
-                {t(locale, "start.adult.cta")}
-              </Link>
-              <Link className="btn btn-secondary" href="/track">
-                {t(locale, "start.track.cta")}
-              </Link>
-            </div>
-            <p className="mt-5 text-sm text-[var(--text-muted)]">
-              <Link href="/start/minor" className="link-underline text-[var(--text-muted)] hover:text-[var(--ink)]">
-                {t(locale, "start.minor.link")}
-              </Link>
-            </p>
           </div>
           <Illustration name="start-journey" eager className="page-hero-art" />
         </section>
 
-        {/* SAFETY + CLOSING */}
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
+        {/* PATH CARD */}
         <section className="container section-pad">
-          <div className="mx-auto grid max-w-3xl gap-6">
-            <div
-              role="note"
-              className="flex flex-col gap-4 rounded-[var(--radius-box)] border border-[var(--line)] border-l-4 border-l-[var(--danger)] bg-[var(--card)] p-6 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <p className="text-[18px] font-semibold leading-[1.4] text-[var(--ink)]">{t(locale, "start.danger.title")}</p>
-                <p className="muted mt-1 text-[15px] leading-[1.6]">{t(locale, "start.danger.body")}</p>
-              </div>
-              <a href="tel:112" className="btn btn-primary shrink-0 justify-center" aria-label={t(locale, "start.danger.callLabel")}>
-                {t(locale, "start.danger.call")}
-              </a>
+          <div className="mx-auto max-w-lg">
+
+            <div className="card flex flex-col">
+              <span className="eyebrow">{t(locale, "start.adult.eyebrow")}</span>
+              <h2 className="mt-4">{t(locale, "start.adult.title")}</h2>
+              <p className="mt-4">{t(locale, "start.adult.body")}</p>
+              <Link className="btn btn-primary btn-arrow mt-8 w-full justify-center" href="/eligibility">
+                {t(locale, "start.adult.cta")}
+              </Link>
             </div>
-            <p className="muted text-[15px] leading-[1.7]">
+
+            <p className="mt-5 text-center text-sm text-[var(--text-muted)]">
+              <Link href="/start/minor" className="link-underline text-[var(--text-muted)] hover:text-[var(--ink)]">
+                {t(locale, "start.minor.link")}
+              </Link>
+            </p>
+
+          </div>
+        </section>
+
+        <div className="container">
+          <div className="hairline" />
+        </div>
+
+        {/* SAFETY + CLOSING */}
+        <section className="container py-12 text-center md:py-16">
+          <div className="mx-auto max-w-xl space-y-5">
+            <p className="text-balance text-[18px] font-medium leading-[1.55] text-[var(--ink)] md:text-[20px]">
+              {t(locale, "start.danger")}{" "}
+              <a
+                href="tel:112"
+                aria-label="Call emergency services 112"
+                className="link-underline text-[var(--ink)]"
+              >
+                {t(locale, "start.dangerCta")}
+              </a>{" "}
+              {t(locale, "start.dangerSuffix")}
+            </p>
+            <p className="muted text-balance text-base leading-[1.75]">
               {t(locale, "start.readMore")}{" "}
               <Link href="/how-it-works" className="link-underline text-[var(--ink)]">
                 {t(locale, "start.howLink")}
