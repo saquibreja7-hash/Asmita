@@ -975,6 +975,7 @@
   "myCases.open": "Open",
   "myCases.new": "Start a new case",
   "case.fingerprints.item": "Image {n}",
+  "case.fingerprints.videoItem": "Video {n}",
   "case.close": "Close my case",
   "case.close.closing": "Closing...",
   "start.adult.eyebrow": "Case setup",

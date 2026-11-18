@@ -8,6 +8,8 @@ import {
   listDevHashPickerPlatforms,
   recordChosenAdvisoryPlatforms,
   MAX_HASHES_PER_SUBMISSION,
+  MAX_VIDEO_DURATION_SEC,
+  MAX_VIDEO_FRAMES,
 } from "@/lib/hash-submission";
 import { requireSession } from "@/lib/auth/middleware";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
@@ -31,23 +33,50 @@ function hashUploadEnabled() {
 }
 
 // Hashes are exactly 64 hex chars. Anything longer is media smuggling and is
-// rejected at the schema layer before validateHashItem runs.
+// rejected at the schema layer before validateHashItem runs. Image items keep
+// their exact old shape (`kind` defaults to image); a video item (video
+// fingerprints WP17) is strict: only its four fields are accepted, and its
+// frames are hashes plus two small integers, never video bytes.
+const imageItem = z.object({
+  kind: z.literal("image").optional(),
+  hash: z.string().min(1).max(64),
+  quality: z.number().int().min(0).max(100),
+  clientVersion: z.string().max(50).optional(),
+});
+const videoItem = z
+  .object({
+    kind: z.literal("video"),
+    frames: z
+      .array(
+        z
+          .object({
+            hash: z.string().min(1).max(64),
+            quality: z.number().int().min(0).max(100),
+            t: z.number().int().min(0).max(MAX_VIDEO_DURATION_SEC),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(MAX_VIDEO_FRAMES),
+    durationSec: z.number().int().min(1).max(MAX_VIDEO_DURATION_SEC),
+    clientVersion: z.string().max(50).optional(),
+  })
+  .strict();
 const schema = z.object({
   hashes: z
-    .array(
-      z.object({
-        hash: z.string().min(1).max(64),
-        quality: z.number().int().min(0).max(100),
-        clientVersion: z.string().max(50).optional(),
-      }),
-    )
+    .array(z.union([imageItem, videoItem]))
     .min(1)
     .max(MAX_HASHES_PER_SUBMISSION),
   declaration: z.boolean().refine(Boolean),
   platformIds: z.array(z.string().uuid()).max(20).optional(),
 });
 
-const MAX_BODY_BYTES = 16_384;
+// The largest legal request is MAX_HASHES_PER_SUBMISSION video items of
+// MAX_VIDEO_FRAMES hashes each: 10 x 1000 x ~96 bytes of
+// {"hash":"...","quality":100,"t":3600} is just under 1 MiB, so a body past
+// this cap can never be a valid submission. Frame content is still checked
+// field by field (validateVideoItem), exactly like an image hash.
+const MAX_BODY_BYTES = 1_048_576;
 
 export async function POST(request: Request, context: { params: Promise<{ caseId: string }> }) {
   if (!hashUploadEnabled()) {
