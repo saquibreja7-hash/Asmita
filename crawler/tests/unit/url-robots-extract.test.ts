@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CrawlError } from "../../src/errors.ts";
 import { extract, largestFromSrcset } from "../../src/crawl/extract.ts";
 import { parseRobots, RobotsCache } from "../../src/crawl/robots.ts";
-import { inScope, normalizeUrl, registrableDomain, sourceHost, urlKey } from "../../src/crawl/url.ts";
+import { inScope, normalizeUrl, registrableDomain, registrableParent, sourceHost, urlKey } from "../../src/crawl/url.ts";
 import type { FetchResult } from "../../src/net/safe-fetch.ts";
 
 describe("normalizeUrl", () => {
@@ -39,6 +39,16 @@ describe("scope", () => {
     expect(registrableDomain("someone.blogspot.com")).toBe("someone.blogspot.com");
     expect(registrableDomain("127.0.0.1")).toBeNull();
     expect(registrableDomain("co.uk")).toBeNull();
+  });
+  it("names the registrable parent only when the source sits on a subdomain of it (WP9)", () => {
+    expect(registrableParent("blog.example.com")).toBe("example.com");
+    expect(registrableParent("a.b.example.co.uk")).toBe("example.co.uk");
+    expect(registrableParent("blog.someone.blogspot.com")).toBe("someone.blogspot.com"); // private suffixes honoured
+    expect(registrableParent("example.com")).toBeNull(); // the registrable domain itself: no parent probe
+    expect(registrableParent("someone.blogspot.com")).toBeNull();
+    expect(registrableParent("Example.COM.")).toBeNull(); // normalised, still itself
+    expect(registrableParent("co.uk")).toBeNull();
+    expect(registrableParent("127.0.0.1")).toBeNull();
   });
   it("scopes pages to the approved host and its subdomains only", () => {
     const apex = sourceHost("example.com")!;

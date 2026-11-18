@@ -858,6 +858,154 @@ ${Array.from({ length: 3 }, (_, i) => `  <entry><title>Post ${i + 1}</title><lin
   return { site, pool, expected, allHashes };
 }
 
+/*
+ * The sitemap-probe fixture (crawler v3 WP9): three sources whose
+ * robots.txt name no sitemap. plain.probe.test serves /sitemap.xml (a
+ * urlset with an image-sitemap entry) and nothing at /sitemap_index.xml;
+ * index.probe.test serves only /sitemap_index.xml (an index pointing at a
+ * child urlset); sub.probe.test serves a non-XML page at /sitemap.xml and
+ * nothing at /sitemap_index.xml, but its registrable parent probe.test
+ * serves a /sitemap.xml that lists in-scope (sub.probe.test) and
+ * out-of-scope (sib.probe.test, probe.test itself) pages. No host here
+ * overlaps the other fixtures' hosts.
+ */
+export const PROBE_PLAIN_HOST = `plain.probe.test`;
+export const PROBE_INDEX_HOST = `index.probe.test`;
+export const PROBE_SUB_HOST = `sub.probe.test`;
+/** The registrable parent of all three sources; its /sitemap.xml is probed once per source. */
+export const PROBE_PARENT_HOST = `probe.test`;
+/** An out-of-scope sibling of sub.probe.test; its page is listed in the parent sitemap and must never be fetched. */
+export const PROBE_SIB_HOST = `sib.probe.test`;
+export const PROBE_HOSTS = [PROBE_PLAIN_HOST, PROBE_INDEX_HOST, PROBE_SUB_HOST, PROBE_PARENT_HOST, PROBE_SIB_HOST];
+
+export async function buildSitemapProbeFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const P = PROBE_PLAIN_HOST;
+  const I = PROBE_INDEX_HOST;
+  const U = PROBE_SUB_HOST;
+  const R = PROBE_PARENT_HOST;
+
+  const img = {
+    alpha: await patternImage(320, 320, 240, "png"),
+    beta: await patternImage(321, 300, 300, "png"),
+    gamma: await patternImage(322, 300, 300, "png"),
+    kept: await patternImage(323, 300, 300, "png"),
+  };
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const h: Record<string, string> = {};
+  for (const [k, v] of Object.entries(img)) h[k] = await hashOf(v);
+  const pool: Pool = {
+    version: "probe-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      { id: "fp-probe-alpha", pdq: h.alpha!, quality: 100 },
+      { id: "fp-probe-beta", pdq: h.beta!, quality: 100 },
+      { id: "fp-probe-gamma", pdq: h.gamma!, quality: 100 },
+      { id: "fp-probe-kept", pdq: h.kept!, quality: 100 },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-probe-alpha", pagePath: "/alpha", imageHost: P, imagePath: "/img/alpha.png" },
+    // beta's image is an <image:loc> entry of the probed sitemap, hashed for its page.
+    { fingerprintId: "fp-probe-beta", pagePath: "/beta", imageHost: P, imagePath: "/img/beta.png" },
+    { fingerprintId: "fp-probe-gamma", pagePath: "/gamma", imageHost: I, imagePath: "/img/gamma.png" },
+    { fingerprintId: "fp-probe-kept", pagePath: "/kept", imageHost: U, imagePath: "/img/kept.png" },
+  ];
+
+  const robotsAllow = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+
+  // ---- (a) plain: /sitemap.xml present, robots.txt names no sitemap ----
+  site.route(P, "/robots.txt", robotsAllow);
+  // The home page links nothing: the probed sitemap is the only way the
+  // fixture's content pages can enter the frontier.
+  site.route(P, "/", sendHtml(html(`<p>plain home, no links</p>`)));
+  site.route(
+    P,
+    "/sitemap.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url><loc>${o(P)}/alpha</loc></url>
+  <url><loc>${o(P)}/beta</loc><image:image><image:loc>${o(P)}/img/beta.png</image:loc></image:image></url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  // No /sitemap_index.xml route: the second probe must never happen once the first hit.
+  site.route(P, "/alpha", sendHtml(html(`<img src="/img/alpha.png">`)));
+  site.route(P, "/beta", sendHtml(html(`<p>its image lives in the sitemap entry</p>`)));
+  site.route(P, "/img/alpha.png", sendBytes(img.alpha, "image/png"));
+  site.route(P, "/img/beta.png", sendBytes(img.beta, "image/png"));
+
+  // ---- (b) index: only /sitemap_index.xml ----
+  site.route(I, "/robots.txt", robotsAllow);
+  site.route(I, "/", sendHtml(html(`<p>index home, no links</p>`)));
+  // No /sitemap.xml route: the probe 404s quietly and the second path is tried.
+  site.route(
+    I,
+    "/sitemap_index.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>${o(I)}/sitemap-child.xml</loc></sitemap>
+</sitemapindex>`,
+      ),
+      "application/xml",
+    ),
+  );
+  site.route(
+    I,
+    "/sitemap-child.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${o(I)}/gamma</loc></url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  site.route(I, "/gamma", sendHtml(html(`<img src="/img/gamma.png">`)));
+  site.route(I, "/img/gamma.png", sendBytes(img.gamma, "image/png"));
+
+  // ---- (c) sub: nothing usable itself; the parent sitemap has the pages ----
+  site.route(U, "/robots.txt", robotsAllow);
+  site.route(U, "/", sendHtml(html(`<p>sub home, no links</p>`)));
+  // A non-XML answer at the first probe path: quietly ignored.
+  site.route(U, "/sitemap.xml", sendHtml(html(`<p>soft-404 junk, not a sitemap</p>`)));
+  // No /sitemap_index.xml route: 404, quietly ignored.
+  site.route(U, "/kept", sendHtml(html(`<img src="/img/kept.png">`)));
+  site.route(U, "/img/kept.png", sendBytes(img.kept, "image/png"));
+
+  // ---- the registrable parent, probe.test: its /sitemap.xml lists pages ----
+  site.route(R, "/robots.txt", robotsAllow);
+  site.route(
+    R,
+    "/sitemap.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${o(U)}/kept</loc></url>
+  <url><loc>${o(PROBE_SIB_HOST)}/dropped</loc></url>
+  <url><loc>${o(R)}/apex-dropped</loc></url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  // sib.probe.test and the apex page have no routes: a request would still be
+  // recorded by the fixture server, so the test can prove they never happen.
+
+  return { site, pool, expected, allHashes: Object.values(h) };
+}
+
 /**
  * The parallel-sources fixture (crawler v2 WP6): twenty independent sites of
  * mixed speed plus one that never answers its home page. A run against all

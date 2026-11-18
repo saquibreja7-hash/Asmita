@@ -50,12 +50,25 @@ export function urlKey(url: URL): string {
 }
 
 /**
- * Registrable domain (eTLD+1) with private suffixes on, so an approved
+ * The registrable domain (eTLD+1) with private suffixes on, so an approved
  * `someone.blogspot.com` stays limited to that blog instead of widening to
  * every blogspot.com site. Returns null for IP literals and bare suffixes.
  */
 export function registrableDomain(hostname: string): string | null {
   return getDomain(hostname, { allowPrivateDomains: true, validHosts: [] }) ?? null;
+}
+
+/**
+ * The registrable parent domain of a source host, when the source sits on
+ * a subdomain of it: `blog.example.com` -> `example.com`. Null when the
+ * host IS the registrable domain (`example.com`, `someone.blogspot.com`
+ * with private suffixes honoured) — the WP9 sitemap probe of the parent
+ * domain applies only to subdomain sources, so those get no parent.
+ */
+export function registrableParent(hostname: string): string | null {
+  const host = hostname.trim().toLowerCase().replace(/\.$/, "");
+  const parent = registrableDomain(host);
+  return parent !== null && parent !== host ? parent : null;
 }
 
 /**
