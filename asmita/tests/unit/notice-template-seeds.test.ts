@@ -209,7 +209,9 @@ describe("crawler drafts agree with each other (R6)", () => {
     const notice = body("CRAWL_REPRESENTATIVE_NOTICE");
     expect(authorisation).toMatch(/intimate images of me/);
     expect(authorisation).toMatch(/did not consent to any copy of them being shared or published/);
-    expect(notice).toMatch(/In the signed authorisation referred to above, the Complainant has declared/);
+    expect(notice).toMatch(/In the authorisation referred to above, the Complainant has declared/);
+    // The authorisation is agreed by a tick, never signed: the notice must not say otherwise.
+    expect(notice).not.toMatch(/signed authori[sz]ation/i);
     expect(notice).toMatch(/did not consent to any copy of them being shared or published/);
     for (const text of [authorisation, notice]) expect(text).not.toMatch(/DRAFT/);
   });

@@ -81,6 +81,8 @@ jobs:
           printf '%s' "$KEY" | npx wrangler secret put CRAWLER_SERVICE_KEY
           HASH=$(printf '%s' "$KEY" | sha256sum | cut -d' ' -f1)
           unset KEY
+          # The hash is not secret; the log copy lets it be read without the web UI.
+          echo "New crawler service key sha256: $HASH"
           {
             echo "### New crawler service key"
             echo "Stored as Worker secret CRAWLER_SERVICE_KEY. Register this sha256 in CrawlServiceKey:"
