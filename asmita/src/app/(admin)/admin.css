@@ -325,7 +325,7 @@
 }
 
 .a-stat[data-urgent="true"] {
-  border-left: var(--s-1) solid var(--c-alert);
+  border-color: var(--c-alert);
 }
 
 .a-stat-value {

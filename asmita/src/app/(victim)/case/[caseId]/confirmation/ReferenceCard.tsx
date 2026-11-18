@@ -44,9 +44,8 @@ export function ReferenceCard({ reference, locale, note, className = "mt-8" }: {
   return (
     <section
       aria-labelledby="case-reference-title"
-      className={`relative ${className} overflow-hidden rounded-[var(--radius-box)] border border-[var(--brand-soft)] bg-[color-mix(in_srgb,var(--brand-soft)_45%,var(--card))] p-5 pl-6 sm:p-6 sm:pl-7`}
+      className={`relative ${className} overflow-hidden rounded-[var(--radius-box)] border border-[var(--brand-soft)] bg-[color-mix(in_srgb,var(--brand-soft)_45%,var(--card))] p-5 sm:p-6`}
     >
-      <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1.5 bg-[var(--brand)]" />
       <h2 id="case-reference-title" className="eyebrow">{t(locale, "confirm.ref.eyebrow")}</h2>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <p

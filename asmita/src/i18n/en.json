@@ -977,9 +977,11 @@
   "case.fingerprints.item": "Image {n}",
   "case.close": "Close my case",
   "case.close.closing": "Closing...",
-  "start.track.cta": "Track your case",
-  "start.danger.title": "In immediate danger?",
-  "start.danger.body": "Call 112 before anything else. Your case can wait.",
-  "start.danger.call": "Call 112",
-  "start.danger.callLabel": "Call emergency services on 112"
+  "start.adult.eyebrow": "Case setup",
+  "start.adult.title": "Continue to private case setup.",
+  "start.adult.body": "Verify your email with a one-time code, sign a digital declaration, and submit links as text only. Takes about ten minutes and you can pause and resume at any point.",
+  "start.danger": "If you are in immediate danger, call",
+  "start.dangerCta": "112",
+  "start.dangerSuffix": "before anything else.",
+  "start.dangerCall.label": "Call emergency services on 112"
 }
