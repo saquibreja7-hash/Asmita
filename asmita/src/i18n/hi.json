@@ -982,5 +982,6 @@
   "start.adult.body": "अपना email one-time code से verify कीजिए, digital declaration पर sign कीजिए, और links को सिर्फ़ text में submit कीजिए। इसमें क़रीब दस मिनट लगते हैं और आप कहीं भी pause करके वापस आ सकते हैं।",
   "start.danger": "अगर आपको फ़ौरन ख़तरा है, तो फ़ोन कीजिए",
   "start.dangerCta": "112",
-  "start.dangerSuffix": "और किसी चीज़ से पहले।"
+  "start.dangerSuffix": "और किसी चीज़ से पहले।",
+  "start.dangerCall.label": "आपातकालीन सेवा 112 पर कॉल करें"
 }

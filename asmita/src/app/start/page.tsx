@@ -62,7 +62,7 @@ export default async function StartPage() {
               {t(locale, "start.danger")}{" "}
               <a
                 href="tel:112"
-                aria-label="Call emergency services 112"
+                aria-label={t(locale, "start.dangerCall.label")}
                 className="link-underline text-[var(--ink)]"
               >
                 {t(locale, "start.dangerCta")}

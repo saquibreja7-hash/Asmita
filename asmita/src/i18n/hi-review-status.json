@@ -79,7 +79,8 @@
       "myCases.*",
       "case.fingerprints.item",
       "case.close",
-      "case.close.closing"
+      "case.close.closing",
+      "start.dangerCall.label"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",

@@ -982,5 +982,6 @@
   "start.adult.body": "Verify your email with a one-time code, sign a digital declaration, and submit links as text only. Takes about ten minutes and you can pause and resume at any point.",
   "start.danger": "If you are in immediate danger, call",
   "start.dangerCta": "112",
-  "start.dangerSuffix": "before anything else."
+  "start.dangerSuffix": "before anything else.",
+  "start.dangerCall.label": "Call emergency services on 112"
 }
