@@ -40,6 +40,8 @@ export type UrlRecord = {
    * database column's existing rows.
    */
   crawlSourceChecked?: boolean;
+  /** When she added it (admin New links). Absent on demo rows. */
+  submittedAt?: string;
 };
 
 type StoreGlobals = {
@@ -155,6 +157,7 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
       flaggedForReview,
       flagReason: options?.flagReasons?.join(","),
       crawlSourceChecked: false,
+      submittedAt: new Date().toISOString(),
     };
     record.urls.push(url);
     return { ok: true as const, duplicate: false, url };

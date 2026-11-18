@@ -69,6 +69,13 @@ export function MobileMenu({ locale, groups }: { locale: Locale; groups: NavGrou
             </details>
           ))}
           <Link
+            href="/track"
+            className="btn btn-secondary mt-3 w-full"
+            onClick={() => setOpen(false)}
+          >
+            {locale === "hi" ? "अपना मामला देखें" : "Track your case"}
+          </Link>
+          <Link
             href="/get-help"
             className="btn btn-primary btn-arrow mt-3 w-full"
             onClick={() => setOpen(false)}

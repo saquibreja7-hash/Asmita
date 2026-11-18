@@ -70,7 +70,7 @@ describe("survivor crawl-consent route", () => {
     const url = `https://asmita.test/api/cases/${record.id}/crawl-consent`;
     const responses = [
       await consentRoute.GET(request(url), params({ caseId: record.id })),
-      await consentRoute.POST(request(url, "POST", { name: "A", contact: "a@example.org", signature: "A", templateRef: "x" }), params({ caseId: record.id })),
+      await consentRoute.POST(request(url, "POST", { agreed: true, templateRef: "x" }), params({ caseId: record.id })),
       await consentRoute.DELETE(request(url, "DELETE"), params({ caseId: record.id })),
     ];
     for (const response of responses) {
@@ -91,7 +91,7 @@ describe("survivor crawl-consent route", () => {
   it("signing is closed while the crawler or hash upload is off, and needs CSRF", async () => {
     const record = await store.createCase("user-a");
     vi.mocked(requireSession).mockResolvedValue(adult as never);
-    const body = { name: "A", contact: "a@example.org", signature: "A", templateRef: "x" };
+    const body = { agreed: true, templateRef: "x" };
     vi.stubEnv("ENABLE_CRAWLER", "false");
     expect((await consentRoute.POST(request("https://asmita.test/x", "POST", body), params({ caseId: record.id }))).status).toBe(503);
     vi.stubEnv("ENABLE_CRAWLER", "true");
@@ -136,7 +136,7 @@ describe("survivor crawl-consent route", () => {
     const state = vi.spyOn(consent, "getCrawlConsentState").mockResolvedValue({ status: "none", signedAt: null, withdrawnAt: null, fingerprintCount: 0 });
     vi.mocked(db.noticeTemplate.findFirst).mockResolvedValue(null as never);
     const response = await consentRoute.POST(
-      request("https://asmita.test/x", "POST", { name: "Test Person", contact: "a@example.org", signature: "Test Person", templateRef: "x" }),
+      request("https://asmita.test/x", "POST", { agreed: true, templateRef: "x" }),
       params({ caseId: "c1" }),
     );
     expect(response.status).toBe(409);

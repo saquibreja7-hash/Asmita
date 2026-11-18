@@ -6,6 +6,8 @@ import AdminLoginPage from "@/app/admin/login/page";
 import SetupMfaPage from "@/app/admin/setup-mfa/page";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { countActionableCases } from "@/lib/admin-cases";
+import { cookies } from "next/headers";
+import { countUnseen, listAddedLinks, NEW_LINKS_SEEN_COOKIE, parseSeenCookie } from "@/lib/admin-new-links";
 import { ADMIN_NAV } from "./admin-nav";
 
 // The console is staff-only and case-bearing: never indexable.
@@ -34,11 +36,17 @@ export default async function AdminLayout({
   const actionable = hasAdminPermission(role, "cases:read")
     ? await countActionableCases().catch(() => null)
     : null;
+  // Links survivors added to existing cases since this admin opened New links.
+  const newLinks = hasAdminPermission(role, "cases:read")
+    ? await listAddedLinks()
+        .then(async (rows) => countUnseen(rows, parseSeenCookie((await cookies()).get(NEW_LINKS_SEEN_COOKIE)?.value)))
+        .catch(() => null)
+    : null;
 
   return (
     // The console has its own shell: no public header, banner or footer.
     <div className="admin a-shell">
-      <AdminNav actionable={actionable} groups={groups}>
+      <AdminNav actionable={actionable} groups={groups} newLinks={newLinks}>
         <AdminLogoutButton />
       </AdminNav>
       <main className="a-main">{children}</main>

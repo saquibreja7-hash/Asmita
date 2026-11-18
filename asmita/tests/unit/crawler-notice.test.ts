@@ -225,7 +225,7 @@ describe("representative notice: rendering", () => {
     expect(n.pdfBody).not.toContain(PDQ_OTHER);
     expect(n.fingerprintIds).toEqual(["h1"]);
     expect(n.pdfBody).toContain("consent-1");
-    expect(n.pdfBody).toContain("signed by the Complainant on 10 November 2026");
+    expect(n.pdfBody).toContain("agreed to by the Complainant on 10 November 2026");
     expect(n.pdfBody).toContain("For Asmita, as authorised representative of the Complainant");
     expect(n.pdfBody).toContain(representativeReference("admin-1"));
     expect(n.pdfBody).not.toContain("admin-1");

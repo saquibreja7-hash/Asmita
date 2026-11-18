@@ -7,7 +7,7 @@ A link on a case comes from one of two places, and each has its own dispatch pat
 | | Survivor link (`source: SURVIVOR`) | Crawler link (`source: CRAWLER`) |
 |-|-|-|
 | Who found it | The survivor | Asmita's crawler, approved by one or two analysts |
-| Who signs | She signs the notice (`signedNoticePdf`) | Nobody signs the notice. Asmita sends it as her authorised representative under her signed crawl authorisation (`CrawlConsent`) |
+| Who signs | She signs the notice (`signedNoticePdf`) | Nobody signs the notice. Asmita sends it as her authorised representative under the crawl authorisation she agreed to by ticking a box (`CrawlConsent`) |
 | Routes | `GET /api/cases/[caseId]/preview-notice`, `POST .../sign-notice`, `POST /api/notices/dispatch` | `POST /api/admin/findings/[id]/notice/preview`, `POST /api/admin/findings/[id]/notice/dispatch` |
 | Template | `IT_RULES_2021` / `DMCA` / `IT_RULES_AND_DMCA`, pinned at signing | `CRAWL_REPRESENTATIVE_NOTICE`, the newest active version |
 | Fingerprint annex | Every fingerprint listed when she signed (`buildSignedHashAnnex`) | Only the fingerprint the approved finding matched (`buildRepresentativeHashAnnex`, same renderer) |
@@ -47,7 +47,7 @@ The notice consists of:
 3. the annex for the matched fingerprint;
 4. the line "For Asmita, as authorised representative of the Complainant", the reviewer reference and the date.
 
-The reviewer reference is a hash of the admin id, never a name or email. Her signature is not attached. The email carries the same text with the two addresses replaced by placeholders, the same rule as survivor notices, and the PDF is attached.
+The reviewer reference is a hash of the admin id, never a name or email. No name or signature of hers is cited or attached: she agrees to the authorisation by ticking a box in her verified account, and the notice says when. The email carries the same text with the two addresses replaced by placeholders, the same rule as survivor notices, and the PDF is attached.
 
 ## Gates and codes
 

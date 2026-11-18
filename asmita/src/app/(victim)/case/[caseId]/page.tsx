@@ -9,6 +9,7 @@ import { FoundByAsmita } from "./FoundByAsmita";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
 import { splitUrls } from "./crawl-consent-logic";
 import { CaseDashboardActions } from "./CaseDashboardActions";
+import { CloseDashboardButton } from "../../CloseDashboardButton";
 import { MarkRemovedButton } from "./MarkRemovedButton";
 import { EscalationLadder } from "./EscalationLadder";
 import { PlatformFiledButton } from "./PlatformFiledButton";
@@ -17,6 +18,7 @@ import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
 import { findSignableHashAdvisory, findSignableNotice } from "@/lib/signable-notice";
 import { findVoidedSignatures } from "@/lib/voided-signatures";
+import { localizeRejectionReason } from "@/lib/rejection-reasons";
 
 // Wording that matches what has actually happened: "prepared" is not "sent",
 // and "sent" is not "removed".
@@ -45,6 +47,18 @@ function StatusBadge({ status, locale, unknown = false }: { status: string; loca
     <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-medium ${color}`}>
       {label}
     </span>
+  );
+}
+
+// Only a rejected link's reason is the admin's note to her; before a decision
+// the same field holds internal flag codes, which are never shown.
+function rejectedReason(stored: string | null | undefined, locale: Locale) {
+  const text = localizeRejectionReason(stored, locale);
+  if (!text) return null;
+  return (
+    <p className="mt-2 max-w-prose rounded-[var(--radius-box)] bg-[var(--page)] px-3 py-2 text-xs leading-[1.6] text-[var(--text)]">
+      <span className="font-medium text-[var(--ink)]">{t(locale, "case.rejectedReason.label")}</span> {text}
+    </p>
   );
 }
 
@@ -156,7 +170,10 @@ export default async function CasePage({
           <div className="mx-auto max-w-2xl space-y-10">
 
             <header>
-              <p className="eyebrow">{t(locale, "case.pill")}</p>
+              <div className="flex items-start justify-between gap-4">
+                <p className="eyebrow">{t(locale, "case.pill")}</p>
+                <CloseDashboardButton locale={locale} />
+              </div>
               <h1 className="page-title-sm mt-4">{t(locale, "case.heading")}</h1>
               <p className="muted mt-3 text-sm leading-[1.7]">
                 {t(locale, "case.reference")}{" "}
@@ -212,6 +229,7 @@ export default async function CasePage({
                         </Link>
                         <p className="font-mono mt-0.5 text-[12px] text-[var(--text-muted)]">{url.domain}</p>
                         {!url.urlHash && <p className="muted mt-1 text-xs">{t(locale, "case.urlExpired")}</p>}
+                        {url.status === "REJECTED" && rejectedReason(url.flagReason, locale)}
                       </div>
                       <div className="flex flex-col items-end gap-1.5">
                         {/* She filed the platform's own form: for her, it has been sent. */}
@@ -248,9 +266,14 @@ export default async function CasePage({
               <section id="fingerprints" aria-labelledby="case-fingerprints-title" className="scroll-mt-24">
                 <h2 id="case-fingerprints-title" className="subsection-title">{t(locale, "case.fingerprints.title")}</h2>
                 <ul className="mt-4 divide-y divide-[var(--line)] overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
-                  {hashSubmissions.map((submission) => (
+                  {hashSubmissions.map((submission, index) => (
                     <li key={submission.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-                      <span className="font-mono text-[13px] text-[var(--text-muted)]">{submission.hashDigest.slice(0, 12)}…</span>
+                      {/* Masked like a password: the fingerprint itself means nothing to her
+                          and should not sit on a shared screen. */}
+                      <span className="flex items-center gap-3">
+                        <span className="text-[15px] font-medium text-[var(--ink)]">{t(locale, "case.fingerprints.item").replace("{n}", String(index + 1))}</span>
+                        <span aria-hidden="true" className="select-none font-mono text-[15px] tracking-[0.2em] text-[var(--text-muted)]">••••••••</span>
+                      </span>
                       <StatusBadge status={submission.status} locale={locale} />
                     </li>
                   ))}

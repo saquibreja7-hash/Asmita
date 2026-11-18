@@ -178,6 +178,8 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
         hashes: hashedFiles.map((f) => ({ hash: f.hash!, quality: f.quality ?? 0, clientVersion: PDQ_CLIENT_VERSION })),
         platformIds: hashOnly ? remainingPlatforms.map((p) => p.id) : [],
         emailPlatformIds: remainingPlatforms.filter((p) => p.hasEmail).map((p) => p.id),
+        // Display only: the review step names the platforms; never sent.
+        emailPlatformNames: remainingPlatforms.filter((p) => p.hasEmail).map((p) => p.name),
         formOnlyPlatforms: [],
         declaration: true,
       });

@@ -480,10 +480,15 @@ html[lang="hi"] .data-table thead th { letter-spacing: 0; text-transform: none; 
   box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
 }
 
+/* Phones: a compact pill in the corner, never a full-width bar over the page. */
 @media (max-width: 640px) {
   .quick-exit {
-    right: 50%;
-    transform: translateX(50%);
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: auto;
+    min-height: 2.75rem;
+    padding: 0 1.1rem;
+    font-size: 15px;
   }
 }
 
@@ -1211,7 +1216,7 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
 @media (max-width: 480px) {
   /* Thumb-friendly: action buttons inside page content span the full width.
      Header and footer buttons are outside <main> and keep their size. */
-  main .btn:not(.btn-link):not(.node) { width: 100%; }
+  main .btn:not(.btn-link):not(.node):not(.quick-exit):not(.btn-compact) { width: 100%; }
   main .flex.flex-wrap:has(> .btn) { flex-direction: column; align-items: stretch; }
   .audience-pills { flex-direction: column; align-items: stretch; }
   .hero-image-copy { max-width: none; }

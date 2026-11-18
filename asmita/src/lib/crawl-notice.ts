@@ -81,7 +81,7 @@ function particulars(input: {
     "",
     `Page address: ${input.pageAddress}`,
     `Image address: ${input.imageAddress}`,
-    `Authorisation relied on: written authorisation ${input.consentId}, signed by the Complainant on ${input.consentSignedOn}. Her signature is not attached to this notice.`,
+    `Authorisation relied on: written authorisation ${input.consentId}, agreed to by the Complainant on ${input.consentSignedOn} in her verified Asmita account. It is not attached to this notice.`,
     "",
     "--- END PARTICULARS ---",
   ].join("\n");
@@ -265,7 +265,9 @@ export async function prepareRepresentativeNotice(input: {
   const date = noticeDate(now);
   const reference = representativeReference(input.adminId);
   const consentSignedOn = noticeDate(consent.signedAt);
-  const authorisationReference = `${consent.id} (signed ${consentSignedOn})`;
+  // She agrees by ticking a box in her account; no name or signature is
+  // recorded, so none is ever cited.
+  const authorisationReference = `${consent.id} (agreed on ${consentSignedOn})`;
   const render = (page: string, image: string) => {
     const variables = {
       caseReference: link.case.referenceNumber,

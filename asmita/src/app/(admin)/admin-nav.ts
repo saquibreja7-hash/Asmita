@@ -11,6 +11,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     heading: "Work",
     items: [
       { href: "/admin/cases", label: "Cases", permission: "cases:read" },
+      { href: "/admin/new-links", label: "New links", permission: "cases:read" },
       { href: "/admin/queue", label: "Flagged links", permission: "cases:read" },
       { href: "/admin/hashes", label: "Fingerprints", permission: "cases:read" },
       { href: "/admin/findings", label: "Findings", permission: "findings:review" },

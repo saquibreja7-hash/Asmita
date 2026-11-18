@@ -28,21 +28,20 @@ export function SignNoticeForm({ caseId, urlId, templateRef, platformName, hashA
   const router = useRouter();
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
-  const [signature, setSignature] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   // The notice PDF shows Latin letters only; say so before signing.
   const nameUnsupported = !isPdfSafeText(name.trim().normalize("NFC"));
-  const signatureUnsupported = !isPdfSafeText(signature.trim().normalize("NFC"));
-  const canSubmit = name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) && signature.trim() && !nameUnsupported && !signatureUnsupported && agreed && !submitting;
+  const canSubmit = name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) && !nameUnsupported && agreed && !submitting;
 
   async function handleSubmit() {
     setError("");
     setSubmitting(true);
     try {
-      const details = { templateRef, name: name.trim(), contact: contact.trim(), signature: signature.trim() };
+      // Her full name is her signature; the server signs with it.
+      const details = { templateRef, name: name.trim(), contact: contact.trim() };
       const res = await csrfFetch(`/api/cases/${caseId}/${advisory ? "sign-hash-advisory" : "sign-notice"}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -104,8 +103,10 @@ export function SignNoticeForm({ caseId, urlId, templateRef, platformName, hashA
             {t(locale, "sign.name.label")}
           </label>
           <p className="muted mt-1 text-sm">{t(locale, "sign.name.sub")}</p>
+          <p id="sign-name-signature" className="muted mt-1 text-sm">{t(locale, "sign.name.signature")}</p>
           <input
             id="sign-name"
+            aria-describedby="sign-name-signature"
             type="text"
             className="field mt-2"
             placeholder={t(locale, "sign.name.placeholder")}
@@ -137,28 +138,6 @@ export function SignNoticeForm({ caseId, urlId, templateRef, platformName, hashA
             autoComplete="email"
           />
         </div>
-      </div>
-
-      {/* Signature */}
-      <div className="space-y-4 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
-        <p className="text-sm font-medium text-[var(--ink)]">{t(locale, "sign.sig.title")}</p>
-        <p className="muted text-sm leading-[1.6]">
-          {t(locale, "sign.sig.sub")}
-        </p>
-        <input
-          id="sign-signature"
-          type="text"
-          className="field font-display text-[18px]"
-          placeholder={t(locale, "sign.sig.placeholder")}
-          value={signature}
-          onChange={(e) => setSignature(e.target.value)}
-          maxLength={100}
-          autoComplete="off"
-          aria-invalid={signatureUnsupported || undefined}
-        />
-        {signatureUnsupported && !nameUnsupported && (
-          <p role="alert" className="text-sm font-medium text-[var(--danger)]">{t(locale, "sign.error.nameScript")}</p>
-        )}
       </div>
 
       {/* Declaration */}

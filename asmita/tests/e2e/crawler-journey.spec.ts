@@ -120,9 +120,7 @@ test.describe("crawler journey", () => {
     const state = await (await page.request.get(`/api/cases/${caseId}/crawl-consent`)).json();
     expect(state).toMatchObject({ status: "none", available: true });
     const signed = await post(page.request, `/api/cases/${caseId}/crawl-consent`, {
-      name: "Synthetic Survivor",
-      contact: "survivor@example.invalid",
-      signature: "Synthetic Survivor",
+      agreed: true,
       templateRef: state.draft.templateRef,
     });
     expect(signed.ok()).toBe(true);

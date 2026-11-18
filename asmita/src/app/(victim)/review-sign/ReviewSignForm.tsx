@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { DRAFT_KEY } from "@/lib/eligibility";
@@ -9,6 +9,7 @@ import { isPdfSafeText } from "@/lib/pdf-text";
 import { FormHandoff } from "@/components/FormHandoff";
 import { platformDirectory } from "@/lib/platforms";
 import { checkLink, matchPlatform } from "@/lib/link-check";
+import { QUALITY_KEYS, joinNames, linkPlatformName, numbered, qualityLevel } from "./review-summary";
 
 type HashEntry = { hash: string; quality: number; clientVersion: string };
 
@@ -18,6 +19,8 @@ type Draft = {
   hashes: HashEntry[];
   platformIds: string[];
   emailPlatformIds: string[];
+  // Display only, for the summary; older drafts may not have it.
+  emailPlatformNames?: string[];
   formOnlyPlatforms: { id: string; name: string; formUrl: string }[];
   declaration: boolean;
 };
@@ -88,6 +91,25 @@ function CheckItem({ heading, detail }: { heading: string; detail: string }) {
   );
 }
 
+function SummaryCard({ id, title, count, icon, children }: { id: string; title: string; count: number; icon: "link" | "image"; children: ReactNode }) {
+  return (
+    <section aria-labelledby={id} className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
+      <div className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:px-6">
+        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)] text-[var(--brand-strong)]">
+          {icon === "link" ? (
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 014 4l-1 1M9 11.5l-1 1a2.8 2.8 0 01-4-4l1-1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+          ) : (
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M2.5 11l3.5-3.5 3 3 2-2 2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+          )}
+        </span>
+        <h2 id={id} className="text-base font-semibold text-[var(--ink)]">{title}</h2>
+        <span className="ml-auto inline-flex min-w-[1.75rem] items-center justify-center rounded-full bg-[var(--page)] px-2 py-0.5 text-xs font-medium tabular-nums text-[var(--text-muted)]">{count}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function ReviewSignForm({ locale, email }: { locale: Locale; email: string | null }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("loading");
@@ -101,7 +123,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
   const [pendingFormPlatforms, setPendingFormPlatforms] = useState<{ id: string; name: string; formUrl: string }[]>([]);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
-  const [signature, setSignature] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [signedCount, setSignedCount] = useState(0);
@@ -243,7 +264,7 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
       const res = await csrfFetch(`/api/cases/${caseId}/sign-notice`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ urlId: noticeUrlId, templateRef, name: name.trim(), contact: contact.trim(), signature: signature.trim() }),
+        body: JSON.stringify({ urlId: noticeUrlId, templateRef, name: name.trim(), contact: contact.trim() }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -262,13 +283,12 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         return;
       }
       // Each link has its own notice. If another is ready, sign it here too;
-      // the signature and confirmation are given again for every notice.
+      // the confirmation is given again for every notice.
       const next = await fetch(`/api/cases/${caseId}/preview-notice`);
       const nextUrlId = next.headers.get("x-notice-url-id");
       const nextRef = noticeRef(next);
       if (nextUrlId && nextRef) {
         setSignedCount(signedCount + 1);
-        setSignature("");
         setAgreed(false);
         setNoticeUrlId(nextUrlId);
         setTemplateRef(nextRef);
@@ -296,7 +316,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         body: JSON.stringify({
           name: name.trim(),
           contact: contact.trim(),
-          signature: signature.trim(),
           platformIds: draft.emailPlatformIds,
           templateRef,
         }),
@@ -331,13 +350,10 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
 
   // The notice PDF shows Latin letters only; say so before signing.
   const nameUnsupported = !isPdfSafeText(name.trim().normalize("NFC"));
-  const signatureUnsupported = !isPdfSafeText(signature.trim().normalize("NFC"));
   const canSign =
     name.trim().length > 0 &&
     !nameUnsupported &&
-    !signatureUnsupported &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) &&
-    signature.trim().length > 0 &&
     agreed &&
     step !== "signing" &&
     step !== "hash-signing";
@@ -400,84 +416,85 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
           </div>
 
           {draft && draft.urls.length > 0 && (
-            <div
-              className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
-            >
-              <p className="text-sm font-medium text-[var(--ink)]">
-                {t(locale, "review.links.label")} ({draft.urls.length})
-              </p>
-              <ul className="mt-3 space-y-1.5">
-                {draft.urls.map((url, i) => (
-                  <li key={i} className="break-all font-mono text-[13px] text-[var(--text-muted)]">
-                    {url}
-                  </li>
-                ))}
-              </ul>
-              {draft.urls.length > 1 && (
-                <p className="muted mt-4 text-xs leading-[1.65]">
-                  {t(locale, "review.links.moreNote")}
-                </p>
-              )}
-            </div>
-          )}
-
-          {draft && draft.hashes.length > 0 && (
-            <div
-              className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-box)] bg-[var(--brand-soft)]">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                    <rect x="1" y="1" width="5" height="5" rx="1" stroke="var(--brand)" strokeWidth="1.2"/>
-                    <rect x="8" y="1" width="5" height="5" rx="1" stroke="var(--brand)" strokeWidth="1.2"/>
-                    <rect x="1" y="8" width="5" height="5" rx="1" stroke="var(--brand)" strokeWidth="1.2"/>
-                    <path d="M8 10.5h5M10.5 8v5" stroke="var(--brand)" strokeWidth="1.2" strokeLinecap="round"/>
-                  </svg>
-                </span>
-                <p className="text-sm font-medium text-[var(--ink)]">
-                  {t(locale, "review.fingerprints.label")}
-                  <span className="ml-1.5 inline-flex items-center rounded-full bg-[var(--brand-soft)] px-2 py-0.5 font-mono text-[11px] text-[var(--brand)]">{draft.hashes.length}</span>
-                </p>
-              </div>
-              <ul className="mt-4 space-y-2">
-                {draft.hashes.map((h, i) => {
-                  const q = h.quality;
-                  const qColor = q >= 70 ? "text-[var(--success)] bg-[var(--success-soft)]" : q >= 50 ? "text-[var(--warning)] bg-[var(--warning-soft)]" : "text-[var(--danger)] bg-[var(--danger-soft)]";
+            <SummaryCard id="review-links-title" title={t(locale, "review.links.title")} count={draft.urls.length} icon="link">
+              <ul className="divide-y divide-[var(--line)]">
+                {draft.urls.map((url, i) => {
+                  const platform = linkPlatformName(url);
                   return (
-                    <li key={i} className="flex items-center justify-between rounded-[var(--radius-box)] border border-[var(--line)] px-3 py-2.5">
-                      <span className="font-mono text-[12px] text-[var(--text-muted)]">{h.hash.slice(0, 8)}&thinsp;&middot;&thinsp;{h.hash.slice(8, 16)}&thinsp;&middot;&thinsp;&hellip;</span>
-                      <span className={`ml-3 shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] font-medium ${qColor}`}>{q}%</span>
+                    <li key={i} className="px-5 py-4 sm:px-6">
+                      <p className="text-sm font-medium text-[var(--ink)]">{numbered(locale, "review.links.item", i)}</p>
+                      <p className="mt-1 break-all font-mono text-[13px] leading-[1.6] text-[var(--text-muted)]">{url}</p>
+                      <p className="mt-2 text-sm text-[var(--text)]">
+                        <span className="text-[var(--text-muted)]">{t(locale, "review.sendTo")}</span>{" "}
+                        <span className="font-medium text-[var(--ink)]">{platform ?? t(locale, "review.links.unknownPlatform")}</span>
+                      </p>
                     </li>
                   );
                 })}
               </ul>
-              {draft.platformIds.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
+              {draft.urls.length > 1 && (
+                <p className="muted border-t border-[var(--line)] bg-[var(--page)] px-5 py-3 text-xs leading-[1.65] sm:px-6">
+                  {t(locale, "review.links.moreNote")}
+                </p>
+              )}
+            </SummaryCard>
+          )}
+
+          {draft && draft.hashes.length > 0 && (
+            <SummaryCard id="review-fingerprints-title" title={t(locale, "review.fingerprints.title")} count={draft.hashes.length} icon="image">
+              <ul className="divide-y divide-[var(--line)]">
+                {draft.hashes.map((h, i) => {
+                  const level = qualityLevel(h.quality);
+                  const tone =
+                    level === "good"
+                      ? "bg-[var(--success-soft)] text-[var(--success)]"
+                      : level === "fair"
+                      ? "bg-[var(--warning-soft)] text-[var(--warning)]"
+                      : "bg-[var(--danger-soft)] text-[var(--danger)]";
+                  return (
+                    <li key={i} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3.5 sm:px-6">
+                      <p className="text-sm text-[var(--ink)]">
+                        <span className="font-medium">{numbered(locale, "review.fingerprints.item", i)}</span>
+                        <span className="text-[var(--text-muted)]"> · {t(locale, "review.fingerprints.ready")}</span>
+                      </p>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>
+                        {t(locale, QUALITY_KEYS[level])}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {(draft.emailPlatformIds.length > 0 || draft.formOnlyPlatforms.length > 0) && (
+                <div className="space-y-1.5 border-t border-[var(--line)] bg-[var(--page)] px-5 py-3.5 text-sm sm:px-6">
                   {draft.emailPlatformIds.length > 0 && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] px-3 py-1 text-xs text-[var(--text-muted)]">
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M1 3l5 3.5L11 3M1 3h10v7H1V3z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-                      {draft.emailPlatformIds.length} {t(locale, "review.fingerprints.emailNote")}
-                    </span>
+                    <p>
+                      <span className="text-[var(--text-muted)]">{t(locale, "review.sendTo")}</span>{" "}
+                      <span className="font-medium text-[var(--ink)]">
+                        {draft.emailPlatformNames?.length
+                          ? joinNames(draft.emailPlatformNames, locale)
+                          : `${draft.emailPlatformIds.length} ${t(locale, "review.fingerprints.emailNote")}`}
+                      </span>
+                    </p>
                   )}
                   {draft.formOnlyPlatforms.length > 0 && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] px-3 py-1 text-xs text-[var(--text-muted)]">
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 2h8v8H2z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/><path d="M4 5h4M4 7h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                      {draft.formOnlyPlatforms.length} {t(locale, "review.fingerprints.formNote")}
-                    </span>
+                    <p>
+                      <span className="text-[var(--text-muted)]">{t(locale, "review.formTo")}</span>{" "}
+                      <span className="font-medium text-[var(--ink)]">{joinNames(draft.formOnlyPlatforms.map((p) => p.name), locale)}</span>
+                    </p>
                   )}
                 </div>
               )}
-            </div>
+            </SummaryCard>
           )}
 
           {error && (
-            <p className="text-sm font-medium text-[var(--danger)]">{error}</p>
+            <p role="alert" className="text-sm font-medium text-[var(--danger)]">{error}</p>
           )}
 
           <div className="flex flex-wrap items-center gap-3 sm:flex-row-reverse sm:justify-between">
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn-primary w-full justify-center sm:w-auto"
               disabled={step === "creating"}
               onClick={() => {
                 if (!draft) return;
@@ -488,9 +505,9 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
               {step === "creating" ? t(locale, "review.cta.creating") : t(locale, "review.cta.create")}
             </button>
             {step === "creating" ? (
-              <span className="btn btn-secondary pointer-events-none opacity-50" aria-disabled="true">{t(locale, "review.cta.back")}</span>
+              <span className="btn btn-secondary w-full justify-center sm:w-auto pointer-events-none opacity-50" aria-disabled="true">{t(locale, "review.cta.back")}</span>
             ) : (
-              <a className="btn btn-secondary" href="/submit">{t(locale, "review.cta.back")}</a>
+              <a className="btn btn-secondary w-full justify-center sm:w-auto" href="/submit">{t(locale, "review.cta.back")}</a>
             )}
           </div>
         </div>
@@ -575,9 +592,10 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
               {t(locale, "review.sign.name.label")}
             </label>
             <p id="rs-name-help" className="muted mt-1 text-sm">{t(locale, "review.sign.name.sub")}</p>
+            <p id="rs-name-signature" className="muted mt-1 text-sm">{t(locale, "sign.name.signature")}</p>
             <input
               id="rs-name"
-              aria-describedby="rs-name-help"
+              aria-describedby="rs-name-help rs-name-signature"
               type="text"
               className="field mt-2"
               placeholder={t(locale, "review.sign.name.placeholder")}
@@ -610,34 +628,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
               autoComplete="email"
             />
           </div>
-          </div>
-        </section>
-
-        <section aria-labelledby="review-signature-title" className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
-          <div className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:px-7">
-            <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)] text-sm font-semibold text-[var(--brand-strong)]">2</span>
-            <h2 id="review-signature-title" className="text-base font-semibold text-[var(--ink)]">{t(locale, "review.sign.sig.title")}</h2>
-          </div>
-          <div className="space-y-4 p-5 sm:p-7">
-          <p id="rs-signature-help" className="muted text-sm leading-[1.6]">
-            {t(locale, "review.sign.sig.sub")}
-          </p>
-          <label htmlFor="rs-signature" className="block text-sm font-medium text-[var(--ink)]">{t(locale, "review.sign.sig.placeholder")}</label>
-          <input
-            id="rs-signature"
-            aria-describedby="rs-signature-help"
-            type="text"
-            className="field !mt-2 text-[18px]"
-            placeholder={t(locale, "review.sign.sig.placeholder")}
-            value={signature}
-            onChange={(e) => setSignature(e.target.value)}
-            maxLength={100}
-            autoComplete="off"
-            aria-invalid={signatureUnsupported || undefined}
-          />
-          {signatureUnsupported && !nameUnsupported && (
-            <p role="alert" className="text-sm font-medium text-[var(--danger)]">{t(locale, "review.sign.error.nameScript")}</p>
-          )}
           </div>
         </section>
 
