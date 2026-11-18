@@ -582,6 +582,157 @@ export async function buildFixture(): Promise<Fixture> {
 /** Seed URL factory for fixture runs: the fixture server, with its port. */
 export const fixtureSeedUrl = (port: number) => (source: { domain: string }) => `http://${source.domain}:${port}/`;
 
+/**
+ * The lighter-browser fixture (crawler v3 WP15): one render = BROWSER source,
+ * light.fixture.test, whose home page is "full of fonts and trackers" —
+ * 12 web fonts, a video, an audio file and two scripts from the built-in
+ * advertising/analytics host list (the test DNS maps those hosts to the
+ * fixture server, so an unblocked request would land in its request log) —
+ * and whose three images are added by script only after everything else has
+ * been asked for, so a request cap that the blocked kinds consumed would
+ * abort them. The /slow page chains a lazy-loader: each image is inserted
+ * only by the onload of the previous one, and the first two responses are
+ * delayed, so the render must wait for network quiet to see the third.
+ * No host here overlaps the other fixtures' hosts.
+ */
+export const LIGHT_HOST = `light.${SOURCE_DOMAIN}`;
+/** The ad hosts of the fixture page (entries of the worker's built-in list). */
+export const LIGHT_TRACKER_HOSTS = ["www.google-analytics.com", "ad.doubleclick.net"];
+export const LIGHT_FONT_COUNT = 12;
+
+export async function buildLightBrowserFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const L = LIGHT_HOST;
+
+  const img = {
+    light1: await patternImage(170, 300, 300, "png"),
+    light2: await patternImage(171, 300, 300, "png"),
+    light3: await patternImage(172, 300, 300, "png"),
+    slow1: await patternImage(173, 300, 300, "png"), // decoy: not in the pool
+    slow2: await patternImage(174, 300, 300, "png"), // decoy: not in the pool
+    slow3: await patternImage(175, 300, 300, "png"), // the planted match
+  };
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const pool: Pool = {
+    version: "light-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      { id: "fp-light-1", pdq: await hashOf(img.light1), quality: 100 },
+      { id: "fp-light-2", pdq: await hashOf(img.light2), quality: 100 },
+      { id: "fp-light-3", pdq: await hashOf(img.light3), quality: 100 },
+      { id: "fp-slow-lazy", pdq: await hashOf(img.slow3), quality: 100 },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-light-1", pagePath: "/", imageHost: L, imagePath: "/img/light-1.png" },
+    { fingerprintId: "fp-light-2", pagePath: "/", imageHost: L, imagePath: "/img/light-2.png" },
+    { fingerprintId: "fp-light-3", pagePath: "/", imageHost: L, imagePath: "/img/light-3.png" },
+    { fingerprintId: "fp-slow-lazy", pagePath: "/slow", imageHost: L, imagePath: "/img/slow-3.png" },
+  ];
+
+  site.route(L, "/robots.txt", sendBytes(Buffer.from("User-agent: *\\nAllow: /\\n"), "text/plain"));
+
+  // The home page: fonts, media and trackers first, images only at load.
+  const fontFaces = Array.from(
+    { length: LIGHT_FONT_COUNT },
+    (_, i) => `@font-face { font-family: F${i + 1}; src: url(/fonts/f${i + 1}.woff2) format("woff2"); }`,
+  ).join("\n      ");
+  const fontSpans = Array.from({ length: LIGHT_FONT_COUNT }, (_, i) => `<span style="font-family: F${i + 1}">${i + 1}</span>`).join("");
+  const trackers = LIGHT_TRACKER_HOSTS.map((host, i) => `<script src="http://${host}:${site.port}/${i === 0 ? "analytics.js" : "x.js"}"></script>`).join("");
+  site.route(
+    L,
+    "/",
+    sendHtml(
+      html(
+        `
+      ${trackers}
+      ${fontSpans}
+      <video src="/media/clip.mp4" preload="auto" muted autoplay playsinline></video>
+      <audio src="/media/tone.mp3" preload="auto"></audio>
+      <div style="height: 6000px"></div>
+      <a href="/slow">slow gallery</a>
+      <script>
+        window.addEventListener("load", function () {
+          ["/img/light-1.png", "/img/light-2.png", "/img/light-3.png"].forEach(function (src) {
+            var img = document.createElement("img");
+            img.src = src;
+            document.body.appendChild(img);
+          });
+        });
+      </script>
+      `,
+        `<style>${fontFaces}</style>`,
+      ),
+    ),
+  );
+
+  // The slow page: a chained lazy-loader started by the first scroll.
+  site.route(
+    L,
+    "/slow",
+    sendHtml(
+      html(`
+      <div id="gallery"></div>
+      <div style="height: 6000px"></div>
+      <script>
+        (function () {
+          var started = false;
+          function add(src, onload) {
+            var img = document.createElement("img");
+            if (onload) img.onload = onload;
+            img.src = src;
+            document.getElementById("gallery").appendChild(img);
+          }
+          window.addEventListener("scroll", function () {
+            if (started) return;
+            started = true;
+            add("/img/slow-1.png", function () {
+              add("/img/slow-2.png", function () {
+                add("/img/slow-3.png");
+              });
+            });
+          });
+        })();
+      </script>
+      `),
+    ),
+  );
+
+  // What the blocked kinds would have asked for (never to be requested).
+  for (let i = 1; i <= LIGHT_FONT_COUNT; i++) {
+    site.route(L, `/fonts/f${i}.woff2`, sendBytes(Buffer.from(`fake woff2 bytes ${i}`), "font/woff2"));
+  }
+  site.route(L, "/media/clip.mp4", sendBytes(Buffer.alloc(2048, 1), "video/mp4"));
+  site.route(L, "/media/tone.mp3", sendBytes(Buffer.alloc(1024, 2), "audio/mpeg"));
+  for (const [i, host] of LIGHT_TRACKER_HOSTS.entries()) {
+    // Real-looking answers, so a broken block would produce ordinary traffic
+    // in the fixture server's request log (including the parent-side
+    // robots.txt fetch the verdict would trigger), not a DNS error.
+    site.route(host, "/robots.txt", sendBytes(Buffer.from("User-agent: *\\nAllow: /\\n"), "text/plain"));
+    site.route(host, i === 0 ? "/analytics.js" : "/x.js", sendBytes(Buffer.from("// tracker"), "application/javascript"));
+  }
+
+  // The images. The first two of the slow chain answer late, so only their
+  // onload continues the chain (and the render's network-quiet wait is what
+  // lets the third one be seen at all).
+  const slowImage = (bytes: Buffer, delayMs: number): Handler => async (res) => {
+    await new Promise((r) => setTimeout(r, delayMs));
+    res.writeHead(200, { "content-type": "image/png", "content-length": String(bytes.length) });
+    res.end(bytes);
+  };
+  site.route(L, "/img/light-1.png", sendBytes(img.light1, "image/png"));
+  site.route(L, "/img/light-2.png", sendBytes(img.light2, "image/png"));
+  site.route(L, "/img/light-3.png", sendBytes(img.light3, "image/png"));
+  site.route(L, "/img/slow-1.png", slowImage(img.slow1, 800));
+  site.route(L, "/img/slow-2.png", slowImage(img.slow2, 800));
+  site.route(L, "/img/slow-3.png", sendBytes(img.slow3, "image/png"));
+
+  const allHashes: string[] = [];
+  for (const b of [img.light1, img.light2, img.light3, img.slow1, img.slow2, img.slow3]) allHashes.push(await hashOf(b));
+  return { site, pool, expected, allHashes };
+}
+
 /*
  * The discovery fixture (crawler v2 WP5): a chain of sites, each linking the
  * next, plus the negatives. a.test is the only source a run starts with; its

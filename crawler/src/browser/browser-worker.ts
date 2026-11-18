@@ -28,6 +28,15 @@
  *     disabled, downloads refused, service workers blocked;
  *   - one honest User-Agent: Chromium's own with the crawler's appended;
  *     no stealth plugins, no fingerprint spoofing;
+ *   - crawler v3 WP15: font requests, audio and video media, and requests
+ *     to a small built-in list of advertising/analytics hosts are aborted
+ *     before any routing work — never fetched, never asked about, never
+ *     counted against the per-page request cap, which therefore keeps its
+ *     room for the page's images (blocked-requests.ts);
+ *   - after scrolling, the render waits for network quiet instead of a
+ *     fixed wait: no request in flight for the quiet window, so a slow or
+ *     chained lazy-loader is waited for, bounded by the page's deadline and
+ *     never longer than the old fixed wait on a page that is quiet already;
  *   - image bytes are taken from the fetched responses, in memory, capped
  *     per image, and handed to the parent as they arrive, under the address
  *     of the hop that served them;
@@ -43,6 +52,7 @@
  */
 import { chromium, type Browser, type BrowserContext as Context, type Page, type Route } from "playwright-core";
 import { inScope } from "../crawl/url.ts";
+import { blockedRequestHost, blockedResourceType } from "./blocked-requests.ts";
 import { CHROMIUM_ARGS } from "./chromium-args.ts";
 import {
   AbortMessageSchema,
@@ -61,6 +71,15 @@ const MAX_REDIRECTS = 5;
 const VERDICT_TIMEOUT_MS = 10_000;
 /** Upper bound on one page.evaluate (a script can block the main thread). */
 const EVALUATE_TIMEOUT_MS = 5_000;
+/**
+ * Network quiet (crawler v3 WP15): after scrolling, the render waits until
+ * no request has been in flight for this long. The window is capped by the
+ * configured scroll wait (BROWSER_SCROLL_WAIT_MS), so a page that is quiet
+ * right away is waited for no longer than the old fixed wait was.
+ */
+const QUIET_MS = 500;
+/** How often the network-quiet wait re-checks the in-flight set. */
+const QUIET_POLL_MS = 25;
 
 let browser: Browser | null = null;
 let proxyPort = 0;
@@ -186,10 +205,37 @@ async function handleLaunch(m: LaunchMessage): Promise<void> {
 const isRedirect = (status: number): boolean => status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 
 /**
+ * Network quiet (crawler v3 WP15): wait until no request has been in flight
+ * for the quiet window, bounded by the render's deadline. Unlike the old
+ * fixed wait plus a one-shot wait for already-known requests, this also
+ * waits for requests the page's own loading chain spawns late (a lazy-loader
+ * whose onload inserts the next image), because the window restarts whenever
+ * anything is in flight. A page that never goes quiet still ends at its
+ * deadline.
+ */
+async function waitNetworkQuiet(task: Task): Promise<void> {
+  const quietMs = Math.min(QUIET_MS, task.msg.scrollWaitMs);
+  let quietSince: number | null = null;
+  while (!task.done) {
+    const left = remaining(task);
+    if (left <= 0) return;
+    if (task.inflight.size === 0) {
+      quietSince ??= Date.now();
+      if (Date.now() - quietSince >= quietMs) return;
+    } else {
+      quietSince = null;
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(QUIET_POLL_MS, left)));
+  }
+}
+
+/**
  * One intercepted request, fetched here hop by hop (redirects are never
  * left to Chromium, which would follow them unrouted). Every hop: request
  * cap, scope for navigations, robots verdict; then a fetch through the
  * context (the same SOCKS proxy, the same User-Agent) with redirects off.
+ * Fonts, audio/video media and the built-in advertising/analytics hosts are
+ * aborted before any of that work (crawler v3 WP15).
  */
 async function handleRoute(task: Task, route: Route): Promise<void> {
   const req = route.request();
@@ -208,6 +254,11 @@ async function handleRoute(task: Task, route: Route): Promise<void> {
   const mainFrame = navigation && frame === task.page.mainFrame();
   const resourceType = req.resourceType();
   let target = req.url();
+  // Crawler v3 WP15: fonts, audio and video media, and the built-in list of
+  // advertising/analytics hosts are aborted before any routing work — never
+  // fetched, never asked about, never counted against the per-page request
+  // cap, which therefore keeps its room for the page's images.
+  if (blockedResourceType(resourceType) || blockedRequestHost(target)) return void (await abort());
   for (let hop = 0; ; hop++) {
     task.requests += 1;
     if (task.requests > task.msg.maxRequests) return void (await abort());
@@ -218,6 +269,9 @@ async function handleRoute(task: Task, route: Route): Promise<void> {
       return void (await abort());
     }
     if (u.protocol !== "http:" && u.protocol !== "https:") return void (await abort());
+    // The host check again on every redirect hop, so nothing that is
+    // followed can end on a blocked host either.
+    if (blockedRequestHost(u)) return void (await abort());
     if (navigation && !inScope(u, task.msg.scopeHost)) return void (await abort());
     if (!(await askVerdict(task, target, resourceType))) return void (await abort());
     if (task.done) return void (await abort());
@@ -339,10 +393,11 @@ async function handleRender(msg: RenderMessage): Promise<void> {
       await bounded(task, page.evaluate("window.scrollBy(0, Math.max(window.innerHeight, 400))"), EVALUATE_TIMEOUT_MS);
       if (msg.scrollWaitMs > 0) await page.waitForTimeout(Math.min(msg.scrollWaitMs, remaining(task)));
     }
-    // Let late responses land, then wait (within the deadline) for requests
-    // still being fetched, so their images are not lost.
-    if (msg.scrollWaitMs > 0 && !task.done) await page.waitForTimeout(Math.min(msg.scrollWaitMs, remaining(task)));
-    if (task.inflight.size > 0 && !task.done) await bounded(task, Promise.all([...task.inflight]), remaining(task)).catch(() => undefined);
+    // Crawler v3 WP15: the fixed wait after scrolling is gone. The render
+    // waits for network quiet — no request in flight for the quiet window —
+    // so late and chained lazy-loaders are waited for and their images are
+    // not lost, bounded by the page's deadline.
+    if (!task.done) await waitNetworkQuiet(task);
 
     const html = await bounded(task, page.content(), EVALUATE_TIMEOUT_MS);
     const truncated = html.length > msg.maxHtmlBytes;
