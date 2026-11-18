@@ -74,7 +74,9 @@
       "confirm.ref.copied",
       "confirm.ref.copiedAnnounce",
       "confirm.ref.copyFailed",
-      "confirm.ref.reassure"
+      "confirm.ref.reassure",
+      "track.*",
+      "myCases.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
