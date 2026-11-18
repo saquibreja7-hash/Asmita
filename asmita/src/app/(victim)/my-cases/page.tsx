@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/middleware";
 import { listCasesForUser } from "@/lib/case-ops";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
+import { CloseDashboardButton } from "../CloseDashboardButton";
 
 export const metadata: Metadata = { title: "Your cases" };
 
@@ -27,6 +28,9 @@ export default async function MyCasesPage({ searchParams }: { searchParams: Prom
       <div className="page-canvas">
         <div className="container py-8 md:py-20">
           <div className="mx-auto max-w-xl">
+            <div className="mb-4 flex justify-end">
+              <CloseDashboardButton locale={locale} />
+            </div>
             <h1 className="page-title-sm">{t(locale, fromFiling && cases.length > 0 ? "myCases.existing.title" : "myCases.title")}</h1>
             <p className="muted mt-2 text-sm leading-[1.75]">
               {t(locale, cases.length === 0 ? "myCases.empty" : fromFiling ? "myCases.existing.sub" : "myCases.sub")}
