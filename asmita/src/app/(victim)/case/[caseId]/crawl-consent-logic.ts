@@ -29,6 +29,19 @@ export function parseConsent(data: { status?: ConsentState["status"]; available?
 }
 
 /**
+ * The tick box is controlled, so it must follow her click at once: the box
+ * shows ticked while the switch-on request is still running (WP34: a box that
+ * un-ticks itself until the server answers reads as broken — Playwright's
+ * check() reads the state immediately after the click and fails with "Clicking
+ * the checkbox did not change its state", and a fast human reader sees the
+ * same flicker). `pendingOn` is her tick; the server's `on` takes over when
+ * the request finishes, and a failure clears the tick with the reason shown.
+ */
+export function tickChecked(input: { on: boolean; pendingOn: boolean; confirmingStop: boolean }): boolean {
+  return (input.on && !input.confirmingStop) || input.pendingOn;
+}
+
+/**
  * Watch-and-verify WP24: the re-upload watch view — the authorisation is
  * live, the case is no longer open and the window's end is known, so her
  * dashboard says "Watching for re-uploads until <date>" instead of the open

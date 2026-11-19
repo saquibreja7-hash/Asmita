@@ -296,7 +296,7 @@ describe("the pool rule, Prisma path", () => {
     expect(db.case.findMany).toHaveBeenCalledWith({ where: { id: { in: ["case-1"] } }, select: { id: true, status: true } });
     expect(db.hashSubmission.findMany).toHaveBeenCalledWith({
       where: { id: { in: ["hash-1"] } },
-      select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true },
+      select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true, algorithm: true },
     });
 
     // PARTIALLY_RESOLVED is still open.
@@ -325,7 +325,7 @@ describe("the pool rule, Prisma path", () => {
     await expect(resolvePoolFingerprint("fp_1")).resolves.toEqual(null);
     expect(db.hashSubmission.findUnique).toHaveBeenCalledWith({
       where: { crawlPoolId: "fp_1" },
-      select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true },
+      select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true, algorithm: true },
     });
     // The resolution's coverage read is bounded to the fingerprint's case.
     expect(db.crawlConsent.findMany).toHaveBeenLastCalledWith({

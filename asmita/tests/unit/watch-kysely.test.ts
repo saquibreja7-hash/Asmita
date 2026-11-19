@@ -164,6 +164,9 @@ describe("the pool and coverage, Kysely path", () => {
     kysely.state.rows.HashSubmission = [
       { id: "h1", caseId: "c1", crawlPoolId: "fp_1", hashEncrypted: encryptField(PDQ), quality: 90, status: "APPROVED" },
     ];
+    // The pool keeps fingerprints only while the case is open or inside its
+    // re-upload window (watch-and-verify WP24); a watch case is open here.
+    kysely.state.rows.Case = [{ id: "c1", status: "OPEN" }];
     const pool = await buildCrawlPool(new Date("2026-11-19T00:00:00Z"));
     expect(pool.fingerprints).toEqual([{ id: "fp_1", pdq: PDQ, quality: 90 }]);
   });

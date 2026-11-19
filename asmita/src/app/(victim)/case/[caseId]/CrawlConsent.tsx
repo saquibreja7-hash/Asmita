@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
-import { consentView, parseConsent, reuploadWatchView, requestConsent, requestStop, type ConsentState } from "./crawl-consent-logic";
+import { consentView, parseConsent, reuploadWatchView, requestConsent, requestStop, tickChecked, type ConsentState } from "./crawl-consent-logic";
 
 /*
  * The survivor's choice to let Asmita look for copies of her images
@@ -62,6 +62,9 @@ export function CrawlConsent({
   const router = useRouter();
   const [consent, setConsent] = useState<ConsentState | null>(initialConsent);
   const [confirmingStop, setConfirmingStop] = useState(false);
+  // Her tick, before the server confirms it: the controlled box must follow
+  // the click at once, not the network (tickChecked; WP34).
+  const [pendingOn, setPendingOn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [announce, setAnnounce] = useState("");
@@ -104,6 +107,9 @@ export function CrawlConsent({
   async function switchOn() {
     if (!consent?.draft) return;
     setError("");
+    // The tick lands before the request: she sees the box ticked (and locked)
+    // while it runs, and a refusal unticks it with the reason shown.
+    setPendingOn(true);
     setBusy(true);
     try {
       const result = await requestConsent(csrfFetch, caseId, consent.draft.templateRef);
@@ -130,6 +136,7 @@ export function CrawlConsent({
     } catch {
       setError(t(locale, "crawl.error.timeout"));
     } finally {
+      setPendingOn(false);
       setBusy(false);
     }
   }
@@ -174,7 +181,7 @@ export function CrawlConsent({
           id="crawl-tick"
           type="checkbox"
           className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand)]"
-          checked={on && !confirmingStop}
+          checked={tickChecked({ on, pendingOn, confirmingStop })}
           disabled={busy}
           aria-describedby="crawl-tick-sub"
           onChange={(e) => onTickChange(e.target.checked)}

@@ -295,7 +295,7 @@ describe("sweepDueLinkVerifications resolve, Prisma path", () => {
     expect(await sweepDueLinkVerifications(NOW)).toEqual({ enqueued: 0, resolved: 1, stillOnline: 0 });
     expect(db.hashSubmission.findMany).toHaveBeenCalledWith({
       where: { id: { in: ["hash-1"] } },
-      select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true },
+      select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true, algorithm: true },
     });
     expect(db.linkVerification.updateMany).toHaveBeenCalledWith({
       where: { id: "chk-1", outcome: "PENDING" },
