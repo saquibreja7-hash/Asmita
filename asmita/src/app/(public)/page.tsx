@@ -329,16 +329,28 @@ export default async function HomePage() {
             </div>
 
             <div className="mt-12 grid gap-4 md:grid-cols-3">
-              {features.map((f, i) => (
-                <Link key={f.title} href={f.href} className="card fade flex flex-col">
-                  <span className="card-icon" aria-hidden>
-                    {f.icon}
-                  </span>
-                  <h3>{locale === "hi" ? hindi.features[i].title : f.title}</h3>
-                  <p className="mt-4 flex-1">{locale === "hi" ? hindi.features[i].body : f.body}</p>
-                  <span className="arrow-link mt-8">{locale === "hi" ? hindi.features[i].cta : f.cta}</span>
-                </Link>
-              ))}
+              {features.map((f, i) =>
+                // A full page load for /check-image: its own headers allow the C2PA WASM reader.
+                f.href === "/check-image" ? (
+                  <a key={f.title} href={f.href} className="card fade flex flex-col">
+                    <span className="card-icon" aria-hidden>
+                      {f.icon}
+                    </span>
+                    <h3>{locale === "hi" ? hindi.features[i].title : f.title}</h3>
+                    <p className="mt-4 flex-1">{locale === "hi" ? hindi.features[i].body : f.body}</p>
+                    <span className="arrow-link mt-8">{locale === "hi" ? hindi.features[i].cta : f.cta}</span>
+                  </a>
+                ) : (
+                  <Link key={f.title} href={f.href} className="card fade flex flex-col">
+                    <span className="card-icon" aria-hidden>
+                      {f.icon}
+                    </span>
+                    <h3>{locale === "hi" ? hindi.features[i].title : f.title}</h3>
+                    <p className="mt-4 flex-1">{locale === "hi" ? hindi.features[i].body : f.body}</p>
+                    <span className="arrow-link mt-8">{locale === "hi" ? hindi.features[i].cta : f.cta}</span>
+                  </Link>
+                ),
+              )}
             </div>
 
             {/* Elevated teal-mist card */}

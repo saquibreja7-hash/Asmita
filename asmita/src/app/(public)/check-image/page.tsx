@@ -10,6 +10,10 @@ import { ImageChecker } from "./ImageChecker";
 export default async function CheckImagePage() {
   const locale = await getLocale();
   const deepCheckEnabled = provenanceCheckEnabled();
+  // The deeper check only works when the owner has set the OpenAI key as a
+  // Worker secret. When it is missing the button is hidden and the page says
+  // the check is temporarily unavailable (the route answers the same way).
+  const deepCheckConfigured = deepCheckEnabled ? Boolean(process.env.OPENAI_API_KEY) : true;
 
   return (
     <AppShell>
@@ -43,8 +47,13 @@ export default async function CheckImagePage() {
 
         {/* CHECKER */}
         <section className="container section-pad" aria-label="Image check">
-          <ImageChecker locale={locale} deepCheckEnabled={deepCheckEnabled} />
-          <p className="muted mx-auto mt-8 max-w-xl text-center text-xs leading-[1.7]">
+          <ImageChecker locale={locale} deepCheckEnabled={deepCheckEnabled} deepCheckConfigured={deepCheckConfigured} />
+          {/* A pointer to Google's own verifier. Asmita sends nothing to
+              Google; she checks the watermark herself, in Google's app. */}
+          <p className="muted mx-auto mt-6 max-w-xl text-center text-xs leading-[1.7]">
+            {t(locale, "check.google.line")}
+          </p>
+          <p className="muted mx-auto mt-4 max-w-xl text-center text-xs leading-[1.7]">
             {t(locale, "check.privacy.note")}
           </p>
         </section>

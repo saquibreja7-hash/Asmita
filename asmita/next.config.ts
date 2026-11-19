@@ -37,6 +37,19 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: buildCsp({ voice: true }) },
         ],
       },
+      // On-device Content Credentials reading (WP38): the page that runs the
+      // C2PA engine needs WebAssembly compilation of our own first-party
+      // engine, and the /c2pa/* asset responses carry the policy the
+      // engine's worker inherits. /check-image is entered by a full page
+      // load, so this policy is always in force when the engine runs.
+      {
+        source: "/check-image",
+        headers: [{ key: "Content-Security-Policy", value: buildCsp({ c2pa: true }) }],
+      },
+      {
+        source: "/c2pa/:path*",
+        headers: [{ key: "Content-Security-Policy", value: buildCsp({ c2pa: true }) }],
+      },
       // PDF previews are served into iframes on the sign pages — relax framing
       // headers for these routes only. All other security headers still apply.
       {

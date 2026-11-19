@@ -25,13 +25,16 @@ const blamePattern =
 /** Words that verdict an image's realness. Results may only say what was or was not found. */
 const realFakePattern = /\b(real|fake|genuine|authentic)\b/i;
 
-/** The result strings of the image checker (local and deeper check). */
+/** The result strings of the image checker (local, C2PA and deeper check). */
 const verdictKeys = (dict: Record<string, string>) =>
   Object.keys(dict).filter(
     (key) =>
       key.startsWith("check.result.") ||
+      key.startsWith("check.c2pa.result.") ||
       key.startsWith("check.deep.result.") ||
-      key === "check.deep.limitation",
+      key === "check.deep.limitation" ||
+      key === "check.c2pa.ai" ||
+      key === "check.c2pa.validation.untrusted",
   );
 
 const checkKeys = (dict: Record<string, string>) =>
@@ -111,6 +114,103 @@ describe("AI image check page copy (WP35)", () => {
     ]) {
       expect(keys).toContain(key);
     }
+  });
+
+  it("lists every WP38 string as machine translated, in both directions of the batch", () => {
+    const keys = status.machineTranslated.keys;
+    for (const key of [
+      "check.deep.body",
+      "check.deep.consent",
+      "check.deep.unavailable",
+      "check.c2pa.title",
+      "check.c2pa.loading",
+      "check.c2pa.result.found.title",
+      "check.c2pa.result.found.body",
+      "check.c2pa.result.none.title",
+      "check.c2pa.result.none.body",
+      "check.c2pa.result.unavailable",
+      "check.c2pa.ai",
+      "check.c2pa.tool",
+      "check.c2pa.signer",
+      "check.c2pa.source",
+      "check.c2pa.validation",
+      "check.c2pa.validation.valid",
+      "check.c2pa.validation.invalid",
+      "check.c2pa.validation.untrusted",
+      "check.meta.title",
+      "check.google.line",
+    ]) {
+      expect(keys, key).toContain(key);
+    }
+  });
+});
+
+describe("check-image page copy (WP38)", () => {
+  it("keeps WP35's wording for 'no Content Credentials found': it says only that none were found", () => {
+    const enBody = enDict["check.c2pa.result.none.body"];
+    expect(enBody).toContain("no Content Credentials");
+    expect(enBody).toContain("that is all this result says");
+    expect(enBody).toContain("can still show none");
+    const hiBody = hiDict["check.c2pa.result.none.body"];
+    expect(hiBody).toContain("Content Credentials");
+    expect(hiBody).toContain("नतीजे का मतलब बस इतना है");
+    expect(hiBody).toContain("नहीं दिख सकते");
+  });
+
+  it("explains the deeper check next to the button: what is sent, to whom, what it can and cannot see, both languages", () => {
+    const body = enDict["check.deep.body"];
+    expect(body).toContain("sends the image");
+    expect(body).toContain("OpenAI");
+    expect(body).toContain("Content Credentials");
+    expect(body).toContain("SynthID watermark");
+    expect(body).toContain("only recognise images made with OpenAI's tools");
+    expect(body).toContain("Asmita does not store the image");
+    expect(body).toContain("under OpenAI's own terms");
+    expect(body).toContain("You can report the image whether or not anything is found");
+
+    const hiBody = hiDict["check.deep.body"];
+    expect(hiBody).toContain("OpenAI");
+    expect(hiBody).toContain("SynthID watermark");
+    expect(hiBody).toContain("सिर्फ़ OpenAI के टूल से बनी इमेज");
+    expect(hiBody).toContain("स्टोर नहीं");
+    expect(hiBody).toContain("अपनी शर्तों");
+    expect(hiBody).toContain("रिपोर्ट कर सकते हैं");
+  });
+
+  it("requires her explicit tick per check, and says so", () => {
+    expect(enDict["check.deep.consent"]).toContain("for this one check");
+    expect(enDict["check.deep.consent"]).toContain("18 or older");
+    expect(hiDict["check.deep.consent"]).toContain("इस एक जाँच");
+    expect(hiDict["check.deep.consent"]).toContain("18 साल");
+    // And a clear "temporarily unavailable" line for the missing-key case.
+    for (const dict of [enDict, hiDict]) {
+      expect(dict["check.deep.unavailable"]).toBeTruthy();
+      expect(dict["check.c2pa.result.unavailable"]).toBeTruthy();
+    }
+  });
+
+  it("points her at Google's own SynthID check without Asmita sending anything, and without overclaiming", () => {
+    const line = enDict["check.google.line"];
+    expect(line).toContain("SynthID");
+    expect(line).toContain("Gemini");
+    expect(line).toContain("Google Lens / Circle to Search");
+    // Worded so the no-blame rule holds: "never sends" reads like the
+    // "never send" advice the blame pattern forbids; the promise is the same.
+    expect(line).toContain("does not send your image to Google");
+    expect(line).toContain("does not catch every AI image");
+    const hiLine = hiDict["check.google.line"];
+    expect(hiLine).toContain("SynthID");
+    expect(hiLine).toContain("Gemini");
+    expect(hiLine).toContain("Google");
+    expect(hiLine).toContain("नहीं भेजता");
+    expect(hiLine).toContain("हर AI इमेज को नहीं");
+  });
+
+  it("names the two signals so she can tell the signed one from the unsigned one", () => {
+    expect(enDict["check.c2pa.title"]).toContain("signed");
+    expect(enDict["check.meta.title"]).toContain("not signed");
+    expect(hiDict["check.c2pa.title"]).toContain("हस्ताक्षरित");
+    expect(hiDict["check.meta.title"]).toContain("हस्ताक्षरित नहीं");
   });
 });
 
