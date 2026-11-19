@@ -54,3 +54,23 @@ describe("createVictimConfirmationEmail", () => {
     process.env.TRANSACTIONAL_EMAIL_FROM = originalTransactional;
   });
 });
+
+describe("email layouts (redesign)", () => {
+  it("a notice letter shows the signed text verbatim and adds no words to it", async () => {
+    const { renderNoticeLetterHtml } = await import("@/lib/email-html");
+    const text = "To: Grievance Officer\n\n1.  Remove <this> & \"that\".\n\nYours faithfully,\nAsmita";
+    const html = renderNoticeLetterHtml("Notice ASMITA-2026-00001", text);
+    const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    expect(html).toContain(`white-space:pre-wrap;word-break:break-word;">${escaped}</div>`);
+    expect(html).not.toMatch(/<img|https?:\/\/(?!www\.w3)/i);
+  });
+
+  it("survivor emails carry no remote resources, a neutral preview line and the safety note", async () => {
+    const { renderEmailHtml, SAFETY_NOTE } = await import("@/lib/email-html");
+    const html = renderEmailHtml({ title: "Your verification code", paragraphs: ["Enter this code."], highlight: "123456", highlightStyle: "code" });
+    expect(html).not.toMatch(/<img|src=|url\(/i);
+    expect(html).toContain("A message from Asmita.");
+    expect(html).toContain(SAFETY_NOTE.replace(/'/g, "'"));
+    expect(html).not.toMatch(/border-left/i);
+  });
+});

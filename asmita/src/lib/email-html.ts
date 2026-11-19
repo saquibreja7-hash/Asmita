@@ -1,18 +1,33 @@
-// Survivor-facing HTML email layout.
+// HTML email layouts: survivor emails and the letter wrapper for notices.
 //
 // Design constraints (deliberate, do not "improve" away):
-// - Discreet: no imagery, no large logo, nothing that reveals the email's
-//   purpose from a lock-screen preview or a shared family inbox at a glance.
-// - Table layout + inline styles only: Gmail/Outlook strip <style> blocks.
-// - No external resources (no remote images/fonts): avoids tracking-pixel
-//   appearance and renders fully with images blocked.
-// - Plain-text part is always sent alongside (built by the callers).
+// - Discreet: no imagery and no logo image; the wordmark is plain text. The
+//   hidden preheader (what a lock screen or inbox list shows after the
+//   subject) is neutral and never says what Asmita is about.
+// - Table layout + inline styles: Gmail and Outlook strip most <style>. The
+//   one <style> block only adds dark-mode colours where clients honour it.
+// - No external resources (no remote images or fonts): nothing that looks
+//   like tracking, and the email renders fully with images blocked.
+// - A plain-text part is always sent alongside (built by the callers).
+// - No coloured left-border accent stripes (owner rule).
 
-const TEAL = "#0f766e";
-const INK = "#1f2937";
-const MUTED = "#6b7280";
-const HAIRLINE = "#e5e7eb";
-const BG = "#f4f4f5";
+const BRAND = "#0f5f58"; // Asmita teal
+const BRAND_SOFT = "#eaf4f2";
+const BRAND_LINE = "#cfe3df";
+const INK = "#1c2321";
+const TEXT = "#3a4442";
+const MUTED = "#6b7672";
+const LINE = "#e6e2da";
+const PAGE = "#f6f3ee"; // the site's warm page colour
+const CARD = "#ffffff";
+
+const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans','Noto Sans Devanagari',Arial,sans-serif";
+const SERIF = "Georgia,'Times New Roman',serif";
+const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace";
+
+/** Shown at the foot of every survivor email. */
+export const SAFETY_NOTE =
+  "Asmita will never ask for your password, your images or any payment. If someone else can see this inbox, you can delete this email.";
 
 function escapeHtml(value: string) {
   return value
@@ -27,65 +42,125 @@ export type EmailHtmlInput = {
   title: string;
   /** Paragraphs of body copy. Rendered in order. */
   paragraphs: string[];
-  /** Optional large monospace value (case reference or OTP code). */
+  /** Optional value set apart in a box: a sign-in code or a case reference. */
   highlight?: string;
   /** Optional small label above the highlight, e.g. "Case reference". */
   highlightLabel?: string;
-  /** Optional call-to-action button. */
+  /** "code" shows the highlight large and spaced, for a one-time code. */
+  highlightStyle?: "code" | "reference";
+  /** Optional call-to-action button; its address is also shown as text. */
   cta?: { label: string; url: string };
-  /** Footer line(s); the privacy note belongs here. */
+  /** Footer line(s), such as the privacy note. The safety note is always added. */
   footerNotes?: string[];
+  /** Neutral text inbox lists show after the subject. Never name the issue. */
+  preheader?: string;
+  /** Document language. */
+  lang?: "en" | "hi";
 };
 
-export function renderEmailHtml(input: EmailHtmlInput): string {
-  const paragraphs = input.paragraphs
-    .map(
-      (p) =>
-        `<p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:${INK};">${escapeHtml(p)}</p>`,
-    )
-    .join("");
+function wordmark() {
+  return `<p style="margin:0;font-family:${SERIF};font-size:24px;line-height:1;color:${BRAND};letter-spacing:0.01em;">Asmita</p>`;
+}
 
-  const highlight = input.highlight
-    ? `${
-        input.highlightLabel
-          ? `<p style="margin:18px 0 6px 0;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:${MUTED};">${escapeHtml(input.highlightLabel)}</p>`
-          : ""
-      }<p style="margin:0 0 18px 0;font-family:Consolas,Menlo,monospace;font-size:22px;letter-spacing:0.08em;color:${TEAL};">${escapeHtml(input.highlight)}</p>`
-    : "";
-
-  const cta = input.cta
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 18px 0;"><tr><td style="border-radius:10px;background:${TEAL};">
-         <a href="${escapeHtml(input.cta.url)}" style="display:inline-block;padding:11px 22px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">${escapeHtml(input.cta.label)}</a>
-       </td></tr></table>`
-    : "";
-
-  const footer = (input.footerNotes ?? [])
-    .map(
-      (n) =>
-        `<p style="margin:0 0 6px 0;font-size:12px;line-height:1.6;color:${MUTED};">${escapeHtml(n)}</p>`,
-    )
-    .join("");
-
+function shell(input: { lang: string; preheader: string; body: string; footer: string }) {
+  // The preheader padding keeps inbox previews from pulling body text.
+  const preheader = `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(input.preheader)}${"&#8199;&#65279;&#847;".repeat(40)}</div>`;
   return `<!doctype html>
-<html lang="en">
-<body style="margin:0;padding:0;background:${BG};">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BG};padding:24px 12px;">
-    <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid ${HAIRLINE};border-radius:14px;">
-        <tr><td style="padding:28px 32px 8px 32px;">
-          <p style="margin:0 0 22px 0;font-size:13px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:${TEAL};">Asmita</p>
-          <p style="margin:0 0 16px 0;font-size:19px;font-weight:600;line-height:1.4;color:${INK};">${escapeHtml(input.title)}</p>
-          ${paragraphs}
-          ${highlight}
-          ${cta}
+<html lang="${input.lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+  @media (prefers-color-scheme: dark) {
+    .a-page { background:#121615 !important; }
+    .a-card { background:#1b2120 !important; border-color:#2c3533 !important; }
+    .a-ink { color:#eef2f1 !important; }
+    .a-text { color:#c9d2cf !important; }
+    .a-muted { color:#94a19d !important; }
+    .a-box { background:#173330 !important; border-color:#24504b !important; }
+    .a-brand { color:#7fd1c5 !important; }
+    .a-line { border-color:#2c3533 !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:${PAGE};" class="a-page">
+  ${preheader}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-page" style="background:${PAGE};">
+    <tr><td align="center" style="padding:32px 14px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+        <tr><td style="padding:0 6px 18px 6px;" class="a-brand">${wordmark()}</td></tr>
+        <tr><td>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-card" style="background:${CARD};border:1px solid ${LINE};border-radius:18px;">
+            <tr><td style="padding:34px 34px 10px 34px;font-family:${SANS};">${input.body}</td></tr>
+            <tr><td class="a-line" style="padding:18px 34px 26px 34px;border-top:1px solid ${LINE};font-family:${SANS};">${input.footer}</td></tr>
+          </table>
         </td></tr>
-        <tr><td style="padding:14px 32px 24px 32px;border-top:1px solid ${HAIRLINE};">
-          ${footer}
+        <tr><td align="center" style="padding:18px 6px 0 6px;font-family:${SANS};">
+          <p class="a-muted" style="margin:0;font-size:12px;line-height:1.6;color:${MUTED};">Asmita &middot; meriasmita.org &middot; free and confidential</p>
         </td></tr>
       </table>
-      <p style="margin:14px 0 0 0;font-size:11px;color:${MUTED};">Asmita &middot; meriasmita.org &middot; free and confidential</p>
     </td></tr>
   </table>
 </body>
 </html>`;
+}
+
+/** Survivor-facing email: heading, short paragraphs, an optional boxed value and button. */
+export function renderEmailHtml(input: EmailHtmlInput): string {
+  const paragraphs = input.paragraphs
+    .map((p) => `<p class="a-text" style="margin:0 0 16px 0;font-size:16px;line-height:1.7;color:${TEXT};">${escapeHtml(p)}</p>`)
+    .join("");
+
+  let highlight = "";
+  if (input.highlight) {
+    const isCode = input.highlightStyle === "code";
+    const label = input.highlightLabel
+      ? `<p class="a-muted" style="margin:0 0 10px 0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED};">${escapeHtml(input.highlightLabel)}</p>`
+      : "";
+    const value = `<p class="a-brand" style="margin:0;font-family:${MONO};font-size:${isCode ? "34px" : "22px"};font-weight:600;letter-spacing:${isCode ? "0.32em" : "0.06em"};line-height:1.2;color:${BRAND};">${escapeHtml(input.highlight)}</p>`;
+    highlight = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 22px 0;">
+      <tr><td class="a-box" align="${isCode ? "center" : "left"}" style="background:${BRAND_SOFT};border:1px solid ${BRAND_LINE};border-radius:14px;padding:${isCode ? "22px 16px" : "18px 20px"};">${label}${value}</td></tr>
+    </table>`;
+  }
+
+  const cta = input.cta
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 14px 0;"><tr><td style="border-radius:999px;background:${BRAND};">
+         <a href="${escapeHtml(input.cta.url)}" style="display:inline-block;padding:13px 26px;font-family:${SANS};font-size:15px;font-weight:600;line-height:1;color:#ffffff;text-decoration:none;border-radius:999px;">${escapeHtml(input.cta.label)}</a>
+       </td></tr></table>
+       <p class="a-muted" style="margin:0 0 18px 0;font-size:12px;line-height:1.6;color:${MUTED};word-break:break-all;">Or open: ${escapeHtml(input.cta.url)}</p>`
+    : "";
+
+  const footer = [...(input.footerNotes ?? []), SAFETY_NOTE]
+    .map((n) => `<p class="a-muted" style="margin:0 0 8px 0;font-size:12.5px;line-height:1.6;color:${MUTED};">${escapeHtml(n)}</p>`)
+    .join("");
+
+  const body = `<p class="a-ink" style="margin:0 0 16px 0;font-size:22px;font-weight:600;line-height:1.35;color:${INK};">${escapeHtml(input.title)}</p>
+    ${paragraphs}
+    ${highlight}
+    ${cta}`;
+
+  return shell({
+    lang: input.lang ?? "en",
+    preheader: input.preheader ?? "A message from Asmita.",
+    body,
+    footer,
+  });
+}
+
+/**
+ * A formal notice to a platform, as a letter. The body is the plain-text
+ * notice exactly as sent and signed, shown verbatim (escaped, line breaks
+ * kept): no text is added, removed or reworded, so the HTML and text parts
+ * and the signed PDF cover the same content (CLAUDE.md, notice integrity).
+ */
+export function renderNoticeLetterHtml(subject: string, text: string): string {
+  const body = `<p class="a-muted" style="margin:0 0 6px 0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED};">Notice</p>
+    <p class="a-ink" style="margin:0 0 22px 0;font-size:18px;font-weight:600;line-height:1.4;color:${INK};">${escapeHtml(subject)}</p>
+    <div class="a-text" style="margin:0 0 18px 0;font-family:${SERIF};font-size:15px;line-height:1.65;color:${TEXT};white-space:pre-wrap;word-break:break-word;">${escapeHtml(text)}</div>`;
+  return shell({ lang: "en", preheader: subject, body, footer: "" }).replace(
+    /<tr><td class="a-line"[^>]*><\/td><\/tr>/,
+    "",
+  );
 }
