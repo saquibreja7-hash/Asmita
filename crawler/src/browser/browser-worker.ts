@@ -91,6 +91,19 @@ const QUIET_MS = 500;
 /** How often the network-quiet wait re-checks the in-flight set. */
 const QUIET_POLL_MS = 25;
 /**
+ * The longest one network-quiet wait may last (review fix): the upper limit
+ * BROWSER_SCROLL_WAIT_MS accepts (config.ts), so no configured scroll wait
+ * is ever cut short, while a page that never goes quiet stops being waited
+ * for. The page deadline minus `quietMargin` caps it further.
+ */
+const QUIET_WAIT_MAX_MS = 30_000;
+/**
+ * Time a quiet wait leaves before the page deadline for what follows it
+ * (the frame gather, the second quiet wait and page.content()): a quarter
+ * of the page timeout, at most one evaluate bound.
+ */
+const quietMargin = (task: Task): number => Math.min(EVALUATE_TIMEOUT_MS, Math.floor(task.msg.timeoutMs / 4));
+/**
  * Crawler v3 WP16: frames one render's gather walks (page.frames() is
  * unbounded, so the walk is capped; the main frame is always first).
  */
@@ -239,14 +252,21 @@ const isRedirect = (status: number): boolean => status === 301 || status === 302
  * fixed wait plus a one-shot wait for already-known requests, this also
  * waits for requests the page's own loading chain spawns late (a lazy-loader
  * whose onload inserts the next image), because the window restarts whenever
- * anything is in flight. A page that never goes quiet still ends at its
- * deadline.
+ * anything is in flight.
+ *
+ * A page that never goes quiet (it polls forever) must still render (review
+ * fix): `remaining()` never drops below 1 ms, so the old `left <= 0` exit
+ * never fired and such a page ran into its deadline and failed. The wait now
+ * gives up at the earlier of QUIET_WAIT_MAX_MS after it started and the
+ * deadline minus a margin kept for the gather and page.content(), and the
+ * render proceeds with whatever arrived.
  */
 async function waitNetworkQuiet(task: Task): Promise<void> {
   const quietMs = Math.min(QUIET_MS, task.msg.scrollWaitMs);
+  const giveUpAt = Math.min(Date.now() + QUIET_WAIT_MAX_MS, task.deadlineAt - quietMargin(task));
   let quietSince: number | null = null;
   while (!task.done) {
-    const left = remaining(task);
+    const left = giveUpAt - Date.now();
     if (left <= 0) return;
     if (task.inflight.size === 0) {
       quietSince ??= Date.now();

@@ -1797,6 +1797,50 @@ export async function buildSoft404ExemptFixture(): Promise<Fixture> {
   return { site, pool, expected: [], allHashes: [] };
 }
 
+/*
+ * The never-quiet page (crawler v3 review fix for WP15): poll.fixture.test's
+ * home page polls /ping every 100 ms for as long as it is open, so the
+ * network never goes quiet for 500 ms. Its one planted image must still be
+ * hashed: the render has to stop waiting for quiet and finish before its
+ * deadline.
+ */
+export const POLL_HOST = `poll.${SOURCE_DOMAIN}`;
+
+export async function buildNeverQuietFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const img = await patternImage(270, 300, 300, "png");
+  const pdq = (await hashImage(img, { minSide: 1 })).hash;
+  const pool: Pool = { version: "poll-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [{ id: "fp-poll", pdq, quality: 100 }] };
+  site.route(POLL_HOST, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(
+    POLL_HOST,
+    "/",
+    sendHtml(
+      html(`
+        <img src="/img/poll.png" width="300" height="300">
+        <script>
+          setInterval(function () { fetch("/ping?t=" + Date.now()).catch(function () {}); }, 100);
+        </script>
+      `),
+    ),
+  );
+  site.routeAny(POLL_HOST, (path) =>
+    path.startsWith("/ping")
+      ? sendBytes(Buffer.from("{}"), "application/json")
+      : (res) => {
+          res.writeHead(404, { "content-type": "text/plain" });
+          res.end("not found");
+        },
+  );
+  site.route(POLL_HOST, "/img/poll.png", sendBytes(img, "image/png"));
+  return {
+    site,
+    pool,
+    expected: [{ fingerprintId: "fp-poll", pagePath: "/", imageHost: POLL_HOST, imagePath: "/img/poll.png" }],
+    allHashes: [pdq],
+  };
+}
+
 /** Env for a fixture run (test values only, nothing real). */
 export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, string> = {}): Record<string, string> {
   return {
