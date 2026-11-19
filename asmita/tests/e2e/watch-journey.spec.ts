@@ -84,7 +84,9 @@ test("watch sign-up through to the watch page", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Add more images" })).toBeVisible();
 
   // Nothing is ever sent to a platform from a watch: the page promises that.
-  await expect(page.getByText("Nothing is sent to any platform unless you choose.")).toBeVisible();
+  // Scoped to the tick's section: the "Add more images" hint makes the same
+  // true promise, and both are deliberate copy.
+  await expect(page.locator("#crawl-consent").getByText("Nothing is sent to any platform unless you choose.")).toBeVisible();
 });
 
 test("stop watching withdraws and takes her fingerprints with it", async ({ page }) => {
