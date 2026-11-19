@@ -73,6 +73,7 @@ export function navGroups(locale: Locale): NavGroup[] {
         { href: "/what-we-do", label: say("What we do", "हम क्या करते हैं") },
         { href: "/how-it-works", label: say("How it works", "यह कैसे काम करता है") },
         { href: "/research", label: say("Research", "शोध") },
+        { href: "/for-platforms", label: say("For platforms", "प्लेटफ़ॉर्म के लिए") },
         { href: "/contact", label: say("Contact", "संपर्क") },
         { href: "/privacy", label: t(locale, "nav.privacy") },
       ],

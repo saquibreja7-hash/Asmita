@@ -792,6 +792,30 @@ model Feedback {
   @@index([createdAt])
 }
 
+// A platform asking to join the partner programme (/for-platforms). Business
+// contact details only, never survivor data. Name, email, phone and message
+// are encrypted at rest (encryptField); the rest is plain so the console can
+// sort and filter. status: NEW, CONTACTED, ONBOARDED or DECLINED.
+model PlatformPartnerApplication {
+  id               String   @id @default(uuid())
+  organisationName String
+  platformName     String
+  websiteDomain    String
+  platformType     String
+  userBase         String
+  contactName      String
+  contactRole      String
+  contactEmail     String
+  contactPhone     String?
+  interests        String[] @default([])
+  message          String?
+  status           String   @default("NEW")
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([status])
+}
+
 model DeletionJob {
   id          String            @id @default(uuid())
   caseId      String

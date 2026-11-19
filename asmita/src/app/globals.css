@@ -911,6 +911,60 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
   border-bottom: 1px solid var(--color-ash);
 }
 
+/* Platform partner form (/for-platforms) */
+.partner-form {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-box) + 6px);
+  box-shadow: var(--shadow-sm);
+  padding: 28px 20px;
+}
+@media (min-width: 768px) {
+  .partner-form { padding: 44px 48px; }
+}
+.partner-form[role="status"] { padding: 48px 24px; }
+.partner-legend {
+  /* Floated so it sits inside the fieldset, not on its border. */
+  float: left;
+  width: 100%;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.partner-legend + * { clear: both; }
+.partner-form fieldset + fieldset {
+  border-top: 1px solid var(--line);
+  padding-top: 32px;
+}
+.partner-form [aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+.partner-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  padding: 14px 16px;
+  background: var(--card);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.partner-choice:hover { border-color: var(--brand); }
+.partner-choice:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.partner-choice:has(input:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .faq-item summary {
   list-style: none;
   cursor: pointer;
