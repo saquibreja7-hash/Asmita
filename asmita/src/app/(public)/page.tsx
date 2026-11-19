@@ -246,7 +246,7 @@ export default async function HomePage() {
               </p>
             </div>
             <span className="hidden h-12 w-px bg-[var(--line)] md:block" aria-hidden />
-            <SupporterLogos className="supporters-strip-logos justify-center" eager />
+            <SupporterLogos className="supporters-strip-logos justify-center" />
           </div>
         </section>
 

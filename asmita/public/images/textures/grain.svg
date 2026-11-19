@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="700" viewBox="0 0 700 700" role="none">
+  <!-- Film grain texture for the site footer (.site-footer::after in globals.css).
+       Procedural feTurbulence tile, tuned to match the statistics of the
+       480 KB JPEG it replaced (luma mean ~194, std ~9, ~2 px grain) while
+       staying under 1 KB. baseFrequency stays below 1 (values at or above 1
+       rasterize flat in Chrome). -->
+  <filter id="grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.4" numOctaves="2" stitchTiles="stitch" seed="7"/>
+    <feColorMatrix type="saturate" values="0"/>
+    <feComponentTransfer>
+      <feFuncR type="linear" slope="0.416" intercept="0.551"/>
+      <feFuncG type="linear" slope="0.416" intercept="0.551"/>
+      <feFuncB type="linear" slope="0.416" intercept="0.551"/>
+      <feFuncA type="table" tableValues="1 1"/>
+    </feComponentTransfer>
+  </filter>
+  <rect width="700" height="700" filter="url(#grain)"/>
+</svg>
