@@ -23,6 +23,14 @@ export const ERROR_CODES = [
   "headers_timeout",
   "body_timeout",
   "tls_failed",
+  /**
+   * A certificate the crawler could not verify for a reason that usually
+   * lies with the crawler's own environment, not the site: a missing local
+   * issuer (no CA bundle, a TLS-intercepting middlebox) or a non-TLS answer
+   * on the TLS port (ERR_SSL_WRONG_VERSION_NUMBER, a proxy). Temporary
+   * (review fix): never a reason to give a page up.
+   */
+  "tls_unverified",
   "network_error",
   "aborted",
   // response
@@ -110,11 +118,11 @@ const SYSCALL_CODES: Record<string, ErrorCode> = {
   DEPTH_ZERO_SELF_SIGNED_CERT: "tls_failed",
   SELF_SIGNED_CERT_IN_CHAIN: "tls_failed",
   UNABLE_TO_VERIFY_LEAF_SIGNATURE: "tls_failed",
-  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: "tls_failed",
+  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: "tls_unverified",
   UNABLE_TO_GET_ISSUER_CERT: "tls_failed",
   CERT_NOT_YET_VALID: "tls_failed",
   CERT_UNTRUSTED: "tls_failed",
-  ERR_SSL_WRONG_VERSION_NUMBER: "tls_failed",
+  ERR_SSL_WRONG_VERSION_NUMBER: "tls_unverified",
 };
 
 // WP13: a name that does not exist is permanent, so it is never retried in
@@ -127,13 +135,20 @@ const RETRYABLE: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   "body_timeout",
   "network_error",
   "dns_failed",
+  // Review fix: an environment-type TLS failure is temporary, so it keeps
+  // its in-run retry like every other temporary failure.
+  "tls_unverified",
 ]);
 
 /**
- * Fetch-failure classes (crawler v3 WP13). Permanent failures — a DNS name
- * that does not exist, a TLS certificate failure — cannot be fixed by
- * retrying, so the page is reported `gone` on the first attempt and the app
- * marks the row dead without the five error retries. Temporary failures —
+ * Fetch-failure classes (crawler v3 WP13, review fix). Permanent failures —
+ * a DNS name that does not exist, a definite certificate failure (expired,
+ * wrong name, self-signed) — cannot be fixed by retrying in this run, so
+ * they are never retried in-run; the page is reported `error` with the
+ * `permanent` hint, and the app marks the row dead only when the same row
+ * fails permanently again at least 24 h later (one bad resolver answer or
+ * one bad hour never kills a page). Environment-type TLS failures
+ * (tls_unverified) are temporary. Temporary failures —
  * timeouts, connection resets and connection refusals, 5xx answers — keep
  * the existing 1 h / 6 h / 24 h backoff; 429/503 are temporary too and keep
  * today's treatment exactly (in-run retry with Retry-After, `error` at the
@@ -143,6 +158,7 @@ export type FailureClass = "permanent" | "temporary";
 
 const PERMANENT_FETCH_FAILURES: ReadonlySet<ErrorCode> = new Set<ErrorCode>(["dns_not_found", "tls_failed"]);
 const TEMPORARY_FETCH_FAILURES: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
+  "tls_unverified",
   "dns_failed",
   "connect_failed",
   "connect_timeout",

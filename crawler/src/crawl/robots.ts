@@ -12,9 +12,13 @@
  *                      -> "disallow all" for the rest of this run
  *                        (RFC 9309 2.3.1.4 "unreachable" -> complete disallow).
  *   DNS name not found / TLS certificate failure (WP13)
- *                      -> rethrown: the host is dead, so the fetch that asked
- *                         reports a permanent failure (`gone`) instead of a
- *                         robots block; no request is ever made to it.
+ *                      -> rethrown: the host looks dead, so the fetch that
+ *                         asked reports a permanent failure (`error` with the
+ *                         permanent hint) instead of a robots block; no
+ *                         request is ever made to it. NOT cached (review
+ *                         fix): the next request to the origin asks again, so
+ *                         one bad resolver answer cannot condemn every page
+ *                         of the origin for the rest of the run.
  *   Body over the cap (500 KiB) -> disallow all.
  * The cache never outlives the process.
  */
@@ -89,8 +93,15 @@ export class RobotsCache {
     const origin = url.origin;
     let p = this.cache.get(origin);
     if (!p) {
-      p = this.load(origin);
-      this.cache.set(origin, p);
+      const loading = this.load(origin);
+      p = loading;
+      this.cache.set(origin, loading);
+      // A permanent failure is rethrown by load(); drop it from the cache
+      // once settled, so it is never served for the rest of the run.
+      // Concurrent callers of the same load still share its one answer.
+      loading.catch(() => {
+        if (this.cache.get(origin) === loading) this.cache.delete(origin);
+      });
     }
     return p;
   }
@@ -113,8 +124,8 @@ export class RobotsCache {
       // is dead, not "robots unreachable". The robots.txt fetch shares the
       // page's origin, so whatever killed it kills the page fetch too;
       // rethrow so the caller reports the permanent failure (the page goes
-      // `gone` on the first attempt) instead of a robots block that would
-      // be rechecked every 24 h forever.
+      // `error` with the permanent hint) instead of a robots block that
+      // would be rechecked every 24 h forever.
       if (fetchFailureClass(err) === "permanent") throw err;
       if (err instanceof CrawlError && err.code === "http_status" && err.status !== undefined) {
         if (err.status === 401 || err.status === 403) {

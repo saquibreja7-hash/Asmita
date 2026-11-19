@@ -576,6 +576,11 @@ model CrawlPage {
   // again when the claim expires.
   claimedUntil  DateTime?
   lastFetchedAt DateTime?
+  // Crawler v3 review fix (WP13): the first permanent fetch failure (a DNS
+  // name that does not exist, a definite TLS certificate failure) — the row
+  // dies only on a permanent failure at least 24 h after this one; a
+  // successful visit clears it. Null before the first permanent failure.
+  lastPermanentFailAt DateTime?
   nextDueAt     DateTime        @default(now())
   failCount     Int             @default(0)
   createdAt     DateTime        @default(now())

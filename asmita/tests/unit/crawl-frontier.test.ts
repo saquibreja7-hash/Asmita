@@ -14,9 +14,11 @@ import {
   crawlPageKey,
   FRONTIER_ALIASES_PER_PAGE_MAX,
   FRONTIER_CLAIM_MS,
+  FRONTIER_ERROR_BACKOFF_MS,
   FRONTIER_MAX_INTERVAL_MS,
   FRONTIER_PRIORITY_DEFAULT,
   FRONTIER_PRIORITY_LASTMOD,
+  FRONTIER_PERMANENT_FAIL_MS,
   FRONTIER_REVISIT_MS,
   linkPriority,
   planNextVisit,
@@ -1001,5 +1003,71 @@ describe("crawl order (WP11)", () => {
       expect(await bad.json()).toEqual({ accepted: 0 });
     }
     expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/x1"))).toHaveLength(0);
+  });
+});
+
+describe("permanent failures (crawler v3 review fix, WP13)", () => {
+  it("the first permanent failure backs off 1 h and is remembered; the row dies only on a second one 24 h later", async () => {
+    const t0 = nowAt(0);
+    const seed = await claimCrawlPages(sourceId, 10, t0);
+    const row = crawlMemory().pages.get(seed[0]!.id)!;
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "error", failure: "permanent", links: [] }], t0);
+    // An ordinary first error step — the row is alive, not gone on day one.
+    expect(row.status).toBe("ERROR");
+    expect(row.failCount).toBe(1);
+    expect(row.nextDueAt.getTime() - t0.getTime()).toBe(FRONTIER_ERROR_BACKOFF_MS[0]);
+    expect(row.lastPermanentFailAt).toEqual(t0);
+
+    // A second permanent failure well inside the window: another ordinary
+    // error step. The remembered failure does not move, so the 24 h window
+    // is measured from the first one and never slides.
+    const t1 = nowAt(2 * HOUR);
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "error", failure: "permanent", links: [] }], t1);
+    expect(row.status).toBe("ERROR");
+    expect(row.failCount).toBe(2);
+    expect(row.nextDueAt.getTime() - t1.getTime()).toBe(FRONTIER_ERROR_BACKOFF_MS[1]);
+    expect(row.lastPermanentFailAt).toEqual(t0);
+
+    // A permanent failure at least 24 h after the first kills the row.
+    expect(FRONTIER_PERMANENT_FAIL_MS).toBe(24 * HOUR);
+    const t2 = nowAt(25 * HOUR);
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "error", failure: "permanent", links: [] }], t2);
+    expect(row.status).toBe("DEAD");
+    expect(row.lastPermanentFailAt).toEqual(t0);
+    // Dead rows are never handed out again.
+    expect(await claimCrawlPages(sourceId, 10, nowAt(26 * HOUR))).toEqual([]);
+  });
+
+  it("a successful visit clears the remembered failure; a temporary error never sets one", async () => {
+    const t0 = nowAt(0);
+    const seed = await claimCrawlPages(sourceId, 10, t0);
+    const row = crawlMemory().pages.get(seed[0]!.id)!;
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "error", failure: "permanent", links: [] }], t0);
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "fetched", links: [] }], nowAt(1 * HOUR));
+    expect(row.lastPermanentFailAt).toBeNull(); // alive again
+
+    // A plain temporary error keeps the marker empty and the row alive.
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "error", links: [] }], nowAt(2 * HOUR));
+    expect(row.lastPermanentFailAt).toBeNull();
+    expect(row.status).toBe("ERROR");
+    expect(row.failCount).toBe(1);
+
+    // A fresh permanent failure after the clear is remembered from scratch.
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "error", failure: "permanent", links: [] }], nowAt(3 * HOUR));
+    expect(row.lastPermanentFailAt).toEqual(nowAt(3 * HOUR));
+  });
+
+  it("a permanent hint on a non-error status skips the entry whole (contract)", async () => {
+    const t0 = nowAt(0);
+    const seed = await claimCrawlPages(sourceId, 10, t0);
+    const row = crawlMemory().pages.get(seed[0]!.id)!;
+    const res = await postReport(crawlerRequest("frontier/report", {
+      method: "POST",
+      body: { sourceId, runId: "run-1", pages: [{ id: seed[0]!.id, status: "fetched", failure: "permanent", links: [] }] },
+    }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ accepted: 0 });
+    expect(row.status).toBe("PENDING"); // nothing moved: the entry was skipped
+    expect(row.claimedUntil).not.toBeNull(); // the claim is untouched
   });
 });

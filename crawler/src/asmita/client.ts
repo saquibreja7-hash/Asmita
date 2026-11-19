@@ -83,35 +83,51 @@ export const FrontierClaimResponseSchema = z.object({
 });
 
 /** One page outcome for POST /api/crawler/frontier/report. */
-export const ReportedPageSchema = z.strictObject({
-  id: ID,
-  status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
-  etag: z.string().min(1).max(512).optional(),
-  lastModified: z.string().min(1).max(512).optional(),
-  /**
-   * The page's in-scope <link rel="canonical"> targets (crawler v3 WP10),
-   * reported as aliases: the app never fetches one. Optional on both sides;
-   * at most 20 per page.
-   */
-  aliases: z.array(z.url({ protocol: /^https?$/ })).max(20).optional(),
-  links: z
-    .array(
-      z.strictObject({
-        url: z.url({ protocol: /^https?$/ }),
-        kind: z.enum(["page", "sitemap", "feed"]),
-        /**
-         * Crawler v3 WP11: a pagination link runs before plain pages (the
-         * app stores priority 30), and a link out of a sitemap document may
-         * carry the entry's <lastmod> as a strict ISO date — an entry newer
-         * than the row's last fetch makes the app crawl it at once.
-         * Optional on both sides.
-         */
-        pagination: z.boolean().optional(),
-        lastmod: z.iso.datetime({ offset: true }).optional(),
-      }),
-    )
-    .max(500),
-});
+export const ReportedPageSchema = z
+  .strictObject({
+    id: ID,
+    status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
+    etag: z.string().min(1).max(512).optional(),
+    lastModified: z.string().min(1).max(512).optional(),
+    /**
+     * Crawler v3 review fix (WP13): an `error` whose fetch failed permanently
+     * (a DNS name that does not exist, a definite certificate failure). The
+     * app marks the row dead only when it fails permanently again at least
+     * 24 h later; until then it is an ordinary error backoff. Optional on
+     * both sides, only with status `error`.
+     */
+    failure: z.literal("permanent").optional(),
+    /**
+     * The page's in-scope <link rel="canonical"> targets (crawler v3 WP10),
+     * reported as aliases: the app never fetches one. Optional on both sides;
+     * at most 20 per page.
+     */
+    aliases: z.array(z.url({ protocol: /^https?$/ })).max(20).optional(),
+    links: z
+      .array(
+        z.strictObject({
+          url: z.url({ protocol: /^https?$/ }),
+          kind: z.enum(["page", "sitemap", "feed"]),
+          /**
+           * Crawler v3 WP11: a pagination link runs before plain pages (the
+           * app stores priority 30), and a link out of a sitemap document may
+           * carry the entry's <lastmod> as a strict ISO date — an entry newer
+           * than the row's last fetch makes the app crawl it at once.
+           * Optional on both sides.
+           */
+          pagination: z.boolean().optional(),
+          lastmod: z.iso.datetime({ offset: true }).optional(),
+        }),
+      )
+      .max(500),
+  })
+  .superRefine((page, ctx) => {
+    // The server refuses the whole entry otherwise (its schema is strict):
+    // catch our own bug before the request leaves.
+    if (page.failure !== undefined && page.status !== "error") {
+      ctx.addIssue({ code: "custom", path: ["failure"], message: "only with status error" });
+    }
+  });
 export type ReportedPage = z.infer<typeof ReportedPageSchema>;
 
 export const FrontierReportRequestSchema = z.strictObject({

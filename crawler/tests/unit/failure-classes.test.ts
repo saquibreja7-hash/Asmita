@@ -1,11 +1,14 @@
 /**
- * Fetch-failure classes (crawler v3 WP13): a DNS name that does not exist
- * and a TLS certificate failure are permanent — reported `gone` on the first
- * attempt, never retried in this run — while timeouts, connection resets and
- * 5xx are temporary and keep the existing backoff; 429/503 keep today's
- * treatment exactly. Unit level: error mapping, the class of each code, the
- * retry decision, the resolver split, the robots.txt pass-through and the
- * summary counters. The end-to-end `gone` report is covered by
+ * Fetch-failure classes (crawler v3 WP13, review fix): a DNS name that does
+ * not exist and a definite TLS certificate failure (expired, wrong name,
+ * self-signed) are permanent — never retried in this run, reported `error`
+ * with the `permanent` hint, and the app kills the row only on a second
+ * permanent failure at least 24 h later. Environment-type certificate
+ * failures (`tls_unverified`: a missing local issuer, a non-TLS answer on
+ * the TLS port) are temporary, like timeouts, resets and 5xx; 429/503 keep
+ * today's treatment exactly. Unit level: error mapping, the class of each
+ * code, the retry decision, the resolver split, the robots.txt pass-through
+ * and the summary counters. The end-to-end report is covered by
  * tests/integration/permanent-failures.test.ts.
  */
 import { describe, expect, it } from "vitest";
@@ -43,13 +46,26 @@ describe("error mapping by class (WP13)", () => {
     "DEPTH_ZERO_SELF_SIGNED_CERT",
     "SELF_SIGNED_CERT_IN_CHAIN",
     "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
-    "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
     "ERR_TLS_CERT_ALTNAME_INVALID",
   ])("maps %s to tls_failed, permanent and never retried", (code) => {
     const e = mapped(code);
     expect(e.code).toBe("tls_failed");
     expect(e.retryable).toBe(false);
     expect(fetchFailureClass(e)).toBe("permanent");
+  });
+
+  it.each([
+    // Review fix: a certificate the crawler could not verify for a reason
+    // that usually lies with its own environment (no CA bundle, a
+    // TLS-intercepting middlebox, a proxy answering a TLS port) is not
+    // proof the site is broken — temporary, like a timeout.
+    "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+    "ERR_SSL_WRONG_VERSION_NUMBER",
+  ])("maps %s to tls_unverified, temporary and retried", (code) => {
+    const e = mapped(code);
+    expect(e.code).toBe("tls_unverified");
+    expect(e.retryable).toBe(true);
+    expect(fetchFailureClass(e)).toBe("temporary");
   });
 
   it.each([
@@ -77,7 +93,7 @@ describe("the class of a fetch failure (WP13)", () => {
   });
 
   it("temporary: timeouts, resets, refused connections, 5xx and 429/503", () => {
-    for (const code of ["dns_failed", "connect_failed", "connect_timeout", "headers_timeout", "body_timeout", "network_error"] as const) {
+    for (const code of ["dns_failed", "connect_failed", "connect_timeout", "headers_timeout", "body_timeout", "network_error", "tls_unverified"] as const) {
       expect(fetchFailureClass(new CrawlError(code))).toBe("temporary");
     }
     for (const status of [429, 500, 502, 503, 504]) {
@@ -128,8 +144,8 @@ describe("retry only what can work (WP13)", () => {
     expect(n).toBe(1);
   });
 
-  it("retries a temporary DNS failure, a reset and a 5xx", async () => {
-    for (const err of [new CrawlError("dns_failed", { retryable: true }), new CrawlError("network_error", { retryable: true }), new CrawlError("http_status", { status: 500, retryable: true })]) {
+  it("retries a temporary DNS failure, a reset, a 5xx and an environment TLS failure", async () => {
+    for (const err of [new CrawlError("dns_failed", { retryable: true }), new CrawlError("network_error", { retryable: true }), new CrawlError("http_status", { status: 500, retryable: true }), new CrawlError("tls_unverified", { retryable: true })]) {
       let n = 0;
       await expect(
         withRetry(
@@ -215,6 +231,23 @@ describe("robots.txt passes a permanent failure through (WP13)", () => {
       await expect(cache.isAllowed(url)).rejects.toMatchObject({ code: err.code });
       expect(outcomes).toEqual([]); // not an "unreachable robots" policy decision
     }
+  });
+
+  it("does not cache a permanent robots failure: the next request asks again (review fix)", async () => {
+    // One bad resolver answer must not condemn every page of the origin for
+    // the rest of the run: the rejected verdict is dropped from the cache,
+    // so the next request re-probes robots.txt (and may get a better answer).
+    let calls = 0;
+    const cache = new RobotsCache(
+      () => {
+        calls++;
+        throw new CrawlError("dns_not_found");
+      },
+      "AsmitaCrawler",
+    );
+    await expect(cache.isAllowed(url)).rejects.toMatchObject({ code: "dns_not_found" });
+    await expect(cache.isAllowed(url)).rejects.toMatchObject({ code: "dns_not_found" });
+    expect(calls).toBe(2);
   });
 
   it("still treats temporary failures as robots-unreachable: disallow all", async () => {

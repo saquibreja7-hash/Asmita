@@ -97,6 +97,11 @@ export type MemoryCrawlPage = {
   nextDueAt: Date;
   failCount: number;
   createdAt: Date;
+  /**
+   * First permanent fetch failure (crawler v3 review fix, WP13); cleared on a
+   * successful visit. Optional: rows created before the column lack it (null).
+   */
+  lastPermanentFailAt?: Date | null;
 };
 
 export type MemoryCrawlServiceKey = {

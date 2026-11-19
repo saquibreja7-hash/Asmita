@@ -1,14 +1,18 @@
 /**
- * Do not retry what cannot work (crawler v3 WP13), end to end against the
- * permanent-failure fixture and the mock API's frontier:
- *   - a DNS name that does not exist is reported `gone` on the first attempt
- *     (one robots.txt probe, one page fetch, no in-run retry), the app marks
- *     the row dead without the five error retries, and a second run claims
- *     nothing;
+ * Do not retry what cannot work (crawler v3 WP13, review fix), end to end
+ * against the permanent-failure fixture and the mock API's frontier:
+ *   - a DNS name that does not exist is reported `error` with the
+ *     `permanent` hint on the first attempt (one robots.txt probe for the
+ *     sitemap-stash read, one page fetch call that fails in its pre-hop,
+ *     and one more robots.txt probe — the permanent failure is not cached,
+ *     so the page's own check asks again; no in-run retry of either); the
+ *     app backs the row off 1 h and remembers the failure instead of
+ *     killing it, and the row dies only on a permanent failure at least
+ *     24 h after the first one; after that a further run claims nothing;
  *   - temporary failures (a plain 500, a 502, a connection reset, a 429)
  *     keep today's treatment: the in-run retry set is untouched (500 once,
- *     502/reset/429 three times), the report says `error`, and the app
- *     backs off 1 h with the failure count at one;
+ *     502/reset/429 three times), the report says `error` without the hint,
+ *     and the app backs off 1 h with the failure count at one;
  *   - the run summary counts failures by class and counts a source whose
  *     home page failed permanently once, with no hostname in any log line.
  */
@@ -61,10 +65,12 @@ function countingFetch(counter: { calls: number }): (inner: SafeFetcher) => Pick
 }
 
 describe("a DNS name that does not exist is permanent", () => {
-  it("is reported gone on the first attempt and never refetched", async () => {
+  it("is reported error with the permanent hint and dies on the second failure 24 h later", async () => {
+    let clock = Date.parse("2026-11-19T10:00:00Z");
     const counter = { calls: 0 };
     const api = await mock({
       sources: [{ id: "src-dead", kind: "site", domain: DEAD_HOST, pageBudget: 10, delayMs: 0, origin: "admin", hops: 0, render: "http" }],
+      now: () => clock,
     });
 
     const first = await runFixtureCrawl(fx.site, api, {
@@ -74,16 +80,23 @@ describe("a DNS name that does not exist is permanent", () => {
     });
     expect(first.result.exitCode).toBe(0);
 
-    // One robots.txt probe (the only network attempt the dead host gets) and
-    // one page fetch call that fails in its pre-hop: no in-run retry.
-    expect(counter.calls).toBe(2);
+    // The robots.txt of the dead host is fetched once for the first-claim
+    // sitemap-stash read and once more for the page's own pre-hop check —
+    // the permanent robots failure is NOT cached (review fix), so the next
+    // request to the origin asks again — plus the one page fetch call that
+    // fails in its pre-hop: no in-run retry of anything.
+    expect(counter.calls).toBe(3);
 
-    // The page was reported gone straight away; the row is dead, not backed off.
+    // The page was reported `error` carrying the `permanent` hint: an
+    // ordinary 1 h backoff with the failure remembered, not a dead row.
     expect(api.reports).toHaveLength(1);
-    expect(api.reports[0]!.statuses).toEqual({ gone: 1 });
+    expect(api.reports[0]!.statuses).toEqual({ error: 1 });
+    expect(api.reports[0]!.permanent).toBe(1);
     const row = [...api.pages.values()][0]!;
-    expect(row.status).toBe("GONE");
-    expect(row.failCount).toBe(0); // dead without five retries
+    expect(row.status).toBe("ERROR");
+    expect(row.failCount).toBe(1);
+    expect(row.nextDueAt).toBe(clock + HOUR); // the first error backoff
+    expect(row.lastPermanentFailAt).toBe(clock);
 
     // The run summary counts the class and the dead home page, once.
     const summary = first.result.summary as Record<string, unknown>;
@@ -95,7 +108,10 @@ describe("a DNS name that does not exist is permanent", () => {
     // No hostname, URL or fingerprint anywhere in the log.
     assertCleanLog(first.lines.join("\n"), { hostnames: [DEAD_HOST], hashes: [] });
 
-    // A second run claims nothing: the row is dead for good, no backoff.
+    // A second permanent failure well inside the 24 h window keeps the row
+    // alive: the failure count and the backoff advance, the remembered
+    // first failure does not move.
+    clock += 2 * HOUR;
     const secondCounter = { calls: 0 };
     const second = await runFixtureCrawl(fx.site, api, {
       hosts: PERMANENT_FAILURE_HOSTS,
@@ -103,8 +119,38 @@ describe("a DNS name that does not exist is permanent", () => {
       wrapFetcher: countingFetch(secondCounter),
     });
     expect(second.result.exitCode).toBe(0);
-    expect(second.result.summary.pagesAttempted).toBe(0);
-    expect(secondCounter.calls).toBe(0);
+    expect(secondCounter.calls).toBe(3); // the same three attempts, asked again
+    expect(second.result.summary).toMatchObject({ homePermanentFailures: 1 });
+    expect(row.status).toBe("ERROR");
+    expect(row.failCount).toBe(2);
+    expect(row.nextDueAt).toBe(clock + 6 * HOUR); // the second error backoff
+    expect(row.lastPermanentFailAt).toBe(Date.parse("2026-11-19T10:00:00Z")); // the first failure is kept
+
+    // A permanent failure at least 24 h after the first one kills the row.
+    clock = Date.parse("2026-11-19T10:00:00Z") + 25 * HOUR;
+    const thirdCounter = { calls: 0 };
+    const third = await runFixtureCrawl(fx.site, api, {
+      hosts: PERMANENT_FAILURE_HOSTS,
+      env: { FETCH_ATTEMPTS: "3" },
+      wrapFetcher: countingFetch(thirdCounter),
+    });
+    expect(third.result.exitCode).toBe(0);
+    expect(thirdCounter.calls).toBe(3);
+    expect(third.result.summary).toMatchObject({ homePermanentFailures: 1 });
+    expect(row.status).toBe("DEAD"); // the second permanent failure, 24 h later
+    assertCleanLog([...first.lines, ...second.lines, ...third.lines].join("\n"), { hostnames: [DEAD_HOST], hashes: [] });
+
+    // A dead row is never handed out again: a further run claims nothing.
+    clock += HOUR;
+    const fourthCounter = { calls: 0 };
+    const fourth = await runFixtureCrawl(fx.site, api, {
+      hosts: PERMANENT_FAILURE_HOSTS,
+      env: { FETCH_ATTEMPTS: "3" },
+      wrapFetcher: countingFetch(fourthCounter),
+    });
+    expect(fourth.result.exitCode).toBe(0);
+    expect(fourth.result.summary.pagesAttempted).toBe(0);
+    expect(fourthCounter.calls).toBe(0);
   }, 30_000);
 });
 

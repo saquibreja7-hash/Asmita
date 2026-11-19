@@ -13,8 +13,12 @@
  * with the app's in-scope check. Crawler v3 WP11 is mirrored too: link
  * priorities (sitemap 10, feed 20, pagination 30, pages 50 + 10 per depth
  * level), the claim order (priority, then nextDueAt) and the lastmod jump
- * (priority 5, due now). It is written out independently so drift
- * between the crawler and the app's contract shows up as a test failure.
+ * (priority 5, due now). The crawler v3 review fix (WP13) is mirrored too:
+ * an `error` with `failure: "permanent"` backs off like any error on the
+ * first attempt and is remembered; the row dies only on a permanent
+ * failure at least 24 h after the first one. It is written out
+ * independently so drift between the crawler and the app's contract shows
+ * up as a test failure.
  */
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -50,14 +54,23 @@ const ServerReportLink = z.strictObject({
   pagination: z.boolean().optional(),
   lastmod: z.iso.datetime({ offset: true }).optional(),
 });
-const ServerReportPage = z.strictObject({
-  id: z.string().min(1),
-  status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
-  etag: z.string().min(1).max(512).optional(),
-  lastModified: z.string().min(1).max(512).optional(),
-  aliases: z.array(z.string().min(10).max(2048)).max(20).optional(),
-  links: z.array(ServerReportLink).max(500),
-});
+const ServerReportPage = z
+  .strictObject({
+    id: z.string().min(1),
+    status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
+    etag: z.string().min(1).max(512).optional(),
+    lastModified: z.string().min(1).max(512).optional(),
+    // Crawler v3 review fix (WP13): an `error` whose fetch failed
+    // permanently. Only ever sent with status "error".
+    failure: z.literal("permanent").optional(),
+    aliases: z.array(z.string().min(10).max(2048)).max(20).optional(),
+    links: z.array(ServerReportLink).max(500),
+  })
+  .superRefine((page, ctx) => {
+    if (page.failure !== undefined && page.status !== "error") {
+      ctx.addIssue({ code: "custom", path: ["failure"], message: "only with status error" });
+    }
+  });
 const ServerReport = z.strictObject({
   sourceId: z.string().min(1),
   runId: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/),
@@ -105,6 +118,12 @@ const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 const CLAIM_MS = 30 * MIN;
+/**
+ * The app's permanent-failure window (crawler v3 review fix, WP13): a row
+ * that failed permanently dies on the next permanent failure at least this
+ * long after the first one.
+ */
+const PERMANENT_FAIL_MS = 24 * HOUR;
 /** The app's priority rule (crawl-pages.ts), mirrored (crawler v3 WP11). */
 const PRIORITY_DEFAULT = 100;
 const PRIORITY_LASTMOD = 5;
@@ -131,6 +150,8 @@ type MockPage = {
   lastFetchedAt: number | null;
   nextDueAt: number;
   failCount: number;
+  /** First permanent fetch failure (review fix, WP13); null once it fetches again. */
+  lastPermanentFailAt: number | null;
 };
 
 /**
@@ -231,7 +252,7 @@ export class MockAsmita {
   /** Every claim body, in order. */
   readonly claims: Array<{ sourceId: string; limit: number }> = [];
   /** Every report, in order, with its page statuses and accepted count. */
-  readonly reports: Array<{ sourceId: string; runId: string; count: number; accepted: number; statuses: Record<string, number> }> = [];
+  readonly reports: Array<{ sourceId: string; runId: string; count: number; accepted: number; statuses: Record<string, number>; permanent: number }> = [];
   /** Every discovery report, in order (the app's POST /discoveries). */
   readonly discoveryReports: Array<{ sourceId: string; runId: string; hosts: string[]; accepted: number }> = [];
   /** Every canonical alias the crawler reported, in order (WP10): page id -> alias URL. */
@@ -299,7 +320,7 @@ export class MockAsmita {
     const id = `page-${this.idCounter}`;
     this.pages.set(id, {
       id, sourceId, url, urlDigest: digest, depth, priority, viaPagination, etag: null, lastModified: null,
-      status: "PENDING", claimedUntil: null, lastFetchedAt: null, nextDueAt: 0, failCount: 0,
+      status: "PENDING", claimedUntil: null, lastFetchedAt: null, nextDueAt: 0, failCount: 0, lastPermanentFailAt: null,
     });
   }
 
@@ -409,6 +430,7 @@ export class MockAsmita {
           row.lastFetchedAt = now;
           row.nextDueAt = now + DAY;
           row.failCount = 0;
+          row.lastPermanentFailAt = null; // alive again (review fix, WP13)
           break;
         case "not_modified": {
           const previous = row.lastFetchedAt !== null ? Math.max(row.nextDueAt - row.lastFetchedAt, 0) : DAY;
@@ -417,6 +439,7 @@ export class MockAsmita {
           row.lastFetchedAt = now;
           row.nextDueAt = now + interval;
           row.failCount = 0;
+          row.lastPermanentFailAt = null; // alive again (review fix, WP13)
           break;
         }
         case "gone":
@@ -430,10 +453,17 @@ export class MockAsmita {
           break;
         case "error": {
           row.failCount += 1;
-          if (row.failCount >= 5) row.status = "DEAD";
+          // Review fix (WP13): the first permanent failure is an ordinary
+          // error backoff with the failure remembered; the row dies only on
+          // a permanent failure at least 24 h after the first one.
+          const permanent = entry.failure === "permanent";
+          const permanentDead =
+            permanent && row.lastPermanentFailAt !== null && now - row.lastPermanentFailAt >= PERMANENT_FAIL_MS;
+          if (row.failCount >= 5 || permanentDead) row.status = "DEAD";
           else {
             row.status = "ERROR";
             row.nextDueAt = now + (row.failCount === 1 ? HOUR : row.failCount === 2 ? 6 * HOUR : DAY);
+            if (permanent && row.lastPermanentFailAt === null) row.lastPermanentFailAt = now;
           }
           break;
         }
@@ -625,12 +655,14 @@ export class MockAsmita {
         return send(400, { error: "invalid_body" });
       }
       const statuses: Record<string, number> = {};
+      let permanent = 0;
       for (const page of parsed.data.pages) {
         const status = (page as { status?: string }).status ?? "invalid";
         statuses[status] = (statuses[status] ?? 0) + 1;
+        if ((page as { failure?: string }).failure === "permanent") permanent += 1;
       }
       const accepted = this.report(parsed.data.sourceId, parsed.data.pages);
-      this.reports.push({ sourceId: parsed.data.sourceId, runId: parsed.data.runId, count: parsed.data.pages.length, accepted, statuses });
+      this.reports.push({ sourceId: parsed.data.sourceId, runId: parsed.data.runId, count: parsed.data.pages.length, accepted, statuses, permanent });
       return send(200, { accepted });
     }
 

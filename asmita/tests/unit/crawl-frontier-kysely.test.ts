@@ -403,3 +403,22 @@ describe("legacy digests (review fix for WP10), Kysely path", () => {
     expect(rows.map((r) => r.urlDigest)).toEqual([crawlPageDigest(SOURCE.id, "https://k.example/new")]);
   });
 });
+
+describe("permanent failures (review fix 7, WP13), Kysely path", () => {
+  it("writes lastPermanentFailAt on a permanent error and reads it with the claimed rows", async () => {
+    kysely.state.rows.CrawlPage = [pageRow({ priority: 5 })];
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "error", failure: "permanent", links: [] }], NOW);
+    const update = callsOn("CrawlPage").find((call) => call.op === "update" && call.detail.set !== undefined)!;
+    expect(update.detail.set).toMatchObject({ status: "ERROR", lastPermanentFailAt: NOW });
+    // An error writes no priority: a bump must survive a failed visit.
+    expect((update.detail.set as Record<string, unknown>).priority).toBeUndefined();
+
+    kysely.state.rows.CrawlPage = [pageRow({ lastPermanentFailAt: NOW })];
+    kysely.state.calls.length = 0;
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "error", failure: "permanent", links: [] }], new Date(NOW.getTime() + 25 * 60 * 60 * 1000));
+    const read = callsOn("CrawlPage").find((call) => call.op === "select" && Array.isArray(call.detail.select) && (call.detail.select as string[]).includes("lastPermanentFailAt"));
+    expect(read).toBeDefined();
+    const dead = callsOn("CrawlPage").find((call) => call.op === "update" && call.detail.set !== undefined)!;
+    expect(dead.detail.set).toMatchObject({ status: "DEAD" }); // the second permanent failure, 24 h on
+  });
+});

@@ -369,3 +369,23 @@ describe("legacy digests (review fix for WP10), Prisma path", () => {
     expect(data.map((r) => r.urlDigest)).toEqual([crawlPageDigest(SOURCE.id, "https://k.example/new")]);
   });
 });
+
+describe("permanent failures (review fix 7, WP13), Prisma path", () => {
+  it("writes the marker on a permanent error; a second one 24 h later marks the row dead", async () => {
+    db.crawlPage.findMany.mockResolvedValueOnce([{ ...CURRENT_ROW }]); // the claimed page row
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "error", failure: "permanent", links: [] }], NOW);
+    expect(db.crawlPage.update).toHaveBeenCalledWith({
+      where: { id: "page-1" },
+      data: expect.objectContaining({ status: "ERROR", lastPermanentFailAt: NOW }),
+    });
+    expect((db.crawlPage.update.mock.calls[0]![0] as { data: Record<string, unknown> }).data.priority).toBeUndefined();
+
+    db.crawlPage.findMany.mockResolvedValueOnce([{ ...CURRENT_ROW, lastPermanentFailAt: NOW }]);
+    db.crawlPage.update.mockClear();
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "error", failure: "permanent", links: [] }], new Date(NOW.getTime() + 25 * 60 * 60 * 1000));
+    expect(db.crawlPage.update).toHaveBeenCalledWith({
+      where: { id: "page-1" },
+      data: expect.objectContaining({ status: "DEAD" }),
+    });
+  });
+});

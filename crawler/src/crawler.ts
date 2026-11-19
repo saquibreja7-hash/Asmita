@@ -1151,10 +1151,11 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * every redirect hop (beforeHop). A 304 becomes "not_modified"; 404/410
    * "gone"; a robots block or a 401/403 answer "blocked"; anything else that
    * fails "error" (the app backs off and eventually marks the page dead) —
-   * except permanent fetch failures (crawler v3 WP13: a DNS name not found,
-   * a TLS certificate failure), which are reported "gone" straight away so
-   * the app kills the row without the five error retries, and are never
-   * retried inside this run either. Links are reported only under
+   * including permanent fetch failures (crawler v3 WP13: a DNS name not
+   * found, a definite TLS certificate failure), which are never retried
+   * inside this run and are reported "error" with the "permanent" hint —
+   * the app kills the row only on a second permanent failure at least 24 h
+   * later (review fix). Links are reported only under
    * MAX_DEPTH, deduplicated per page, in scope.
    *
    * Fake "not found" pages (crawler v3 WP14, review fix): a fetched HTML
@@ -1217,10 +1218,12 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       const err = toCrawlError(raw);
       record(err.code, err.status);
       if (err.code === "out_of_scope") metrics.pagesOutOfScope++;
-      // WP13: a DNS name that does not exist or a TLS certificate failure
-      // cannot be fixed by retrying, so the page is `gone` on the first
-      // attempt and the app kills the row without the five error retries.
-      // Temporary failures (timeouts, resets, 5xx) keep the error backoff;
+      // WP13 (review fix): a DNS name that does not exist or a definite
+      // certificate failure is not retried in this run and is reported as
+      // an `error` carrying the `permanent` hint: the app kills the row
+      // only when it fails permanently again at least 24 h later, so one
+      // bad resolver answer cannot kill a page. Temporary failures
+      // (timeouts, resets, 5xx, environment TLS) keep the error backoff;
       // 429/503 are unchanged.
       const permanent = fetchFailureClass(err) === "permanent";
       const status: ReportedPage["status"] =
@@ -1230,9 +1233,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
             ? "blocked"
             : err.code === "robots_disallowed"
               ? "blocked"
-              : permanent
-                ? "gone"
-                : "error";
+              : "error";
       // A source's home page (the depth-0 seed) failing permanently means
       // the whole site is dead: count it once per source in the summary —
       // a count only, never a hostname (rule 3).
@@ -1240,7 +1241,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         ctx.homePermanentCounted = true;
         metrics.homePermanentFailures++;
       }
-      return { id: page.id, status, links: [] };
+      return { id: page.id, status, ...(status === "error" && permanent ? { failure: "permanent" as const } : {}), links: [] };
     }
     const validators = {
       ...(result.etag !== null ? { etag: result.etag } : {}),

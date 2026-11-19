@@ -4,9 +4,11 @@
  * (a malformed report is our bug and must never leave the process), so the
  * new optional link fields — the pagination flag and the sitemap <lastmod>
  * as a strict ISO date — must pass `ReportedPageSchema`, and anything the
- * app's strict Zod would refuse must fail here too. The app-side mirror of
- * this test is in asmita/tests/unit/crawl-frontier.test.ts ("accepts the
- * crawler's WP11 link fields"); together they are the WP11 contract.
+ * app's strict Zod would refuse must fail here too. The crawler v3 review
+ * fix (WP13) adds the optional `failure: "permanent"` hint on an `error`
+ * page. The app-side mirror of this test is in
+ * asmita/tests/unit/crawl-frontier.test.ts ("accepts the crawler's WP11
+ * link fields"); together they are the report contract.
  */
 import { describe, expect, it } from "vitest";
 import { FrontierReportRequestSchema, ReportedPageSchema } from "../../src/asmita/client.ts";
@@ -21,6 +23,26 @@ const report = (links: unknown[]) => ({
 });
 
 describe("frontier report contract (WP11)", () => {
+  it("accepts the permanent-failure hint on an error page and refuses it anywhere else (review fix, WP13)", () => {
+    const ok = FrontierReportRequestSchema.safeParse({
+      sourceId: SOURCE_ID,
+      runId: RUN_ID,
+      pages: [{ id: "page-1", status: "error", failure: "permanent", links: [] }],
+    });
+    expect(ok.success).toBe(true);
+    expect(ReportedPageSchema.safeParse({ id: "page-1", status: "error", failure: "permanent", links: [] }).success).toBe(true);
+    expect(ReportedPageSchema.safeParse({ id: "page-1", status: "error", links: [] }).success).toBe(true); // optional
+    for (const page of [
+      { id: "page-1", status: "fetched", failure: "permanent", links: [] }, // only an error may carry it
+      { id: "page-1", status: "gone", failure: "permanent", links: [] },
+      { id: "page-1", status: "not_modified", failure: "permanent", links: [] },
+      { id: "page-1", status: "error", failure: "temporary", links: [] }, // "permanent" is the only hint
+      { id: "page-1", status: "error", failure: null, links: [] },
+    ]) {
+      expect(ReportedPageSchema.safeParse(page).success, JSON.stringify(page)).toBe(false);
+    }
+  });
+
   it("accepts the pagination flag and the strict-ISO lastmod on a link", () => {
     const body = report([
       { url: "https://k.example/list?page=2", kind: "page", pagination: true },

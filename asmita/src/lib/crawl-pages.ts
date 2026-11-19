@@ -40,7 +40,12 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * revisit in 24 h; after "not_modified" double the previous interval up to
  * 14 days; after "error" back off 1 h, 6 h, 24 h and mark the page dead
  * after 5 failures; "gone" is dead. "blocked" (robots or a 401/403 answer)
- * is rechecked after 24 h — the spec does not give it a schedule.
+ * is rechecked after 24 h — the spec does not give it a schedule. A
+ * permanent fetch failure (crawler v3 review fix, WP13: `error` carrying
+ * `failure: "permanent"`) backs off like any error on the first attempt and
+ * is remembered on the row (`lastPermanentFailAt`); the row dies only on a
+ * permanent failure at least 24 h after the first one, and a successful
+ * visit clears the marker.
  *
  * Crawl order (crawler v3 WP11): every row carries a priority, lower runs
  * first, and the claim sorts by priority, then nextDueAt. A reported link
@@ -62,6 +67,13 @@ export const FRONTIER_ERROR_BACKOFF_MS = [60 * 60 * 1000, 6 * 60 * 60 * 1000, 24
 export const FRONTIER_MAX_FAILURES = 5;
 /** Recheck interval after a blocked page (spec gives none; see header). */
 export const FRONTIER_BLOCKED_REVISIT_MS = 24 * 60 * 60 * 1000;
+/**
+ * The permanent-failure window (crawler v3 review fix, WP13): a row that
+ * failed permanently is marked dead only on the next permanent failure at
+ * least this long after the first one. One bad resolver answer or one bad
+ * hour never kills a page.
+ */
+export const FRONTIER_PERMANENT_FAIL_MS = 24 * 60 * 60 * 1000;
 /**
  * The priority every row keeps until a report says otherwise (crawler v3
  * WP11): lower runs first, so the default runs last.
@@ -113,6 +125,14 @@ export const frontierReportPageSchema = z
     status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
     etag: z.string().min(1).max(512).optional(),
     lastModified: z.string().min(1).max(512).optional(),
+    // Crawler v3 review fix (WP13): an `error` whose fetch failed
+    // permanently (a DNS name that does not exist, a definite TLS
+    // certificate failure). The row is marked dead only on a permanent
+    // failure at least 24 h after the first one; until then it is an
+    // ordinary error backoff. Optional on both sides, only with status
+    // `error` — anything else skips the whole entry, like every malformed
+    // one.
+    failure: z.literal("permanent").optional(),
     // Canonical aliases (crawler v3 WP10, review fix): the <link
     // rel="canonical"> targets of the fetched page, in scope. A row for an
     // alias that was never fetched and is not a seed is retired; a fetched
@@ -139,7 +159,12 @@ export const frontierReportPageSchema = z
       )
       .max(FRONTIER_LINKS_PER_PAGE_MAX),
   })
-  .strict();
+  .strict()
+  .superRefine((page, ctx) => {
+    if (page.failure !== undefined && page.status !== "error") {
+      ctx.addIssue({ code: "custom", path: ["failure"], message: "only with status error" });
+    }
+  });
 
 export const frontierReportSchema = z
   .object({
@@ -479,13 +504,20 @@ export type PageUpdatePlan = {
   failCount: number;
   etag: string | null;
   lastModified: string | null;
+  /**
+   * The first permanent failure this row remembers (crawler v3 review fix,
+   * WP13), or null once it visits successfully again.
+   */
+  lastPermanentFailAt: Date | null;
 };
 
 /**
  * The next scheduling step for one reported page, from the row's current
  * state (spec: 24 h after fetched; doubling after not_modified, capped at
  * 14 days; 1 h / 6 h / 24 h after error, dead after 5 failures; gone is
- * dead; blocked rechecked after 24 h).
+ * dead; blocked rechecked after 24 h). A permanent failure (review fix,
+ * WP13) is an error like any other on the first attempt — the row remembers
+ * it — and dies only on a permanent failure at least 24 h after the first.
  */
 export type SchedulablePage = {
   nextDueAt: Date;
@@ -493,34 +525,57 @@ export type SchedulablePage = {
   failCount: number;
   etag: string | null;
   lastModified: string | null;
+  /** The row's first permanent failure, when it has had one (review fix, WP13). */
+  lastPermanentFailAt?: Date | null;
 };
 
-export function planNextVisit(row: SchedulablePage, report: { status: ReportedPage["status"]; etag?: string; lastModified?: string }, now: Date): PageUpdatePlan {
+export function planNextVisit(
+  row: SchedulablePage,
+  report: { status: ReportedPage["status"]; etag?: string; lastModified?: string; failure?: "permanent" },
+  now: Date,
+): PageUpdatePlan {
   // A missing validator keeps the stored one: an absent field means "no new
   // validator was seen", never "clear the old one".
   const etag = report.etag ?? row.etag;
   const lastModified = report.lastModified ?? row.lastModified;
+  const remembered = row.lastPermanentFailAt ?? null;
   switch (report.status) {
     case "fetched":
-      return { status: "FETCHED", nextDueAt: new Date(now.getTime() + FRONTIER_REVISIT_MS), lastFetchedAt: now, failCount: 0, etag, lastModified };
+      return { status: "FETCHED", nextDueAt: new Date(now.getTime() + FRONTIER_REVISIT_MS), lastFetchedAt: now, failCount: 0, etag, lastModified, lastPermanentFailAt: null };
     case "not_modified": {
       // The interval that was in effect for this visit (24 h after a fetch;
       // the seed's first visit cannot be not_modified, but stay bounded).
       const previous = row.lastFetchedAt ? Math.max(row.nextDueAt.getTime() - row.lastFetchedAt.getTime(), 0) : FRONTIER_REVISIT_MS;
       const interval = Math.min(Math.max(previous * 2, FRONTIER_REVISIT_MS), FRONTIER_MAX_INTERVAL_MS);
-      return { status: "NOT_MODIFIED", nextDueAt: new Date(now.getTime() + interval), lastFetchedAt: now, failCount: 0, etag, lastModified };
+      return { status: "NOT_MODIFIED", nextDueAt: new Date(now.getTime() + interval), lastFetchedAt: now, failCount: 0, etag, lastModified, lastPermanentFailAt: null };
     }
     case "gone":
-      return { status: "GONE", nextDueAt: now, lastFetchedAt: now, failCount: row.failCount, etag, lastModified };
+      return { status: "GONE", nextDueAt: now, lastFetchedAt: now, failCount: row.failCount, etag, lastModified, lastPermanentFailAt: remembered };
     case "blocked":
-      return { status: "BLOCKED", nextDueAt: new Date(now.getTime() + FRONTIER_BLOCKED_REVISIT_MS), lastFetchedAt: row.lastFetchedAt, failCount: row.failCount, etag, lastModified };
+      return { status: "BLOCKED", nextDueAt: new Date(now.getTime() + FRONTIER_BLOCKED_REVISIT_MS), lastFetchedAt: row.lastFetchedAt, failCount: row.failCount, etag, lastModified, lastPermanentFailAt: remembered };
     case "error": {
       const failCount = row.failCount + 1;
-      if (failCount >= FRONTIER_MAX_FAILURES) {
-        return { status: "DEAD", nextDueAt: row.nextDueAt, lastFetchedAt: row.lastFetchedAt, failCount, etag, lastModified };
+      // Review fix (WP13): the first permanent failure backs off like any
+      // error and is remembered; a permanent failure at least 24 h after
+      // the first kills the row without waiting for five retries.
+      const permanentAgain =
+        report.failure === "permanent" && remembered !== null && now.getTime() - remembered.getTime() >= FRONTIER_PERMANENT_FAIL_MS;
+      if (failCount >= FRONTIER_MAX_FAILURES || permanentAgain) {
+        return { status: "DEAD", nextDueAt: row.nextDueAt, lastFetchedAt: row.lastFetchedAt, failCount, etag, lastModified, lastPermanentFailAt: remembered };
       }
       const backoff = FRONTIER_ERROR_BACKOFF_MS[Math.min(failCount, FRONTIER_ERROR_BACKOFF_MS.length) - 1]!;
-      return { status: "ERROR", nextDueAt: new Date(now.getTime() + backoff), lastFetchedAt: row.lastFetchedAt, failCount, etag, lastModified };
+      return {
+        status: "ERROR",
+        nextDueAt: new Date(now.getTime() + backoff),
+        lastFetchedAt: row.lastFetchedAt,
+        failCount,
+        etag,
+        lastModified,
+        // The FIRST permanent failure is the one remembered: a second
+        // inside the window moves nothing, so the 24 h is measured from
+        // the first, never sliding.
+        lastPermanentFailAt: report.failure === "permanent" ? (remembered ?? now) : remembered,
+      };
     }
   }
 }
@@ -709,14 +764,14 @@ async function pageRows(sourceId: string, ids: string[]): Promise<Map<string, Cu
   }
   if (usesWorkerKysely()) {
     const rows = await getWorkerDb().selectFrom("CrawlPage")
-      .select(["id", "status", "nextDueAt", "lastFetchedAt", "failCount", "etag", "lastModified", "depth", "urlDigest", "viaPagination"])
+      .select(["id", "status", "nextDueAt", "lastFetchedAt", "failCount", "etag", "lastModified", "depth", "urlDigest", "viaPagination", "lastPermanentFailAt"])
       .where("sourceId", "=", sourceId).where("id", "in", wanted).execute();
     return new Map(rows.map((row) => [row.id, row as CurrentRow]));
   }
   const { db } = await import("@/lib/db");
   const rows = await db.crawlPage.findMany({
     where: { sourceId, id: { in: wanted } },
-    select: { id: true, status: true, nextDueAt: true, lastFetchedAt: true, failCount: true, etag: true, lastModified: true, depth: true, urlDigest: true, viaPagination: true },
+    select: { id: true, status: true, nextDueAt: true, lastFetchedAt: true, failCount: true, etag: true, lastModified: true, depth: true, urlDigest: true, viaPagination: true, lastPermanentFailAt: true },
   });
   return new Map(rows.map((row) => [row.id, row as unknown as CurrentRow]));
 }
@@ -785,7 +840,10 @@ async function applyReport(
     const memory = crawlMemory();
     for (const { id, plan } of updates) {
       const row = memory.pages.get(id)!;
-      Object.assign(row, { status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt, failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null });
+      Object.assign(row, {
+        status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt, failCount: plan.failCount,
+        etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null, lastPermanentFailAt: plan.lastPermanentFailAt,
+      });
     }
     // A newer-than-last-fetch lastmod jumps the queue (WP11): due now.
     for (const bump of bumps) {
@@ -839,6 +897,7 @@ async function applyReport(
         await trx.updateTable("CrawlPage").set({
           status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt,
           failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null,
+          lastPermanentFailAt: plan.lastPermanentFailAt,
         }).where("id", "=", id).where("sourceId", "=", sourceId).execute();
       }
       // A newer-than-last-fetch lastmod jumps the queue (WP11): due now.
@@ -903,6 +962,7 @@ async function applyReport(
         data: {
           status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt,
           failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null,
+          lastPermanentFailAt: plan.lastPermanentFailAt,
         },
       });
     }

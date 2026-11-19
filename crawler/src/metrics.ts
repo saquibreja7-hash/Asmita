@@ -139,11 +139,12 @@ export class RunMetrics {
   readonly errors: Partial<Record<ErrorCode, number>> = {};
   readonly robots: Record<string, number> = {};
   /**
-   * Fetch failures by class (crawler v3 WP13): permanent (DNS name not
-   * found, TLS certificate failures — reported `gone` on the first
-   * attempt) and temporary (timeouts, resets, 5xx/429/503 — today's
-   * backoff). Counted wherever an error code with a class is recorded;
-   * every other error has no class and no line here.
+   * Fetch failures by class (crawler v3 WP13, review fix): permanent (a DNS
+   * name not found, a definite TLS certificate failure — reported `error`
+   * with the `permanent` hint, never retried in this run) and temporary
+   * (timeouts, resets, 5xx/429/503 — today's backoff). Counted wherever an
+   * error code with a class is recorded; every other error has no class
+   * and no line here.
    */
   readonly failures: { permanent: number; temporary: number } = { permanent: 0, temporary: 0 };
   /**
