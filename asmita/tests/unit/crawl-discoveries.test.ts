@@ -220,7 +220,7 @@ describe("the unproductive-site pause sweep", () => {
         sourceId,
         urlEncrypted: encryptField(`https://x.example.org/${at.toISOString()}/${i}`),
         urlDigest: sha256(`${sourceId}\u0000${at.toISOString()}\u0000${i}`),
-        depth: 0, kind: "PAGE", etag: null, lastModified: null, status: "FETCHED",
+        depth: 0, kind: "PAGE", priority: 100, etag: null, lastModified: null, status: "FETCHED",
         claimedUntil: null, lastFetchedAt: at, nextDueAt: new Date(at.getTime() + DAY), failCount: 0, createdAt: at,
       };
       crawlMemory().pages.set(row.id, row);

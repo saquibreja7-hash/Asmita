@@ -10,6 +10,7 @@ export const ERROR_CODES = [
   "blocked_port",
   "url_credentials",
   "blocked_address",
+  "dns_not_found",
   "dns_failed",
   "too_many_redirects",
   "redirect_invalid",
@@ -22,6 +23,14 @@ export const ERROR_CODES = [
   "headers_timeout",
   "body_timeout",
   "tls_failed",
+  /**
+   * A certificate the crawler could not verify for a reason that usually
+   * lies with the crawler's own environment, not the site: a missing local
+   * issuer (no CA bundle, a TLS-intercepting middlebox) or a non-TLS answer
+   * on the TLS port (ERR_SSL_WRONG_VERSION_NUMBER, a proxy). Temporary
+   * (review fix): never a reason to give a page up.
+   */
+  "tls_unverified",
   "network_error",
   "aborted",
   // response
@@ -83,7 +92,7 @@ export class CrawlError extends Error {
 }
 
 const SYSCALL_CODES: Record<string, ErrorCode> = {
-  ENOTFOUND: "dns_failed",
+  ENOTFOUND: "dns_not_found",
   EAI_AGAIN: "dns_failed",
   ECONNREFUSED: "connect_failed",
   ECONNRESET: "network_error",
@@ -109,13 +118,16 @@ const SYSCALL_CODES: Record<string, ErrorCode> = {
   DEPTH_ZERO_SELF_SIGNED_CERT: "tls_failed",
   SELF_SIGNED_CERT_IN_CHAIN: "tls_failed",
   UNABLE_TO_VERIFY_LEAF_SIGNATURE: "tls_failed",
-  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: "tls_failed",
+  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: "tls_unverified",
   UNABLE_TO_GET_ISSUER_CERT: "tls_failed",
   CERT_NOT_YET_VALID: "tls_failed",
   CERT_UNTRUSTED: "tls_failed",
-  ERR_SSL_WRONG_VERSION_NUMBER: "tls_failed",
+  ERR_SSL_WRONG_VERSION_NUMBER: "tls_unverified",
 };
 
+// WP13: a name that does not exist is permanent, so it is never retried in
+// this run either. EAI_AGAIN (and every other resolver failure, see
+// net/policy.ts) stays "dns_failed" and keeps its retry.
 const RETRYABLE: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   "connect_failed",
   "connect_timeout",
@@ -123,7 +135,49 @@ const RETRYABLE: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   "body_timeout",
   "network_error",
   "dns_failed",
+  // Review fix: an environment-type TLS failure is temporary, so it keeps
+  // its in-run retry like every other temporary failure.
+  "tls_unverified",
 ]);
+
+/**
+ * Fetch-failure classes (crawler v3 WP13, review fix). Permanent failures —
+ * a DNS name that does not exist, a definite certificate failure (expired,
+ * wrong name, self-signed) — cannot be fixed by retrying in this run, so
+ * they are never retried in-run; the page is reported `error` with the
+ * `permanent` hint, and the app marks the row dead only when the same row
+ * fails permanently again at least 24 h later (one bad resolver answer or
+ * one bad hour never kills a page). Environment-type TLS failures
+ * (tls_unverified) are temporary. Temporary failures —
+ * timeouts, connection resets and connection refusals, 5xx answers — keep
+ * the existing 1 h / 6 h / 24 h backoff; 429/503 are temporary too and keep
+ * today's treatment exactly (in-run retry with Retry-After, `error` at the
+ * app). Everything else (scope, robots, caps, decode, API...) has no class.
+ */
+export type FailureClass = "permanent" | "temporary";
+
+const PERMANENT_FETCH_FAILURES: ReadonlySet<ErrorCode> = new Set<ErrorCode>(["dns_not_found", "tls_failed"]);
+const TEMPORARY_FETCH_FAILURES: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
+  "tls_unverified",
+  "dns_failed",
+  "connect_failed",
+  "connect_timeout",
+  "headers_timeout",
+  "body_timeout",
+  "network_error",
+]);
+
+/** The class of a fetch failure (WP13), or null when the error is not one. */
+export function fetchFailureClass(err: { code: ErrorCode; status?: number | undefined }): FailureClass | null {
+  if (PERMANENT_FETCH_FAILURES.has(err.code)) return "permanent";
+  if (TEMPORARY_FETCH_FAILURES.has(err.code)) return "temporary";
+  if (err.code === "http_status") {
+    // 5xx and 429/503 are temporary; other statuses have their own mapping
+    // (404/410 gone, 401/403 blocked) and no class of their own.
+    return err.status !== undefined && (err.status >= 500 || err.status === 429) ? "temporary" : null;
+  }
+  return null;
+}
 
 /** Map anything thrown to a CrawlError without keeping its message. */
 export function toCrawlError(err: unknown): CrawlError {

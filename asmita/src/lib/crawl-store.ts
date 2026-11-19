@@ -89,6 +89,8 @@ export type MemoryCrawlPage = {
   urlDigest: string;
   depth: number;
   kind: "PAGE" | "SITEMAP" | "FEED";
+  /** Crawl order (crawler v3 WP11): lower runs first; claim sorts by it, then nextDueAt. */
+  priority: number;
   etag: string | null;
   lastModified: string | null;
   status: "PENDING" | "FETCHED" | "NOT_MODIFIED" | "GONE" | "BLOCKED" | "ERROR" | "DEAD";
@@ -97,6 +99,11 @@ export type MemoryCrawlPage = {
   nextDueAt: Date;
   failCount: number;
   createdAt: Date;
+  /**
+   * First permanent fetch failure (crawler v3 review fix, WP13); cleared on a
+   * successful visit. Optional: rows created before the column lack it (null).
+   */
+  lastPermanentFailAt?: Date | null;
 };
 
 export type MemoryCrawlServiceKey = {

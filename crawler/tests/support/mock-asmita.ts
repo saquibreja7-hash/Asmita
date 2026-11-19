@@ -6,12 +6,21 @@
  * including the Authorization header.
  *
  * The frontier half mirrors the app's rules (asmita/src/lib/crawl-pages.ts)
- * on purpose: the seed created on first claim, rows claimed for 30 minutes,
- * the daily page budget, the visit schedule (24 h after fetched, doubling
- * after not_modified up to 14 days, error backoff 1 h / 6 h / 24 h and dead
- * after five, gone dead) and the per-source digest dedup of reported links
- * with the app's in-scope check. It is written out independently so drift
- * between the crawler and the app's contract shows up as a test failure.
+ * on purpose: the seed created on first claim (at priority 50, review fix),
+ * rows claimed for 30 minutes, the daily page budget, the visit schedule
+ * (24 h after fetched, doubling after not_modified up to 14 days, error
+ * backoff 1 h / 6 h / 24 h and dead after five, gone dead) and the
+ * per-source digest dedup of reported links with the app's in-scope check.
+ * Crawler v3 WP11 is mirrored too: link priorities (sitemap 10, feed 20,
+ * pagination 30, pages 50 + 10 per depth level), the claim order (priority,
+ * then nextDueAt), the lastmod jump (priority 5, due now, clamped to now)
+ * and the visit reset (a successful visit falls back to the kind/depth
+ * value, so the jump is one-shot). The crawler v3 review fix (WP13) is
+ * mirrored too: an `error` with `failure: "permanent"` backs off like any
+ * error on the first attempt and is remembered; the row dies only on a
+ * permanent failure at least 24 h after the first one. It is written out
+ * independently so drift between the crawler and the app's contract shows
+ * up as a test failure.
  */
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -42,14 +51,28 @@ const ServerClaim = z.strictObject({
 const ServerReportLink = z.strictObject({
   url: z.string().min(10).max(2048),
   kind: z.enum(["page", "sitemap", "feed"]),
+  // Crawler v3 WP11: a pagination link runs before plain pages; a sitemap
+  // link may carry the entry's <lastmod> as a strict ISO date.
+  pagination: z.boolean().optional(),
+  lastmod: z.iso.datetime({ offset: true }).optional(),
 });
-const ServerReportPage = z.strictObject({
-  id: z.string().min(1),
-  status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
-  etag: z.string().min(1).max(512).optional(),
-  lastModified: z.string().min(1).max(512).optional(),
-  links: z.array(ServerReportLink).max(500),
-});
+const ServerReportPage = z
+  .strictObject({
+    id: z.string().min(1),
+    status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
+    etag: z.string().min(1).max(512).optional(),
+    lastModified: z.string().min(1).max(512).optional(),
+    // Crawler v3 review fix (WP13): an `error` whose fetch failed
+    // permanently. Only ever sent with status "error".
+    failure: z.literal("permanent").optional(),
+    aliases: z.array(z.string().min(10).max(2048)).max(20).optional(),
+    links: z.array(ServerReportLink).max(500),
+  })
+  .superRefine((page, ctx) => {
+    if (page.failure !== undefined && page.status !== "error") {
+      ctx.addIssue({ code: "custom", path: ["failure"], message: "only with status error" });
+    }
+  });
 const ServerReport = z.strictObject({
   sourceId: z.string().min(1),
   runId: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/),
@@ -62,10 +85,15 @@ const ServerDiscoveries = z.strictObject({
 });
 const BODY_LIMIT = 256 * 1024;
 
-/** The tracking-parameter rule of the app's digest key (crawl-pages.ts). */
+/** The tracking-parameter rule of the app's digest key (crawl-page-key.ts). */
 const TRACKING_PARAM = /^(utm_[a-z]+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|_ga|igshid)$/i;
 
-/** The app's digest key of a page URL: tracking params stripped, rest sorted. */
+/**
+ * The app's digest key of a page URL (crawl-page-key.ts, mirrored): the
+ * crawler v3 WP10 normalisation — https, one leading `www.` dropped, a final
+ * index document and a non-root trailing slash dropped — with tracking
+ * parameters stripped and the rest sorted.
+ */
 function pageKey(rawUrl: string): string | null {
   let url: URL;
   try {
@@ -74,8 +102,12 @@ function pageKey(rawUrl: string): string | null {
     return null;
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  url.protocol = "https:";
   url.hash = "";
+  url.hostname = url.hostname.replace(/^www\./i, "");
+  if (/\/index\.(?:html|htm|php)\/?$/i.test(url.pathname)) url.pathname = url.pathname.replace(/\/index\.(?:html|htm|php)\/?$/i, "/");
   if (url.pathname === "") url.pathname = "/";
+  if (url.pathname.length > 1 && url.pathname.endsWith("/")) url.pathname = url.pathname.slice(0, -1);
   if (url.search) {
     const params = [...new URLSearchParams(url.search).entries()].filter(([k]) => !TRACKING_PARAM.test(k));
     params.sort(([a, av], [b, bv]) => (a === b ? (av < bv ? -1 : av > bv ? 1 : 0) : a < b ? -1 : 1));
@@ -88,6 +120,27 @@ const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 const CLAIM_MS = 30 * MIN;
+/**
+ * The app's permanent-failure window (crawler v3 review fix, WP13): a row
+ * that failed permanently dies on the next permanent failure at least this
+ * long after the first one.
+ */
+const PERMANENT_FAIL_MS = 24 * HOUR;
+/** The app's priority rule (crawl-pages.ts), mirrored (crawler v3 WP11). */
+const PRIORITY_DEFAULT = 100;
+const PRIORITY_LASTMOD = 5;
+/** The seed row's priority (review fix, WP11): the depth-0 page value. */
+const PRIORITY_SEED = 50;
+function linkPriority(link: { kind: "page" | "sitemap" | "feed"; pagination?: boolean }, depth: number): number {
+  if (link.kind === "sitemap") return 10;
+  if (link.kind === "feed") return 20;
+  if (link.pagination === true) return 30;
+  return Math.min(50 + 10 * Math.max(depth, 0), PRIORITY_DEFAULT);
+}
+/** The app's visit reset (review fix, WP11): a successful visit resets a row's priority to its kind/depth value. */
+function visitPriority(row: { kind: "PAGE" | "SITEMAP" | "FEED"; viaPagination: boolean; depth: number }): number {
+  return linkPriority({ kind: row.kind === "SITEMAP" ? "sitemap" : row.kind === "FEED" ? "feed" : "page", pagination: row.viaPagination }, row.depth);
+}
 
 type MockPage = {
   id: string;
@@ -95,13 +148,20 @@ type MockPage = {
   url: string;
   urlDigest: string;
   depth: number;
+  priority: number;
+  /** Stored from a pagination link (review fix: its canonical aliases are ignored). */
+  viaPagination: boolean;
   etag: string | null;
   lastModified: string | null;
   status: "PENDING" | "FETCHED" | "NOT_MODIFIED" | "GONE" | "BLOCKED" | "ERROR" | "DEAD";
+  /** The row's document kind (the app's CrawlPage.kind), for the visit reset. */
+  kind: "PAGE" | "SITEMAP" | "FEED";
   claimedUntil: number | null;
   lastFetchedAt: number | null;
   nextDueAt: number;
   failCount: number;
+  /** First permanent fetch failure (review fix, WP13); null once it fetches again. */
+  lastPermanentFailAt: number | null;
 };
 
 /**
@@ -201,10 +261,12 @@ export class MockAsmita {
   readonly pages = new Map<string, MockPage>();
   /** Every claim body, in order. */
   readonly claims: Array<{ sourceId: string; limit: number }> = [];
-  /** Every report, in order, with its page statuses and accepted count. */
-  readonly reports: Array<{ sourceId: string; runId: string; count: number; accepted: number; statuses: Record<string, number> }> = [];
+  /** Every report, in order, with its page statuses, permanent hints and accepted count. */
+  readonly reports: Array<{ sourceId: string; runId: string; count: number; accepted: number; statuses: Record<string, number>; permanent: number }> = [];
   /** Every discovery report, in order (the app's POST /discoveries). */
   readonly discoveryReports: Array<{ sourceId: string; runId: string; hosts: string[]; accepted: number }> = [];
+  /** Every canonical alias the crawler reported, in order (WP10): page id -> alias URL. */
+  readonly reportedAliases: Array<{ sourceId: string; pageId: string; url: string }> = [];
   /** The sources the mock created from discovery reports, by host (the app's DISCOVERED rows). */
   readonly discovered = new Map<string, MockDiscoveredSource>();
   /** Auto-enables per UTC day, by day-start timestamp (the app's daily cap). */
@@ -260,15 +322,15 @@ export class MockAsmita {
     this.insertPage(sourceId, url, depth);
   }
 
-  private insertPage(sourceId: string, url: string, depth: number): void {
+  private insertPage(sourceId: string, url: string, depth: number, priority: number = PRIORITY_DEFAULT, viaPagination = false, kind: "PAGE" | "SITEMAP" | "FEED" = "PAGE"): void {
     const digest = this.digest(sourceId, url);
     if (digest === null) return;
     if (this.rowsOf(sourceId).some((p) => p.urlDigest === digest)) return;
     this.idCounter += 1;
     const id = `page-${this.idCounter}`;
     this.pages.set(id, {
-      id, sourceId, url, urlDigest: digest, depth, etag: null, lastModified: null,
-      status: "PENDING", claimedUntil: null, lastFetchedAt: null, nextDueAt: 0, failCount: 0,
+      id, sourceId, url, urlDigest: digest, depth, priority, viaPagination, etag: null, lastModified: null,
+      status: "PENDING", kind, claimedUntil: null, lastFetchedAt: null, nextDueAt: 0, failCount: 0, lastPermanentFailAt: null,
     });
   }
 
@@ -279,7 +341,8 @@ export class MockAsmita {
     const now = this.now();
     if (this.rowsOf(sourceId).length === 0) {
       const seedUrl = this.opts.seedUrl ? this.opts.seedUrl(source) : `https://${source.domain}/`;
-      this.insertPage(sourceId, seedUrl, 0);
+      // Review fix (WP11): the seed is stored at 50, the depth-0 page value.
+      this.insertPage(sourceId, seedUrl, 0, PRIORITY_SEED);
     }
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
@@ -288,7 +351,9 @@ export class MockAsmita {
     if (take <= 0) return [];
     const due = this.rowsOf(sourceId)
       .filter((p) => p.nextDueAt <= now && p.status !== "DEAD" && p.status !== "GONE" && (p.claimedUntil === null || p.claimedUntil < now))
-      .sort((a, b) => a.nextDueAt - b.nextDueAt)
+      // The app's claim order (WP11): lowest priority first, then the
+      // longest-due row.
+      .sort((a, b) => a.priority - b.priority || a.nextDueAt - b.nextDueAt)
       .slice(0, take);
     for (const row of due) row.claimedUntil = now + CLAIM_MS;
     return due.map((p) => ({
@@ -298,20 +363,75 @@ export class MockAsmita {
     }));
   }
 
-  /** The app's report: scheduling, link storage with the in-scope check. */
+  /** The app's report: scheduling, link storage with the in-scope check, canonical aliases (WP10). */
   private report(sourceId: string, pages: unknown[]): number {
     const source = this.sourceById(sourceId);
     if (!source) return 0;
     const now = this.now();
     const domain = (this.opts.sourceDomainOverride ?? source.domain).toLowerCase();
+    /** The app's acceptableLink: an explicit http(s) URL on the source's host. */
+    const acceptable = (raw: string): string | null => {
+      let host: string;
+      try {
+        const url = new URL(raw);
+        if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+        // The app also refuses non-default ports (crawl-pages.ts); the
+        // fixture site lives on one, so the mock checks only the scheme
+        // and credentials here. The port rule is covered by the app-side
+        // unit tests (crawl-frontier.test.ts).
+        if (url.username !== "" || url.password !== "") return null;
+        host = url.hostname;
+        if (host !== domain && !host.endsWith(`.${domain}`)) return null;
+        return raw;
+      } catch {
+        return null;
+      }
+    };
+    const checkedPages = pages
+      .map((raw) => ({ raw, parsed: ServerReportPage.safeParse(raw) }))
+      .filter((p): p is { raw: unknown; parsed: { success: true; data: z.infer<typeof ServerReportPage> } } => p.parsed.success)
+      .map((p) => p.parsed.data);
+    // Pass 1: the aliases (WP10, review fix). They win over links: a row
+    // for one that was never fetched and is not a seed is retired; a fetched
+    // row or a seed is never touched, no placeholder row is inserted, and a
+    // page reached via pagination has its aliases ignored.
+    const aliasDigests = new Set<string>();
+    for (const entry of checkedPages) {
+      const row = this.pages.get(entry.id);
+      if (!row || row.sourceId !== sourceId || row.status === "DEAD" || row.status === "GONE") continue;
+      for (const raw of entry.aliases ?? []) {
+        if (acceptable(raw) === null) continue;
+        const digest = this.digest(sourceId, raw);
+        if (digest === null || digest === row.urlDigest || aliasDigests.has(digest)) continue;
+        this.reportedAliases.push({ sourceId, pageId: entry.id, url: raw });
+        if (row.viaPagination) continue;
+        aliasDigests.add(digest);
+      }
+    }
+    // A row this report moves was just visited: never an alias victim.
+    for (const entry of checkedPages) {
+      const row = this.pages.get(entry.id);
+      if (row && row.sourceId === sourceId) aliasDigests.delete(row.urlDigest);
+    }
+    for (const row of this.rowsOf(sourceId)) {
+      if (!aliasDigests.has(row.urlDigest)) continue;
+      if (row.lastFetchedAt !== null || row.depth === 0) continue;
+      if (row.status !== "DEAD" && row.status !== "GONE") {
+        row.status = "DEAD";
+        row.nextDueAt = now;
+        row.claimedUntil = null;
+      }
+    }
     let accepted = 0;
-    for (const raw of pages) {
-      const checked = ServerReportPage.safeParse(raw);
-      if (!checked.success) continue;
-      const entry = checked.data;
+    /** Rows this report moves (the app excludes them from the lastmod jump). */
+    const reportedIds = new Set<string>();
+    /** Link lastmods by digest (WP11), the first report of one wins. */
+    const lastmodByDigest = new Map<string, number>();
+    for (const entry of checkedPages) {
       const row = this.pages.get(entry.id);
       if (!row || row.sourceId !== sourceId || row.status === "DEAD" || row.status === "GONE") continue;
       accepted += 1;
+      reportedIds.add(entry.id);
       row.etag = entry.etag ?? row.etag;
       row.lastModified = entry.lastModified ?? row.lastModified;
       row.claimedUntil = null;
@@ -321,6 +441,8 @@ export class MockAsmita {
           row.lastFetchedAt = now;
           row.nextDueAt = now + DAY;
           row.failCount = 0;
+          row.lastPermanentFailAt = null; // alive again (review fix, WP13)
+          row.priority = visitPriority(row); // the lastmod bump was one-shot (review fix, WP11)
           break;
         case "not_modified": {
           const previous = row.lastFetchedAt !== null ? Math.max(row.nextDueAt - row.lastFetchedAt, 0) : DAY;
@@ -329,6 +451,8 @@ export class MockAsmita {
           row.lastFetchedAt = now;
           row.nextDueAt = now + interval;
           row.failCount = 0;
+          row.lastPermanentFailAt = null; // alive again (review fix, WP13)
+          row.priority = visitPriority(row); // the lastmod bump was one-shot (review fix, WP11)
           break;
         }
         case "gone":
@@ -342,31 +466,48 @@ export class MockAsmita {
           break;
         case "error": {
           row.failCount += 1;
-          if (row.failCount >= 5) row.status = "DEAD";
+          // Review fix (WP13): the first permanent failure is an ordinary
+          // error backoff with the failure remembered; the row dies only on
+          // a permanent failure at least 24 h after the first one.
+          const permanent = entry.failure === "permanent";
+          const permanentDead =
+            permanent && row.lastPermanentFailAt !== null && now - row.lastPermanentFailAt >= PERMANENT_FAIL_MS;
+          if (row.failCount >= 5 || permanentDead) row.status = "DEAD";
           else {
             row.status = "ERROR";
             row.nextDueAt = now + (row.failCount === 1 ? HOUR : row.failCount === 2 ? 6 * HOUR : DAY);
+            if (permanent && row.lastPermanentFailAt === null) row.lastPermanentFailAt = now;
           }
           break;
         }
       }
       for (const link of entry.links) {
-        let host: string;
-        try {
-          const url = new URL(link.url);
-          if (url.protocol !== "http:" && url.protocol !== "https:") continue;
-          // The app also refuses non-default ports (crawl-pages.ts); the
-          // fixture site lives on one, so the mock checks only the scheme
-          // and credentials here. The port rule is covered by the app-side
-          // unit tests (crawl-frontier.test.ts).
-          if (url.username !== "" || url.password !== "") continue;
-          host = url.hostname;
-        } catch {
-          continue;
+        if (acceptable(link.url) === null) continue; // the app's in-scope and shape check
+        const digest = this.digest(sourceId, link.url);
+        if (digest !== null && aliasDigests.has(digest)) continue; // an alias is never a live row
+        this.insertPage(
+          sourceId,
+          link.url,
+          row.depth + 1,
+          linkPriority(link, row.depth + 1),
+          link.pagination === true,
+          link.kind === "page" ? "PAGE" : link.kind === "sitemap" ? "SITEMAP" : "FEED",
+        );
+        // Review fix (WP11): a lastmod in the future is clamped to now.
+        if (digest !== null && link.lastmod !== undefined && !lastmodByDigest.has(digest)) {
+          lastmodByDigest.set(digest, Math.min(Date.parse(link.lastmod), now));
         }
-        if (host !== domain && !host.endsWith(`.${domain}`)) continue; // the app's in-scope check
-        this.insertPage(sourceId, link.url, row.depth + 1);
       }
+    }
+    // The app's lastmod jump (WP11): a row whose reported sitemap entry is
+    // newer than its last fetch is priority 5 and due now — except rows this
+    // same report moved (just fetched), dead rows and rows never fetched.
+    for (const [digest, lastmod] of lastmodByDigest) {
+      const row = this.rowsOf(sourceId).find((p) => p.urlDigest === digest);
+      if (!row || reportedIds.has(row.id) || row.status === "DEAD" || row.status === "GONE") continue;
+      if (row.lastFetchedAt === null || lastmod <= row.lastFetchedAt) continue;
+      row.priority = PRIORITY_LASTMOD;
+      row.nextDueAt = now;
     }
     return accepted;
   }
@@ -535,12 +676,14 @@ export class MockAsmita {
         return send(400, { error: "invalid_body" });
       }
       const statuses: Record<string, number> = {};
+      let permanent = 0;
       for (const page of parsed.data.pages) {
         const status = (page as { status?: string }).status ?? "invalid";
         statuses[status] = (statuses[status] ?? 0) + 1;
+        if ((page as { failure?: string }).failure === "permanent") permanent += 1;
       }
       const accepted = this.report(parsed.data.sourceId, parsed.data.pages);
-      this.reports.push({ sourceId: parsed.data.sourceId, runId: parsed.data.runId, count: parsed.data.pages.length, accepted, statuses });
+      this.reports.push({ sourceId: parsed.data.sourceId, runId: parsed.data.runId, count: parsed.data.pages.length, accepted, statuses, permanent });
       return send(200, { accepted });
     }
 

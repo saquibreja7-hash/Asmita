@@ -1,5 +1,5 @@
 /** Run counters. Only numbers and fixed reason/error codes, never URLs. */
-import type { ErrorCode } from "./errors.ts";
+import { fetchFailureClass, type ErrorCode } from "./errors.ts";
 
 export type SkipReason =
   | "duplicate_url"
@@ -41,6 +41,13 @@ export class RunMetrics {
   pagesXml = 0;
   /** Sitemap documents parsed (index or urlset, WP4). */
   sitemapDocs = 0;
+  /**
+   * Sitemap probes made (crawler v3 WP9): /sitemap.xml, /sitemap_index.xml
+   * and the registrable parent's /sitemap.xml, fetched directly when a
+   * source's robots.txt names no sitemap. Robots-refused probes (which
+   * never reach the network) and budget-refused ones are not counted.
+   */
+  sitemapProbes = 0;
   /** Addresses taken from sitemaps: page locs, child sitemaps, image locs (WP4). */
   sitemapUrlsTaken = 0;
   /** <image:loc> image candidates taken from sitemaps (WP4). */
@@ -51,6 +58,14 @@ export class RunMetrics {
   feedEntriesTaken = 0;
   /** Sitemap/feed documents that hit the MAX_SITEMAP_URLS cap (WP4). */
   docsTruncated = 0;
+  /**
+   * Fetched HTML pages whose normalised body digest had already appeared on
+   * five or more distinct URLs of the same source this run (crawler v3
+   * WP14): soft-404s — nothing extracted from them, reported `gone`. They
+   * are still pages fetched (the body must be read to recognise one), so
+   * they count in pagesFetched too.
+   */
+  pagesSoft404 = 0;
   /** Links skipped as obvious non-content: login, cart, search, calendar (WP4). */
   linksSkippedNonContent = 0;
   /** Links dropped by the per-path query-variant cap (WP4). */
@@ -123,6 +138,21 @@ export class RunMetrics {
   readonly imagesSkipped: Partial<Record<SkipReason, number>> = {};
   readonly errors: Partial<Record<ErrorCode, number>> = {};
   readonly robots: Record<string, number> = {};
+  /**
+   * Fetch failures by class (crawler v3 WP13, review fix): permanent (a DNS
+   * name not found, a definite TLS certificate failure — reported `error`
+   * with the `permanent` hint, never retried in this run) and temporary
+   * (timeouts, resets, 5xx/429/503 — today's backoff). Counted wherever an
+   * error code with a class is recorded; every other error has no class
+   * and no line here.
+   */
+  readonly failures: { permanent: number; temporary: number } = { permanent: 0, temporary: 0 };
+  /**
+   * Sources whose home page (the depth-0 seed) failed permanently this run
+   * (WP13), counted once per source — the whole site is dead, whatever the
+   * rest of its rows do. A count only, never a hostname.
+   */
+  homePermanentFailures = 0;
 
   constructor(now: number = Date.now()) {
     this.startedAt = now;
@@ -132,8 +162,10 @@ export class RunMetrics {
     if (n > 0) this.imagesSkipped[reason] = (this.imagesSkipped[reason] ?? 0) + n;
   }
 
-  error(code: ErrorCode): void {
+  error(code: ErrorCode, status?: number): void {
     this.errors[code] = (this.errors[code] ?? 0) + 1;
+    const cls = fetchFailureClass({ code, status });
+    if (cls !== null) this.failures[cls]++;
   }
 
   summary(opts: { now?: number; budgetPages: number; budgetImages: number; outcome: string }): Record<string, number | string | Record<string, number>> {
@@ -147,7 +179,9 @@ export class RunMetrics {
       pagesNotModified: this.pagesNotModified,
       pagesNonHtml: this.pagesNonHtml,
       pagesXml: this.pagesXml,
+      pagesSoft404: this.pagesSoft404,
       sitemapDocs: this.sitemapDocs,
+      sitemapProbes: this.sitemapProbes,
       sitemapUrlsTaken: this.sitemapUrlsTaken,
       sitemapImages: this.sitemapImages,
       feedsParsed: this.feedsParsed,
@@ -185,6 +219,8 @@ export class RunMetrics {
       poolSyncFailures: this.poolSyncFailures,
       browser: { ...this.browser },
       errors: { ...this.errors } as Record<string, number>,
+      failures: { ...this.failures },
+      homePermanentFailures: this.homePermanentFailures,
       robots: { ...this.robots },
       budgetPagesUsed: this.pagesAttempted,
       budgetPages: opts.budgetPages,
