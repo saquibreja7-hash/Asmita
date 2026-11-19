@@ -55,7 +55,13 @@ main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
          pages that need a browser (render = BROWSER, or AUTO with scripts
                 and no image candidates, or a tiny script-only stub, WP12):
                 BrowserRenderer -> browser worker
-                child (Playwright Chromium, all traffic through the
+                child (Playwright Chromium, its own sandbox ON and
+                self-tested at the first launch — WP25: without it
+                rendering is disabled for the run unless
+                CRAWLER_ALLOW_UNSANDBOXED_BROWSER=true, local development
+                only; in the container image the worker runs as the
+                separate browser-worker uid that cannot read the key file;
+                all traffic through the
                 in-process SOCKS proxy; images from intercepted responses;
                 fonts, audio/video media and the built-in advertising hosts
                 aborted before routing, crawler v3 WP15; network quiet after
@@ -175,7 +181,8 @@ whose home page failed permanently, once each; no hostname is ever logged.
 | **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active; since WP7 also a full browser-rendered crawl under the same patch); `tests/unit/config-policy.test.ts` |
 | **Browser traffic is policy-checked too (WP7).** Chromium's every request leaves through an in-process SOCKS proxy that applies the same address policy as `safe-fetch` (resolve every address, refuse if any is blocked, dial the validated address, same port and scheme rules); no direct browser egress (Chromium is launched with `--proxy-bypass-list=<-loopback>` so even loopback destinations go through the proxy, and the fixture hostnames exist only in the test policy's DNS, so a successful render proves the proxy resolved them). | `net/browser-proxy.ts`, `browser/browser-renderer.ts`. | `tests/unit/browser-proxy.test.ts` (raw SOCKS client: tunnel, private-literal refusal, literal-as-domain refusal, hostname-to-private-address refusal, bad port, BIND, bad greeting, per-render byte account destroying over-budget tunnels, no tunnel while no render account is active, an ended account tearing its tunnels down, an established tunnel outliving the handshake timeout); `tests/integration/browser.test.ts` (a page script's private-address requests are all refused and the render survives; a robots-disallowed image inside a rendered page is never requested); `tests/integration/browser-escape.test.ts` (a browser-only redirect off scope never contacts the other site and credits nothing, an image redirect to a robots-disallowed path is never followed, an allowed image redirect is reported under the address that served it, popups never load, WebSockets never connect); `tests/unit/browser-renderer.test.ts` (WebRTC limited to proxied traffic, no `/proc` read for the worker, deadline SIGKILL, stale render messages ignored, graceful stop) |
 | **A lighter browser (WP15).** Font requests, audio and video media, and a small built-in list of advertising/analytics hosts — written in code, never an image or video CDN — are aborted before any routing work: never fetched, never asked to the parent's robots verdict, never counted against the per-page request cap, which therefore keeps its room for the page's images; the host list is re-checked on every redirect hop, and image requests are never blocked. The fixed wait after scrolling is replaced by a network-quiet wait: no request in flight for 500 ms (the window capped by `BROWSER_SCROLL_WAIT_MS`), bounded by the page deadline, so slow and chained lazy-loaders are waited for. | `browser/blocked-requests.ts` (kinds and hosts, in code), `browser/browser-worker.ts` (block checks before the cap and the verdict, per-hop re-check, `waitNetworkQuiet`). | `tests/unit/browser-blocked.test.ts` (blocked kinds; host and subdomain matching; the list contains no image or video CDN); `tests/integration/browser-light.test.ts` (fonts, audio/video and the built-in ad hosts never requested — the fixture DNS maps the ad hosts to the fixture server, so an unblocked request or its robots.txt fetch would show in its log; images still requested exactly once; a page full of fonts and trackers still finds its images within a request cap of 8; a slow chained lazy-loader is waited for and its third image is found) |
-| **Galleries in frames and components (WP16).** The static path collects in-scope `<iframe src>` and `<frame src>` as page links (kind `page`): a gallery inside a frame is claimed as its own page, under the same scope, non-content, query-cap and nofollow rules as an anchor — and an off-scope frame's host is reported as a discovery like any out-of-scope link, never fetched. The browser path, after its network-quiet wait, gathers image candidates from every frame (`page.frames()`, `about:srcdoc` frames included) and from open shadow roots — the same candidates the static extractor reads — and makes the browser load the ones the page has not requested: ordinary routed image requests, so they pass the same proxy, robots verdict and per-page caps, and image bytes still come only from intercepted responses. Out-of-scope frames are not rendered (their navigations are refused before any request, scope and robots checks as before), so the gather finds nothing in one — it keeps only the empty initial document; closed shadow roots stay invisible by design. Bounded: frames per render, elements per frame, candidates per list, loads by the remaining image slots, every step inside the page deadline. | `crawl/extract.ts` (frame srcs; the shared candidate rules), `browser/browser-worker.ts` (`GATHER_SCRIPT`, `gatherFrameImages`). | `tests/unit/frames-extract.test.ts`; `tests/integration/frames.test.ts` (real Chromium against `buildFramesFixture`: the static path follows an in-scope iframe gallery and a `<frameset>` frame page and hashes both planted images; the rendered page's shadow-root, iframe and srcdoc galleries exist only as `data-src` their lazy loaders never load, and all their planted images are hashed and credited to the embedding page; the off-scope iframe is never contacted — not even robots.txt — and its in-pool canary never matches, while its host is reported as a discovery) |
+| **Galleries in frames and components (WP16).** The static path collects in-scope `<iframe src>` and `<frame src>` as page links (kind `page`): a gallery inside a frame is claimed as its own page, under the same scope, non-content, query-cap and nofollow rules as an anchor — and an off-scope frame's host is reported as a discovery like any out-of-scope link, never fetched. The browser path, after its network-quiet wait, gathers image candidates from every frame (`page.frames()`, about:srcdoc frames included) and from open shadow roots — the same candidates the static extractor reads — and makes the browser load the ones the page has not requested: ordinary routed image requests, so they pass the same proxy, robots verdict and per-page caps, and image bytes still come only from intercepted responses. Out-of-scope frames are not rendered (their navigations are refused before any request, scope and robots checks as before), so the gather finds nothing in one — it keeps only the empty initial document; closed shadow roots stay invisible by design. Bounded: frames per render, elements per frame, candidates per list, loads by the remaining image slots, every step inside the page deadline. | `crawl/extract.ts` (frame srcs; the shared candidate rules), `browser/browser-worker.ts` (`GATHER_SCRIPT`, `gatherFrameImages`). | `tests/unit/frames-extract.test.ts`; `tests/integration/frames.test.ts` (real Chromium against `buildFramesFixture`: the static path follows an in-scope iframe gallery and a `<frameset>` frame page and hashes both planted images; the rendered page's shadow-root, iframe and srcdoc galleries exist only as `data-src` their lazy loaders never load, and all their planted images are hashed and credited to the embedding page; the off-scope iframe is never contacted — not even robots.txt — and its in-pool canary never matches, while its host is reported as a discovery) |
+| **Chromium's own sandbox, self-tested, fail closed (WP25).** The browser worker launches Chromium with its own sandbox on (Playwright `chromiumSandbox: true` — without it Playwright silently passes `--no-sandbox`) and no `--no-sandbox` flag; Chromium refuses to run unsandboxed where the runtime grants no unprivileged user namespaces, so the first sandboxed launch per run is the self-test and its verdict lands in the run summary as booleans and ids only (`browser.sandboxTested` / `sandboxOn` / `workerUid`). Sandbox unavailable -> rendering disabled for the run: BROWSER pages report `error` under `browser_sandbox_unavailable` without rendering, AUTO pages fall back to their static result; the only override is `CRAWLER_ALLOW_UNSANDBOXED_BROWSER=true` (local development only). Either way the worker never holds the key (fixed env allowlist) and, in the container image, runs as the separate `browser-worker` uid (setuid drop helper) that cannot read the key file or the parent's `/proc/<pid>/environ`. | `browser/sandbox.ts` (the decision), `browser/chromium-args.ts`, `browser/browser-worker.ts` (sandboxed launch, self-test), `browser-renderer.ts` (fail closed, override, uid report), `config.ts`. | `tests/unit/browser-sandbox.test.ts` (every decision branch; the sandboxed flag list never carries --no-sandbox; the override config is strict and default-off; the worker env and argv never contain the key, its path, or /proc); `tests/unit/browser-renderer.test.ts` (through the real IPC boundary: sandbox-on launch recorded, sandbox refusal sticky and logged once, the override respawn unsandboxed); `tests/integration/browser-sandbox.test.ts` (a full crawl on the real Chromium: fail-closed pages, AUTO fallback, the override run, or the sandboxed render where the runtime allows); `scripts/docker-sandbox-check.sh` (both modes against real Docker) |
 | **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files decode tolerantly (`failOn: "none"`) but stay bounded by the byte cap and pixel limit. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, light and heavy truncation, AVIF); fixtures `cut.jpg` (matches), `cut-heavy.jpg` (does not) and `pic.avif` |
 | **Service key only to Asmita.** | `AsmitaClient` has its own agent, builds URLs only from `ASMITA_API_URL`, refuses redirects. The crawl fetcher sends no auth or cookie headers. | `crawl.test.ts` "never sends credentials or cookies to crawled hosts"; `client-findings.test.ts` "refuses redirects" |
 | **No URLs, hostnames, fingerprints or bodies in logs.** Field allowlist, string sanitiser, errors reduced to fixed codes; uncaught errors and Node warnings routed through the logger. | `log.ts`, `errors.ts`, `cli.ts`. | `crawl.test.ts` log scan; `tests/integration/process.test.ts` runs the real `runMain` in a child process and scans all of stdout and stderr |
@@ -473,30 +480,47 @@ through the same decoder path as every other image. The main process still
 writes nothing.
 
 **The worker's isolation.** The browser worker gets a scrubbed environment
-(no key, no config), runs under Node's permission model (`--permission`:
-reads confined to its own bundle, `playwright-core` and the browser
-directory plus read-only system metadata; writes confined to the memory
-temp dir; child processes allowed because it must spawn Chromium; no
-worker threads, no native addons) and has stdout/stderr discarded — crash
-output never reaches the logs. What that does NOT protect against is the
-same as for the decoder, plus one more: Chromium is native code, so Node's
-permission model does not bind it (its writes go to the tmpfs its
-environment points at), and `--no-sandbox` is passed. Chromium's own
-sandbox does not need a setuid helper on current Linux: it uses
-unprivileged user namespaces, and those are what a container may not grant
-(Docker's default seccomp profile refuses them; Cloud Run may as well, not
-verified). Without it a Chromium renderer exploit runs as the worker's
-user, which is the crawler's user: it can read whatever that user can,
-including the key file and `/proc/<pid>/environ` of the parent (so an
-inline `CRAWLER_SERVICE_KEY` would be exposed; use
-`CRAWLER_SERVICE_KEY_FILE`). The worker's own Node code is not granted
-`/proc` reads. **Browser rendering stays off for real sites (no source with
-`render = BROWSER` or `AUTO`) until the worker runs sandboxed** (Chromium's
-sandbox enabled in a runtime that grants user namespaces, or a syscall
-sandbox such as gVisor/nsjail around the worker) **or under a separate
-UID** that cannot read the key file. Deployment hardening is otherwise the
-decoder's list: no egress except through the parent's proxy if the
-platform allows it, and the key as a file.
+(a fixed five-name allowlist: no key, no key-file path, no config), runs
+under Node's permission model (`--permission`: reads confined to its own
+bundle, `playwright-core` and the browser directory plus read-only system
+metadata; writes confined to the memory temp dir; child processes allowed
+because it must spawn Chromium; no worker threads, no native addons) and
+has stdout/stderr discarded — crash output never reaches the logs. What
+that does NOT protect against is the same as for the decoder, plus one
+more: Chromium is native code, so Node's permission model does not bind
+it (its writes go to the tmpfs its environment points at).
+
+**Chromium's own sandbox, and the self-test (WP25).** Chromium is launched
+with its sandbox ON — Playwright's `chromiumSandbox: true`, which is what
+withholds Playwright's implicit `--no-sandbox`, and no `--no-sandbox`
+flag anywhere. On current Linux its sandbox needs no setuid helper, only
+unprivileged user namespaces, and a container runtime may refuse those
+(Docker's default seccomp profile denies clone(CLONE_NEWUSER) to a
+non-root user, and Chromium refuses to run sandboxed as root at all).
+Chromium fails its launch hard when the sandbox cannot start — it never
+silently degrades — and the crawler turns that into the self-test: the
+first time a run needs a browser, the sandboxed launch on about:blank is
+the test, and its verdict goes into the run summary as booleans and ids
+(`browser.sandboxTested`, `browser.sandboxOn`, `browser.workerUid`) —
+never a URL. `node dist/sandbox-check.js` (in the image) answers the same
+question directly, with no key, no config and no network.
+
+**Fail closed (WP25).** If the sandbox is unavailable, browser rendering
+is disabled for the run automatically: `render = BROWSER` pages report
+`error` (counted under the `browser_sandbox_unavailable` code, without
+rendering; the app backs the row off), and `render = AUTO` pages fall back
+to their static result. The only override is
+`CRAWLER_ALLOW_UNSANDBOXED_BROWSER=true` — **for local development only**;
+it lets the run render with `--no-sandbox` (recorded as `sandboxOn:
+false`), and it must never be set in a deployed environment. In the
+container image the worker is additionally dropped onto a separate uid
+(`browser-worker`, 30000) by a tiny setuid helper, so even on that
+override path a renderer exploit cannot read the key file (owned by the
+crawler's user, mode 0400) or the parent's `/proc/<pid>/environ`; see the
+deployment notes below. **Browser rendering may be enabled for real sites
+only where the run summary shows the sandbox on** (`browser.sandboxOn:
+true`): a source with `render = BROWSER` or `AUTO` on a real site is a
+go-live item, and the runbook tells the operator how to read the verdict.
 
 **Rendered pages stay inside the rules.** Every request of the browser
 context (the page, its frames, popups) is routed through the worker, which
@@ -546,8 +570,11 @@ and the image as the browser fetched it (after redirects), with the image
 bytes that response carried. Links come from the rendered DOM. A rendered
 page reports no ETag/Last-Modified — a render is never conditional-GET
 suppressed, so browser pages are revisited at the 24 h base interval. A
-BROWSER page whose render fails reports `error` (the app backs off); an AUTO
-page whose render fails falls back to its static result.
+BROWSER page whose render fails reports `error` (the app backs off); an
+AUTO page whose render fails falls back to its static result. When the
+rendering is disabled because the sandbox self-test failed (WP25), every
+BROWSER page reports that same `error` under the
+`browser_sandbox_unavailable` code.
 
 ## Asmita API contract
 
@@ -593,7 +620,11 @@ sources crawled, sources active (those that claimed work, WP6), pages
 claimed (every page the app handed out, WP6), pages
 attempted/fetched/not-modified/non-HTML, soft-404 pages cut by the body
 digest (`pagesSoft404`, WP14), browser renders
-attempted/failed/images (WP7), new URLs reported to the frontier
+attempted/failed/images (WP7) plus the sandbox self-test's verdict
+(`browser.sandboxTested`, `browser.sandboxOn`, `browser.workerUid`, WP25 —
+booleans and ids only; `sandboxTested` false means no page needed a
+browser this run, `workerUid` is the worker's OS user, `-1` until a
+worker answered), new URLs reported to the frontier
 (WP6), pages that were sitemap or feed documents (`pagesXml`) with the
 sitemap and feed addresses taken from them, the sitemap probes made
 (`sitemapProbes`, crawler v3 WP9), the largest claimed frontier
@@ -662,6 +693,7 @@ network activity and the log names only the offending variable names. See
 | `BROWSER_MAX_REQUESTS_PER_PAGE` | 300 | requests one rendered page may make; the rest are aborted before the network. Fonts, audio/video media and the built-in ad/analytics hosts are aborted before routing and do not count (WP15) |
 | `BROWSER_MAX_PAGE_BYTES` | 67108864 | bytes one rendered page may move through the proxy (all tunnels summed) |
 | `BROWSER_TMP_DIR` | /dev/shm | memory-backed directory for Chromium's throwaway profile; must be a tmpfs |
+| `CRAWLER_ALLOW_UNSANDBOXED_BROWSER` | false | WP25: the only override of the sandbox fail-closed rule. When Chromium's own sandbox cannot start, browser rendering is disabled for the run (BROWSER pages report `error` under `browser_sandbox_unavailable`, AUTO pages fall back to their static result). `"true"` renders with `--no-sandbox` instead — **local development only**, never in a deployed environment. Strict literal: anything but `true`/`false` fails startup. Touches nothing else (the network policy is unaffected) |
 | `GLOBAL_CONCURRENCY` | 4 | concurrent requests across all hosts |
 | `CRAWLER_SOURCE_CONCURRENCY` | 8 | sources crawled at once (WP6); each source is sequential, and every request still passes `GLOBAL_CONCURRENCY` and the per-host delay, so a slow or failing source holds only its own worker slot |
 | `LOOP_IDLE_SECONDS` | 60 | `run --loop` only (WP6): seconds to sleep after a pass that found nothing due, before listing sources and claiming again (1..3600) |
@@ -703,10 +735,25 @@ Nothing here has been deployed.
   browser's profile lives there): run with `--shm-size=1g` where the
   platform allows it, or set `BROWSER_TMP_DIR` to another tmpfs mount. The
   read-only root filesystem of Cloud Run's container sandbox is fine
-  because the crawler and the worker write nothing to disk. `--no-sandbox`
-  makes rendering run, but it is not enough to render real sites: see
-  "The worker's isolation" (rendering stays off until the worker is
-  sandboxed or under a separate UID).
+  because the crawler and the worker write nothing to disk.
+- **Browser rendering's sandbox (WP25).** The image drops the browser
+  worker onto the separate `browser-worker` uid (30000) through a tiny
+  setuid helper (`/usr/local/bin/asmita-browser-drop`, the
+  `chrome-sandbox` pattern: it switches users and execs, never running
+  anything as root), keeps Chromium's own sandbox ON, and fails closed when
+  the runtime does not allow it. Docker's default seccomp profile denies
+  the unprivileged user namespaces Chromium's sandbox needs, so on Docker
+  and Cloud Run run the container with
+  `--security-opt seccomp=crawler/docker/seccomp-userns.json` (the default
+  profile plus user namespaces; see `crawler/docker/README.md`) or expect
+  the run summary to say `browser.sandboxOn: false` and rendering to stay
+  disabled. Check a deployment directly with
+  `docker run --rm --network none <image> node dist/sandbox-check.js`
+  (exit 0 = sandbox on; it prints booleans and ids only). If the platform
+  starts the container as root, the entrypoint hands the mounted key file
+  to the crawler's user (0400) and drops privileges once — nothing keeps
+  root afterwards. `scripts/docker-sandbox-check.sh` (repository root)
+  proves both modes against real Docker.
 - Secrets: store the key in Secret Manager and mount it **as a file**, then
   point `CRAWLER_SERVICE_KEY_FILE` at it (for example
   `--set-secrets /secrets/crawler-service-key=crawler-service-key:latest` with

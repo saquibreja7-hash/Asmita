@@ -81,6 +81,21 @@ export const ConfigSchema = z.object({
    * flags); the crawler itself never writes to it.
    */
   BROWSER_TMP_DIR: z.string().min(1).max(1024).default("/dev/shm"),
+  /**
+   * WP25: the only override around the browser-sandbox fail-closed rule.
+   * When Chromium's own sandbox cannot start (the runtime grants no
+   * unprivileged user namespaces), browser rendering is disabled for the
+   * run — render = BROWSER pages report an error, AUTO pages fall back to
+   * their static result. Setting this to "true" lets the run render with
+   * `--no-sandbox` instead: FOR LOCAL DEVELOPMENT ONLY. Strict literals, so
+   * a typo fails startup instead of silently enabling it. It touches nothing
+   * else: the network policy, the proxy and every other guarantee are
+   * unaffected.
+   */
+  CRAWLER_ALLOW_UNSANDBOXED_BROWSER: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v: string) => v === "true"),
   MAX_HTML_BYTES: int(1024, 20 * 1024 * 1024, 2 * 1024 * 1024),
   MAX_IMAGE_BYTES: int(1024, 50 * 1024 * 1024, 10 * 1024 * 1024),
   MIN_IMAGE_SIDE: int(1, 4096, 64),

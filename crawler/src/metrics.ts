@@ -133,8 +133,23 @@ export class RunMetrics {
   poolSyncFailures = 0;
   sourcesCrawled = 0;
   sourcesInvalid = 0;
-  /** Browser rendering (WP7): renders attempted, failures, images handed over. */
-  readonly browser: { renders: number; failed: number; images: number } = { renders: 0, failed: 0, images: 0 };
+  /**
+   * Browser rendering (WP7): renders attempted, failures, images handed over.
+   * WP25 adds the sandbox self-test's answer: `sandboxTested` says the
+   * sandboxed launch ran at all (false when no page needed a browser this
+   * run), `sandboxOn` whether Chromium's own sandbox is up, `workerUid` the
+   * worker's OS user once a worker answered (the container image drops the
+   * worker onto a separate uid that cannot read the key file; -1 until
+   * then). Booleans, ids and counts only — never a URL.
+   */
+  readonly browser: { renders: number; failed: number; images: number; sandboxTested: boolean; sandboxOn: boolean; workerUid: number } = {
+    renders: 0,
+    failed: 0,
+    images: 0,
+    sandboxTested: false,
+    sandboxOn: false,
+    workerUid: -1,
+  };
   readonly imagesSkipped: Partial<Record<SkipReason, number>> = {};
   readonly errors: Partial<Record<ErrorCode, number>> = {};
   readonly robots: Record<string, number> = {};
@@ -168,7 +183,7 @@ export class RunMetrics {
     if (cls !== null) this.failures[cls]++;
   }
 
-  summary(opts: { now?: number; budgetPages: number; budgetImages: number; outcome: string }): Record<string, number | string | Record<string, number>> {
+  summary(opts: { now?: number; budgetPages: number; budgetImages: number; outcome: string }): Record<string, number | string | boolean | Record<string, number | boolean>> {
     return {
       outcome: opts.outcome,
       durationMs: (opts.now ?? Date.now()) - this.startedAt,
