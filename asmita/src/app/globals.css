@@ -1479,6 +1479,7 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
 .site-header.scrolled { border-bottom-color: var(--color-ash); }
 
 .nav-link {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1492,15 +1493,28 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.nav-link:hover {
-  background: var(--color-teal-mist);
-  color: var(--color-brand-teal);
+/* Hover and the section you are in: teal text over a short bar in the
+   logo's flame orange, not a filled pill. */
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 2px;
+  height: 3px;
+  border-radius: 999px;
+  background: #f5b94b;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  opacity: 0;
 }
-
-/* The section you are in stays highlighted. */
-.nav-link[data-current] {
-  background: var(--color-brand-teal);
-  color: #ffffff;
+.nav-link:hover { color: var(--color-brand-teal); }
+.nav-link:hover::after { transform: scaleX(0.6); opacity: 0.6; }
+.nav-link[data-current] { color: var(--color-brand-teal); }
+.nav-link[data-current]::after { transform: scaleX(1); opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-link::after { transition: none; }
 }
 
 /* Header dropdowns and the phone menu share these link styles. */
@@ -1540,6 +1554,7 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
 /* Small laptops: tighter spacing so every link stays on one line. */
 @media (max-width: 1279px) {
   .nav-link { padding: 8px 10px; font-size: 14px; }
+  .nav-link::after { left: 10px; right: 10px; }
 }
 
 html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
