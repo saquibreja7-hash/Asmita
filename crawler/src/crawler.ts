@@ -55,9 +55,10 @@
  * The crawler keeps no frontier of its own: the queue, the seen set and the
  * scheduling live in the app (CrawlPage rows). The only page state here is
  * the claimed batch (at most FRONTIER_CLAIM_LIMIT entries) and the report
- * built from it — plus two small bounded per-source structures (WP4): the
- * query-variant guard (path/variant hashes) and the one-shot robots sitemap
- * stash — so a second run resumes where the last one stopped, and a killed
+ * built from it — plus three small bounded per-source structures: the
+ * query-variant guard (path/variant hashes, WP4), the one-shot robots
+ * sitemap stash (WP4) and the soft-404 digest map (WP14, body digests only)
+ * — so a second run resumes where the last one stopped, and a killed
  * run loses at most its claimed batch, which the app hands out again after
  * the 30-minute claim window.
  *
@@ -69,7 +70,7 @@
 import { randomUUID } from "node:crypto";
 import type { Config } from "./config.ts";
 import { userAgentToken } from "./config.ts";
-import { CrawlError, toCrawlError, type ErrorCode } from "./errors.ts";
+import { CrawlError, fetchFailureClass, toCrawlError, type ErrorCode } from "./errors.ts";
 import { FindingsSink } from "./findings.ts";
 import type { Logger } from "./log.ts";
 import { MIN_QUALITY, Matcher } from "./match/matcher.ts";
@@ -79,7 +80,9 @@ import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robots.ts";
 import { isNonContentUrl, QueryGuardStore, type QueryVariantGuard } from "./crawl/traps.ts";
+import { Soft404Tracker, soft404Digest } from "./crawl/soft404.ts";
 import { inScope, normalizeUrl, registrableParent, sourceHost, urlKey } from "./crawl/url.ts";
+import { isScriptOnlyStub } from "./crawl/page-redirects.ts";
 import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
 import { BrowserRenderer, type BrowserImage } from "./browser/browser-renderer.ts";
 import type { ImageDecoder } from "./image/decoder-pool.ts";
@@ -188,6 +191,22 @@ type SourceCtx = {
    * once per batch and cleared; the run-wide dedup and cap live in the run.
    */
   discoveredHosts: string[];
+  /**
+   * Per-source soft-404 tracker (crawler v3 WP14): a digest of each fetched
+   * HTML body (whitespace collapsed, digits stripped) with the distinct
+   * claimed-URL keys that carried it. Once one digest has appeared on
+   * SOFT404_THRESHOLD distinct URLs, further pages with it are soft-404s —
+   * nothing is extracted and they are reported `gone`. Holds 16-byte hashes
+   * only, never a URL or body, is never logged, and is bounded (at most
+   * SOFT404_DIGEST_CAP digests, least recently used dropped); a killed run
+   * loses it whole, which is safe — the app's rows keep their schedules.
+   */
+  soft404: Soft404Tracker;
+  /**
+   * Set once this source's home page (the depth-0 seed) failed permanently
+   * (WP13), so the run summary counts it once per source, not per page.
+   */
+  homePermanentCounted: boolean;
 };
 
 export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget" | "unauthorized";
@@ -438,7 +457,9 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       },
     });
 
-  const record = (code: ErrorCode) => metrics.error(code);
+  const record = (code: ErrorCode, status?: number): void => {
+    metrics.error(code, status);
+  };
 
   // --- browser rendering (WP7) ------------------------------------------------
   /**
@@ -712,7 +733,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         return metrics.skip("image_host_failures_capped");
       }
       if (touchedOffHost) metrics.imagesOffHost++;
-      record(err.code);
+      record(err.code, err.status);
       return metrics.skip(err.code === "robots_disallowed" ? "robots" : "fetch_failed");
     }
     if (touchedOffHost) metrics.imagesOffHost++;
@@ -1122,11 +1143,31 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * runs on the claimed URL (the app's data, never trusted blindly) and on
    * every redirect hop (beforeHop). A 304 becomes "not_modified"; 404/410
    * "gone"; a robots block or a 401/403 answer "blocked"; anything else that
-   * fails "error" (the app backs off and eventually marks the page dead).
-   * Links are reported only under MAX_DEPTH, deduplicated per page, in scope.
+   * fails "error" (the app backs off and eventually marks the page dead) —
+   * except permanent fetch failures (crawler v3 WP13: a DNS name not found,
+   * a TLS certificate failure), which are reported "gone" straight away so
+   * the app kills the row without the five error retries, and are never
+   * retried inside this run either. Links are reported only under
+   * MAX_DEPTH, deduplicated per page, in scope.
+   *
+   * Fake "not found" pages (crawler v3 WP14): a fetched HTML body whose
+   * digest (whitespace collapsed, digits stripped) has already appeared on
+   * five or more distinct URLs of this source is a soft-404 — no images or
+   * links are extracted from it and it is reported "gone" — so a site that
+   * answers every unknown path with the same 200 "not found" page cannot
+   * keep the frontier busy forever. The digest is in-memory only (rule 3).
+   *
+   * Redirects that live in the page (crawler v3 WP12): on the static path a
+   * qualifying `<meta http-equiv="refresh">` (up to 10 s) is followed inside
+   * the same fetch — scope-, robots- and hop-budget-checked, never
+   * off-scope — so the extracted content is the target's and findings keep
+   * the page address as claimed. A render = BROWSER page does not follow it
+   * here; Chromium follows it during the render.
    *
    * Pages that need a browser (render = BROWSER, or AUTO with scripts and no
-   * image candidates) are then rendered in Chromium: their images are the
+   * image candidates — including a tiny script-only stub, WP12: under 2 KiB
+   * of visible text, no links, usually a JavaScript redirect or app shell)
+   * are then rendered in Chromium: their images are the
    * responses the browser intercepted, their links come from the rendered
    * DOM, and they are reported without validators (a render is never
    * conditional-GET-suppressed). An AUTO page whose render fails falls back
@@ -1154,6 +1195,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         headers,
         signal: hard.signal,
         gate,
+        // WP12: the static path follows a qualifying in-page meta refresh as
+        // one more redirect hop of this fetch (beforeHop re-checks scope and
+        // robots for it). Browser-rendered pages leave it to Chromium.
+        followMetaRefresh: source.render !== "browser",
         beforeHop: politeHop(source.delayMs, (u) => {
           // A redirect may not take a page fetch off the source's domain.
           if (!inScope(u, scopeHost)) throw new CrawlError("out_of_scope");
@@ -1161,8 +1206,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       });
     } catch (raw) {
       const err = toCrawlError(raw);
-      record(err.code);
+      record(err.code, err.status);
       if (err.code === "out_of_scope") metrics.pagesOutOfScope++;
+      // WP13: a DNS name that does not exist or a TLS certificate failure
+      // cannot be fixed by retrying, so the page is `gone` on the first
+      // attempt and the app kills the row without the five error retries.
+      // Temporary failures (timeouts, resets, 5xx) keep the error backoff;
+      // 429/503 are unchanged.
+      const permanent = fetchFailureClass(err) === "permanent";
       const status: ReportedPage["status"] =
         err.code === "http_status" && (err.status === 404 || err.status === 410)
           ? "gone"
@@ -1170,7 +1221,16 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
             ? "blocked"
             : err.code === "robots_disallowed"
               ? "blocked"
-              : "error";
+              : permanent
+                ? "gone"
+                : "error";
+      // A source's home page (the depth-0 seed) failing permanently means
+      // the whole site is dead: count it once per source in the summary —
+      // a count only, never a hostname (rule 3).
+      if (permanent && page.depth === 0 && !ctx.homePermanentCounted) {
+        ctx.homePermanentCounted = true;
+        metrics.homePermanentFailures++;
+      }
       return { id: page.id, status, links: [] };
     }
     const validators = {
@@ -1214,15 +1274,30 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     metrics.pagesFetched++;
     const html = body.toString("utf8");
+    // WP14: a body digest that already appeared on five or more distinct
+    // URLs of this source marks this page a soft-404: extract nothing (no
+    // images, no links, no render) and report it gone, like a 404. The
+    // page was still fetched — a soft-404 is recognised retrospectively —
+    // and the digest never leaves memory and is never logged.
+    if (ctx.soft404.observe(soft404Digest(html), urlKey(url))) {
+      metrics.pagesSoft404++;
+      return { id: page.id, status: "gone", links: [] };
+    }
     const ex = extract(html, result.url, result.xRobotsTag, {
       maxLinks: config.MAX_LINKS_PER_PAGE,
       maxImages: config.MAX_IMAGES_PER_PAGE,
     });
 
-    // Does this page need a browser? (WP7)
+    // Does this page need a browser? (WP7; WP12 adds the script-only stub.)
+    // The stub clause is the WP12 rule written out — a tiny script-only stub
+    // (under 2 KiB of visible text, no links, a script) also renders — and it
+    // sits inside the WP7 rule's reach (scripts and no image candidates);
+    // kept explicit so the stub contract has its own code and tests.
+    const stub = source.render === "auto" && isScriptOnlyStub(html, ex);
     const wantBrowser =
       source.render === "browser" ||
-      (source.render === "auto" && ex.images.length === 0 && HAS_SCRIPT.test(html));
+      (source.render === "auto" && ex.images.length === 0 && HAS_SCRIPT.test(html)) ||
+      stub;
     if (wantBrowser) {
       const rendered = await renderPageInBrowser(page, url, ctx);
       if (rendered === "dropped") return null; // stopped mid-render: redo whole
@@ -1308,6 +1383,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       robotsSitemaps: null,
       probeLinks: null,
       discoveredHosts: [],
+      soft404: new Soft404Tracker(),
+      homePermanentCounted: false,
     };
     let pages = 0;
     /** Set once this source claims real work (WP6: sourcesActive). */
@@ -1433,20 +1510,29 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
           ctx.robotsSitemaps = [];
           ctx.probeLinks = []; // no origin to probe on
         } else {
-          const rules = await robots.rulesFor(first);
-          const seen = new Set<string>();
-          const list: URL[] = [];
-          for (const raw of rules.sitemaps.slice(0, ROBOTS_SITEMAP_CAP)) {
-            const s = normalizeUrl(raw, first);
-            if (s === null || seen.has(urlKey(s))) continue;
-            seen.add(urlKey(s));
-            list.push(s);
+          // A permanently dead host rethrows from its robots fetch (WP13):
+          // no sitemap list then — every claimed page below reports its own
+          // permanent failure, which is what the run summary counts.
+          try {
+            const rules = await robots.rulesFor(first);
+            const seen = new Set<string>();
+            const list: URL[] = [];
+            for (const raw of rules.sitemaps.slice(0, ROBOTS_SITEMAP_CAP)) {
+              const s = normalizeUrl(raw, first);
+              if (s === null || seen.has(urlKey(s))) continue;
+              seen.add(urlKey(s));
+              list.push(s);
+            }
+            ctx.robotsSitemaps = list;
+          } catch {
+            ctx.robotsSitemaps = [];
           }
-          ctx.robotsSitemaps = list;
           // robots.txt named no sitemap (WP9): probe the conventional paths
           // once per source per run, counted against the page budget.
           ctx.probeLinks =
-            list.length === 0 ? await probeSitemapPaths(ctx, first, batch[0]!.depth, () => mayProbe(batch.length)) : [];
+            (ctx.robotsSitemaps ?? []).length === 0
+              ? await probeSitemapPaths(ctx, first, batch[0]!.depth, () => mayProbe(batch.length))
+              : [];
         }
       }
       for (const page of batch) {

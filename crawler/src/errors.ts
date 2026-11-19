@@ -10,6 +10,7 @@ export const ERROR_CODES = [
   "blocked_port",
   "url_credentials",
   "blocked_address",
+  "dns_not_found",
   "dns_failed",
   "too_many_redirects",
   "redirect_invalid",
@@ -83,7 +84,7 @@ export class CrawlError extends Error {
 }
 
 const SYSCALL_CODES: Record<string, ErrorCode> = {
-  ENOTFOUND: "dns_failed",
+  ENOTFOUND: "dns_not_found",
   EAI_AGAIN: "dns_failed",
   ECONNREFUSED: "connect_failed",
   ECONNRESET: "network_error",
@@ -116,6 +117,9 @@ const SYSCALL_CODES: Record<string, ErrorCode> = {
   ERR_SSL_WRONG_VERSION_NUMBER: "tls_failed",
 };
 
+// WP13: a name that does not exist is permanent, so it is never retried in
+// this run either. EAI_AGAIN (and every other resolver failure, see
+// net/policy.ts) stays "dns_failed" and keeps its retry.
 const RETRYABLE: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   "connect_failed",
   "connect_timeout",
@@ -124,6 +128,40 @@ const RETRYABLE: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   "network_error",
   "dns_failed",
 ]);
+
+/**
+ * Fetch-failure classes (crawler v3 WP13). Permanent failures — a DNS name
+ * that does not exist, a TLS certificate failure — cannot be fixed by
+ * retrying, so the page is reported `gone` on the first attempt and the app
+ * marks the row dead without the five error retries. Temporary failures —
+ * timeouts, connection resets and connection refusals, 5xx answers — keep
+ * the existing 1 h / 6 h / 24 h backoff; 429/503 are temporary too and keep
+ * today's treatment exactly (in-run retry with Retry-After, `error` at the
+ * app). Everything else (scope, robots, caps, decode, API...) has no class.
+ */
+export type FailureClass = "permanent" | "temporary";
+
+const PERMANENT_FETCH_FAILURES: ReadonlySet<ErrorCode> = new Set<ErrorCode>(["dns_not_found", "tls_failed"]);
+const TEMPORARY_FETCH_FAILURES: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
+  "dns_failed",
+  "connect_failed",
+  "connect_timeout",
+  "headers_timeout",
+  "body_timeout",
+  "network_error",
+]);
+
+/** The class of a fetch failure (WP13), or null when the error is not one. */
+export function fetchFailureClass(err: { code: ErrorCode; status?: number | undefined }): FailureClass | null {
+  if (PERMANENT_FETCH_FAILURES.has(err.code)) return "permanent";
+  if (TEMPORARY_FETCH_FAILURES.has(err.code)) return "temporary";
+  if (err.code === "http_status") {
+    // 5xx and 429/503 are temporary; other statuses have their own mapping
+    // (404/410 gone, 401/403 blocked) and no class of their own.
+    return err.status !== undefined && (err.status >= 500 || err.status === 429) ? "temporary" : null;
+  }
+  return null;
+}
 
 /** Map anything thrown to a CrawlError without keeping its message. */
 export function toCrawlError(err: unknown): CrawlError {

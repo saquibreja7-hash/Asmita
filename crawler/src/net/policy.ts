@@ -82,7 +82,14 @@ export async function resolveAllowed(hostname: string, policy: NetPolicy): Promi
   let addrs: ResolvedAddress[];
   try {
     addrs = await policy.resolve(host);
-  } catch {
+  } catch (err) {
+    // WP13: a name that does not exist is permanent — never retried in this
+    // run, reported `gone` so the app kills the row without five tries.
+    // Any other resolver failure (timeout, temporary error) keeps the
+    // retryable dns_failed.
+    if (err !== null && typeof err === "object" && (err as { code?: unknown }).code === "ENOTFOUND") {
+      throw new CrawlError("dns_not_found");
+    }
     throw new CrawlError("dns_failed", { retryable: true });
   }
   if (addrs.length === 0) throw new CrawlError("dns_failed", { retryable: true });

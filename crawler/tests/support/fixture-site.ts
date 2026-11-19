@@ -87,6 +87,24 @@ export class FixtureSite {
 
 const html = (body: string, head = "") => `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
 
+/**
+ * Deterministic distinct letters for a number (1 -> a, 26 -> z, 27 -> aa):
+ * a per-page word that survives the soft-404 body digest's digit stripping
+ * (crawler v3 WP14), so pages that differ only by digits in their markup —
+ * which the digest must treat as one template — can be kept apart on purpose
+ * by giving each a letter tag.
+ */
+const letterTag = (n: number): string => {
+  let s = "";
+  let x = Math.max(1, Math.floor(n));
+  while (x > 0) {
+    const m = (x - 1) % 26;
+    s = String.fromCharCode(97 + m) + s;
+    x = Math.floor((x - 1) / 26);
+  }
+  return s;
+};
+
 function sendHtml(content: string, extra: Record<string, string> = {}): Handler {
   return (res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...extra });
@@ -432,17 +450,27 @@ export async function buildFixture(): Promise<Fixture> {
   // ---- link flood: approve flood.fixture.test ----
   // Every page is ~1.6 MB of links to 40,000 further pages (a hostile site
   // trying to exhaust the frontier). The home page also has one real image.
+  // Each page carries its own letter tag: the flood test wants every claimed
+  // page to offer its links, and the soft-404 body digest (crawler v3 WP14)
+  // would read digit-only-identical bodies as one repeated template.
   const F = `flood.${S}`;
-  const floodPage = (seed: number, withImage: boolean) =>
+  const floodPage = (tag: string, seed: number, withImage: boolean) =>
     html(
       (withImage ? `<img src="/img/flood.png">` : "") +
+        `<p>page ${tag}</p>` +
         Array.from({ length: 40_000 }, (_, i) => `<a href="/p/${seed}-${i}">x</a>`).join(""),
     );
-  const home = floodPage(0, true);
+  const home = floodPage("home", 0, true);
   site.route(F, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
   site.route(F, "/", sendHtml(home));
   site.route(F, "/img/flood.png", sendBytes(img.flood, "image/png"));
-  site.routeAny(F, (path) => sendHtml(floodPage(Number(path.split("-")[1] ?? 0) + 1, false)));
+  site.routeAny(F, (path) => {
+    // Today's rule kept: the link index that led here is the next seed.
+    const m = /^\/p\/(\d+)-(\d+)/.exec(path);
+    const seed = m ? Number(m[2]) + 1 : 1;
+    const tag = m ? `${letterTag(Number(m[1]) + 1)}-${letterTag(seed)}` : "any";
+    return sendHtml(floodPage(tag, seed, false));
+  });
 
   // ---- conditional-GET fixture: approve etag.fixture.test ----
   // Three pages: two that always serve the same ETag (a 304 answers the
@@ -795,7 +823,11 @@ ${Array.from({ length: 3 }, (_, i) => `  <entry><title>Post ${i + 1}</title><lin
       `/listing?page=${n}`,
       sendHtml(
         html(
-          `${plantedImg}${next}
+          // The heading word makes every listing page genuinely distinct
+          // content beyond its digits: a real listing's pages differ in more
+          // than numbers, and the soft-404 body digest (WP14) strips digits,
+          // so digit-only variation would read as one repeated template.
+          `<h1>Listing ${letterTag(n)}</h1>${plantedImg}${next}
            <a href="/listing?page=${n}&amp;utm_source=share">share this page</a>
            <a href="/listing?page=${n}&amp;calendar=1">calendar view</a>`,
         ),
@@ -852,7 +884,11 @@ ${Array.from({ length: 3 }, (_, i) => `  <entry><title>Post ${i + 1}</title><lin
       const nextPath = `/cal/${next.toISOString().slice(0, 10)}`;
       return send(`<a rel="next" class="next-day" href="${nextPath}">Next day</a>`);
     }
-    return send(`<p>nothing here</p>`);
+    // The admitted /t?u=N variants each get their own word: the query-trap
+    // test wants all eight fetched, and the soft-404 body digest (WP14)
+    // would otherwise read digit-only-identical bodies as one template.
+    const u = Number(/\/t\?u=(\d+)/.exec(path)?.[1] ?? 0);
+    return send(`<p>nothing here (${letterTag(u)})</p>`);
   });
 
   return { site, pool, expected, allHashes };
@@ -1193,6 +1229,248 @@ export async function buildParallelFixture(): Promise<Fixture> {
   site.route(HANG_HOST, "/", () => {});
   const pool: Pool = { version: "parallel-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
   return { site, pool, expected: [], allHashes: [] };
+}
+
+/*
+ * The page-redirects fixture (crawler v3 WP12): redirects that live in the
+ * page body, not the protocol. redirects.fixture.test (render http) has a
+ * meta-refresh redirector whose target carries the planted image (the
+ * redirector's own decoy image must never be fetched), an off-scope meta
+ * refresh (away.test is never contacted, robots.txt included), an 11-second
+ * refresh that is page content instead (its own image is found), a
+ * self-refresh loop bounded by the shared redirect-hop budget, and a
+ * robots-disallowed refresh target. stub.fixture.test (render auto) carries
+ * a location.replace() stub — under 2 KiB of visible text, one script, no
+ * links, no images — whose target's image only a render can find, and a
+ * small script-less page that must never be rendered. No host overlaps the
+ * other fixtures' hosts.
+ */
+export const REDIR_HOST = `redirects.${SOURCE_DOMAIN}`;
+export const STUB_HOST = `stub.${SOURCE_DOMAIN}`;
+export const AWAY_HOST = "away.test";
+
+export async function buildPageRedirectsFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const R = REDIR_HOST;
+  const U = STUB_HOST;
+
+  const img = {
+    metaTarget: await patternImage(170, 320, 240, "png"),
+    slowOwn: await patternImage(171, 300, 300, "png"),
+    stubTarget: await patternImage(172, 320, 240, "png"),
+  };
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const planted = [
+    { id: "fp-meta", key: "metaTarget", page: "/meta-refresh", path: "/img/meta-target.png" },
+    { id: "fp-meta-slow", key: "slowOwn", page: "/meta-slow", path: "/img/slow-own.png" },
+    { id: "fp-stub", key: "stubTarget", page: "/stub", path: "/img/stub-target.png" },
+  ] as const;
+  const fingerprints: Array<{ id: string; pdq: string; quality: number }> = [];
+  const allHashes: string[] = [];
+  for (const p of planted) {
+    allHashes.push(await hashOf(img[p.key]));
+    fingerprints.push({ id: p.id, pdq: allHashes[allHashes.length - 1]!, quality: 100 });
+  }
+  const pool: Pool = { version: "redirects-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints };
+  const expected: Expected[] = planted.map((p) => ({
+    fingerprintId: p.id,
+    pagePath: p.page,
+    imageHost: p.page === "/stub" ? U : R,
+    imagePath: p.path,
+  }));
+
+  // ---- meta-refresh source (render http) ----
+  site.route(R, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nDisallow: /private/\n"), "text/plain"));
+  site.route(
+    R,
+    "/",
+    sendHtml(
+      html(`
+        <a href="/meta-refresh">meta refresh</a>
+        <a href="/meta-offsite">off-scope meta refresh</a>
+        <a href="/meta-slow">slow refresh</a>
+        <a href="/meta-loop">refresh loop</a>
+        <a href="/meta-robots">robots-disallowed target</a>
+      `),
+    ),
+  );
+  // The redirector: its own image is discarded like an HTTP redirect's page.
+  site.route(
+    R,
+    "/meta-refresh",
+    sendHtml(html(`<img src="/img/redirector-decoy.png">`, `<meta http-equiv="refresh" content="0; url=/refreshed">`)),
+  );
+  site.route(R, "/refreshed", sendHtml(html(`<img src="/img/meta-target.png"><a href="/refreshed-child">child</a>`)));
+  site.route(R, "/refreshed-child", sendHtml(html(`<p>reached through the followed refresh's links</p>`)));
+  site.route(R, "/img/meta-target.png", sendBytes(img.metaTarget, "image/png"));
+  site.route(R, "/img/redirector-decoy.png", sendBytes(img.slowOwn, "image/png"));
+  // Off-scope target: away.test must never be requested, not even robots.txt.
+  site.route(
+    R,
+    "/meta-offsite",
+    sendHtml(html(`<p>moving on&hellip;</p>`, `<meta http-equiv="refresh" content="2; url=${o(AWAY_HOST)}/page">`)),
+  );
+  site.route(AWAY_HOST, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(AWAY_HOST, "/page", sendHtml(html(`<img src="/away.png">`)));
+  // 11 seconds: too slow to be a redirect, so this page is content.
+  site.route(
+    R,
+    "/meta-slow",
+    sendHtml(html(`<img src="/img/slow-own.png">`, `<meta http-equiv="refresh" content="11; url=/never-refreshed">`)),
+  );
+  site.route(R, "/never-refreshed", sendHtml(html(`<img src="/img/meta-target.png">`)));
+  // A self-refresh chain: only the shared redirect budget ends it.
+  site.route(R, "/meta-loop", sendHtml(html(`<p>round and round</p>`, `<meta http-equiv="refresh" content="0; url=/meta-loop">`)));
+  // The target is in scope but robots-disallowed: the page reports blocked.
+  site.route(
+    R,
+    "/meta-robots",
+    sendHtml(html(`<p>nothing to see</p>`, `<meta http-equiv="refresh" content="3; url=/private/target">`)),
+  );
+  site.route(R, "/private/target", sendHtml(html(`<img src="/img/meta-target.png">`)));
+  site.route(R, "/img/slow-own.png", sendBytes(img.slowOwn, "image/png"));
+
+  // ---- script-stub source (render auto) ----
+  site.route(U, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(U, "/", sendHtml(html(`<a href="/stub">js redirect stub</a><a href="/stub-plain">plain page</a>`)));
+  // A location.replace stub: tiny, one script, no links, no images.
+  site.route(U, "/stub", sendHtml(html(`<p>Loading&hellip;</p>`, `<script>location.replace("/stub-target");</script>`)));
+  site.route(U, "/stub-target", sendHtml(html(`<img src="/img/stub-target.png"><a href="/stub-target-child">child</a>`)));
+  site.route(U, "/stub-target-child", sendHtml(html(`<p>child of the stub's target</p>`)));
+  site.route(U, "/img/stub-target.png", sendBytes(img.stubTarget, "image/png"));
+  // Tiny and script-less: never rendered.
+  site.route(U, "/stub-plain", sendHtml(html(`<p>a small page with no script</p>`)));
+
+  return { site, pool, expected, allHashes };
+}
+
+/*
+ * The permanent-failure fixture (crawler v3 WP13): fetch failures that can
+ * never be fixed by retrying, and the temporary ones that keep today's
+ * backoff. temp500.test answers its home page with a plain 500 — temporary,
+ * but not in today's in-run retry set, so it is fetched once; temp502.test
+ * answers 502 and reset.test breaks the connection mid-answer — both
+ * retried in-run like today; rate429.test answers 429 with Retry-After: 0
+ * (429/503 keep today's backoff). All of them report `error`, so the app
+ * keeps the 1 h / 6 h / 24 h backoff. dead.test is never in the test
+ * policy's DNS, so resolving it fails with ENOTFOUND: permanent, reported
+ * `gone` on the first attempt. No host here overlaps the other fixtures'
+ * hosts.
+ */
+export const TEMP500_HOST = "temp500.test";
+export const TEMP502_HOST = "temp502.test";
+export const RESET_HOST = "reset.test";
+export const RATE429_HOST = "rate429.test";
+/** Never resolvable in the test policy: a DNS name that does not exist. */
+export const DEAD_HOST = "dead.test";
+export const PERMANENT_FAILURE_HOSTS = [TEMP500_HOST, TEMP502_HOST, RESET_HOST, RATE429_HOST];
+
+export async function buildPermanentFailuresFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const robots = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+  const statusPage = (status: number, body: string, extra: Record<string, string> = {}): Handler => (res) => {
+    res.writeHead(status, { "content-type": "text/html; charset=utf-8", ...extra });
+    res.end(body);
+  };
+  site.route(TEMP500_HOST, "/robots.txt", robots);
+  site.route(TEMP500_HOST, "/", statusPage(500, "<html><body>server error</body></html>"));
+  site.route(TEMP502_HOST, "/robots.txt", robots);
+  site.route(TEMP502_HOST, "/", statusPage(502, "<html><body>bad gateway</body></html>"));
+  site.route(RESET_HOST, "/robots.txt", robots);
+  // The connection breaks after the headers: a reset, not a status.
+  site.route(RESET_HOST, "/", (res) => {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.write("<html><body>hal");
+    res.destroy();
+  });
+  site.route(RATE429_HOST, "/robots.txt", robots);
+  site.route(RATE429_HOST, "/", statusPage(429, "<html><body>slow down</body></html>", { "retry-after": "0" }));
+  const pool: Pool = { version: "permfail-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
+  return { site, pool, expected: [], allHashes: [] };
+}
+
+/*
+ * The soft-404 fixture (crawler v3 WP14). soft404.fixture.test answers every
+ * unknown path with the same "not found" page over HTTP 200; its hub links
+ * twelve missing paths, so the first five distinct URLs carrying that body
+ * digest are processed normally and every further one is a soft-404: nothing
+ * extracted, reported gone. The not-found page plants an in-pool image and
+ * one link so the cut is observable (exactly one finding, exactly one row
+ * under it, every gone report entry linkless). alike.fixture.test is the
+ * negative: nine genuinely similar gallery pages — same layout, digits in
+ * the body, a different word and image each — that must all be fetched,
+ * extracted and reported fetched. No host overlaps the other fixtures' hosts.
+ */
+export const SOFT404_HOST = `soft404.${SOURCE_DOMAIN}`;
+export const ALIKE_HOST = `alike.${SOURCE_DOMAIN}`;
+export const SOFT404_MISSING = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet", "kilo", "lima"];
+export const ALIKE_GALLERIES = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india"];
+
+export async function buildSoft404Fixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const N = SOFT404_HOST;
+  const L = ALIKE_HOST;
+
+  const img: Record<string, Buffer> = { soft404: await patternImage(250, 300, 300, "png") };
+  for (const [i, w] of ALIKE_GALLERIES.entries()) img[w] = await patternImage(255 + i, 300, 300, "png");
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const allHashes: string[] = [];
+  const fingerprints: Array<{ id: string; pdq: string; quality: number }> = [];
+  const planted: Array<{ fp: string; key: string; page: string; path: string; host: string }> = [
+    { fp: "fp-soft404", key: "soft404", page: "/missing/alpha", path: "/img/soft404.png", host: N },
+    ...ALIKE_GALLERIES.map((w) => ({ fp: `fp-alike-${w}`, key: w, page: `/gallery/${w}`, path: `/img/gal-${w}.png`, host: L })),
+  ];
+  for (const p of planted) {
+    const h = await hashOf(img[p.key]!);
+    allHashes.push(h);
+    fingerprints.push({ id: p.fp, pdq: h, quality: 100 });
+  }
+  const pool: Pool = { version: "soft404-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints };
+  const expected: Expected[] = planted.map((p) => ({ fingerprintId: p.fp, pagePath: p.page, imageHost: p.host, imagePath: p.path }));
+
+  // ---- the soft-404 site: every unknown path answers the same page ----
+  const robots = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+  site.route(N, "/robots.txt", robots);
+  site.route(
+    N,
+    "/",
+    sendHtml(html(SOFT404_MISSING.map((w) => `<a href="/missing/${w}">${w}</a>`).join(""))),
+  );
+  // Identical for every unknown path, digits included, HTTP 200: the fake
+  // "not found" the crawler must learn to recognise within one run.
+  const notFound = html(`
+    <h1>Page not found</h1>
+    <p>Sorry, the page you are looking for does not exist. Error code 404 was
+       raised for this address in 2026.</p>
+    <a href="/loop-deeper">back to the gallery</a>
+    <img src="/img/soft404.png" width="300" height="300">
+  `);
+  site.routeAny(N, () => sendHtml(notFound));
+  site.route(N, "/img/soft404.png", sendBytes(img.soft404!, "image/png"));
+
+  // ---- the genuinely-similar galleries: same layout, different images ----
+  site.route(L, "/robots.txt", robots);
+  site.route(L, "/", sendHtml(html(ALIKE_GALLERIES.map((w) => `<a href="/gallery/${w}">${w}</a>`).join(""))));
+  for (const [i, w] of ALIKE_GALLERIES.entries()) {
+    site.route(
+      L,
+      `/gallery/${w}`,
+      sendHtml(
+        html(
+          // Same layout and the same digits everywhere; only the word and
+          // the image address differ — real gallery pages — so no two of
+          // these bodies may share a digest.
+          `<h1>Gallery ${w}</h1>
+           <p>Photo ${i + 1} of ${ALIKE_GALLERIES.length}, published in 2026.</p>
+           <img src="/img/gal-${w}.png" width="300" height="300">`,
+        ),
+      ),
+    );
+    site.route(L, `/img/gal-${w}.png`, sendBytes(img[w]!, "image/png"));
+  }
+
+  return { site, pool, expected, allHashes };
 }
 
 /** Env for a fixture run (test values only, nothing real). */

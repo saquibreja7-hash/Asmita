@@ -296,6 +296,25 @@ describe("report", () => {
     expect((await claimCrawlPages(second, 10, new Date(t.getTime() + 25 * HOUR))).length).toBe(1);
   });
 
+  it("a permanent failure's gone report kills the row on the first attempt (WP13)", async () => {
+    // The crawler reports `gone` straight away for a fetch failure that
+    // retrying cannot fix (a DNS name that does not exist, a TLS
+    // certificate failure), so the row dies immediately — it does not
+    // spend the five error retries first.
+    const seedId = claimed[0]!.id;
+    const t = nowAt(0);
+    const first = await reportCrawlPages(sourceId, "run-1", [{ id: seedId, status: "gone", links: [] }], t);
+    expect(first.accepted).toBe(1);
+    const row = crawlMemory().pages.get(seedId)!;
+    expect(row.status).toBe("GONE");
+    expect(row.failCount).toBe(0); // dead without the five error retries
+    expect(row.lastFetchedAt).toEqual(t); // counted as visited, not as an error
+    // A retried report (the crawler lost the answer) changes nothing.
+    const again = await reportCrawlPages(sourceId, "run-1", [{ id: seedId, status: "gone", links: [] }], nowAt(1 * MIN));
+    expect(again.accepted).toBe(0); // a dead row is never resurrected
+    expect(await claimCrawlPages(sourceId, 10, new Date(t.getTime() + 30 * DAY))).toEqual([]);
+  });
+
   it("ignores entries that are malformed, unknown, or another source's rows", async () => {
     const otherSource = await createSource("other-forum.example.com", 10);
     const otherSeed = await claimCrawlPages(otherSource, 10, nowAt(0));
