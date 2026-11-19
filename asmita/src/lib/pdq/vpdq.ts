@@ -7,10 +7,11 @@
  * "The method"; ADR 007).
  *
  * The video never leaves the survivor's device. The browser sampler decodes
- * frames into a canvas in the page and throws them away; only the 64-hex PDQ
- * hash, its quality and the whole-second timestamp of each kept frame are
- * ever returned, stored or sent. No frame pixels, data URL or media bytes
- * exist anywhere in this module's output.
+ * frames into a canvas in the page, hands each drawn frame to the hashing
+ * Web Worker as an ImageBitmap and throws it away (WP42 P2); only the
+ * 64-hex PDQ hash, its quality and the whole-second timestamp of each kept
+ * frame are ever returned, stored or sent. No frame pixels, data URL or
+ * media bytes exist anywhere in this module's output.
  *
  * Sampling decisions, dedup and capping are pure functions (unit-tested
  * without a browser); the sampler itself needs the DOM and is only used from
@@ -18,6 +19,7 @@
  */
 
 import { computePdqHash, hammingDistance } from "./pdq";
+import { hashBitmapInWorker, hashWorkerSupported, HashWorkerError } from "./hash-client";
 
 /** Bumped when the sampling, dedup or capping behaviour changes. */
 export const VPDQ_CLIENT_VERSION = "vpdq-ts-0.1.0";
@@ -193,6 +195,35 @@ function waitForVideoEvent(video: HTMLVideoElement, event: "loadedmetadata" | "s
  * object URL, video element and canvas are released when the generator
  * finishes, is closed or fails — whichever happens first.
  */
+
+// One drawn frame is fingerprinted off the main thread (WP42 P2): the frame
+// becomes an ImageBitmap (transferable) and the worker posts back only
+// { hash, quality }. Where no worker can run, the frame is hashed where it
+// was drawn — the exact path this module used before the worker — so hashes
+// stay bit-identical either way and frame selection is untouched.
+async function hashFrame(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): Promise<{ hash: string; quality: number }> {
+  if (hashWorkerSupported()) {
+    try {
+      const bitmap = await createImageBitmap(ctx.canvas);
+      try {
+        return await hashBitmapInWorker(bitmap);
+      } finally {
+        // After a successful transfer this is a no-op (the worker freed it);
+        // if the post never happened, the bitmap is released here.
+        bitmap.close();
+      }
+    } catch (err) {
+      if (!(err instanceof HashWorkerError)) throw err;
+      // The worker cannot be used; fall through to the main-thread path.
+    }
+  }
+  return computePdqHash(ctx.getImageData(0, 0, width, height));
+}
+
 export async function* sampleVideoFrames(
   file: File,
   options: SampleVideoOptions = {},
@@ -252,8 +283,7 @@ export async function* sampleVideoFrames(
       await waitForVideoEvent(video, "seeked", SEEK_TIMEOUT_MS);
       throwIfAborted(options.signal);
       ctx.drawImage(video, 0, 0, width, height);
-      const imageData = ctx.getImageData(0, 0, width, height);
-      const { hash, quality } = computePdqHash(imageData);
+      const { hash, quality } = await hashFrame(ctx, width, height);
       options.onProgress?.(Math.round((100 * (i + 1)) / times.length));
       yield { hash, quality, t: times[i] };
     }

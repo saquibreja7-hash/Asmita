@@ -477,3 +477,41 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - The age radios' legend reuses the existing "How old are you now?" string, visually hidden — no new sentence was added for it.
 - The wrong-code e2e uses "000000" against a random code; the 1-in-a-million collision is accepted (all codes in every test are synthetic).
 - "Forced submit failure shows an alert" is covered by intercepting `POST /api/auth/request-otp` with a 500 on the email step (no database needed), which exercises the shared FormError on a real failure path.
+
+
+## WP42. Web audit: image and video fingerprinting off the main thread — 2026-11-19
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22). This is an owner-approved best-practice audit work package (P1, P2, P13 and the fallback, CSP and build checks), not a crawler-spec WP; no `crawler/` source changed (the crawler re-ran green only to confirm nothing broke — it imports `pdq.ts`, whose exports and `computePdqHash` are untouched, and its `pdq-contract` test still pins exactly that).
+
+**What was built**
+
+- P1: a module Web Worker (`asmita/src/lib/pdq/hash.worker.ts`) now does the PDQ hashing. The form hands it her chosen file; the worker decodes it (`createImageBitmap`), draws it to an `OffscreenCanvas` at the image's own size and reads the pixels — the same full-resolution path the main thread used, so hashes stay bit-identical. Only `{ hash, quality }` comes back.
+- P2: the vPDQ sampler keeps its frame selection exactly (same seeks, seconds and keep pipeline) and hands each drawn frame to the same worker as a transferable `ImageBitmap`. The page canvas, object URL and bitmaps are freed as before.
+- P13: `SubmitForm` has no static import from the pdq modules any more (only erased type imports); it loads the hashing entry (`hash-file.ts`, which carries the worker client, PDQ and vPDQ) only when a file is chosen. Verified in the builds: the submit chunk contains none of the hashing code; the worker is a separate file in `next dev`, `next build` (Turbopack) and the vinext/Cloudflare build (`dist/client/_next/static/workers/…`).
+- Fallback: Worker/OffscreenCanvas/createImageBitmap missing, or a worker that fails to load (then not retried for the page) → the exact previous main-thread path runs, for images in `hash-file.ts` and per frame in the sampler; a worker that answered once and crashed is rebuilt. Strict reply validation (id, 64-hex hash, integer quality, fixed codes); anything malformed terminates the worker and the request fails with a fixed code the callers treat as "hash on the main thread".
+- CSP: `worker-src 'self'` on every policy; no `blob:` — both bundlers emit the worker as a real same-origin file (verified by loading it with a 200 in the e2e specs).
+- One-line fix found while verifying: the video entry waits one macrotask before its "ready" line replaces the reading line — the worker's async tail let React batch the final 100% progress tick (which WP40 A8 always keeps) with the completion update, so the reading line never visibly reached 100%.
+
+**Tests** (all run, all passing)
+
+- New `asmita/tests/unit/hash-worker.test.ts` — 20 tests: the worker's message handler returns bit-identical hashes to the direct function on all 8 Meta reference vectors (and through the file and bitmap paths with stubbed decode steps); fixed error codes (`decode_failed`, `hash_failed`, `bad_request`), unanswerable messages return null, every touched bitmap is closed (also on failure), and replies serialise to exactly `{id, ok, hash, quality}` / `{id, ok, code}` with no media; plus source pins for the lazy load (P13), the module-worker construction, the frame transfer, both main-thread fallbacks and the CSP.
+- `tests/unit/pdq-reference-vectors.test.ts` and every existing pdq/vpdq test: unchanged and passing (bit-identical hashes; the pure functions and exports are untouched).
+- `tests/unit/csp.test.ts` +1: `worker-src 'self'` on every policy variant, never `blob:`.
+- E2E (chromium, against a throwaway local Postgres 17): `hash-flow.spec.ts` (5) and `video-hash-flow.spec.ts` (3) pass — both journeys now also assert the worker script loads with 200, the video journey still records its progress line ending at 100%, and a new CPU-throttled test proves Cancel stops the video read mid-hash, drops the file and leaves the form usable (no hang on the in-flight worker request). `filing.spec.ts` (3) also passes.
+- Package totals from the final `check.sh` run (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source touched). `asmita` — lint 0 errors (the 4 pre-existing warnings in untouched files, no new ones), type-check clean, `prisma validate` ok, 154 test files / 1286 tests all passed.
+
+**Not done or not verified**
+
+- The full Playwright run is the separate verify step; the WP's own specs and the neighbouring ones that exercise the same page were run here (see Tests).
+- No real phone and no real 12-MP photo were available: the offload is structural, but the milliseconds saved were not measured on real hardware.
+- Safari and Firefox were not driven; their fallback paths are the previous main-thread code, covered by unit tests and source pins.
+- The `/check-image` page is WP43's and was not touched.
+
+**Deviations and decisions, with reasons**
+
+- The worker decodes her file itself (the WP allowed "createImageBitmap on the main thread (or in the worker from the File)"): decoding is the heaviest step for a 12-MP photo, so it moved too.
+- The protocol has a third request kind, `pixels`, next to `file` and `bitmap`: it is the pure inner step both reduce to, and it is what lets the unit tests drive the real handler with the reference vectors in Node, where no DOM APIs exist. The page never posts it.
+- No request can hang: the worker answers every well-formed message — including its own handler throwing — with a fixed refusal code, and replies are validated strictly.
+- Pre-existing e2e race found and worked around in the specs, not the app: after `fill()` the links textarea keeps focus; a click within the 600 ms debounce window (WP40 A7) blurs it, flushing the checks, which renders the checks list and removes the platform question — a reflow that moves the page under the pointer so the click misses the declaration checkbox (a missed click can land on whatever moved there). It reproduces at HEAD (verified with WP42 stashed), and the worker makes it likelier by finishing inside the same window. The specs now wait for the app's own `#url-checks` list and pin `prefers-reduced-motion: reduce` (like the accessibility spec, which also makes the site's smooth scrolling instant). No assertion was weakened; the product edge is recorded for the owner in `asmita/docs/product/web-audit-progress.md`.
+- Also pre-existing on this host and left as found (verified at HEAD, pages untouched by this WP): `forms-focus.spec.ts`'s alert assertion sees Next's own route announcer as a second `role=alert`, and its sign-form checkbox click has the same blur-reflow race on the review-sign page.
+- Local footnote: running `npm run build` leaves `.next/types` behind, which makes the repo's plain `tsc --noEmit` fail on generated validator types until `.next` is removed — a repo-wide footgun unrelated to this WP (check.sh never builds); worth a look in a housekeeping pass.

@@ -29,6 +29,11 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, nonce, env 
   return [
     "default-src 'self'",
     `script-src ${scriptSrc.join(" ")}`,
+    // The PDQ hashing Web Worker (WP42) is a real same-origin script the
+    // bundler emits, so 'self' covers it. blob: is deliberately absent: the
+    // worker is never an inline blob (its URL is a file the bundler emits,
+    // in dev and in both production builds).
+    "worker-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     // The browser opens the signed voice WebSocket straight to Sarvam; the

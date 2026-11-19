@@ -44,7 +44,7 @@ Done when: route, store and migration tests (valid video item, too many frames, 
 
 ### WP18. Fingerprint a video in her browser (client)
 
-- New module `asmita/src/lib/pdq/vpdq.ts`: pure functions for sampling decisions, dedup and capping (unit-tested without a browser), plus a browser sampler that loads her chosen file through an object URL into a hidden `<video>`, seeks to each whole second, draws the frame to a canvas, computes PDQ, and yields `{ hash, quality, t }`. Cancelable, reports progress, frees the object URL and canvas when done.
+- New module `asmita/src/lib/pdq/vpdq.ts`: pure functions for sampling decisions, dedup and capping (unit-tested without a browser), plus a browser sampler that loads her chosen file through an object URL into a hidden `<video>`, seeks to each whole second, draws the frame to a canvas, hands the drawn frame to the hashing Web Worker as a transferable ImageBitmap (WP42; hashed off the main thread, same worker as images, main-thread path where no worker can run), and yields `{ hash, quality, t }`. Cancelable, reports progress, frees the object URL, canvas and frame bitmaps when done.
 - Survivor UI on the submit page (where images are fingerprinted today, `SubmitForm.tsx`) and on her dashboard's add flow: accept video files (`video/*`), show progress ("Reading your video on this device: 42%"), say clearly that the video is not uploaded, then submit the result as a WP17 video item. Unsupported codec or a read failure shows a kind message and suggests converting or choosing another file; nothing is sent.
 - Limits from "The method": 60 minutes, 1,000 frames; longer videos are refused before reading with a clear message.
 

@@ -45,6 +45,21 @@ describe("buildCsp", () => {
     expect(policy).not.toContain("upgrade-insecure-requests");
   });
 
+  it("allows the same-origin PDQ hashing worker, never a blob worker (WP42)", () => {
+    // The hashing worker is a real script file the bundler emits (dev,
+    // next build, vinext build), so 'self' covers it on every page; blob:
+    // would only be needed for an inline worker, which this is not.
+    for (const options of [
+      { nonce: "abc123", env: "production" },
+      { env: "production" },
+      { nonce: "abc123", voice: true, env: "production" },
+      { nonce: "abc123", env: "development" },
+    ]) {
+      const policy = buildCsp(options);
+      expect(directive(policy, "worker-src")).toBe("worker-src 'self'");
+    }
+  });
+
   it("always locks down plugins, base URI, form targets and framing", () => {
     for (const env of ["production", "development"]) {
       const policy = buildCsp({ nonce: "abc123", env });
