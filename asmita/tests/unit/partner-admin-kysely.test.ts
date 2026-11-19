@@ -142,12 +142,14 @@ afterEach(() => {
 describe("actOnPartnerApplication, Kysely path", () => {
   it("approving inserts the partner with the email ciphertext copied as-is, then flips the application", async () => {
     kysely.state.rows.PlatformPartnerApplication = [applicationRow()];
-    kysely.state.rows.PlatformPartner = [{ id: "p-1" }];
+    // An unrelated partner row: the fake answers the insert's RETURNING from
+    // this table, and the ownership check reads its domains first.
+    kysely.state.rows.PlatformPartner = [{ id: "p-1", primaryDomain: "unrelated.example", extraDomains: [] }];
 
     const result = await actOnPartnerApplication({ applicationId: "app-1", action: "approve" }, ACTOR);
     expect(result).toEqual({ ok: true, status: "ONBOARDED", partnerId: "p-1" });
 
-    const inserts = callsOn("PlatformPartner");
+    const inserts = callsOn("PlatformPartner").filter((call) => call.op === "insert");
     expect(inserts).toHaveLength(1);
     expect(inserts[0].detail.onConflict).toBe(true);
     expect(inserts[0].detail.values).toMatchObject({
@@ -181,6 +183,20 @@ describe("actOnPartnerApplication, Kysely path", () => {
     // The status write runs after the insert inside the transaction; on the
     // real database the rollback removes it, so it is never visible.
     expect(kysely.state.updateResults.PlatformPartnerApplication).toBeUndefined();
+  });
+
+  it("refuses a domain another partner owns as an extra domain, before any write", async () => {
+    // Rule 1: one domain, one partner. The existing partner holds
+    // cdn.example-tube.example as an extra domain, so the application for
+    // that domain cannot be onboarded, not even with a different primary.
+    kysely.state.rows.PlatformPartnerApplication = [applicationRow({ websiteDomain: "cdn.example-tube.example" })];
+    kysely.state.rows.PlatformPartner = [partnerRow()];
+
+    const result = await actOnPartnerApplication({ applicationId: "app-1", action: "approve" }, ACTOR);
+    expect(result).toEqual({ ok: false, error: "partner_exists" });
+    expect(callsOn("PlatformPartner").filter((call) => call.op === "insert")).toHaveLength(0);
+    expect(callsOn("PlatformPartnerApplication").filter((call) => call.op === "update")).toHaveLength(0);
+    expect(inMemoryAuditLog).toHaveLength(0);
   });
 
   it("marks contacted with a guarded write, and reports invalid_status when the guard matches nothing", async () => {

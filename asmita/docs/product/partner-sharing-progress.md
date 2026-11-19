@@ -12,7 +12,7 @@ Working notes for `partner-sharing-spec.md`, one entry per work package, appende
 - `src/lib/partner-admin.ts`: application actions (mark contacted, approve, decline), partner domains and channel email, suspend/reactivate, key issue/revoke, "record written permission to crawl" — every action audited (`ADMIN_ACTION`, `partner_*`), memory/Kysely/Prisma paths like the crawl modules.
 - Six admin routes under `/api/admin/partners/…`, all `platforms:edit` + CSRF + strict Zod + per-admin rate limit.
 - Admin console: the requests list on `/admin/partners` gained actions and a platform-partners table; a partner detail page (`/admin/partners/[partnerId]`) lists and edits domains, suspends/reactivates, issues keys (shown once, with copy-and-dismiss), revokes keys, and records the written permission (date + note).
-- Tests (synthetic data only): `tests/unit/partner-auth.test.ts`, `partner-admin.test.ts`, `partner-admin-routes.test.ts`, `partner-admin-kysely.test.ts`, `partner-admin-prisma.test.ts` — 60 tests covering Rules 5 and 6 as WP30 touches them (admin approval gates, keys issued by an admin and shown once, hash-only storage, revocation honoured, suspension stops authentication, one audit entry per action, per-route rate limits, scoped key access, encrypted channel email, no key material or email in audit data).
+- Tests (synthetic data only): `tests/unit/partner-auth.test.ts`, `partner-admin.test.ts`, `partner-admin-routes.test.ts`, `partner-admin-kysely.test.ts`, `partner-admin-prisma.test.ts` — 63 tests covering Rules 5 and 6 as WP30 touches them (admin approval gates, keys issued by an admin and shown once, hash-only storage, revocation honoured, suspension stops authentication, one audit entry per action, per-route rate limits, scoped key access, encrypted channel email, no key material or email in audit data).
 
 **Not verified**
 
@@ -29,7 +29,7 @@ Working notes for `partner-sharing-spec.md`, one entry per work package, appende
 
 - On approval the application's contact email becomes the partner's channel email (the ciphertext is copied as-is, no decrypt/re-encrypt round trip; in memory it is encrypted), and admins can edit or clear it on the detail page — the spec lists `channelEmail` on the model and WP33 sends notices there, so it must be settable somewhere.
 - `crawlPermissionRecordedAt` stores the date the admin enters (the date on the written permission), not the moment of recording; the recording moment is the audit entry. Re-recording overwrites.
-- A domain belongs to one partner: a candidate primary or extra domain that another partner already owns (primary or extra) is refused (`domain_in_use`), so Rule 1's "the reported URLs on that partner's own domains" is never ambiguous.
+- A domain belongs to one partner: a candidate primary or extra domain that another partner already owns (primary or extra) is refused — `domain_in_use` when editing a partner, `partner_exists` when approving an application — so Rule 1's "the reported URLs on that partner's own domains" is never ambiguous. (Review pass, same day: the approve path had checked only primary domains; it now refuses a domain that any partner owns as an extra domain too, before any write, with a test on each backend.)
 - `createdFromApplicationId` carries no foreign key, like `AuditLog.actorId`: provenance, not integrity.
 - Same-status changes answer `409 no_change`; re-approving or re-declining a terminal application answers `409 invalid_status`.
 - Suspending a partner keeps its keys but they stop authenticating until reactivation.

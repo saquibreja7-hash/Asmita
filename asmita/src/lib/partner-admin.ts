@@ -250,6 +250,15 @@ async function setApplicationStatus(applicationId: string, from: PartnerApplicat
 async function insertPartnerFromApplication(application: ApplicationSnapshot): Promise<string> {
   const id = randomUUID();
   const now = new Date();
+  // One domain belongs to one partner (Rule 1: a reported URL on a partner's
+  // own domains must never be ambiguous): the insert is refused not only when
+  // another partner's primary domain matches, but also when any partner holds
+  // the domain as an extra. The unique index below still backstops races.
+  for (const partner of await allPartnerDomains()) {
+    if (partner.primaryDomain === application.websiteDomain || partner.extraDomains.includes(application.websiteDomain)) {
+      throw new PartnerExists();
+    }
+  }
   // On the database paths the application's contact email is already an
   // encryptField payload under the same key, so the ciphertext is copied
   // without a decrypt/re-encrypt round trip; in memory it is plaintext.
@@ -258,9 +267,6 @@ async function insertPartnerFromApplication(application: ApplicationSnapshot): P
     : application.contactEmail;
   if (isDevNoDb()) {
     const memory = partnerMemory();
-    for (const partner of memory.partners.values()) {
-      if (partner.primaryDomain === application.websiteDomain) throw new PartnerExists();
-    }
     memory.partners.set(id, {
       id,
       name: application.platformName,

@@ -159,6 +159,19 @@ describe("application actions", () => {
     expect(await listPlatformPartners()).toHaveLength(1);
   });
 
+  it("an application for a domain another partner owns as an extra is refused (Rule 1)", async () => {
+    seedPartner({ primaryDomain: "owner.example", extraDomains: ["shared.example"] });
+    const application = await seedApplication({ websiteDomain: "shared.example" });
+    expect(await actOnPartnerApplication({ applicationId: application.id, action: "approve" }, ACTOR)).toEqual({
+      ok: false,
+      error: "partner_exists",
+    });
+    expect(application.status).toBe("NEW");
+    // Only the seeded partner exists; nothing was written and nothing audited.
+    expect(await listPlatformPartners()).toHaveLength(1);
+    expect(auditEntries("partner_approved")).toHaveLength(0);
+  });
+
   it("every action writes exactly one audit entry, and no audit data carries the contact email", async () => {
     const application = await seedApplication();
     await actOnPartnerApplication({ applicationId: application.id, action: "approve" }, ACTOR);

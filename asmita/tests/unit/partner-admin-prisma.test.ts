@@ -83,6 +83,8 @@ afterEach(() => {
 describe("actOnPartnerApplication, Prisma path", () => {
   it("approving creates the partner and flips the application inside one transaction", async () => {
     mocked.platformPartnerApplication.findUnique.mockResolvedValue(applicationRow() as never);
+    // The domain-ownership check reads all partners first: none own this domain.
+    mocked.platformPartner.findMany.mockResolvedValue([] as never);
     mocked.platformPartner.create.mockResolvedValue({ id: "p-1" } as never);
     mocked.platformPartnerApplication.updateMany.mockResolvedValue({ count: 1 } as never);
 
@@ -112,6 +114,7 @@ describe("actOnPartnerApplication, Prisma path", () => {
 
   it("a unique violation answers partner_exists and the application is not flipped", async () => {
     mocked.platformPartnerApplication.findUnique.mockResolvedValue(applicationRow() as never);
+    mocked.platformPartner.findMany.mockResolvedValue([] as never);
     mocked.platformPartner.create.mockRejectedValue({ code: "P2002" } as never);
 
     const result = await actOnPartnerApplication({ applicationId: "app-1", action: "approve" }, ACTOR);
@@ -120,8 +123,24 @@ describe("actOnPartnerApplication, Prisma path", () => {
     expect(mocked.platformPartnerApplication.updateMany).not.toHaveBeenCalled();
   });
 
+  it("refuses a domain another partner owns as an extra domain, before any write", async () => {
+    // Rule 1: one domain, one partner. partnerRow() holds
+    // cdn.example-tube.example as an extra domain, so approving an
+    // application for that domain must not create a second owner.
+    mocked.platformPartnerApplication.findUnique.mockResolvedValue(
+      applicationRow({ websiteDomain: "cdn.example-tube.example" }) as never,
+    );
+    mocked.platformPartner.findMany.mockResolvedValue([partnerRow()] as never);
+
+    const result = await actOnPartnerApplication({ applicationId: "app-1", action: "approve" }, ACTOR);
+    expect(result).toEqual({ ok: false, error: "partner_exists" });
+    expect(mocked.platformPartner.create).not.toHaveBeenCalled();
+    expect(mocked.platformPartnerApplication.updateMany).not.toHaveBeenCalled();
+  });
+
   it("a lost status race answers invalid_status", async () => {
     mocked.platformPartnerApplication.findUnique.mockResolvedValue(applicationRow() as never);
+    mocked.platformPartner.findMany.mockResolvedValue([] as never);
     mocked.platformPartner.create.mockResolvedValue({ id: "p-1" } as never);
     mocked.platformPartnerApplication.updateMany.mockResolvedValue({ count: 0 } as never);
 
