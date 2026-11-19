@@ -13,12 +13,12 @@
 
 const BRAND = "#0f5f58"; // Asmita teal
 const BRAND_SOFT = "#eaf4f2";
-const BRAND_LINE = "#cfe3df";
 const INK = "#1c2321";
 const TEXT = "#3a4442";
 const MUTED = "#6b7672";
 const LINE = "#e6e2da";
-const PAGE = "#f6f3ee"; // the site's warm page colour
+const PAGE = "#eef4f2"; // a soft teal tint behind the card
+const BAND = "#0f4f49"; // header band
 const CARD = "#ffffff";
 
 const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans','Noto Sans Devanagari',Arial,sans-serif";
@@ -59,10 +59,18 @@ export type EmailHtmlInput = {
 };
 
 function wordmark() {
-  return `<p style="margin:0;font-family:${SERIF};font-size:24px;line-height:1;color:${BRAND};letter-spacing:0.01em;">Asmita</p>`;
+  // Text, never an image: images are often blocked and can look like tracking.
+  return `<p style="margin:0;font-family:${SERIF};font-size:30px;line-height:1;color:#ffffff;letter-spacing:0.01em;">Asmita</p>
+    <p style="margin:8px 0 0 0;font-family:${SANS};font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#bfe3dc;">Free and confidential</p>`;
 }
 
-function shell(input: { lang: string; preheader: string; body: string; footer: string }) {
+function signoff() {
+  return `<p class="a-ink" style="margin:0 0 3px 0;font-size:15px;font-weight:700;color:${INK};">Team Asmita</p>
+    <p class="a-muted" style="margin:0;font-size:13px;line-height:1.6;color:${MUTED};">Support to remove non-consensual images, free of charge</p>
+    <p style="margin:6px 0 0 0;font-size:13px;"><a href="https://meriasmita.org" class="a-brand" style="color:${BRAND};text-decoration:none;font-weight:600;">meriasmita.org</a></p>`;
+}
+
+function shell(input: { lang: string; preheader: string; body: string; footer: string; signoff: string }) {
   // The preheader padding keeps inbox previews from pulling body text.
   const preheader = `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(input.preheader)}${"&#8199;&#65279;&#847;".repeat(40)}</div>`;
   return `<!doctype html>
@@ -90,11 +98,12 @@ function shell(input: { lang: string; preheader: string; body: string; footer: s
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-page" style="background:${PAGE};">
     <tr><td align="center" style="padding:32px 14px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
-        <tr><td style="padding:0 6px 18px 6px;" class="a-brand">${wordmark()}</td></tr>
         <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-card" style="background:${CARD};border:1px solid ${LINE};border-radius:18px;">
-            <tr><td style="padding:34px 34px 10px 34px;font-family:${SANS};">${input.body}</td></tr>
-            <tr><td class="a-line" style="padding:18px 34px 26px 34px;border-top:1px solid ${LINE};font-family:${SANS};">${input.footer}</td></tr>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-card" style="background:${CARD};border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(15,79,73,0.10);">
+            <tr><td align="center" style="background:${BAND};padding:34px 32px;">${wordmark()}</td></tr>
+            <tr><td style="padding:38px 36px 6px 36px;font-family:${SANS};">${input.body}</td></tr>
+            ${input.signoff ? `<tr><td style="padding:0 36px 8px 36px;font-family:${SANS};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td class="a-line" style="border-top:1px solid ${LINE};padding-top:24px;">${input.signoff}</td></tr></table></td></tr>` : ""}
+            ${input.footer ? `<tr><td style="padding:14px 36px 30px 36px;font-family:${SANS};">${input.footer}</td></tr>` : `<tr><td style="padding:0 0 24px 0;"></td></tr>`}
           </table>
         </td></tr>
         <tr><td align="center" style="padding:18px 6px 0 6px;font-family:${SANS};">
@@ -121,7 +130,7 @@ export function renderEmailHtml(input: EmailHtmlInput): string {
       : "";
     const value = `<p class="a-brand" style="margin:0;font-family:${MONO};font-size:${isCode ? "34px" : "22px"};font-weight:600;letter-spacing:${isCode ? "0.32em" : "0.06em"};line-height:1.2;color:${BRAND};">${escapeHtml(input.highlight)}</p>`;
     highlight = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 22px 0;">
-      <tr><td class="a-box" align="${isCode ? "center" : "left"}" style="background:${BRAND_SOFT};border:1px solid ${BRAND_LINE};border-radius:14px;padding:${isCode ? "22px 16px" : "18px 20px"};">${label}${value}</td></tr>
+      <tr><td class="a-box" align="${isCode ? "center" : "left"}" style="background:${BRAND_SOFT};border-radius:12px;padding:${isCode ? "24px 16px" : "20px 24px"};">${label}${value}</td></tr>
     </table>`;
   }
 
@@ -136,7 +145,7 @@ export function renderEmailHtml(input: EmailHtmlInput): string {
     .map((n) => `<p class="a-muted" style="margin:0 0 8px 0;font-size:12.5px;line-height:1.6;color:${MUTED};">${escapeHtml(n)}</p>`)
     .join("");
 
-  const body = `<p class="a-ink" style="margin:0 0 16px 0;font-size:22px;font-weight:600;line-height:1.35;color:${INK};">${escapeHtml(input.title)}</p>
+  const body = `<p class="a-ink" style="margin:0 0 20px 0;font-size:23px;font-weight:700;line-height:1.35;letter-spacing:-0.2px;color:${INK};">${escapeHtml(input.title)}</p>
     ${paragraphs}
     ${highlight}
     ${cta}`;
@@ -146,6 +155,7 @@ export function renderEmailHtml(input: EmailHtmlInput): string {
     preheader: input.preheader ?? "A message from Asmita.",
     body,
     footer,
+    signoff: signoff(),
   });
 }
 
@@ -159,8 +169,6 @@ export function renderNoticeLetterHtml(subject: string, text: string): string {
   const body = `<p class="a-muted" style="margin:0 0 6px 0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED};">Notice</p>
     <p class="a-ink" style="margin:0 0 22px 0;font-size:18px;font-weight:600;line-height:1.4;color:${INK};">${escapeHtml(subject)}</p>
     <div class="a-text" style="margin:0 0 18px 0;font-family:${SERIF};font-size:15px;line-height:1.65;color:${TEXT};white-space:pre-wrap;word-break:break-word;">${escapeHtml(text)}</div>`;
-  return shell({ lang: "en", preheader: subject, body, footer: "" }).replace(
-    /<tr><td class="a-line"[^>]*><\/td><\/tr>/,
-    "",
-  );
+  // No Asmita sign-off block: the signed text carries its own sign-off.
+  return shell({ lang: "en", preheader: subject, body, footer: "", signoff: "" });
 }
