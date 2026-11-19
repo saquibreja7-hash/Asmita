@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth/middleware";
 import { getCaseForUser } from "@/lib/case-ops";
 import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
 import { CrawlConsent } from "./CrawlConsent";
+import { PartnerShareConsent } from "./PartnerShareConsent";
 import { FoundByAsmita } from "./FoundByAsmita";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
 import { splitUrls } from "./crawl-consent-logic";
@@ -16,6 +17,7 @@ import { PlatformFiledButton } from "./PlatformFiledButton";
 import { getLocale } from "@/lib/get-locale";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
+import { isPartnerShareableStatus } from "@/lib/partner-share-consent";
 import { findSignableHashAdvisory, findSignableNotice } from "@/lib/signable-notice";
 import { findVoidedSignatures } from "@/lib/voided-signatures";
 import { localizeRejectionReason } from "@/lib/rejection-reasons";
@@ -157,6 +159,9 @@ export default async function CasePage({
 
   // Links Asmita's search found are kept apart from the ones she submitted.
   const { own: ownUrls, found: foundUrls } = splitUrls(record.urls);
+  // Approved fingerprints only: nothing can be shared with a partner
+  // platform without one, so the section is hidden without them.
+  const shareableHashes = hashSubmissions.filter((submission) => isPartnerShareableStatus(submission.status));
   // Where things stand is about the links she reported: Asmita's own notices
   // for found links promise no follow-up, so they never say "we follow up".
   const standing = standingOf(ownUrls, hashSubmissions.length);
@@ -282,6 +287,10 @@ export default async function CasePage({
             )}
 
             {hashUploadEnabled && hashSubmissions.length > 0 && <CrawlConsent caseId={record.id} locale={locale} />}
+
+            {hashUploadEnabled && hashSubmissions.length > 0 && (
+              <PartnerShareConsent caseId={record.id} locale={locale} eligibleCount={shareableHashes.length} />
+            )}
 
             <div className="space-y-3">
               <FoldedSection id="actions" title={t(locale, "case.actions.title")} hint={t(locale, "case.actions.hint")}>

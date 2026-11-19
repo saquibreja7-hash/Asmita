@@ -84,6 +84,7 @@ enum TemplateType {
   HASH_ADVISORY
   CRAWL_AUTHORISATION
   CRAWL_REPRESENTATIVE_NOTICE
+  PARTNER_SHARING_CONSENT
 }
 
 // Where a SubmittedUrl came from: the survivor, or an analyst-approved
@@ -201,6 +202,8 @@ enum AuditEventType {
   CRAWL_SOURCE_PROMOTED
   CRAWL_SOURCE_PAUSED
   CRAWL_SOURCE_RESUMED
+  PARTNER_SHARE_CONSENT_GIVEN
+  PARTNER_SHARE_CONSENT_WITHDRAWN
 }
 
 enum DeletionJobStatus {
@@ -263,6 +266,7 @@ model Case {
   hashSubmissions HashSubmission[]
   crawlConsents   CrawlConsent[]
   crawlFindings   CrawlFinding[]
+  partnerShareConsents PartnerShareConsent[]
 
   @@unique([userId, registrationKeyHash])
   @@index([createdAt])
@@ -869,6 +873,32 @@ model PlatformPartnerKey {
   partner PlatformPartner @relation(fields: [partnerId], references: [id])
 
   @@index([partnerId])
+}
+
+// Partner programme part 2 (WP31): the survivor's agreement, given with one
+// tick on her case page, that Asmita may share her fingerprints with partner
+// platforms. One live (not withdrawn) row per case; withdrawn rows stay as
+// the record. No PDF and no signature: the tick is the agreement, and the
+// exact text she ticked against is pinned by templateId + templateDigest,
+// like every signed document. hashSubmissionIds records the fingerprints the
+// case page listed when she ticked; sharing itself follows the live
+// agreement and each fingerprint's own approval (Rule 2, partner-sharing
+// spec), so a fingerprint approved later is covered too and a rejected one
+// is never shared. A fingerprint is shared only while the case is an adult
+// case, the row is live and the fingerprint is approved.
+model PartnerShareConsent {
+  id                String    @id @default(uuid())
+  caseId            String
+  hashSubmissionIds String[]  @default([])
+  // The PARTNER_SHARING_CONSENT template ticked and a digest of its text.
+  templateId        String
+  templateDigest    String
+  agreedAt          DateTime  @default(now())
+  withdrawnAt       DateTime?
+
+  case Case @relation(fields: [caseId], references: [id])
+
+  @@index([caseId])
 }
 
 model DeletionJob {

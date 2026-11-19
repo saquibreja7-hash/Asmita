@@ -13,6 +13,7 @@
     "/case/[caseId]/sign - declaration is legally consequential, English only",
     "/review-sign - as above",
     "Crawl authorisation text (crawl-consent draft on the case page) - legally consequential signing text, English only; the surrounding crawl.* labels are translated",
+    "Partner-sharing agreement text (partner-share draft on the case page) - legally consequential, English only; the surrounding partnerShare.* labels are translated",
     "Platform-specific reporting notes in /resources - references English-language UIs"
   ],
   "machineTranslated": {
@@ -81,7 +82,8 @@
       "case.fingerprints.item",
       "case.close",
       "case.close.closing",
-      "start.dangerCall.label"
+      "start.dangerCall.label",
+      "partnerShare.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
@@ -94,6 +96,7 @@
     "keys": [
       "crawl.*",
       "case.found.*",
+      "partnerShare.*",
       "quickexit.button",
       "quickexit.buttonAria"
     ]

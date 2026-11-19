@@ -182,7 +182,9 @@ describe("account erasure, Kysely path", () => {
     const deleted = await hardDeleteDueUsers(new Date());
     expect(deleted).toEqual(["user-1"]);
     expect(callsOn("CrawlSource")).toHaveLength(0);
+    // PartnerShareConsent rows are deleted with the crawl authorisations, so
+    // nothing of hers stays shareable with a partner platform (WP31).
     expect(kysely.state.calls.filter((call) => call.op === "delete").map((call) => call.table).sort())
-      .toEqual(["CrawlConsent", "CrawlFinding", "Feedback", "OtpToken", "SessionToken"]);
+      .toEqual(["CrawlConsent", "CrawlFinding", "Feedback", "OtpToken", "PartnerShareConsent", "SessionToken"]);
   });
 });

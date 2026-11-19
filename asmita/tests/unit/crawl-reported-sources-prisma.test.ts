@@ -13,6 +13,7 @@ const db = vi.hoisted(() => {
     crawlBlockedHost: { findFirst: fn(), findMany: fn() },
     crawlFinding: { findUnique: fn(), findMany: fn(), deleteMany: fn(), updateMany: fn() },
     crawlConsent: { findMany: fn(), deleteMany: fn() },
+    partnerShareConsent: { deleteMany: fn() },
     submittedUrl: { findMany: fn(), findFirst: fn(), findUnique: fn(), create: fn(), updateMany: fn(), deleteMany: fn() },
     hashSubmission: { updateMany: fn() },
     platform: { findFirst: fn() },
@@ -49,7 +50,7 @@ const CONSENT = { id: "consent-1", hashSubmissionIds: ["h1"], signedAt: new Date
 const zeroCounts: Array<[Record<string, ReturnType<typeof vi.fn>>, string]> = [
   [db.emailDeliveryProof, "deleteMany"], [db.hashDispatch, "updateMany"], [db.escalation, "deleteMany"],
   [db.urlPortalToken, "deleteMany"], [db.submittedUrl, "deleteMany"], [db.crawlFinding, "deleteMany"],
-  [db.crawlConsent, "deleteMany"], [db.hashSubmission, "updateMany"], [db.feedback, "deleteMany"],
+  [db.crawlConsent, "deleteMany"], [db.partnerShareConsent, "deleteMany"], [db.hashSubmission, "updateMany"], [db.feedback, "deleteMany"],
   [db.adminAccessLog, "updateMany"], [db.case, "updateMany"], [db.sessionToken, "deleteMany"],
   [db.otpToken, "deleteMany"], [db.notice, "deleteMany"],
 ];

@@ -5,6 +5,7 @@ import { hashEmail, sha256 } from "@/lib/hash";
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { writeAuditLog } from "@/lib/audit";
 import { eraseCrawlMemoryForCases } from "@/lib/crawl-store";
+import { erasePartnerShareConsentsForCases } from "@/lib/partner-store";
 
 export type CaseRecord = {
   id: string;
@@ -277,6 +278,7 @@ export async function hardDeleteDueUsers(now = new Date()) {
       }
     }
     eraseCrawlMemoryForCases(erasedCaseIds);
+    erasePartnerShareConsentsForCases(erasedCaseIds);
     deactivatedUsers.delete(userId);
     deletedUserIds.push(userId);
     await writeAuditLog({
