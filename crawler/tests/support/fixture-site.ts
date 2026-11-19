@@ -734,6 +734,146 @@ export async function buildLightBrowserFixture(): Promise<Fixture> {
 }
 
 /*
+ * The frames-and-components fixture (crawler v3 WP16). Two sources; no host
+ * here overlaps any other fixture's hosts.
+ *   - frames.fixture.test (render http): the static side. The home page
+ *     embeds an in-scope iframe gallery (/frame-gallery, one planted match),
+ *     an off-scope iframe (outside.test — mapped into the fixture DNS, so a
+ *     wrongly followed frame would land in the request log), an about:blank
+ *     iframe and empty/missing-src iframes (never links), and links a
+ *     frameset page whose <frame src> is a second planted gallery.
+ *   - shadow.fixture.test (render browser): the rendered side. The home page
+ *     carries a web component whose OPEN shadow root holds a two-image
+ *     gallery, an in-scope iframe (/frame-a) and an about:srcdoc frame —
+ *     each with images that exist only as data-src and whose lazy loaders
+ *     wait for an event the page never sends, so nothing but the worker's
+ *     frame/shadow gather can load them — plus an off-scope iframe whose
+ *     navigation must be refused before any request leaves.
+ * outside.test serves a canary page whose image is in the pool: following
+ * the off-scope frame on either path would post its finding.
+ */
+export const FRAMES_HOST = `frames.${SOURCE_DOMAIN}`;
+export const SHADOW_HOST = `shadow.${SOURCE_DOMAIN}`;
+/** The off-scope host both sides' pages embed (mapped into the fixture DNS). */
+export const FRAMES_OFF_HOST = "outside.test";
+
+export async function buildFramesFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const F = FRAMES_HOST;
+  const H = SHADOW_HOST;
+
+  const img = {
+    frame: await patternImage(180, 320, 240, "png"), // static iframe gallery
+    frameB: await patternImage(181, 300, 300, "png"), // static frameset frame
+    shadow: await patternImage(182, 300, 300, "png"), // inside the open shadow root
+    shadowDecoy: await patternImage(183, 300, 300, "png"), // second shadow image, not in the pool
+    frameA: await patternImage(184, 300, 300, "png"), // inside the in-scope iframe
+    srcdoc: await patternImage(185, 300, 300, "png"), // inside the about:srcdoc frame
+    canary: await patternImage(186, 300, 300, "png"), // on outside.test: in the pool, must never be hashed
+  };
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const pool: Pool = {
+    version: "frames-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      { id: "fp-frames-gallery", pdq: await hashOf(img.frame), quality: 100 },
+      { id: "fp-frameset", pdq: await hashOf(img.frameB), quality: 100 },
+      { id: "fp-shadow", pdq: await hashOf(img.shadow), quality: 100 },
+      { id: "fp-frame-a", pdq: await hashOf(img.frameA), quality: 100 },
+      { id: "fp-srcdoc", pdq: await hashOf(img.srcdoc), quality: 100 },
+      { id: "fp-outside-canary", pdq: await hashOf(img.canary), quality: 100 },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-frames-gallery", pagePath: "/frame-gallery", imageHost: F, imagePath: "/img/frame.png" },
+    { fingerprintId: "fp-frameset", pagePath: "/frame-b", imageHost: F, imagePath: "/img/frame-b.png" },
+    { fingerprintId: "fp-shadow", pagePath: "/", imageHost: H, imagePath: "/img/shadow-1.png" },
+    { fingerprintId: "fp-frame-a", pagePath: "/", imageHost: H, imagePath: "/img/frame-a.png" },
+    { fingerprintId: "fp-srcdoc", pagePath: "/", imageHost: H, imagePath: "/img/srcdoc.png" },
+  ];
+
+  const robots = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+
+  // ---- static side: frames.fixture.test ----
+  site.route(F, "/robots.txt", robots);
+  site.route(
+    F,
+    "/",
+    sendHtml(
+      html(`
+        <a href="/frameset">Frameset</a>
+        <iframe src="/frame-gallery"></iframe>
+        <iframe src="${o(FRAMES_OFF_HOST)}/never"></iframe>
+        <iframe src="about:blank"></iframe>
+        <iframe src=""></iframe>
+        <iframe></iframe>
+      `),
+    ),
+  );
+  site.route(F, "/frame-gallery", sendHtml(html(`<img src="/img/frame.png" width="320" height="240">`)));
+  site.route(F, "/frameset", sendHtml(`<!DOCTYPE html><html><head></head><frameset><frame src="/frame-b"></frameset></html>`));
+  site.route(F, "/frame-b", sendHtml(html(`<img src="/img/frame-b.png" width="300" height="300">`)));
+  site.route(F, "/img/frame.png", sendBytes(img.frame, "image/png"));
+  site.route(F, "/img/frame-b.png", sendBytes(img.frameB, "image/png"));
+
+  // ---- rendered side: shadow.fixture.test ----
+  // The galleries exist only as data-src, and the page's lazy loaders wait
+  // for "asmita-activate" — an event nothing ever sends — so the images are
+  // loaded only by the worker's frame/shadow gather (crawler v3 WP16).
+  const neverFires = `
+      document.addEventListener("asmita-activate", function () {
+        document.body.querySelectorAll("img").forEach(function (i) { i.src = i.dataset.src; });
+      });`;
+  site.route(H, "/robots.txt", robots);
+  site.route(
+    H,
+    "/",
+    sendHtml(
+      html(`
+        <gallery-comp></gallery-comp>
+        <iframe src="/frame-a"></iframe>
+        <iframe srcdoc="<img data-src='/img/srcdoc.png'>"></iframe>
+        <iframe src="${o(FRAMES_OFF_HOST)}/never"></iframe>
+        <script>
+          customElements.define("gallery-comp", class extends HTMLElement {
+            connectedCallback() {
+              const root = this.attachShadow({ mode: "open" });
+              root.innerHTML = "<img data-src='/img/shadow-1.png'><img data-src='/img/shadow-2.png'>";
+            }
+          });
+          ${neverFires}
+        </script>
+      `),
+    ),
+  );
+  site.route(
+    H,
+    "/frame-a",
+    sendHtml(
+      html(`
+        <img data-src="/img/frame-a.png">
+        <script>${neverFires}</script>
+      `),
+    ),
+  );
+  site.route(H, "/img/shadow-1.png", sendBytes(img.shadow, "image/png"));
+  site.route(H, "/img/shadow-2.png", sendBytes(img.shadowDecoy, "image/png"));
+  site.route(H, "/img/frame-a.png", sendBytes(img.frameA, "image/png"));
+  site.route(H, "/img/srcdoc.png", sendBytes(img.srcdoc, "image/png"));
+
+  // ---- the off-scope host (never to be requested, not even its robots.txt) ----
+  site.route(FRAMES_OFF_HOST, "/robots.txt", robots);
+  site.route(FRAMES_OFF_HOST, "/never", sendHtml(html(`<img src="/canary.png">`)));
+  site.route(FRAMES_OFF_HOST, "/canary.png", sendBytes(img.canary, "image/png"));
+
+  const allHashes: string[] = [];
+  for (const b of [img.frame, img.frameB, img.shadow, img.shadowDecoy, img.frameA, img.srcdoc, img.canary]) allHashes.push(await hashOf(b));
+  return { site, pool, expected, allHashes };
+}
+
+/*
  * The discovery fixture (crawler v2 WP5): a chain of sites, each linking the
  * next, plus the negatives. a.test is the only source a run starts with; its
  * home page links b.test (discovered, hops 1) and never.test (on the

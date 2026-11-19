@@ -34,9 +34,18 @@
  *     counted against the per-page request cap, which therefore keeps its
  *     room for the page's images (blocked-requests.ts);
  *   - after scrolling, the render waits for network quiet instead of a
- *     fixed wait: no request in flight for the quiet window, so a slow or
- *     chained lazy-loader is waited for, bounded by the page's deadline and
+ *     fixed wait: no request in flight for 500 ms, so a slow or chained
+ *     lazy-loader is waited for, bounded by the page's deadline and
  *     never longer than the old fixed wait on a page that is quiet already;
+ *   - crawler v3 WP16: after the quiet wait the render gathers image
+ *     candidates from every frame (page.frames(), about:srcdoc frames
+ *     included) and from open shadow roots — the same candidates the static
+ *     extractor reads — and makes the browser load the ones the page has
+ *     not requested. Those loads are ordinary routed image requests: same
+ *     proxy, same robots verdict, same request and image caps, and an
+ *     out-of-scope frame contributes nothing: its navigation is refused
+ *     before any request leaves (scope and robots checks as before), so
+ *     it keeps only the empty initial document;
  *   - image bytes are taken from the fetched responses, in memory, capped
  *     per image, and handed to the parent as they arrive, under the address
  *     of the hop that served them;
@@ -51,6 +60,7 @@
  *     could print (a URL, page text) reaches the logs.
  */
 import { chromium, type Browser, type BrowserContext as Context, type Page, type Route } from "playwright-core";
+import { IMAGE_EXT, LAZY_SRC_ATTRS, LAZY_SRCSET_ATTRS, largestFromSrcset, styleBackgroundImages } from "../crawl/extract.ts";
 import { inScope } from "../crawl/url.ts";
 import { blockedRequestHost, blockedResourceType } from "./blocked-requests.ts";
 import { CHROMIUM_ARGS } from "./chromium-args.ts";
@@ -80,6 +90,19 @@ const EVALUATE_TIMEOUT_MS = 5_000;
 const QUIET_MS = 500;
 /** How often the network-quiet wait re-checks the in-flight set. */
 const QUIET_POLL_MS = 25;
+/**
+ * Crawler v3 WP16: frames one render's gather walks (page.frames() is
+ * unbounded, so the walk is capped; the main frame is always first).
+ */
+const MAX_GATHER_FRAMES = 64;
+/** Raw candidate strings taken from one frame's DOM per list. */
+const MAX_GATHER_RAW = 200;
+/** Elements the in-page walk visits per frame (a hostile page is bounded). */
+const MAX_GATHER_VISITS = 20_000;
+/** Forced loads started per page.evaluate, so one bad chunk cannot stall. */
+const GATHER_CHUNK = 16;
+/** Routed request URLs remembered per render, for the gather's dedup. */
+const MAX_REMEMBERED_URLS = 4096;
 
 let browser: Browser | null = null;
 let proxyPort = 0;
@@ -104,6 +127,12 @@ type Task = {
   mainRedirect: string | null;
   /** Requests still being fetched (their images may not have been sent yet). */
   inflight: Set<Promise<void>>;
+  /**
+   * The hop-0 URLs the page's requests were routed under (crawler v3 WP16):
+   * what the gather must not ask for again, whether they were served or
+   * refused. Bounded by MAX_REMEMBERED_URLS.
+   */
+  routedUrls: Set<string>;
 };
 
 const tasks = new Map<number, Task>();
@@ -230,6 +259,151 @@ async function waitNetworkQuiet(task: Task): Promise<void> {
 }
 
 /**
+ * Crawler v3 WP16: the in-page half of the gather. Walks one frame's DOM —
+ * OPEN shadow roots included, closed ones are invisible by design — and
+ * returns the raw image-candidate attributes the static extractor would
+ * read: an <img> that has not loaded (its src), raw srcsets, the lazy
+ * data-* attributes, <video> posters, inline background styles, and anchor
+ * hrefs straight to an image file. It resolves and fetches nothing; the
+ * worker decides what to load. Bounded: elements visited, raw strings per
+ * list, and one evaluate per frame (the render deadline bounds them all).
+ */
+const GATHER_SCRIPT = `(() => {
+  const out = { base: document.baseURI, urls: [], srcsets: [], styles: [], anchors: [] };
+  const lazy = ${JSON.stringify(LAZY_SRC_ATTRS)};
+  const lazyset = ${JSON.stringify(LAZY_SRCSET_ATTRS)};
+  // Mirrors extract.ts IMAGE_EXT, tolerant of a query string or fragment;
+  // the worker re-checks the parsed pathname with the real rule.
+  const toImage = /\\.(jpe?g|png|gif|webp|avif)(?:[?#][\\s\\S]*)?$/i;
+  let visits = 0;
+  const push = (list, v) => {
+    if (typeof v === "string" && v.trim() !== "" && list.length < ${MAX_GATHER_RAW}) list.push(v);
+  };
+  // An icon or spacer by declared size is no candidate (extract.ts rule).
+  const tiny = (el) => {
+    const w = Number(el.getAttribute("width"));
+    const h = Number(el.getAttribute("height"));
+    return (Number.isFinite(w) && w > 0 && w < 32) || (Number.isFinite(h) && h > 0 && h < 32);
+  };
+  const walk = (el) => {
+    if (visits >= ${MAX_GATHER_VISITS}) return;
+    visits++;
+    const tag = el.tagName;
+    if (tag === "IMG" && !tiny(el)) {
+      if (!(el.complete && el.naturalWidth > 0)) push(out.urls, el.getAttribute("src"));
+      for (const a of lazy) push(out.urls, el.getAttribute(a));
+      push(out.srcsets, el.getAttribute("srcset"));
+      for (const a of lazyset) push(out.srcsets, el.getAttribute(a));
+    } else if (tag === "SOURCE") {
+      push(out.srcsets, el.getAttribute("srcset"));
+    } else if (tag === "VIDEO") {
+      push(out.urls, el.getAttribute("poster"));
+    } else if (tag === "A") {
+      const href = el.getAttribute("href");
+      if (typeof href === "string" && toImage.test(href.trim())) push(out.anchors, href);
+    }
+    const style = el.getAttribute("style");
+    if (typeof style === "string" && style.indexOf("background") >= 0) push(out.styles, style);
+    const shadow = el.shadowRoot;
+    if (shadow) for (const c of shadow.children) walk(c);
+    for (const c of el.children) walk(c);
+  };
+  for (const c of document.documentElement.children) walk(c);
+  return out;
+})()`;
+
+/**
+ * Starts the loads the gather decided on. The URLs are inlined into the
+ * expression: Playwright runs a string argument as an expression, not as a
+ * function to call with the second argument, so the callable form
+ * (fn, args) silently does nothing here.
+ */
+const forceLoad = (urls: string[]): string =>
+  `(function (urls) { for (const u of urls) { var i = new Image(); i.src = u; } })(${JSON.stringify(urls)})`;
+
+/**
+ * Crawler v3 WP16: galleries in frames and components. The page's own
+ * scripts are not the only thing that can name an image: a gallery can live
+ * inside a frame (an iframe document, an about:srcdoc frame) or inside a
+ * web component's open shadow root, and its images may never be requested
+ * by the page itself (a lazy loader waiting for an event that never comes,
+ * or a frame nobody scrolls). After the network-quiet wait the render walks
+ * every frame of the page and every open shadow root, collects the same
+ * image candidates the static extractor reads, and makes the browser load
+ * the ones the page has not asked for — as ordinary image requests, so they
+ * leave through the same proxy, wait for the same robots verdict, and count
+ * against the same request and image caps as the page's own images. Nothing
+ * is loaded that the page requested already (served or refused), nothing
+ * beyond the remaining image slots, and an out-of-scope frame contributes
+ * nothing: its navigation was refused before any request left, so it
+ * keeps only the empty initial document and the walk of it finds no
+ * candidates. Returns the number of loads started.
+ */
+async function gatherFrameImages(task: Task): Promise<number> {
+  const page = task.page;
+  if (page === null || task.done) return 0;
+  const room = task.msg.maxImages - task.imagesSent - task.imagesSkipped;
+  if (room <= 0) return 0;
+  const wanted: string[] = [];
+  const seen = new Set<string>();
+  /** One raw candidate string, resolved against the frame's base URL. */
+  const consider = (raw: string, base: URL, anchor: boolean): void => {
+    let url: URL;
+    try {
+      url = new URL(raw.trim(), base);
+    } catch {
+      return;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return;
+    url.hash = "";
+    if (/\.svgz?$/i.test(url.pathname)) return; // the static extractor's svg rule
+    if (anchor && !IMAGE_EXT.test(url.pathname)) return;
+    const href = url.href;
+    if (seen.has(href) || task.routedUrls.has(href)) return;
+    seen.add(href);
+    if (wanted.length < room) wanted.push(href);
+  };
+  for (const frame of page.frames().slice(0, MAX_GATHER_FRAMES)) {
+    if (task.done || wanted.length >= room) break;
+    let found: unknown;
+    try {
+      found = await bounded(task, frame.evaluate(GATHER_SCRIPT), EVALUATE_TIMEOUT_MS);
+    } catch {
+      continue; // a detached frame, or a script that blocked the evaluate
+    }
+    const g = found as { base?: unknown; urls?: unknown; srcsets?: unknown; styles?: unknown; anchors?: unknown } | null;
+    if (g === null || typeof g !== "object" || typeof g.base !== "string") continue;
+    let base: URL;
+    try {
+      base = new URL(g.base);
+    } catch {
+      continue;
+    }
+    for (const raw of Array.isArray(g.urls) ? g.urls : []) if (typeof raw === "string") consider(raw, base, false);
+    for (const raw of Array.isArray(g.srcsets) ? g.srcsets : []) {
+      if (typeof raw !== "string") continue;
+      const best = largestFromSrcset(raw);
+      if (best !== null) consider(best, base, false);
+    }
+    for (const raw of Array.isArray(g.styles) ? g.styles : []) {
+      if (typeof raw !== "string") continue;
+      for (const u of styleBackgroundImages(raw)) consider(u, base, false);
+    }
+    for (const raw of Array.isArray(g.anchors) ? g.anchors : []) if (typeof raw === "string") consider(raw, base, true);
+  }
+  for (let i = 0; i < wanted.length; i += GATHER_CHUNK) {
+    if (task.done) break;
+    const chunk = wanted.slice(i, i + GATHER_CHUNK);
+    try {
+      await bounded(task, page.evaluate(forceLoad(chunk)), EVALUATE_TIMEOUT_MS);
+    } catch {
+      break; // the page is gone or blocked the evaluate: whatever started stays
+    }
+  }
+  return wanted.length;
+}
+
+/**
  * One intercepted request, fetched here hop by hop (redirects are never
  * left to Chromium, which would follow them unrouted). Every hop: request
  * cap, scope for navigations, robots verdict; then a fetch through the
@@ -269,6 +443,9 @@ async function handleRoute(task: Task, route: Route): Promise<void> {
       return void (await abort());
     }
     if (u.protocol !== "http:" && u.protocol !== "https:") return void (await abort());
+    // Crawler v3 WP16: the first hop's address is what the page asked for —
+    // the gather must not ask for it again, whether it was served or refused.
+    if (hop === 0 && task.routedUrls.size < MAX_REMEMBERED_URLS) task.routedUrls.add(u.href);
     // The host check again on every redirect hop, so nothing that is
     // followed can end on a blocked host either.
     if (blockedRequestHost(u)) return void (await abort());
@@ -334,6 +511,7 @@ async function handleRender(msg: RenderMessage): Promise<void> {
     imagesSkipped: 0,
     mainRedirect: null,
     inflight: new Set(),
+    routedUrls: new Set(),
   };
   tasks.set(msg.id, task);
   // The render's own deadline; the parent SIGKILLs this process if even
@@ -398,6 +576,14 @@ async function handleRender(msg: RenderMessage): Promise<void> {
     // so late and chained lazy-loaders are waited for and their images are
     // not lost, bounded by the page's deadline.
     if (!task.done) await waitNetworkQuiet(task);
+
+    // Crawler v3 WP16: galleries in frames and components. After the page
+    // has settled, the render gathers image candidates from every frame and
+    // open shadow root and makes the browser load the ones the page never
+    // asked for; the extra requests are ordinary routed image requests, so
+    // the quiet wait runs once more to let them (and their bytes) arrive. A
+    // page that needs nothing extra gathers nothing and waits no longer.
+    if (!task.done && !!(await gatherFrameImages(task)) && !task.done) await waitNetworkQuiet(task);
 
     const html = await bounded(task, page.content(), EVALUATE_TIMEOUT_MS);
     const truncated = html.length > msg.maxHtmlBytes;
