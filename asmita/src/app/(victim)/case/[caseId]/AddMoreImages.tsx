@@ -84,7 +84,10 @@ export function AddMoreImages({ caseId, locale }: { caseId: string; locale: Loca
         accept="image/*"
         multiple
         onChange={onContinue}
-        aria-label={t(locale, "case.watch.addImages")}
+        // Distinct from the visible button's name ("Add more images"): the
+        // hidden chooser is its own control for assistive tech, and a duplicate
+        // name made the page ambiguous (two "Add more images" buttons).
+        aria-label={t(locale, "watch.images.label")}
         className="sr-only"
         tabIndex={-1}
       />

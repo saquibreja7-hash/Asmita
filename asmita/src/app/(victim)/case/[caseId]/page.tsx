@@ -211,7 +211,12 @@ export default async function CasePage({
                   <>
                     <p className="eyebrow">{t(locale, "case.watch.pill")}</p>
                     <h2 id="watch-status-title" className="subsection-title mt-2">{t(locale, "case.watch.notWatching.title")}</h2>
-                    <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.watch.notWatching.sub")}</p>
+                    {/* A stop deleted her fingerprints: the record says so,
+                        instead of the generic "off" line that would hide a
+                        data deletion from her. */}
+                    <p className="muted mt-3 text-sm leading-[1.75]">
+                      {t(locale, consentState.status === "withdrawn" ? "watch.state.withdrawn" : "case.watch.notWatching.sub")}
+                    </p>
                   </>
                 )}
               </section>
