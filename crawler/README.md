@@ -76,7 +76,12 @@ main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
                 final /index.html) is kept once, https preferred (WP10);
                 iframe and frame srcs are page links (WP16)
          per image: SafeFetcher -> Buffer -> hash-image.ts (sniff, sharp,
-                    prepare.ts, pdq.ts) -> Matcher -> FindingsSink
+                    prepare.ts, pdq.ts) -> PoolMatcher (the image pool through
+                    the brute-force Matcher, plus the video fingerprints'
+                    frame index — WP20; one preview image within the
+                    threshold of any frame of a survivor video is a match
+                    for that video's pool id, the thumbnail clause of the
+                    video match rule) -> FindingsSink
          POST /frontier/report (page outcomes + links of kinds page,
                 sitemap and feed — pagination links flagged, sitemap
                 <lastmod> entries riding as strict ISO so the app can make a
@@ -192,6 +197,7 @@ whose home page failed permanently, once each; no hostname is ever logged.
 | **No retries for what cannot work (WP13).** Fetch failures are classified: a DNS name that does not exist and a definite TLS certificate failure (expired, wrong name, self-signed) are permanent — never retried in the run, and reported `error` carrying the `permanent` hint so the app kills the row only on a second permanent failure at least 24 h after the first; one bad resolver answer or one bad hour never kills a page. Environment-type certificate failures (`tls_unverified`: a missing local issuer, a non-TLS answer on the TLS port), timeouts, connection resets and refusals and 5xx are temporary and keep the app's 1 h / 6 h / 24 h error backoff (429/503 unchanged). A permanent failure of a source's robots.txt is rethrown, not treated as "unreachable robots", and never cached: the next request to the origin asks again, so the dead-host verdict cannot condemn every page of the origin for the rest of the run — but the page fetch that asked still reports the permanent failure. The summary counts failures by class (`failures.permanent` / `failures.temporary`) and the sources whose home page failed permanently, once each (`homePermanentFailures`) — counts only, never a hostname. | `errors.ts` (`fetchFailureClass`), `net/policy.ts`, `crawl/robots.ts`, `crawler.ts`, `metrics.ts`. | `tests/unit/failure-classes.test.ts` (each class, the narrowed TLS split, the retry decision, the resolver split, the robots pass-through and its no-cache rule, the summary counters); `tests/integration/permanent-failures.test.ts` (a DNS-dead source reports its home page `error` with the permanent hint — three probes, no retry — the row dies only on a second permanent failure 24 h later and a further run claims nothing; 500/502/reset/429 keep today's in-run retries and the 1 h backoff; the log scan) |
 | **Fake "not found" pages are cut (WP14).** A site that answers every unknown path with the same 200 "not found" page cannot keep the frontier busy forever: within one run and one source the crawler digests each fetched HTML body (normalised — whitespace collapsed, digits stripped — so a template that echoes only the requested id or page number is recognised across URLs) and, once one digest has appeared on five or more distinct URLs, treats every further page with it as a soft-404: no images, no links, no render, reported `gone` so the app kills the row. Genuinely different pages (different words, different image addresses) stay distinct and are never cut. The digests live in memory only, are never logged (rule 3), hold 16-byte hashes only — never a URL or body — and the map is bounded (see the bounded-frontier row); a killed run loses it whole, which is safe. Counted as `pagesSoft404` (soft-404s are still fetched pages: the body must be read to recognise one). | `crawl/soft404.ts`, `crawler.ts`, `metrics.ts`. | `tests/unit/soft404.test.ts` (the normalisation, the 5-distinct-URL boundary, distinct-URL counting, digest independence, the bounded LRU map); `tests/integration/soft404.test.ts` (the spec's done-when: a fixture site answering every unknown path with the same not-found page is cut off — first five template URLs fetched, the rest `gone` with linkless reports, one finding, one image request — and nine genuinely similar gallery pages with different images are all fetched, extracted and reported fetched) |
 | **Withdrawn fingerprints stop matching.** Pool re-synced at least hourly; a pool older than 60 minutes stops the run; queued findings for removed ids are dropped; a `fingerprint_not_accepted` rejection removes the id from the in-memory pool at once. | `crawler.ts`, `findings.ts`, `match/matcher.ts`. | `tests/integration/lifecycle.test.ts`, `client-findings.test.ts` |
+| **Video frames match the same way (video-fingerprints spec WP20).** The pool's video entries are indexed by multi-index hashing over their frame hashes (16 chunk tables per frame, probe radius floor(threshold/16)); one preview image within the threshold of any frame is a finding for the video's pool id, reported through the unchanged finding contract and reviewed by a person. The same withdrawal, re-sync and staleness rules cover video ids (one composite matcher, `match/pool-matcher.ts`); the run summary counts `videoMatches` separately, and no frame hash is ever logged. Phase 2 never fetches video bytes: only images are downloaded and decoded, in the existing isolated decoder child under the existing budgets. | `match/video-index.ts`, `match/pool-matcher.ts`, `crawler.ts`, the app's `crawl-pool.ts`. | `tests/unit/video-index.test.ts` (brute-force property test, the pigeonhole boundary at every distance 0..31, withdrawal, thresholds), `tests/unit/pool-matcher.test.ts`, `tests/unit/pool-contract.test.ts`, `tests/integration/video-pool.test.ts` (poster match end to end, `<video src>` never requested, withdrawal of a video id, log scan) |
 | **Fail closed config**, no setting that loosens the network policy. Loopback access for tests is a policy object injected in code from `tests/support/test-policy.ts`. | `config.ts`. | `config-policy.test.ts` (schema has no such key; `src/` network code never mentions loopback) |
 | **Same PDQ as the browser.** | `src/pdq.ts` re-exports `asmita/src/lib/pdq/pdq.ts` (bundled at build). | `tests/unit/pdq-contract.test.ts` (exact export list, version, types, golden hash) |
 
@@ -254,6 +260,24 @@ capped at 31. Every pool entry within the threshold becomes its own finding,
 best first (one picture can be in several survivors' submissions).
 `npm run bench:matcher` on a laptop (Node 22): about **0.9 ms per query at
 100,000 fingerprints** and about 13 ms at 1,000,000.
+
+Video fingerprints (video-fingerprints spec WP20) match through the same
+threshold with one difference: the pool entry is a whole video, so what is
+indexed is its kept frame hashes — at most 1,000 per video, easily 100k+
+across a pool, where a brute-force scan per crawled image would dominate.
+`src/match/video-index.ts` splits each frame hash into 16 chunks of 16 bits
+and indexes every chunk (multi-index hashing): a query within distance t of
+a frame must sit within floor(t/16) bits (1 at the capped threshold) on at
+least one chunk, so probing each chunk table for near-exact values finds
+every frame within t while touching a fraction of the pool. A BK-tree was
+rejected: at radius 31 of 256 bits it degrades towards a linear scan. Match
+rule (Phase 2): one preview image within the threshold of any frame of a
+video is a finding for that video's pool id — the thumbnail clause; the
+3-frames clause needs a crawl that samples an online video, which Phase 2
+never does. One image can match several videos and image entries; each is
+its own finding, reviewed by a person like any other. `npm run
+bench:video` (Node 22, container): about **0.23 ms per query at 100,000
+frames** and 0.43 ms at 1,000,000.
 
 ## Decoder isolation
 
@@ -553,7 +577,7 @@ page whose render fails falls back to its static result.
 
 Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
-- `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality }] }`. Video fingerprints (algorithm `VPDQ`, video-fingerprints spec WP17) are **never** in this pool: the crawler would misread a video's frame list as one image hash, so they are excluded on every backend (spec rule 3) until WP20 serves them as `kind: "video"` with a frame index.
+- `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality } | { id, kind: "video", frames: [64-hex] }] }`. Two entry kinds since video-fingerprints spec WP20: image fingerprints exactly as before, and approved, consented video fingerprints (algorithm `VPDQ`) as one entry per video carrying its kept frame hashes — hashes only, never qualities, timestamps or bytes. The crawler indexes the frames for lookup (`src/match/video-index.ts`) and reports a match against the video's pool id like an image match, for human review; until WP20 the pool served no video fingerprint at all (the pre-WP20 rule 3).
 - `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs, origin: "admin" | "reported" | "discovered", hops, render: "http" | "browser" | "auto" }] }`. `origin` says how a site entered the list: an admin added it, a survivor's submitted link or an approved finding named its host (crawler v2 WP1; the app copies the host only, never the link or the case), or the crawler discovered it by following links (WP5). `hops` is how far it sits from a human-added or survivor-reported site. `render` (WP7) says how its pages are fetched: `http` never launches a browser, `browser` renders every page in Chromium, `auto` renders only pages whose HTML has scripts and no image candidates. The crawler treats every enabled source the same whatever its origin.
 - `POST /api/crawler/frontier/claim` `{ sourceId, limit (1..200) }` -> `{ urls: [{ id, url, depth, etag?, lastModified? }] }` (crawler v2 WP3). The app's frontier: the next due pages of one source, in priority order (priority, then nextDueAt — crawler v3 WP11), claimed for 30 minutes so two crawler instances never get the same URL. A source with no rows yet gets its seed (`https://<domain>/`) created on the first claim. An empty batch means nothing is due (the daily `pageBudget` counts too); an unknown or disabled source answers empty, never an error.
 - `POST /api/crawler/frontier/report` `{ sourceId, runId, pages: [{ id, status: "fetched" | "not_modified" | "gone" | "blocked" | "error", etag?, lastModified?, failure?: "permanent" (only with status `error`, crawler v3 review fix WP13), aliases?: [{ in-scope canonical URL }] (max 20, crawler v3 WP10), links: [{ url, kind: "page" | "sitemap" | "feed", pagination?: true, lastmod?: ISO date }] (max 500) }] }` -> `{ accepted: number }` (crawler v2 WP3). The app schedules the next visit (24 h after fetched, doubling after not_modified up to 14 days, 1 h / 6 h / 24 h after error and dead after five failures, gone dead), stores the new in-scope links deduplicated per source on a keyed digest — checked against the legacy digests of a pre-WP10 row's spellings too, so no duplicate of an existing row is stored (review fix 4) — and counts the pages against the source budget. The optional `pagination` flag and `lastmod` (crawler v3 WP11) set the stored row's priority — sitemap 10, feed 20, pagination 30, other pages 50 plus 10 per depth level, the seed 50 — and an entry whose lastmod (clamped to now) is newer than the row's last fetch makes it priority 5 and due now, one shot: a successful visit resets the row to its kind/depth value (review fix 8). A row never fetched, a dead row and a row the same report fetched are never jumped. An `error` carrying `failure: "permanent"` (review fix 7) backs off like any error on the first attempt and is remembered on the row; the row dies only on a permanent failure at least 24 h after the first, and a successful visit clears the memory. The optional `aliases` are a fetched page's `<link rel="canonical">` targets (in scope, never fetched because they are canonical): the app marks any live row for an alias dead and stores a digest-only dead "tombstone" row when there is none, so the same content is never fetched twice and a later link to it never becomes a live row; the digest applies the same shared normalisation as the crawler's dedup key, and rows stored before it keep their stored digest. Retry-safe: a report the server applied but the crawler never saw answered only moves schedules forward. The scope check the crawler does is repeated by the app on every link and alias.
@@ -601,7 +625,9 @@ batch (`batchPeak`), links dropped by the per-page cap or skipped as
 non-content / by the query-variant cap, distinct out-of-scope hosts
 seen/reported/capped as discoveries (`discoveryHostsSeen`,
 `discoveryHostsReported`, `discoveryHostsCapped`), images
-seen/hashed/skipped by reason, matches, findings
+seen/hashed/skipped by reason, matches (every pool hit; video matches — a
+frame of a survivor video within the threshold, WP20 — counted again in
+`videoMatches`), findings
 queued/posted/accepted/rejected (by reason)/withdrawn/invalid/failed/unsent,
 pool syncs, robots outcomes, errors by code, fetch failures by class
 (`failures.permanent` / `failures.temporary`, crawler v3 WP13) and sources
@@ -610,7 +636,7 @@ source), page and image budget used.
 Every `PROGRESS_LOG_SECONDS` a `run_progress` line (WP6) carries the
 mid-run view of the same counters: sources active, pages
 claimed/fetched/not-modified, new URLs, new hosts reported, images hashed,
-matches. Counts only, like every line.
+matches (video matches within them). Counts only, like every line.
 
 ## Running locally
 
@@ -620,6 +646,7 @@ npm ci
 npm run check            # lint + type-check + tests + build
 npm run mock             # full crawl of a local fixture site against a mock API
 npm run bench:matcher    # matcher benchmark (default 100k fingerprints)
+npm run bench:video      # video frame index benchmark (default 100k frames)
 ```
 
 `npm run mock` uses the test-only loopback policy (injected in code) and

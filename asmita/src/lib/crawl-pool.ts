@@ -17,9 +17,12 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * still holds after a withdrawal matches nothing. No case, user or email data
  * is ever part of the pool.
  *
- * Video fingerprints (algorithm VPDQ) are never in the pool: the crawler
- * would misread their frame lists as one image hash (video-fingerprints spec
- * rule 3). WP20 will serve them as kind "video" with a frame index.
+ * Video fingerprints (algorithm VPDQ, video-fingerprints spec WP20) are in
+ * the pool as their own shape: { id, kind: "video", frames } with the kept
+ * frame hashes the survivor's browser computed on her device — hashes only,
+ * never qualities or timestamps, never bytes. The crawler indexes the frames
+ * (multi-index hashing) and reports a match against the video's pool id
+ * exactly like an image match, for human review.
  */
 
 /** PDQ Hamming distance the crawler may report as a possible match. */
@@ -28,10 +31,22 @@ export const CRAWL_MATCH_THRESHOLD = 31;
 const POOL_STATUSES = ["APPROVED", "DISPATCHED"] as const;
 const PDQ = /^[0-9a-f]{64}$/;
 
-export type CrawlPoolEntry = { id: string; pdq: string; quality: number };
+export type CrawlPoolImageEntry = { id: string; pdq: string; quality: number };
+export type CrawlPoolVideoEntry = { id: string; kind: "video"; frames: string[] };
+export type CrawlPoolEntry = CrawlPoolImageEntry | CrawlPoolVideoEntry;
 export type CrawlPool = { version: string; generatedAt: string; threshold: number; fingerprints: CrawlPoolEntry[] };
 
-type Candidate = { id: string; caseId: string; crawlPoolId: string | null; hashEncrypted: string; quality: number; status: string; algorithm: string };
+type Candidate = {
+  id: string;
+  caseId: string;
+  crawlPoolId: string | null;
+  hashEncrypted: string;
+  quality: number;
+  status: string;
+  algorithm: string;
+  /** Video only (VPDQ): the kept frame list as JSON, encrypted. */
+  videoFramesEncrypted: string | null;
+};
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -69,47 +84,87 @@ async function fingerprintsByIds(ids: string[]): Promise<Candidate[]> {
   if (isDevNoDb()) {
     const memory = crawlMemory();
     // Absent algorithm reads as PDQ: dev rows seeded before video fingerprints.
-    return ids.flatMap((id) => (memory.fingerprints.has(id) ? [{ ...memory.fingerprints.get(id)!, algorithm: memory.fingerprints.get(id)!.algorithm ?? "PDQ" }] : []));
+    return ids.flatMap((id) => {
+      const row = memory.fingerprints.get(id);
+      return row
+        ? [{ ...row, algorithm: row.algorithm ?? "PDQ", videoFramesEncrypted: row.videoFramesEncrypted ?? null }]
+        : [];
+    });
   }
   if (usesWorkerKysely()) {
     return getWorkerDb().selectFrom("HashSubmission")
-      .select(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status", "algorithm"])
+      .select(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status", "algorithm", "videoFramesEncrypted"])
       .where("id", "in", ids).execute();
   }
   const { db } = await import("@/lib/db");
   return db.hashSubmission.findMany({
     where: { id: { in: ids } },
-    select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true, algorithm: true },
+    select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true, algorithm: true, videoFramesEncrypted: true },
   });
 }
 
 async function fingerprintByPoolId(poolId: string): Promise<Candidate | null> {
   if (isDevNoDb()) {
     for (const fingerprint of crawlMemory().fingerprints.values()) {
-      if (fingerprint.crawlPoolId === poolId) return { ...fingerprint, algorithm: fingerprint.algorithm ?? "PDQ" };
+      if (fingerprint.crawlPoolId === poolId) {
+        return { ...fingerprint, algorithm: fingerprint.algorithm ?? "PDQ", videoFramesEncrypted: fingerprint.videoFramesEncrypted ?? null };
+      }
     }
     return null;
   }
   if (usesWorkerKysely()) {
     return (await getWorkerDb().selectFrom("HashSubmission")
-      .select(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status", "algorithm"])
+      .select(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status", "algorithm", "videoFramesEncrypted"])
       .where("crawlPoolId", "=", poolId).executeTakeFirst()) ?? null;
   }
   const { db } = await import("@/lib/db");
   return db.hashSubmission.findUnique({
     where: { crawlPoolId: poolId },
-    select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true, algorithm: true },
+    select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true, algorithm: true, videoFramesEncrypted: true },
   });
 }
 
 function inPool(candidate: Candidate, coverage: Coverage): candidate is Candidate & { crawlPoolId: string } {
   return (
-    // A video fingerprint is never pool material (spec rule 3, above).
-    candidate.algorithm !== "VPDQ" &&
     Boolean(candidate.crawlPoolId) &&
     (POOL_STATUSES as readonly string[]).includes(candidate.status) &&
     Boolean(coverage.get(candidate.caseId)?.ids.has(candidate.id))
   );
+}
+
+/**
+ * The frame hashes a video fingerprint serves in the pool (WP20): the kept
+ * frame list stored encrypted as JSON of { hash, quality, t }, reduced to its
+ * 64-hex hashes. If the list is gone or unreadable, the stored best frame's
+ * hash stands in for it — the same fallback the hash annex uses, so an entry
+ * never silently vanishes; account erasure clears the pool id in the same
+ * statement as the list, so the fallback is defence, not a live path. Null
+ * when neither source holds a valid hash: the row is skipped.
+ */
+function videoFramesOf(candidate: Candidate & { crawlPoolId: string }): string[] | null {
+  const frames: string[] = [];
+  if (candidate.videoFramesEncrypted) {
+    try {
+      const parsed: unknown = JSON.parse(decryptField(candidate.videoFramesEncrypted));
+      if (Array.isArray(parsed)) {
+        for (const frame of parsed) {
+          if (typeof frame === "object" && frame !== null) {
+            const hash = (frame as { hash?: unknown }).hash;
+            if (typeof hash === "string" && PDQ.test(hash)) frames.push(hash);
+          }
+        }
+      }
+    } catch {
+      // Not the stored JSON shape: fall through to the best frame below.
+    }
+  }
+  if (frames.length > 0) return frames;
+  try {
+    const best = decryptField(candidate.hashEncrypted).trim().toLowerCase();
+    return PDQ.test(best) ? [best] : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
@@ -118,6 +173,12 @@ export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
   const fingerprints: CrawlPoolEntry[] = [];
   for (const candidate of candidates) {
     if (!inPool(candidate, coverage)) continue;
+    if (candidate.algorithm === "VPDQ") {
+      const frames = videoFramesOf(candidate);
+      if (!frames) continue;
+      fingerprints.push({ id: candidate.crawlPoolId, kind: "video", frames });
+      continue;
+    }
     let pdq: string;
     try {
       pdq = decryptField(candidate.hashEncrypted).trim().toLowerCase();
@@ -129,12 +190,16 @@ export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
   }
   // Sorted by the random id, so the order says nothing about cases or age.
   fingerprints.sort((a, b) => a.id.localeCompare(b.id));
-  const version = sha256(fingerprints.map((f) => `${f.id}:${f.pdq}:${f.quality}`).join("\n")).slice(0, 32);
+  const version = sha256(
+    fingerprints.map((f) => ("kind" in f ? `${f.id}:video:${f.frames.join("")}` : `${f.id}:${f.pdq}:${f.quality}`)).join("\n"),
+  ).slice(0, 32);
   return { version, generatedAt: now.toISOString(), threshold: CRAWL_MATCH_THRESHOLD, fingerprints };
 }
 
 /**
- * The fingerprint behind a pool id, only while it is still in the pool.
+ * The fingerprint behind a pool id, only while it is still in the pool —
+ * an image or a video (WP20): a video finding resolves to its video
+ * submission like an image finding to its image submission.
  * Null for an unknown, withdrawn, erased or no-longer-approved id.
  */
 export async function resolvePoolFingerprint(poolId: string): Promise<{ hashSubmissionId: string; caseId: string; consentId: string } | null> {

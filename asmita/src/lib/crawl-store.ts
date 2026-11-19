@@ -18,6 +18,12 @@ export type MemoryFingerprint = {
   crawlPoolId: string | null;
   /** PDQ image or VPDQ video fingerprint; absent reads as PDQ (rows seeded before video fingerprints existed). */
   algorithm?: "PDQ" | "VPDQ";
+  /**
+   * Video only (VPDQ, video-fingerprints spec WP20): the kept frame list as
+   * the same JSON the route stored ({ hash, quality, t }), encrypted. The
+   * pool serves its hashes; erasure clears it with the pool id.
+   */
+  videoFramesEncrypted?: string | null;
 };
 
 export type MemoryCrawlConsent = {
@@ -162,9 +168,14 @@ export function eraseCrawlMemoryForCases(caseIds: string[]) {
   const ids = new Set(caseIds);
   memory.consents = memory.consents.filter((consent) => !ids.has(consent.caseId));
   for (const [id, finding] of memory.findings) if (ids.has(finding.caseId)) memory.findings.delete(id);
-  // Fingerprints are kept (as on the database path) but leave the pool.
+  // Fingerprints are kept (as on the database path) but leave the pool; the
+  // video frame list goes with the pool id, as the database erasure clears
+  // both in the same statement (WP17/WP20).
   for (const fingerprint of memory.fingerprints.values()) {
-    if (ids.has(fingerprint.caseId)) fingerprint.crawlPoolId = null;
+    if (ids.has(fingerprint.caseId)) {
+      fingerprint.crawlPoolId = null;
+      fingerprint.videoFramesEncrypted = null;
+    }
   }
   // Sources stay, including REPORTED ones her links created: they carry her
   // host only, never her link or case, so erasing her must not touch them.

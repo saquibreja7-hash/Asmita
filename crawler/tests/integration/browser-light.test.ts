@@ -136,7 +136,7 @@ describe("the lighter browser (crawler v3 WP15)", () => {
   it("logs no URL, hostname, fingerprint or body", () => {
     assertCleanLog(logLines.join("\n"), {
       hostnames: [LIGHT_HOST, ...LIGHT_TRACKER_HOSTS],
-      hashes: [...fx.allHashes, ...fx.pool.fingerprints.map((f) => f.pdq)],
+      hashes: [...fx.allHashes, ...fx.pool.fingerprints.flatMap((f) => ("pdq" in f ? [f.pdq] : []))],
       secrets: [TEST_KEY],
     });
   });

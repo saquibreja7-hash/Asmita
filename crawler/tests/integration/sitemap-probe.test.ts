@@ -145,7 +145,7 @@ describe("sitemap probing (WP9)", () => {
     expect(logLines.length).toBeGreaterThan(3);
     assertCleanLog(logLines.join("\n"), {
       hostnames: PROBE_HOSTS,
-      hashes: [...fx.allHashes, ...fx.pool.fingerprints.map((f) => f.pdq)],
+      hashes: [...fx.allHashes, ...fx.pool.fingerprints.flatMap((f) => ("pdq" in f ? [f.pdq] : []))],
     });
     const summary = logLines.map((l) => JSON.parse(l) as { event: string }).find((l) => l.event === "run_summary");
     expect(summary).toBeDefined();

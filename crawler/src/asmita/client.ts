@@ -20,19 +20,42 @@ import { parseRetryAfter, withRetry } from "../retry.ts";
 const HEX64 = /^[0-9a-f]{64}$/;
 const ID = z.string().min(1).max(128);
 
+/**
+ * One image fingerprint in the pool: the pre-WP20 shape, unchanged (the
+ * video-fingerprints spec's video entries are a second shape beside it).
+ */
+export const PoolImageEntrySchema = z.object({
+  id: ID,
+  pdq: z.string().regex(HEX64),
+  quality: z.number().min(0).max(100),
+});
+export type PoolImageEntry = z.infer<typeof PoolImageEntrySchema>;
+
+/**
+ * One video fingerprint in the pool (video-fingerprints spec WP20): its
+ * kept frame hashes, one 64-hex PDQ per frame (vPDQ), at most 1000 — the
+ * route's per-submission cap. The id is the video submission's pool id;
+ * a match is reported against it like an image match.
+ */
+export const PoolVideoEntrySchema = z.object({
+  id: ID,
+  kind: z.literal("video"),
+  frames: z.array(z.string().regex(HEX64)).min(1).max(1000),
+});
+export type PoolVideoEntry = z.infer<typeof PoolVideoEntrySchema>;
+
 export const PoolSchema = z.object({
   version: z.string().min(1).max(200),
   generatedAt: z.iso.datetime({ offset: true }),
   threshold: z.number().int().min(0).max(256),
-  fingerprints: z.array(
-    z.object({
-      id: ID,
-      pdq: z.string().regex(HEX64),
-      quality: z.number().min(0).max(100),
-    }),
-  ),
+  fingerprints: z.array(z.union([PoolImageEntrySchema, PoolVideoEntrySchema])),
 });
 export type Pool = z.infer<typeof PoolSchema>;
+
+/** Whether a pool entry is a video fingerprint (WP20). */
+export function isVideoPoolEntry(entry: Pool["fingerprints"][number]): entry is PoolVideoEntry {
+  return "kind" in entry && entry.kind === "video";
+}
 
 export const SourcesSchema = z.object({
   sources: z.array(

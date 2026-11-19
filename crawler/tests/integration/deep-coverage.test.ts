@@ -150,7 +150,7 @@ describe("deep coverage", () => {
     expect(logLines.length).toBeGreaterThan(3);
     assertCleanLog(logLines.join("\n"), {
       hostnames: [DEEP_HOST, TRAP_HOST],
-      hashes: [...fx.allHashes, ...fx.pool.fingerprints.map((f) => f.pdq)],
+      hashes: [...fx.allHashes, ...fx.pool.fingerprints.flatMap((f) => ("pdq" in f ? [f.pdq] : []))],
     });
     const summary = logLines.map((l) => JSON.parse(l) as { event: string }).find((l) => l.event === "run_summary");
     expect(summary).toBeDefined();

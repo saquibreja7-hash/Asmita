@@ -73,7 +73,8 @@ import { userAgentToken } from "./config.ts";
 import { CrawlError, fetchFailureClass, toCrawlError, type ErrorCode } from "./errors.ts";
 import { FindingsSink } from "./findings.ts";
 import type { Logger } from "./log.ts";
-import { MIN_QUALITY, Matcher } from "./match/matcher.ts";
+import { MIN_QUALITY } from "./match/matcher.ts";
+import { PoolMatcher } from "./match/pool-matcher.ts";
 import { RunMetrics, type SkipReason } from "./metrics.ts";
 import type { ClaimedPage, Finding, FindingResult, Pool, ReportedPage, Source } from "./asmita/client.ts";
 import { extract } from "./crawl/extract.ts";
@@ -311,10 +312,19 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     throw err;
   }
 
-  let matcher = new Matcher(pool.fingerprints, pool.threshold);
+  // The whole pool in one matcher (video-fingerprints spec WP20): the image
+  // fingerprints through the brute-force Matcher, plus the video
+  // fingerprints' frame hashes through the multi-index-hashing index. Same
+  // interface, same withdrawal/re-sync/staleness rules, one pool age.
+  let matcher = new PoolMatcher(pool.fingerprints, pool.threshold);
   let poolSyncedAt = now();
   metrics.poolSyncs++;
-  log.info("pool_loaded", { poolSize: matcher.size, count: sources.length });
+  log.info("pool_loaded", {
+    poolSize: matcher.size,
+    poolVideos: matcher.videoCount,
+    poolFrames: matcher.frameCount,
+    count: sources.length,
+  });
 
   // --- progress heartbeat (WP6) ---------------------------------------------
   // Counts only, like every other line: a mid-run view of the same counters
@@ -331,6 +341,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         hostsReported: metrics.discoveryHostsReported,
         imagesHashed: metrics.imagesHashed,
         matches: metrics.matches,
+        videoMatches: metrics.videoMatches,
         poolSize: matcher.size,
       }),
     config.PROGRESS_LOG_SECONDS * 1000,
@@ -358,14 +369,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     resyncing = true;
     try {
       const next = await api.getPool(hard.signal);
-      const fresh = new Matcher(next.fingerprints, next.threshold);
+      const fresh = new PoolMatcher(next.fingerprints, next.threshold);
       for (const id of withdrawnIds) fresh.withdraw(id);
       const dropped = [...matcher.idSetView()].filter((id) => !fresh.has(id)).length;
       matcher = fresh;
       poolSyncedAt = now();
       metrics.poolSyncs++;
       sink.purge((id) => fresh.has(id));
-      log.info("pool_resynced", { poolSize: fresh.size, dropped });
+      log.info("pool_resynced", { poolSize: fresh.size, poolVideos: fresh.videoCount, poolFrames: fresh.frameCount, dropped });
     } catch (raw) {
       const err = toCrawlError(raw);
       metrics.poolSyncFailures++;
@@ -384,7 +395,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   resyncTimer.unref();
 
   /** The matcher, or null once the pool is too old to trust. */
-  const currentMatcher = (): Matcher | null => {
+  const currentMatcher = (): PoolMatcher | null => {
     if (now() - poolSyncedAt > POOL_MAX_AGE_MS) {
       requestStop("pool_stale");
       return null;
@@ -557,6 +568,11 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     const observedAt = new Date(now()).toISOString();
     for (const hit of m.match(hashed.pdq)) {
+      // Video matches (WP20): the image sits within the threshold of a frame
+      // of a survivor video — the thumbnail clause of the video match rule.
+      // Same finding contract as an image hit: the fingerprint id is the
+      // video submission's pool id, and a person reviews it.
+      if (hit.kind === "video") metrics.videoMatches++;
       const finding: Finding = {
         fingerprintId: hit.fingerprintId,
         pageUrl: pageUrl.href,

@@ -1841,6 +1841,70 @@ export async function buildNeverQuietFixture(): Promise<Fixture> {
   };
 }
 
+/*
+ * The video-pool fixture (video-fingerprints spec WP20). vpdq.fixture.test
+ * serves one page with a poster image and a decoy; the pool holds the
+ * poster's hash both as an image entry and as a frame of two video
+ * fingerprints (one exact, one near-duplicate), plus far frames that match
+ * nothing. The poster must produce three findings — the image entry, and one
+ * per video, each at its own best frame distance — and the decoy none.
+ * Synthetic images only; no host overlaps the other fixtures' hosts.
+ */
+export const VPDQ_HOST = `vpdq.${SOURCE_DOMAIN}`;
+
+export async function buildVideoPoolFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const poster = await patternImage(300, 320, 240, "png");
+  const decoy = await patternImage(301, 320, 240, "png");
+  const posterHash = (await hashImage(poster, { minSide: 1 })).hash;
+  const decoyHash = (await hashImage(decoy, { minSide: 1 })).hash;
+  // Far frames of the two videos: real hashes of images the site never serves.
+  const far1 = (await hashImage(await patternImage(302, 300, 300, "png"), { minSide: 1 })).hash;
+  const far2 = (await hashImage(await patternImage(303, 300, 300, "png"), { minSide: 1 })).hash;
+  const NEAR = 6;
+  const nearPoster = flipBits(posterHash, NEAR);
+
+  const pool: Pool = {
+    version: "vpdq-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      // The poster is also planted as an ordinary image fingerprint: one
+      // image, three findings, two kinds.
+      { id: "fp-poster-img", pdq: posterHash, quality: 100 },
+      // Video A carries the poster's exact hash as one of its frames.
+      { id: "fp-vid-a", kind: "video", frames: [far1, posterHash, far2] },
+      // Video B only near-misses it: its best frame distance is NEAR.
+      { id: "fp-vid-b", kind: "video", frames: [nearPoster, far2] },
+      // A video with no frame near anything on the page.
+      { id: "fp-vid-c", kind: "video", frames: [far1, far2] },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-poster-img", pagePath: "/", imageHost: VPDQ_HOST, imagePath: "/img/poster.png" },
+    { fingerprintId: "fp-vid-a", pagePath: "/", imageHost: VPDQ_HOST, imagePath: "/img/poster.png" },
+    { fingerprintId: "fp-vid-b", pagePath: "/", imageHost: VPDQ_HOST, imagePath: "/img/poster.png" },
+  ];
+
+  site.route(VPDQ_HOST, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(
+    VPDQ_HOST,
+    "/",
+    sendHtml(
+      html(`
+      <h1>Sample clip</h1>
+      <video poster="/img/poster.png" src="/clip.webm"></video>
+      <img src="/img/decoy.png" width="320" height="240">
+    `),
+    ),
+  );
+  site.route(VPDQ_HOST, "/img/poster.png", sendBytes(poster, "image/png"));
+  site.route(VPDQ_HOST, "/img/decoy.png", sendBytes(decoy, "image/png"));
+  // Every hash the run touches, for the log scan: the two images it hashes
+  // and every frame the pool carries.
+  return { site, pool, expected, allHashes: [posterHash, decoyHash, far1, far2, nearPoster] };
+}
+
 /** Env for a fixture run (test values only, nothing real). */
 export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, string> = {}): Record<string, string> {
   return {

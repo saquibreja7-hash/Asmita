@@ -117,6 +117,12 @@ export class RunMetrics {
   /** Images refused because the source hit MAX_OFFSITE_HOST_FAILURES. */
   imageHostFailuresCapped = 0;
   matches = 0;
+  /**
+   * Matches against video fingerprints (video-fingerprints spec WP20): the
+   * image sat within the threshold of a survivor video's frame. Counted per
+   * hit like the matches loop finds them; a count only, never a frame.
+   */
+  videoMatches = 0;
   findingsQueued = 0;
   findingsPosted = 0;
   /** Accepted by the server (new or already known: it no longer says which). */
@@ -206,6 +212,7 @@ export class RunMetrics {
       imageHostFailuresCapped: this.imageHostFailuresCapped,
       imagesSkipped: { ...this.imagesSkipped } as Record<string, number>,
       matches: this.matches,
+      videoMatches: this.videoMatches,
       findingsQueued: this.findingsQueued,
       findingsPosted: this.findingsPosted,
       findingsAccepted: this.findingsAccepted,
