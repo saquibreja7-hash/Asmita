@@ -1075,6 +1075,25 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
   }
 }
 .pf-faq .faq-item summary::after { color: var(--pf-flame-ink); }
+/* Home page band linking to /for-platforms. */
+.pf-home-band {
+  border: 1px solid rgba(245, 185, 75, 0.45);
+  border-radius: calc(var(--radius-box) + 12px);
+  background:
+    radial-gradient(55% 80% at 0% 0%, rgba(245, 185, 75, 0.24), transparent 70%),
+    radial-gradient(50% 70% at 100% 100%, rgba(10, 94, 90, 0.10), transparent 70%),
+    var(--pf-flame-soft);
+}
+.pf-home-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: var(--radius-box);
+  background: var(--card);
+  border: 1px solid rgba(245, 185, 75, 0.35);
+}
+.pf-home-item .pf-chip { width: 42px; height: 42px; flex: none; }
 
 /* Platform partner form (/for-platforms) */
 .partner-form {
