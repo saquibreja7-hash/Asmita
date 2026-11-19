@@ -10,13 +10,25 @@ import { FormHandoff } from "@/components/FormHandoff";
 import { platformDirectory } from "@/lib/platforms";
 import { checkLink, matchPlatform } from "@/lib/link-check";
 import { QUALITY_KEYS, joinNames, linkPlatformName, numbered, qualityLevel } from "./review-summary";
+import { bestFrameQuality } from "@/lib/pdq/vpdq";
 
 type HashEntry = { hash: string; quality: number; clientVersion: string };
+
+// A video fingerprint as the WP17 video item: frame hashes and timestamps
+// only — never frame pixels or media bytes.
+type VideoHashEntry = {
+  kind: "video";
+  frames: { hash: string; quality: number; t: number }[];
+  durationSec: number;
+  clientVersion: string;
+};
+
+type DraftHashItem = HashEntry | VideoHashEntry;
 
 type Draft = {
   registrationKey?: string;
   urls: string[];
-  hashes: HashEntry[];
+  hashes: DraftHashItem[];
   platformIds: string[];
   emailPlatformIds: string[];
   // Display only, for the summary; older drafts may not have it.
@@ -444,7 +456,10 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
             <SummaryCard id="review-fingerprints-title" title={t(locale, "review.fingerprints.title")} count={draft.hashes.length} icon="image">
               <ul className="divide-y divide-[var(--line)]">
                 {draft.hashes.map((h, i) => {
-                  const level = qualityLevel(h.quality);
+                  // A video draft item carries kind: "video"; image items are unchanged.
+                  const videoFrames = "kind" in h ? h.frames : null;
+                  const quality = "kind" in h ? bestFrameQuality(h.frames) : h.quality;
+                  const level = qualityLevel(quality);
                   const tone =
                     level === "good"
                       ? "bg-[var(--success-soft)] text-[var(--success)]"
@@ -454,8 +469,13 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
                   return (
                     <li key={i} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3.5 sm:px-6">
                       <p className="text-sm text-[var(--ink)]">
-                        <span className="font-medium">{numbered(locale, "review.fingerprints.item", i)}</span>
+                        <span className="font-medium">
+                          {numbered(locale, videoFrames ? "review.fingerprints.videoItem" : "review.fingerprints.item", i)}
+                        </span>
                         <span className="text-[var(--text-muted)]"> · {t(locale, "review.fingerprints.ready")}</span>
+                        {videoFrames && (
+                          <span className="text-[var(--text-muted)]"> · {t(locale, "review.fingerprints.video").replace("{n}", String(videoFrames.length))}</span>
+                        )}
                       </p>
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>
                         {t(locale, QUALITY_KEYS[level])}

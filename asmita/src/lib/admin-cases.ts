@@ -754,6 +754,7 @@ export type AdminCaseLink = {
 
 export type AdminCaseFingerprint = {
   id: string;
+  algorithm: string;
   status: string;
   quality: number;
   digestPrefix: string;
@@ -761,6 +762,9 @@ export type AdminCaseFingerprint = {
   flagReason: string | null;
   requestedPlatformName: string | null;
   inSignedNotice: boolean;
+  /** Video only (VPDQ): kept frame count and the video's duration in seconds. */
+  videoFrameCount: number | null;
+  videoDurationSec: number | null;
 };
 
 export type AdminCaseDetail = {
@@ -863,11 +867,14 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
       orderBy: { submittedAt: "asc" },
       select: {
         id: true,
+        algorithm: true,
         status: true,
         quality: true,
         hashDigest: true,
         submittedAt: true,
         flagReason: true,
+        videoFrameCount: true,
+        videoDurationSec: true,
         requestedPlatform: { select: { name: true } },
       },
     }),
@@ -1068,6 +1075,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
     }),
     fingerprints: hashes.map((hash) => ({
       id: hash.id,
+      algorithm: hash.algorithm,
       status: hash.status,
       quality: hash.quality,
       digestPrefix: hash.hashDigest.slice(0, 12),
@@ -1075,6 +1083,8 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
       flagReason: hash.flagReason,
       requestedPlatformName: hash.requestedPlatform?.name ?? null,
       inSignedNotice: signedFingerprints.has(hash.id),
+      videoFrameCount: hash.videoFrameCount ?? null,
+      videoDurationSec: hash.videoDurationSec ?? null,
     })),
     hashAdvisoryRefusal,
     timeline: timeline.map((event) => ({

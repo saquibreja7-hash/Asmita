@@ -962,7 +962,7 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
 export const HARD_DELETE_RETAINED = {
   user: "id, role, verification flags, declared age and created date; no email or email hash",
   case: "id, reference number, status CLOSED, NGO-verified flag and created/updated dates",
-  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool",
+  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool; a video fingerprint's frame list is removed with the erasure, its row keeps the best frame's hash",
   deletionJob: "id, case id, dates and status",
   adminAccessLog: "which admin opened which case or link, and when; the reason text is cleared",
   auditLog: "earlier entries are append-only and unchanged",
@@ -1059,11 +1059,12 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
       counts.linkVerifications = deleted(await tx.deleteFrom("LinkVerification").where("submittedUrlId", "in", urlIds).execute());
       counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
     }
-    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    // Crawler matches and authorisations go; the kept fingerprints leave the
+    // pool, and a kept video fingerprint loses its frame list (WP17).
     const findingIds = (await tx.selectFrom("CrawlFinding").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
     counts.crawlFindings = deleted(await tx.deleteFrom("CrawlFinding").where("caseId", "in", caseIds).execute());
     counts.crawlConsents = deleted(await tx.deleteFrom("CrawlConsent").where("caseId", "in", caseIds).execute());
-    await tx.updateTable("HashSubmission").set({ crawlPoolId: null }).where("caseId", "in", caseIds).execute();
+    await tx.updateTable("HashSubmission").set({ crawlPoolId: null, videoFramesEncrypted: null }).where("caseId", "in", caseIds).execute();
     counts.feedback = deleted(await tx.deleteFrom("Feedback").where((eb) => eb.or([
       eb("caseId", "in", caseIds),
       eb("caseReference", "in", caseRows.map((row) => row.referenceNumber)),
@@ -1124,11 +1125,12 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     // Removal re-checks reference her links, so they are erased with them.
     counts.linkVerifications = (await tx.linkVerification.deleteMany({ where: { submittedUrlId: { in: urlIds } } })).count;
     counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
-    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    // Crawler matches and authorisations go; the kept fingerprints leave the
+    // pool, and a kept video fingerprint loses its frame list (WP17).
     const findingIds = (await tx.crawlFinding.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
     counts.crawlFindings = (await tx.crawlFinding.deleteMany({ where: { caseId: { in: caseIds } } })).count;
     counts.crawlConsents = (await tx.crawlConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
-    await tx.hashSubmission.updateMany({ where: { caseId: { in: caseIds } }, data: { crawlPoolId: null } });
+    await tx.hashSubmission.updateMany({ where: { caseId: { in: caseIds } }, data: { crawlPoolId: null, videoFramesEncrypted: null } });
     counts.feedback = (await tx.feedback.deleteMany({
       where: { OR: [{ caseId: { in: caseIds } }, { caseReference: { in: caseRows.map((row) => row.referenceNumber) } }] },
     })).count;

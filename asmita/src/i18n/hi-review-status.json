@@ -80,12 +80,18 @@
       "track.*",
       "myCases.*",
       "case.fingerprints.item",
+      "case.fingerprints.videoItem",
       "case.close",
       "case.close.closing",
       "start.dangerCall.label",
       "start.watch.*",
       "watch.*",
-      "case.watch.*"
+      "case.watch.*",
+      "submit.hash.video.*",
+      "submit.hash.fileLabel",
+      "submit.hash.fileHint",
+      "review.fingerprints.videoItem",
+      "review.fingerprints.video"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",

@@ -399,9 +399,12 @@ export default async function CasePage({
                   {hashSubmissions.map((submission, index) => (
                     <li key={submission.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
                       {/* Masked like a password: the fingerprint itself means nothing to her
-                          and should not sit on a shared screen. */}
+                          and should not sit on a shared screen. A video is named like an
+                          image, with its own label. */}
                       <span className="flex items-center gap-3">
-                        <span className="text-[15px] font-medium text-[var(--ink)]">{t(locale, "case.fingerprints.item").replace("{n}", String(index + 1))}</span>
+                        <span className="text-[15px] font-medium text-[var(--ink)]">
+                          {t(locale, submission.algorithm === "VPDQ" ? "case.fingerprints.videoItem" : "case.fingerprints.item").replace("{n}", String(index + 1))}
+                        </span>
                         <span aria-hidden="true" className="select-none font-mono text-[15px] tracking-[0.2em] text-[var(--text-muted)]">••••••••</span>
                       </span>
                       <StatusBadge status={submission.status} locale={locale} />

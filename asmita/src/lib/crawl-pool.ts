@@ -20,6 +20,10 @@ import * as store from "@/lib/store";
  * cannot link two fingerprints to one case or to a survivor, and an id it
  * still holds after a withdrawal matches nothing. No case, user or email data
  * is ever part of the pool.
+ *
+ * Video fingerprints (algorithm VPDQ) are never in the pool: the crawler
+ * would misread their frame lists as one image hash (video-fingerprints spec
+ * rule 3). WP20 will serve them as kind "video" with a frame index.
  */
 
 /** PDQ Hamming distance the crawler may report as a possible match. */
@@ -45,7 +49,7 @@ export function isCaseOpen(status: string): boolean {
 export type CrawlPoolEntry = { id: string; pdq: string; quality: number };
 export type CrawlPool = { version: string; generatedAt: string; threshold: number; fingerprints: CrawlPoolEntry[] };
 
-type Candidate = { id: string; caseId: string; crawlPoolId: string | null; hashEncrypted: string; quality: number; status: string };
+type Candidate = { id: string; caseId: string; crawlPoolId: string | null; hashEncrypted: string; quality: number; status: string; algorithm: string };
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -122,41 +126,44 @@ async function fingerprintsByIds(ids: string[]): Promise<Candidate[]> {
   if (ids.length === 0) return [];
   if (isDevNoDb()) {
     const memory = crawlMemory();
-    return ids.flatMap((id) => (memory.fingerprints.has(id) ? [memory.fingerprints.get(id)!] : []));
+    // Absent algorithm reads as PDQ: dev rows seeded before video fingerprints.
+    return ids.flatMap((id) => (memory.fingerprints.has(id) ? [{ ...memory.fingerprints.get(id)!, algorithm: memory.fingerprints.get(id)!.algorithm ?? "PDQ" }] : []));
   }
   if (usesWorkerKysely()) {
     return getWorkerDb().selectFrom("HashSubmission")
-      .select(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status"])
+      .select(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status", "algorithm"])
       .where("id", "in", ids).execute();
   }
   const { db } = await import("@/lib/db");
   return db.hashSubmission.findMany({
     where: { id: { in: ids } },
-    select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true },
+    select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true, algorithm: true },
   });
 }
 
 async function fingerprintByPoolId(poolId: string): Promise<Candidate | null> {
   if (isDevNoDb()) {
     for (const fingerprint of crawlMemory().fingerprints.values()) {
-      if (fingerprint.crawlPoolId === poolId) return fingerprint;
+      if (fingerprint.crawlPoolId === poolId) return { ...fingerprint, algorithm: fingerprint.algorithm ?? "PDQ" };
     }
     return null;
   }
   if (usesWorkerKysely()) {
     return (await getWorkerDb().selectFrom("HashSubmission")
-      .select(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status"])
+      .select(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status", "algorithm"])
       .where("crawlPoolId", "=", poolId).executeTakeFirst()) ?? null;
   }
   const { db } = await import("@/lib/db");
   return db.hashSubmission.findUnique({
     where: { crawlPoolId: poolId },
-    select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true },
+    select: { id: true, caseId: true, crawlPoolId: true, hashEncrypted: true, quality: true, status: true, algorithm: true },
   });
 }
 
 function inPool(candidate: Candidate, coverage: Coverage): candidate is Candidate & { crawlPoolId: string } {
   return (
+    // A video fingerprint is never pool material (spec rule 3, above).
+    candidate.algorithm !== "VPDQ" &&
     Boolean(candidate.crawlPoolId) &&
     (POOL_STATUSES as readonly string[]).includes(candidate.status) &&
     Boolean(coverage.get(candidate.caseId)?.ids.has(candidate.id))
