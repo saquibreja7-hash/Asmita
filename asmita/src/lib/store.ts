@@ -13,6 +13,8 @@ export type CaseRecord = {
   registrationKeyHash?: string | null;
   createdAt: string;
   status: "OPEN" | "RESOLVED";
+  /** "Watch for my images" (WP22): a watch holds fingerprints and no links. */
+  mode?: "CASE" | "WATCH";
   urls: UrlRecord[];
   signedHashAdvisoryPdf?: string | null;
   hashAdvisoryPlatformIds?: string[];
@@ -75,7 +77,7 @@ export function createReferenceNumber() {
   return generateCaseReference();
 }
 
-export async function createCase(userId: string, registrationKeyHash?: string) {
+export async function createCase(userId: string, registrationKeyHash?: string, mode: "CASE" | "WATCH" = "CASE") {
   assertDevOrTest();
   const record: CaseRecord = {
     id: randomUUID(),
@@ -84,6 +86,7 @@ export async function createCase(userId: string, registrationKeyHash?: string) {
     registrationKeyHash,
     createdAt: new Date().toISOString(),
     status: "OPEN",
+    mode,
     urls: [],
   };
   cases.set(record.id, record);

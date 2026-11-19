@@ -6,6 +6,9 @@ import { getCaseForUser } from "@/lib/case-ops";
 import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submission";
 import { CrawlConsent } from "./CrawlConsent";
 import { FoundByAsmita } from "./FoundByAsmita";
+import { WatchFoundList } from "./WatchFoundList";
+import { AddMoreImages } from "./AddMoreImages";
+import { getCrawlConsentState } from "@/lib/crawl-consent";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
 import { splitUrls } from "./crawl-consent-logic";
 import { CaseDashboardActions } from "./CaseDashboardActions";
@@ -162,6 +165,101 @@ export default async function CasePage({
   const standing = standingOf(ownUrls, hashSubmissions.length);
   const showFound = crawlerFindingsVisibleToSurvivor();
   const created = new Date(record.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+
+  // "Watch for my images" (WP22): a watch renders its own view — no links are
+  // asked for or listed as hers, only her fingerprints, the watch status and
+  // the copies Asmita's search found (site name only, with her two choices).
+  if (record.mode === "WATCH") {
+    const consentState = await getCrawlConsentState(record.id);
+    const watching = consentState.status === "signed";
+    const watchingSince = watching && consentState.signedAt
+      ? new Date(consentState.signedAt).toLocaleDateString(locale === "hi" ? "hi-IN" : "en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" })
+      : null;
+    // Possible copies: the found links no notice has gone out for yet. A
+    // stopped or sent link is history, not a choice.
+    const copies = foundUrls.filter((url) => !url.representativeNoticeSentAt).length;
+    return (
+      <AppShell>
+        <div className="page-canvas">
+          <div className="container py-8 md:py-20">
+            <div className="mx-auto max-w-2xl space-y-10">
+
+              <header>
+                <div className="flex items-start justify-between gap-4">
+                  <p className="eyebrow">{t(locale, "case.watch.pill")}</p>
+                  <CloseDashboardButton locale={locale} />
+                </div>
+                <h1 className="page-title-sm mt-4">{t(locale, "watch.title")}</h1>
+                <p className="muted mt-3 text-sm leading-[1.7]">
+                  {t(locale, "case.reference")}{" "}
+                  <span className="font-mono text-[var(--ink)]">{record.referenceNumber}</span>
+                  <span aria-hidden> · </span>
+                  {t(locale, "case.created")} {created} {t(locale, "case.ist")}
+                </p>
+              </header>
+
+              <section aria-labelledby="watch-status-title" className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
+                {watching ? (
+                  <>
+                    <p className="eyebrow text-[var(--brand)]">{t(locale, "case.watch.watchingSince")} {watchingSince}</p>
+                    <h2 id="watch-status-title" className="subsection-title mt-2">
+                      {copies === 0
+                        ? t(locale, "case.watch.noCopies")
+                        : `${copies} ${t(locale, copies === 1 ? "case.watch.copyFound" : "case.watch.copiesFound")}`}
+                    </h2>
+                  </>
+                ) : (
+                  <>
+                    <p className="eyebrow">{t(locale, "case.watch.pill")}</p>
+                    <h2 id="watch-status-title" className="subsection-title mt-2">{t(locale, "case.watch.notWatching.title")}</h2>
+                    <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.watch.notWatching.sub")}</p>
+                  </>
+                )}
+              </section>
+
+              {showFound && <WatchFoundList caseId={record.id} urls={foundUrls} locale={locale} badge={(status) => <StatusBadge status={status} locale={locale} />} />}
+
+              {hashUploadEnabled && hashSubmissions.length > 0 && (
+                <section id="fingerprints" aria-labelledby="watch-fingerprints-title" className="scroll-mt-24">
+                  <h2 id="watch-fingerprints-title" className="subsection-title">{t(locale, "case.fingerprints.title")}</h2>
+                  <ul className="mt-4 divide-y divide-[var(--line)] overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
+                    {hashSubmissions.map((submission, index) => (
+                      <li key={submission.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+                        <span className="flex items-center gap-3">
+                          <span className="text-[15px] font-medium text-[var(--ink)]">{t(locale, "case.fingerprints.item").replace("{n}", String(index + 1))}</span>
+                          <span aria-hidden="true" className="select-none font-mono text-[15px] tracking-[0.2em] text-[var(--text-muted)]">••••••••</span>
+                        </span>
+                        <StatusBadge status={submission.status} locale={locale} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {hashUploadEnabled && (
+                <section aria-label={t(locale, "case.watch.addImages")} className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
+                  <h2 className="subsection-title">{t(locale, "case.watch.addImages")}</h2>
+                  <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.watch.addImages.hint")}</p>
+                  <div className="mt-5">
+                    <AddMoreImages caseId={record.id} locale={locale} />
+                  </div>
+                </section>
+              )}
+
+              {hashUploadEnabled && <CrawlConsent caseId={record.id} locale={locale} watch />}
+
+              <nav aria-label={t(locale, "case.more.label")} className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[var(--line)] pt-6 text-sm">
+                <Link className="link-underline text-[var(--ink)]" href="/get-help">{t(locale, "case.more.help")}</Link>
+                <Link className="link-underline text-[var(--ink)]" href="/resources">{t(locale, "case.tools.resources")}</Link>
+                <Link className="link-underline text-[var(--text-muted)] hover:text-[var(--danger)]" href="/delete-account">{t(locale, "case.tools.delete")}</Link>
+              </nav>
+
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

@@ -38,6 +38,7 @@ describe("notice template seeds", () => {
       "FIR_PACKAGE",
       "CRAWL_AUTHORISATION",
       "CRAWL_REPRESENTATIVE_NOTICE",
+      "WATCH_AUTHORISATION",
     ]);
   });
 
@@ -62,9 +63,22 @@ describe("notice template seeds", () => {
     expect(body).toMatch(/withdraw this authorisation at any time/);
   });
 
+  it("the watch-only authorisation promises comparison and alerting, never a notice (WP22)", () => {
+    const body = seed("WATCH_AUTHORISATION").bodyTemplate;
+    expect(body).toMatch(/compare the fingerprints/);
+    expect(body).toMatch(/Asmita tells me, and I choose what happens next/);
+    expect(body).toMatch(/Nothing is sent to any website or platform under this authorisation/);
+    expect(body).toMatch(/my fingerprints are deleted from Asmita/);
+    // The same declaration of intimacy the full authorisation rests on, so the
+    // two agree about what her fingerprints are.
+    expect(body).toMatch(/intimate images of me/);
+    expect(body).toMatch(/did not consent to any copy of them being shared or published/);
+    expect(seed("WATCH_AUTHORISATION").bodyTemplate).not.toContain("{{url}}");
+  });
+
   it("the crawler templates render into a signable PDF", async () => {
     const { generateNoticePdf } = await import("@/lib/notice-pdf");
-    for (const type of ["CRAWL_AUTHORISATION", "CRAWL_REPRESENTATIVE_NOTICE"]) {
+    for (const type of ["CRAWL_AUTHORISATION", "CRAWL_REPRESENTATIVE_NOTICE", "WATCH_AUTHORISATION"]) {
       const template = seed(type);
       const pdf = await generateNoticePdf({
         platformName: "Asmita",
@@ -127,8 +141,8 @@ describe("notice template seeds", () => {
         const rendered = renderNoticeTemplate(template.bodyTemplate, sampleVariables);
         expect(() => assertNoticeBodySafe(rendered)).not.toThrow();
         expect(rendered).toContain(sampleVariables.caseReference);
-        // The crawl authorisation is addressed to Asmita, not to a platform.
-        if (template.templateType !== "CRAWL_AUTHORISATION") {
+        // The crawl authorisations are addressed to Asmita, not to a platform.
+        if (template.templateType !== "CRAWL_AUTHORISATION" && template.templateType !== "WATCH_AUTHORISATION") {
           expect(rendered).toContain(sampleVariables.platformName);
         }
         if (template.bodyTemplate.includes("{{url}}")) {

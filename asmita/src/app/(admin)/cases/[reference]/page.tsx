@@ -77,7 +77,19 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
 
       <dl className="mt-6 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="Status">{STATUS_LABELS[detail.status] ?? detail.status}</Fact>
-        <Fact label="Next action">{nextActionLabel(detail.work.nextAction, detail.work.actionCount)}</Fact>
+        <Fact label="Type">{detail.mode === "WATCH" ? "Watch for my images" : "Takedown case"}</Fact>
+        <Fact label="Next action">
+          {detail.mode === "WATCH" && detail.work.nextAction === "review_findings" ? (
+            <>
+              {nextActionLabel(detail.work.nextAction, detail.work.actionCount)}{" "}
+              <Link className="link-underline" href="/admin/findings?status=CANDIDATE">
+                Open the findings console
+              </Link>
+            </>
+          ) : (
+            nextActionLabel(detail.work.nextAction, detail.work.actionCount)
+          )}
+        </Fact>
         <Fact label="Due">
           <span className={due.overdue ? "text-[var(--danger)]" : undefined}>
             {due.overdue && <span aria-hidden="true">! </span>}

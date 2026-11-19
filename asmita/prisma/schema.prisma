@@ -84,6 +84,7 @@ enum TemplateType {
   HASH_ADVISORY
   CRAWL_AUTHORISATION
   CRAWL_REPRESENTATIVE_NOTICE
+  WATCH_AUTHORISATION
 }
 
 // Where a SubmittedUrl came from: the survivor, or an analyst-approved
@@ -97,6 +98,23 @@ enum CrawlFindingStatus {
   CANDIDATE
   APPROVED
   DISMISSED
+}
+
+// What a case is (watch-and-verify WP22). CASE: a takedown complaint with
+// links. WATCH: "Watch for my images" — no links, only fingerprints watched
+// for copies; nothing is sent to any platform until she chooses "Take it down".
+enum CaseMode {
+  CASE
+  WATCH
+}
+
+// What a crawl authorisation covers (WP22). SEARCH_AND_NOTICE: comparison and
+// representative notices (the existing tick). WATCH_ONLY: comparison and
+// alerting her only; a representative notice is refused (watch_only_consent)
+// until she converts the watch into a case and ticks the full authorisation.
+enum CrawlConsentScope {
+  SEARCH_AND_NOTICE
+  WATCH_ONLY
 }
 
 enum CrawlSourceKind {
@@ -194,6 +212,7 @@ enum AuditEventType {
   CRAWL_SOURCE_PROMOTED
   CRAWL_SOURCE_PAUSED
   CRAWL_SOURCE_RESUMED
+  WATCH_CONVERTED
 }
 
 enum DeletionJobStatus {
@@ -230,6 +249,8 @@ model Case {
   userId                String
   registrationKeyHash   String?
   status                CaseStatus @default(OPEN)
+  // "Watch for my images" (WP22): a watch holds fingerprints and no links.
+  mode                  CaseMode   @default(CASE)
   state                 String?
   city                  String?
   ngoVerified           Boolean    @default(false)
@@ -430,6 +451,12 @@ model CrawlConsent {
   templateDigest     String
   signedAt           DateTime  @default(now())
   withdrawnAt        DateTime?
+  // What the authorisation covers (WP22). Defaults to the original scope.
+  scope              CrawlConsentScope @default(SEARCH_AND_NOTICE)
+  // Set on the full (SEARCH_AND_NOTICE) authorisation she signs when she
+  // turns a watch into a case ("Take it down"): the WATCH_ONLY authorisation
+  // it replaces. Findings recorded under that one stay covered by this one.
+  convertedFromId    String?
 
   case Case @relation(fields: [caseId], references: [id])
 

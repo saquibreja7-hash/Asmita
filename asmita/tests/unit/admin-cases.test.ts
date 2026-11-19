@@ -6,6 +6,7 @@ vi.mock("@/lib/db", () => ({
     submittedUrl: { findMany: vi.fn() },
     notice: { findMany: vi.fn() },
     hashSubmission: { groupBy: vi.fn(), findMany: vi.fn() },
+    crawlFinding: { groupBy: vi.fn(), findMany: vi.fn() },
     platform: { findMany: vi.fn() },
     noticeTemplate: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
     hashDispatch: { count: vi.fn() },
@@ -221,6 +222,10 @@ describe("listAdminCases", () => {
     mocked.noticeTemplate.findMany.mockResolvedValue([{ templateType: "IT_RULES_2021", platformId: null }]);
     mocked.notice.findMany.mockResolvedValue([]);
     mocked.hashSubmission.groupBy.mockResolvedValue([]);
+    // WP22: the watch found-copies queue reads these; none of these fixtures
+    // are watches, so both stay empty.
+    mocked.crawlFinding.groupBy.mockResolvedValue([]);
+    mocked.crawlFinding.findMany.mockResolvedValue([]);
   });
   afterEach(() => {
     vi.unstubAllEnvs();

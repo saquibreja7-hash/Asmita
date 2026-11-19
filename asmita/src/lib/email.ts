@@ -269,6 +269,50 @@ export async function sendVictimConfirmation(to: string, referenceNumber: string
   }, { idempotencyKey: `case-confirmation/${referenceNumber}` }));
 }
 
+/*
+ * "Watch for my images" (WP22): an analyst approved a possible copy on her
+ * watch. The email carries only her case reference and a sign-in prompt —
+ * never a link, image, site name or platform name (shared phones and
+ * inboxes). She sees the site name, and her choices, after signing in.
+ */
+export function createWatchCopyFoundEmail(referenceNumber: string) {
+  const lines = [
+    "We may have found a copy of your image. Sign in to Asmita to see it.",
+  ];
+  const subject = `Update on Asmita case ${referenceNumber}`;
+  const text = [
+    "Hello,",
+    "",
+    `An update on Asmita case ${referenceNumber}.`,
+    "",
+    ...lines.flatMap((line) => [line, ""]),
+    "For your privacy, this email names no website and contains no links.",
+  ].join("\n");
+  const html = renderEmailHtml({
+    title: "An update on your watch.",
+    paragraphs: lines,
+    highlight: referenceNumber,
+    highlightLabel: "Case reference",
+    // No call-to-action button: the email carries no links by rule.
+    footerNotes: ["For your privacy, this email names no website and contains no links."],
+  });
+  return { subject, text, html };
+}
+
+export async function sendWatchCopyFoundEmail(to: string, referenceNumber: string, idempotencyKey?: string) {
+  const { subject, text, html } = createWatchCopyFoundEmail(referenceNumber);
+  if (!process.env.RESEND_API_KEY) {
+    return { id: `dev-watch-found-${referenceNumber}` };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text,
+    html,
+  }, idempotencyKey ? { idempotencyKey } : undefined));
+}
+
 function assertEmailSent(result: unknown): EmailSendResult {
   const response = result as { data?: { id?: string } | null; error?: { name?: string; message?: string } | null };
   // The same idempotency key with a different payload (or still in flight):

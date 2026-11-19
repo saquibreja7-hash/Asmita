@@ -27,6 +27,10 @@ export type MemoryCrawlConsent = {
   templateDigest: string;
   signedAt: Date;
   withdrawnAt: Date | null;
+  /** What the authorisation covers (WP22). Absent rows are the original full scope. */
+  scope?: "SEARCH_AND_NOTICE" | "WATCH_ONLY";
+  /** The WATCH_ONLY authorisation a full one replaced at "Take it down" (WP22). */
+  convertedFromId?: string | null;
 };
 
 export type MemoryCrawlFinding = {

@@ -146,32 +146,35 @@ export async function fingerprintStillConsented(caseId: string, hashSubmissionId
 
 /**
  * Whether a live authorisation covers a finding: it lists the matched
- * fingerprint, and the finding was recorded under it. A finding recorded
- * under an earlier authorisation (crawlConsentId) is never covered by a
- * later one; a row from before crawlConsentId existed is covered only if it
- * was first seen after this authorisation was signed. A copy seen again
+ * fingerprint, and the finding was recorded under it or under the watch-only
+ * authorisation this full one replaced at "Take it down" (convertedFromId;
+ * WP22). A finding recorded under an earlier authorisation is never covered
+ * by a later one; a row from before crawlConsentId existed is covered only
+ * if it was first seen after this authorisation was signed. A copy seen again
  * under a new authorisation is a new finding, reviewed from the start.
  */
 export function consentCoversFinding(
-  consent: { id: string; hashSubmissionIds: string[]; signedAt: Date },
+  consent: { id: string; hashSubmissionIds: string[]; signedAt: Date; convertedFromId?: string | null },
   finding: { hashSubmissionId: string; crawlConsentId?: string | null; firstSeenAt: Date },
 ): boolean {
   if (!consent.hashSubmissionIds.includes(finding.hashSubmissionId)) return false;
-  if (finding.crawlConsentId) return finding.crawlConsentId === consent.id;
+  if (finding.crawlConsentId) {
+    return finding.crawlConsentId === consent.id || finding.crawlConsentId === consent.convertedFromId;
+  }
   return consent.signedAt.getTime() <= finding.firstSeenAt.getTime();
 }
 
 /** Whether the live authorisation on the finding's case covers it (consentCoversFinding). */
 export async function findingStillConsented(finding: { caseId: string; hashSubmissionId: string; crawlConsentId?: string | null; firstSeenAt: Date }): Promise<boolean> {
-  let rows: Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date }>;
+  let rows: Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date; convertedFromId?: string | null }>;
   if (isDevNoDb()) {
     rows = crawlMemory().consents.filter((c) => c.caseId === finding.caseId && !c.withdrawnAt);
   } else if (usesWorkerKysely()) {
-    rows = await getWorkerDb().selectFrom("CrawlConsent").select(["id", "hashSubmissionIds", "signedAt"])
+    rows = await getWorkerDb().selectFrom("CrawlConsent").select(["id", "hashSubmissionIds", "signedAt", "convertedFromId"])
       .where("caseId", "=", finding.caseId).where("withdrawnAt", "is", null).execute();
   } else {
     const { db } = await import("@/lib/db");
-    rows = await db.crawlConsent.findMany({ where: { caseId: finding.caseId, withdrawnAt: null }, select: { id: true, hashSubmissionIds: true, signedAt: true } });
+    rows = await db.crawlConsent.findMany({ where: { caseId: finding.caseId, withdrawnAt: null }, select: { id: true, hashSubmissionIds: true, signedAt: true, convertedFromId: true } });
   }
   return rows.some((consent) => consentCoversFinding({ ...consent, signedAt: new Date(consent.signedAt) }, finding));
 }

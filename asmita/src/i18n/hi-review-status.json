@@ -80,7 +80,10 @@
       "case.fingerprints.item",
       "case.close",
       "case.close.closing",
-      "start.dangerCall.label"
+      "start.dangerCall.label",
+      "start.watch.*",
+      "watch.*",
+      "case.watch.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",

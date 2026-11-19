@@ -114,7 +114,7 @@ describe("review controls", () => {
 describe("notice step and error messages", () => {
   const state: NoticeGateInput = {
     reviewStatus: "APPROVED", representativeNoticeSentAt: null, noticeAttemptUnconfirmed: false,
-    crawlConsentWithdrawn: false, urlsPurged: false, linkStatus: "NOTICE_QUEUED", crawlerEnabled: true,
+    crawlConsentWithdrawn: false, watchOnly: false, urlsPurged: false, linkStatus: "NOTICE_QUEUED", crawlerEnabled: true,
   };
   const render = (over: Partial<typeof state> = {}) =>
     renderToStaticMarkup(createElement(NoticeStep, { findingId: "f1", caseId: "c1", state: { ...state, ...over } }));
@@ -230,6 +230,7 @@ describe("safety note and list helpers", () => {
     representativeNoticeSentAt: null,
     noticeAttemptUnconfirmed: false,
     crawlConsentWithdrawn: false,
+    watchOnly: false,
     ...over,
   });
   it("labels platform and notice state", () => {

@@ -645,3 +645,60 @@ describe("routes", () => {
     expect(state.sent).toHaveLength(0);
   });
 });
+
+describe("watch-only authorisations (WP22 \"Watch for my images\")", () => {
+  it("refuses preview and dispatch while the case's only live consent is watch-only", async () => {
+    state.consents[0].scope = "WATCH_ONLY";
+    await expectRefusal("watch_only_consent");
+    // Nothing was ever previewed, so nothing was revealed either.
+    expect(state.accessLog).toHaveLength(0);
+  });
+
+  it("between Take it down and the full authorisation tick, nothing can be sent", async () => {
+    // She converted the watch: the watch-only authorisation is withdrawn and
+    // no full one is signed yet.
+    state.consents[0] = { ...state.consents[0], scope: "WATCH_ONLY", withdrawnAt: new Date() };
+    await expectRefusal("consent_withdrawn");
+  });
+
+  it("after Take it down, the full authorisation covers the finding the watch recorded", async () => {
+    const auth = seedOf("CRAWL_AUTHORISATION");
+    state.consents[0] = {
+      ...state.consents[0], id: "consent-watch", scope: "WATCH_ONLY", withdrawnAt: new Date("2026-11-18T06:00:00Z"),
+    };
+    state.consents.push({
+      id: "consent-full", caseId: "case-1", hashSubmissionIds: ["h1", "h2"], templateId: "tpl-auth",
+      templateDigest: templateDigest(auth), signedAt: new Date("2026-11-18T07:00:00Z"), withdrawnAt: null,
+      scope: "SEARCH_AND_NOTICE", convertedFromId: "consent-watch",
+    });
+    state.findings.get("cf-1")!.crawlConsentId = "consent-watch";
+
+    const preview = await previewRepresentativeNotice(base);
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) throw new Error(preview.error);
+    // The notice relies on the full authorisation she signed on the spot.
+    expect(preview.notice.consentId).toBe("consent-full");
+    expect(preview.notice.pdfBody).toContain("consent-full");
+    expect(preview.notice.pdfBody).toContain("agreed to by the Complainant on 18 November 2026");
+
+    const sent = await dispatchRepresentativeNotice({ ...base, contentDigest: preview.notice.contentDigest });
+    expect(sent).toMatchObject({ ok: true, dispatched: true, transport: "email" });
+  });
+
+  it("a full authorisation that does not point back at the watch one does not cover its findings", async () => {
+    // A later authorisation signed without the conversion link (a stopped
+    // watch that never went through Take it down) never inherits the watch's
+    // findings: they were recorded under an authorisation that is gone.
+    const auth = seedOf("CRAWL_AUTHORISATION");
+    state.consents[0] = {
+      ...state.consents[0], id: "consent-watch", scope: "WATCH_ONLY", withdrawnAt: new Date("2026-11-18T06:00:00Z"),
+    };
+    state.consents.push({
+      id: "consent-full", caseId: "case-1", hashSubmissionIds: ["h1", "h2"], templateId: "tpl-auth",
+      templateDigest: templateDigest(auth), signedAt: new Date("2026-11-18T07:00:00Z"), withdrawnAt: null,
+      scope: "SEARCH_AND_NOTICE",
+    });
+    state.findings.get("cf-1")!.crawlConsentId = "consent-watch";
+    await expectRefusal("consent_withdrawn");
+  });
+});

@@ -61,6 +61,8 @@ export type DisplayCase = {
   userId: string;
   createdAt: string;
   status: string;
+  /** "Watch for my images" (WP22): WATCH cases render the watch view. Absent means CASE. */
+  mode?: "CASE" | "WATCH";
   urls: DisplayUrl[];
 };
 
@@ -129,6 +131,7 @@ function toDisplayCase(dbCase: {
   userId: string;
   createdAt: Date;
   status: string;
+  mode?: "CASE" | "WATCH" | null;
   submittedUrls: Array<{
     id: string;
     domain: string;
@@ -150,6 +153,7 @@ function toDisplayCase(dbCase: {
     userId: dbCase.userId,
     createdAt: dbCase.createdAt.toISOString(),
     status: dbCase.status,
+    mode: dbCase.mode ?? "CASE",
     urls: dbCase.submittedUrls.filter((url) => includeFindings || urlSource(url.source) !== "CRAWLER").map(toDisplayUrl),
   };
 }
@@ -286,15 +290,15 @@ export async function getSessionUserStatus(userId: string): Promise<"active" | "
   return user.deactivatedAt ? "deactivated" : "active";
 }
 
-export async function createCase(userId: string): Promise<{ id: string; referenceNumber: string }> {
-  if (isDevNoDb()) return store.createCase(userId);
+export async function createCase(userId: string, mode: "CASE" | "WATCH" = "CASE"): Promise<{ id: string; referenceNumber: string }> {
+  if (isDevNoDb()) return store.createCase(userId, undefined, mode);
   const db = await getPrismaDb();
   let dbCase: { id: string; referenceNumber: string } | null = null;
   for (let attempt = 0; attempt < 5 && !dbCase; attempt += 1) {
     const referenceNumber = generateCaseReference();
     try {
       dbCase = await db.case.create({
-        data: { referenceNumber, userId, status: "OPEN" },
+        data: { referenceNumber, userId, status: "OPEN", mode },
         select: { id: true, referenceNumber: true },
       });
     } catch (error) {
@@ -515,7 +519,7 @@ function includesFindings(options?: CaseReadOptions) {
 
 function memoryDisplayCase(rec: store.CaseRecord, includeFindings: boolean): DisplayCase {
   const urls = includeFindings ? rec.urls : rec.urls.filter((url) => urlSource(url.source) !== "CRAWLER");
-  return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: urls.map(memoryDisplayUrl) };
+  return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, mode: rec.mode ?? "CASE", urls: urls.map(memoryDisplayUrl) };
 }
 
 export async function getCaseForUser(caseId: string, userId: string, options?: CaseReadOptions): Promise<DisplayCase | null> {
@@ -1209,6 +1213,7 @@ export async function listAllCases(): Promise<DisplayCase[]> {
         userId: record.userId,
         createdAt: record.createdAt,
         status: record.status,
+        mode: record.mode ?? "CASE" as const,
         urls: record.urls.map(memoryDisplayUrl),
       }));
   }
