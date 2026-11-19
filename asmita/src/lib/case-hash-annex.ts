@@ -126,6 +126,11 @@ export async function buildSignedHashAnnex(signedIds: string[]): Promise<SignedA
   if (rows.some((h) => h.status !== "APPROVED" && h.status !== "DISPATCHED")) {
     return { ok: false, reason: "fingerprints_pending_review" };
   }
+  // A signed video whose frame list is gone (account erasure) would render as
+  // one frame, not the frames she signed: refuse rather than send a different annex.
+  if (rows.some((h) => h.algorithm === "VPDQ" && !h.videoFramesEncrypted)) {
+    return { ok: false, reason: "signed_fingerprints_changed" };
+  }
   return { ok: true, annex: render(rows) };
 }
 

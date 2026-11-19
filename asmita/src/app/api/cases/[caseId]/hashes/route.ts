@@ -113,6 +113,14 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
   }
 
+  // Throttle before reading up to 1 MiB: parsing a large body costs the
+  // Worker even when the request is later refused. Generous for real use
+  // (60 uploads an hour per survivor); the per-case daily limit below still applies.
+  const bodyLimit = await checkRateLimitAsync(`hashes-body:${auth.session.sub}`, 60, 60 * 60_000);
+  if (!bodyLimit.allowed) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
+
   // Measure the bytes actually read: Content-Length can be absent or wrong.
   let raw: string;
   try {

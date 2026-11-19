@@ -334,6 +334,15 @@ describe("annex, sign and dispatch with a mix of image and video fingerprints", 
   });
 });
 
+describe("a signed video whose frame list is gone", () => {
+  it("is refused at dispatch rather than sent as one frame", async () => {
+    const row = videoRow(VID_ID, new Date("2026-11-02T00:00:00Z"), "APPROVED") as Record<string, unknown>;
+    row.videoFramesEncrypted = null;
+    state.rows = [row];
+    expect(await buildSignedHashAnnex([VID_ID])).toEqual({ ok: false, reason: "signed_fingerprints_changed" });
+  });
+});
+
 describe("admin approval of a video fingerprint behaves like an image", () => {
   it("auto-dispatches the signed advisory, only to the platforms on her signed list", async () => {
     state.rows = [
@@ -399,17 +408,17 @@ describe("admin approval of a video fingerprint behaves like an image", () => {
 describe("edge shapes of the video annex entry", () => {
   it("a VPDQ row whose frame list was cleared still lists one entry, holding the stored best frame", async () => {
     // Account erasure clears the encrypted frame list but keeps the row
-    // (WP17); the entry falls back to the stored best frame's hash.
+    // (WP17); a preview falls back to the stored best frame's hash. Dispatch
+    // of an already signed annex refuses instead (review fix, tested above):
+    // it must never send something different from what she signed.
     const cleared = { ...videoRow(VID_ID, new Date("2026-11-02T00:00:00Z"), "APPROVED"), videoFramesEncrypted: null };
     state.rows = [cleared];
 
-    const annex = await buildSignedHashAnnex([VID_ID]);
-    expect(annex.ok).toBe(true);
-    if (!annex.ok) return;
-    expect(annex.annex.text).toContain("  1. Video fingerprint (vPDQ, 3 frames)");
-    expect(annex.annex.text).toContain(`       ${F2}`);
+    const annex = await buildHashAnnexForSigning("case-1");
+    expect(annex.text).toContain("  1. Video fingerprint (vPDQ, 3 frames)");
+    expect(annex.text).toContain(`       ${F2}`);
     // The best frame's hash appears exactly once: as the one listed frame.
-    expect(annex.annex.text.split(F2).length - 1).toBe(1);
+    expect(annex.text.split(F2).length - 1).toBe(1);
   });
 
   it("the representative notice annex lists a matched video fingerprint as one entry", async () => {
