@@ -201,7 +201,9 @@ export function buildHashAnnex(input: HashAnnexInput) {
       entry.push(
         listed.length < video.frames.length
           ? `     Frame hashes (PDQ, one frame per second; ${listed.length} of ${video.frames.length} listed, evenly spaced):`
-          : `     Frame hashes (PDQ, one frame per second):`,
+          : listed.length < video.frameCount
+            ? `     Frame hashes (PDQ, one frame per second; ${listed.length} of ${video.frameCount} listed):`
+            : `     Frame hashes (PDQ, one frame per second):`,
       );
       for (const frame of listed) entry.push(`       ${frame}`);
     }

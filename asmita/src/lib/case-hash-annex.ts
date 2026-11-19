@@ -94,6 +94,13 @@ export async function buildHashAnnexForSigning(caseId: string): Promise<HashAnne
   return render(await db.hashSubmission.findMany(signingQuery(caseId)));
 }
 
+/** Whether the case has a photo (PDQ) fingerprint the crawler can search for today. */
+export async function hasSignableImageFingerprint(caseId: string): Promise<boolean> {
+  if (process.env.ENABLE_HASH_UPLOAD !== "true") return false;
+  const rows = await db.hashSubmission.findMany({ ...signingQuery(caseId), select: { algorithm: true } });
+  return rows.some((row) => row.algorithm === "PDQ");
+}
+
 /** The ids buildHashAnnexForSigning would list, without decrypting anything. */
 export async function signableHashIds(caseId: string): Promise<string[]> {
   if (process.env.ENABLE_HASH_UPLOAD !== "true") return [];

@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { writeAuditLog } from "@/lib/audit";
 import { crawlMemory } from "@/lib/crawl-store";
-import { buildHashAnnexForSigning } from "@/lib/case-hash-annex";
+import { hasSignableImageFingerprint, buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { noticeDate } from "@/lib/notice-date";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
 import { templateRef } from "@/lib/signed-template";
@@ -104,6 +104,9 @@ export async function buildCrawlAuthorisationDraft(
   if (!template) return { error: "template_missing" };
   const annex = await buildHashAnnexForSigning(caseId);
   if (annex.hashSubmissionIds.length === 0) return { error: "no_hashes" };
+  // The crawler searches photo fingerprints only until video search is built
+  // (video-fingerprints spec WP20): a video-only case is not offered the search.
+  if (!(await hasSignableImageFingerprint(caseId))) return { error: "no_hashes" };
   const variables = { caseReference: referenceNumber, declarationReference: referenceNumber };
   return {
     template,

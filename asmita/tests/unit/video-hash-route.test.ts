@@ -187,3 +187,46 @@ describe("POST /api/cases/[caseId]/hashes with a video item", () => {
     expect(m.logSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({ event: "media_payload_rejected" }));
   });
 });
+
+// Review fixes: nothing can hide in an unknown key, and the size cap counts the
+// bytes actually read.
+describe("hash route rejects hidden media and oversized image-only bodies", () => {
+  const DATA_URL = "data:image/jpeg;base64," + "A".repeat(2000);
+
+  it("refuses an unknown key on an image item instead of dropping it", async () => {
+    const res = await post([{ hash: H1, quality: 80, frame: DATA_URL }]);
+    expect(res.status).toBe(400);
+    expect(m.hashCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unknown key at the top level", async () => {
+    const res = await addHashes(
+      new Request("https://asmita.test/api/cases/case-1/hashes", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ hashes: [{ hash: H1, quality: 80 }], declaration: true, preview: DATA_URL }),
+      }),
+      { params: Promise.resolve({ caseId: "case-1" }) },
+    );
+    expect(res.status).toBe(400);
+    expect(m.hashCreate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the 16 KB cap for a request with no video item, whatever Content-Length says", async () => {
+    const res = await addHashes(
+      new Request("https://asmita.test/api/cases/case-1/hashes", {
+        method: "POST",
+        headers: { "content-type": "application/json", "content-length": "10" },
+        body: JSON.stringify({ hashes: [{ hash: H1, quality: 80, clientVersion: "x".repeat(40) }], declaration: true, pad: " ".repeat(20_000) }),
+      }),
+      { params: Promise.resolve({ caseId: "case-1" }) },
+    );
+    expect([400, 413]).toContain(res.status);
+    expect(m.hashCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses a video frame timed after the end of the video", async () => {
+    const res = await post([{ ...videoBody, durationSec: 1, frames: [{ hash: H1, quality: 80, t: 5 }] }]);
+    expect(res.status).toBe(400);
+  });
+});

@@ -169,8 +169,11 @@ export async function dispatchHashAdvisories(input: {
       // database error here) must not stop dispatch to the others.
       try {
       if (accessToken) {
+        // Photo (PDQ) fingerprints only: the platform API has no video (vPDQ)
+        // format yet, and a video's best frame alone is not the video. Videos
+        // still reach the platform in the annex of the notice body.
         const rows = await db.hashSubmission.findMany({
-          where: { id: { in: pendingSubmissions.map((s) => s.id) } },
+          where: { id: { in: pendingSubmissions.map((s) => s.id) }, algorithm: "PDQ" },
           select: { hashEncrypted: true, quality: true },
         });
         const fingerprintValues = rows.map((row) => ({

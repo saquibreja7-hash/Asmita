@@ -187,7 +187,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           name: file.name,
           kind: isVideo ? "video" : "image",
           status: "error",
-          error: err instanceof VpdqError ? err.code : undefined,
+          error: err instanceof VpdqError ? err.code : isVideo ? "video_cannot_read" : undefined,
         };
       }
       const done = finished[index];

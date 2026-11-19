@@ -37,12 +37,14 @@ function hashUploadEnabled() {
 // their exact old shape (`kind` defaults to image); a video item (video
 // fingerprints WP17) is strict: only its four fields are accepted, and its
 // frames are hashes plus two small integers, never video bytes.
-const imageItem = z.object({
-  kind: z.literal("image").optional(),
-  hash: z.string().min(1).max(64),
-  quality: z.number().int().min(0).max(100),
-  clientVersion: z.string().max(50).optional(),
-});
+const imageItem = z
+  .object({
+    kind: z.literal("image").optional(),
+    hash: z.string().min(1).max(64),
+    quality: z.number().int().min(0).max(100),
+    clientVersion: z.string().max(50).optional(),
+  })
+  .strict();
 const videoItem = z
   .object({
     kind: z.literal("video"),
@@ -61,15 +63,20 @@ const videoItem = z
     durationSec: z.number().int().min(1).max(MAX_VIDEO_DURATION_SEC),
     clientVersion: z.string().max(50).optional(),
   })
+  .strict()
+  .refine((item) => item.frames.every((frame) => frame.t <= item.durationSec), { message: "frame_after_end" });
+// Strict throughout: an unknown key (a smuggled frame or data URL) is a
+// rejection, never silently dropped.
+const schema = z
+  .object({
+    hashes: z
+      .array(z.union([imageItem, videoItem]))
+      .min(1)
+      .max(MAX_HASHES_PER_SUBMISSION),
+    declaration: z.boolean().refine(Boolean),
+    platformIds: z.array(z.string().uuid()).max(20).optional(),
+  })
   .strict();
-const schema = z.object({
-  hashes: z
-    .array(z.union([imageItem, videoItem]))
-    .min(1)
-    .max(MAX_HASHES_PER_SUBMISSION),
-  declaration: z.boolean().refine(Boolean),
-  platformIds: z.array(z.string().uuid()).max(20).optional(),
-});
 
 // The largest legal request is MAX_HASHES_PER_SUBMISSION video items of
 // MAX_VIDEO_FRAMES hashes each: 10 x 1000 x ~96 bytes of
@@ -77,6 +84,8 @@ const schema = z.object({
 // this cap can never be a valid submission. Frame content is still checked
 // field by field (validateVideoItem), exactly like an image hash.
 const MAX_BODY_BYTES = 1_048_576;
+// A request with no video item keeps the old image-only cap.
+const MAX_IMAGE_ONLY_BODY_BYTES = 16_384;
 
 export async function POST(request: Request, context: { params: Promise<{ caseId: string }> }) {
   if (!hashUploadEnabled()) {
@@ -104,15 +113,36 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
   }
 
+  // Measure the bytes actually read: Content-Length can be absent or wrong.
+  let raw: string;
+  try {
+    raw = await request.text();
+  } catch {
+    return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
+  }
+  const tooLarge = async (size: number) => {
+    await logSecurityEvent({
+      event: "media_payload_rejected",
+      actorHash: auth.session.emailHash,
+      route: "/api/cases/[caseId]/hashes",
+      reason: `body_bytes:${size}`,
+    });
+    return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
+  };
+  const size = new TextEncoder().encode(raw).length;
+  if (size > MAX_BODY_BYTES) return tooLarge(size);
   let payload: unknown;
   try {
-    payload = await request.json();
+    payload = JSON.parse(raw);
   } catch {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
   const parsed = schema.safeParse(payload);
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
+  }
+  if (size > MAX_IMAGE_ONLY_BODY_BYTES && !parsed.data.hashes.some((item) => item.kind === "video")) {
+    return tooLarge(size);
   }
   const { caseId } = await context.params;
 
