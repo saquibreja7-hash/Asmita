@@ -131,8 +131,15 @@ export function CrawlConsent({
       }
       await load();
       setAnnounce(t(locale, k("crawl.announce.on", "watch.announce.on")));
-      onNowOn?.();
-      router.refresh();
+      if (onNowOn) {
+        // The /watch flow navigates to her watch page: the navigation loads
+        // it fresh, and a router.refresh() on top of it races the pending
+        // route change away (WP34 — the tick could leave her stranded on
+        // /watch with "Watching is on" and no navigation).
+        onNowOn();
+      } else {
+        router.refresh();
+      }
     } catch {
       setError(t(locale, "crawl.error.timeout"));
     } finally {
