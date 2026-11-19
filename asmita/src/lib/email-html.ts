@@ -1,13 +1,14 @@
 // HTML email layouts: survivor emails and the letter wrapper for notices.
 //
 // Design constraints (deliberate, do not "improve" away):
-// - Discreet: no imagery and no logo image; the wordmark is plain text. The
-//   hidden preheader (what a lock screen or inbox list shows after the
-//   subject) is neutral and never says what Asmita is about.
+// - Discreet: the only image is Asmita's own logo, from Asmita's own domain
+//   (owner decision), with alt text that reads "Asmita" when images are
+//   blocked. The hidden preheader (what a lock screen or inbox list shows
+//   after the subject) is neutral and never says what Asmita is about.
 // - Table layout + inline styles: Gmail and Outlook strip most <style>. The
 //   one <style> block only adds dark-mode colours where clients honour it.
-// - No external resources (no remote images or fonts): nothing that looks
-//   like tracking, and the email renders fully with images blocked.
+// - No other remote resources (no fonts, no third-party images, no tracking
+//   parameters): the email reads fully with images blocked.
 // - A plain-text part is always sent alongside (built by the callers).
 // - No coloured left-border accent stripes (owner rule).
 
@@ -18,7 +19,7 @@ const TEXT = "#3a4442";
 const MUTED = "#6b7672";
 const LINE = "#e6e2da";
 const PAGE = "#eef4f2"; // a soft teal tint behind the card
-const BAND = "#0f4f49"; // header band
+const BAND = "#e3f0ed"; // light header band, so the teal logo reads in both themes
 const CARD = "#ffffff";
 
 const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans','Noto Sans Devanagari',Arial,sans-serif";
@@ -58,16 +59,21 @@ export type EmailHtmlInput = {
   lang?: "en" | "hi";
 };
 
+/** Asmita's logo, served from Asmita's own site (the same file as the site header). */
+function logoUrl() {
+  const base = (process.env.NEXT_PUBLIC_APP_URL || "https://meriasmita.org").replace(/\/+$/, "");
+  return `${base}/asmita-wordmark-v2.png`;
+}
+
 function wordmark() {
-  // Text, never an image: images are often blocked and can look like tracking.
-  return `<p style="margin:0;font-family:${SERIF};font-size:30px;line-height:1;color:#ffffff;letter-spacing:0.01em;">Asmita</p>
-    <p style="margin:8px 0 0 0;font-family:${SANS};font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#bfe3dc;">Free and confidential</p>`;
+  // 317x94 source shown at 160x47. The alt text is styled so a blocked image
+  // still reads as the wordmark.
+  return `<img src="${escapeHtml(logoUrl())}" width="160" height="47" alt="Asmita" style="display:inline-block;border:0;outline:none;text-decoration:none;height:auto;max-width:160px;font-family:${SERIF};font-size:28px;line-height:47px;color:${BRAND};">`;
 }
 
 function signoff() {
   return `<p class="a-ink" style="margin:0 0 3px 0;font-size:15px;font-weight:700;color:${INK};">Team Asmita</p>
-    <p class="a-muted" style="margin:0;font-size:13px;line-height:1.6;color:${MUTED};">Support to remove non-consensual images, free of charge</p>
-    <p style="margin:6px 0 0 0;font-size:13px;"><a href="https://meriasmita.org" class="a-brand" style="color:${BRAND};text-decoration:none;font-weight:600;">meriasmita.org</a></p>`;
+    <p style="margin:2px 0 0 0;font-size:13px;"><a href="https://meriasmita.org" class="a-brand" style="color:${BRAND};text-decoration:none;font-weight:600;">meriasmita.org</a></p>`;
 }
 
 function shell(input: { lang: string; preheader: string; body: string; footer: string; signoff: string }) {
@@ -90,6 +96,7 @@ function shell(input: { lang: string; preheader: string; body: string; footer: s
     .a-box { background:#173330 !important; border-color:#24504b !important; }
     .a-brand { color:#7fd1c5 !important; }
     .a-line { border-color:#2c3533 !important; }
+    .a-band { background:${BAND} !important; }
   }
 </style>
 </head>
@@ -100,14 +107,14 @@ function shell(input: { lang: string; preheader: string; body: string; footer: s
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
         <tr><td>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-card" style="background:${CARD};border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(15,79,73,0.10);">
-            <tr><td align="center" style="background:${BAND};padding:34px 32px;">${wordmark()}</td></tr>
+            <tr><td align="center" class="a-band" style="background:${BAND};padding:30px 32px;">${wordmark()}</td></tr>
             <tr><td style="padding:38px 36px 6px 36px;font-family:${SANS};">${input.body}</td></tr>
             ${input.signoff ? `<tr><td style="padding:0 36px 8px 36px;font-family:${SANS};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td class="a-line" style="border-top:1px solid ${LINE};padding-top:24px;">${input.signoff}</td></tr></table></td></tr>` : ""}
             ${input.footer ? `<tr><td style="padding:14px 36px 30px 36px;font-family:${SANS};">${input.footer}</td></tr>` : `<tr><td style="padding:0 0 24px 0;"></td></tr>`}
           </table>
         </td></tr>
         <tr><td align="center" style="padding:18px 6px 0 6px;font-family:${SANS};">
-          <p class="a-muted" style="margin:0;font-size:12px;line-height:1.6;color:${MUTED};">Asmita &middot; meriasmita.org &middot; free and confidential</p>
+          <p class="a-muted" style="margin:0;font-size:12px;line-height:1.6;color:${MUTED};">Asmita &middot; meriasmita.org</p>
         </td></tr>
       </table>
     </td></tr>
