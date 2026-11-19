@@ -10,13 +10,21 @@ import { createCrawlSource } from "@/lib/crawl-sources";
 import {
   claimCrawlPages,
   crawlPageDigest,
+  crawlPageKey,
+  FRONTIER_ALIASES_PER_PAGE_MAX,
   FRONTIER_CLAIM_MS,
   FRONTIER_MAX_INTERVAL_MS,
+  FRONTIER_PRIORITY_DEFAULT,
+  FRONTIER_PRIORITY_LASTMOD,
   FRONTIER_REVISIT_MS,
+  linkPriority,
   planNextVisit,
   reportCrawlPages,
 } from "@/lib/crawl-pages";
 import { purgeExpiredCrawlPages, URL_RETENTION_MS } from "@/lib/url-retention";
+import { pageKey } from "@/lib/crawl-page-key";
+import { encryptField } from "@/lib/encryption";
+import { sha256 } from "@/lib/hash";
 import { POST as postClaim } from "@/app/api/crawler/frontier/claim/route";
 import { POST as postReport } from "@/app/api/crawler/frontier/report/route";
 
@@ -440,5 +448,485 @@ describe("frontier routes", () => {
     }));
     expect(await again.json()).toEqual({ accepted: 1 });
     expect([...crawlMemory().pages.values()].filter((p) => p.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/x"))).toHaveLength(1);
+  });
+});
+
+// --- crawler v3 WP10: count the same page once ------------------------------
+
+/** Every form of one page: scheme, host form, trailing slash, index document. */
+const ONE_PAGE = [
+  "https://forum.example.com/target",
+  "http://forum.example.com/target",
+  "https://forum.example.com/target/",
+  "https://forum.example.com/target/index.html",
+  "https://forum.example.com/target/index.htm",
+  "https://forum.example.com/target/index.php",
+  "https://www.forum.example.com/target",
+  "http://www.forum.example.com/target/index.html",
+  "https://forum.example.com/target?utm_source=x", // tracking noise
+];
+
+/** Near-misses that must stay distinct pages. */
+const DISTINCT_PAGES = [
+  "https://forum.example.com/", // the root is its own page
+  "https://forum.example.com/target/extra",
+  "https://forum.example.com/target?a=1", // a real parameter is content
+  "https://forum.example.com:8443/target", // a non-default port is another server
+  "https://shop.forum.example.com/target", // a subdomain other than www
+  "https://forum.example.com/indexeling", // "index" as a prefix
+  "https://forum.example.com/target/index.html/x", // the index document is not final
+];
+
+describe("page key (WP10)", () => {
+  it("digests every form of one page to one frontier row", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: seed[0]!.id, status: "fetched", links: ONE_PAGE.map((url) => ({ url, kind: "page" as const })) },
+    ], nowAt(1 * MIN));
+    const rows = [...crawlMemory().pages.values()];
+    expect(rows).toHaveLength(2); // the seed and exactly one row for the target
+    const target = rows.find((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/target"));
+    expect(target).toBeDefined();
+    expect(target!.depth).toBe(1);
+  });
+
+  it("keeps distinct pages distinct", () => {
+    for (const raw of DISTINCT_PAGES) {
+      expect(crawlPageDigest(sourceId, raw), raw).not.toBe(crawlPageDigest(sourceId, "https://forum.example.com/target"));
+    }
+    expect(new Set(DISTINCT_PAGES.map((raw) => crawlPageDigest(sourceId, raw))).size).toBe(DISTINCT_PAGES.length);
+  });
+
+  it("is the same key the crawler computes (shared module, both sides pinned)", () => {
+    // crawlPageKey delegates to the one module the crawler imports
+    // (asmita/src/lib/crawl-page-key.ts); the crawler's
+    // tests/unit/page-key-contract.test.ts pins its urlKey to the same
+    // module, so this is the contract that both sides agree.
+    for (const raw of [...ONE_PAGE, ...DISTINCT_PAGES, "https://forum.example.com/index.html"]) {
+      expect(crawlPageKey(raw), raw).toBe(pageKey(raw));
+    }
+  });
+
+  it("collapses the root's index document to the root itself", () => {
+    expect(crawlPageKey("https://forum.example.com/index.html")).toBe("https://forum.example.com/");
+    expect(crawlPageKey("https://forum.example.com/index.php")).toBe("https://forum.example.com/");
+    expect(crawlPageKey("https://forum.example.com/")).toBe("https://forum.example.com/");
+  });
+
+  it("existing rows keep their stored digest; a same-page link is a second row until the old one ages out", async () => {
+    // A row digested under the pre-WP10 rule (address as written, tracking
+    // stripped) is never re-digested: the digest is computed once at insert.
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    const legacyUrl = "https://forum.example.com/old/";
+    const legacyDigest = sha256(`crawl-page\u0000${sourceId}\u0000${legacyUrl}`);
+    crawlMemory().pages.set("page-legacy", {
+      id: "page-legacy", sourceId, urlEncrypted: encryptField(legacyUrl), urlDigest: legacyDigest,
+      depth: 1, kind: "PAGE", priority: 100, etag: null, lastModified: null, status: "PENDING",
+      claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: nowAt(0),
+    });
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: seed[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/old", kind: "page" }] },
+    ], nowAt(1 * MIN));
+    // The old row is untouched, digest and status included.
+    const legacy = crawlMemory().pages.get("page-legacy")!;
+    expect(legacy.urlDigest).toBe(legacyDigest);
+    expect(legacy.status).toBe("PENDING");
+    // The new-rule link of the same page is stored as a second row (the
+    // duplicate is accepted until the old row ages out of retention).
+    const fresh = [...crawlMemory().pages.values()].find((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/old"));
+    expect(fresh).toBeDefined();
+    expect(fresh!.id).not.toBe("page-legacy");
+  });
+});
+
+describe("canonical aliases (WP10)", () => {
+  it("kills the live row of an in-scope alias; the address is never handed out again", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: seed[0]!.id, status: "fetched", links: [
+        { url: "https://forum.example.com/dupe", kind: "page" },
+        { url: "https://forum.example.com/twin", kind: "page" },
+      ] },
+    ], nowAt(1 * MIN));
+    const batch = await claimCrawlPages(sourceId, 10, nowAt(2 * MIN));
+    expect(batch).toHaveLength(2);
+    const dupe = batch.find((b) => b.url.endsWith("/dupe"))!;
+    const twin = batch.find((b) => b.url.endsWith("/twin"))!;
+    // /dupe names /twin (in its trailing-slash form) as its canonical.
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: dupe.id, status: "fetched", aliases: ["https://forum.example.com/twin/"], links: [] },
+      { id: twin.id, status: "fetched", links: [] },
+    ], nowAt(3 * MIN));
+    const twinDigest = crawlPageDigest(sourceId, "https://forum.example.com/twin")!;
+    const twinRow = [...crawlMemory().pages.values()].find((r) => r.urlDigest === twinDigest)!;
+    expect(twinRow.status).toBe("DEAD"); // killed even though this same report fetched it
+    expect(twinRow.claimedUntil).toBeNull();
+    // Never due again (the dupe page itself is scheduled 24 h out, so nothing
+    // is due for the rest of the day), whatever spelling a later link uses.
+    expect(await claimCrawlPages(sourceId, 10, nowAt(4 * MIN))).toEqual([]);
+    const again = await reportCrawlPages(sourceId, "run-1", [
+      { id: dupe.id, status: "fetched", aliases: ["https://forum.example.com/twin/index.html"], links: [{ url: "https://www.forum.example.com/twin", kind: "page" }] },
+    ], nowAt(31 * DAY));
+    expect(again.accepted).toBe(1); // the dupe page itself moved on
+    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === twinDigest)).toHaveLength(1); // one row, still dead
+    expect(crawlMemory().pages.get(dupe.id)!.status).toBe("FETCHED");
+  });
+
+  it("tombstones an alias that has no row: its link in the same report is swallowed", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: seed[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/canon-page", kind: "page" }] },
+    ], nowAt(1 * MIN));
+    const batch = await claimCrawlPages(sourceId, 10, nowAt(2 * MIN));
+    expect(batch).toHaveLength(1);
+    // The page's canonical target is also reported as a link by another page
+    // in the same report (the fixture's late twin): the alias wins.
+    await reportCrawlPages(sourceId, "run-1", [
+      {
+        id: batch[0]!.id,
+        status: "fetched",
+        aliases: ["https://forum.example.com/late-twin"],
+        links: [
+          { url: "https://forum.example.com/late-twin", kind: "page" },
+          { url: "https://forum.example.com/real-content", kind: "page" },
+        ],
+      },
+    ], nowAt(3 * MIN));
+    const lateDigest = crawlPageDigest(sourceId, "https://forum.example.com/late-twin")!;
+    const lateRows = [...crawlMemory().pages.values()].filter((r) => r.urlDigest === lateDigest);
+    expect(lateRows).toHaveLength(1);
+    expect(lateRows[0]!.status).toBe("DEAD"); // the digest-only tombstone
+    // The live link beside it was stored, the alias was not.
+    const real = [...crawlMemory().pages.values()].find((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/real-content"));
+    expect(real).toBeDefined();
+    expect(real!.status).toBe("PENDING");
+    // The tombstone is dead, never due: it leaves with the retention sweep
+    // (the other rows are due and stay).
+    expect(await purgeExpiredCrawlPages(nowAt(35 * DAY))).toBe(1);
+    expect([...crawlMemory().pages.values()].filter((r) => r.status === "DEAD")).toHaveLength(0);
+  });
+
+  it("a later link to a tombstoned alias never becomes a live row", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: seed[0]!.id, status: "fetched", aliases: ["https://forum.example.com/never-fetch"], links: [] },
+    ], nowAt(1 * MIN));
+    const digest = crawlPageDigest(sourceId, "https://forum.example.com/never-fetch")!;
+    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === digest)).toHaveLength(1);
+    const second = await createSource("second-forum.example.com", 10);
+    // A different source is unaffected: the digest is per source.
+    const otherSeed = await claimCrawlPages(second, 10, nowAt(2 * MIN));
+    await reportCrawlPages(second, "run-1", [
+      { id: otherSeed[0]!.id, status: "fetched", links: [{ url: "https://second-forum.example.com/never-fetch", kind: "page" }] },
+    ], nowAt(3 * MIN));
+    expect((await claimCrawlPages(second, 10, nowAt(4 * MIN))).length).toBe(1);
+    // On this source a page now links the same address: no live row appears.
+    await reportCrawlPages(sourceId, "run-2", [
+      { id: seed[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/never-fetch/index.php", kind: "page" }] },
+    ], nowAt(5 * MIN));
+    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === digest)).toHaveLength(1);
+    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === digest)[0]!.status).toBe("DEAD");
+  });
+
+  it("ignores self-aliases, off-scope aliases and malformed ones", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    const seedRow = crawlMemory().pages.get(seed[0]!.id)!;
+    await reportCrawlPages(sourceId, "run-1", [
+      {
+        id: seed[0]!.id,
+        status: "fetched",
+        aliases: [
+          seed[0]!.url, // names itself canonical: no alias
+          "https://forum.example.com/", // the seed's own address, same digest
+          "https://other.example.org/x", // off the source host: never stored
+          "https://forum.example.com:8443/x", // non-default port: refused
+          "https://user:pw@forum.example.com/x", // credentials: refused
+          "not a valid url at all", // malformed: refused
+          "ftp://forum.example.com/x", // scheme: refused
+        ],
+        links: [{ url: "https://forum.example.com/kept", kind: "page" }],
+      },
+    ], nowAt(1 * MIN));
+    const rows = [...crawlMemory().pages.values()];
+    expect(rows).toHaveLength(2); // the seed and the kept link only
+    expect(crawlMemory().pages.get(seed[0]!.id)!.status).toBe("FETCHED"); // not killed by its self-alias
+    expect(crawlMemory().pages.get(seed[0]!.id)!.urlDigest).toBe(seedRow.urlDigest);
+  });
+
+  it("an alias of a dead row changes nothing; a retried report is safe", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    const id = seed[0]!.id;
+    // Five failures kill the page (the app's dead-after-five rule).
+    let cursor = nowAt(0);
+    for (let i = 0; i < 5; i++) {
+      await reportCrawlPages(sourceId, "run-1", [{ id, status: "error", links: [] }], cursor);
+      cursor = crawlMemory().pages.get(id)!.nextDueAt;
+    }
+    expect(crawlMemory().pages.get(id)!.status).toBe("DEAD");
+    // A late report of the dead row — with an alias, as a retry might carry —
+    // changes nothing: no row is scheduled, no tombstone is stored.
+    const late = await reportCrawlPages(sourceId, "run-1", [
+      { id, status: "fetched", aliases: ["https://forum.example.com/after-dead"], links: [] },
+    ], nowAt(3 * DAY));
+    expect(late.accepted).toBe(0);
+    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/after-dead"))).toHaveLength(0);
+    expect([...crawlMemory().pages.values()]).toHaveLength(1);
+  });
+
+  it("the report schema is strict: more than 20 aliases skips the entry whole", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    const id = seed[0]!.id;
+    const aliases = (n: number) => Array.from({ length: n }, (_, i) => `https://forum.example.com/alias-${i}`);
+    // 21 aliases: the entry fails validation and is skipped, envelope intact.
+    const over = await postReport(crawlerRequest("frontier/report", {
+      method: "POST",
+      body: { sourceId, runId: "run-1", pages: [{ id, status: "fetched", aliases: aliases(FRONTIER_ALIASES_PER_PAGE_MAX + 1), links: [] }] },
+    }));
+    expect(over.status).toBe(200);
+    expect(await over.json()).toEqual({ accepted: 0 });
+    expect(crawlMemory().pages.get(id)!.status).toBe("PENDING"); // not scheduled
+    // Exactly 20 (all distinct) is accepted: the page moves, 20 tombstones.
+    const ok = await postReport(crawlerRequest("frontier/report", {
+      method: "POST",
+      body: { sourceId, runId: "run-1", pages: [{ id, status: "fetched", aliases: aliases(FRONTIER_ALIASES_PER_PAGE_MAX), links: [] }] },
+    }));
+    expect(await ok.json()).toEqual({ accepted: 1 });
+    expect(crawlMemory().pages.get(id)!.status).toBe("FETCHED");
+    expect([...crawlMemory().pages.values()].filter((r) => r.status === "DEAD")).toHaveLength(FRONTIER_ALIASES_PER_PAGE_MAX);
+    // Not a string, or a bad shape, is refused the same way.
+    const bad = await postReport(crawlerRequest("frontier/report", {
+      method: "POST",
+      body: { sourceId, runId: "run-1", pages: [{ id, status: "fetched", aliases: ["https://forum.example.com/a", 5], links: [] }] },
+    }));
+    expect(await bad.json()).toEqual({ accepted: 0 });
+  });
+});
+
+// --- crawler v3 WP11: crawl the useful pages first ---------------------------
+
+/** The frontier row of one page of this source, looked up by its path. */
+function rowOf(path: string) {
+  const digest = crawlPageDigest(sourceId, `https://forum.example.com${path}`);
+  return [...crawlMemory().pages.values()].find((r) => r.urlDigest === digest)!;
+}
+
+describe("crawl order (WP11)", () => {
+  it("linkPriority: sitemap 10, feed 20, pagination 30, pages 50 + 10 per depth, capped", () => {
+    expect(linkPriority({ kind: "sitemap" }, 1)).toBe(10);
+    expect(linkPriority({ kind: "feed" }, 1)).toBe(20);
+    expect(linkPriority({ kind: "page", pagination: true }, 1)).toBe(30);
+    expect(linkPriority({ kind: "page", pagination: false }, 1)).not.toBe(30); // only a marked link is pagination
+    expect(linkPriority({ kind: "page" }, 0)).toBe(50);
+    expect(linkPriority({ kind: "page" }, 1)).toBe(60);
+    expect(linkPriority({ kind: "page" }, 5)).toBe(100);
+    expect(linkPriority({ kind: "page" }, 9)).toBe(100); // the cap is the default
+    expect(FRONTIER_PRIORITY_DEFAULT).toBe(100);
+    expect(FRONTIER_PRIORITY_LASTMOD).toBe(5);
+  });
+
+  it("a report stores each link's row with the priority its kind implies", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    await reportCrawlPages(sourceId, "run-1", [
+      {
+        id: seed[0]!.id,
+        status: "fetched",
+        links: [
+          { url: "https://forum.example.com/sitemap.xml", kind: "sitemap" },
+          { url: "https://forum.example.com/feed.rss", kind: "feed" },
+          { url: "https://forum.example.com/list?page=2", kind: "page", pagination: true },
+          { url: "https://forum.example.com/deep", kind: "page" },
+        ],
+      },
+    ], nowAt(1 * MIN));
+    expect(rowOf("/sitemap.xml").priority).toBe(10);
+    expect(rowOf("/feed.rss").priority).toBe(20);
+    expect(rowOf("/list?page=2").priority).toBe(30);
+    expect(rowOf("/deep").priority).toBe(60); // depth 1: 50 + 10
+    // The seed row is the app's own: it keeps the default.
+    expect(crawlMemory().pages.get(seed[0]!.id)!.priority).toBe(100);
+    // A link reported by a depth-1 page sits one level deeper.
+    const batch = await claimCrawlPages(sourceId, 10, nowAt(2 * MIN));
+    expect(batch.map((u) => u.url)).toEqual([
+      "https://forum.example.com/sitemap.xml",
+      "https://forum.example.com/feed.rss",
+      "https://forum.example.com/list?page=2",
+      "https://forum.example.com/deep",
+    ]);
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: batch[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/from-sitemap", kind: "page" }] },
+    ], nowAt(3 * MIN));
+    expect(rowOf("/from-sitemap").priority).toBe(70); // depth 2
+  });
+
+  it("claims lowest priority first, then the row that has been due the longest", async () => {
+    // A row stored before WP11 (the default 100) runs after every new row.
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: seed[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/a", kind: "page" }] },
+    ], nowAt(1 * MIN));
+    crawlMemory().pages.set("page-old", {
+      id: "page-old", sourceId, urlEncrypted: encryptField("https://forum.example.com/old"), urlDigest: crawlPageDigest(sourceId, "https://forum.example.com/old")!,
+      depth: 1, kind: "PAGE", priority: FRONTIER_PRIORITY_DEFAULT, etag: null, lastModified: null, status: "PENDING",
+      claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: nowAt(0),
+    });
+    let batch = await claimCrawlPages(sourceId, 10, nowAt(2 * MIN));
+    expect(batch.map((u) => u.url)).toEqual(["https://forum.example.com/a", "https://forum.example.com/old"]);
+    // Both rows are claimed for 30 minutes; the next ordering check runs
+    // after the claim window.
+    const claimed = new Set(batch.map((u) => u.id));
+    expect(claimed.has("page-old")).toBe(true);
+
+    // Same priority: the earlier nextDueAt wins; a lower number beats a later due time.
+    const rowA = rowOf("/a");
+    rowA.priority = 60;
+    rowA.nextDueAt = nowAt(10 * MIN);
+    const old = crawlMemory().pages.get("page-old")!;
+    old.priority = 60;
+    old.nextDueAt = nowAt(5 * MIN);
+    crawlMemory().pages.set("page-mid", {
+      id: "page-mid", sourceId, urlEncrypted: encryptField("https://forum.example.com/mid"), urlDigest: crawlPageDigest(sourceId, "https://forum.example.com/mid")!,
+      depth: 1, kind: "PAGE", priority: 90, etag: null, lastModified: null, status: "PENDING",
+      claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: nowAt(0),
+    });
+    batch = await claimCrawlPages(sourceId, 10, nowAt(40 * MIN));
+    // old (60, due 5 min) before a (60, due 10 min) before mid (90, due since ever).
+    expect(batch.map((u) => u.url)).toEqual(["https://forum.example.com/old", "https://forum.example.com/a", "https://forum.example.com/mid"]);
+  });
+
+  it("a sitemap link whose lastmod is newer than the row's last fetch jumps the queue", async () => {
+    const t0 = nowAt(0);
+    const seed = await claimCrawlPages(sourceId, 10, t0);
+    // The seed's report stores a sitemap row (10) and a page row whose
+    // sitemap entry carries a lastmod. The page has never been fetched:
+    // no last fetch to compare, so no jump — it is due immediately anyway.
+    await reportCrawlPages(sourceId, "run-1", [
+      {
+        id: seed[0]!.id,
+        status: "fetched",
+        links: [
+          { url: "https://forum.example.com/sitemap.xml", kind: "sitemap" },
+          { url: "https://forum.example.com/changed", kind: "page", lastmod: "2026-11-17T09:05:00Z" },
+          { url: "https://forum.example.com/stale", kind: "page", lastmod: "2026-11-17T08:00:00Z" },
+        ],
+      },
+    ], t0);
+    expect(rowOf("/changed").priority).toBe(60);
+    expect(rowOf("/stale").priority).toBe(60);
+
+    // Fetch the sitemap first (priority 10) and let it report /changed with
+    // the same lastmod: still no fetch to beat.
+    const first = await claimCrawlPages(sourceId, 1, nowAt(1 * MIN));
+    expect(first.map((u) => u.url)).toEqual(["https://forum.example.com/sitemap.xml"]);
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: first[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/changed", kind: "page", lastmod: "2026-11-17T09:05:00Z" }] },
+    ], nowAt(1 * MIN));
+    expect(rowOf("/changed").priority).toBe(60);
+
+    // Fetch /changed itself (last fetch = t2) and /stale (last fetch = t2).
+    const second = await claimCrawlPages(sourceId, 10, nowAt(2 * MIN));
+    expect(second.map((u) => u.url)).toEqual(["https://forum.example.com/changed", "https://forum.example.com/stale"]);
+    await reportCrawlPages(sourceId, "run-1", second.map((u) => ({ id: u.id, status: "fetched" as const, links: [] })), nowAt(2 * MIN));
+    expect(rowOf("/changed").nextDueAt.getTime() - nowAt(2 * MIN).getTime()).toBe(FRONTIER_REVISIT_MS);
+
+    // A retried sitemap report (retry-safe by design) carries a lastmod newer
+    // than /changed's last fetch: priority 5, due now — hours before its own
+    // 24 h schedule. /stale's lastmod is older than its fetch: unchanged.
+    const t3 = nowAt(3 * MIN);
+    await reportCrawlPages(sourceId, "run-1", [
+      {
+        id: first[0]!.id,
+        status: "fetched",
+        links: [
+          { url: "https://forum.example.com/changed", kind: "page", lastmod: "2026-11-17T09:10:00Z" },
+          { url: "https://forum.example.com/stale", kind: "page", lastmod: "2026-11-17T08:00:00Z" },
+        ],
+      },
+    ], t3);
+    const changed = rowOf("/changed");
+    expect(changed.priority).toBe(FRONTIER_PRIORITY_LASTMOD);
+    expect(changed.nextDueAt).toEqual(t3); // due immediately
+    expect(changed.lastFetchedAt).toEqual(nowAt(2 * MIN)); // the jump does not refetch by itself
+    expect(rowOf("/stale").priority).toBe(60);
+    expect(rowOf("/stale").nextDueAt.getTime() - nowAt(2 * MIN).getTime()).toBe(FRONTIER_REVISIT_MS);
+
+    // The jumped row is the only thing due: it is claimed next, 24 h early.
+    const third = await claimCrawlPages(sourceId, 10, nowAt(4 * MIN));
+    expect(third.map((u) => u.url)).toEqual(["https://forum.example.com/changed"]);
+  });
+
+  it("no jump for a page this report fetched, a never-fetched row, or a dead row", async () => {
+    const t0 = nowAt(0);
+    const seed = await claimCrawlPages(sourceId, 10, t0);
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: seed[0]!.id, status: "fetched", links: [
+        { url: "https://forum.example.com/sitemap.xml", kind: "sitemap" },
+        { url: "https://forum.example.com/fresh", kind: "page" },
+        { url: "https://forum.example.com/doomed", kind: "page" },
+      ] },
+    ], t0);
+    const batch = await claimCrawlPages(sourceId, 10, nowAt(1 * MIN));
+    const byUrl = new Map(batch.map((u) => [u.url, u.id]));
+    // All three rows are in this one report; the sitemap names /fresh with a
+    // future lastmod — but /fresh was fetched by this very report, so its
+    // fresh 24 h schedule wins. /doomed went gone: dead is final.
+    await reportCrawlPages(sourceId, "run-1", [
+      {
+        id: byUrl.get("https://forum.example.com/sitemap.xml")!,
+        status: "fetched",
+        links: [
+          { url: "https://forum.example.com/fresh", kind: "page", lastmod: "2026-11-18T09:00:00Z" },
+          { url: "https://forum.example.com/doomed", kind: "page", lastmod: "2026-11-18T09:00:00Z" },
+        ],
+      },
+      { id: byUrl.get("https://forum.example.com/fresh")!, status: "fetched", links: [] },
+      { id: byUrl.get("https://forum.example.com/doomed")!, status: "gone", links: [] },
+    ], nowAt(2 * MIN));
+    const fresh = rowOf("/fresh");
+    expect(fresh.priority).toBe(60); // not bumped to 5
+    expect(fresh.nextDueAt.getTime() - nowAt(2 * MIN).getTime()).toBe(FRONTIER_REVISIT_MS);
+    const doomed = rowOf("/doomed");
+    expect(doomed.status).toBe("GONE");
+    expect(doomed.priority).toBe(60); // dead rows are never re-queued
+    // And nothing is due before the 24 h schedules.
+    expect(await claimCrawlPages(sourceId, 10, nowAt(3 * MIN))).toEqual([]);
+  });
+
+  it("accepts the crawler's WP11 link fields; a bad one skips the entry whole (contract)", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    const ok = await postReport(crawlerRequest("frontier/report", {
+      method: "POST",
+      body: {
+        sourceId,
+        runId: "run-1",
+        pages: [{
+          id: seed[0]!.id,
+          status: "fetched",
+          links: [
+            { url: "https://forum.example.com/page-1", kind: "page", pagination: true },
+            { url: "https://forum.example.com/page-2", kind: "page", lastmod: "2026-11-17T09:00:00Z" },
+            { url: "https://forum.example.com/sitemap-2.xml", kind: "sitemap", lastmod: "2026-11-17T09:00:00.000Z" },
+          ],
+        }],
+      },
+    }));
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ accepted: 1 });
+    expect(rowOf("/page-1").priority).toBe(30);
+    expect(rowOf("/page-2").priority).toBe(60); // stored, never fetched: the lastmod is not a jump
+    expect(rowOf("/sitemap-2.xml").priority).toBe(10);
+    // Strict per-entry validation: a non-ISO lastmod, a non-boolean pagination
+    // marker or an unknown field skips the entry (the page is not scheduled).
+    for (const links of [
+      [{ url: "https://forum.example.com/x1", kind: "page", lastmod: "17 Nov 2026" }],
+      [{ url: "https://forum.example.com/x2", kind: "page", pagination: "yes" }],
+      [{ url: "https://forum.example.com/x3", kind: "page", urgent: true }],
+    ]) {
+      const bad = await postReport(crawlerRequest("frontier/report", {
+        method: "POST",
+        body: { sourceId, runId: "run-1", pages: [{ id: seed[0]!.id, status: "fetched", links }] },
+      }));
+      expect(await bad.json()).toEqual({ accepted: 0 });
+    }
+    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/x1"))).toHaveLength(0);
   });
 });

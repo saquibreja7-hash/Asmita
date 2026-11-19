@@ -88,11 +88,26 @@ export const ReportedPageSchema = z.strictObject({
   status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
   etag: z.string().min(1).max(512).optional(),
   lastModified: z.string().min(1).max(512).optional(),
+  /**
+   * The page's in-scope <link rel="canonical"> targets (crawler v3 WP10),
+   * reported as aliases: the app never fetches one. Optional on both sides;
+   * at most 20 per page.
+   */
+  aliases: z.array(z.url({ protocol: /^https?$/ })).max(20).optional(),
   links: z
     .array(
       z.strictObject({
         url: z.url({ protocol: /^https?$/ }),
         kind: z.enum(["page", "sitemap", "feed"]),
+        /**
+         * Crawler v3 WP11: a pagination link runs before plain pages (the
+         * app stores priority 30), and a link out of a sitemap document may
+         * carry the entry's <lastmod> as a strict ISO date — an entry newer
+         * than the row's last fetch makes the app crawl it at once.
+         * Optional on both sides.
+         */
+        pagination: z.boolean().optional(),
+        lastmod: z.iso.datetime({ offset: true }).optional(),
       }),
     )
     .max(500),

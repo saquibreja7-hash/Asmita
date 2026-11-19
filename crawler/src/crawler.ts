@@ -13,6 +13,31 @@
  * obvious non-content URLs (login, cart, search, calendar) and query-string
  * traps are skipped.
  *
+ * Sitemap probing (crawler v3 WP9): a source whose robots.txt names no
+ * `Sitemap:` is probed at the conventional paths directly — /sitemap.xml
+ * on the source host, then /sitemap_index.xml, plus the registrable
+ * parent domain's /sitemap.xml for a subdomain source — through
+ * safe-fetch, robots-checked, counted against the page budget, at most
+ * these two (plus one parent) probes per source per run. A 404 or a
+ * non-XML answer is quietly ignored; a probe that parses reuses the WP4
+ * document path, so only in-scope, non-trap entries become links.
+ *
+ * Counting the same page once (crawler v3 WP10): the dedup key shared
+ * with the app (crawl/url.ts -> asmita/src/lib/crawl-page-key.ts) treats
+ * http/https, www./bare host, a trailing slash on a non-root path and a
+ * final /index.{html,htm,php} as one page, https is preferred among the
+ * forms one page offers and the host form seen first is kept; and a
+ * fetched page's <link rel="canonical"> target is reported as an alias
+ * (in scope only, never fetched just because it is canonical), which the
+ * app turns into dead rows so the same content is never fetched twice.
+ *
+ * The useful pages first (crawler v3 WP11): pagination links are flagged
+ * and sitemap <lastmod> values (strict ISO, quietly dropped when unusable)
+ * ride on the reported links, so the app can run sitemaps before feeds
+ * before pagination before plain pages and make a page whose sitemap
+ * entry is newer than its last fetch due at once. The crawler stays
+ * priority-blind: the queue and its order live in the app.
+ *
  * Discovery (crawler v2 WP5): the out-of-scope hosts linked from in-scope
  * pages are reported to the app (hosts only, deduplicated per run, capped
  * by MAX_DISCOVERY_HOSTS); the app decides which become crawl sources. The
@@ -54,7 +79,7 @@ import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robots.ts";
 import { isNonContentUrl, QueryGuardStore, type QueryVariantGuard } from "./crawl/traps.ts";
-import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
+import { inScope, normalizeUrl, registrableParent, sourceHost, urlKey } from "./crawl/url.ts";
 import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
 import { BrowserRenderer, type BrowserImage } from "./browser/browser-renderer.ts";
 import type { ImageDecoder } from "./image/decoder-pool.ts";
@@ -152,6 +177,13 @@ type SourceCtx = {
    */
   robotsSitemaps: URL[] | null;
   /**
+   * Links the WP9 sitemap probes found (pages, child sitemaps, feed
+   * entries), built once after the first claim when the robots stash came
+   * back empty and attached to the source's first reported page entry the
+   * same way; null until the first claim of the run resolved it.
+   */
+  probeLinks: ReportedPage["links"] | null;
+  /**
    * Out-of-scope hosts this source's in-scope pages linked (WP5), reported
    * once per batch and cleared; the run-wide dedup and cap live in the run.
    */
@@ -171,6 +203,8 @@ export type RunResult = {
 const HTML_TYPES = new Set(["text/html", "application/xhtml+xml"]);
 const IMAGE_ACCEPT = "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.1";
 const HTML_ACCEPT = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1";
+/** Sitemap probes (WP9) prefer XML; the wildcard tail keeps misconfigured hosts usable. */
+const XML_ACCEPT = "application/xml,text/xml,application/rss+xml,application/atom+xml,*/*;q=0.1";
 
 export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const { config, api, fetcher } = deps;
@@ -707,8 +741,36 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const REPORT_ENVELOPE_BYTES = 128;
   /** The frontier contract caps a page's reported links at 500. */
   const MAX_REPORT_LINKS_PER_PAGE = 500;
+  /** The frontier contract caps a page's canonical aliases at 20 (WP10). */
+  const MAX_REPORT_ALIASES_PER_PAGE = 20;
   /** A page "has scripts" when its HTML carries a script tag (AUTO rule). */
   const HAS_SCRIPT = /<script[\s>]/i;
+
+  /**
+   * The canonical aliases one fetched HTML page reports (crawler v3 WP10):
+   * its <link rel="canonical"> targets, filtered to what the app may store.
+   * An alias is metadata, never a link: the crawler never fetches the
+   * canonical address, and an out-of-scope or non-content target is dropped
+   * here, silently (it is not a discovery either). The app kills any live
+   * row for an alias and tombstones its digest, so the same page is not
+   * fetched twice.
+   */
+  const pageAliases = (ex: ReturnType<typeof extract>, claimed: URL, ctx: SourceCtx): string[] => {
+    const aliases: string[] = [];
+    if (ex.canonical.length === 0) return aliases;
+    const selfKey = urlKey(claimed);
+    const seen = new Set<string>();
+    for (const candidate of ex.canonical) {
+      if (!inScope(candidate, ctx.scopeHost)) continue; // never fetch it just because it is canonical
+      if (isNonContentUrl(candidate)) continue;
+      const key = urlKey(candidate);
+      if (key === selfKey || seen.has(key)) continue; // a self-referencing canonical is no alias
+      if (aliases.length >= MAX_REPORT_ALIASES_PER_PAGE) break;
+      seen.add(key);
+      aliases.push(candidate.href);
+    }
+    return aliases;
+  };
 
   /**
    * Links for the frontier report, from whichever extraction is in force
@@ -741,7 +803,9 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       if (seenOnPage.has(key)) return true;
       if (links.length >= cap) return false;
       seenOnPage.add(key);
-      links.push({ url: candidate.href, kind });
+      // A pagination link is flagged (crawler v3 WP11) so the app runs it
+      // before plain pages; the flag is data, the priority is the app's.
+      links.push(pagination ? { url: candidate.href, kind, pagination: true } : { url: candidate.href, kind });
       return true;
     };
     for (const link of ex.links) {
@@ -833,9 +897,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const xmlLinks = async (ctx: SourceCtx, docUrl: URL, body: Buffer, kind: XmlDocumentKind, depth: number): Promise<ReportedPage["links"]> => {
     const links: ReportedPage["links"] = [];
     const cap = linkCap();
-    const seen = new Set<string>();
-    /** Add one candidate; false only when the entry is full. */
-    const admit = (candidate: URL, linkKind: "page" | "sitemap" | "feed"): boolean => {
+    /** Key -> index in `links`, so a same-key entry can be upgraded (WP10). */
+    const seen = new Map<string, number>();
+    /**
+     * Add one candidate; false only when the entry is full. `lastmod` is the
+     * candidate's sitemap <lastmod> in strict ISO (crawler v3 WP11): the app
+     * makes a row whose entry is newer than its last fetch due immediately.
+     */
+    const admit = (candidate: URL, linkKind: "page" | "sitemap" | "feed", lastmod?: string | null): boolean => {
       if (!inScope(candidate, ctx.scopeHost)) return true;
       if (isNonContentUrl(candidate)) {
         metrics.linksSkippedNonContent++;
@@ -846,10 +915,22 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         return true;
       }
       const key = urlKey(candidate);
-      if (seen.has(key)) return true;
+      const at = seen.get(key);
+      if (at !== undefined) {
+        // The same page in a second form (WP10): the host form seen first is
+        // kept, but an https form replaces an http one. A lastmod this form
+        // carries wins; otherwise the one already reported is kept.
+        if (candidate.protocol === "https:" && links[at]!.url.startsWith("http://")) {
+          // A null lastmod (a present but unusable value) means "none", the
+          // same as an absent one; a previously reported one is kept.
+          const kept = lastmod ?? links[at]!.lastmod;
+          links[at] = kept != null ? { url: candidate.href, kind: linkKind, lastmod: kept } : { url: candidate.href, kind: linkKind };
+        }
+        return true;
+      }
       if (links.length >= cap) return false;
-      seen.add(key);
-      links.push({ url: candidate.href, kind: linkKind });
+      seen.set(key, links.length);
+      links.push(lastmod != null ? { url: candidate.href, kind: linkKind, lastmod } : { url: candidate.href, kind: linkKind });
       return true;
     };
     if (kind === "urlset" || kind === "sitemapindex") {
@@ -860,7 +941,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         metrics.sitemapUrlsTaken += parsed.children.length;
         if (depth < config.MAX_DEPTH) {
           for (const child of parsed.children) {
-            if (!admit(child, "sitemap")) break;
+            if (!admit(child.loc, "sitemap", child.lastmod)) break;
           }
         }
       } else {
@@ -868,7 +949,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         metrics.sitemapImages += parsed.pages.reduce((n, p) => n + p.images.length, 0);
         if (depth < config.MAX_DEPTH) {
           for (const p of parsed.pages) {
-            if (!admit(p.loc, "page")) break;
+            if (!admit(p.loc, "page", p.lastmod)) break;
           }
         }
         for (const p of parsed.pages) {
@@ -897,26 +978,142 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   };
 
   /**
-   * Attaches the Sitemap: URLs the source's robots.txt named (WP4) to its
-   * first reported page entry, once per source per run; later entries get an
-   * empty stash. The same scope, non-content and query-cap rules apply.
+   * One sitemap probe (WP9). `keepOn` is checked on every redirect hop: the
+   * source's own scope for the source-host probes, and the parent host
+   * itself for the parent probe — the one deliberate fetch outside the
+   * source's scope, so it is pinned as narrowly as the spec allows. A probe
+   * is speculative: any failure (404/410, robots, network, off-host
+   * redirect) and any body that is not an XML sitemap or feed document is
+   * quietly ignored — no error code, no links.
    */
-  const attachRobotsSitemaps = (entry: ReportedPage, ctx: SourceCtx): void => {
+  const probeSitemap = async (
+    ctx: SourceCtx,
+    target: URL,
+    keepOn: (u: URL) => boolean,
+    delayMs: number,
+    depth: number,
+    mayProbe: () => boolean,
+  ): Promise<ReportedPage["links"] | null> => {
+    // robots.txt first, per origin: a probe the rules refuse never reaches
+    // the network, so it costs no budget and no request either.
+    if (!(await robots.rulesFor(target)).isAllowed(target)) return null;
+    if (!mayProbe()) return null;
+    metrics.sitemapProbes++;
+    let res: FetchResult;
+    try {
+      res = await fetchWithRetry(target, {
+        kind: "html",
+        maxBytes: config.MAX_HTML_BYTES,
+        accept: XML_ACCEPT,
+        signal: hard.signal,
+        gate,
+        beforeHop: politeHop(delayMs, (u) => {
+          if (!keepOn(u)) throw new CrawlError("out_of_scope");
+        }),
+      });
+    } catch {
+      return null; // quietly ignored: a probe asks, the site need not answer
+    }
+    let body = res.body;
+    if (isGzipBody(body)) {
+      try {
+        body = await decode(body, "gzip", config.MAX_HTML_BYTES);
+      } catch {
+        return null;
+      }
+    }
+    const docKind = sniffXmlDoc(body);
+    if (docKind === null) return null; // not a sitemap or feed document
+    // Reuse the WP4 path: same caps, same scope and trap rules, image
+    // sitemap entries hashed for their in-scope pages. For the parent probe
+    // this is what drops every entry outside the source's own scope.
+    return await xmlLinks(ctx, res.url, body, docKind, depth);
+  };
+
+  /**
+   * The WP9 probe sequence for one source whose robots.txt names no
+   * `Sitemap:`: /sitemap.xml on the source host, then /sitemap_index.xml
+   * only when the first answered nothing usable, and (a source on a
+   * subdomain) the registrable parent domain's /sitemap.xml besides. At
+   * most these three fetches per source per run, each robots-checked and
+   * counted against the page budget by `mayProbe`.
+   */
+  const probeSitemapPaths = async (
+    ctx: SourceCtx,
+    origin: URL,
+    depth: number,
+    mayProbe: () => boolean,
+  ): Promise<ReportedPage["links"]> => {
+    /** The probe URL: the source's origin (scheme and port as claimed), the host swapped. */
+    const probeUrl = (host: string, path: string): URL => {
+      const u = new URL(path, origin);
+      u.hostname = host;
+      return u;
+    };
+    const links: ReportedPage["links"] = [];
+    const onSource = (u: URL): boolean => inScope(u, ctx.scopeHost);
+    const hit = await probeSitemap(ctx, probeUrl(ctx.scopeHost, "/sitemap.xml"), onSource, ctx.source.delayMs, depth, mayProbe);
+    if (hit !== null) {
+      links.push(...hit); // a usable sitemap: the second path is not probed
+    } else {
+      const second = await probeSitemap(
+        ctx,
+        probeUrl(ctx.scopeHost, "/sitemap_index.xml"),
+        onSource,
+        ctx.source.delayMs,
+        depth,
+        mayProbe,
+      );
+      if (second !== null) links.push(...second);
+    }
+    const parent = registrableParent(ctx.scopeHost);
+    if (parent !== null) {
+      const onParent = (u: URL): boolean => u.hostname.replace(/\.$/, "") === parent;
+      const third = await probeSitemap(
+        ctx,
+        probeUrl(parent, "/sitemap.xml"),
+        onParent,
+        Math.max(ctx.source.delayMs, config.OFFSITE_HOST_DELAY_MS),
+        depth,
+        mayProbe,
+      );
+      if (third !== null) links.push(...third);
+    }
+    return links;
+  };
+
+  /**
+   * Attaches the robots.txt sitemap stash and the WP9 probe links to the
+   * source's first reported page entry, once per source per run; later
+   * entries get empty stashes. The scope, non-content and query-cap rules
+   * already ran when the stashes were built; only the report-entry cap
+   * applies again here.
+   */
+  const attachSeedLinks = (entry: ReportedPage, ctx: SourceCtx): void => {
     const stash = ctx.robotsSitemaps;
-    if (stash === null) return;
-    ctx.robotsSitemaps = [];
-    for (const s of stash) {
-      if (entry.links.length >= linkCap()) break;
-      if (!inScope(s, ctx.scopeHost)) continue;
-      if (isNonContentUrl(s)) {
-        metrics.linksSkippedNonContent++;
-        continue;
+    if (stash !== null) {
+      ctx.robotsSitemaps = [];
+      for (const s of stash) {
+        if (entry.links.length >= linkCap()) break;
+        if (!inScope(s, ctx.scopeHost)) continue;
+        if (isNonContentUrl(s)) {
+          metrics.linksSkippedNonContent++;
+          continue;
+        }
+        if (!ctx.queryGuard.admit(s)) {
+          metrics.linksSkippedQueryCap++;
+          continue;
+        }
+        entry.links.push({ url: s.href, kind: "sitemap" });
       }
-      if (!ctx.queryGuard.admit(s)) {
-        metrics.linksSkippedQueryCap++;
-        continue;
+    }
+    const probes = ctx.probeLinks;
+    if (probes !== null) {
+      ctx.probeLinks = [];
+      for (const link of probes) {
+        if (entry.links.length >= linkCap()) break;
+        entry.links.push(link);
       }
-      entry.links.push({ url: s.href, kind: "sitemap" });
     }
   };
 
@@ -1045,14 +1242,27 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
           maxImages: config.MAX_IMAGES_PER_PAGE,
         });
         recordLinkExtraction(ex2);
-        return { id: page.id, status: "fetched", links: collectLinks(ex2, page, ctx) };
+        const aliases = pageAliases(ex2, url, ctx);
+        return {
+          id: page.id,
+          status: "fetched",
+          links: collectLinks(ex2, page, ctx),
+          ...(aliases.length > 0 ? { aliases } : {}),
+        };
       }
       record(rendered.code);
       if (source.render === "browser") return { id: page.id, status: "error", links: [] };
       // AUTO: the render was an enhancement; report the static result.
       if (stop.signal.aborted) return null;
       recordExtraction(ex);
-      return { id: page.id, status: "fetched", ...validators, links: collectLinks(ex, page, ctx) };
+      const aliases = pageAliases(ex, url, ctx);
+      return {
+        id: page.id,
+        status: "fetched",
+        ...validators,
+        links: collectLinks(ex, page, ctx),
+        ...(aliases.length > 0 ? { aliases } : {}),
+      };
     }
 
     // Static path: images from the HTML, links from the HTML.
@@ -1068,7 +1278,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       // 30-minute window. A killed run loses at most its claimed batch.
       return null;
     }
-    return { id: page.id, status: "fetched", ...validators, links: collectLinks(ex, page, ctx) };
+    const aliases = pageAliases(ex, url, ctx);
+    return {
+      id: page.id,
+      status: "fetched",
+      ...validators,
+      links: collectLinks(ex, page, ctx),
+      ...(aliases.length > 0 ? { aliases } : {}),
+    };
   };
 
   const crawlSource = async (source: Source): Promise<void> => {
@@ -1089,6 +1306,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       failedOffHosts: new Set<string>(),
       queryGuard: queryGuards.guardFor(source.id),
       robotsSitemaps: null,
+      probeLinks: null,
       discoveredHosts: [],
     };
     let pages = 0;
@@ -1154,6 +1372,22 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       }
     };
 
+    /**
+     * Grants one page-budget slot to a WP9 sitemap probe. The claimed batch
+     * is reserved first (a probe must never take a slot its own carrier
+     * page needs, or a source whose budget barely covers its batch would
+     * probe every run and never crawl), and no probe runs once the run is
+     * stopping, a report failed or a budget is spent.
+     */
+    const mayProbe = (reserve: number): boolean => {
+      if (stop.signal.aborted || reportBroken) return false;
+      if (pages + reserve >= source.pageBudget) return false;
+      if (metrics.pagesAttempted + reserve >= config.MAX_PAGES) return false;
+      pages++;
+      metrics.pagesAttempted++;
+      return true;
+    };
+
     while (!stop.signal.aborted && !reportBroken) {
       if (sink.disabled || sink.unauthorized) {
         if (sink.unauthorized) unauthorized = true;
@@ -1197,6 +1431,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         const first = normalizeUrl(batch[0]!.url);
         if (first === null) {
           ctx.robotsSitemaps = [];
+          ctx.probeLinks = []; // no origin to probe on
         } else {
           const rules = await robots.rulesFor(first);
           const seen = new Set<string>();
@@ -1208,6 +1443,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
             list.push(s);
           }
           ctx.robotsSitemaps = list;
+          // robots.txt named no sitemap (WP9): probe the conventional paths
+          // once per source per run, counted against the page budget.
+          ctx.probeLinks =
+            list.length === 0 ? await probeSitemapPaths(ctx, first, batch[0]!.depth, () => mayProbe(batch.length)) : [];
         }
       }
       for (const page of batch) {
@@ -1222,7 +1461,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         metrics.pagesAttempted++;
         const entry = await processPage(page, ctx);
         if (entry !== null) {
-          attachRobotsSitemaps(entry, ctx);
+          attachSeedLinks(entry, ctx);
           const bytes = Buffer.byteLength(JSON.stringify(entry)) + 1;
           if (pendingBytes + bytes > MAX_REPORT_BODY_BYTES) await flushReport();
           pending.push(entry);

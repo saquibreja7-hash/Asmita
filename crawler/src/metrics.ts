@@ -41,6 +41,13 @@ export class RunMetrics {
   pagesXml = 0;
   /** Sitemap documents parsed (index or urlset, WP4). */
   sitemapDocs = 0;
+  /**
+   * Sitemap probes made (crawler v3 WP9): /sitemap.xml, /sitemap_index.xml
+   * and the registrable parent's /sitemap.xml, fetched directly when a
+   * source's robots.txt names no sitemap. Robots-refused probes (which
+   * never reach the network) and budget-refused ones are not counted.
+   */
+  sitemapProbes = 0;
   /** Addresses taken from sitemaps: page locs, child sitemaps, image locs (WP4). */
   sitemapUrlsTaken = 0;
   /** <image:loc> image candidates taken from sitemaps (WP4). */
@@ -148,6 +155,7 @@ export class RunMetrics {
       pagesNonHtml: this.pagesNonHtml,
       pagesXml: this.pagesXml,
       sitemapDocs: this.sitemapDocs,
+      sitemapProbes: this.sitemapProbes,
       sitemapUrlsTaken: this.sitemapUrlsTaken,
       sitemapImages: this.sitemapImages,
       feedsParsed: this.feedsParsed,

@@ -6,10 +6,11 @@
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { parseRobots, robotsSitemaps, ROBOTS_SITEMAP_CAP } from "../../src/crawl/robots.ts";
+import { ReportedPageSchema } from "../../src/asmita/client.ts";
 import { decodeEntities, isGzipBody, parseFeed, parseSitemap, sniffXmlDoc } from "../../src/crawl/xml-docs.ts";
 
 const base = new URL("https://deep.example/sitemap.xml");
-const loc = (u: string) => ({ loc: new URL(u), images: [] as URL[] });
+const loc = (u: string) => ({ loc: new URL(u), images: [] as URL[], lastmod: null });
 
 describe("sniffXmlDoc", () => {
   it("recognises the four document kinds by root element, whatever the prologue", () => {
@@ -82,7 +83,39 @@ ${entries}
 </sitemapindex>`;
     const parsed = parseSitemap(Buffer.from(xml), base, "sitemapindex", 100);
     expect(parsed.pages).toEqual([]);
-    expect(parsed.children.map((c) => c.href)).toEqual(["https://deep.example/sitemap-1.xml.gz", "https://deep.example/sitemap-2.xml"]);
+    expect(parsed.children.map((c) => c.loc.href)).toEqual(["https://deep.example/sitemap-1.xml.gz", "https://deep.example/sitemap-2.xml"]);
+    expect(parsed.children.map((c) => c.lastmod)).toEqual([null, null]);
+  });
+
+  it("collects <lastmod> as strict ISO, dropping what is not one (WP11)", () => {
+    const xml = urlset(`
+  <url><loc>https://deep.example/full</loc><lastmod>2026-11-19T12:00:00+05:30</lastmod></url>
+  <url><lastmod>2026-11-19</lastmod><loc>https://deep.example/date-only</loc></url>
+  <url><loc>https://deep.example/zulu</loc><lastmod>2026-11-19T10:00:00Z</lastmod></url>
+  <url><loc>https://deep.example/bogus</loc><lastmod>19 Nov 2026</lastmod></url>
+  <url><loc>https://deep.example/partial</loc><lastmod>2026-11</lastmod></url>
+  <url><loc>https://deep.example/none</loc></url>`);
+    const parsed = parseSitemap(Buffer.from(xml), base, "urlset", 100);
+    const lastmod = (u: string) => parsed.pages.find((p) => p.loc.href === u)!.lastmod;
+    expect(lastmod("https://deep.example/full")).toBe("2026-11-19T06:30:00.000Z"); // offset normalised to UTC
+    expect(lastmod("https://deep.example/date-only")).toBe("2026-11-19T00:00:00.000Z"); // the spec's date form
+    expect(lastmod("https://deep.example/zulu")).toBe("2026-11-19T10:00:00.000Z");
+    expect(lastmod("https://deep.example/bogus")).toBeNull(); // never guessed
+    expect(lastmod("https://deep.example/partial")).toBeNull(); // a partial date is not an ISO date
+    expect(lastmod("https://deep.example/none")).toBeNull();
+    // An index child's own <lastmod> is collected the same way.
+    const index = `<?xml version="1.0"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>https://deep.example/child.xml</loc><lastmod>2026-11-19T10:00:00Z</lastmod></sitemap>
+</sitemapindex>`;
+    const kids = parseSitemap(Buffer.from(index), base, "sitemapindex", 100);
+    expect(kids.children[0]!.lastmod).toBe("2026-11-19T10:00:00.000Z");
+    // Whatever the parser produces passes the report contract's ISO rule.
+    for (const entry of [...parsed.pages, ...kids.children]) {
+      if (entry.lastmod === null) continue;
+      const link = { url: entry.loc.href, kind: "page", lastmod: entry.lastmod };
+      expect(ReportedPageSchema.safeParse({ id: "p1", status: "fetched", links: [link] }).success).toBe(true);
+    }
   });
 
   it("stops taking URLs at the cap and reports truncation", () => {

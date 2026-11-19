@@ -858,14 +858,309 @@ ${Array.from({ length: 3 }, (_, i) => `  <entry><title>Post ${i + 1}</title><lin
   return { site, pool, expected, allHashes };
 }
 
+/*
+ * The sitemap-probe fixture (crawler v3 WP9): three sources whose
+ * robots.txt name no sitemap. plain.probe.test serves /sitemap.xml (a
+ * urlset with an image-sitemap entry) and nothing at /sitemap_index.xml;
+ * index.probe.test serves only /sitemap_index.xml (an index pointing at a
+ * child urlset); sub.probe.test serves a non-XML page at /sitemap.xml and
+ * nothing at /sitemap_index.xml, but its registrable parent probe.test
+ * serves a /sitemap.xml that lists in-scope (sub.probe.test) and
+ * out-of-scope (sib.probe.test, probe.test itself) pages. No host here
+ * overlaps the other fixtures' hosts.
+ */
+export const PROBE_PLAIN_HOST = `plain.probe.test`;
+export const PROBE_INDEX_HOST = `index.probe.test`;
+export const PROBE_SUB_HOST = `sub.probe.test`;
+/** The registrable parent of all three sources; its /sitemap.xml is probed once per source. */
+export const PROBE_PARENT_HOST = `probe.test`;
+/** An out-of-scope sibling of sub.probe.test; its page is listed in the parent sitemap and must never be fetched. */
+export const PROBE_SIB_HOST = `sib.probe.test`;
+export const PROBE_HOSTS = [PROBE_PLAIN_HOST, PROBE_INDEX_HOST, PROBE_SUB_HOST, PROBE_PARENT_HOST, PROBE_SIB_HOST];
+
+export async function buildSitemapProbeFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const P = PROBE_PLAIN_HOST;
+  const I = PROBE_INDEX_HOST;
+  const U = PROBE_SUB_HOST;
+  const R = PROBE_PARENT_HOST;
+
+  const img = {
+    alpha: await patternImage(320, 320, 240, "png"),
+    beta: await patternImage(321, 300, 300, "png"),
+    gamma: await patternImage(322, 300, 300, "png"),
+    kept: await patternImage(323, 300, 300, "png"),
+  };
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const h: Record<string, string> = {};
+  for (const [k, v] of Object.entries(img)) h[k] = await hashOf(v);
+  const pool: Pool = {
+    version: "probe-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      { id: "fp-probe-alpha", pdq: h.alpha!, quality: 100 },
+      { id: "fp-probe-beta", pdq: h.beta!, quality: 100 },
+      { id: "fp-probe-gamma", pdq: h.gamma!, quality: 100 },
+      { id: "fp-probe-kept", pdq: h.kept!, quality: 100 },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-probe-alpha", pagePath: "/alpha", imageHost: P, imagePath: "/img/alpha.png" },
+    // beta's image is an <image:loc> entry of the probed sitemap, hashed for its page.
+    { fingerprintId: "fp-probe-beta", pagePath: "/beta", imageHost: P, imagePath: "/img/beta.png" },
+    { fingerprintId: "fp-probe-gamma", pagePath: "/gamma", imageHost: I, imagePath: "/img/gamma.png" },
+    { fingerprintId: "fp-probe-kept", pagePath: "/kept", imageHost: U, imagePath: "/img/kept.png" },
+  ];
+
+  const robotsAllow = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+
+  // ---- (a) plain: /sitemap.xml present, robots.txt names no sitemap ----
+  site.route(P, "/robots.txt", robotsAllow);
+  // The home page links nothing: the probed sitemap is the only way the
+  // fixture's content pages can enter the frontier.
+  site.route(P, "/", sendHtml(html(`<p>plain home, no links</p>`)));
+  site.route(
+    P,
+    "/sitemap.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url><loc>${o(P)}/alpha</loc></url>
+  <url><loc>${o(P)}/beta</loc><image:image><image:loc>${o(P)}/img/beta.png</image:loc></image:image></url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  // No /sitemap_index.xml route: the second probe must never happen once the first hit.
+  site.route(P, "/alpha", sendHtml(html(`<img src="/img/alpha.png">`)));
+  site.route(P, "/beta", sendHtml(html(`<p>its image lives in the sitemap entry</p>`)));
+  site.route(P, "/img/alpha.png", sendBytes(img.alpha, "image/png"));
+  site.route(P, "/img/beta.png", sendBytes(img.beta, "image/png"));
+
+  // ---- (b) index: only /sitemap_index.xml ----
+  site.route(I, "/robots.txt", robotsAllow);
+  site.route(I, "/", sendHtml(html(`<p>index home, no links</p>`)));
+  // No /sitemap.xml route: the probe 404s quietly and the second path is tried.
+  site.route(
+    I,
+    "/sitemap_index.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>${o(I)}/sitemap-child.xml</loc></sitemap>
+</sitemapindex>`,
+      ),
+      "application/xml",
+    ),
+  );
+  site.route(
+    I,
+    "/sitemap-child.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${o(I)}/gamma</loc></url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  site.route(I, "/gamma", sendHtml(html(`<img src="/img/gamma.png">`)));
+  site.route(I, "/img/gamma.png", sendBytes(img.gamma, "image/png"));
+
+  // ---- (c) sub: nothing usable itself; the parent sitemap has the pages ----
+  site.route(U, "/robots.txt", robotsAllow);
+  site.route(U, "/", sendHtml(html(`<p>sub home, no links</p>`)));
+  // A non-XML answer at the first probe path: quietly ignored.
+  site.route(U, "/sitemap.xml", sendHtml(html(`<p>soft-404 junk, not a sitemap</p>`)));
+  // No /sitemap_index.xml route: 404, quietly ignored.
+  site.route(U, "/kept", sendHtml(html(`<img src="/img/kept.png">`)));
+  site.route(U, "/img/kept.png", sendBytes(img.kept, "image/png"));
+
+  // ---- the registrable parent, probe.test: its /sitemap.xml lists pages ----
+  site.route(R, "/robots.txt", robotsAllow);
+  site.route(
+    R,
+    "/sitemap.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${o(U)}/kept</loc></url>
+  <url><loc>${o(PROBE_SIB_HOST)}/dropped</loc></url>
+  <url><loc>${o(R)}/apex-dropped</loc></url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  // sib.probe.test and the apex page have no routes: a request would still be
+  // recorded by the fixture server, so the test can prove they never happen.
+
+  return { site, pool, expected, allHashes: Object.values(h) };
+}
+
+/*
+ * The count-once fixture (crawler v3 WP10): one source whose home page links
+ * the same target page in four forms — /target, /target/ (trailing slash),
+ * /target/index.html and the www host — which must become one frontier row
+ * and one fetch; a second page links the https form of the same target after
+ * the row exists, which must change nothing. Canonical aliases: one page
+ * whose canonical target also has a live row (the row is killed), one whose
+ * target has no row yet (a link arriving in the same batch is swallowed by
+ * the tombstone), one canonical pointing at itself and one pointing
+ * off-scope (neither is reported, the off-scope one is never fetched and
+ * never a discovery). No host here overlaps the other fixtures' hosts.
+ */
+export const CANON_HOST = "canon.fixture.test";
+export const WWW_CANON_HOST = `www.${CANON_HOST}`;
+/** An off-scope host a canonical link names; it must never be contacted. */
+export const CANON_OFFSITE_HOST = "other-canon.test";
+/** The alias target that already has a live row when its alias is reported. */
+export const CANON_KILLED_PATH = "/real-page";
+/** The alias target that has no row until a later link in the same batch. */
+export const CANON_LATE_PATH = "/late-twin";
+
+export async function buildCanonicalFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const C = CANON_HOST;
+  const W = WWW_CANON_HOST;
+
+  const page = (body: string, head = "") => sendHtml(html(body, head));
+  site.route(C, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+
+  // The four forms of one page, in a fixed order: the first form seen
+  // (/target, bare) is the one kept and fetched.
+  const target = page(`<p>the one target page</p>`);
+  site.route(C, "/target", target);
+  site.route(C, "/target/", target);
+  site.route(C, "/target/index.html", target);
+  site.route(W, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(W, "/target", target);
+
+  site.route(
+    C,
+    "/",
+    page(`
+      <a href="/target">t1</a>
+      <a href="/target/">t2</a>
+      <a href="/target/index.html">t3</a>
+      <a href="${o(W)}/target">t4 (www)</a>
+      <a href="/second">the https variant lives here</a>
+      <a href="/canonical-page">canonical page</a>
+      <a href="${CANON_KILLED_PATH}">its canonical target, linked too</a>
+      <a href="/late-canonical">late canonical</a>
+      <a href="/self-canonical">self canonical</a>
+      <a href="/offscope-canonical">off-scope canonical</a>
+    `),
+  );
+  // The https twin of /target, linked only after the row exists, plus the
+  // late alias target (no row yet when its alias may be reported first).
+  site.route(C, "/second", page(`<a href="https://${C}:${site.port}/target">https twin</a><a href="${CANON_LATE_PATH}">late twin</a>`));
+  site.route(C, "/canonical-page", page(`<p>a duplicate of the real page</p>`, `<link rel="canonical" href="${CANON_KILLED_PATH}">`));
+  site.route(C, "/late-canonical", page(`<p>another duplicate, its target is linked later</p>`, `<link rel="canonical" href="${CANON_LATE_PATH}">`));
+  site.route(C, "/self-canonical", page(`<p>names itself canonical</p>`, `<link rel="canonical" href="/self-canonical">`));
+  site.route(C, "/offscope-canonical", page(`<p>names an off-scope host canonical</p>`, `<link rel="canonical" href="${o(CANON_OFFSITE_HOST)}/page">`));
+  site.route(C, CANON_KILLED_PATH, page(`<p>the real page</p>`));
+  // CANON_LATE_PATH has no route on purpose: any request to it would be
+  // recorded (as a 404) and the test proves none ever happens.
+
+  const pool: Pool = { version: "canon-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
+  return { site, pool, expected: [], allHashes: [] };
+}
+
+/*
+ * The crawl-order fixture (crawler v3 WP11): one source whose home page
+ * links a pagination page, a plain page and a feed, whose robots.txt names
+ * a sitemap with <lastmod> entries — one newer than any fetch the fixture
+ * will ever see, one an old date-only value — and whose feed lists one
+ * entry page. The mock mirrors the app's priorities, so a run claims the
+ * sitemap before the feed before the pagination page before the plain
+ * page, and a later run (after the sitemap re-reports it) fetches the
+ * newer-lastmod page ahead of the older plain one. No images, no host
+ * overlaps with the other fixtures.
+ */
+export const PRIO_HOST = "prio.fixture.test";
+/** The sitemap's new entry: newer than every fetch the fixture's clock sees. */
+export const PRIO_LASTMOD_NEW = "2026-11-19T12:00:00Z";
+/** The sitemap's old entry: a date-only value far in the past. */
+export const PRIO_LASTMOD_OLD = "2026-11-09";
+/** The ISO forms the crawler normalises those to before reporting. */
+export const PRIO_LASTMOD_NEW_ISO = "2026-11-19T12:00:00.000Z";
+export const PRIO_LASTMOD_OLD_ISO = "2026-11-09T00:00:00.000Z";
+
+export async function buildPriorityFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const P = PRIO_HOST;
+
+  const page = (body: string, head = "") => sendHtml(html(body, head));
+  site.route(P, "/robots.txt", sendBytes(
+    Buffer.from(`User-agent: *\nAllow: /\nSitemap: ${o(P)}/sitemap.xml\n`),
+    "text/plain",
+  ));
+  site.route(
+    P,
+    "/",
+    page(
+      `
+      <a href="/listing?page=2" rel="next">next page</a>
+      <a href="/plain">a plain page</a>
+    `,
+      `<link rel="alternate" type="application/rss+xml" href="/feed.rss">`,
+    ),
+  );
+  site.route(
+    P,
+    "/sitemap.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${o(P)}/gallery</loc><lastmod>${PRIO_LASTMOD_NEW}</lastmod></url>
+  <url><loc>${o(P)}/stale</loc><lastmod>${PRIO_LASTMOD_OLD}</lastmod></url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  site.route(
+    P,
+    "/feed.rss",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <title>prio</title><link>${o(P)}/</link>
+  <item><title>one</title><link>${o(P)}/from-feed</link></item>
+</channel></rss>`,
+      ),
+      "application/rss+xml",
+    ),
+  );
+  for (const path of ["/listing?page=2", "/plain", "/gallery", "/stale", "/from-feed"]) {
+    site.route(P, path, page(`<p>${path}</p>`));
+  }
+
+  const pool: Pool = { version: "prio-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
+  return { site, pool, expected: [], allHashes: [] };
+}
+
 /**
  * The parallel-sources fixture (crawler v2 WP6): twenty independent sites of
  * mixed speed plus one that never answers its home page. A run against all
  * of them proves sources are crawled concurrently (the bound a serial run
  * cannot meet) and that a hanging source does not delay the others: every
  * fast source finishes while the hanging one is still stuck on its first
- * request, and the hanging source's report is the last one the run sends.
- * Host s1.speed.test has a second page linked from its home page — the only
+ * request, and the hanging source's error report is the last one the run
+ * sends. Host s1.speed.test has a second page linked from its home page — the only
  * new URL any of these sites reports. No host here overlaps the other
  * fixtures' hosts, and no page carries an image.
  */
