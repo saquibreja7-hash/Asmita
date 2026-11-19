@@ -197,7 +197,13 @@ export function PartnerManager({ partner, keys }: { partner: PlatformPartnerView
     });
     setBusy(false);
     if (!result.ok) return setPermissionError(result.message);
-    setNotice("Written permission recorded.");
+    const data = result.data as { crawlSources?: { created?: unknown[] } } | null;
+    const created = Array.isArray(data?.crawlSources?.created) ? data.crawlSources.created.length : 0;
+    setNotice(
+      created > 0
+        ? `Written permission recorded. ${created} monitoring ${created === 1 ? "source" : "sources"} created — enable ${created === 1 ? "it" : "them"} on the Crawl sources page.`
+        : "Written permission recorded.",
+    );
     setPermissionDate("");
     setPermissionNote("");
     setPermissionTouched(false);

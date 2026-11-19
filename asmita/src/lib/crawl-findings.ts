@@ -9,6 +9,7 @@ import { promoteDiscoveredSource } from "@/lib/crawl-discoveries";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
+import { alertPartnerChannelOfFinding, partnerCrawlPermissionMissing } from "@/lib/partner-channel";
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { isUrlExpired } from "@/lib/url-retention";
@@ -31,7 +32,12 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  *   SECOND_REVIEW_DISTANCE needs a second, different analyst before it is
  *   APPROVED. Final approval re-checks that the survivor's authorisation is
  *   still live, then adds the page URL to the case as a SubmittedUrl with
- *   source CRAWLER. Nothing is sent to anyone here.
+ *   source CRAWLER. Nothing is sent to anyone here except the WP33 partner
+ *   alert, which goes to the platform partner's channel (never the image,
+ *   never the survivor's data) and never affects the review's outcome.
+ * - WP33 gate: a finding whose page is on a platform partner's domain is
+ *   recorded only once the partner's written permission to crawl is
+ *   recorded; before that the report is refused.
  */
 
 export const MAX_FINDINGS_PER_BATCH = 50;
@@ -241,6 +247,8 @@ export async function recordCrawlFindings(
 ): Promise<{ results: CrawlFindingResult[]; mediaRejected: boolean }> {
   const fingerprints = new Map<string, Awaited<ReturnType<typeof resolvePoolFingerprint>>>();
   const sources = new Map<string, string | null>();
+  // WP33: the partner-permission gate, cached per page host for this batch.
+  const partnerPermissionMissing = new Map<string, boolean>();
   const results: CrawlFindingResult[] = [];
   let mediaRejected = false;
 
@@ -267,6 +275,17 @@ export async function recordCrawlFindings(
     }
     if (!pageOnSourceHost(page.normalizedUrl, sourceDomain)) {
       results.push({ status: "rejected", reason: "page_not_in_source" });
+      continue;
+    }
+    // WP33: findings on a platform partner's domains are allowed only after
+    // the partner's written permission to crawl is recorded — until then
+    // Asmita does not monitor the partner, so its copies stay out of the
+    // crawl flow (and out of the partner channel) entirely.
+    if (!partnerPermissionMissing.has(page.domain)) {
+      partnerPermissionMissing.set(page.domain, await partnerCrawlPermissionMissing(page.domain));
+    }
+    if (partnerPermissionMissing.get(page.domain) === true) {
+      results.push({ status: "rejected", reason: "partner_permission_missing" });
       continue;
     }
     if (!fingerprints.has(item.fingerprintId)) fingerprints.set(item.fingerprintId, await resolvePoolFingerprint(item.fingerprintId));
@@ -600,6 +619,39 @@ async function ensureSourceForApprovedFinding(host: string) {
   }
 }
 
+/**
+ * WP33: the partner channel alert after an analyst accepts a finding on a
+ * partner's domain — the case reference, the page URL on the partner's own
+ * domain and the fingerprint id; never the image address, never a hash
+ * value, never anything about the survivor. Never allowed to fail the
+ * approval that triggers it: the review is already recorded when this
+ * runs, so a missing case row or a channel problem is logged, nothing more.
+ */
+async function alertPartnerChannelOfApprovedFinding(input: {
+  findingId: string;
+  caseId: string;
+  caseReference: string | null;
+  pageUrl: string;
+  pageDomain: string;
+  fingerprintId: string;
+  reviewerId: string;
+}): Promise<void> {
+  try {
+    if (input.caseReference === null) return;
+    await alertPartnerChannelOfFinding({
+      findingId: input.findingId,
+      caseId: input.caseId,
+      caseReference: input.caseReference,
+      pageUrl: input.pageUrl,
+      pageDomain: input.pageDomain,
+      fingerprintId: input.fingerprintId,
+      reviewerId: input.reviewerId,
+    });
+  } catch {
+    console.error("partner_channel_alert_failed");
+  }
+}
+
 export async function reviewCrawlFinding(input: { findingId: string; decision: ReviewDecision; reviewerId: string; now?: Date }): Promise<ReviewOutcome> {
   const now = input.now ?? new Date();
   if (isDevNoDb()) return reviewInMemory(input.findingId, input.decision, input.reviewerId, now);
@@ -680,6 +732,16 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
   if (!outcome) return { ok: false, error: "already_reviewed" };
   await auditReview("CRAWL_FINDING_APPROVED", finding, input.reviewerId, { stage: "final", second: plan.second, submittedUrlId: outcome.submittedUrlId, createdUrl: outcome.createdUrl });
   await ensureSourceForApprovedFinding(parsed.domain);
+  const caseRow = await db.case.findUnique({ where: { id: finding.caseId }, select: { referenceNumber: true } });
+  await alertPartnerChannelOfApprovedFinding({
+    findingId: finding.id,
+    caseId: finding.caseId,
+    caseReference: caseRow?.referenceNumber ?? null,
+    pageUrl: parsed.normalizedUrl,
+    pageDomain: parsed.domain,
+    fingerprintId: finding.hashSubmissionId,
+    reviewerId: input.reviewerId,
+  });
   return { ok: true, status: "APPROVED", ...outcome };
 }
 
@@ -729,6 +791,15 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
   }
   await auditReview("CRAWL_FINDING_APPROVED", finding, reviewerId, { stage: "final", second: plan.second, submittedUrlId, createdUrl: !existing });
   await ensureSourceForApprovedFinding(parsed.domain);
+  await alertPartnerChannelOfApprovedFinding({
+    findingId: finding.id,
+    caseId: finding.caseId,
+    caseReference: record.referenceNumber,
+    pageUrl: parsed.normalizedUrl,
+    pageDomain: parsed.domain,
+    fingerprintId: finding.hashSubmissionId,
+    reviewerId,
+  });
   return { ok: true, status: "APPROVED", submittedUrlId: submittedUrlId!, createdUrl: !existing };
 }
 

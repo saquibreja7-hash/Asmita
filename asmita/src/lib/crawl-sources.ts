@@ -84,7 +84,7 @@ export type CrawlSourceView = {
   delayMs: number;
   enabled: boolean;
   approvedBy: string | null;
-  origin: "ADMIN" | "REPORTED" | "DISCOVERED";
+  origin: "ADMIN" | "REPORTED" | "DISCOVERED" | "PARTNER";
   hops: number;
   discoveredFromId: string | null;
   /** The parent source's domain, resolved for display (WP5); null when gone or not discovered. */
@@ -124,7 +124,7 @@ export async function listEnabledCrawlSources() {
   type Row = { id: string; domain: string; pageBudget: number; delayMs: number; origin: string; hops: number; render: string };
   const toContract = (row: Row) => ({
     id: row.id, kind: "site" as const, domain: row.domain, pageBudget: row.pageBudget, delayMs: row.delayMs,
-    origin: row.origin.toLowerCase() as "admin" | "reported" | "discovered",
+    origin: row.origin.toLowerCase() as "admin" | "reported" | "discovered" | "partner",
     hops: row.hops,
     render: row.render.toLowerCase() as "http" | "browser" | "auto",
   });

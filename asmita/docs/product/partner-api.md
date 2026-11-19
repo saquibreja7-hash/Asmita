@@ -165,6 +165,25 @@ Errors: `400 invalid_payload` (malformed body), `413 payload_too_large`,
 `404 unknown_fingerprint` (an id Asmita never sent you), `400 invalid_url`,
 `403 url_not_on_partner_domain`, plus the auth and rate-limit codes above.
 
+## Emails to your channel address
+
+Alongside the API, an Asmita admin records a channel email address for your
+organisation. Two kinds of email arrive there, and nothing needs to be
+configured on your side:
+
+- **Notice copies.** When Asmita dispatches a takedown notice for content on
+  your domains, the same notice that went to your grievance contact is copied
+  to your channel address — the same subject, text and signed PDF, never a
+  second notice instead of the first.
+- **Crawler alerts.** If you gave Asmita written permission to monitor your
+  public pages, then when Asmita's crawler finds a possible match on your
+  service and an Asmita analyst accepts it, your channel address receives an
+  alert with the case reference, the page URL on your domain and the
+  fingerprint id. No image or video is ever sent.
+
+Report what you did with either through `POST /api/partner/v1/outcomes`
+above; the outcome feeds the same per-partner metrics.
+
 ## Running Hasher-Matcher-Actioner (HMA)?
 
 Platforms that run Meta's open-source Hasher-Matcher-Actioner (HMA, now

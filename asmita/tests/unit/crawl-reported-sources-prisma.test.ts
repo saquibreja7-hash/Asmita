@@ -21,7 +21,10 @@ const db = vi.hoisted(() => {
     partnerOutcome: { deleteMany: fn() },
     submittedUrl: { findMany: fn(), findFirst: fn(), findUnique: fn(), create: fn(), updateMany: fn(), deleteMany: fn() },
     platform: { findFirst: fn() },
-    case: { create: fn(), findMany: fn(), findFirst: fn(), updateMany: fn() },
+    // WP33: the partner lookup behind the findings gate and the channel
+    // alert; no partners in these fixtures, so nothing is gated or sent.
+    platformPartner: { findMany: fn() },
+    case: { create: fn(), findMany: fn(), findFirst: fn(), findUnique: fn(), updateMany: fn() },
     user: { findUnique: fn(), updateMany: fn(), update: fn() },
     notice: { findMany: fn(), deleteMany: fn() },
     auditLog: { findMany: fn() },
@@ -71,6 +74,10 @@ beforeEach(() => {
 
   db.submittedUrl.findMany.mockResolvedValue([]);
   db.submittedUrl.findFirst.mockResolvedValue(null);
+  // No platform partners exist in these fixtures: the WP33 findings gate
+  // passes and no channel alert is ever sent.
+  db.platformPartner.findMany.mockResolvedValue([]);
+  db.case.findUnique.mockResolvedValue({ referenceNumber: "ASMITA-2026-00001" });
   const storedUrl = (data: Record<string, unknown>) => ({
     id: "url-new", caseId: "c1", urlEncrypted: "enc", urlHash: "h", platformId: null,
     status: "PENDING_REVIEW", flaggedForReview: false, flagReason: null, signedNoticePdf: null, source: "SURVIVOR",

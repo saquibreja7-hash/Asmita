@@ -58,7 +58,7 @@ export type MemoryCrawlSource = {
   delayMs: number;
   enabled: boolean;
   approvedBy: string | null;
-  origin: "ADMIN" | "REPORTED" | "DISCOVERED";
+  origin: "ADMIN" | "REPORTED" | "DISCOVERED" | "PARTNER";
   hops: number;
   discoveredFromId: string | null;
   render: "HTTP" | "BROWSER" | "AUTO";

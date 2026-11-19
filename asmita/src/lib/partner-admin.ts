@@ -6,6 +6,7 @@ import { normaliseDomain } from "@/lib/platform-partners-shared";
 import { partnerApplications, type PartnerApplication } from "@/lib/platform-partners";
 import { partnerMemory } from "@/lib/partner-store";
 import { issuePartnerKey, revokePartnerKey } from "@/lib/partner-auth";
+import { ensurePartnerCrawlSources } from "@/lib/partner-crawl";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
 /*
@@ -500,6 +501,19 @@ export async function updatePlatformPartner(
     // The channel email itself never enters the audit data; only that it changed.
     data: { action: "partner_updated", changes: auditChanges },
   });
+  // WP33: new domains of a partner whose written permission to crawl is
+  // already recorded may also be monitored, so they get their crawl source
+  // the same way (disabled, awaiting the usual admin enable). Best effort.
+  if (updated.crawlPermissionRecordedAt && (input.primaryDomain !== undefined || input.extraDomains !== undefined)) {
+    try {
+      await ensurePartnerCrawlSources(
+        { id: input.partnerId, primaryDomain: updated.primaryDomain, extraDomains: updated.extraDomains },
+        actorId,
+      );
+    } catch {
+      console.error("partner_crawl_sources_failed");
+    }
+  }
   return { ok: true, partner: updated };
 }
 
@@ -617,7 +631,7 @@ export async function revokePlatformPartnerKey(
 // Written permission to crawl (gate for WP33's crawler monitoring)
 
 export type CrawlPermissionResult =
-  | { ok: true; partner: PlatformPartnerView }
+  | { ok: true; partner: PlatformPartnerView; crawlSources?: { created: string[]; skipped: string[] } }
   | { ok: false; error: "partner_not_found" | "invalid_date" | "future_date" };
 
 export async function recordPartnerCrawlPermission(
@@ -644,5 +658,18 @@ export async function recordPartnerCrawlPermission(
     actorId,
     data: { action: "partner_crawl_permission_recorded", date: input.date, note: input.note },
   });
-  return { ok: true, partner: updated };
+  // WP33: the recorded permission is what allows Asmita to monitor the
+  // partner's pages, so this is also the moment its domains may appear as
+  // crawl sources (disabled, awaiting the usual admin enable). Best effort:
+  // an unrecordable domain is skipped, never an error for the permission.
+  let crawlSources: { created: string[]; skipped: string[] } | undefined;
+  try {
+    crawlSources = await ensurePartnerCrawlSources(
+      { id: input.partnerId, primaryDomain: updated.primaryDomain, extraDomains: updated.extraDomains },
+      actorId,
+    );
+  } catch {
+    console.error("partner_crawl_sources_failed");
+  }
+  return { ok: true, partner: updated, ...(crawlSources ? { crawlSources } : {}) };
 }

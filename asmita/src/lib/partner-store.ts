@@ -74,6 +74,20 @@ export type MemoryPartnerOutcome = {
   createdAt: Date;
 };
 
+/** WP33: the memory twin of PartnerChannelSend (one email through the channel). */
+export type MemoryPartnerChannelSend = {
+  id: string;
+  partnerId: string;
+  kind: "NOTICE" | "FINDING_ALERT";
+  urlId: string | null;
+  findingId: string | null;
+  caseId: string | null;
+  dedupKey: string;
+  messageId: string;
+  sentAt: Date;
+  createdAt: Date;
+};
+
 type PartnerMemory = {
   partners: Map<string, MemoryPlatformPartner>;
   keys: Map<string, MemoryPlatformPartnerKey>;
@@ -84,12 +98,14 @@ type PartnerMemory = {
   nextFeedSeq: number;
   /** WP32: partner-reported outcomes, the twin of PartnerOutcome. */
   outcomes: MemoryPartnerOutcome[];
+  /** WP33: emails sent through a partner's channel, the twin of PartnerChannelSend. */
+  channelSends: MemoryPartnerChannelSend[];
 };
 
 const globals = globalThis as typeof globalThis & { __asmitaPartnerStore?: PartnerMemory };
 
 function emptyMemory(): PartnerMemory {
-  return { partners: new Map(), keys: new Map(), shareConsents: [], feedEvents: [], nextFeedSeq: 1, outcomes: [] };
+  return { partners: new Map(), keys: new Map(), shareConsents: [], feedEvents: [], nextFeedSeq: 1, outcomes: [], channelSends: [] };
 }
 
 export function partnerMemory(): PartnerMemory {
@@ -102,6 +118,7 @@ export function partnerMemory(): PartnerMemory {
   globals.__asmitaPartnerStore.feedEvents ??= [];
   globals.__asmitaPartnerStore.nextFeedSeq ??= 1;
   globals.__asmitaPartnerStore.outcomes ??= [];
+  globals.__asmitaPartnerStore.channelSends ??= [];
   return globals.__asmitaPartnerStore;
 }
 

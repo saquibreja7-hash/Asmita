@@ -16,6 +16,10 @@ const db = vi.hoisted(() => {
     crawlFinding: { findUnique: vi.fn() },
     crawlSource: { findUnique: vi.fn() },
     platform: { findFirst: vi.fn() },
+    // WP33: the partner lookup behind the findings gate and the channel
+    // alert; no partners in these fixtures, so nothing is gated or sent.
+    platformPartner: { findMany: vi.fn() },
+    case: { findUnique: vi.fn() },
     $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
   };
 });
@@ -33,6 +37,10 @@ beforeEach(() => {
   vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
   const live = { id: "consent-1", caseId: "c1", hashSubmissionIds: ["h1", "h2", "h3"], signedAt: new Date("2026-11-01T00:00:00Z") };
   db.crawlConsent.findMany.mockResolvedValue([live]);
+  // No platform partners exist in these fixtures: the WP33 findings gate
+  // passes and no channel alert is ever sent.
+  db.platformPartner.findMany.mockResolvedValue([]);
+  db.case.findUnique.mockResolvedValue({ referenceNumber: "ASMITA-2026-00001" });
   // The case-row lock (case-link-lock.ts) finds the case; consent locks find `live`.
   db.tx.$queryRaw.mockImplementation(async (q: string[]) => (q.join("?").includes('FROM "Case"') ? [{ id: "c1" }] : [live]));
 });

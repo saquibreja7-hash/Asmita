@@ -38,6 +38,7 @@ async function send(method: "POST" | "PATCH", body: unknown): Promise<{ ok: true
 export function originLabel(origin: CrawlSourceView["origin"]): string {
   if (origin === "REPORTED") return "Reported";
   if (origin === "DISCOVERED") return "Discovered";
+  if (origin === "PARTNER") return "Partner";
   return "Admin";
 }
 
@@ -231,6 +232,7 @@ export function SourcesManager({ sources, crawlerEnabled = true }: { sources: Cr
             <option value="ADMIN">Admin</option>
             <option value="REPORTED">Reported</option>
             <option value="DISCOVERED">Discovered</option>
+            <option value="PARTNER">Partner</option>
           </select>
         </div>
       </div>

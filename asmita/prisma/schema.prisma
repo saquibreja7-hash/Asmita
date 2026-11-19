@@ -111,6 +111,7 @@ enum CrawlSourceOrigin {
   ADMIN
   REPORTED
   DISCOVERED
+  PARTNER
 }
 
 // How the crawler fetches a source's pages (crawler v2; HTTP today).
@@ -175,6 +176,14 @@ enum PartnerOutcomeType {
   NOT_OUR_CONTENT
 }
 
+// What a PartnerChannelSend row records (WP33): a copy of a dispatched
+// notice, or the alert that an analyst accepted a crawler finding on the
+// partner's domain.
+enum PartnerChannelSendKind {
+  NOTICE
+  FINDING_ALERT
+}
+
 enum AuditEventType {
   USER_REGISTERED
   USER_VERIFIED
@@ -222,6 +231,8 @@ enum AuditEventType {
   PARTNER_SHARE_CONSENT_GIVEN
   PARTNER_SHARE_CONSENT_WITHDRAWN
   PARTNER_OUTCOME_REPORTED
+  PARTNER_CHANNEL_SENT
+  PARTNER_CHANNEL_FAILED
 }
 
 enum DeletionJobStatus {
@@ -872,6 +883,7 @@ model PlatformPartner {
 
   keys PlatformPartnerKey[]
   outcomes PartnerOutcome[]
+  channelSends PartnerChannelSend[]
 
   @@index([status])
   @@index([createdAt])
@@ -984,6 +996,38 @@ model PartnerOutcome {
   @@index([caseId])
   @@index([fingerprintId])
   @@index([urlHash])
+}
+
+// Partner programme part 2 (WP33): every email Asmita sent through a
+// platform partner's takedown channel — the copy of a dispatched notice
+// (WP33's "send it there in addition to the verified grievance contact")
+// and the alert when an analyst accepts a crawler finding on the partner's
+// domain. One row per successful send; dedupKey (the same sha256 key the
+// send carries to Resend) is unique, so a retry — including one on another
+// Worker isolate — sees the earlier send and never emails the channel
+// twice. urlId, findingId and caseId are provenance, not integrity (no
+// foreign keys), exactly like PartnerOutcome's; partnerId is a real
+// relation, like PartnerOutcome's. Nothing here holds an address or a
+// fingerprint value: the notice copy is the notice Asmita already sent, and
+// the alert email carries only the case reference, the page URL on the
+// partner's own domain and the fingerprint id.
+model PartnerChannelSend {
+  id        String                @id @default(uuid())
+  partnerId String
+  kind      PartnerChannelSendKind
+  // The SubmittedUrl the notice copy is about (NOTICE).
+  urlId     String?
+  // The CrawlFinding the alert is about (FINDING_ALERT).
+  findingId String?
+  caseId    String?
+  dedupKey  String                @unique
+  messageId String
+  sentAt    DateTime
+  createdAt DateTime              @default(now())
+
+  partner PlatformPartner @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
 }
 
 model DeletionJob {

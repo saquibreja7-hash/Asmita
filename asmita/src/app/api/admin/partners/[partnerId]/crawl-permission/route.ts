@@ -29,5 +29,5 @@ export async function POST(request: Request, context: { params: Promise<{ partne
   const { partnerId } = await context.params;
   const result = await recordPartnerCrawlPermission({ partnerId, ...parsed.data }, auth.session.sub);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: STATUS[result.error] ?? 400 });
-  return NextResponse.json({ partner: result.partner });
+  return NextResponse.json({ partner: result.partner, ...(result.crawlSources ? { crawlSources: result.crawlSources } : {}) });
 }

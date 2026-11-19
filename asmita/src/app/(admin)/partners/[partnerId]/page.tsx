@@ -2,12 +2,25 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deniedFor } from "../../page-permission";
 import { getPlatformPartner, listPlatformPartnerKeys } from "@/lib/partner-admin";
+import { getPartnerMetrics } from "@/lib/partner-metrics";
 import { PartnerManager } from "./PartnerManager";
 
 export const dynamic = "force-dynamic";
 
 const when = (iso: string) =>
   new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(iso));
+
+/** A duration in hours/days for the median time to outcome; "—" when unmeasurable. */
+function durationLabel(ms: number | null): string {
+  if (ms === null) return "—";
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 1) return "under a minute";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} h`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
 
 // One platform partner from the programme. Business contact data only — this
 // page never reads anything survivor-related.
@@ -17,7 +30,7 @@ export default async function PartnerDetailPage({ params }: { params: Promise<{ 
   const { partnerId } = await params;
   const partner = await getPlatformPartner(partnerId);
   if (!partner) notFound();
-  const keys = await listPlatformPartnerKeys(partnerId);
+  const [keys, metrics] = await Promise.all([listPlatformPartnerKeys(partnerId), getPartnerMetrics(partnerId)]);
 
   return (
     <section>
@@ -51,6 +64,24 @@ export default async function PartnerDetailPage({ params }: { params: Promise<{ 
             : "Not recorded"}
         </dd>
       </dl>
+
+      <section className="mt-8">
+        <h2>Programme metrics</h2>
+        <dl className="a-card mt-4 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-2 p-4 text-sm">
+          <dt className="muted">Fingerprints in the feed</dt>
+          <dd className="tabular-nums">
+            {metrics.fingerprintsDelivered}
+            <span className="muted block text-xs">
+              Every active partner polls the same shared feed with its own key, so this is what this partner — and every
+              other — can receive.
+            </span>
+          </dd>
+          <dt className="muted">Outcomes reported</dt>
+          <dd className="tabular-nums">{metrics.outcomesReported}</dd>
+          <dt className="muted">Median time to outcome</dt>
+          <dd className="tabular-nums">{durationLabel(metrics.medianTimeToOutcomeMs)}</dd>
+        </dl>
+      </section>
 
       <div className="mt-6">
         <PartnerManager keys={keys} partner={partner} />
