@@ -25,7 +25,7 @@ vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => false, getWorker
 vi.mock("@/lib/db", () => ({ db }));
 
 import { encryptField } from "@/lib/encryption";
-import { claimCrawlPages, reportCrawlPages } from "@/lib/crawl-pages";
+import { claimCrawlPages, crawlPageDigest, reportCrawlPages } from "@/lib/crawl-pages";
 import { purgeExpiredCrawlPages } from "@/lib/url-retention";
 
 const NOW = new Date("2026-11-17T09:00:00Z");
@@ -218,5 +218,53 @@ describe("per-source frontier cap, Prisma path (review fix)", () => {
     expect(accepted).toBe(1);
     expect(db.crawlPage.createMany).not.toHaveBeenCalled();
     expect(db.crawlPage.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("canonical aliases, Prisma path (WP10)", () => {
+  it("kills live rows for the alias digests and inserts dead tombstones, never a live alias row", async () => {
+    db.crawlPage.findMany.mockResolvedValue([
+      { ...CURRENT_ROW, id: "page-1", urlDigest: "d-1" },
+      { ...CURRENT_ROW, id: "page-2", urlDigest: "d-2", depth: 0 },
+    ]);
+    // /dupe names /twin (trailing-slash form: the same digest after the
+    // WP10 normalisation) as its canonical; /twin is also linked in the same
+    // report and must never become a live row.
+    const twinDigest = crawlPageDigest(SOURCE.id, "https://k.example/twin");
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      {
+        id: "page-1", status: "fetched",
+        aliases: ["https://k.example/twin/"],
+        links: [
+          { url: "https://k.example/twin", kind: "page" },
+          { url: "https://k.example/other", kind: "page" },
+        ],
+      },
+      { id: "page-2", status: "fetched", links: [] },
+    ], NOW);
+    expect(accepted).toBe(2);
+    expect(db.crawlPage.updateMany).toHaveBeenCalledWith({
+      where: { sourceId: SOURCE.id, urlDigest: { in: [twinDigest] }, status: { notIn: ["DEAD", "GONE"] } },
+      data: { status: "DEAD", nextDueAt: NOW, claimedUntil: null },
+    });
+    expect(db.crawlPage.createMany).toHaveBeenCalledTimes(1);
+    const data = db.crawlPage.createMany.mock.calls[0]![0].data as Array<Record<string, unknown>>;
+    expect(data).toHaveLength(2);
+    const tombstone = data.find((r) => r.urlDigest === twinDigest)!;
+    expect(tombstone).toMatchObject({ status: "DEAD", kind: "PAGE", depth: 0, nextDueAt: NOW });
+    const other = data.find((r) => r.urlDigest === crawlPageDigest(SOURCE.id, "https://k.example/other"))!;
+    expect(other).toMatchObject({ status: "PENDING", depth: 1 });
+    expect(db.crawlPage.createMany).toHaveBeenCalledWith({ data: expect.any(Array), skipDuplicates: true });
+  });
+
+  it("a self-alias kills and stores nothing", async () => {
+    const selfDigest = crawlPageDigest(SOURCE.id, "https://k.example/");
+    db.crawlPage.findMany.mockResolvedValue([{ ...CURRENT_ROW, id: "page-1", urlDigest: selfDigest }]);
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", aliases: ["https://k.example/index.php"], links: [] },
+    ], NOW);
+    expect(accepted).toBe(1);
+    expect(db.crawlPage.updateMany).not.toHaveBeenCalled(); // no kill statement at all
+    expect(db.crawlPage.createMany).not.toHaveBeenCalled();
   });
 });

@@ -1,8 +1,17 @@
 /** URL parsing, dedup keys and crawl scope. */
 import { getDomain } from "tldts";
+import { pageKeyOf, queryKey as sharedQueryKey, TRACKING_PARAM } from "../../../asmita/src/lib/crawl-page-key.ts";
 
-/** Query parameters stripped everywhere (tracking noise, never content). */
-export const TRACKING_PARAM = /^(utm_[a-z]+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|_ga|igshid)$/i;
+/**
+ * The tracking-parameter rule and the page-key normalisation live in one
+ * dependency-free module the app shares (asmita/src/lib/crawl-page-key.ts,
+ * imported read-only like pdq.ts): crawler and app compute the same dedup
+ * key by running the same code, so a page the two sides spell differently
+ * (http/https, www./bare host, trailing slash, a final index document) is
+ * still counted once. `tests/unit/page-key-contract.test.ts` fails if the
+ * two sides drift apart.
+ */
+export { TRACKING_PARAM };
 
 /**
  * Parse a URL for fetching and reporting: WHATWG parsing (lower-cased scheme
@@ -28,25 +37,23 @@ export function normalizeUrl(raw: string, base?: string | URL): URL | null {
 /**
  * The tracking-stripped, sorted query string of a URL: the varying part of
  * a dedup key. Shared by `urlKey` and the per-path query-variant guard
- * (crawl/traps.ts), so both apply the same tracking-parameter rule.
+ * (crawl/traps.ts), so both apply the same tracking-parameter rule — the
+ * rule itself now lives in the module the app shares (crawl-page-key.ts).
  */
 export function queryKey(url: URL): string {
-  if (!url.search) return "";
-  const params = [...new URLSearchParams(url.search).entries()].filter(([k]) => !TRACKING_PARAM.test(k));
-  params.sort(([a, av], [b, bv]) => (a === b ? (av < bv ? -1 : av > bv ? 1 : 0) : a < b ? -1 : 1));
-  return new URLSearchParams(params).toString();
+  return sharedQueryKey(url.search);
 }
 
 /**
- * Dedup key only (never fetched or reported): the URL with tracking
- * parameters removed and the remaining parameters sorted, so trivially
- * different links to one resource are fetched once.
+ * Dedup key only (never fetched or reported): the shared page-key
+ * normalisation (crawl-page-key.ts, crawler v3 WP10) — http/https, one
+ * leading `www.` label, a trailing slash on non-root paths and a final
+ * /index.{html,htm,php} are one page — with tracking parameters removed
+ * and the rest sorted, so trivially different links to one resource are
+ * fetched once. Addresses keep their real form: the key is identity only.
  */
 export function urlKey(url: URL): string {
-  if (!url.search) return url.href;
-  const copy = new URL(url.href);
-  copy.search = queryKey(url);
-  return copy.href;
+  return pageKeyOf(url) ?? url.href;
 }
 
 /**

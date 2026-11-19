@@ -73,7 +73,7 @@ vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => true, getWorkerD
 vi.mock("@/lib/db", () => ({ db: new Proxy({}, { get: () => { throw new Error("prisma path must not run here"); } }) }));
 
 import { encryptField } from "@/lib/encryption";
-import { claimCrawlPages, reportCrawlPages } from "@/lib/crawl-pages";
+import { claimCrawlPages, crawlPageDigest, reportCrawlPages } from "@/lib/crawl-pages";
 
 const NOW = new Date("2026-11-17T09:00:00Z");
 const SOURCE = { id: "src-1", kind: "SITE", domain: "k.example", pageBudget: 50, delayMs: 0, enabled: true };
@@ -236,5 +236,61 @@ describe("reportCrawlPages, Kysely path", () => {
     expect((inserts[0]!.detail.values as unknown[]).length).toBe(500);
     expect((inserts[1]!.detail.values as unknown[]).length).toBe(200);
     for (const insert of inserts) expect(insert.detail.onConflict).toBe(true);
+  });
+});
+
+describe("canonical aliases, Kysely path (WP10)", () => {
+  it("kills live rows for the alias digests and inserts dead tombstones, never a live alias row", async () => {
+    kysely.state.rows.CrawlPage = [
+      pageRow({ id: "page-1", urlDigest: "d-1" }),
+      pageRow({ id: "page-2", urlDigest: "d-2", urlEncrypted: encryptField("https://k.example/twin") }),
+    ];
+    // /dupe names /twin (in its trailing-slash form, so the same digest) as
+    // its canonical; /twin is also linked in the same report and must never
+    // become a live row.
+    const twinDigest = crawlPageDigest(SOURCE.id, "https://k.example/twin");
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      {
+        id: "page-1", status: "fetched",
+        aliases: ["https://k.example/twin/"],
+        links: [
+          { url: "https://k.example/twin", kind: "page" },
+          { url: "https://k.example/other", kind: "page" },
+        ],
+      },
+      { id: "page-2", status: "fetched", links: [] },
+    ], NOW);
+    expect(accepted).toBe(2);
+    // The kill: one update, DEAD, by digest, live rows only.
+    const kill = callsOn("CrawlPage").find((call) => call.op === "update" && (call.detail.set as Record<string, unknown>).status === "DEAD");
+    expect(kill).toBeDefined();
+    expect(kill!.detail.wheres).toEqual(expect.arrayContaining([
+      ["urlDigest", "in", [twinDigest]],
+      ["status", "not in", ["DEAD", "GONE"]],
+    ]));
+    expect((kill!.detail.set as Record<string, unknown>).claimedUntil).toBeNull();
+    // The insert carries the live /other link and the dead tombstone; the
+    // alias's own link never made it in.
+    const inserts = callsOn("CrawlPage").filter((call) => call.op === "insert");
+    expect(inserts).toHaveLength(1);
+    const rows = inserts[0]!.detail.values as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(2);
+    const tombstone = rows.find((r) => r.urlDigest === twinDigest)!;
+    expect(tombstone).toMatchObject({ status: "DEAD", kind: "PAGE", depth: 0 });
+    expect(tombstone.nextDueAt).toEqual(NOW);
+    const other = rows.find((r) => r.urlDigest === crawlPageDigest(SOURCE.id, "https://k.example/other"))!;
+    expect(other).toMatchObject({ status: "PENDING", depth: 1 });
+  });
+
+  it("reads the claimed rows' digests (the self-alias check needs them)", async () => {
+    const selfDigest = crawlPageDigest(SOURCE.id, "https://k.example/");
+    kysely.state.rows.CrawlPage = [pageRow({ id: "page-1", urlDigest: selfDigest })];
+    await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", aliases: ["https://k.example/"], links: [] }, // self-alias: no-op
+    ], NOW);
+    const read = callsOn("CrawlPage").find((call) => call.op === "select" && call.detail.forUpdate === undefined && (call.detail.select as unknown[])?.includes("urlDigest"));
+    expect(read).toBeDefined();
+    expect(callsOn("CrawlPage").filter((call) => call.op === "update" && (call.detail.set as Record<string, unknown>).status === "DEAD")).toHaveLength(0);
+    expect(callsOn("CrawlPage").filter((call) => call.op === "insert")).toHaveLength(0);
   });
 });

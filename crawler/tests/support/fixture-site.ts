@@ -1006,14 +1006,84 @@ export async function buildSitemapProbeFixture(): Promise<Fixture> {
   return { site, pool, expected, allHashes: Object.values(h) };
 }
 
+/*
+ * The count-once fixture (crawler v3 WP10): one source whose home page links
+ * the same target page in four forms — /target, /target/ (trailing slash),
+ * /target/index.html and the www host — which must become one frontier row
+ * and one fetch; a second page links the https form of the same target after
+ * the row exists, which must change nothing. Canonical aliases: one page
+ * whose canonical target also has a live row (the row is killed), one whose
+ * target has no row yet (a link arriving in the same batch is swallowed by
+ * the tombstone), one canonical pointing at itself and one pointing
+ * off-scope (neither is reported, the off-scope one is never fetched and
+ * never a discovery). No host here overlaps the other fixtures' hosts.
+ */
+export const CANON_HOST = "canon.fixture.test";
+export const WWW_CANON_HOST = `www.${CANON_HOST}`;
+/** An off-scope host a canonical link names; it must never be contacted. */
+export const CANON_OFFSITE_HOST = "other-canon.test";
+/** The alias target that already has a live row when its alias is reported. */
+export const CANON_KILLED_PATH = "/real-page";
+/** The alias target that has no row until a later link in the same batch. */
+export const CANON_LATE_PATH = "/late-twin";
+
+export async function buildCanonicalFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const C = CANON_HOST;
+  const W = WWW_CANON_HOST;
+
+  const page = (body: string, head = "") => sendHtml(html(body, head));
+  site.route(C, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+
+  // The four forms of one page, in a fixed order: the first form seen
+  // (/target, bare) is the one kept and fetched.
+  const target = page(`<p>the one target page</p>`);
+  site.route(C, "/target", target);
+  site.route(C, "/target/", target);
+  site.route(C, "/target/index.html", target);
+  site.route(W, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(W, "/target", target);
+
+  site.route(
+    C,
+    "/",
+    page(`
+      <a href="/target">t1</a>
+      <a href="/target/">t2</a>
+      <a href="/target/index.html">t3</a>
+      <a href="${o(W)}/target">t4 (www)</a>
+      <a href="/second">the https variant lives here</a>
+      <a href="/canonical-page">canonical page</a>
+      <a href="${CANON_KILLED_PATH}">its canonical target, linked too</a>
+      <a href="/late-canonical">late canonical</a>
+      <a href="/self-canonical">self canonical</a>
+      <a href="/offscope-canonical">off-scope canonical</a>
+    `),
+  );
+  // The https twin of /target, linked only after the row exists, plus the
+  // late alias target (no row yet when its alias may be reported first).
+  site.route(C, "/second", page(`<a href="https://${C}:${site.port}/target">https twin</a><a href="${CANON_LATE_PATH}">late twin</a>`));
+  site.route(C, "/canonical-page", page(`<p>a duplicate of the real page</p>`, `<link rel="canonical" href="${CANON_KILLED_PATH}">`));
+  site.route(C, "/late-canonical", page(`<p>another duplicate, its target is linked later</p>`, `<link rel="canonical" href="${CANON_LATE_PATH}">`));
+  site.route(C, "/self-canonical", page(`<p>names itself canonical</p>`, `<link rel="canonical" href="/self-canonical">`));
+  site.route(C, "/offscope-canonical", page(`<p>names an off-scope host canonical</p>`, `<link rel="canonical" href="${o(CANON_OFFSITE_HOST)}/page">`));
+  site.route(C, CANON_KILLED_PATH, page(`<p>the real page</p>`));
+  // CANON_LATE_PATH has no route on purpose: any request to it would be
+  // recorded (as a 404) and the test proves none ever happens.
+
+  const pool: Pool = { version: "canon-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
+  return { site, pool, expected: [], allHashes: [] };
+}
+
 /**
  * The parallel-sources fixture (crawler v2 WP6): twenty independent sites of
  * mixed speed plus one that never answers its home page. A run against all
  * of them proves sources are crawled concurrently (the bound a serial run
  * cannot meet) and that a hanging source does not delay the others: every
  * fast source finishes while the hanging one is still stuck on its first
- * request, and the hanging source's report is the last one the run sends.
- * Host s1.speed.test has a second page linked from its home page — the only
+ * request, and the hanging source's error report is the last one the run
+ * sends. Host s1.speed.test has a second page linked from its home page — the only
  * new URL any of these sites reports. No host here overlaps the other
  * fixtures' hosts, and no page carries an image.
  */

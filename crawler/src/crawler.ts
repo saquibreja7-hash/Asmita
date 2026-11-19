@@ -22,6 +22,15 @@
  * non-XML answer is quietly ignored; a probe that parses reuses the WP4
  * document path, so only in-scope, non-trap entries become links.
  *
+ * Counting the same page once (crawler v3 WP10): the dedup key shared
+ * with the app (crawl/url.ts -> asmita/src/lib/crawl-page-key.ts) treats
+ * http/https, www./bare host, a trailing slash on a non-root path and a
+ * final /index.{html,htm,php} as one page, https is preferred among the
+ * forms one page offers and the host form seen first is kept; and a
+ * fetched page's <link rel="canonical"> target is reported as an alias
+ * (in scope only, never fetched just because it is canonical), which the
+ * app turns into dead rows so the same content is never fetched twice.
+ *
  * Discovery (crawler v2 WP5): the out-of-scope hosts linked from in-scope
  * pages are reported to the app (hosts only, deduplicated per run, capped
  * by MAX_DISCOVERY_HOSTS); the app decides which become crawl sources. The
@@ -725,8 +734,36 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const REPORT_ENVELOPE_BYTES = 128;
   /** The frontier contract caps a page's reported links at 500. */
   const MAX_REPORT_LINKS_PER_PAGE = 500;
+  /** The frontier contract caps a page's canonical aliases at 20 (WP10). */
+  const MAX_REPORT_ALIASES_PER_PAGE = 20;
   /** A page "has scripts" when its HTML carries a script tag (AUTO rule). */
   const HAS_SCRIPT = /<script[\s>]/i;
+
+  /**
+   * The canonical aliases one fetched HTML page reports (crawler v3 WP10):
+   * its <link rel="canonical"> targets, filtered to what the app may store.
+   * An alias is metadata, never a link: the crawler never fetches the
+   * canonical address, and an out-of-scope or non-content target is dropped
+   * here, silently (it is not a discovery either). The app kills any live
+   * row for an alias and tombstones its digest, so the same page is not
+   * fetched twice.
+   */
+  const pageAliases = (ex: ReturnType<typeof extract>, claimed: URL, ctx: SourceCtx): string[] => {
+    const aliases: string[] = [];
+    if (ex.canonical.length === 0) return aliases;
+    const selfKey = urlKey(claimed);
+    const seen = new Set<string>();
+    for (const candidate of ex.canonical) {
+      if (!inScope(candidate, ctx.scopeHost)) continue; // never fetch it just because it is canonical
+      if (isNonContentUrl(candidate)) continue;
+      const key = urlKey(candidate);
+      if (key === selfKey || seen.has(key)) continue; // a self-referencing canonical is no alias
+      if (aliases.length >= MAX_REPORT_ALIASES_PER_PAGE) break;
+      seen.add(key);
+      aliases.push(candidate.href);
+    }
+    return aliases;
+  };
 
   /**
    * Links for the frontier report, from whichever extraction is in force
@@ -851,7 +888,8 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const xmlLinks = async (ctx: SourceCtx, docUrl: URL, body: Buffer, kind: XmlDocumentKind, depth: number): Promise<ReportedPage["links"]> => {
     const links: ReportedPage["links"] = [];
     const cap = linkCap();
-    const seen = new Set<string>();
+    /** Key -> index in `links`, so a same-key entry can be upgraded (WP10). */
+    const seen = new Map<string, number>();
     /** Add one candidate; false only when the entry is full. */
     const admit = (candidate: URL, linkKind: "page" | "sitemap" | "feed"): boolean => {
       if (!inScope(candidate, ctx.scopeHost)) return true;
@@ -864,9 +902,17 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         return true;
       }
       const key = urlKey(candidate);
-      if (seen.has(key)) return true;
+      const at = seen.get(key);
+      if (at !== undefined) {
+        // The same page in a second form (WP10): the host form seen first is
+        // kept, but an https form replaces an http one.
+        if (candidate.protocol === "https:" && links[at]!.url.startsWith("http://")) {
+          links[at] = { url: candidate.href, kind: linkKind };
+        }
+        return true;
+      }
       if (links.length >= cap) return false;
-      seen.add(key);
+      seen.set(key, links.length);
       links.push({ url: candidate.href, kind: linkKind });
       return true;
     };
@@ -1179,14 +1225,27 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
           maxImages: config.MAX_IMAGES_PER_PAGE,
         });
         recordLinkExtraction(ex2);
-        return { id: page.id, status: "fetched", links: collectLinks(ex2, page, ctx) };
+        const aliases = pageAliases(ex2, url, ctx);
+        return {
+          id: page.id,
+          status: "fetched",
+          links: collectLinks(ex2, page, ctx),
+          ...(aliases.length > 0 ? { aliases } : {}),
+        };
       }
       record(rendered.code);
       if (source.render === "browser") return { id: page.id, status: "error", links: [] };
       // AUTO: the render was an enhancement; report the static result.
       if (stop.signal.aborted) return null;
       recordExtraction(ex);
-      return { id: page.id, status: "fetched", ...validators, links: collectLinks(ex, page, ctx) };
+      const aliases = pageAliases(ex, url, ctx);
+      return {
+        id: page.id,
+        status: "fetched",
+        ...validators,
+        links: collectLinks(ex, page, ctx),
+        ...(aliases.length > 0 ? { aliases } : {}),
+      };
     }
 
     // Static path: images from the HTML, links from the HTML.
@@ -1202,7 +1261,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       // 30-minute window. A killed run loses at most its claimed batch.
       return null;
     }
-    return { id: page.id, status: "fetched", ...validators, links: collectLinks(ex, page, ctx) };
+    const aliases = pageAliases(ex, url, ctx);
+    return {
+      id: page.id,
+      status: "fetched",
+      ...validators,
+      links: collectLinks(ex, page, ctx),
+      ...(aliases.length > 0 ? { aliases } : {}),
+    };
   };
 
   const crawlSource = async (source: Source): Promise<void> => {

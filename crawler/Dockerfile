@@ -1,7 +1,9 @@
 # Asmita crawler: job image (Cloud Run job, asia-south1).
 #
-# Build from the REPOSITORY ROOT, because the bundle includes the read-only
-# PDQ module from asmita/src/lib/pdq/pdq.ts:
+# Build from the REPOSITORY ROOT, because the bundle includes read-only
+# modules from asmita/src/lib/: the PDQ code (pdq/pdq.ts) and the page-key
+# module the crawler's dedup key and the app's frontier digest share
+# (crawl-page-key.ts, crawler v3 WP10):
 #   docker build -f crawler/Dockerfile -t asmita-crawler .
 # BuildKit then uses crawler/Dockerfile.dockerignore (not the repo root's).
 #
@@ -31,6 +33,7 @@ COPY crawler/package.json crawler/package-lock.json ./
 RUN npm ci
 COPY crawler/ ./
 COPY asmita/src/lib/pdq/pdq.ts /src/asmita/src/lib/pdq/pdq.ts
+COPY asmita/src/lib/crawl-page-key.ts /src/asmita/src/lib/crawl-page-key.ts
 RUN npm run build
 
 FROM node:22-bookworm-slim AS deps

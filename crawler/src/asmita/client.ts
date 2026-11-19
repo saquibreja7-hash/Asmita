@@ -88,6 +88,12 @@ export const ReportedPageSchema = z.strictObject({
   status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
   etag: z.string().min(1).max(512).optional(),
   lastModified: z.string().min(1).max(512).optional(),
+  /**
+   * The page's in-scope <link rel="canonical"> targets (crawler v3 WP10),
+   * reported as aliases: the app never fetches one. Optional on both sides;
+   * at most 20 per page.
+   */
+  aliases: z.array(z.url({ protocol: /^https?$/ })).max(20).optional(),
   links: z
     .array(
       z.strictObject({

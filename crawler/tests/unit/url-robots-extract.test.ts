@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CrawlError } from "../../src/errors.ts";
-import { extract, largestFromSrcset } from "../../src/crawl/extract.ts";
+import { extract, largestFromSrcset, MAX_CANONICAL_PER_PAGE } from "../../src/crawl/extract.ts";
 import { parseRobots, RobotsCache } from "../../src/crawl/robots.ts";
 import { inScope, normalizeUrl, registrableDomain, registrableParent, sourceHost, urlKey } from "../../src/crawl/url.ts";
 import type { FetchResult } from "../../src/net/safe-fetch.ts";
@@ -17,8 +17,9 @@ describe("normalizeUrl", () => {
   ])("%s -> %s", (input, want) => expect(n(input)).toBe(want));
   it("dedup key drops tracking params and sorts the rest, without changing the URL", () => {
     const u = new URL("http://example.com/p?b=2&a=1&utm_source=x&fbclid=y");
-    expect(urlKey(u)).toBe("http://example.com/p?a=1&b=2");
-    expect(urlKey(new URL("http://example.com/p?utm_medium=z"))).toBe("http://example.com/p");
+    // WP10: the key is the canonical form — https — while the URL itself keeps its real address.
+    expect(urlKey(u)).toBe("https://example.com/p?a=1&b=2");
+    expect(urlKey(new URL("http://example.com/p?utm_medium=z"))).toBe("https://example.com/p");
     expect(u.href).toBe("http://example.com/p?b=2&a=1&utm_source=x&fbclid=y");
     const signed = new URL("https://cdn.example.net/i.jpg?sig=a%2Fb&exp=1&url=https://x/y");
     expect(normalizeUrl(signed.href)!.href).toBe(signed.href);
@@ -219,5 +220,37 @@ describe("extract", () => {
   it("drops fragments and dedups links", () => {
     const ex = extract(`<a href="/x#1">1</a><a href="/x#2">2</a><a href="/x?utm_campaign=q">3</a><a href="mailto:a@b.c">m</a>`, page);
     expect(paths(ex.links)).toEqual(["https://example.com/x"]); // first occurrence kept
+  });
+
+  // --- crawler v3 WP10: count the same page once -----------------------------
+
+  it("treats the four forms of one page as one link (WP10)", () => {
+    const ex = extract(
+      `<a href="/t">1</a><a href="/t/">2</a><a href="/t/index.html">3</a>` +
+        `<a href="https://www.example.com/t">4</a><a href="http://example.com/t">5</a>`,
+      page,
+    );
+    expect(paths(ex.links)).toEqual(["https://example.com/t"]); // first form seen, https preferred
+  });
+
+  it("prefers the https form when one page offers both schemes (WP10)", () => {
+    const ex = extract(`<a href="http://example.com/x">http first</a><a href="https://example.com/x">https second</a>`, page);
+    expect(paths(ex.links)).toEqual(["https://example.com/x"]);
+  });
+
+  it("collects <link rel=canonical> targets as alias candidates, never as links (WP10)", () => {
+    const head =
+      `<link rel="canonical" href="https://example.com/the-real-one">` +
+      `<link rel="canonical" href="/dup"><link rel="canonical" href="/dup">`;
+    const ex = extract(`<head>${head}</head><a href="/t">t</a>`, page);
+    expect(paths(ex.canonical)).toEqual(["https://example.com/dup", "https://example.com/the-real-one"]);
+    expect(paths(ex.links)).toEqual(["https://example.com/t"]); // the canonical is not followed
+    // Canonical is metadata: collected on nofollow pages too, unlike links.
+    const nofollow = extract(`<meta name="robots" content="nofollow">${head}`, page);
+    expect(nofollow.links).toEqual([]);
+    expect(paths(nofollow.canonical)).toEqual(paths(ex.canonical));
+    // Bounded: at most MAX_CANONICAL_PER_PAGE targets, the rest ignored.
+    const many = Array.from({ length: MAX_CANONICAL_PER_PAGE + 10 }, (_, i) => `<link rel="canonical" href="/c${i}">`).join("");
+    expect(extract(`<head>${many}</head>`, page).canonical).toHaveLength(MAX_CANONICAL_PER_PAGE);
   });
 });

@@ -14,6 +14,14 @@
  *    (<a href=*.jpg><img></a> takes the href, not the thumbnail);
  *  - obvious non-content links (login, cart, search, calendar) are skipped
  *    before the cap, so real content fills it.
+ *
+ * Crawler v3 WP10 additions:
+ *  - the dedup key (crawl/url.ts, shared with the app) treats http/https,
+ *    www./bare host, a trailing slash and a final index document as one
+ *    page; among the forms one page offers on one page, https wins and the
+ *    host form seen first is kept;
+ *  - <link rel="canonical"> targets are collected (never followed) so the
+ *    caller can report the in-scope ones as aliases.
  */
 import { load } from "cheerio";
 import { isNonContentUrl } from "./traps.ts";
@@ -38,6 +46,13 @@ export type Extracted = {
   /** urlKeys of `links` that are pagination markers (priority; query-cap exempt). */
   pagination: Set<string>;
   images: URL[];
+  /**
+   * The page's <link rel="canonical"> targets (crawler v3 WP10), resolved
+   * against the base, deduplicated by key, at most MAX_CANONICAL_PER_PAGE.
+   * Metadata, not links: they are never fetched here, and the caller
+   * reports only the in-scope ones as aliases.
+   */
+  canonical: URL[];
   /** Meta robots / X-Robots-Tag said nofollow (links were not collected). */
   nofollow: boolean;
   /** Images skipped before fetching, by reason. */
@@ -50,6 +65,9 @@ export type Extracted = {
 
 /** Declared width or height below this is treated as an icon/spacer. */
 export const MIN_DECLARED_SIDE = 32;
+
+/** Canonical targets kept per page (the report contract caps aliases at 20). */
+export const MAX_CANONICAL_PER_PAGE = 20;
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|avif)$/i;
 const LAZY_SRC_ATTRS = ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-url", "data-full-src", "data-hi-res-src"];
@@ -314,10 +332,23 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
     });
   });
 
-  // <link rel="image_src"> and JSON-LD image.
+  // <link rel="image_src">, <link rel="canonical"> and JSON-LD image.
+  const canonical: URL[] = [];
+  const canonicalKeys = new Set<string>();
   $("link[rel]").each((_, el) => {
     const l = $(el);
-    if (relTokens(l.attr("rel")).includes("image_src")) addImage(l.attr("href"));
+    const rel = relTokens(l.attr("rel"));
+    if (rel.includes("image_src")) addImage(l.attr("href"));
+    // The page's canonical address (WP10): metadata, so it is collected on
+    // nofollow pages too and never followed here — only reported as an alias
+    // by the caller, and never fetched just because it is canonical.
+    if (rel.includes("canonical")) {
+      const url = l.attr("href") === undefined ? null : normalizeUrl(l.attr("href")!, base);
+      if (url !== null && !canonicalKeys.has(urlKey(url)) && canonical.length < MAX_CANONICAL_PER_PAGE) {
+        canonicalKeys.add(urlKey(url));
+        canonical.push(url);
+      }
+    }
   });
   $('script[type="application/ld+json" i]').each((_, el) => {
     const raw = $(el).text();
@@ -345,7 +376,12 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
   const feedLinks = new Map<string, URL>();
   const seenKeys = new Set<string>();
   const keepLink = (map: Map<string, URL>, key: string, url: URL): boolean => {
-    if (seenKeys.has(key)) return true;
+    if (seenKeys.has(key)) {
+      // The same page in a second form (WP10): keep the host form seen
+      // first, but prefer https when the page offers both schemes.
+      if (url.protocol === "https:" && map.get(key)?.protocol === "http:") map.set(key, url);
+      return true;
+    }
     if (map.size >= limits.maxLinks) return false;
     seenKeys.add(key);
     map.set(key, url);
@@ -427,6 +463,7 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
     feeds: feedsKept,
     pagination,
     images: [...images.values()],
+    canonical,
     nofollow,
     skipped,
     dropped,
