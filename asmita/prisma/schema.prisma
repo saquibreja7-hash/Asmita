@@ -150,6 +150,13 @@ enum HashSubmissionStatus {
   REJECTED
 }
 
+// A partner platform's lifecycle (WP30): ACTIVE partners alone receive
+// fingerprints and notices; an admin suspends and reactivates.
+enum PlatformPartnerStatus {
+  ACTIVE
+  SUSPENDED
+}
+
 enum AuditEventType {
   USER_REGISTERED
   USER_VERIFIED
@@ -814,6 +821,54 @@ model PlatformPartnerApplication {
 
   @@index([createdAt])
   @@index([status])
+}
+
+// Partner programme, part 2 (WP30): a platform that joined. Created only by
+// an admin approving a PlatformPartnerApplication; fingerprints are shared
+// with ACTIVE partners only, and only under each survivor's agreement
+// (PartnerShareConsent, WP31). Business data, never survivor data; the
+// takedown-channel email is encrypted at rest like the application's contact
+// fields. No foreign key to the application on purpose, like AuditLog's
+// actorId: the reference is provenance, the row outlives the link.
+model PlatformPartner {
+  id                        String                @id @default(uuid())
+  name                      String
+  primaryDomain             String                @unique
+  extraDomains              String[]              @default([])
+  status                    PlatformPartnerStatus @default(ACTIVE)
+  // The partner's agreed inbox for the takedown channel (WP33), encryptField.
+  channelEmailEncrypted     String?
+  createdFromApplicationId  String?               @unique
+  // Crawler monitoring of the partner's domains (WP33) starts only after an
+  // admin records the platform's written permission; the note says where it
+  // is filed. RecordedBy is the admin's session id.
+  crawlPermissionRecordedAt   DateTime?
+  crawlPermissionRecordedById String?
+  crawlPermissionNote         String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  keys PlatformPartnerKey[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Only the sha256 of a partner key is stored (src/lib/partner-auth.ts); the
+// key itself is shown once at issue and never again. lastUsedAt is the last
+// successful partner-API request. Revoked keys stop working immediately.
+model PlatformPartnerKey {
+  id         String    @id @default(uuid())
+  partnerId  String
+  keyHash    String    @unique
+  label      String
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  partner PlatformPartner @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
 }
 
 model DeletionJob {
