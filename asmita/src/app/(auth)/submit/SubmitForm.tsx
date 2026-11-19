@@ -14,6 +14,7 @@ import type { HashPickerPlatform } from "@/lib/hash-submission";
 import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { checkLink, matchPlatform, type LinkCheckError, type PlatformPattern } from "@/lib/link-check";
+import { FormError } from "@/components/FormError";
 import { FormHandoff } from "@/components/FormHandoff";
 import { UnsureHandoff } from "@/components/UnsureHandoff";
 
@@ -112,9 +113,16 @@ function checkLines(text: string, knownPlatforms: PlatformPattern[]): LineCheck[
     });
 }
 
+// Progress for a video read is reflected at most about four times a second
+// (WP40 A8): a state update per frame churns the DOM and any listener.
+const VIDEO_PROGRESS_MIN_INTERVAL_MS = 250;
+
 export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false, platforms = [], locale, children }: Props) {
   const router = useRouter();
   const [urls, setUrls] = useState("");
+  // What the per-line checks are computed from: the typed text only after a
+  // short pause or on blur, never on every keystroke (WP40 A7).
+  const [checkedUrls, setCheckedUrls] = useState("");
   const [declaration, setDeclaration] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -132,8 +140,12 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   // The fingerprint section is optional, so it starts folded away.
   const [hashOpen, setHashOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const urlsRef = useRef<HTMLTextAreaElement>(null);
+  const declarationRef = useRef<HTMLInputElement>(null);
+  const platformsRef = useRef<HTMLFieldSetElement>(null);
   // Stops the in-flight video read when she cancels or leaves the page.
   const abortRef = useRef<AbortController | null>(null);
+  const lastProgressRef = useRef(0);
 
   useEffect(() => {
     const id = window.setTimeout(() => setHydrated(true), 0);
@@ -142,6 +154,13 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
       abortRef.current?.abort();
     };
   }, []);
+
+  // A short pause (or leaving the box) is what makes the line checks move
+  // (WP40 A7): typing stays quiet instead of re-announcing on every keystroke.
+  useEffect(() => {
+    const id = window.setTimeout(() => setCheckedUrls(urls), 600);
+    return () => window.clearTimeout(id);
+  }, [urls]);
 
   function cancelHashing() {
     abortRef.current?.abort();
@@ -164,12 +183,18 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     for (const [index, file] of selected.entries()) {
       if (controller.signal.aborted) break;
       const isVideo = isVideoFile(file);
+      lastProgressRef.current = 0;
       try {
         if (isVideo) {
           const { frames, durationSec } = await fingerprintVideo(file, {
             signal: controller.signal,
             onProgress: (progress) => {
               if (!isActive()) return;
+              // The first and last ticks always land; the rest are throttled
+              // to about four React updates a second (WP40 A8).
+              const now = Date.now();
+              if (progress < 100 && now - lastProgressRef.current < VIDEO_PROGRESS_MIN_INTERVAL_MS) return;
+              lastProgressRef.current = now;
               setHashFiles((current) =>
                 current.map((entry, i) => (i === index && entry.status === "hashing" ? { ...entry, progress } : entry)),
               );
@@ -203,12 +228,15 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   const hashedFiles = hashFiles.filter(
     (f) => f.status === "hashed" && (f.kind === "video" ? (f.frames?.length ?? 0) > 0 : Boolean(f.hash)),
   );
-  const lineChecks = checkLines(urls, knownPlatforms);
+  // The checks shown on screen come from the settled text (WP40 A7); the
+  // submit gating and the draft itself always parse the text as it is now.
+  const lineChecks = checkLines(checkedUrls, knownPlatforms);
   const parsedUrls = lineChecks.flatMap((c) => (c.url ? [c.url] : []));
   const skippedLines = lineChecks.filter((c) => c.problem).length;
-  const hashOnly = hashedFiles.length > 0 && parsedUrls.length === 0;
-  const hasAnyContent = parsedUrls.length > 0 || hashedFiles.length > 0;
-  const canSubmit = declaration && hasAnyContent && (!hashOnly || selectedPlatformIds.length > 0 || unsure);
+  const liveParsedUrls = checkLines(urls, knownPlatforms).flatMap((c) => (c.url ? [c.url] : []));
+  const liveHashOnly = hashedFiles.length > 0 && liveParsedUrls.length === 0;
+  const hasAnyContent = liveParsedUrls.length > 0 || hashedFiles.length > 0;
+  const canSubmit = declaration && hasAnyContent && (!liveHashOnly || selectedPlatformIds.length > 0 || unsure);
 
   function togglePlatform(id: string) {
     setUnsure(false);
@@ -222,9 +250,37 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     setUnsure((prev) => !prev);
   }
 
+  // The button is never disabled to block validation (WP40 A9): submitting
+  // with something missing focuses the first problem; the status line under
+  // the button already says why.
+  function focusFirstSubmitError(): boolean {
+    if (!hasAnyContent) {
+      urlsRef.current?.focus();
+      return true;
+    }
+    if (liveHashOnly && selectedPlatformIds.length === 0 && !unsure) {
+      platformsRef.current?.focus();
+      return true;
+    }
+    if (!declaration) {
+      declarationRef.current?.focus();
+      return true;
+    }
+    return false;
+  }
+
+  // Always parse the text as it stands at submit time; the on-screen checks
+  // may lag a short pause behind the last keystroke.
+  function parsedUrlsAtSubmit(): string[] {
+    return checkLines(urls, knownPlatforms).flatMap((c) => (c.url ? [c.url] : []));
+  }
+
   // The declaration is logged on the review step, once there is a session.
   function submit() {
     setError("");
+    if (focusFirstSubmitError()) return;
+    const parsed = parsedUrlsAtSubmit();
+    const hashOnly = hashedFiles.length > 0 && parsed.length === 0;
     if (hashOnly && unsure) {
       setShowUnsure(true);
       return;
@@ -233,7 +289,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     try {
       const selectedPlatforms = hashOnly ? platforms.filter((p) => selectedPlatformIds.includes(p.id)) : [];
       const formLinks = new Map<string, { name: string; formUrl: string }>();
-      const remainingUrls = parsedUrls.filter((url) => {
+      const remainingUrls = parsed.filter((url) => {
         const checked = checkLink(url);
         const platform = checked.ok ? matchPlatform(checked.domain, knownPlatforms) : null;
         if (!platform?.formUrl) return true;
@@ -270,7 +326,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
         setRemainingDraft(draft);
         // Opting in keeps the form-only links in the case too, so they get a
         // deadline and next steps (docs/product/escalation-ladder.md).
-        setTrackedDraft(parsedUrls.length > remainingUrls.length ? buildDraft(parsedUrls) : null);
+        setTrackedDraft(parsed.length > remainingUrls.length ? buildDraft(parsed) : null);
         setHandoff([...formLinks.values()]);
       } else if (draft) {
         sessionStorage.setItem(DRAFT_KEY, draft);
@@ -305,7 +361,12 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   return (
     <div>
       {children}
-      <div className="mt-6 space-y-6">
+      {/* Enter submits like a click: the primary action is a real submit
+          button inside a form (WP40 A9). */}
+      <form
+        className="mt-6 space-y-6"
+        onSubmit={(e) => { e.preventDefault(); submit(); }}
+      >
       <div className="filing-card">
       {/* Step 1: the links */}
       <Step n={1}>
@@ -318,17 +379,22 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             </p>
           </div>
         <textarea
+          ref={urlsRef}
           className="filing-input mt-4 min-h-32"
           id="urls"
           onChange={(e) => setUrls(e.target.value)}
+          onBlur={() => setCheckedUrls(urls)}
           aria-describedby={lineChecks.length > 0 ? "url-checks" : undefined}
           value={urls}
           placeholder={"https://example.com/post/1234\nhttps://example.com/post/5678"}
           spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
         />
 
         {lineChecks.length > 0 && (
-          <ul id="url-checks" className="mt-3 space-y-2 text-sm" aria-live="polite">
+          <ul id="url-checks" className="mt-3 space-y-2 text-sm">
             {lineChecks.map((c, i) => (
               <li key={`${c.line}-${i}`} className="flex items-center gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-white px-3 py-2.5">
                 <span
@@ -353,7 +419,14 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
         )}
         {lineChecks.some((c) => c.url && !c.platform) && <p className="mt-3 rounded-[var(--radius-box)] bg-[var(--brand-soft)] p-4 text-sm leading-[1.7] text-[var(--ink)]">{locale === "hi" ? "हम इस प्लेटफ़ॉर्म को अभी नहीं पहचानते। आप जाँच का अनुरोध कर सकते हैं; हम रिपोर्टिंग का सुरक्षित रास्ता खोजने की कोशिश करेंगे, लेकिन संपर्क या सामग्री हटने का वादा नहीं कर सकते।" : "We don’t recognize this platform yet. You can request an investigation. We’ll try to find a safe reporting route, but cannot promise to contact the platform or secure removal."}</p>}
         {skippedLines > 0 && parsedUrls.length > 0 && (
-          <p className="mt-2 text-xs text-[var(--text-muted)]">{t(locale, "submit.link.skipNote")}</p>
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            {/* One announced summary of the checks, instead of a live list
+                that re-speaks on every keystroke (WP40 A7). */}
+            <span role="status">
+              {t(locale, "submit.link.summary").replace("{ready}", String(parsedUrls.length)).replace("{skipped}", String(skippedLines))}
+            </span>{" "}
+            {t(locale, "submit.link.skipNote")}
+          </p>
         )}
 
         <details className="group mt-4">
@@ -426,7 +499,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           </button>
 
           {hashFiles.length > 0 && (
-            <ul className="space-y-1.5 text-sm" aria-live="polite">
+            <ul className="space-y-1.5 text-sm">
               {hashFiles.map((file, i) => (
                 <li
                   key={`${file.name}-${i}`}
@@ -448,6 +521,16 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
                       {file.status === "error" && file.kind === "image" && t(locale, "submit.hash.error")}
                     </span>
                   </div>
+                  {/* The read is shown as a progress bar, not announced per
+                      tick (WP40 A8): screen readers read its value on demand. */}
+                  {file.status === "hashing" && file.kind === "video" && (
+                    <progress
+                      className="mt-1.5 h-1.5 w-full"
+                      max={100}
+                      value={file.progress ?? 0}
+                      aria-label={t(locale, "submit.hash.video.reading")}
+                    />
+                  )}
                   {(() => {
                     const errorKey = file.status === "error" && file.kind === "video" && file.error ? VIDEO_ERROR_KEYS[file.error] : undefined;
                     return errorKey ? (
@@ -469,7 +552,8 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
 
           {hashFiles.some((f) => f.kind === "video" && f.status === "hashing") && (
             <div className="flex items-start justify-between gap-3">
-              <p className="muted text-sm leading-[1.6]">
+              {/* The polite status announces only that a read started (WP40 A8). */}
+              <p className="muted text-sm leading-[1.6]" role="status">
                 {t(locale, "submit.hash.video.notUploaded")}
               </p>
               <button
@@ -485,12 +569,12 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           {hashedFiles.length > 0 && hashFiles.every((f) => f.status !== "hashing") && (
             <div className="space-y-1.5">
               {hashedFiles.some((f) => f.kind === "image") && (
-                <p className="text-sm leading-[1.6] font-medium text-[var(--brand)]">
+                <p className="text-sm leading-[1.6] font-medium text-[var(--brand)]" role="status">
                   {t(locale, "submit.hash.doneNote")}
                 </p>
               )}
               {hashedFiles.some((f) => f.kind === "video") && (
-                <p className="text-sm leading-[1.6] font-medium text-[var(--brand)]">
+                <p className="text-sm leading-[1.6] font-medium text-[var(--brand)]" role="status">
                   {t(locale, "submit.hash.video.doneNote")}
                 </p>
               )}
@@ -505,51 +589,56 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
 
           {hashedFiles.length > 0 && parsedUrls.length === 0 && (
             <div>
-              <p className="block text-sm font-medium text-[var(--ink)]">
-                {t(locale, "submit.hash.platforms.title")}
-              </p>
-              {platforms.length > 0 && (
-                <p className="muted mt-1 text-sm leading-[1.6]">
-                  {t(locale, "submit.hash.platforms.sub")}
-                </p>
-              )}
-              <ul className="mt-3 space-y-2">
-                {platforms.map((p) => (
-                  <li key={p.id}>
+              {/* One question, one group: the checkboxes are a fieldset with a
+                  legend, and the fieldset itself takes the focus when
+                  submitting without a choice (WP40 A9/A13). */}
+              <fieldset ref={platformsRef} tabIndex={-1} className="outline-none">
+                <legend className="block text-sm font-medium text-[var(--ink)]">
+                  {t(locale, "submit.hash.platforms.title")}
+                </legend>
+                {platforms.length > 0 && (
+                  <p className="muted mt-1 text-sm leading-[1.6]">
+                    {t(locale, "submit.hash.platforms.sub")}
+                  </p>
+                )}
+                <ul className="mt-3 space-y-2">
+                  {platforms.map((p) => (
+                    <li key={p.id}>
+                      <label className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-4 py-3 hover:border-[var(--brand)] transition-colors">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0 accent-[var(--brand)]"
+                          checked={selectedPlatformIds.includes(p.id)}
+                          onChange={() => togglePlatform(p.id)}
+                        />
+                        <span className="flex-1 text-sm text-[var(--ink)]">{p.name}</span>
+                        {!p.hasEmail && (
+                          <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{t(locale, "submit.hash.platforms.formNote")}</span>
+                        )}
+                      </label>
+                    </li>
+                  ))}
+                  <li>
                     <label className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-4 py-3 hover:border-[var(--brand)] transition-colors">
                       <input
                         type="checkbox"
                         className="h-4 w-4 shrink-0 accent-[var(--brand)]"
-                        checked={selectedPlatformIds.includes(p.id)}
-                        onChange={() => togglePlatform(p.id)}
+                        checked={unsure}
+                        onChange={toggleUnsure}
                       />
-                      <span className="flex-1 text-sm text-[var(--ink)]">{p.name}</span>
-                      {!p.hasEmail && (
-                        <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{t(locale, "submit.hash.platforms.formNote")}</span>
-                      )}
+                      <span className="flex-1 text-sm text-[var(--ink)]">{t(locale, "submit.hash.platforms.unsure")}</span>
                     </label>
                   </li>
-                ))}
-                <li>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-4 py-3 hover:border-[var(--brand)] transition-colors">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 shrink-0 accent-[var(--brand)]"
-                      checked={unsure}
-                      onChange={toggleUnsure}
-                    />
-                    <span className="flex-1 text-sm text-[var(--ink)]">{t(locale, "submit.hash.platforms.unsure")}</span>
-                  </label>
-                </li>
-              </ul>
-              {selectedPlatformIds.some((id) => {
-                const p = platforms.find((pl) => pl.id === id);
-                return p && !p.hasEmail;
-              }) && (
-                <p className="muted mt-2 text-xs leading-[1.6]">
-                  {t(locale, "submit.hash.platforms.formOnlyNote")}
-                </p>
-              )}
+                </ul>
+                {selectedPlatformIds.some((id) => {
+                  const p = platforms.find((pl) => pl.id === id);
+                  return p && !p.hasEmail;
+                }) && (
+                  <p className="muted mt-2 text-xs leading-[1.6]">
+                    {t(locale, "submit.hash.platforms.formOnlyNote")}
+                  </p>
+                )}
+              </fieldset>
             </div>
           )}
           </div>
@@ -567,6 +656,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           }`}
         >
           <input
+            ref={declarationRef}
             checked={declaration}
             onChange={(e) => setDeclaration(e.target.checked)}
             type="checkbox"
@@ -579,9 +669,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
       </Step>
       </div>
 
-      {error && (
-        <p className="text-sm font-medium text-[var(--danger)]">{error}</p>
-      )}
+      <FormError message={error} />
 
       {!canSubmit && (
         <p className="text-sm text-[var(--text-muted)]" role="status">
@@ -589,7 +677,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             locale,
             !hasAnyContent
               ? "submit.hint.content"
-              : hashOnly && selectedPlatformIds.length === 0 && !unsure
+              : liveHashOnly && selectedPlatformIds.length === 0 && !unsure
                 ? "submit.hint.hashPlatform"
                 : "submit.hint.declaration",
           )}
@@ -598,15 +686,14 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
       <div>
         <button
           className="btn btn-primary btn-arrow w-full justify-center sm:w-auto"
-          disabled={!hydrated || !canSubmit || submitting}
-          onClick={submit}
-          type="button"
+          disabled={!hydrated || submitting}
+          type="submit"
         >
           {submitting ? t(locale, "submit.cta.saving") : t(locale, "submit.cta.review")}
         </button>
       </div>
 
-      </div>
+      </form>
     </div>
   );
 }

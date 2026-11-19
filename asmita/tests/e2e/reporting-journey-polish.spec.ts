@@ -2,32 +2,60 @@ import { expect, test } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { withAdmin } from "./support/database";
 
-test("OTP accepts a complete autofill code while displaying six individual digits", async ({ page }) => {
+test("the code arrives in one box: typed key by key, pasted, and autofilled", async ({ page }) => {
+  await page.goto("/register");
+  await page.getByText("I am 18 years of age or older.").click();
+  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Your email address." })).toBeFocused();
+  await page.getByLabel("Email address").fill(`otp-${randomUUID()}@example.invalid`);
+  const response = page.waitForResponse("**/api/auth/request-otp");
+  await page.getByRole("button", { name: "Send verification code" }).click();
+  const { devOtp } = (await (await response).json()) as { devOtp: string };
+  await expect(page.getByRole("heading", { name: "Enter the code we sent." })).toBeFocused();
+
+  // One single box (WP40 A3), no per-digit boxes left.
+  const code = page.getByLabel("6-digit code");
+  await expect(code.locator("input")).toHaveCount(0);
+  await expect(page.locator("#otp")).toHaveCount(1);
+
+  // Typing non-digits does nothing; typing the code fills it.
+  await code.click();
+  await page.keyboard.type("a-");
+  await expect(code).toHaveValue("");
+  await page.keyboard.type(devOtp);
+  await expect(code).toHaveValue(devOtp);
+
+  // A paste lands in one action: insertText is the input event a paste fires,
+  // with all six digits in a single multi-character insertion.
+  await code.fill("");
+  await code.focus();
+  await page.evaluate((text: string) => document.execCommand("insertText", false, text), devOtp);
+  await expect(code).toHaveValue(devOtp);
+
+  // And so does an autofill-style fill.
+  await code.fill("");
+  await code.fill(devOtp);
+  await expect(code).toHaveValue(devOtp);
+
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page).toHaveURL(/\/submit$/);
+});
+
+test("a wrong code is announced as an alert and focus returns to the box", async ({ page }) => {
   await page.goto("/register");
   await page.getByText("I am 18 years of age or older.").click();
   await page.getByText("I was 18 or older.").click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Email address").fill(`otp-${randomUUID()}@example.invalid`);
-  const response = page.waitForResponse("**/api/auth/request-otp");
   await page.getByRole("button", { name: "Send verification code" }).click();
-  const { devOtp } = await (await response).json();
-  await expect(page.getByRole("group", { name: "Verification code digits" }).locator("input")).toHaveCount(6);
-  await page.getByLabel("6-digit code").focus();
-  await page.keyboard.type("a");
-  await expect(page.getByLabel("6-digit code")).toHaveValue("");
-  await page.keyboard.type(devOtp);
-  for (let i = 1; i < 6; i++) await expect(page.getByLabel(`Digit ${i + 1}`)).toHaveValue(devOtp[i]);
-  await page.getByLabel("6-digit code").evaluate((element, code: string) => {
-    const clipboard = new DataTransfer();
-    clipboard.setData("text", code);
-    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: clipboard, bubbles: true, cancelable: true }));
-  }, devOtp);
-  for (let i = 1; i < 6; i++) await expect(page.getByLabel(`Digit ${i + 1}`)).toHaveValue(devOtp[i]);
-  await page.getByLabel("6-digit code").fill("");
-  await page.getByLabel("6-digit code").fill(devOtp);
-  for (let i = 1; i < 6; i++) await expect(page.getByLabel(`Digit ${i + 1}`)).toHaveValue(devOtp[i]);
+  await expect(page.getByLabel("6-digit code")).toBeVisible({ timeout: 30_000 });
+
+  // A code that cannot match (the real one is random six digits).
+  await page.getByLabel("6-digit code").fill("000000");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page).toHaveURL(/\/submit$/);
+  await expect(page.getByRole("alert")).toContainText("The code did not match. Please try again.");
+  await expect(page.getByLabel("6-digit code")).toBeFocused();
 });
 
 test("a YouTube case without a verified contact does not offer signing or redirect to a form", async ({ page }, testInfo) => {
