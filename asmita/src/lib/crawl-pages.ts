@@ -53,6 +53,10 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * 30, other pages 50 plus 10 per depth level, capped at the default 100);
  * a sitemap link whose lastmod is newer than the row's last fetch sets 5
  * and makes the row due immediately. Rows stored before WP11 keep 100.
+ * Review fix (WP11): the seed row is stored at 50 (the depth-0 page value),
+ * a lastmod is clamped to now before it is compared, and a successful
+ * visit resets the row's priority to its kind/depth value, so a lastmod
+ * jump is one-shot.
  */
 
 /** How long a claimed row is withheld from other claims. */
@@ -81,6 +85,12 @@ export const FRONTIER_PERMANENT_FAIL_MS = 24 * 60 * 60 * 1000;
 export const FRONTIER_PRIORITY_DEFAULT = 100;
 /** A sitemap entry whose lastmod is newer than the row's last fetch (WP11). */
 export const FRONTIER_PRIORITY_LASTMOD = 5;
+/**
+ * The seed row's priority (crawler v3 review fix, WP11): 50, exactly the
+ * `linkPriority` of a depth-0 page, so a backfilled seed and a new seed run
+ * in the same place instead of after every reported page.
+ */
+export const FRONTIER_PRIORITY_SEED = 50;
 
 /** Server-side caps, mirrored in the route schemas. */
 export const FRONTIER_CLAIM_LIMIT_MAX = 200;
@@ -227,6 +237,22 @@ export function linkPriority(link: { kind: "page" | "sitemap" | "feed"; paginati
   if (link.kind === "feed") return 20;
   if (link.pagination === true) return 30;
   return Math.min(50 + 10 * Math.max(depth, 0), FRONTIER_PRIORITY_DEFAULT);
+}
+
+/**
+ * The priority a row falls back to after a successful visit (crawler v3
+ * review fix, WP11): its own kind/depth value, so a lastmod jump (priority
+ * 5) is one-shot and a bumped row does not run first forever. The seed's
+ * value is the depth-0 page value, 50 (`FRONTIER_PRIORITY_SEED`).
+ */
+export function visitPriority(row: { kind: "PAGE" | "SITEMAP" | "FEED"; viaPagination?: boolean; depth: number }): number {
+  return linkPriority(
+    {
+      kind: row.kind === "SITEMAP" ? "sitemap" : row.kind === "FEED" ? "feed" : "page",
+      pagination: row.viaPagination === true,
+    },
+    row.depth,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -473,7 +499,7 @@ async function insertSeed(seed: SeedInsert): Promise<void> {
     if (!exists) {
       memory.pages.set(seed.id, {
         id: seed.id, sourceId: seed.sourceId, urlEncrypted: seed.urlEncrypted, urlDigest: seed.urlDigest,
-        depth: 0, kind: "PAGE", priority: FRONTIER_PRIORITY_DEFAULT, etag: null, lastModified: null, status: "PENDING",
+        depth: 0, kind: "PAGE", priority: FRONTIER_PRIORITY_SEED, etag: null, lastModified: null, status: "PENDING",
         claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: new Date(),
       });
     }
@@ -482,13 +508,13 @@ async function insertSeed(seed: SeedInsert): Promise<void> {
   if (usesWorkerKysely()) {
     await getWorkerDb().insertInto("CrawlPage").values({
       id: seed.id, sourceId: seed.sourceId, urlEncrypted: seed.urlEncrypted, urlDigest: seed.urlDigest,
-      depth: 0, kind: "PAGE", status: "PENDING", nextDueAt: new Date(0),
+      depth: 0, kind: "PAGE", priority: FRONTIER_PRIORITY_SEED, status: "PENDING", nextDueAt: new Date(0),
     }).onConflict((oc) => oc.columns(["sourceId", "urlDigest"]).doNothing()).execute();
     return;
   }
   const { db } = await import("@/lib/db");
   try {
-    await db.crawlPage.create({ data: { id: seed.id, sourceId: seed.sourceId, urlEncrypted: seed.urlEncrypted, urlDigest: seed.urlDigest, nextDueAt: new Date(0) } });
+    await db.crawlPage.create({ data: { id: seed.id, sourceId: seed.sourceId, urlEncrypted: seed.urlEncrypted, urlDigest: seed.urlDigest, priority: FRONTIER_PRIORITY_SEED, nextDueAt: new Date(0) } });
   } catch (err) {
     if ((err as { code?: string }).code !== "P2002") throw err; // a concurrent first claim won the insert
   }
@@ -504,6 +530,13 @@ export type PageUpdatePlan = {
   failCount: number;
   etag: string | null;
   lastModified: string | null;
+  /**
+   * The row's priority after this report, when the report changes it
+   * (crawler v3 review fix, WP11): a successful visit resets it to the
+   * kind/depth value, so a lastmod jump (priority 5) is one-shot. Absent
+   * means the stored priority stays.
+   */
+  priority?: number;
   /**
    * The first permanent failure this row remembers (crawler v3 review fix,
    * WP13), or null once it visits successfully again.
@@ -683,6 +716,10 @@ export async function reportCrawlPages(
     // Dead rows are final; a report for another source's row is not ours.
     if (!row || row.status === "DEAD" || row.status === "GONE") continue;
     const plan = planNextVisit(row, page, now);
+    // Review fix (WP11): a successful visit consumes the lastmod jump —
+    // the row's priority falls back to its kind/depth value. A failed
+    // visit keeps it, so a bumped row retries before the rest.
+    if (page.status === "fetched" || page.status === "not_modified") plan.priority = visitPriority(row);
     updates.push({ id: page.id, plan });
     accepted++;
     for (const link of page.links ?? []) {
@@ -701,7 +738,13 @@ export async function reportCrawlPages(
         viaPagination: link.pagination === true,
       });
       linkUrls.set(digest, url);
-      if (link.lastmod !== undefined && !lastmodByDigest.has(digest)) lastmodByDigest.set(digest, new Date(link.lastmod));
+      // Review fix (WP11): a lastmod in the future is clamped to now — a
+      // site cannot outrank every honest page by writing next year — and
+      // the bump below only ever fires for a lastmod strictly newer than
+      // the row's last fetch.
+      if (link.lastmod !== undefined && !lastmodByDigest.has(digest)) {
+        lastmodByDigest.set(digest, new Date(Math.min(Date.parse(link.lastmod), now.getTime())));
+      }
     }
   }
 
@@ -764,20 +807,20 @@ async function pageRows(sourceId: string, ids: string[]): Promise<Map<string, Cu
   }
   if (usesWorkerKysely()) {
     const rows = await getWorkerDb().selectFrom("CrawlPage")
-      .select(["id", "status", "nextDueAt", "lastFetchedAt", "failCount", "etag", "lastModified", "depth", "urlDigest", "viaPagination", "lastPermanentFailAt"])
+      .select(["id", "status", "nextDueAt", "lastFetchedAt", "failCount", "etag", "lastModified", "depth", "urlDigest", "kind", "viaPagination", "lastPermanentFailAt"])
       .where("sourceId", "=", sourceId).where("id", "in", wanted).execute();
     return new Map(rows.map((row) => [row.id, row as CurrentRow]));
   }
   const { db } = await import("@/lib/db");
   const rows = await db.crawlPage.findMany({
     where: { sourceId, id: { in: wanted } },
-    select: { id: true, status: true, nextDueAt: true, lastFetchedAt: true, failCount: true, etag: true, lastModified: true, depth: true, urlDigest: true, viaPagination: true, lastPermanentFailAt: true },
+    select: { id: true, status: true, nextDueAt: true, lastFetchedAt: true, failCount: true, etag: true, lastModified: true, depth: true, urlDigest: true, kind: true, viaPagination: true, lastPermanentFailAt: true },
   });
   return new Map(rows.map((row) => [row.id, row as unknown as CurrentRow]));
 }
 
 /** What the scheduling needs from one current row, plus its depth and digest. */
-type CurrentRow = SchedulablePage & { id: string; status: MemoryCrawlPage["status"]; depth: number; urlDigest: string; viaPagination?: boolean };
+type CurrentRow = SchedulablePage & { id: string; status: MemoryCrawlPage["status"]; depth: number; urlDigest: string; kind: "PAGE" | "SITEMAP" | "FEED"; viaPagination?: boolean };
 
 /**
  * The rows for the given link digests, keyed by digest — what the WP11
@@ -843,6 +886,7 @@ async function applyReport(
       Object.assign(row, {
         status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt, failCount: plan.failCount,
         etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null, lastPermanentFailAt: plan.lastPermanentFailAt,
+        ...(plan.priority !== undefined ? { priority: plan.priority } : {}),
       });
     }
     // A newer-than-last-fetch lastmod jumps the queue (WP11): due now.
@@ -898,6 +942,7 @@ async function applyReport(
           status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt,
           failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null,
           lastPermanentFailAt: plan.lastPermanentFailAt,
+          ...(plan.priority !== undefined ? { priority: plan.priority } : {}),
         }).where("id", "=", id).where("sourceId", "=", sourceId).execute();
       }
       // A newer-than-last-fetch lastmod jumps the queue (WP11): due now.
@@ -963,6 +1008,7 @@ async function applyReport(
           status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt,
           failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null,
           lastPermanentFailAt: plan.lastPermanentFailAt,
+          ...(plan.priority !== undefined ? { priority: plan.priority } : {}),
         },
       });
     }

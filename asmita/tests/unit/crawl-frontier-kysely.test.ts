@@ -313,7 +313,10 @@ describe("crawl order (WP11), Kysely path", () => {
       await reportCrawlPages(SOURCE.id, "run-1", [
         { id: "page-1", status: "fetched", links: [{ url: childUrl, kind: "page", lastmod: "2026-11-17T10:00:00Z" }] },
       ], NOW);
-      expect(callsOn("CrawlPage").filter((call) => call.op === "update" && (call.detail.set as Record<string, unknown>).priority !== undefined)).toHaveLength(0);
+      // No bump: no update writes the lastmod priority. (The reported page's
+      // own visit reset does write a priority since review fix 8 — 50, not
+      // 5 — so the bump is told apart by its value.)
+      expect(callsOn("CrawlPage").filter((call) => call.op === "update" && (call.detail.set as Record<string, unknown>).priority === 5)).toHaveLength(0);
     }
   });
 });
@@ -420,5 +423,21 @@ describe("permanent failures (review fix 7, WP13), Kysely path", () => {
     expect(read).toBeDefined();
     const dead = callsOn("CrawlPage").find((call) => call.op === "update" && call.detail.set !== undefined)!;
     expect(dead.detail.set).toMatchObject({ status: "DEAD" }); // the second permanent failure, 24 h on
+  });
+});
+
+describe("the visit reset and the seed's priority (review fix 8, WP11), Kysely path", () => {
+  it("a visit resets the priority and clears the marker; a seed is stored at 50", async () => {
+    kysely.state.rows.CrawlPage = [pageRow({ priority: 5, lastPermanentFailAt: NOW })];
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "fetched", links: [] }], NOW);
+    const update = callsOn("CrawlPage").find((call) => call.op === "update" && call.detail.set !== undefined)!;
+    expect(update.detail.set).toMatchObject({ status: "FETCHED", lastPermanentFailAt: null, priority: 50 });
+
+    kysely.state.rows.CrawlPage = [];
+    kysely.state.calls.length = 0;
+    await claimCrawlPages(SOURCE.id, 10, NOW);
+    const insert = callsOn("CrawlPage").find((call) => call.op === "insert")!;
+    const row = (Array.isArray(insert.detail.values) ? insert.detail.values[0] : insert.detail.values) as Record<string, unknown>;
+    expect(row.priority).toBe(50);
   });
 });

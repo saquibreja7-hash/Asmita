@@ -389,3 +389,22 @@ describe("permanent failures (review fix 7, WP13), Prisma path", () => {
     });
   });
 });
+
+describe("the visit reset and the seed's priority (review fix 8, WP11), Prisma path", () => {
+  it("a visit resets the priority and clears the marker; a seed is stored at 50", async () => {
+    db.crawlPage.findMany.mockResolvedValueOnce([{ ...CURRENT_ROW, priority: 5, lastPermanentFailAt: NOW, kind: "PAGE" }]);
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "fetched", links: [] }], NOW);
+    expect(db.crawlPage.update).toHaveBeenCalledWith({
+      where: { id: "page-1" },
+      data: expect.objectContaining({ status: "FETCHED", lastPermanentFailAt: null, priority: 50 }),
+    });
+
+    db.crawlPage.count.mockResolvedValueOnce(0); // hasPages
+    db.crawlPage.count.mockResolvedValueOnce(0); // fetched today
+    db.$queryRaw.mockResolvedValueOnce([]);
+    await claimCrawlPages(SOURCE.id, 10, NOW);
+    expect(db.crawlPage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ sourceId: SOURCE.id, priority: 50, nextDueAt: new Date(0) }),
+    });
+  });
+});

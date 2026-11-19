@@ -136,18 +136,23 @@ describe("crawl the useful pages first (WP11)", () => {
     }));
     expect(second.exitCode).toBe(0);
     expect(second.summary.errors).toEqual({});
+    // The seed row runs at its stored priority 50 (review fix 8: the app's
+    // own row is a depth-0 page), after the pagination link (30) and ahead
+    // of every depth-1 page (60) — no longer after every reported row.
     expect(seenSecond().map((r) => r.path)).toEqual([
       "/sitemap.xml",
       "/feed.rss",
       "/gallery",
       "/listing?page=2",
+      "/",
       "/plain",
       "/stale",
       "/from-feed",
-      "/", // the seed row (priority 100, the app's own) runs after every reported row
     ]);
     expect(second.summary.pagesFetched).toBe(6); // 8 pages served, two of them XML documents
-    expect(row("/gallery").priority).toBe(5); // the jump, still on the row after its fetch
+    // The jump was one-shot (review fix 8): /gallery's own fetch in this run
+    // reset its priority to the kind/depth value, so the bump is spent.
+    expect(row("/gallery").priority).toBe(70);
     expect(row("/gallery").nextDueAt).toBe(clock + DAY); // fetched at the bumped time, scheduled normally
     expect(row("/stale").priority).toBe(70); // the old lastmod bumped nothing
   }, 120_000);

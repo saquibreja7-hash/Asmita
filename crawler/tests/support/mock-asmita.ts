@@ -6,17 +6,19 @@
  * including the Authorization header.
  *
  * The frontier half mirrors the app's rules (asmita/src/lib/crawl-pages.ts)
- * on purpose: the seed created on first claim, rows claimed for 30 minutes,
- * the daily page budget, the visit schedule (24 h after fetched, doubling
- * after not_modified up to 14 days, error backoff 1 h / 6 h / 24 h and dead
- * after five, gone dead) and the per-source digest dedup of reported links
- * with the app's in-scope check. Crawler v3 WP11 is mirrored too: link
- * priorities (sitemap 10, feed 20, pagination 30, pages 50 + 10 per depth
- * level), the claim order (priority, then nextDueAt) and the lastmod jump
- * (priority 5, due now). The crawler v3 review fix (WP13) is mirrored too:
- * an `error` with `failure: "permanent"` backs off like any error on the
- * first attempt and is remembered; the row dies only on a permanent
- * failure at least 24 h after the first one. It is written out
+ * on purpose: the seed created on first claim (at priority 50, review fix),
+ * rows claimed for 30 minutes, the daily page budget, the visit schedule
+ * (24 h after fetched, doubling after not_modified up to 14 days, error
+ * backoff 1 h / 6 h / 24 h and dead after five, gone dead) and the
+ * per-source digest dedup of reported links with the app's in-scope check.
+ * Crawler v3 WP11 is mirrored too: link priorities (sitemap 10, feed 20,
+ * pagination 30, pages 50 + 10 per depth level), the claim order (priority,
+ * then nextDueAt), the lastmod jump (priority 5, due now, clamped to now)
+ * and the visit reset (a successful visit falls back to the kind/depth
+ * value, so the jump is one-shot). The crawler v3 review fix (WP13) is
+ * mirrored too: an `error` with `failure: "permanent"` backs off like any
+ * error on the first attempt and is remembered; the row dies only on a
+ * permanent failure at least 24 h after the first one. It is written out
  * independently so drift between the crawler and the app's contract shows
  * up as a test failure.
  */
@@ -127,11 +129,17 @@ const PERMANENT_FAIL_MS = 24 * HOUR;
 /** The app's priority rule (crawl-pages.ts), mirrored (crawler v3 WP11). */
 const PRIORITY_DEFAULT = 100;
 const PRIORITY_LASTMOD = 5;
+/** The seed row's priority (review fix, WP11): the depth-0 page value. */
+const PRIORITY_SEED = 50;
 function linkPriority(link: { kind: "page" | "sitemap" | "feed"; pagination?: boolean }, depth: number): number {
   if (link.kind === "sitemap") return 10;
   if (link.kind === "feed") return 20;
   if (link.pagination === true) return 30;
   return Math.min(50 + 10 * Math.max(depth, 0), PRIORITY_DEFAULT);
+}
+/** The app's visit reset (review fix, WP11): a successful visit resets a row's priority to its kind/depth value. */
+function visitPriority(row: { kind: "PAGE" | "SITEMAP" | "FEED"; viaPagination: boolean; depth: number }): number {
+  return linkPriority({ kind: row.kind === "SITEMAP" ? "sitemap" : row.kind === "FEED" ? "feed" : "page", pagination: row.viaPagination }, row.depth);
 }
 
 type MockPage = {
@@ -146,6 +154,8 @@ type MockPage = {
   etag: string | null;
   lastModified: string | null;
   status: "PENDING" | "FETCHED" | "NOT_MODIFIED" | "GONE" | "BLOCKED" | "ERROR" | "DEAD";
+  /** The row's document kind (the app's CrawlPage.kind), for the visit reset. */
+  kind: "PAGE" | "SITEMAP" | "FEED";
   claimedUntil: number | null;
   lastFetchedAt: number | null;
   nextDueAt: number;
@@ -251,7 +261,7 @@ export class MockAsmita {
   readonly pages = new Map<string, MockPage>();
   /** Every claim body, in order. */
   readonly claims: Array<{ sourceId: string; limit: number }> = [];
-  /** Every report, in order, with its page statuses and accepted count. */
+  /** Every report, in order, with its page statuses, permanent hints and accepted count. */
   readonly reports: Array<{ sourceId: string; runId: string; count: number; accepted: number; statuses: Record<string, number>; permanent: number }> = [];
   /** Every discovery report, in order (the app's POST /discoveries). */
   readonly discoveryReports: Array<{ sourceId: string; runId: string; hosts: string[]; accepted: number }> = [];
@@ -312,7 +322,7 @@ export class MockAsmita {
     this.insertPage(sourceId, url, depth);
   }
 
-  private insertPage(sourceId: string, url: string, depth: number, priority: number = PRIORITY_DEFAULT, viaPagination = false): void {
+  private insertPage(sourceId: string, url: string, depth: number, priority: number = PRIORITY_DEFAULT, viaPagination = false, kind: "PAGE" | "SITEMAP" | "FEED" = "PAGE"): void {
     const digest = this.digest(sourceId, url);
     if (digest === null) return;
     if (this.rowsOf(sourceId).some((p) => p.urlDigest === digest)) return;
@@ -320,7 +330,7 @@ export class MockAsmita {
     const id = `page-${this.idCounter}`;
     this.pages.set(id, {
       id, sourceId, url, urlDigest: digest, depth, priority, viaPagination, etag: null, lastModified: null,
-      status: "PENDING", claimedUntil: null, lastFetchedAt: null, nextDueAt: 0, failCount: 0, lastPermanentFailAt: null,
+      status: "PENDING", kind, claimedUntil: null, lastFetchedAt: null, nextDueAt: 0, failCount: 0, lastPermanentFailAt: null,
     });
   }
 
@@ -331,7 +341,8 @@ export class MockAsmita {
     const now = this.now();
     if (this.rowsOf(sourceId).length === 0) {
       const seedUrl = this.opts.seedUrl ? this.opts.seedUrl(source) : `https://${source.domain}/`;
-      this.insertPage(sourceId, seedUrl, 0);
+      // Review fix (WP11): the seed is stored at 50, the depth-0 page value.
+      this.insertPage(sourceId, seedUrl, 0, PRIORITY_SEED);
     }
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
@@ -431,6 +442,7 @@ export class MockAsmita {
           row.nextDueAt = now + DAY;
           row.failCount = 0;
           row.lastPermanentFailAt = null; // alive again (review fix, WP13)
+          row.priority = visitPriority(row); // the lastmod bump was one-shot (review fix, WP11)
           break;
         case "not_modified": {
           const previous = row.lastFetchedAt !== null ? Math.max(row.nextDueAt - row.lastFetchedAt, 0) : DAY;
@@ -440,6 +452,7 @@ export class MockAsmita {
           row.nextDueAt = now + interval;
           row.failCount = 0;
           row.lastPermanentFailAt = null; // alive again (review fix, WP13)
+          row.priority = visitPriority(row); // the lastmod bump was one-shot (review fix, WP11)
           break;
         }
         case "gone":
@@ -472,9 +485,17 @@ export class MockAsmita {
         if (acceptable(link.url) === null) continue; // the app's in-scope and shape check
         const digest = this.digest(sourceId, link.url);
         if (digest !== null && aliasDigests.has(digest)) continue; // an alias is never a live row
-        this.insertPage(sourceId, link.url, row.depth + 1, linkPriority(link, row.depth + 1), link.pagination === true);
+        this.insertPage(
+          sourceId,
+          link.url,
+          row.depth + 1,
+          linkPriority(link, row.depth + 1),
+          link.pagination === true,
+          link.kind === "page" ? "PAGE" : link.kind === "sitemap" ? "SITEMAP" : "FEED",
+        );
+        // Review fix (WP11): a lastmod in the future is clamped to now.
         if (digest !== null && link.lastmod !== undefined && !lastmodByDigest.has(digest)) {
-          lastmodByDigest.set(digest, Date.parse(link.lastmod));
+          lastmodByDigest.set(digest, Math.min(Date.parse(link.lastmod), now));
         }
       }
     }

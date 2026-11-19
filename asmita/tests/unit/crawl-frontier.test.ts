@@ -16,13 +16,15 @@ import {
   FRONTIER_CLAIM_MS,
   FRONTIER_ERROR_BACKOFF_MS,
   FRONTIER_MAX_INTERVAL_MS,
+  FRONTIER_PERMANENT_FAIL_MS,
   FRONTIER_PRIORITY_DEFAULT,
   FRONTIER_PRIORITY_LASTMOD,
-  FRONTIER_PERMANENT_FAIL_MS,
+  FRONTIER_PRIORITY_SEED,
   FRONTIER_REVISIT_MS,
   linkPriority,
   planNextVisit,
   reportCrawlPages,
+  visitPriority,
 } from "@/lib/crawl-pages";
 import { purgeExpiredCrawlPages, URL_RETENTION_MS } from "@/lib/url-retention";
 import { legacyPageKey, legacyPageKeys, pageKey } from "@/lib/crawl-page-key";
@@ -817,8 +819,10 @@ describe("crawl order (WP11)", () => {
     expect(rowOf("/feed.rss").priority).toBe(20);
     expect(rowOf("/list?page=2").priority).toBe(30);
     expect(rowOf("/deep").priority).toBe(60); // depth 1: 50 + 10
-    // The seed row is the app's own: it keeps the default.
-    expect(crawlMemory().pages.get(seed[0]!.id)!.priority).toBe(100);
+    // The seed row is the app's own: stored at 50 (review fix, WP11), and a
+    // visit resets it to the kind/depth value, which for a depth-0 page is
+    // 50 again.
+    expect(crawlMemory().pages.get(seed[0]!.id)!.priority).toBe(FRONTIER_PRIORITY_SEED);
     // A link reported by a depth-1 page sits one level deeper.
     const batch = await claimCrawlPages(sourceId, 10, nowAt(2 * MIN));
     expect(batch.map((u) => u.url)).toEqual([
@@ -1069,5 +1073,77 @@ describe("permanent failures (crawler v3 review fix, WP13)", () => {
     expect(await res.json()).toEqual({ accepted: 0 });
     expect(row.status).toBe("PENDING"); // nothing moved: the entry was skipped
     expect(row.claimedUntil).not.toBeNull(); // the claim is untouched
+  });
+});
+
+describe("the visit reset and the seed's priority (crawler v3 review fix, WP11)", () => {
+  it("stores a new seed at 50, exactly the depth-0 page value", async () => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    expect(crawlMemory().pages.get(seed[0]!.id)!.priority).toBe(FRONTIER_PRIORITY_SEED);
+    expect(FRONTIER_PRIORITY_SEED).toBe(linkPriority({ kind: "page" }, 0));
+    expect(visitPriority({ kind: "PAGE", depth: 0 })).toBe(FRONTIER_PRIORITY_SEED);
+  });
+
+  it("a successful visit resets a bumped row to its kind/depth value; a failed visit keeps the bump", async () => {
+    const t0 = nowAt(0);
+    const seed = await claimCrawlPages(sourceId, 10, t0);
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: seed[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/changed", kind: "page" }] },
+    ], t0);
+    const row = rowOf("/changed");
+    expect(row.priority).toBe(60); // depth 1: 50 + 10
+    row.priority = FRONTIER_PRIORITY_LASTMOD; // a lastmod jump landed
+    // An error report must keep the bump: the row retries before the rest.
+    await reportCrawlPages(sourceId, "run-1", [{ id: row.id, status: "error", links: [] }], nowAt(1 * MIN));
+    expect(rowOf("/changed").priority).toBe(FRONTIER_PRIORITY_LASTMOD);
+    // A fetched visit consumes it: back to the kind/depth value.
+    await reportCrawlPages(sourceId, "run-1", [{ id: row.id, status: "fetched", links: [] }], nowAt(2 * MIN));
+    expect(rowOf("/changed").priority).toBe(60);
+    // A not_modified visit resets too: the bump is one-shot whatever the
+    // successful answer was.
+    row.priority = FRONTIER_PRIORITY_LASTMOD;
+    await reportCrawlPages(sourceId, "run-1", [{ id: row.id, status: "not_modified", links: [] }], nowAt(3 * MIN));
+    expect(rowOf("/changed").priority).toBe(60);
+    // Every kind resets to its own value: a sitemap row to 10, a feed to 20,
+    // a pagination-stored page to 30.
+    expect(visitPriority({ kind: "SITEMAP", depth: 3 })).toBe(10);
+    expect(visitPriority({ kind: "FEED", depth: 3 })).toBe(20);
+    expect(visitPriority({ kind: "PAGE", viaPagination: true, depth: 3 })).toBe(30);
+  });
+
+  it("a lastmod in the future is clamped to now: it jumps the queue, and a stale one never does", async () => {
+    const t0 = nowAt(0);
+    const seed = await claimCrawlPages(sourceId, 10, t0);
+    await reportCrawlPages(sourceId, "run-1", [
+      {
+        id: seed[0]!.id,
+        status: "fetched",
+        links: [
+          { url: "https://forum.example.com/sitemap.xml", kind: "sitemap" },
+          { url: "https://forum.example.com/future", kind: "page" },
+        ],
+      },
+    ], t0);
+    // Fetch both rows at minute 2 (the sitemap first: priority 10).
+    const batch = await claimCrawlPages(sourceId, 10, nowAt(1 * MIN));
+    expect(batch.map((u) => u.url)).toEqual(["https://forum.example.com/sitemap.xml", "https://forum.example.com/future"]);
+    const sitemapId = batch[0]!.id;
+    const futureId = batch[1]!.id;
+    await reportCrawlPages(sourceId, "run-1", batch.map((u) => ({ id: u.id, status: "fetched" as const, links: [] })), nowAt(2 * MIN));
+    // A sitemap report at minute 3 carries a lastmod ten years ahead: clamped
+    // to now (minute 3), still newer than the minute-2 fetch, so it jumps.
+    const t3 = nowAt(3 * MIN);
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: sitemapId, status: "fetched", links: [{ url: "https://forum.example.com/future", kind: "page", lastmod: "2036-11-17T09:00:00Z" }] },
+    ], t3);
+    const bumped = rowOf("/future");
+    expect(bumped.priority).toBe(FRONTIER_PRIORITY_LASTMOD);
+    expect(bumped.nextDueAt).toEqual(t3); // due at the report's now, not in 2036
+    // A lastmod older than the row's last fetch never bumps anything.
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: sitemapId, status: "fetched", links: [{ url: "https://forum.example.com/future", kind: "page", lastmod: "2026-11-17T09:01:00Z" }] },
+    ], nowAt(4 * MIN));
+    expect(rowOf("/future").priority).toBe(FRONTIER_PRIORITY_LASTMOD); // unchanged by the stale report
+    expect(rowOf("/future").nextDueAt).toEqual(t3);
   });
 });
