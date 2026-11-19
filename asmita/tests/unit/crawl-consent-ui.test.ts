@@ -9,16 +9,17 @@ import hi from "@/i18n/hi.json";
 import status from "@/i18n/hi-review-status.json";
 import { CrawlConsent } from "@/app/(victim)/case/[caseId]/CrawlConsent";
 import { FoundByAsmita } from "@/app/(victim)/case/[caseId]/FoundByAsmita";
-import { consentView, foundLinkView, isCrawlerFound, requestConsent, requestStop, signOutcome, splitUrls, type ConsentState } from "@/app/(victim)/case/[caseId]/crawl-consent-logic";
+import { consentView, foundLinkView, isCrawlerFound, reuploadWatchView, requestConsent, requestStop, signOutcome, splitUrls, type ConsentState } from "@/app/(victim)/case/[caseId]/crawl-consent-logic";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const draft = { subject: "Authorisation for case X", body: "Body of the authorisation text", templateRef: "ref-1" };
-const off: ConsentState = { status: "none", available: true, draft };
-const on: ConsentState = { status: "signed", available: true, draft: null };
-const render = (initialConsent: ConsentState | null) =>
-  renderToStaticMarkup(createElement(CrawlConsent, { caseId: "c1", locale: "en", initialConsent }));
+const off: ConsentState = { status: "none", available: true, draft, watchUntil: null };
+const on: ConsentState = { status: "signed", available: true, draft: null, watchUntil: null };
+const watching: ConsentState = { status: "signed", available: true, draft: null, watchUntil: "2027-11-19T09:00:00.000Z" };
+const render = (initialConsent: ConsentState | null, caseOpen = true) =>
+  renderToStaticMarkup(createElement(CrawlConsent, { caseId: "c1", locale: "en", caseOpen, initialConsent }));
 const resp = (ok: boolean, body: unknown = {}) => ({ ok, json: async () => body }) as Response;
 
 describe("CrawlConsent render", () => {
@@ -29,8 +30,8 @@ describe("CrawlConsent render", () => {
   });
 
   it("shows nothing when signing is unavailable and she has not signed", () => {
-    expect(render({ status: "none", available: false, draft: null })).not.toContain("search the web");
-    expect(render({ status: "none", available: true, draft: null })).not.toContain("search the web");
+    expect(render({ status: "none", available: false, draft: null, watchUntil: null })).not.toContain("search the web");
+    expect(render({ status: "none", available: true, draft: null, watchUntil: null })).not.toContain("search the web");
   });
 
   // Owner decision 2026-11-18: one tick, no name, signature or "Sign and
@@ -63,7 +64,35 @@ describe("CrawlConsent render", () => {
   });
 
   it("withdraw is still offered when the crawler is switched off", () => {
-    expect(render({ status: "signed", available: false, draft: null })).toMatch(/<input[^>]*id="crawl-tick"[^>]*checked/);
+    expect(render({ status: "signed", available: false, draft: null, watchUntil: null })).toMatch(/<input[^>]*id="crawl-tick"[^>]*checked/);
+  });
+
+  // Watch-and-verify WP24: once the case is closed and the re-upload window
+  // is running, the section says what it is really doing and offers "Stop
+  // watching" instead of the open-case search copy.
+  it("shows the re-upload watch with its end date and a Stop watching button on a closed case", () => {
+    const html = render(watching, false);
+    expect(html).toContain("Watching for re-uploads until");
+    expect(html).toContain("2027");
+    expect(html).toContain("Stop watching");
+    expect(html).toContain("keeps comparing your image fingerprints");
+    expect(html).toMatch(/<input[^>]*id="crawl-tick"[^>]*checked/);
+    expect(html).not.toContain("Searching is on");
+  });
+
+  it("keeps the ordinary search copy on an open case even when a window is set", () => {
+    const html = render(watching, true);
+    expect(html).toContain("Searching is on");
+    expect(html).not.toContain("Watching for re-uploads");
+    expect(html).not.toContain("Stop watching");
+  });
+
+  it("never shows the watch view on an open case, without a window, or without a live authorisation", () => {
+    expect(reuploadWatchView(null, false)).toBeNull();
+    expect(reuploadWatchView(on, false)).toBeNull();
+    expect(reuploadWatchView(watching, true)).toBeNull();
+    expect(reuploadWatchView({ ...on, status: "withdrawn" }, false)).toBeNull();
+    expect(reuploadWatchView(watching, false)).toEqual({ until: "2027-11-19T09:00:00.000Z" });
   });
 });
 
@@ -72,7 +101,7 @@ describe("crawl consent logic", () => {
     expect(consentView(null)).toBe("hidden");
     expect(consentView(off)).toBe("off");
     expect(consentView({ ...off, status: "withdrawn" })).toBe("off");
-    expect(consentView({ status: "signed", available: false, draft: null })).toBe("on");
+    expect(consentView({ status: "signed", available: false, draft: null, watchUntil: null })).toBe("on");
   });
 
   it("maps server errors, including the changed-text path", () => {

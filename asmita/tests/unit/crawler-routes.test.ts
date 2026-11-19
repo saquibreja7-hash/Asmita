@@ -133,7 +133,7 @@ describe("survivor crawl-consent route", () => {
     const caseOps = await import("@/lib/case-ops");
     const spy = vi.spyOn(caseOps, "getCaseForUser").mockResolvedValue({ id: "c1", referenceNumber: "ASM-TEST-1", userId: "user-a", createdAt: "", status: "OPEN", urls: [] });
     const consent = await import("@/lib/crawl-consent");
-    const state = vi.spyOn(consent, "getCrawlConsentState").mockResolvedValue({ status: "none", signedAt: null, withdrawnAt: null, fingerprintCount: 0 });
+    const state = vi.spyOn(consent, "getCrawlConsentState").mockResolvedValue({ status: "none", signedAt: null, withdrawnAt: null, fingerprintCount: 0, watchUntil: null });
     vi.mocked(db.noticeTemplate.findFirst).mockResolvedValue(null as never);
     const response = await consentRoute.POST(
       request("https://asmita.test/x", "POST", { agreed: true, templateRef: "x" }),

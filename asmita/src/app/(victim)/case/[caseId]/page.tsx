@@ -7,6 +7,7 @@ import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submis
 import { CrawlConsent } from "./CrawlConsent";
 import { FoundByAsmita } from "./FoundByAsmita";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
+import { isCaseOpen } from "@/lib/crawl-pool";
 import { getLinkVerificationSummaries, type LinkVerificationSummary } from "@/lib/link-verification";
 import { splitUrls } from "./crawl-consent-logic";
 import { CaseDashboardActions } from "./CaseDashboardActions";
@@ -312,7 +313,9 @@ export default async function CasePage({
               </section>
             )}
 
-            {hashUploadEnabled && hashSubmissions.length > 0 && <CrawlConsent caseId={record.id} locale={locale} />}
+            {hashUploadEnabled && hashSubmissions.length > 0 && (
+              <CrawlConsent caseId={record.id} locale={locale} caseOpen={isCaseOpen(record.status)} />
+            )}
 
             <div className="space-y-3">
               <FoldedSection id="actions" title={t(locale, "case.actions.title")} hint={t(locale, "case.actions.hint")}>

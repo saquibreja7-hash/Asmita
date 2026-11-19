@@ -25,7 +25,7 @@ const db = vi.hoisted(() => {
     crawlFinding: { findMany: fn() },
     crawlConsent: { findMany: fn() },
     hashSubmission: { findMany: fn() },
-    case: { findUnique: fn() },
+    case: { findUnique: fn(), findMany: fn() },
   };
   return self;
 });
@@ -94,6 +94,9 @@ beforeEach(() => {
   db.crawlConsent.findMany.mockResolvedValue([]);
   db.hashSubmission.findMany.mockResolvedValue([]);
   db.case.findUnique.mockResolvedValue(null);
+  // WP24: the pool rule also reads the case status; the fixture case is open,
+  // so a live authorisation with an approved fingerprint means "in the pool".
+  db.case.findMany.mockResolvedValue([{ id: "case-1", status: "OPEN" }]);
 });
 
 afterEach(() => {
@@ -278,7 +281,7 @@ describe("sweepDueLinkVerifications resolve, Prisma path", () => {
     // The pool read ran and found no live authorisation.
     expect(db.crawlConsent.findMany).toHaveBeenCalledWith({
       where: { withdrawnAt: null, caseId: { in: ["case-1"] } },
-      select: { id: true, caseId: true, hashSubmissionIds: true },
+      select: { id: true, caseId: true, hashSubmissionIds: true, watchUntil: true },
     });
     expect(db.hashSubmission.findMany).not.toHaveBeenCalled();
   });

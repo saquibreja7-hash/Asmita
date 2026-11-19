@@ -27,6 +27,8 @@ export type MemoryCrawlConsent = {
   templateDigest: string;
   signedAt: Date;
   withdrawnAt: Date | null;
+  // Watch-and-verify WP24: the re-upload window on a resolved case (crawl-watch.ts).
+  watchUntil?: Date | null;
 };
 
 export type MemoryCrawlFinding = {

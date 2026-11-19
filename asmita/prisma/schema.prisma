@@ -204,6 +204,7 @@ enum AuditEventType {
   CRAWL_SOURCE_PAUSED
   CRAWL_SOURCE_RESUMED
   CONTENT_STILL_ONLINE
+  CRAWL_WATCH_STARTED
 }
 
 enum DeletionJobStatus {
@@ -441,6 +442,11 @@ model CrawlConsent {
   templateDigest     String
   signedAt           DateTime  @default(now())
   withdrawnAt        DateTime?
+  // Watch-and-verify WP24: when the case is resolved (or every link on it is
+  // verified removed), the live authorisation keeps her fingerprints in the
+  // crawler pool until this date (start + 12 months) instead of only while
+  // the case is open. Null while the case is open and no watch has started.
+  watchUntil         DateTime?
 
   case Case @relation(fields: [caseId], references: [id])
 
