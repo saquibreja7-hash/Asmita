@@ -10,6 +10,7 @@ import { createCrawlSource } from "@/lib/crawl-sources";
 import {
   claimCrawlPages,
   crawlPageDigest,
+  crawlPageLegacyDigests,
   crawlPageKey,
   FRONTIER_ALIASES_PER_PAGE_MAX,
   FRONTIER_CLAIM_MS,
@@ -22,7 +23,7 @@ import {
   reportCrawlPages,
 } from "@/lib/crawl-pages";
 import { purgeExpiredCrawlPages, URL_RETENTION_MS } from "@/lib/url-retention";
-import { pageKey } from "@/lib/crawl-page-key";
+import { legacyPageKey, legacyPageKeys, pageKey } from "@/lib/crawl-page-key";
 import { encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { POST as postClaim } from "@/app/api/crawler/frontier/claim/route";
@@ -532,9 +533,11 @@ describe("page key (WP10)", () => {
     expect(crawlPageKey("https://forum.example.com/")).toBe("https://forum.example.com/");
   });
 
-  it("existing rows keep their stored digest; a same-page link is a second row until the old one ages out", async () => {
+  it("existing rows keep their stored digest, and a same-page link adds no second row (review fix)", async () => {
     // A row digested under the pre-WP10 rule (address as written, tracking
     // stripped) is never re-digested: the digest is computed once at insert.
+    // Review fix: a link to the same page in the new spelling is checked
+    // against the legacy digests too, so it no longer inserts a duplicate.
     const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
     const legacyUrl = "https://forum.example.com/old/";
     const legacyDigest = sha256(`crawl-page\u0000${sourceId}\u0000${legacyUrl}`);
@@ -550,11 +553,44 @@ describe("page key (WP10)", () => {
     const legacy = crawlMemory().pages.get("page-legacy")!;
     expect(legacy.urlDigest).toBe(legacyDigest);
     expect(legacy.status).toBe("PENDING");
-    // The new-rule link of the same page is stored as a second row (the
-    // duplicate is accepted until the old row ages out of retention).
-    const fresh = [...crawlMemory().pages.values()].find((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/old"));
-    expect(fresh).toBeDefined();
-    expect(fresh!.id).not.toBe("page-legacy");
+    // No second row for the same page.
+    expect([...crawlMemory().pages.values()].find((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/old"))).toBeUndefined();
+    expect([...crawlMemory().pages.values()]).toHaveLength(2); // the seed and the legacy row
+  });
+
+  it.each([
+    ["trailing slash", "https://forum.example.com/old/", "https://forum.example.com/old"],
+    ["www. host", "https://www.forum.example.com/old", "https://forum.example.com/old"],
+    ["http scheme", "http://forum.example.com/old", "https://forum.example.com/old"],
+    ["index document", "https://forum.example.com/old/index.php", "https://www.forum.example.com/old/"],
+    ["tracking and order", "http://www.forum.example.com/list/?b=2&utm_source=x&a=1", "https://forum.example.com/list?a=1&b=2"],
+  ])("a legacy row in the %s form blocks the new-form duplicate", async (_name, legacyUrl, linked) => {
+    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    const legacyDigest = sha256(`crawl-page\u0000${sourceId}\u0000${legacyPageKey(legacyUrl)}`);
+    expect(crawlPageLegacyDigests(sourceId, linked)).toContain(legacyDigest);
+    crawlMemory().pages.set("page-legacy", {
+      id: "page-legacy", sourceId, urlEncrypted: encryptField(legacyUrl), urlDigest: legacyDigest,
+      depth: 1, kind: "PAGE", priority: 100, etag: null, lastModified: null, status: "FETCHED",
+      claimedUntil: null, lastFetchedAt: nowAt(0), nextDueAt: nowAt(1 * DAY), failCount: 0, createdAt: nowAt(0),
+    });
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: seed[0]!.id, status: "fetched", links: [{ url: linked, kind: "page" }, { url: "https://forum.example.com/fresh", kind: "page" }] },
+    ], nowAt(1 * MIN));
+    const rows = [...crawlMemory().pages.values()];
+    expect(rows).toHaveLength(3); // seed, legacy row, the genuinely new /fresh
+    expect(rows.some((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/fresh"))).toBe(true);
+  });
+
+  it("the legacy spellings are bounded and never include the new key's own digest", () => {
+    const keys = legacyPageKeys("https://forum.example.com/old");
+    expect(keys.length).toBeLessThanOrEqual(20);
+    expect(keys).toContain("http://www.forum.example.com/old/index.html");
+    expect(keys).toContain("https://forum.example.com/old/");
+    const root = legacyPageKeys("https://forum.example.com/");
+    expect(root).toContain("http://www.forum.example.com/");
+    expect(root).not.toContain("https://forum.example.com//");
+    expect(crawlPageLegacyDigests(sourceId, "https://forum.example.com/old")).not.toContain(crawlPageDigest(sourceId, "https://forum.example.com/old"));
+    expect(legacyPageKeys("ftp://forum.example.com/x")).toEqual([]);
   });
 });
 

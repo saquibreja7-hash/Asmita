@@ -78,7 +78,7 @@ vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => true, getWorkerD
 vi.mock("@/lib/db", () => ({ db: new Proxy({}, { get: () => { throw new Error("prisma path must not run here"); } }) }));
 
 import { encryptField } from "@/lib/encryption";
-import { claimCrawlPages, crawlPageDigest, reportCrawlPages } from "@/lib/crawl-pages";
+import { claimCrawlPages, crawlPageDigest, crawlPageLegacyDigests, reportCrawlPages } from "@/lib/crawl-pages";
 
 const NOW = new Date("2026-11-17T09:00:00Z");
 const SOURCE = { id: "src-1", kind: "SITE", domain: "k.example", pageBudget: 50, delayMs: 0, enabled: true };
@@ -383,5 +383,23 @@ describe("canonical aliases, Kysely path (WP10, review fix)", () => {
     expect(read).toBeDefined();
     expect(callsOn("CrawlPage").filter((call) => call.op === "update" && (call.detail.set as Record<string, unknown>).status === "DEAD")).toHaveLength(0);
     expect(callsOn("CrawlPage").filter((call) => call.op === "insert")).toHaveLength(0);
+  });
+});
+
+describe("legacy digests (review fix for WP10), Kysely path", () => {
+  it("inserts no duplicate of a row stored under a pre-WP10 digest", async () => {
+    const oldDigest = crawlPageLegacyDigests(SOURCE.id, "https://k.example/old")[0]!;
+    kysely.state.rows.CrawlPage = [
+      pageRow({ id: "page-1", urlDigest: "d-1" }),
+      pageRow({ id: "page-old", urlDigest: oldDigest, depth: 1, status: "FETCHED", lastFetchedAt: NOW }),
+    ];
+    await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", links: [{ url: "https://k.example/old", kind: "page" }, { url: "https://k.example/new", kind: "page" }] },
+    ], NOW);
+    const read = callsOn("CrawlPage").find((call) => call.op === "select" && ((call.detail.wheres as unknown[][]) ?? []).some((w) => w[0] === "urlDigest"));
+    expect(read).toBeDefined();
+    const inserts = callsOn("CrawlPage").filter((call) => call.op === "insert");
+    const rows = inserts[0]!.detail.values as Array<Record<string, unknown>>;
+    expect(rows.map((r) => r.urlDigest)).toEqual([crawlPageDigest(SOURCE.id, "https://k.example/new")]);
   });
 });

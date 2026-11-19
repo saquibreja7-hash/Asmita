@@ -25,7 +25,7 @@ vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => false, getWorker
 vi.mock("@/lib/db", () => ({ db }));
 
 import { encryptField } from "@/lib/encryption";
-import { claimCrawlPages, crawlPageDigest, reportCrawlPages } from "@/lib/crawl-pages";
+import { claimCrawlPages, crawlPageDigest, crawlPageLegacyDigests, reportCrawlPages } from "@/lib/crawl-pages";
 import { purgeExpiredCrawlPages } from "@/lib/url-retention";
 
 const NOW = new Date("2026-11-17T09:00:00Z");
@@ -349,5 +349,23 @@ describe("canonical aliases, Prisma path (WP10, review fix)", () => {
     expect(accepted).toBe(1);
     expect(db.crawlPage.updateMany).not.toHaveBeenCalled(); // no kill statement at all
     expect(db.crawlPage.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("legacy digests (review fix for WP10), Prisma path", () => {
+  it("reads the legacy digests of a link's spellings and inserts no duplicate of a pre-WP10 row", async () => {
+    const legacy = crawlPageLegacyDigests(SOURCE.id, "https://k.example/old");
+    const oldDigest = legacy[0]!; // e.g. the http:// spelling a pre-WP10 row was stored under
+    db.crawlPage.findMany
+      .mockResolvedValueOnce([{ ...CURRENT_ROW }]) // the claimed page rows
+      .mockResolvedValueOnce([{ ...CURRENT_ROW, id: "page-old", urlDigest: oldDigest, status: "FETCHED", lastFetchedAt: NOW }]);
+    await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", links: [{ url: "https://k.example/old", kind: "page" }, { url: "https://k.example/new", kind: "page" }] },
+    ], NOW);
+    // One digest read covering the legacy spellings.
+    const read = db.crawlPage.findMany.mock.calls[1]![0] as { where: { urlDigest: { in: string[] } } };
+    for (const d of legacy) expect(read.where.urlDigest.in).toContain(d);
+    const data = db.crawlPage.createMany.mock.calls[0]![0].data as Array<Record<string, unknown>>;
+    expect(data.map((r) => r.urlDigest)).toEqual([crawlPageDigest(SOURCE.id, "https://k.example/new")]);
   });
 });

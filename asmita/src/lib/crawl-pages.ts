@@ -5,7 +5,7 @@ import { crawlMemory, sourceDayKey, type MemoryCrawlPage } from "@/lib/crawl-sto
 import { crawlerShapedUrl, pageOnSourceHost } from "@/lib/crawl-findings";
 import { isBlockedCrawlHost } from "@/lib/crawl-sources";
 import { maxFrontierPagesPerSource } from "@/lib/crawler-flags";
-import { pageKey } from "@/lib/crawl-page-key";
+import { legacyPageKeys, pageKey } from "@/lib/crawl-page-key";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
@@ -174,7 +174,22 @@ export function crawlPageKey(rawUrl: string): string | null {
 export function crawlPageDigest(sourceId: string, url: string): string | null {
   const key = crawlPageKey(url);
   if (key === null) return null;
+  return keyDigest(sourceId, key);
+}
+
+/** The per-source digest of an already computed key (new or legacy form). */
+function keyDigest(sourceId: string, key: string): string {
   return sha256(`crawl-page\u0000${sourceId}\u0000${key}`);
+}
+
+/**
+ * The legacy digests (rows stored before crawler v3 WP10) of every spelling
+ * that shares this URL's page key, the new digest itself excluded. Exported
+ * for the frontier tests; see crawl-page-key.ts `legacyPageKeys`.
+ */
+export function crawlPageLegacyDigests(sourceId: string, url: string): string[] {
+  const current = crawlPageDigest(sourceId, url);
+  return legacyPageKeys(url).map((key) => keyDigest(sourceId, key)).filter((d) => d !== current);
 }
 
 /**
@@ -580,6 +595,8 @@ export async function reportCrawlPages(
   const links = new Map<string, NewLinkRow>(); // digest -> row (dedups the report itself)
   /** Alias digests of this report: never-fetched, non-seed rows for them are retired. */
   const aliasDigests = new Set<string>();
+  /** The accepted URL behind each alias and link digest (for the legacy-key lookup). */
+  const linkUrls = new Map<string, string>();
   let accepted = 0;
 
   // Pass 1: the aliases. They win over links, so they are collected before
@@ -595,6 +612,7 @@ export async function reportCrawlPages(
       // Self-alias (a page naming itself canonical) changes nothing.
       if (digest === null || digest === row.urlDigest) continue;
       aliasDigests.add(digest);
+      linkUrls.set(digest, url);
     }
   }
   // A row this report moves is a page the crawler just visited: never an alias victim.
@@ -627,6 +645,7 @@ export async function reportCrawlPages(
         priority: linkPriority(link, row.depth + 1),
         viaPagination: link.pagination === true,
       });
+      linkUrls.set(digest, url);
       if (link.lastmod !== undefined && !lastmodByDigest.has(digest)) lastmodByDigest.set(digest, new Date(link.lastmod));
     }
   }
@@ -636,13 +655,36 @@ export async function reportCrawlPages(
   // same report moved was just fetched, so it keeps its fresh schedule; a
   // dead row is final; a row never fetched has no last fetch to compare
   // and is due anyway, so it keeps the priority its link stored.
+  //
+  // Rows stored before WP10 (review fix) carry the digest of the LEGACY key
+  // (crawl-page-key.ts): a link spelled differently from such a row (https
+  // for http, bare for www., no trailing slash, no index document) has a new
+  // digest no row carries, so it would insert a duplicate live row. Every
+  // link is therefore also looked up by the legacy digests of all its
+  // spellings, in the same read as the lastmod check: a link whose page
+  // already has a legacy row is not inserted (and a lastmod bump reaches
+  // that row), and an alias reaches a legacy row too.
+  const legacyToNew = new Map<string, string>();
+  for (const [newDigest, url] of linkUrls) {
+    if (!links.has(newDigest) && !aliasDigests.has(newDigest)) continue;
+    for (const key of legacyPageKeys(url)) {
+      const legacy = keyDigest(sourceId, key);
+      if (legacy !== newDigest && !legacyToNew.has(legacy)) legacyToNew.set(legacy, newDigest);
+    }
+  }
   const reportedIds = new Set(updates.map((u) => u.id));
   const bumps: Array<{ id: string }> = [];
-  if (lastmodByDigest.size > 0) {
-    const rows = await rowsByDigest(sourceId, [...lastmodByDigest.keys()]);
+  if (lastmodByDigest.size > 0 || legacyToNew.size > 0) {
+    const rows = await rowsByDigest(sourceId, [...new Set([...lastmodByDigest.keys(), ...legacyToNew.keys()])]);
     for (const row of rows.values()) {
+      const newDigest = legacyToNew.get(row.urlDigest);
+      if (newDigest !== undefined) {
+        // The page already has a row under its legacy key: no second row.
+        links.delete(newDigest);
+        if (aliasDigests.has(newDigest) && !reportedIds.has(row.id)) aliasDigests.add(row.urlDigest);
+      }
       if (reportedIds.has(row.id) || row.status === "DEAD" || row.status === "GONE") continue;
-      const lastmod = lastmodByDigest.get(row.urlDigest);
+      const lastmod = lastmodByDigest.get(row.urlDigest) ?? (newDigest !== undefined ? lastmodByDigest.get(newDigest) : undefined);
       if (lastmod === undefined || row.lastFetchedAt === null) continue;
       if (lastmod.getTime() > row.lastFetchedAt.getTime()) bumps.push({ id: row.id });
     }

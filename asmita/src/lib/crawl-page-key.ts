@@ -17,8 +17,16 @@
  * URLs keep working as addresses.
  *
  * Rows stored before this rule keep their stored digest (the digest is
- * computed once, at insert); they are not re-digested, and duplicates
- * between an old row and a new link are accepted until the old row ages out.
+ * computed once, at insert); they are not re-digested. Their digest is of
+ * the LEGACY key (`legacyPageKey`: the URL as written, fragment dropped,
+ * tracking parameters stripped and the rest sorted — no scheme, host, slash
+ * or index folding). So that a link spelled differently from such a row does
+ * not insert a duplicate live row after the deploy (review fix), the app
+ * checks at insert time both the new key's digest and the legacy digest of
+ * every spelling that shares the new key (`legacyPageKeys`: http/https,
+ * www./bare, the path with and without a trailing slash or a final index
+ * document) and skips the insert when a row exists under any of them. No
+ * backfill is needed: old rows age out with the 30-day retention.
  */
 
 /** Query parameters stripped everywhere (tracking noise, never content). */
@@ -94,4 +102,64 @@ export function pageKey(rawUrl: string): string | null {
     return null;
   }
   return pageKeyOf(url);
+}
+
+/**
+ * The page key as both sides computed it before crawler v3 WP10 (the
+ * digest of every frontier row stored before the deploy): the URL as
+ * written, fragment dropped, empty path "/", tracking parameters stripped
+ * and the rest sorted. Null for anything that does not parse or is not
+ * http(s).
+ */
+export function legacyPageKey(rawUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  url.hash = "";
+  if (url.pathname === "") url.pathname = "/";
+  if (url.search) url.search = queryKey(url.search);
+  return url.toString();
+}
+
+/** The directory-index documents the WP10 key folds into their directory. */
+const INDEX_DOCS = ["index.html", "index.htm", "index.php"] as const;
+
+/**
+ * The legacy keys (`legacyPageKey`) of every spelling that shares this
+ * URL's WP10 page key: http and https, the bare and the `www.` host, and
+ * the canonical path bare, with a trailing slash (non-root) and with each
+ * final index document. At most 2 x 2 x 5 = 20 keys, deduplicated; empty
+ * for anything that is not http(s). The query is kept as written (the
+ * legacy key sorts and strips it itself) and so is any port.
+ */
+export function legacyPageKeys(rawUrl: string): string[] {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return [];
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return [];
+  const host = canonicalHostname(url.hostname);
+  const path = canonicalPathname(url.pathname === "" ? "/" : url.pathname);
+  const dir = path === "/" ? "/" : `${path}/`;
+  const paths = path === "/" ? ["/", ...INDEX_DOCS.map((d) => `/${d}`)] : [path, dir, ...INDEX_DOCS.map((d) => `${dir}${d}`)];
+  const out = new Set<string>();
+  for (const protocol of ["http:", "https:"]) {
+    for (const hostname of [host, `www.${host}`]) {
+      for (const pathname of paths) {
+        const copy = new URL(url.href);
+        copy.protocol = protocol;
+        copy.hostname = hostname;
+        copy.pathname = pathname;
+        const key = legacyPageKey(copy.toString());
+        if (key !== null) out.add(key);
+      }
+    }
+  }
+  return [...out];
 }
