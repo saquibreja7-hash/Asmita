@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { writeAuditLog } from "@/lib/audit";
 import { crawlMemory } from "@/lib/crawl-store";
+import { deleteEmbeddingsForCase } from "@/lib/crawl-embeddings";
 import { hasSearchableFingerprint, buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { noticeDate } from "@/lib/notice-date";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
@@ -226,6 +227,10 @@ export async function withdrawCrawlConsent(
         candidatesDeleted += 1;
       }
     }
+    // The SSCD embeddings of her confirmed copies go at once too (ADR 008,
+    // WP28): the pool stops serving them on the next build, exactly as the
+    // withdrawn pool ids stop matching.
+    await deleteEmbeddingsForCase([caseId]);
     for (const fingerprint of memory.fingerprints.values()) {
       if (fingerprint.caseId === caseId) fingerprint.crawlPoolId = null;
     }
@@ -245,6 +250,9 @@ export async function withdrawCrawlConsent(
       if (withdrawn.count === 0) return null;
       // Pool ids go first, so the crawler's next report on them is refused.
       await tx.hashSubmission.updateMany({ where: { caseId, crawlPoolId: { not: null } }, data: { crawlPoolId: null } });
+      // The SSCD embeddings of her confirmed copies go in the same
+      // transaction (ADR 008, WP28): the pool stops serving them at once.
+      await tx.findingEmbedding.deleteMany({ where: { caseId } });
       // Approved crawler links with no notice sent can never be sent now, even
       // under a later authorisation (crawl-notice.ts refuses them). Links
       // already sent keep their record untouched.

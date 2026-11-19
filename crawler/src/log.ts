@@ -34,6 +34,8 @@ export const LOG_FIELDS = [
   // only, like poolSize.
   "poolVideos",
   "poolFrames",
+  // SSCD embeddings of confirmed copies in the pool (WP28): a count only.
+  "poolEmbeddings",
   "dropped",
   "pages",
   "images",

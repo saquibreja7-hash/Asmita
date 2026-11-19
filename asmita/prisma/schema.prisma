@@ -154,6 +154,15 @@ enum HashSubmissionStatus {
   REJECTED
 }
 
+// How a crawler finding matched (ADR 008, WP28): PDQ or VPDQ (a hash
+// distance), or SSCD (a deep-descriptor similarity, no distance). Default
+// PDQ: rows written before the second layer existed are image matches.
+enum CrawlFindingMethod {
+  PDQ
+  VPDQ
+  SSCD
+}
+
 enum AuditEventType {
   USER_REGISTERED
   USER_VERIFIED
@@ -464,13 +473,22 @@ model CrawlFinding {
   pageUrlEncrypted  String
   imageUrlEncrypted String
   urlDigest         String?
-  distance          Int
+  // Null for an SSCD finding (ADR 008, WP28): the second layer has no PDQ
+  // distance. A widening — old rows and old code always wrote one.
+  distance          Int?
+  // The SSCD similarity when the second layer matched or scored a borderline
+  // PDQ match; information for the analyst, never an automatic accept or
+  // reject. Null on pure PDQ/VPDQ findings.
+  sscdSimilarity    Float?
   quality           Int
   firstSeenAt       DateTime           @default(now())
   lastSeenAt        DateTime           @default(now())
   sourceId          String
   runId             String
   reviewStatus      CrawlFindingStatus @default(CANDIDATE)
+  // Which layer matched (ADR 008, WP28). Default PDQ; a video finding is
+  // derived from its VPDQ submission, an SSCD finding carries sscdSimilarity.
+  method            CrawlFindingMethod @default(PDQ)
   reviewedById      String?
   reviewedAt        DateTime?
   // A second, different analyst confirms an approval before anything acts on it.
@@ -481,11 +499,44 @@ model CrawlFinding {
   hashSubmission HashSubmission @relation(fields: [hashSubmissionId], references: [id])
   source         CrawlSource    @relation(fields: [sourceId], references: [id])
   submittedUrl   SubmittedUrl?
+  embeddings     FindingEmbedding[]
 
   @@unique([caseId, urlDigest])
   @@index([reviewStatus])
   @@index([firstSeenAt])
   @@index([sourceId])
+}
+
+// An SSCD embedding of an ANALYST-CONFIRMED copy (ADR 008, WP28): the crawler
+// — never the survivor's device, never the app — computes the descriptor from
+// the image bytes it already holds in memory on a match and posts it to
+// /api/crawler/embeddings; the app stores it only for APPROVED findings under
+// a live authorisation. The vector is encrypted at rest like every other
+// secret and never logged; never an image, crop or thumbnail is stored. It is
+// deleted with the fingerprint's rejection, the consent's withdrawal or the
+// case's erasure (and cascades with its finding); it is NOT subject to the
+// 30-day URL blanking.
+model FindingEmbedding {
+  id               String   @id @default(uuid())
+  // The confirmed finding this embedding was seeded from; one per finding.
+  findingId        String   @unique
+  // The fingerprint the confirmed finding matched (denormalised for the pool
+  // lookup and the deletion paths).
+  hashSubmissionId String
+  caseId           String
+  // Which descriptor produced the vector: only rows matching the configured
+  // model id + version are served or accepted, so a model change never mixes
+  // incomparable vectors.
+  model            String
+  version          String
+  // The L2-normalised float vector, encrypted at rest (encryptField).
+  vectorEncrypted  String
+  createdAt        DateTime @default(now())
+
+  finding CrawlFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([hashSubmissionId])
+  @@index([caseId])
 }
 
 // A public site the crawler may visit. ADMIN rows are approved by a human

@@ -6,7 +6,9 @@ admin-approved list of sites, finds image addresses in their HTML, downloads
 each image **into memory only**, computes its PDQ fingerprint with the same
 code survivors' browsers run, compares it against the pool of fingerprints
 survivors have submitted, throws the image away, and reports matches to the
-Asmita app for human review.
+Asmita app for human review. When the SSCD second layer is switched on
+(WP28, off by default), images PDQ did not match are also compared with
+SSCD embeddings of analyst-confirmed copies, to find altered versions.
 
 It is safety-critical: it fetches attacker-influenced URLs, handles pages that
 may host intimate images, and reports to a system that acts on survivors'
@@ -90,6 +92,18 @@ main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
                     a storyboard — is split into its tiles in the decoder
                     child instead: one decode, one hash per tile, every
                     tile matched like an image of its own
+         the SSCD second layer (WP28, only while ENABLE_SSCD): images PDQ
+                    did not match are embedded in a second isolated child
+                    (sscd-worker.js, onnxruntime-node CPU, memory only)
+                    and compared by cosine with the pool's embeddings of
+                    analyst-confirmed copies — on sources the app flagged
+                    as matched (SSCD_SCOPE=matched_sources) or everywhere
+                    (all), within SSCD_MAX_PER_RUN inferences per run; a hit
+                    above SSCD_THRESHOLD becomes a finding (method "sscd")
+                    for the same analyst review, a borderline PDQ match
+                    (distance 25-31) gets an SSCD score shown to the
+                    analyst, and a PDQ match seeds an embedding offer the
+                    app keeps only for analyst-confirmed findings
          POST /frontier/report (page outcomes + links of kinds page,
                 sitemap and feed — pagination links flagged, sitemap
                 <lastmod> entries riding as strict ISO so the app can make a
@@ -207,6 +221,7 @@ whose home page failed permanently, once each; no hostname is ever logged.
 | **Withdrawn fingerprints stop matching.** Pool re-synced at least hourly; a pool older than 60 minutes stops the run; queued findings for removed ids are dropped; a `fingerprint_not_accepted` rejection removes the id from the in-memory pool at once. | `crawler.ts`, `findings.ts`, `match/matcher.ts`. | `tests/integration/lifecycle.test.ts`, `client-findings.test.ts` |
 | **Video frames match the same way (video-fingerprints spec WP20).** The pool's video entries are indexed by multi-index hashing over their frame hashes (16 chunk tables per frame, probe radius floor(threshold/16)); one preview image within the threshold of any frame is a finding for the video's pool id, reported through the unchanged finding contract and reviewed by a person. The same withdrawal, re-sync and staleness rules cover video ids (one composite matcher, `match/pool-matcher.ts`); the run summary counts `videoMatches` separately, and no frame hash is ever logged. Phase 2 never fetches video bytes: only images are downloaded and decoded, in the existing isolated decoder child under the existing budgets. | `match/video-index.ts`, `match/pool-matcher.ts`, `crawler.ts`, the app's `crawl-pool.ts`. | `tests/unit/video-index.test.ts` (brute-force property test, the pigeonhole boundary at every distance 0..31, withdrawal, thresholds), `tests/unit/pool-matcher.test.ts`, `tests/unit/pool-contract.test.ts`, `tests/integration/video-pool.test.ts` (poster match end to end, `<video src>` never requested, withdrawal of a video id, log scan) |
 | **Video previews are image candidates (video-fingerprints spec WP21).** A page's video previews — `<video poster>`, the `og:image` of a page that declares an `og:video`, JSON-LD `VideoObject.thumbnailUrl`, video-sitemap `<video:thumbnail_loc>` and preview sprite sheets — are ordinary image candidates (same fetch path, caps and budgets) tagged "video preview" in memory, so the run summary counts them (`videoPreviews`); the tag never leaves the process. A preview sprite sheet — an image whose **address** names a sprite or a storyboard (path only, never the query; `image/sprite.ts`, in code) — is split into its tiles **in the decoder child**: one decode under the whole-image rules, a grid chosen from the decoded size (tiles ≥ `MIN_IMAGE_SIDE` on both sides, ≤ 100 tiles, tile aspect aimed at 16:9; exact ties resolved to the fewest tiles, so a 16:9 photo named like a sprite keeps its whole-image hash), one PDQ hash per tile, every tile matched against image fingerprints and video frames alike. Several tiles of one sprite hitting the same pool id are one finding (the per-fingerprint-and-address dedup); the sprite itself counts once in `videoPreviews` and its tiles in `spriteTiles`. No video bytes are fetched in Phase 2, and no URL, tile or frame hash is ever logged. | `crawl/extract.ts` (poster, og:video preview, JSON-LD thumbnailUrl), `crawl/xml-docs.ts` (`video:thumbnail_loc`), `image/sprite.ts`, `image/hash-image.ts`, `image/decoder-worker.ts` + `decoder-pool.ts` (the tile-split request and reply), `crawler.ts`. | `tests/unit/video-preview-extract.test.ts`, `tests/unit/xml-docs.test.ts` (video thumbnails), `tests/unit/sprite.test.ts` (address rule, every grid case, tile hashes equal the standalone images'), `tests/unit/decoder-isolation.test.ts` (the sprite protocol: strict reply shape, wrong-kind reply kills the child, env/argv guarantees, retry), `tests/integration/video-previews.test.ts` (every preview kind end to end against `buildVideoPreviewFixture`, sprite tiles matched, the unsplit grid image no match, `<video src>` and the og:video target never requested, counts, log scan) |
+| **A second matching layer with SSCD embeddings (WP28).** Only while `ENABLE_SSCD` is on. Images PDQ did not match are embedded in a second isolated child process (`dist/sscd-worker.js`: sharp decode under the same byte/format/pixel rules as PDQ, then a 320x320 resize and `onnxruntime-node` CPU inference — memory only, never a disk write, weights downloaded at image build time from a pinned URL with a sha256 check, never in git) and compared by cosine with the pool's embeddings of **analyst-confirmed copies**. Scope: only sources the app flagged `matched: true` (a finding already accepted there) by default, everywhere with `SSCD_SCOPE=all`; budget: at most `SSCD_MAX_PER_RUN` inferences per run (`sscdSkippedBudget` counts the rest). A hit at or above `SSCD_THRESHOLD` becomes a finding with `method: "sscd"` and a similarity, for the same analyst review. A borderline PDQ match (distance 25-31) gets an SSCD score against that fingerprint's embeddings, shown to the analyst — never an automatic accept or reject. A PDQ match seeds an embedding offer: the crawler embeds the image while it holds the bytes and posts it to `POST /api/crawler/embeddings`; the app keeps it only when the finding at that exact location is analyst-confirmed, so stored embeddings are exactly the confirmed copies'. Off by default on both sides; off, the wire, the behaviour and the logs are byte-for-byte what they were. Logs carry counts only (`sscdInferences`, `sscdMatches`, `sscdSkippedBudget`, `sscdSkippedScope`, embedding offer counts) — never a vector or a similarity of an individual image. | `image/sscd-pool.ts`, `image/sscd-worker.ts`, `image/sscd-model.ts`, `match/sscd-index.ts`, `embeddings.ts`, `crawler.ts`; app side `crawl-embeddings.ts`, `crawl-pool.ts`. | `tests/unit/sscd-{index,model,pool,config}.test.ts`, `tests/integration/sscd-layer.test.ts`, the memory-only crawl, `tests/unit/crawl-embeddings*.test.ts` (app) |
 | **Fail closed config**, no setting that loosens the network policy. Loopback access for tests is a policy object injected in code from `tests/support/test-policy.ts`. | `config.ts`. | `config-policy.test.ts` (schema has no such key; `src/` network code never mentions loopback) |
 | **Same PDQ as the browser.** | `src/pdq.ts` re-exports `asmita/src/lib/pdq/pdq.ts` (bundled at build). | `tests/unit/pdq-contract.test.ts` (exact export list, version, types, golden hash) |
 
@@ -311,6 +326,30 @@ PDQ hashing run in separate **child processes** (`src/image/decoder-pool.ts`,
 `src/image/decoder-worker.ts`, bundled as `dist/decoder-worker.js`). The
 crawler process holds the fingerprint pool, the matcher and the service key,
 and never loads sharp itself (`dist/main.js` contains no sharp import; tested).
+
+SSCD embeddings (WP28) run in a fourth child of the same discipline,
+`dist/sscd-worker.js` (`src/image/sscd-pool.ts`, `src/image/sscd-worker.ts`),
+spawned only when `ENABLE_SSCD` is on: image bytes in, a fixed-shape
+512-dim vector out. It reuses the decoder's decode rules (`prepareImage` in
+`hash-image.ts`: magic-byte allowlist, sharp format agreement, pixel cap,
+minimum side), then resizes to the model's 320x320 square input in memory
+and runs the pinned ONNX weights through `onnxruntime-node` on CPU,
+single-threaded. A separate child rather than a third request kind on the
+decoder child, because onnxruntime's native memory profile (the ~98 MB model
+resident plus its working set) is very different from sharp's; the decoder's
+budgets, protocol and tests stay untouched. Its isolation set is the
+decoder's — scrubbed environment (no key, no config), the model path and
+expected dimension on argv (not secret), Node permission model with reads
+confined to its bundle, sharp, onnxruntime-node and the model file, a JS heap
+cap, parent-side recycling (500 tasks / 1.5 GiB RSS — larger than the
+decoder's 768 MB because the model is resident), per-task timeout with
+kill-and-replace, once-only crash retry, stdout/stderr discarded, strict
+reply validation where a wrong dimension or a non-finite value kills the
+child. The weights are never in git: the Dockerfile downloads them from a
+pinned URL with a sha256 check at image build time; a runtime hash check
+would need `node:fs` in `src/`, which the memory-only rule forbids, so the
+build-time check is the pin (`sscd_model_missing` / `sscd_bad_model` are the
+error codes a container that lost its model reports, per image).
 
 What crosses the boundary: the parent sends `{ id, bytes, minSide }` —
 or, for a preview sprite sheet (video-fingerprints spec WP21), `{ id,
@@ -606,15 +645,16 @@ page whose render fails falls back to its static result.
 
 Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
-- `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality } | { id, kind: "video", frames: [64-hex] }] }`. Two entry kinds since video-fingerprints spec WP20: image fingerprints exactly as before, and approved, consented video fingerprints (algorithm `VPDQ`) as one entry per video carrying its kept frame hashes — hashes only, never qualities, timestamps or bytes. The crawler indexes the frames for lookup (`src/match/video-index.ts`) and reports a match against the video's pool id like an image match, for human review; until WP20 the pool served no video fingerprint at all (the pre-WP20 rule 3).
-- `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs, origin: "admin" | "reported" | "discovered", hops, render: "http" | "browser" | "auto" }] }`. `origin` says how a site entered the list: an admin added it, a survivor's submitted link or an approved finding named its host (crawler v2 WP1; the app copies the host only, never the link or the case), or the crawler discovered it by following links (WP5). `hops` is how far it sits from a human-added or survivor-reported site. `render` (WP7) says how its pages are fetched: `http` never launches a browser, `browser` renders every page in Chromium, `auto` renders only pages whose HTML has scripts and no image candidates. The crawler treats every enabled source the same whatever its origin.
+- `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality } | { id, kind: "video", frames: [64-hex] }] }`. Two entry kinds since video-fingerprints spec WP20: image fingerprints exactly as before, and approved, consented video fingerprints (algorithm `VPDQ`) as one entry per video carrying its kept frame hashes — hashes only, never qualities, timestamps or bytes. The crawler indexes the frames for lookup (`src/match/video-index.ts`) and reports a match against the video's pool id like an image match, for human review; until WP20 the pool served no video fingerprint at all (the pre-WP20 rule 3). WP28: while the app's `ENABLE_SSCD` is on, an image entry may also carry `sscd: { model, version, vectors }` — the SSCD embeddings (512-dim, L2-normalised) of this fingerprint's analyst-confirmed copies, at most 16, under exactly the same pool gating (approved, consented, non-withdrawn). The crawler keeps them in memory for the run and matches by brute-force cosine (fine at Asmita's scale: a vector is 2 KiB, 10,000 embeddings are ~20 MB and scan in under a millisecond; an ANN index would be the next step at many tens of thousands). Entries without embeddings keep the exact pre-WP28 shape.
+- `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs, origin: "admin" | "reported" | "discovered", hops, render: "http" | "browser" | "auto" }] }`. `origin` says how a site entered the list: an admin added it, a survivor's submitted link or an approved finding named its host (crawler v2 WP1; the app copies the host only, never the link or the case), or the crawler discovered it by following links (WP5). `hops` is how far it sits from a human-added or survivor-reported site. `render` (WP7) says how its pages are fetched: `http` never launches a browser, `browser` renders every page in Chromium, `auto` renders only pages whose HTML has scripts and no image candidates. The crawler treats every enabled source the same whatever its origin. WP28: while the app's `ENABLE_SSCD` is on, each source also carries `matched: true|false` — whether a finding on it was already accepted — which is the default scope of the SSCD second layer; absent reads as false, so a switched-off app never widens it.
 - `POST /api/crawler/frontier/claim` `{ sourceId, limit (1..200) }` -> `{ urls: [{ id, url, depth, etag?, lastModified? }] }` (crawler v2 WP3). The app's frontier: the next due pages of one source, in priority order (priority, then nextDueAt — crawler v3 WP11), claimed for 30 minutes so two crawler instances never get the same URL. A source with no rows yet gets its seed (`https://<domain>/`) created on the first claim. An empty batch means nothing is due (the daily `pageBudget` counts too); an unknown or disabled source answers empty, never an error.
 - `POST /api/crawler/frontier/report` `{ sourceId, runId, pages: [{ id, status: "fetched" | "not_modified" | "gone" | "blocked" | "error", etag?, lastModified?, failure?: "permanent" (only with status `error`, crawler v3 review fix WP13), aliases?: [{ in-scope canonical URL }] (max 20, crawler v3 WP10), links: [{ url, kind: "page" | "sitemap" | "feed", pagination?: true, lastmod?: ISO date }] (max 500) }] }` -> `{ accepted: number }` (crawler v2 WP3). The app schedules the next visit (24 h after fetched, doubling after not_modified up to 14 days, 1 h / 6 h / 24 h after error and dead after five failures, gone dead), stores the new in-scope links deduplicated per source on a keyed digest — checked against the legacy digests of a pre-WP10 row's spellings too, so no duplicate of an existing row is stored (review fix 4) — and counts the pages against the source budget. The optional `pagination` flag and `lastmod` (crawler v3 WP11) set the stored row's priority — sitemap 10, feed 20, pagination 30, other pages 50 plus 10 per depth level, the seed 50 — and an entry whose lastmod (clamped to now) is newer than the row's last fetch makes it priority 5 and due now, one shot: a successful visit resets the row to its kind/depth value (review fix 8). A row never fetched, a dead row and a row the same report fetched are never jumped. An `error` carrying `failure: "permanent"` (review fix 7) backs off like any error on the first attempt and is remembered on the row; the row dies only on a permanent failure at least 24 h after the first, and a successful visit clears the memory. The optional `aliases` are a fetched page's `<link rel="canonical">` targets (in scope, never fetched because they are canonical): the app marks any live row for an alias dead and stores a digest-only dead "tombstone" row when there is none, so the same content is never fetched twice and a later link to it never becomes a live row; the digest applies the same shared normalisation as the crawler's dedup key, and rows stored before it keep their stored digest. Retry-safe: a report the server applied but the crawler never saw answered only moves schedules forward. The scope check the crawler does is repeated by the app on every link and alias.
 - `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs, origin: "admin" | "reported" | "discovered", hops, render: "http" | "browser" | "auto" }] }`. `origin` says how a site entered the list: an admin added it, a survivor's submitted link or an approved finding named its host (crawler v2 WP1; the app copies the host only, never the link or the case), or the crawler discovered it by following links (WP5). `hops` is how far it sits from a human-added or survivor-reported site. `render` (WP7) says how its pages are fetched: `http` never launches a browser, `browser` renders every page in Chromium, `auto` renders only pages whose HTML has scripts and no image candidates — including a tiny script-only stub (WP12: under 2 KiB of visible text, no links, usually a JavaScript redirect or an app shell). The crawler treats every enabled source the same whatever its origin.
 - `POST /api/crawler/frontier/claim` `{ sourceId, limit (1..200) }` -> `{ urls: [{ id, url, depth, etag?, lastModified? }] }` (crawler v2 WP3). The app's frontier: the next due pages of one source, claimed for 30 minutes so two crawler instances never get the same URL. A source with no rows yet gets its seed (`https://<domain>/`) created on the first claim. An empty batch means nothing is due (the daily `pageBudget` counts too); an unknown or disabled source answers empty, never an error.
 - `POST /api/crawler/frontier/report` `{ sourceId, runId, pages: [{ id, status: "fetched" | "not_modified" | "gone" | "blocked" | "error", etag?, lastModified?, links: [{ url, kind: "page" | "sitemap" | "feed" }] (max 500) }] }` -> `{ accepted: number }` (crawler v2 WP3). The app schedules the next visit (24 h after fetched, doubling after not_modified up to 14 days, 1 h / 6 h / 24 h after error and dead after five failures, gone dead), stores the new in-scope links deduplicated per source on a keyed digest and counts the pages against the source budget. Retry-safe: a report the server applied but the crawler never saw answered only moves schedules forward. The scope check the crawler does is repeated by the app on every link. Since crawler v3 WP13, as narrowed by the review fix, a page whose host's DNS name does not exist or whose TLS certificate definitely fails is reported `error` with `failure: "permanent"` — never retried in the run, and the row dies only on a second permanent failure at least 24 h after the first. Since crawler v3 WP14 a `gone` can also mean the page was a fake "not found": the crawler had already seen the same normalised body (whitespace collapsed, digits stripped) on five or more distinct URLs of this source within the run, so it extracted nothing from the page.
 - `POST /api/crawler/discoveries` `{ sourceId, runId, hosts: [string] (max 200) }` -> `{ accepted: number }` (crawler v2 WP5). The out-of-scope hosts linked from in-scope pages — hosts only, deduplicated per run by the crawler. The app applies the discovery rules: never-crawl hosts and hosts that are already sources are skipped; the rest become `DISCOVERED` sources one hop deeper than the reporting source, switched on automatically while within `CRAWLER_MAX_DISCOVERY_HOPS` (default 2) and at most `CRAWLER_MAX_NEW_SITES_PER_DAY` (default 200) per UTC day — everything else is stored switched off for an admin to enable. A discovered site that later produces a match is promoted (hops 0, reported-source budget); one that spends its page budget three days running without a match is paused for 30 days by the hourly sweep. `accepted` counts the hosts stored as sources, enabled or not. Best-effort for the crawler: a failed report only delays discovery to the next run.
-- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and already-known findings alike, so the crawler cannot tell whether two pool ids belong to one case; the old `"created"` / `"duplicate"` are still tolerated and counted as accepted. A page must be on its source's host or a subdomain (`page_not_in_source`, which also sets exit code 4); the image may be on another public host. A page or image address with credentials or a non-default port is refused (`invalid_url`); the crawler never fetches one
+- `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, method?, distance?, sscdSimilarity?, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and already-known findings alike, so the crawler cannot tell whether two pool ids belong to one case; the old `"created"` / `"duplicate"` are still tolerated and counted as accepted. A page must be on its source's host or a subdomain (`page_not_in_source`, which also sets exit code 4); the image may be on another public host. A page or image address with credentials or a non-default port is refused (`invalid_url`); the crawler never fetches one. WP28: while the crawler's SSCD layer is on, findings carry `method` (`pdq`, `vpdq`, `sscd`) — absent means pdq, so a switched-off crawler's wire is unchanged — an `sscd` finding carries `sscdSimilarity` (cosine, 0..1) and no `distance`, and a borderline pdq match (distance 25-31) may carry an `sscdSimilarity` score for the analyst; a vpdq finding never carries one. The app stores the method (`CrawlFinding.method`; a video finding reported without one is labelled from its submission's algorithm) and shows the analyst which layer matched; an `sscd` finding always needs the second reviewer, like the least-certain PDQ matches.
+- `POST /api/crawler/embeddings` `{ runId, embeddings: [{ fingerprintId, pageUrl, imageUrl, model, version, vector }] }` (WP28, at most 10 per call) -> `{ results: [{ status: "stored" | "rejected", reason? }] }`. The crawler offers an embedding of an image it holds in memory at a PDQ match; the app resolves the pool id, recomputes the finding's location digest exactly as the findings route does, and stores the vector (encrypted at rest, `FindingEmbedding`) **only when that finding exists, is APPROVED and the authorisation is live** — the analyst's acceptance is the gate, `finding_not_confirmed` otherwise. Idempotent per finding (`embedding_exists`); `model_mismatch` refuses a different descriptor identity; `fingerprint_not_accepted` withdraws the pool id like a finding rejection. Never an image, crop or thumbnail crosses to the app, and no vector is ever logged.
 
 Responses are validated with Zod. Findings are validated locally with the
 server's rules (strict objects, `runId` `[A-Za-z0-9_.:-]{1,64}`, integer
@@ -647,8 +687,8 @@ claimed (every page the app handed out, WP6), pages
 attempted/fetched/not-modified/non-HTML, soft-404 pages cut by the body
 digest (`pagesSoft404`, WP14), browser renders
 attempted/failed/images (WP7), new URLs reported to the frontier
-(WP6), pages that were sitemap or feed documents (`pagesXml`) with the
-sitemap and feed addresses taken from them, the sitemap probes made
+(WP6), pages that were sitemap or feed documents (`pagesXml`) with
+the sitemap and feed addresses taken from them, the sitemap probes made
 (`sitemapProbes`, crawler v3 WP9), the largest claimed frontier
 batch (`batchPeak`), links dropped by the per-page cap or skipped as
 non-content / by the query-variant cap, distinct out-of-scope hosts
@@ -663,8 +703,13 @@ queued/posted/accepted/rejected (by reason)/withdrawn/invalid/failed/unsent,
 pool syncs, robots outcomes, errors by code, fetch failures by class
 (`failures.permanent` / `failures.temporary`, crawler v3 WP13) and sources
 whose home page failed permanently (`homePermanentFailures`, counted once per
-source), page and image budget used.
-Every `PROGRESS_LOG_SECONDS` a `run_progress` line (WP6) carries the
+source), page and image budget used. While the SSCD layer is on (WP28) the
+summary also carries `sscdInferences`, `sscdMatches`, `sscdSkippedBudget`,
+`sscdSkippedScope`, `sscdEmbeddingsPosted`, `sscdEmbeddingsStored`,
+`sscdEmbeddingsRejected`, `sscdEmbeddingsUnsent` and the `sscd` child's
+own counters — counts only, never a vector or a similarity; switched off,
+none of these fields exist and the line is byte-for-byte what it always
+was. Every `PROGRESS_LOG_SECONDS` a `run_progress` line (WP6) carries the
 mid-run view of the same counters: sources active, pages
 claimed/fetched/not-modified, new URLs, new hosts reported, images hashed,
 matches (video matches within them). Counts only, like every line.
@@ -733,6 +778,14 @@ network activity and the log names only the offending variable names. See
 | `MAX_OFFSITE_HOST_FAILURES` | 20 | distinct off-scope hosts tried without returning an image, per source per run (1..1000) |
 | `MAX_CRAWL_DELAY_MS` | 30000 | cap on honoured robots `Crawl-delay` |
 | `POOL_RESYNC_MINUTES` | 30 | 1..60 |
+| `ENABLE_SSCD` | false | WP28: the second matching layer. Only the exact string "true" enables it; anything else (including unset) is off, and off changes nothing — no inference, no embeddings route call, no new log fields. Needs the app-side `ENABLE_SSCD` too |
+| `SSCD_SCOPE` | matched_sources | WP28: run the second layer only on sources the app flagged as having an accepted finding (`matched_sources`), or everywhere (`all`) |
+| `SSCD_MAX_PER_RUN` | 2000 | WP28: per-run cap on SSCD inferences (second layer, borderline scores, seeding); images beyond it are counted (`sscdSkippedBudget`), never run |
+| `SSCD_THRESHOLD` | 0.85 | WP28: cosine similarity at which an SSCD hit becomes a finding (the vectors are L2-normalised); calibrated in ADR 008 |
+| `SSCD_MODEL_ID` / `SSCD_MODEL_VERSION` | sscd_disc_mixup / onnx-1 | WP28: the descriptor identity, must match the app's pair (its pool serves and its embeddings route accepts only this pair) |
+| `SSCD_MODEL_FILE` | (required when ENABLE_SSCD) | WP28: absolute path of the pinned ONNX weights in the container (downloaded at image build time, sha256-checked, never in git) |
+| `SSCD_EMBED_DIM` | 512 | WP28: the embedding dimension the child must answer with; a wrong dimension is a protocol kill |
+| `SSCD_TIMEOUT_MS` | 20000 | WP28: per-image embedding deadline; the child is killed and replaced |
 | `CONNECT_TIMEOUT_MS`, `HEADERS_TIMEOUT_MS`, `BODY_TIMEOUT_MS`, `REQUEST_TIMEOUT_MS` | 10s, 15s, 15s, 30s | fetch timeouts |
 | `FETCH_ATTEMPTS` | 3 | per crawl request |
 | `API_TIMEOUT_MS`, `API_ATTEMPTS` | 30s, 4 | Asmita API calls |
@@ -752,7 +805,17 @@ Nothing here has been deployed.
   (`npx playwright-core install --with-deps chromium`), so the browser
   revision is pinned by the lockfile. Runs as the non-root `node` user,
   sharp's prebuilt libvips, Chromium at `/app/browsers`
-  (`PLAYWRIGHT_BROWSERS_PATH`).
+  (`PLAYWRIGHT_BROWSERS_PATH`). Since WP28 the build also installs
+  `onnxruntime-node` (the SSCD embedder child) and downloads the pinned
+  SSCD weights to `/app/models/sscd_disc_mixup.onnx` — pinned URL +
+  sha256 build args, build refused on a hash mismatch, weights never in
+  git, an MIT notice shipped beside them
+  (`/app/models/SSCD-NOTICE.txt`); the model file is read-only. Enabling
+  the layer needs `ENABLE_SSCD=true` **and**
+  `SSCD_MODEL_FILE=/app/models/sscd_disc_mixup.onnx` on both sides, and
+  roughly doubles the job's memory appetite while the SSCD child is
+  resident — give the job more memory when the layer is on (4 Gi
+  recommended; 2 Gi still works with `SSCD_MAX_PER_RUN` kept small).
 - Region `asia-south1` (Mumbai). Create a Cloud Run **job**, not a service:
   `gcloud run jobs create asmita-crawler --region asia-south1 --image <image> --tasks 1 --max-retries 0 --task-timeout 3600s --memory 2Gi --cpu 1`.
   Keep `MAX_RUN_MINUTES` below the task timeout so the run ends gracefully.
@@ -804,6 +867,14 @@ container variant, are in the runbook):
 - JavaScript is executed only for sources with `render = BROWSER` or `AUTO`
   (WP7); for `render = http` (the default) client-side content is invisible
   by design.
+- The SSCD second layer (WP28) is off by default and, on, still bounded:
+  it never runs on sprite tiles or video hits, an image PDQ already matched
+  is never scanned against other fingerprints' embeddings, and its matching
+  is brute-force cosine over embeddings the pool serves (at most 16 per
+  fingerprint — fine at Asmita's scale, an ANN index far away). A missing
+  model file disables embeddings per image (`sscd_model_missing`), counted,
+  never fatal; the run completes as a PDQ-only crawl. The eval numbers and
+  the licence record live in ADR 008.
 - The soft-404 cut (WP14) is deliberately blind to digits: pages of one
   source whose bodies differ only in numbers — one template with different
   ids — are one digest, and from the sixth such URL the rows are reported

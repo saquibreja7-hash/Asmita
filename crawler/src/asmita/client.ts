@@ -23,11 +23,27 @@ const ID = z.string().min(1).max(128);
 /**
  * One image fingerprint in the pool: the pre-WP20 shape, unchanged (the
  * video-fingerprints spec's video entries are a second shape beside it).
+ * WP28 adds an OPTIONAL `sscd` block — present only while the app serves
+ * SSCD embeddings (ENABLE_SSCD on both sides): the 512-dim
+ * L2-normalised descriptors of analyst-confirmed copies of this
+ * fingerprint's image, at most 16 per fingerprint. Absent otherwise, so a
+ * pool from a switched-off app parses exactly as before.
  */
+export const PoolSscdSchema = z.object({
+  model: z.string().min(1).max(64),
+  version: z.string().min(1).max(64),
+  vectors: z
+    .array(z.array(z.number().finite().min(-1).max(1)).min(1).max(2048))
+    .min(1)
+    .max(16),
+});
+export type PoolSscd = z.infer<typeof PoolSscdSchema>;
+
 export const PoolImageEntrySchema = z.object({
   id: ID,
   pdq: z.string().regex(HEX64),
   quality: z.number().min(0).max(100),
+  sscd: PoolSscdSchema.optional(),
 });
 export type PoolImageEntry = z.infer<typeof PoolImageEntrySchema>;
 
@@ -75,6 +91,12 @@ export const SourcesSchema = z.object({
        * candidates; "http" never (the default, and the old behaviour).
        */
       render: z.enum(["http", "browser", "auto"]),
+      /**
+       * WP28: whether a finding on this source was already accepted. Only
+       * served while the app has SSCD enabled; absent reads as false, so a
+       * switched-off app never widens the second layer's scope.
+       */
+      matched: z.boolean().optional(),
     }),
   ),
 });
@@ -186,17 +208,45 @@ export const DiscoveriesResponseSchema = z.object({
  * The server validates findings strictly (no extra fields at envelope or
  * item level). The same rules are applied here before sending, so a
  * malformed finding is dropped locally instead of failing a whole batch.
+ *
+ * WP28: an SSCD finding carries `method: "sscd"` + `sscdSimilarity` and no
+ * `distance` (there is no PDQ distance to report); a PDQ finding inside
+ * the borderline band (distance 25..31) may carry an `sscdSimilarity`
+ * score for the analyst; everything else is exactly the pre-WP28 shape —
+ * absent `method` means pdq, so a switched-off crawler's wire is
+ * unchanged. Video findings report `method: "vpdq"` while SSCD is enabled
+ * (honest labelling; the app derives it from the submission's algorithm
+ * when absent).
  */
-export const FindingSchema = z.strictObject({
-  fingerprintId: ID,
-  // No length cap beyond the batch byte limit (the contract sets none).
-  pageUrl: z.url({ protocol: /^https?$/ }),
-  imageUrl: z.url({ protocol: /^https?$/ }),
-  distance: z.number().int().min(0).max(31),
-  quality: z.number().min(0).max(100),
-  observedAt: z.iso.datetime({ offset: true }),
-  sourceId: ID,
-});
+export const FindingSchema = z
+  .strictObject({
+    fingerprintId: ID,
+    // No length cap beyond the batch byte limit (the contract sets none).
+    pageUrl: z.url({ protocol: /^https?$/ }),
+    imageUrl: z.url({ protocol: /^https?$/ }),
+    method: z.enum(["pdq", "vpdq", "sscd"]).optional(),
+    distance: z.number().int().min(0).max(31).optional(),
+    sscdSimilarity: z.number().min(0).max(1).optional(),
+    quality: z.number().min(0).max(100),
+    observedAt: z.iso.datetime({ offset: true }),
+    sourceId: ID,
+  })
+  .superRefine((f, ctx) => {
+    const method = f.method ?? "pdq";
+    if (method === "sscd") {
+      if (f.distance !== undefined) ctx.addIssue({ code: "custom", path: ["distance"], message: "an sscd finding carries no distance" });
+      if (f.sscdSimilarity === undefined) ctx.addIssue({ code: "custom", path: ["sscdSimilarity"], message: "an sscd finding requires sscdSimilarity" });
+      return;
+    }
+    if (f.distance === undefined) {
+      ctx.addIssue({ code: "custom", path: ["distance"], message: "required unless method is sscd" });
+    }
+    // The app accepts the borderline score only on a finding explicitly
+    // labelled pdq (the crawler labels every finding while SSCD is on).
+    if (f.sscdSimilarity !== undefined && f.method !== "pdq") {
+      ctx.addIssue({ code: "custom", path: ["sscdSimilarity"], message: "only a pdq finding carries a borderline score" });
+    }
+  });
 export type Finding = z.infer<typeof FindingSchema>;
 export const FindingsRequestSchema = z.strictObject({
   runId: z.string().regex(RUN_ID_PATTERN),
@@ -233,6 +283,56 @@ export const MAX_FINDINGS_PER_CALL = 50;
 /** Server body limit is 256 KiB; batches are cut below it with headroom. */
 export const MAX_FINDINGS_BODY_BYTES = 240 * 1024;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024; // pools can be large; still bounded
+
+// --- SSCD embeddings (WP28) ---------------------------------------------------
+
+/**
+ * One embedding the crawler computed of an image it holds in memory at a
+ * PDQ match, offered to the app for storage. The app keeps it only when
+ * the finding it names is analyst-confirmed (APPROVED) under a live
+ * authorisation — the acceptance gate lives server-side. Vectors are
+ * rounded to 1e-6 (they are L2-normalised; the rounding moves cosine by
+ * under 1e-5) to keep payloads small.
+ */
+export const EmbeddingItemSchema = z.strictObject({
+  fingerprintId: ID,
+  pageUrl: z.url({ protocol: /^https?$/ }),
+  imageUrl: z.url({ protocol: /^https?$/ }),
+  model: z.string().min(1).max(64),
+  version: z.string().min(1).max(64),
+  vector: z.array(z.number().finite().min(-1.0001).max(1.0001)).min(16).max(2048),
+});
+export type EmbeddingItem = z.infer<typeof EmbeddingItemSchema>;
+
+export const EmbeddingsRequestSchema = z.strictObject({
+  runId: z.string().regex(RUN_ID_PATTERN),
+  embeddings: z.array(EmbeddingItemSchema).min(1).max(10),
+});
+
+/** Per-item reasons the server can return (fixed vocabulary, like findings). */
+export const EMBEDDING_REASONS = [
+  "invalid_embedding",
+  "invalid_url",
+  "unknown_source",
+  "fingerprint_not_accepted",
+  "finding_not_confirmed",
+  "model_mismatch",
+] as const;
+
+export const EmbeddingsResponseSchema = z.object({
+  results: z.array(
+    z.object({
+      // "stored": kept (or already present — idempotent repeats answer
+      // stored with reason embedding_exists). "rejected": not kept.
+      status: z.enum(["stored", "rejected"]),
+      reason: z.string().max(500).optional(),
+    }),
+  ),
+});
+export type EmbeddingResult = z.infer<typeof EmbeddingsResponseSchema>["results"][number];
+
+/** Vector payloads are ~10 KiB each; 10 per request stays far under 256 KiB. */
+export const MAX_EMBEDDINGS_PER_CALL = 10;
 
 export type AsmitaClientConfig = {
   baseUrl: string;
@@ -306,6 +406,20 @@ export class AsmitaClient {
     if (!FindingsRequestSchema.safeParse(body).success) throw new CrawlError("internal");
     const res = await this.call("POST", "/api/crawler/findings", body, FindingsResponseSchema, signal);
     if (res.results.length !== findings.length) throw new CrawlError("api_bad_response");
+    return res.results;
+  }
+
+  /**
+   * Offers SSCD embeddings of matched images for storage (WP28). The app
+   * keeps one only when the finding it names is analyst-confirmed; repeats
+   * are idempotent. Retry-safe for the same reason findings are.
+   */
+  async postEmbeddings(runId: string, embeddings: EmbeddingItem[], signal?: AbortSignal): Promise<EmbeddingResult[]> {
+    if (embeddings.length === 0) return [];
+    const body = { runId, embeddings };
+    if (!EmbeddingsRequestSchema.safeParse(body).success) throw new CrawlError("internal");
+    const res = await this.call("POST", "/api/crawler/embeddings", body, EmbeddingsResponseSchema, signal);
+    if (res.results.length !== embeddings.length) throw new CrawlError("api_bad_response");
     return res.results;
   }
 

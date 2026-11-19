@@ -61,9 +61,11 @@ export type SpriteResult = { tiles: SpriteTile[]; width: number; height: number;
 /**
  * The shared decode path of hashImage and hashSpriteImage: sniff, cap and
  * prepare the pixels once. Every format, pixel and size rule of a whole
- * image applies before any tile is cut.
+ * image applies before any tile is cut. Exported for the SSCD worker
+ * (WP28), which decodes under the same rules before it resizes for the
+ * model — attacker bytes get no second, laxer decode path.
  */
-async function prepareImage(bytes: Buffer, opts: HashOptions): Promise<{ input: PdqInput; format: ImageFormat }> {
+export async function prepareImage(bytes: Buffer, opts: HashOptions): Promise<{ input: PdqInput; format: ImageFormat }> {
   const format = sniffImage(bytes);
   if (!format) throw new CrawlError("image_sniff_failed");
   const limitInputPixels = opts.limitInputPixels ?? DEFAULT_LIMIT_INPUT_PIXELS;

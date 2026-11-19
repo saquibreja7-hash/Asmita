@@ -59,6 +59,8 @@ beforeEach(() => {
     escalation: { deleteMany: empty() },
     urlPortalToken: { deleteMany: empty() },
     crawlFinding: { findMany: vi.fn().mockResolvedValue([]), deleteMany: empty() },
+    // WP28 (ADR 008): the erasure deletes the case's SSCD embeddings too.
+    findingEmbedding: { deleteMany: empty() },
     crawlConsent: { deleteMany: empty() },
     hashSubmission: { updateMany: m.hashUpdateMany, deleteMany: m.hashDeleteMany, findMany: vi.fn().mockResolvedValue([]) },
     feedback: { deleteMany: empty() },

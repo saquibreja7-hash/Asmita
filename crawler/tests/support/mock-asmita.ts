@@ -25,20 +25,48 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { z } from "zod";
-import type { Finding, Pool, Source } from "../../src/asmita/client.ts";
+import type { EmbeddingItem, Finding, Pool, Source } from "../../src/asmita/client.ts";
 
 /**
  * The server's request contract, written out independently of the client's
- * schema so client drift shows up as a 400 in tests.
+ * schema so client drift shows up as a 400 in tests. WP28: findings may
+ * carry the layer that matched (`method`), an SSCD finding carries
+ * `sscdSimilarity` and no distance, and a pdq finding may carry a
+ * borderline score.
  */
-const ServerFinding = z.strictObject({
+const ServerFinding = z
+  .strictObject({
+    fingerprintId: z.string().min(1),
+    pageUrl: z.string().min(1),
+    imageUrl: z.string().min(1),
+    method: z.enum(["pdq", "vpdq", "sscd"]).optional(),
+    distance: z.number().int().min(0).max(31).optional(),
+    sscdSimilarity: z.number().min(0).max(1).optional(),
+    quality: z.number().min(0).max(100),
+    observedAt: z.iso.datetime({ offset: true }),
+    sourceId: z.string().min(1),
+  })
+  .superRefine((f, ctx) => {
+    const method = f.method ?? "pdq";
+    if (method === "sscd") {
+      if (f.distance !== undefined) ctx.addIssue({ code: "custom", path: ["distance"], message: "sscd carries no distance" });
+      if (f.sscdSimilarity === undefined) ctx.addIssue({ code: "custom", path: ["sscdSimilarity"], message: "sscd requires sscdSimilarity" });
+      return;
+    }
+    if (f.distance === undefined) ctx.addIssue({ code: "custom", path: ["distance"], message: "distance required" });
+    if (f.sscdSimilarity !== undefined && f.method !== "pdq") ctx.addIssue({ code: "custom", path: ["sscdSimilarity"], message: "pdq only" });
+  });
+const ServerEmbedding = z.strictObject({
   fingerprintId: z.string().min(1),
   pageUrl: z.string().min(1),
   imageUrl: z.string().min(1),
-  distance: z.number().int().min(0).max(31),
-  quality: z.number().min(0).max(100),
-  observedAt: z.iso.datetime({ offset: true }),
-  sourceId: z.string().min(1),
+  model: z.string().min(1),
+  version: z.string().min(1),
+  vector: z.array(z.number().finite()).min(16).max(2048),
+});
+const ServerEmbeddingsEnvelope = z.strictObject({
+  runId: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/),
+  embeddings: z.array(ServerEmbedding).min(1).max(10),
 });
 const ServerEnvelope = z.strictObject({
   runId: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/),
@@ -169,7 +197,7 @@ type MockPage = {
  * the app defaults a human-added site: origin "admin", hops 0, render "http".
  */
 export function siteSource(
-  fields: Pick<Source, "id" | "domain" | "pageBudget" | "delayMs"> & Partial<Pick<Source, "origin" | "hops" | "render">>,
+  fields: Pick<Source, "id" | "domain" | "pageBudget" | "delayMs"> & Partial<Pick<Source, "origin" | "hops" | "render" | "matched">>,
 ): Source {
   return { kind: "site", origin: "admin", hops: 0, render: "http", ...fields };
 }
@@ -194,15 +222,15 @@ export type MockAsmitaOptions = {
   key: string;
   pool: Pool;
   sources: Source[];
-  /** Override status for a route ("pool" | "sources" | "findings" | "claim" | "report" | "discoveries"), e.g. 503. */
-  status?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report" | "discoveries", number>>;
+  /** Override status for a route ("pool" | "sources" | "findings" | "embeddings" | "claim" | "report" | "discoveries"), e.g. 503. */
+  status?: Partial<Record<"pool" | "sources" | "findings" | "embeddings" | "claim" | "report" | "discoveries", number>>;
   /** Fail the first N calls of a route with 500. */
-  failFirst?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report" | "discoveries", number>>;
+  failFirst?: Partial<Record<"pool" | "sources" | "findings" | "embeddings" | "claim" | "report" | "discoveries", number>>;
   /**
    * Answer a route with this status once more than `after` calls reached the
    * route (e.g. the key revoked between two passes of a --loop run).
    */
-  statusAfter?: Partial<Record<"pool" | "sources" | "findings" | "claim" | "report" | "discoveries", { after: number; status: number }>>;
+  statusAfter?: Partial<Record<"pool" | "sources" | "findings" | "embeddings" | "claim" | "report" | "discoveries", { after: number; status: number }>>;
   /** Pool served from the second pool request on (simulates a re-sync change). */
   poolAfterFirst?: Pool;
   /** Fingerprint ids the server answers "fingerprint_not_accepted" for. */
@@ -218,6 +246,18 @@ export type MockAsmitaOptions = {
    * host reported to POST /discoveries is ever stored.
    */
   discovery?: MockDiscoveryRules;
+  /**
+   * The mock's mirror of the app's SSCD rules (WP28). Without it no
+   * embedding is ever stored (the app answers the same way while its
+   * ENABLE_SSCD is off). `confirmedFindings` names the (fingerprint,
+   * page, image) locations an analyst has confirmed — the app's
+   * finding_not_confirmed gate, mirrored.
+   */
+  sscd?: {
+    model: string;
+    version: string;
+    confirmedFindings?: Array<{ fingerprintId: string; pageUrl: string; imageUrl: string }>;
+  };
   /**
    * The frontier's clock (default Date.now). Tests advance it to prove
    * scheduling, the daily budget and the 30-minute claim window.
@@ -269,6 +309,13 @@ export class MockAsmita {
   readonly reportedAliases: Array<{ sourceId: string; pageId: string; url: string }> = [];
   /** The sources the mock created from discovery reports, by host (the app's DISCOVERED rows). */
   readonly discovered = new Map<string, MockDiscoveredSource>();
+  /**
+   * WP28: every embedding offer the crawler posted, in order, and the ones
+   * the mock stored (the app's FindingEmbedding rows), keyed by
+   * fingerprint|page|image.
+   */
+  readonly postedEmbeddings: EmbeddingItem[] = [];
+  readonly storedEmbeddings = new Map<string, EmbeddingItem>();
   /** Auto-enables per UTC day, by day-start timestamp (the app's daily cap). */
   readonly autoEnabledByDay = new Map<number, number>();
   private server: Server | null = null;
@@ -637,13 +684,15 @@ export class MockAsmita {
           ? "sources"
           : req.method === "POST" && path === "/api/crawler/findings"
             ? "findings"
-            : req.method === "POST" && path === "/api/crawler/frontier/claim"
-              ? "claim"
-              : req.method === "POST" && path === "/api/crawler/frontier/report"
-                ? "report"
-                : req.method === "POST" && path === "/api/crawler/discoveries"
-                  ? "discoveries"
-                  : null;
+            : req.method === "POST" && path === "/api/crawler/embeddings"
+              ? "embeddings"
+              : req.method === "POST" && path === "/api/crawler/frontier/claim"
+                ? "claim"
+                : req.method === "POST" && path === "/api/crawler/frontier/report"
+                  ? "report"
+                  : req.method === "POST" && path === "/api/crawler/discoveries"
+                    ? "discoveries"
+                    : null;
     if (!route) return send(404, { error: "not_found" });
     if (req.headers.authorization !== `Bearer ${this.opts.key}`) return send(401, { error: "unauthorized" });
     const override = this.opts.status?.[route];
@@ -700,7 +749,36 @@ export class MockAsmita {
 
     // The bodyLimit option is the findings route's (it drives the 413-split
     // test); claim and report bodies are checked against the real limit.
+    // Embeddings share the server's 256 KiB cap like every POST body.
     if (Buffer.byteLength(raw) > (this.opts.bodyLimit ?? BODY_LIMIT)) return send(413, { error: "payload_too_large" });
+
+    if (route === "embeddings") {
+      const parsed = ServerEmbeddingsEnvelope.safeParse(body);
+      if (!parsed.success) {
+        this.badRequests.push("embeddings");
+        return send(400, { error: "invalid_body" });
+      }
+      // The app's rules (WP28), mirrored: a known pool id, the deployment's
+      // model id + version, and an analyst-confirmed finding at exactly
+      // this location; repeats are idempotent.
+      const rules = this.opts.sscd;
+      const known = new Set((this.opts.poolAfterFirst ?? this.opts.pool).fingerprints.map((f) => f.id));
+      const results = parsed.data.embeddings.map((item) => {
+        this.postedEmbeddings.push(item);
+        if (!known.has(item.fingerprintId)) return { status: "rejected", reason: "fingerprint_not_accepted" };
+        if (!rules || item.model !== rules.model || item.version !== rules.version) return { status: "rejected", reason: "model_mismatch" };
+        const confirmed = (rules.confirmedFindings ?? []).some(
+          (c) => c.fingerprintId === item.fingerprintId && c.pageUrl === item.pageUrl && c.imageUrl === item.imageUrl,
+        );
+        if (!confirmed) return { status: "rejected", reason: "finding_not_confirmed" };
+        const key = `${item.fingerprintId}|${item.pageUrl}|${item.imageUrl}`;
+        if (this.storedEmbeddings.has(key)) return { status: "stored", reason: "embedding_exists" };
+        this.storedEmbeddings.set(key, item);
+        return { status: "stored" };
+      });
+      return send(200, { results });
+    }
+
     const env = ServerEnvelope.safeParse(body);
     if (!env.success) {
       this.badRequests.push("envelope");

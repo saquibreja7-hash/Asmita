@@ -14,7 +14,8 @@ import { gzipSync } from "node:zlib";
 import sharp from "sharp";
 import type { Pool } from "../../src/asmita/client.ts";
 import { hashImage } from "../../src/image/hash-image.ts";
-import { flipBits, patternImage, pixelBombPng, randomFingerprint, spriteSheet } from "./synthetic.ts";
+import { packHex, popcount32 } from "../../src/match/matcher.ts";
+import { fakeSscdEmbed, flipBits, patternImage, pixelBombPng, randomFingerprint, spriteSheet } from "./synthetic.ts";
 
 export const SOURCE_DOMAIN = "fixture.test";
 export const CDN_HOST = "cdn.imgcdn.test";
@@ -2078,3 +2079,112 @@ export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, st
 }
 
 export const TEST_KEY = "test-service-key-0123456789-abcdefghij";
+
+/*
+ * The SSCD second-layer fixture (WP28). sscd.fixture.test serves three
+ * pages: a confirmed copy of the survivor's image (an exact PDQ match that
+ * seeds an embedding), an altered version of it (a crop plus a colour
+ * filter plus a JPEG re-encode — the transformations PDQ does not survive)
+ * and an unrelated decoy. The pool holds the confirmed copy's fingerprint
+ * twice — exactly and at distance 27 (the borderline band, so the analyst
+ * score path runs) — each entry carrying the fake embedder's descriptor of
+ * the confirmed copy, exactly as the app would serve a stored embedding.
+ *
+ * The real SSCD model is never loaded here: the crawl runs with a
+ * deterministic in-process stand-in for the isolated child
+ * (fakeSscdEmbed, tests/support/synthetic.ts) whose descriptor is chosen
+ * to survive the planted alteration by construction. The model's own
+ * tolerance for crops and filters is what scripts/eval-sscd.ts measures.
+ * Synthetic images only; no host overlaps the other fixtures' hosts.
+ */
+export const SSCD_HOST = "sscd.fixture.test";
+
+/** The SSCD fixture plus the numbers that pin its honest premise. */
+export type SscdFixture = Fixture & {
+  /** PDQ distance of the altered variant from the confirmed copy: above the pool threshold. */
+  variantPdqDistance: number;
+  /** The fake descriptor's cosine for the altered variant: above the test threshold. */
+  variantSimilarity: number;
+  /** The fake descriptor's cosine for the decoy: below everything. */
+  decoySimilarity: number;
+};
+
+export async function buildSscdFixture(): Promise<SscdFixture> {
+  const site = await new FixtureSite().start();
+  const confirmed = await patternImage(4001, 640, 480, "png");
+  // ~13% crop (16% of the area) plus a colour filter and a JPEG re-encode:
+  // enough that PDQ cannot see the copy (verified by the test's own
+  // distance check), mild enough that a coarse descriptor still can.
+  const variant = await sharp(confirmed)
+    .extract({ left: 42, top: 32, width: 556, height: 416 })
+    .modulate({ saturation: 0.55, brightness: 1.08 })
+    .blur(0.7)
+    .jpeg({ quality: 72 })
+    .toBuffer();
+  const decoy = await patternImage(4002, 640, 480, "png");
+  const confirmedHash = (await hashImage(confirmed, { minSide: 1 })).hash;
+  const variantHash = (await hashImage(variant, { minSide: 1 })).hash;
+  const borderHash = flipBits(confirmedHash, 27);
+  const vector = await fakeSscdEmbed(confirmed);
+  const variantVector = await fakeSscdEmbed(variant);
+  const decoyVector = await fakeSscdEmbed(decoy);
+  const cos = (a: number[], b: number[]) => a.reduce((s, x, i) => s + x * b[i]!, 0);
+  // What the fixture itself claims, so the test can pin the honest premise:
+  // PDQ cannot see the altered copy, the coarse descriptor can, and the
+  // decoy matches nothing.
+  const variantPdqDistance = hamming(confirmedHash, variantHash);
+  const variantSimilarity = cos(vector, variantVector);
+  const decoySimilarity = cos(vector, decoyVector);
+
+  const pool: Pool = {
+    version: "sscd-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      // The confirmed copy, with the embedding the app would serve for it.
+      { id: "fp-sscd", pdq: confirmedHash, quality: 100, sscd: { model: "sscd_disc_mixup", version: "onnx-1", vectors: [vector] } },
+      // The same image at PDQ distance 27 (the borderline band), with the
+      // same embedding: a borderline match must carry the analyst score.
+      { id: "fp-border", pdq: borderHash, quality: 100, sscd: { model: "sscd_disc_mixup", version: "onnx-1", vectors: [vector] } },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-sscd", pagePath: "/confirmed.html", imageHost: SSCD_HOST, imagePath: "/img/confirmed.png" },
+    { fingerprintId: "fp-border", pagePath: "/confirmed.html", imageHost: SSCD_HOST, imagePath: "/img/confirmed.png" },
+    { fingerprintId: "fp-sscd", pagePath: "/altered.html", imageHost: SSCD_HOST, imagePath: "/img/variant.png" },
+    { fingerprintId: "fp-border", pagePath: "/altered.html", imageHost: SSCD_HOST, imagePath: "/img/variant.png" },
+  ];
+
+  site.route(SSCD_HOST, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(
+    SSCD_HOST,
+    "/",
+    sendHtml(
+      html(`
+      <h1>Gallery</h1>
+      <a href="/confirmed.html">confirmed</a>
+      <a href="/altered.html">altered</a>
+      <a href="/decoy.html">decoy</a>
+    `),
+    ),
+  );
+  site.route(SSCD_HOST, "/confirmed.html", sendHtml(html(`<img src="/img/confirmed.png" width="640" height="480">`)));
+  site.route(SSCD_HOST, "/altered.html", sendHtml(html(`<img src="/img/variant.png" width="640" height="480">`)));
+  site.route(SSCD_HOST, "/decoy.html", sendHtml(html(`<img src="/img/decoy.png" width="640" height="480">`)));
+  site.route(SSCD_HOST, "/img/confirmed.png", sendBytes(confirmed, "image/png"));
+  site.route(SSCD_HOST, "/img/variant.png", sendBytes(variant, "image/jpeg"));
+  site.route(SSCD_HOST, "/img/decoy.png", sendBytes(decoy, "image/png"));
+
+  return { site, pool, expected, allHashes: [confirmedHash, borderHash], variantPdqDistance, variantSimilarity, decoySimilarity };
+}
+
+/** Hamming distance of two 64-hex PDQ hashes (the matcher's own packing). */
+function hamming(a: string, b: string): number {
+  const wa = new Uint32Array(8);
+  const wb = new Uint32Array(8);
+  packHex(a, wa, 0);
+  packHex(b, wb, 0);
+  let d = 0;
+  for (let i = 0; i < 8; i++) d += popcount32(wa[i]! ^ wb[i]!);
+  return d;
+}

@@ -1,6 +1,7 @@
 import { decryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { crawlMemory } from "@/lib/crawl-store";
+import { sscdEnabled, sscdModelId, sscdModelVersion } from "@/lib/crawler-flags";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
 /*
@@ -23,15 +24,26 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * never qualities or timestamps, never bytes. The crawler indexes the frames
  * (multi-index hashing) and reports a match against the video's pool id
  * exactly like an image match, for human review.
+ *
+ * SSCD embeddings (ADR 008, WP28): while ENABLE_SSCD is on, an image
+ * fingerprint's entry also carries the decrypted embeddings of its
+ * analyst-confirmed copies — { model, version, vectors }, at most 16, under
+ * exactly today's gating. Video entries never carry them, and an image entry
+ * without embeddings keeps the pre-WP28 shape, so nothing changes while the
+ * switch is off.
  */
 
 /** PDQ Hamming distance the crawler may report as a possible match. */
 export const CRAWL_MATCH_THRESHOLD = 31;
 
+/** At most this many embeddings the pool serves per fingerprint (ADR 008). */
+export const MAX_POOL_EMBEDDINGS_PER_FINGERPRINT = 16;
+
 const POOL_STATUSES = ["APPROVED", "DISPATCHED"] as const;
 const PDQ = /^[0-9a-f]{64}$/;
 
-export type CrawlPoolImageEntry = { id: string; pdq: string; quality: number };
+export type CrawlPoolSscd = { model: string; version: string; vectors: number[][] };
+export type CrawlPoolImageEntry = { id: string; pdq: string; quality: number; sscd?: CrawlPoolSscd };
 export type CrawlPoolVideoEntry = { id: string; kind: "video"; frames: string[] };
 export type CrawlPoolEntry = CrawlPoolImageEntry | CrawlPoolVideoEntry;
 export type CrawlPool = { version: string; generatedAt: string; threshold: number; fingerprints: CrawlPoolEntry[] };
@@ -170,9 +182,18 @@ function videoFramesOf(candidate: Candidate & { crawlPoolId: string }): string[]
 export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
   const coverage = await liveCoverage();
   const candidates = await fingerprintsByIds([...new Set([...coverage.values()].flatMap((entry) => [...entry.ids]))]);
+  // inPool is the type guard, so the filter keeps the narrowed non-null pool id.
+  const inPoolCandidates = candidates.filter((candidate): candidate is Candidate & { crawlPoolId: string } => inPool(candidate, coverage));
+  // The second layer's vectors (ADR 008, WP28): only while the switch is on,
+  // and only for the in-pool image fingerprints the crawler may match. The
+  // helper is imported lazily — crawl-embeddings imports resolvePoolFingerprint
+  // from here, and a static edge both ways would make module initialisation
+  // order decide whether the schemas come out whole.
+  const embeddingsBySubmission = sscdEnabled()
+    ? await (await import("@/lib/crawl-embeddings")).poolEmbeddingsForPoolIds(inPoolCandidates.map((candidate) => candidate.id))
+    : new Map<string, number[][]>();
   const fingerprints: CrawlPoolEntry[] = [];
-  for (const candidate of candidates) {
-    if (!inPool(candidate, coverage)) continue;
+  for (const candidate of inPoolCandidates) {
     if (candidate.algorithm === "VPDQ") {
       const frames = videoFramesOf(candidate);
       if (!frames) continue;
@@ -186,12 +207,24 @@ export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
       continue;
     }
     if (!PDQ.test(pdq)) continue;
-    fingerprints.push({ id: candidate.crawlPoolId, pdq, quality: candidate.quality });
+    const vectors = embeddingsBySubmission.get(candidate.id);
+    // An image entry without embeddings keeps the exact pre-WP28 shape.
+    fingerprints.push(vectors
+      ? { id: candidate.crawlPoolId, pdq, quality: candidate.quality, sscd: { model: sscdModelId(), version: sscdModelVersion(), vectors } }
+      : { id: candidate.crawlPoolId, pdq, quality: candidate.quality });
   }
   // Sorted by the random id, so the order says nothing about cases or age.
   fingerprints.sort((a, b) => a.id.localeCompare(b.id));
   const version = sha256(
-    fingerprints.map((f) => ("kind" in f ? `${f.id}:video:${f.frames.join("")}` : `${f.id}:${f.pdq}:${f.quality}`)).join("\n"),
+    fingerprints.map((f) => {
+      if ("kind" in f) return `${f.id}:video:${f.frames.join("")}`;
+      // The version covers the served vectors too, so an embedding added or
+      // removed flips it and the crawler re-syncs (WP28).
+      const base = `${f.id}:${f.pdq}:${f.quality}`;
+      return "sscd" in f && f.sscd
+        ? `${base}:${f.sscd.model}:${f.sscd.version}:${f.sscd.vectors.map((vector) => vector.join(",")).join(";")}`
+        : base;
+    }).join("\n"),
   ).slice(0, 32);
   return { version, generatedAt: now.toISOString(), threshold: CRAWL_MATCH_THRESHOLD, fingerprints };
 }
@@ -199,15 +232,22 @@ export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
 /**
  * The fingerprint behind a pool id, only while it is still in the pool —
  * an image or a video (WP20): a video finding resolves to its video
- * submission like an image finding to its image submission.
+ * submission like an image finding to its image submission. The matched
+ * submission's algorithm is part of the answer so a finding reported without
+ * a method is still labelled VPDQ (ADR 008, WP28).
  * Null for an unknown, withdrawn, erased or no-longer-approved id.
  */
-export async function resolvePoolFingerprint(poolId: string): Promise<{ hashSubmissionId: string; caseId: string; consentId: string } | null> {
+export async function resolvePoolFingerprint(poolId: string): Promise<{ hashSubmissionId: string; caseId: string; consentId: string; algorithm: string } | null> {
   const candidate = await fingerprintByPoolId(poolId);
   if (!candidate) return null;
   const coverage = await liveCoverage([candidate.caseId]);
   if (!inPool(candidate, coverage)) return null;
-  return { hashSubmissionId: candidate.id, caseId: candidate.caseId, consentId: coverage.get(candidate.caseId)!.consentId };
+  return {
+    hashSubmissionId: candidate.id,
+    caseId: candidate.caseId,
+    consentId: coverage.get(candidate.caseId)!.consentId,
+    algorithm: candidate.algorithm,
+  };
 }
 
 /** Whether a fingerprint is still covered by a live authorisation on its case. */

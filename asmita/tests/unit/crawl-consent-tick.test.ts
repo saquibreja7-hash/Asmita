@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   hashUpdateMany: vi.fn(),
   urlUpdateMany: vi.fn(),
   findingDeleteMany: vi.fn(),
+  // WP28 (ADR 008): a withdrawal now deletes the case's SSCD embeddings too.
+  embeddingDeleteMany: vi.fn(),
   pdfInputs: [] as Array<Record<string, unknown>>,
 }));
 
@@ -45,6 +47,7 @@ vi.mock("@/lib/db", () => {
     hashSubmission: { updateMany: mocks.hashUpdateMany },
     submittedUrl: { updateMany: mocks.urlUpdateMany },
     crawlFinding: { deleteMany: mocks.findingDeleteMany },
+    findingEmbedding: { deleteMany: mocks.embeddingDeleteMany },
     $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
   };
   return { db };

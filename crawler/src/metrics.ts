@@ -173,6 +173,25 @@ export class RunMetrics {
    * rest of its rows do. A count only, never a hostname.
    */
   homePermanentFailures = 0;
+  // --- SSCD second layer (WP28). Only reported while ENABLE_SSCD is on
+  // (see summary): counts only, never a vector, a similarity of an
+  // individual image or a model name.
+  /** SSCD inferences run this pass (second layer, borderline scores, seeding). */
+  sscdInferences = 0;
+  /** Second-layer hits above the threshold that became findings. */
+  sscdMatches = 0;
+  /** Images that wanted an SSCD inference past SSCD_MAX_PER_RUN. */
+  sscdSkippedBudget = 0;
+  /** Images on a source outside SSCD_SCOPE that wanted an SSCD inference. */
+  sscdSkippedScope = 0;
+  /** Embedding offers posted to the app. */
+  sscdEmbeddingsPosted = 0;
+  /** Embedding offers the app stored (or already had — idempotent). */
+  sscdEmbeddingsStored = 0;
+  /** Embedding offers the app refused (not confirmed, wrong model, ...). */
+  sscdEmbeddingsRejected = 0;
+  /** Embedding offers still undelivered at exit. */
+  sscdEmbeddingsUnsent = 0;
 
   constructor(now: number = Date.now()) {
     this.startedAt = now;
@@ -188,8 +207,8 @@ export class RunMetrics {
     if (cls !== null) this.failures[cls]++;
   }
 
-  summary(opts: { now?: number; budgetPages: number; budgetImages: number; outcome: string }): Record<string, number | string | Record<string, number>> {
-    return {
+  summary(opts: { now?: number; budgetPages: number; budgetImages: number; outcome: string; sscd?: boolean }): Record<string, number | string | Record<string, number>> {
+    const base: Record<string, number | string | Record<string, number>> = {
       outcome: opts.outcome,
       durationMs: (opts.now ?? Date.now()) - this.startedAt,
       sourcesCrawled: this.sourcesCrawled,
@@ -250,5 +269,19 @@ export class RunMetrics {
       budgetImagesUsed: this.imagesSeen,
       budgetImages: opts.budgetImages,
     };
+    // WP28: the SSCD counters exist in the summary only while the second
+    // layer is on — switched off, the log line is byte-for-byte what it
+    // always was ("nothing changes when off"). Counts only (rule 3).
+    if (opts.sscd) {
+      base.sscdInferences = this.sscdInferences;
+      base.sscdMatches = this.sscdMatches;
+      base.sscdSkippedBudget = this.sscdSkippedBudget;
+      base.sscdSkippedScope = this.sscdSkippedScope;
+      base.sscdEmbeddingsPosted = this.sscdEmbeddingsPosted;
+      base.sscdEmbeddingsStored = this.sscdEmbeddingsStored;
+      base.sscdEmbeddingsRejected = this.sscdEmbeddingsRejected;
+      base.sscdEmbeddingsUnsent = this.sscdEmbeddingsUnsent;
+    }
+    return base;
   }
 }

@@ -181,6 +181,29 @@ export function randomFingerprint(seed: number): string {
   return hex;
 }
 
+/**
+ * Test-only stand-in for the isolated SSCD child (WP28): a deterministic,
+ * coarse descriptor of the image — a 4x4 greyscale grid, centred and
+ * L2-normalised — chosen because it survives the fixture's planted
+ * alterations (a mild crop, a colour filter, a JPEG re-encode) by
+ * construction while separating unrelated images, so the second layer's
+ * pipeline can be proven without the model weights. The real model's
+ * behaviour is measured by scripts/eval-sscd.ts, not by this function.
+ */
+export async function fakeSscdEmbed(bytes: Buffer): Promise<number[]> {
+  const { data } = await sharp(bytes)
+    .flatten({ background: "black" })
+    .greyscale()
+    .resize(4, 4, { fit: "fill" })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const px = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  const v: number[] = [];
+  for (const p of px) v.push(p / 255 - 0.5);
+  const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0)) || 1;
+  return v.map((x) => Math.round((x / norm) * 1e6) / 1e6);
+}
+
 /** Flip `bits` distinct bits of a hex fingerprint (deterministically). */
 export function flipBits(hex: string, bits: number, seed = 7): string {
   const bytes = Buffer.from(hex, "hex");
