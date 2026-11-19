@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { provenanceCheckEnabled } from "@/lib/dev-flags";
+import { THORN_DEEPFAKE_SURVEY_URL } from "@/lib/ai-image-research";
 import { ImageChecker } from "./ImageChecker";
 
 export default async function CheckImagePage() {
@@ -22,6 +23,15 @@ export default async function CheckImagePage() {
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               {t(locale, "check.hero.sub")}
+            </p>
+            <p className="mx-auto mt-5 max-w-lg text-base leading-[1.7] text-[var(--ink)]">
+              {t(locale, "check.hero.report")}
+            </p>
+            <p className="muted mx-auto mt-4 max-w-md text-xs leading-[1.7]">
+              {t(locale, "check.research.line")}{" "}
+              <a className="text-link" href={THORN_DEEPFAKE_SURVEY_URL} target="_blank" rel="noopener noreferrer">
+                {t(locale, "check.research.read")} <span aria-hidden>↗</span>
+              </a>
             </p>
           </div>
           <Illustration name="page-check-image" eager className="page-hero-art" />

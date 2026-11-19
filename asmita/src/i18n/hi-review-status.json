@@ -15,7 +15,7 @@
     "Platform-specific reporting notes in /resources - references English-language UIs"
   ],
   "machineTranslated": {
-    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request",
+    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request; the WP35 batch (check.hero.report, check.research.line, check.research.read and the reworded check.result.noneFound.body, check.deep.result.none.body, check.disclaimer, plus the deepfakes issue-page strings) machine translated by Hermes (GLM 5.3), 2026-11-19",
     "keys": [
       "talk.*",
       "privacy.s08.i5.*",
@@ -86,12 +86,19 @@
       "submit.hash.fileLabel",
       "submit.hash.fileHint",
       "review.fingerprints.videoItem",
-      "review.fingerprints.video"
+      "review.fingerprints.video",
+      "check.hero.report",
+      "check.research.line",
+      "check.research.read",
+      "check.result.noneFound.body",
+      "check.deep.result.none.body",
+      "check.disclaimer"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
       "about page Sarvam line",
-      "footer helpline label"
+      "footer helpline label",
+      "deepfakes issue page definition, what-you-can-do and research line (issue-content-hi.ts, WP35)"
     ]
   },
   "pendingNativeReview": {

@@ -433,3 +433,43 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+## Thorn-inspired
+
+Owner decisions, 19 November 2026 (Saquib), from research into Thorn's published work. Copy no Thorn text or code except where a licence is stated; everything below is written in our own words. Thorn's research is cited by name and link only.
+
+### WP35. Wording on the "Is this image AI-made?" page (app) — 2026-11-19
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+**What was built**
+
+- `/check-image` now tells her, directly under the hero subtitle and above the tool: an image of her made or edited by AI "can be reported exactly like a real one, and you will be believed. Fake images of you are abuse." New key `check.hero.report` (en + hi), rendered with the page's existing text styles — no new cards, no coloured left-border stripes.
+- One research line follows it (new keys `check.research.line`, `check.research.read`): "One US survey — Thorn's 'Deepfake Nudes & Young People' (2025) — found that about 1 in 17 young people surveyed had deepfake nudes made of them." It is always labelled a US survey, and "Read the survey" links to https://www.thorn.org/research/library/deepfake-nudes-and-young-people/ . The URL lives once, in `asmita/src/lib/ai-image-research.ts`. No other statistic was added anywhere, and the line never presents the figure as Indian data.
+- Check results no longer verdict an image. `check.result.noneFound.body` dropped "this does not mean the image is genuine ... a real-looking image" and now states only what was not found ("This file does not carry any AI credential — that is all this result says ..."); `check.deep.result.none.body` dropped "this does not mean the image is genuine" the same way; `check.disclaimer` replaced "a clear result here is not legal proof ... a fake or AI-made image" with "what it finds is not legal proof ... an AI-made or edited image of you". All three were reworded in Hindi to match. The found-signal strings already described only what was found and are unchanged in both languages.
+- The deepfakes issue page (`/issue/deepfakes`, which carries the same message) received the same three parts: its definition now says "A fake image of you is abuse — you can report it exactly like a real one, and you will be believed" (replacing "The image is not real, but the harm is"), its "What you can do" card says a report works exactly as for any other image, and the one research line renders under the definition through a new optional `research` field on `IssueTopic` — only the deepfakes topic sets it (`issue-content.ts`, `issue-content-hi.ts`).
+- Victim-blame review: every `check.*` string and all deepfakes topic copy were scanned for "don't share nudes"-style advice; none existed, so no line had to be removed. The one "do not upload" line is the under-18 gate, which routes to `/minor-support` and stays (root CLAUDE.md: minors never reach the case flow).
+- Hindi: all new and reworded survivor strings are in `hi.json` and `issue-content-hi.ts` and are listed in `hi-review-status.json` — the six keys in `machineTranslated.keys`, the issue-page strings in `machineTranslated.inline`, and this batch's translator in `by`. Machine translated; no native review yet.
+
+**Decisions, recorded per the standing rule**
+
+- The one research line appears on both in-scope pages in identical wording. The WP's bullets govern "these pages"; the deepfakes page carries the same abuse-and-report message, and a statistic about deepfake nudes belongs on it. Each page still carries exactly one research line and that one statistic.
+- The statistic is linked, not pasted as a raw URL: the line keeps the full attribution ("Thorn's ... (2025)") and a "Read the survey" link carries the URL — the site's established external-link pattern (`target="_blank" rel="noopener noreferrer"`, as on /get-help). Thorn's published work is cited by name and link only; no text was copied from it.
+- "Near the top" is the hero on `/check-image` (above the age gate and the tool) and the definition paragraph on the deepfakes page — the first survivor-facing text each page shows.
+- The never-real-or-fake rule was applied to the checker's result strings (`check.result.*`, `check.deep.result.*`, `check.deep.limitation`), which the new test scans in both languages. The required "report it exactly like a real one" message keeps the word "real" (it compares how she can report; it does not verdict an image), and the deepfakes definition keeps "the harm done to you is real" — about the harm, not the image.
+- `issueContentHi` is now typed `Record<slug, Omit<IssueTopic, "slug">>` (it was an untyped `as const` object) so the template's optional `research` access type-checks; rendering is unchanged for the topics without research copy.
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/ai-image-copy.test.ts` — 11 tests: the report-believe-abuse line in both languages; the one research line (US-survey label, Thorn attribution, 1 in 17, the link constant, only those numbers in the line, never presented as India); every result string verdict-free in both languages; no blame-pattern advice in any `check.*` string or the deepfakes topic in either language; the under-18 line stays safe routing; the machine-translation listing; the deepfakes page carries the same message and research line with the same URL; only that topic has research copy; and no other statistic appears anywhere on the deepfakes page.
+- No existing test asserted the replaced copy — the suites were searched for the old phrases ("genuine", "real-looking", "clear result", the old definition) and none appear; the `/check-image` e2e journey (`hash-flow.spec.ts`) asserts only the age gate and the file picker, which are unchanged. The i18n key-parity test covers the new keys.
+- Package totals from the final `check.sh` run (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source touched; re-confirmed green). `asmita` — lint 0 errors (4 pre-existing warnings, all in untouched files), type-check clean, `prisma validate` ok, 153 test files / 1261 tests all passed. The asmita production build was also run and passed (not a `check.sh` gate; done to prove the two changed pages compile).
+
+**Not done or not verified**
+
+- The Hindi strings are machine translated and listed as such; no native speaker has read them. The pages were verified by the unit tests on the copy, by type-check and by the production build; no browser run (dev server, Playwright, e2e) was made in this WP — e2e is not part of `check.sh`, and the `/check-image` journey's assertions are untouched by the copy change.
+- Copy on other pages that also mentions AI-made images (home, /get-help triage, FAQ, who-we-help, chat) was deliberately left alone: the WP names the check-image page, its shared copy and the deepfakes page. What those pages already say ("A fake image is still abuse", "Asmita treats synthetic intimate images the same as real ones") agrees with the new wording, so the site does not contradict itself.
+- No crawler behaviour, config or migration changed, so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval).
+
+**Deviations from the spec, with reasons**
+
+- None beyond the decisions above: every change sits inside the WP's named pages (check-image, the copy it shares, the deepfakes issue page), and nothing outside that scope was touched.
