@@ -318,15 +318,15 @@ describe("crawl order (WP11), Kysely path", () => {
   });
 });
 
-describe("canonical aliases, Kysely path (WP10)", () => {
-  it("kills live rows for the alias digests and inserts dead tombstones, never a live alias row", async () => {
+describe("canonical aliases, Kysely path (WP10, review fix)", () => {
+  it("retires only never-fetched, non-seed rows for the alias digests and inserts no placeholder", async () => {
     kysely.state.rows.CrawlPage = [
       pageRow({ id: "page-1", urlDigest: "d-1" }),
-      pageRow({ id: "page-2", urlDigest: "d-2", urlEncrypted: encryptField("https://k.example/twin") }),
+      pageRow({ id: "page-2", urlDigest: "d-2", urlEncrypted: encryptField("https://k.example/other-page") }),
     ];
     // /dupe names /twin (in its trailing-slash form, so the same digest) as
-    // its canonical; /twin is also linked in the same report and must never
-    // become a live row.
+    // its canonical; /twin is also linked in the same report and is not
+    // stored as a new row.
     const twinDigest = crawlPageDigest(SOURCE.id, "https://k.example/twin");
     const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
       {
@@ -340,25 +340,37 @@ describe("canonical aliases, Kysely path (WP10)", () => {
       { id: "page-2", status: "fetched", links: [] },
     ], NOW);
     expect(accepted).toBe(2);
-    // The kill: one update, DEAD, by digest, live rows only.
+    // The retirement: one update, DEAD, by digest, and only for rows that
+    // were never fetched and are not a depth-0 seed.
     const kill = callsOn("CrawlPage").find((call) => call.op === "update" && (call.detail.set as Record<string, unknown>).status === "DEAD");
     expect(kill).toBeDefined();
     expect(kill!.detail.wheres).toEqual(expect.arrayContaining([
       ["urlDigest", "in", [twinDigest]],
       ["status", "not in", ["DEAD", "GONE"]],
+      ["lastFetchedAt", "is", null],
+      ["depth", ">", 0],
     ]));
     expect((kill!.detail.set as Record<string, unknown>).claimedUntil).toBeNull();
-    // The insert carries the live /other link and the dead tombstone; the
-    // alias's own link never made it in.
+    // The insert carries only the live /other link: no placeholder row for
+    // the alias, and the alias's own link never made it in.
     const inserts = callsOn("CrawlPage").filter((call) => call.op === "insert");
     expect(inserts).toHaveLength(1);
     const rows = inserts[0]!.detail.values as Array<Record<string, unknown>>;
-    expect(rows).toHaveLength(2);
-    const tombstone = rows.find((r) => r.urlDigest === twinDigest)!;
-    expect(tombstone).toMatchObject({ status: "DEAD", kind: "PAGE", depth: 0 });
-    expect(tombstone.nextDueAt).toEqual(NOW);
-    const other = rows.find((r) => r.urlDigest === crawlPageDigest(SOURCE.id, "https://k.example/other"))!;
-    expect(other).toMatchObject({ status: "PENDING", depth: 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ urlDigest: crawlPageDigest(SOURCE.id, "https://k.example/other"), status: "PENDING", depth: 1, viaPagination: false });
+  });
+
+  it("ignores the aliases of a page reached via pagination, and stores pagination links as such", async () => {
+    kysely.state.rows.CrawlPage = [pageRow({ id: "page-1", urlDigest: "d-1", depth: 1, viaPagination: true })];
+    await reportCrawlPages(SOURCE.id, "run-1", [
+      {
+        id: "page-1", status: "fetched", aliases: ["https://k.example/list"],
+        links: [{ url: "https://k.example/list?page=3", kind: "page", pagination: true }],
+      },
+    ], NOW);
+    expect(callsOn("CrawlPage").filter((call) => call.op === "update" && (call.detail.set as Record<string, unknown>).status === "DEAD")).toHaveLength(0);
+    const inserts = callsOn("CrawlPage").filter((call) => call.op === "insert");
+    expect((inserts[0]!.detail.values as Array<Record<string, unknown>>)[0]).toMatchObject({ viaPagination: true, priority: 30 });
   });
 
   it("reads the claimed rows' digests (the self-alias check needs them)", async () => {

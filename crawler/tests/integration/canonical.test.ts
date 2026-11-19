@@ -2,10 +2,10 @@
  * Crawler v3 WP10, the "done when" fixture: a site that links the same page
  * in four forms — http/https, www./bare host, a trailing slash and a final
  * /index.html — shows one fetch, and a fetched page's <link rel="canonical">
- * is reported as an alias the app acts on: the alias's live row is killed
- * and an alias without a row gets a digest-only dead tombstone, so the
- * canonical address is never fetched (and never fetched just because it is
- * canonical). A self-referencing canonical and an off-scope canonical are
+ * is reported as an alias the app acts on (review fix): a row for it that
+ * was already fetched is never killed, and an alias without a row inserts
+ * no placeholder but keeps its link in the same report from becoming a row,
+ * so the canonical address is never fetched just because it is canonical. A self-referencing canonical and an off-scope canonical are
  * reported as nothing, and the off-scope host is never contacted and never
  * a discovery.
  */
@@ -84,24 +84,28 @@ describe("count the same page once (WP10)", () => {
     expect(targetRow.url).toBe(`http://${CANON_HOST}:${fx.site.port}/target`);
     expect(targetRow.status).toBe("FETCHED");
     expect(first.summary.pagesFetched).toBe(8); // home + the seven depth-1 pages
-    expect(second.summary.pagesFetched).toBe(7); // the revisit: no alias row among them
+    // The revisit: all eight again — the canonical target /real-page was
+    // fetched before its alias arrived, so the alias no longer kills it
+    // (review fix: an alias never kills a fetched row).
+    expect(second.summary.pagesFetched).toBe(8);
   });
 
-  it("reports the in-scope canonical as an alias and the app never fetches it again", () => {
-    // Exactly the two in-scope aliases were reported: the killed live row
-    // (/real-page, claimed with the reporting page's own batch) and the
-    // late twin (no row yet; its link arrived in the same report).
+  it("reports the in-scope canonical as an alias; a fetched target survives, an unseen one is never fetched", () => {
+    // Exactly the two in-scope aliases were reported: /real-page (claimed
+    // with the reporting page's own batch and fetched) and the late twin
+    // (no row yet; its link arrived in the same report).
     expect(new Set(api.reportedAliases.map((a) => a.url))).toEqual(
       new Set([`http://${CANON_HOST}:${fx.site.port}${CANON_KILLED_PATH}`, `http://${CANON_HOST}:${fx.site.port}${CANON_LATE_PATH}`]),
     );
-    // The killed row: fetched once (it was already claimed), dead from the
-    // alias on, and never due again.
-    expect(pathCount(CANON_KILLED_PATH)).toBe(1);
-    expect(rowByPath(CANON_KILLED_PATH)!.status).toBe("DEAD");
-    // The late twin: its only row is the dead tombstone, so it was never
-    // fetched at all, before or after the second run.
+    // Review fix: the target row was fetched, so the alias leaves it alone —
+    // it stays live and is revisited like any page (once per run).
+    expect(pathCount(CANON_KILLED_PATH)).toBe(2);
+    expect(rowByPath(CANON_KILLED_PATH)!.status).toBe("FETCHED");
+    // The late twin: no placeholder row, and its link in the same report as
+    // its alias was never stored, so it was never fetched in either run.
     expect(fx.site.requests.filter((r) => r.path === CANON_LATE_PATH)).toHaveLength(0);
-    expect([...api.pages.values()].filter((r) => r.url.endsWith(CANON_LATE_PATH)).every((r) => r.status === "DEAD")).toBe(true);
+    expect([...api.pages.values()].filter((r) => r.url.endsWith(CANON_LATE_PATH))).toHaveLength(0);
+    expect([...api.pages.values()].filter((r) => r.status === "DEAD")).toHaveLength(0);
   });
 
   it("a self-referencing canonical is no alias; an off-scope canonical is reported as nothing", () => {

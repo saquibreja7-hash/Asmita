@@ -122,6 +122,8 @@ type MockPage = {
   urlDigest: string;
   depth: number;
   priority: number;
+  /** Stored from a pagination link (review fix: its canonical aliases are ignored). */
+  viaPagination: boolean;
   etag: string | null;
   lastModified: string | null;
   status: "PENDING" | "FETCHED" | "NOT_MODIFIED" | "GONE" | "BLOCKED" | "ERROR" | "DEAD";
@@ -289,16 +291,15 @@ export class MockAsmita {
     this.insertPage(sourceId, url, depth);
   }
 
-  private insertPage(sourceId: string, url: string, depth: number, status: "PENDING" | "DEAD" = "PENDING", priority: number = PRIORITY_DEFAULT): void {
+  private insertPage(sourceId: string, url: string, depth: number, priority: number = PRIORITY_DEFAULT, viaPagination = false): void {
     const digest = this.digest(sourceId, url);
     if (digest === null) return;
     if (this.rowsOf(sourceId).some((p) => p.urlDigest === digest)) return;
     this.idCounter += 1;
     const id = `page-${this.idCounter}`;
-    const now = this.now();
     this.pages.set(id, {
-      id, sourceId, url, urlDigest: digest, depth, priority, etag: null, lastModified: null,
-      status, claimedUntil: null, lastFetchedAt: null, nextDueAt: status === "DEAD" ? now : 0, failCount: 0,
+      id, sourceId, url, urlDigest: digest, depth, priority, viaPagination, etag: null, lastModified: null,
+      status: "PENDING", claimedUntil: null, lastFetchedAt: null, nextDueAt: 0, failCount: 0,
     });
   }
 
@@ -358,8 +359,10 @@ export class MockAsmita {
       .map((raw) => ({ raw, parsed: ServerReportPage.safeParse(raw) }))
       .filter((p): p is { raw: unknown; parsed: { success: true; data: z.infer<typeof ServerReportPage> } } => p.parsed.success)
       .map((p) => p.parsed.data);
-    // Pass 1: the aliases (WP10). They win over links; a live row for one
-    // is killed, an alias without a row gets a digest-only dead tombstone.
+    // Pass 1: the aliases (WP10, review fix). They win over links: a row
+    // for one that was never fetched and is not a seed is retired; a fetched
+    // row or a seed is never touched, no placeholder row is inserted, and a
+    // page reached via pagination has its aliases ignored.
     const aliasDigests = new Set<string>();
     for (const entry of checkedPages) {
       const row = this.pages.get(entry.id);
@@ -368,13 +371,19 @@ export class MockAsmita {
         if (acceptable(raw) === null) continue;
         const digest = this.digest(sourceId, raw);
         if (digest === null || digest === row.urlDigest || aliasDigests.has(digest)) continue;
-        aliasDigests.add(digest);
-        this.insertPage(sourceId, raw, row.depth, "DEAD"); // tombstone when no row exists
         this.reportedAliases.push({ sourceId, pageId: entry.id, url: raw });
+        if (row.viaPagination) continue;
+        aliasDigests.add(digest);
       }
+    }
+    // A row this report moves was just visited: never an alias victim.
+    for (const entry of checkedPages) {
+      const row = this.pages.get(entry.id);
+      if (row && row.sourceId === sourceId) aliasDigests.delete(row.urlDigest);
     }
     for (const row of this.rowsOf(sourceId)) {
       if (!aliasDigests.has(row.urlDigest)) continue;
+      if (row.lastFetchedAt !== null || row.depth === 0) continue;
       if (row.status !== "DEAD" && row.status !== "GONE") {
         row.status = "DEAD";
         row.nextDueAt = now;
@@ -433,7 +442,7 @@ export class MockAsmita {
         if (acceptable(link.url) === null) continue; // the app's in-scope and shape check
         const digest = this.digest(sourceId, link.url);
         if (digest !== null && aliasDigests.has(digest)) continue; // an alias is never a live row
-        this.insertPage(sourceId, link.url, row.depth + 1, "PENDING", linkPriority(link, row.depth + 1));
+        this.insertPage(sourceId, link.url, row.depth + 1, linkPriority(link, row.depth + 1), link.pagination === true);
         if (digest !== null && link.lastmod !== undefined && !lastmodByDigest.has(digest)) {
           lastmodByDigest.set(digest, Date.parse(link.lastmod));
         }

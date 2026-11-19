@@ -295,15 +295,15 @@ describe("crawl order (WP11), Prisma path", () => {
   });
 });
 
-describe("canonical aliases, Prisma path (WP10)", () => {
-  it("kills live rows for the alias digests and inserts dead tombstones, never a live alias row", async () => {
+describe("canonical aliases, Prisma path (WP10, review fix)", () => {
+  it("retires only never-fetched, non-seed rows for the alias digests and inserts no placeholder", async () => {
     db.crawlPage.findMany.mockResolvedValue([
       { ...CURRENT_ROW, id: "page-1", urlDigest: "d-1" },
       { ...CURRENT_ROW, id: "page-2", urlDigest: "d-2", depth: 0 },
     ]);
     // /dupe names /twin (trailing-slash form: the same digest after the
     // WP10 normalisation) as its canonical; /twin is also linked in the same
-    // report and must never become a live row.
+    // report and is not stored as a new row.
     const twinDigest = crawlPageDigest(SOURCE.id, "https://k.example/twin");
     const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
       {
@@ -318,17 +318,26 @@ describe("canonical aliases, Prisma path (WP10)", () => {
     ], NOW);
     expect(accepted).toBe(2);
     expect(db.crawlPage.updateMany).toHaveBeenCalledWith({
-      where: { sourceId: SOURCE.id, urlDigest: { in: [twinDigest] }, status: { notIn: ["DEAD", "GONE"] } },
+      where: {
+        sourceId: SOURCE.id, urlDigest: { in: [twinDigest] }, status: { notIn: ["DEAD", "GONE"] },
+        lastFetchedAt: null, depth: { gt: 0 },
+      },
       data: { status: "DEAD", nextDueAt: NOW, claimedUntil: null },
     });
     expect(db.crawlPage.createMany).toHaveBeenCalledTimes(1);
     const data = db.crawlPage.createMany.mock.calls[0]![0].data as Array<Record<string, unknown>>;
-    expect(data).toHaveLength(2);
-    const tombstone = data.find((r) => r.urlDigest === twinDigest)!;
-    expect(tombstone).toMatchObject({ status: "DEAD", kind: "PAGE", depth: 0, nextDueAt: NOW });
-    const other = data.find((r) => r.urlDigest === crawlPageDigest(SOURCE.id, "https://k.example/other"))!;
-    expect(other).toMatchObject({ status: "PENDING", depth: 1 });
+    expect(data).toHaveLength(1); // the /other link only: no placeholder, no alias link
+    expect(data[0]).toMatchObject({ urlDigest: crawlPageDigest(SOURCE.id, "https://k.example/other"), status: "PENDING", depth: 1, viaPagination: false });
     expect(db.crawlPage.createMany).toHaveBeenCalledWith({ data: expect.any(Array), skipDuplicates: true });
+  });
+
+  it("ignores the aliases of a page reached via pagination", async () => {
+    db.crawlPage.findMany.mockResolvedValue([{ ...CURRENT_ROW, id: "page-1", urlDigest: "d-1", depth: 1, viaPagination: true }]);
+    await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", aliases: ["https://k.example/list"], links: [] },
+    ], NOW);
+    expect(db.crawlPage.updateMany).not.toHaveBeenCalled();
+    expect(db.crawlPage.createMany).not.toHaveBeenCalled();
   });
 
   it("a self-alias kills and stores nothing", async () => {

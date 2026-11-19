@@ -558,48 +558,95 @@ describe("page key (WP10)", () => {
   });
 });
 
-describe("canonical aliases (WP10)", () => {
-  it("kills the live row of an in-scope alias; the address is never handed out again", async () => {
+describe("canonical aliases (WP10, review fix)", () => {
+  // Review fix: an alias retires only a row that was never fetched and is
+  // not a depth-0 seed; it never kills a fetched row or a seed, never
+  // inserts a placeholder row, and is ignored when the reporting page was
+  // reached via pagination.
+  const rowOf = (url: string) => [...crawlMemory().pages.values()].filter((r) => r.urlDigest === crawlPageDigest(sourceId, url));
+
+  async function seedWithLinks(links: Array<{ url: string; kind: "page"; pagination?: boolean }>) {
     const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
+    await reportCrawlPages(sourceId, "run-1", [{ id: seed[0]!.id, status: "fetched", links }], nowAt(1 * MIN));
+    return seed[0]!;
+  }
+
+  it("retires a never-fetched alias row; a later link in another spelling adds no row", async () => {
+    await seedWithLinks([
+      { url: "https://forum.example.com/dupe", kind: "page" },
+      { url: "https://forum.example.com/twin", kind: "page" },
+    ]);
+    const batch = await claimCrawlPages(sourceId, 1, nowAt(2 * MIN)); // only /dupe goes out
+    const dupe = batch[0]!;
+    expect(dupe.url.endsWith("/dupe") || dupe.url.endsWith("/twin")).toBe(true);
+    const other = dupe.url.endsWith("/dupe") ? "https://forum.example.com/twin" : "https://forum.example.com/dupe";
+    // The fetched page names the other one (trailing-slash form) as canonical.
+    await reportCrawlPages(sourceId, "run-1", [{ id: dupe.id, status: "fetched", aliases: [`${other}/`], links: [] }], nowAt(3 * MIN));
+    const otherRows = rowOf(other);
+    expect(otherRows).toHaveLength(1);
+    expect(otherRows[0]!.status).toBe("DEAD"); // never fetched, depth 1: retired
+    // A later link in another spelling neither adds a row nor revives it.
     await reportCrawlPages(sourceId, "run-1", [
-      { id: seed[0]!.id, status: "fetched", links: [
-        { url: "https://forum.example.com/dupe", kind: "page" },
-        { url: "https://forum.example.com/twin", kind: "page" },
-      ] },
-    ], nowAt(1 * MIN));
+      { id: dupe.id, status: "fetched", links: [{ url: other.replace("https://", "https://www.") + "/index.html", kind: "page" }] },
+    ], nowAt(31 * DAY));
+    expect(rowOf(other)).toHaveLength(1);
+    expect(rowOf(other)[0]!.status).toBe("DEAD");
+  });
+
+  it("never kills a row that has been fetched, even in the same report", async () => {
+    await seedWithLinks([
+      { url: "https://forum.example.com/dupe", kind: "page" },
+      { url: "https://forum.example.com/twin", kind: "page" },
+    ]);
     const batch = await claimCrawlPages(sourceId, 10, nowAt(2 * MIN));
-    expect(batch).toHaveLength(2);
     const dupe = batch.find((b) => b.url.endsWith("/dupe"))!;
     const twin = batch.find((b) => b.url.endsWith("/twin"))!;
-    // /dupe names /twin (in its trailing-slash form) as its canonical.
+    // Same report: the twin is visited, so it is no alias victim.
     await reportCrawlPages(sourceId, "run-1", [
       { id: dupe.id, status: "fetched", aliases: ["https://forum.example.com/twin/"], links: [] },
       { id: twin.id, status: "fetched", links: [] },
     ], nowAt(3 * MIN));
-    const twinDigest = crawlPageDigest(sourceId, "https://forum.example.com/twin")!;
-    const twinRow = [...crawlMemory().pages.values()].find((r) => r.urlDigest === twinDigest)!;
-    expect(twinRow.status).toBe("DEAD"); // killed even though this same report fetched it
-    expect(twinRow.claimedUntil).toBeNull();
-    // Never due again (the dupe page itself is scheduled 24 h out, so nothing
-    // is due for the rest of the day), whatever spelling a later link uses.
-    expect(await claimCrawlPages(sourceId, 10, nowAt(4 * MIN))).toEqual([]);
-    const again = await reportCrawlPages(sourceId, "run-1", [
-      { id: dupe.id, status: "fetched", aliases: ["https://forum.example.com/twin/index.html"], links: [{ url: "https://www.forum.example.com/twin", kind: "page" }] },
-    ], nowAt(31 * DAY));
-    expect(again.accepted).toBe(1); // the dupe page itself moved on
-    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === twinDigest)).toHaveLength(1); // one row, still dead
-    expect(crawlMemory().pages.get(dupe.id)!.status).toBe("FETCHED");
+    expect(crawlMemory().pages.get(twin.id)!.status).toBe("FETCHED");
+    // A later report: the twin was fetched before, so it still stands.
+    await reportCrawlPages(sourceId, "run-2", [
+      { id: dupe.id, status: "fetched", aliases: ["https://forum.example.com/twin"], links: [] },
+    ], nowAt(1 * DAY + 3 * MIN));
+    expect(crawlMemory().pages.get(twin.id)!.status).toBe("FETCHED");
   });
 
-  it("tombstones an alias that has no row: its link in the same report is swallowed", async () => {
-    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
-    await reportCrawlPages(sourceId, "run-1", [
-      { id: seed[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/canon-page", kind: "page" }] },
-    ], nowAt(1 * MIN));
+  it("a site-wide canonical to the home page never kills the seed", async () => {
+    const seed = await seedWithLinks([{ url: "https://forum.example.com/thread", kind: "page" }]);
     const batch = await claimCrawlPages(sourceId, 10, nowAt(2 * MIN));
-    expect(batch).toHaveLength(1);
-    // The page's canonical target is also reported as a link by another page
-    // in the same report (the fixture's late twin): the alias wins.
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: batch[0]!.id, status: "fetched", aliases: ["https://www.forum.example.com/"], links: [] },
+    ], nowAt(3 * MIN));
+    expect(crawlMemory().pages.get(seed.id)!.status).toBe("FETCHED");
+    // The seed is due again tomorrow like any fetched page.
+    expect((await claimCrawlPages(sourceId, 10, nowAt(1 * DAY + 2 * MIN))).map((b) => b.id)).toContain(seed.id);
+  });
+
+  it("paginated pages naming page 1 as canonical never retire page 1", async () => {
+    // The seed links the listing and its page 2 (a pagination link); page 2
+    // is claimed and fetched first (pagination runs before plain pages).
+    await seedWithLinks([
+      { url: "https://forum.example.com/list", kind: "page" },
+      { url: "https://forum.example.com/list?page=2", kind: "page", pagination: true },
+    ]);
+    const first = await claimCrawlPages(sourceId, 1, nowAt(2 * MIN));
+    expect(first[0]!.url).toBe("https://forum.example.com/list?page=2");
+    await reportCrawlPages(sourceId, "run-1", [
+      { id: first[0]!.id, status: "fetched", aliases: ["https://forum.example.com/list"], links: [] },
+    ], nowAt(3 * MIN));
+    const listRows = rowOf("https://forum.example.com/list");
+    expect(listRows).toHaveLength(1);
+    expect(listRows[0]!.status).toBe("PENDING"); // never fetched yet, still not retired
+    const next = await claimCrawlPages(sourceId, 10, nowAt(4 * MIN));
+    expect(next.map((b) => b.url)).toEqual(["https://forum.example.com/list"]);
+  });
+
+  it("an alias without a row inserts nothing; its link in the same report is not stored", async () => {
+    await seedWithLinks([{ url: "https://forum.example.com/canon-page", kind: "page" }]);
+    const batch = await claimCrawlPages(sourceId, 10, nowAt(2 * MIN));
     await reportCrawlPages(sourceId, "run-1", [
       {
         id: batch[0]!.id,
@@ -611,40 +658,11 @@ describe("canonical aliases (WP10)", () => {
         ],
       },
     ], nowAt(3 * MIN));
-    const lateDigest = crawlPageDigest(sourceId, "https://forum.example.com/late-twin")!;
-    const lateRows = [...crawlMemory().pages.values()].filter((r) => r.urlDigest === lateDigest);
-    expect(lateRows).toHaveLength(1);
-    expect(lateRows[0]!.status).toBe("DEAD"); // the digest-only tombstone
-    // The live link beside it was stored, the alias was not.
-    const real = [...crawlMemory().pages.values()].find((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/real-content"));
-    expect(real).toBeDefined();
-    expect(real!.status).toBe("PENDING");
-    // The tombstone is dead, never due: it leaves with the retention sweep
-    // (the other rows are due and stay).
-    expect(await purgeExpiredCrawlPages(nowAt(35 * DAY))).toBe(1);
+    expect(rowOf("https://forum.example.com/late-twin")).toHaveLength(0); // no placeholder row
+    const real = rowOf("https://forum.example.com/real-content");
+    expect(real).toHaveLength(1);
+    expect(real[0]!.status).toBe("PENDING");
     expect([...crawlMemory().pages.values()].filter((r) => r.status === "DEAD")).toHaveLength(0);
-  });
-
-  it("a later link to a tombstoned alias never becomes a live row", async () => {
-    const seed = await claimCrawlPages(sourceId, 10, nowAt(0));
-    await reportCrawlPages(sourceId, "run-1", [
-      { id: seed[0]!.id, status: "fetched", aliases: ["https://forum.example.com/never-fetch"], links: [] },
-    ], nowAt(1 * MIN));
-    const digest = crawlPageDigest(sourceId, "https://forum.example.com/never-fetch")!;
-    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === digest)).toHaveLength(1);
-    const second = await createSource("second-forum.example.com", 10);
-    // A different source is unaffected: the digest is per source.
-    const otherSeed = await claimCrawlPages(second, 10, nowAt(2 * MIN));
-    await reportCrawlPages(second, "run-1", [
-      { id: otherSeed[0]!.id, status: "fetched", links: [{ url: "https://second-forum.example.com/never-fetch", kind: "page" }] },
-    ], nowAt(3 * MIN));
-    expect((await claimCrawlPages(second, 10, nowAt(4 * MIN))).length).toBe(1);
-    // On this source a page now links the same address: no live row appears.
-    await reportCrawlPages(sourceId, "run-2", [
-      { id: seed[0]!.id, status: "fetched", links: [{ url: "https://forum.example.com/never-fetch/index.php", kind: "page" }] },
-    ], nowAt(5 * MIN));
-    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === digest)).toHaveLength(1);
-    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === digest)[0]!.status).toBe("DEAD");
   });
 
   it("ignores self-aliases, off-scope aliases and malformed ones", async () => {
@@ -683,12 +701,12 @@ describe("canonical aliases (WP10)", () => {
     }
     expect(crawlMemory().pages.get(id)!.status).toBe("DEAD");
     // A late report of the dead row — with an alias, as a retry might carry —
-    // changes nothing: no row is scheduled, no tombstone is stored.
+    // changes nothing: no row is scheduled, nothing is stored.
     const late = await reportCrawlPages(sourceId, "run-1", [
       { id, status: "fetched", aliases: ["https://forum.example.com/after-dead"], links: [] },
     ], nowAt(3 * DAY));
     expect(late.accepted).toBe(0);
-    expect([...crawlMemory().pages.values()].filter((r) => r.urlDigest === crawlPageDigest(sourceId, "https://forum.example.com/after-dead"))).toHaveLength(0);
+    expect(rowOf("https://forum.example.com/after-dead")).toHaveLength(0);
     expect([...crawlMemory().pages.values()]).toHaveLength(1);
   });
 
@@ -704,14 +722,14 @@ describe("canonical aliases (WP10)", () => {
     expect(over.status).toBe(200);
     expect(await over.json()).toEqual({ accepted: 0 });
     expect(crawlMemory().pages.get(id)!.status).toBe("PENDING"); // not scheduled
-    // Exactly 20 (all distinct) is accepted: the page moves, 20 tombstones.
+    // Exactly 20 (all distinct) is accepted: the page moves; none has a row, so nothing else changes.
     const ok = await postReport(crawlerRequest("frontier/report", {
       method: "POST",
       body: { sourceId, runId: "run-1", pages: [{ id, status: "fetched", aliases: aliases(FRONTIER_ALIASES_PER_PAGE_MAX), links: [] }] },
     }));
     expect(await ok.json()).toEqual({ accepted: 1 });
     expect(crawlMemory().pages.get(id)!.status).toBe("FETCHED");
-    expect([...crawlMemory().pages.values()].filter((r) => r.status === "DEAD")).toHaveLength(FRONTIER_ALIASES_PER_PAGE_MAX);
+    expect([...crawlMemory().pages.values()]).toHaveLength(1);
     // Not a string, or a bad shape, is refused the same way.
     const bad = await postReport(crawlerRequest("frontier/report", {
       method: "POST",

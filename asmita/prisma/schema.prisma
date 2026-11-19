@@ -564,6 +564,9 @@ model CrawlPage {
   // sitemap entry whose lastmod is newer than the row's last fetch jumps
   // the queue at 5, due immediately.
   priority      Int             @default(100)
+  // Stored from a pagination link (crawler v3 review fix): the canonical
+  // aliases such a page reports (page 2 naming page 1) are ignored.
+  viaPagination Boolean         @default(false)
   // Validators the crawler sent as If-None-Match / If-Modified-Since.
   etag          String?
   lastModified  String?
