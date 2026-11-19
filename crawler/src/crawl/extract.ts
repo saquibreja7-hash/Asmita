@@ -22,6 +22,8 @@
  *    host form seen first is kept;
  *  - <link rel="canonical"> targets are collected (never followed) so the
  *    caller can report the in-scope ones as aliases.
+ * Crawler v3 WP16: <iframe src> and <frame src> become page links, so a
+ * gallery inside a frame is reached by claiming the frame's own address.
  */
 import { load } from "cheerio";
 import { isNonContentUrl } from "./traps.ts";
@@ -69,9 +71,14 @@ export const MIN_DECLARED_SIDE = 32;
 /** Canonical targets kept per page (the report contract caps aliases at 20). */
 export const MAX_CANONICAL_PER_PAGE = 20;
 
-const IMAGE_EXT = /\.(jpe?g|png|gif|webp|avif)$/i;
-const LAZY_SRC_ATTRS = ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-url", "data-full-src", "data-hi-res-src"];
-const LAZY_SRCSET_ATTRS = ["data-srcset", "data-lazy-srcset"];
+/**
+ * Image-file extension, lazy attributes and the background-image URL reader:
+ * shared with the browser worker's frame/shadow gather (crawler v3 WP16), so
+ * the static extractor and the rendered path collect the same candidates.
+ */
+export const IMAGE_EXT = /\.(jpe?g|png|gif|webp|avif)$/i;
+export const LAZY_SRC_ATTRS = ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-url", "data-full-src", "data-hi-res-src"];
+export const LAZY_SRCSET_ATTRS = ["data-srcset", "data-lazy-srcset"];
 const META_IMAGE = ["og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src"];
 
 /** Feed autodiscovery: <link rel="alternate" type="application/atom+xml">. */
@@ -191,6 +198,20 @@ function backgroundImageUrls(declaration: string): string[] {
   return out;
 }
 
+/**
+ * Every background-image url(...) of a style attribute: only its
+ * background/background-image declarations are read. Shared with the
+ * browser worker's frame/shadow gather (crawler v3 WP16).
+ */
+export function styleBackgroundImages(style: string): string[] {
+  const out: string[] = [];
+  const declRe = /background(?:-image)?\s*:\s*([^;]+)/gi;
+  for (let m = declRe.exec(style); m !== null; m = declRe.exec(style)) {
+    for (const u of backgroundImageUrls(m[1]!)) out.push(u);
+  }
+  return out;
+}
+
 export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: ExtractLimits = DEFAULT_EXTRACT_LIMITS): Extracted {
   const $ = load(html);
   const skipped = { data_uri: 0, svg: 0, tiny: 0, invalid: 0 };
@@ -301,11 +322,7 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
 
   // CSS background-image in inline styles.
   $("[style]").each((_, el) => {
-    const style = $(el).attr("style") ?? "";
-    const declRe = /background(?:-image)?\s*:\s*([^;]+)/gi;
-    for (let m = declRe.exec(style); m !== null; m = declRe.exec(style)) {
-      for (const u of backgroundImageUrls(m[1]!)) addImage(u);
-    }
+    for (const u of styleBackgroundImages($(el).attr("style") ?? "")) addImage(u);
   });
 
   // <video poster>.
@@ -422,6 +439,32 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
       return;
     }
     if (!keepLink(pageLinks, key, url)) dropped.links++;
+  });
+
+  // Crawler v3 WP16: <iframe src> and <frame src> are page links — a gallery
+  // inside a frame is reached by claiming the frame's own address. The
+  // crawler's scope check (collectLinks) keeps the in-scope ones and turns
+  // the others into discovery hosts, exactly as for anchors. The anchor rules
+  // apply: nofollow (the page's meta robots or the element's own rel), the
+  // obvious-non-content skip, and a src straight to an image file is an image
+  // candidate, not a page. about:, data: and javascript: srcs are nothing
+  // (normalizeUrl), and an empty or missing src must not become a self-link.
+  $("iframe[src], frame[src]").each((_, el) => {
+    const f = $(el);
+    if (hasNofollow(f.attr("rel")) || nofollow) return;
+    const src = f.attr("src") ?? "";
+    if (src.trim() === "") return;
+    const url = normalizeUrl(src, base);
+    if (url === null) return;
+    if (IMAGE_EXT.test(url.pathname)) {
+      keepImage(urlKey(url), url);
+      return;
+    }
+    if (isNonContentUrl(url)) {
+      skippedLinks.nonContent++;
+      return;
+    }
+    if (!keepLink(pageLinks, urlKey(url), url)) dropped.links++;
   });
 
   // Feed autodiscovery and rel=next in <head> (only when links may be followed).

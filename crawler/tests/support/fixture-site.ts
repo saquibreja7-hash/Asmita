@@ -610,6 +610,297 @@ export async function buildFixture(): Promise<Fixture> {
 /** Seed URL factory for fixture runs: the fixture server, with its port. */
 export const fixtureSeedUrl = (port: number) => (source: { domain: string }) => `http://${source.domain}:${port}/`;
 
+/**
+ * The lighter-browser fixture (crawler v3 WP15): one render = BROWSER source,
+ * light.fixture.test, whose home page is "full of fonts and trackers" —
+ * 12 web fonts, a video, an audio file and two scripts from the built-in
+ * advertising/analytics host list (the test DNS maps those hosts to the
+ * fixture server, so an unblocked request would land in its request log) —
+ * and whose three images are added by script only after everything else has
+ * been asked for, so a request cap that the blocked kinds consumed would
+ * abort them. The /slow page chains a lazy-loader: each image is inserted
+ * only by the onload of the previous one, and the first two responses are
+ * delayed, so the render must wait for network quiet to see the third.
+ * No host here overlaps the other fixtures' hosts.
+ */
+export const LIGHT_HOST = `light.${SOURCE_DOMAIN}`;
+/** The ad hosts of the fixture page (entries of the worker's built-in list). */
+export const LIGHT_TRACKER_HOSTS = ["www.google-analytics.com", "ad.doubleclick.net"];
+export const LIGHT_FONT_COUNT = 12;
+
+export async function buildLightBrowserFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const L = LIGHT_HOST;
+
+  const img = {
+    light1: await patternImage(170, 300, 300, "png"),
+    light2: await patternImage(171, 300, 300, "png"),
+    light3: await patternImage(172, 300, 300, "png"),
+    slow1: await patternImage(173, 300, 300, "png"), // decoy: not in the pool
+    slow2: await patternImage(174, 300, 300, "png"), // decoy: not in the pool
+    slow3: await patternImage(175, 300, 300, "png"), // the planted match
+  };
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const pool: Pool = {
+    version: "light-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      { id: "fp-light-1", pdq: await hashOf(img.light1), quality: 100 },
+      { id: "fp-light-2", pdq: await hashOf(img.light2), quality: 100 },
+      { id: "fp-light-3", pdq: await hashOf(img.light3), quality: 100 },
+      { id: "fp-slow-lazy", pdq: await hashOf(img.slow3), quality: 100 },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-light-1", pagePath: "/", imageHost: L, imagePath: "/img/light-1.png" },
+    { fingerprintId: "fp-light-2", pagePath: "/", imageHost: L, imagePath: "/img/light-2.png" },
+    { fingerprintId: "fp-light-3", pagePath: "/", imageHost: L, imagePath: "/img/light-3.png" },
+    { fingerprintId: "fp-slow-lazy", pagePath: "/slow", imageHost: L, imagePath: "/img/slow-3.png" },
+  ];
+
+  site.route(L, "/robots.txt", sendBytes(Buffer.from("User-agent: *\\nAllow: /\\n"), "text/plain"));
+
+  // The home page: fonts, media and trackers first, images only at load.
+  const fontFaces = Array.from(
+    { length: LIGHT_FONT_COUNT },
+    (_, i) => `@font-face { font-family: F${i + 1}; src: url(/fonts/f${i + 1}.woff2) format("woff2"); }`,
+  ).join("\n      ");
+  const fontSpans = Array.from({ length: LIGHT_FONT_COUNT }, (_, i) => `<span style="font-family: F${i + 1}">${i + 1}</span>`).join("");
+  const trackers = LIGHT_TRACKER_HOSTS.map((host, i) => `<script src="http://${host}:${site.port}/${i === 0 ? "analytics.js" : "x.js"}"></script>`).join("");
+  site.route(
+    L,
+    "/",
+    sendHtml(
+      html(
+        `
+      ${trackers}
+      ${fontSpans}
+      <video src="/media/clip.mp4" preload="auto" muted autoplay playsinline></video>
+      <audio src="/media/tone.mp3" preload="auto"></audio>
+      <div style="height: 6000px"></div>
+      <a href="/slow">slow gallery</a>
+      <script>
+        window.addEventListener("load", function () {
+          ["/img/light-1.png", "/img/light-2.png", "/img/light-3.png"].forEach(function (src) {
+            var img = document.createElement("img");
+            img.src = src;
+            document.body.appendChild(img);
+          });
+        });
+      </script>
+      `,
+        `<style>${fontFaces}</style>`,
+      ),
+    ),
+  );
+
+  // The slow page: a chained lazy-loader started by the first scroll.
+  site.route(
+    L,
+    "/slow",
+    sendHtml(
+      html(`
+      <div id="gallery"></div>
+      <div style="height: 6000px"></div>
+      <script>
+        (function () {
+          var started = false;
+          function add(src, onload) {
+            var img = document.createElement("img");
+            if (onload) img.onload = onload;
+            img.src = src;
+            document.getElementById("gallery").appendChild(img);
+          }
+          window.addEventListener("scroll", function () {
+            if (started) return;
+            started = true;
+            add("/img/slow-1.png", function () {
+              add("/img/slow-2.png", function () {
+                add("/img/slow-3.png");
+              });
+            });
+          });
+        })();
+      </script>
+      `),
+    ),
+  );
+
+  // What the blocked kinds would have asked for (never to be requested).
+  for (let i = 1; i <= LIGHT_FONT_COUNT; i++) {
+    site.route(L, `/fonts/f${i}.woff2`, sendBytes(Buffer.from(`fake woff2 bytes ${i}`), "font/woff2"));
+  }
+  site.route(L, "/media/clip.mp4", sendBytes(Buffer.alloc(2048, 1), "video/mp4"));
+  site.route(L, "/media/tone.mp3", sendBytes(Buffer.alloc(1024, 2), "audio/mpeg"));
+  for (const [i, host] of LIGHT_TRACKER_HOSTS.entries()) {
+    // Real-looking answers, so a broken block would produce ordinary traffic
+    // in the fixture server's request log (including the parent-side
+    // robots.txt fetch the verdict would trigger), not a DNS error.
+    site.route(host, "/robots.txt", sendBytes(Buffer.from("User-agent: *\\nAllow: /\\n"), "text/plain"));
+    site.route(host, i === 0 ? "/analytics.js" : "/x.js", sendBytes(Buffer.from("// tracker"), "application/javascript"));
+  }
+
+  // The images. The first two of the slow chain answer late, so only their
+  // onload continues the chain (and the render's network-quiet wait is what
+  // lets the third one be seen at all).
+  const slowImage = (bytes: Buffer, delayMs: number): Handler => async (res) => {
+    await new Promise((r) => setTimeout(r, delayMs));
+    res.writeHead(200, { "content-type": "image/png", "content-length": String(bytes.length) });
+    res.end(bytes);
+  };
+  site.route(L, "/img/light-1.png", sendBytes(img.light1, "image/png"));
+  site.route(L, "/img/light-2.png", sendBytes(img.light2, "image/png"));
+  site.route(L, "/img/light-3.png", sendBytes(img.light3, "image/png"));
+  site.route(L, "/img/slow-1.png", slowImage(img.slow1, 800));
+  site.route(L, "/img/slow-2.png", slowImage(img.slow2, 800));
+  site.route(L, "/img/slow-3.png", sendBytes(img.slow3, "image/png"));
+
+  const allHashes: string[] = [];
+  for (const b of [img.light1, img.light2, img.light3, img.slow1, img.slow2, img.slow3]) allHashes.push(await hashOf(b));
+  return { site, pool, expected, allHashes };
+}
+
+/*
+ * The frames-and-components fixture (crawler v3 WP16). Two sources; no host
+ * here overlaps any other fixture's hosts.
+ *   - frames.fixture.test (render http): the static side. The home page
+ *     embeds an in-scope iframe gallery (/frame-gallery, one planted match),
+ *     an off-scope iframe (outside.test — mapped into the fixture DNS, so a
+ *     wrongly followed frame would land in the request log), an about:blank
+ *     iframe and empty/missing-src iframes (never links), and links a
+ *     frameset page whose <frame src> is a second planted gallery.
+ *   - shadow.fixture.test (render browser): the rendered side. The home page
+ *     carries a web component whose OPEN shadow root holds a two-image
+ *     gallery, an in-scope iframe (/frame-a) and an about:srcdoc frame —
+ *     each with images that exist only as data-src and whose lazy loaders
+ *     wait for an event the page never sends, so nothing but the worker's
+ *     frame/shadow gather can load them — plus an off-scope iframe whose
+ *     navigation must be refused before any request leaves.
+ * outside.test serves a canary page whose image is in the pool: following
+ * the off-scope frame on either path would post its finding.
+ */
+export const FRAMES_HOST = `frames.${SOURCE_DOMAIN}`;
+export const SHADOW_HOST = `shadow.${SOURCE_DOMAIN}`;
+/** The off-scope host both sides' pages embed (mapped into the fixture DNS). */
+export const FRAMES_OFF_HOST = "outside.test";
+
+export async function buildFramesFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const F = FRAMES_HOST;
+  const H = SHADOW_HOST;
+
+  const img = {
+    frame: await patternImage(180, 320, 240, "png"), // static iframe gallery
+    frameB: await patternImage(181, 300, 300, "png"), // static frameset frame
+    shadow: await patternImage(182, 300, 300, "png"), // inside the open shadow root
+    shadowDecoy: await patternImage(183, 300, 300, "png"), // second shadow image, not in the pool
+    frameA: await patternImage(184, 300, 300, "png"), // inside the in-scope iframe
+    srcdoc: await patternImage(185, 300, 300, "png"), // inside the about:srcdoc frame
+    canary: await patternImage(186, 300, 300, "png"), // on outside.test: in the pool, must never be hashed
+  };
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const pool: Pool = {
+    version: "frames-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      { id: "fp-frames-gallery", pdq: await hashOf(img.frame), quality: 100 },
+      { id: "fp-frameset", pdq: await hashOf(img.frameB), quality: 100 },
+      { id: "fp-shadow", pdq: await hashOf(img.shadow), quality: 100 },
+      { id: "fp-frame-a", pdq: await hashOf(img.frameA), quality: 100 },
+      { id: "fp-srcdoc", pdq: await hashOf(img.srcdoc), quality: 100 },
+      { id: "fp-outside-canary", pdq: await hashOf(img.canary), quality: 100 },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-frames-gallery", pagePath: "/frame-gallery", imageHost: F, imagePath: "/img/frame.png" },
+    { fingerprintId: "fp-frameset", pagePath: "/frame-b", imageHost: F, imagePath: "/img/frame-b.png" },
+    { fingerprintId: "fp-shadow", pagePath: "/", imageHost: H, imagePath: "/img/shadow-1.png" },
+    { fingerprintId: "fp-frame-a", pagePath: "/", imageHost: H, imagePath: "/img/frame-a.png" },
+    { fingerprintId: "fp-srcdoc", pagePath: "/", imageHost: H, imagePath: "/img/srcdoc.png" },
+  ];
+
+  const robots = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+
+  // ---- static side: frames.fixture.test ----
+  site.route(F, "/robots.txt", robots);
+  site.route(
+    F,
+    "/",
+    sendHtml(
+      html(`
+        <a href="/frameset">Frameset</a>
+        <iframe src="/frame-gallery"></iframe>
+        <iframe src="${o(FRAMES_OFF_HOST)}/never"></iframe>
+        <iframe src="about:blank"></iframe>
+        <iframe src=""></iframe>
+        <iframe></iframe>
+      `),
+    ),
+  );
+  site.route(F, "/frame-gallery", sendHtml(html(`<img src="/img/frame.png" width="320" height="240">`)));
+  site.route(F, "/frameset", sendHtml(`<!DOCTYPE html><html><head></head><frameset><frame src="/frame-b"></frameset></html>`));
+  site.route(F, "/frame-b", sendHtml(html(`<img src="/img/frame-b.png" width="300" height="300">`)));
+  site.route(F, "/img/frame.png", sendBytes(img.frame, "image/png"));
+  site.route(F, "/img/frame-b.png", sendBytes(img.frameB, "image/png"));
+
+  // ---- rendered side: shadow.fixture.test ----
+  // The galleries exist only as data-src, and the page's lazy loaders wait
+  // for "asmita-activate" — an event nothing ever sends — so the images are
+  // loaded only by the worker's frame/shadow gather (crawler v3 WP16).
+  const neverFires = `
+      document.addEventListener("asmita-activate", function () {
+        document.body.querySelectorAll("img").forEach(function (i) { i.src = i.dataset.src; });
+      });`;
+  site.route(H, "/robots.txt", robots);
+  site.route(
+    H,
+    "/",
+    sendHtml(
+      html(`
+        <gallery-comp></gallery-comp>
+        <iframe src="/frame-a"></iframe>
+        <iframe srcdoc="<img data-src='/img/srcdoc.png'>"></iframe>
+        <iframe src="${o(FRAMES_OFF_HOST)}/never"></iframe>
+        <script>
+          customElements.define("gallery-comp", class extends HTMLElement {
+            connectedCallback() {
+              const root = this.attachShadow({ mode: "open" });
+              root.innerHTML = "<img data-src='/img/shadow-1.png'><img data-src='/img/shadow-2.png'>";
+            }
+          });
+          ${neverFires}
+        </script>
+      `),
+    ),
+  );
+  site.route(
+    H,
+    "/frame-a",
+    sendHtml(
+      html(`
+        <img data-src="/img/frame-a.png">
+        <script>${neverFires}</script>
+      `),
+    ),
+  );
+  site.route(H, "/img/shadow-1.png", sendBytes(img.shadow, "image/png"));
+  site.route(H, "/img/shadow-2.png", sendBytes(img.shadowDecoy, "image/png"));
+  site.route(H, "/img/frame-a.png", sendBytes(img.frameA, "image/png"));
+  site.route(H, "/img/srcdoc.png", sendBytes(img.srcdoc, "image/png"));
+
+  // ---- the off-scope host (never to be requested, not even its robots.txt) ----
+  site.route(FRAMES_OFF_HOST, "/robots.txt", robots);
+  site.route(FRAMES_OFF_HOST, "/never", sendHtml(html(`<img src="/canary.png">`)));
+  site.route(FRAMES_OFF_HOST, "/canary.png", sendBytes(img.canary, "image/png"));
+
+  const allHashes: string[] = [];
+  for (const b of [img.frame, img.frameB, img.shadow, img.shadowDecoy, img.frameA, img.srcdoc, img.canary]) allHashes.push(await hashOf(b));
+  return { site, pool, expected, allHashes };
+}
+
 /*
  * The discovery fixture (crawler v2 WP5): a chain of sites, each linking the
  * next, plus the negatives. a.test is the only source a run starts with; its

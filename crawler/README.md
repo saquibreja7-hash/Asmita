@@ -54,7 +54,13 @@ main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
                 and no image candidates, or a tiny script-only stub, WP12):
                 BrowserRenderer -> browser worker
                 child (Playwright Chromium, all traffic through the
-                in-process SOCKS proxy; images from intercepted responses)
+                in-process SOCKS proxy; images from intercepted responses;
+                fonts, audio/video media and the built-in advertising hosts
+                aborted before routing, crawler v3 WP15; network quiet after
+                scrolling instead of a fixed wait; after the quiet wait,
+                image candidates gathered from every frame and every open
+                shadow root and loaded like the page's own requests,
+                crawler v3 WP16)
                 XML documents (WP4): sitemap indexes, urlsets (a .gz body is
                 inflated in memory) and RSS/Atom feeds, sniffed by root
                 element, become more frontier rows; image sitemap entries
@@ -65,7 +71,8 @@ main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
                 srcset, background-image, video poster, image_src, JSON-LD,
                 noscript, thumbnail hrefs); one page offered in several
                 spellings (http/https, www./bare host, trailing slash, a
-                final /index.html) is kept once, https preferred (WP10)
+                final /index.html) is kept once, https preferred (WP10);
+                iframe and frame srcs are page links (WP16)
          per image: SafeFetcher -> Buffer -> hash-image.ts (sniff, sharp,
                     prepare.ts, pdq.ts) -> Matcher -> FindingsSink
          POST /frontier/report (page outcomes + links of kinds page,
@@ -155,6 +162,8 @@ page failed permanently, once each; no hostname is ever logged.
 | **Timeouts**: connect, headers, body idle, and an overall per-request deadline (stops slow drips). | undici options + `AbortSignal.timeout`. | `bytes.test.ts`, fixture `/img/slow.png` |
 | **Memory only.** Image bytes live in one Buffer, dropped after hashing; no temp files or disk caches. | No `node:fs` in `src/` (ESLint + static test), `toBuffer()` only, `sharp.cache(false)`; container sets `VIPS_DISC_THRESHOLD=2g`, an unwritable `TMPDIR` and runs with a read-only root FS. | `tests/integration/memory-only.test.ts` (full crawl with every `fs` write API, `fs.promises` writers, `createWriteStream`, `mkdtemp` patched to throw; control assertions prove the patch is active; since WP7 also a full browser-rendered crawl under the same patch); `tests/unit/config-policy.test.ts` |
 | **Browser traffic is policy-checked too (WP7).** Chromium's every request leaves through an in-process SOCKS proxy that applies the same address policy as `safe-fetch` (resolve every address, refuse if any is blocked, dial the validated address, same port and scheme rules); no direct browser egress (Chromium is launched with `--proxy-bypass-list=<-loopback>` so even loopback destinations go through the proxy, and the fixture hostnames exist only in the test policy's DNS, so a successful render proves the proxy resolved them). | `net/browser-proxy.ts`, `browser/browser-renderer.ts`. | `tests/unit/browser-proxy.test.ts` (raw SOCKS client: tunnel, private-literal refusal, literal-as-domain refusal, hostname-to-private-address refusal, bad port, BIND, bad greeting, per-render byte account destroying over-budget tunnels, no tunnel while no render account is active, an ended account tearing its tunnels down, an established tunnel outliving the handshake timeout); `tests/integration/browser.test.ts` (a page script's private-address requests are all refused and the render survives; a robots-disallowed image inside a rendered page is never requested); `tests/integration/browser-escape.test.ts` (a browser-only redirect off scope never contacts the other site and credits nothing, an image redirect to a robots-disallowed path is never followed, an allowed image redirect is reported under the address that served it, popups never load, WebSockets never connect); `tests/unit/browser-renderer.test.ts` (WebRTC limited to proxied traffic, no `/proc` read for the worker, deadline SIGKILL, stale render messages ignored, graceful stop) |
+| **A lighter browser (WP15).** Font requests, audio and video media, and a small built-in list of advertising/analytics hosts — written in code, never an image or video CDN — are aborted before any routing work: never fetched, never asked to the parent's robots verdict, never counted against the per-page request cap, which therefore keeps its room for the page's images; the host list is re-checked on every redirect hop, and image requests are never blocked. The fixed wait after scrolling is replaced by a network-quiet wait: no request in flight for 500 ms (the window capped by `BROWSER_SCROLL_WAIT_MS`), bounded by the page deadline, so slow and chained lazy-loaders are waited for. | `browser/blocked-requests.ts` (kinds and hosts, in code), `browser/browser-worker.ts` (block checks before the cap and the verdict, per-hop re-check, `waitNetworkQuiet`). | `tests/unit/browser-blocked.test.ts` (blocked kinds; host and subdomain matching; the list contains no image or video CDN); `tests/integration/browser-light.test.ts` (fonts, audio/video and the built-in ad hosts never requested — the fixture DNS maps the ad hosts to the fixture server, so an unblocked request or its robots.txt fetch would show in its log; images still requested exactly once; a page full of fonts and trackers still finds its images within a request cap of 8; a slow chained lazy-loader is waited for and its third image is found) |
+| **Galleries in frames and components (WP16).** The static path collects in-scope `<iframe src>` and `<frame src>` as page links (kind `page`): a gallery inside a frame is claimed as its own page, under the same scope, non-content, query-cap and nofollow rules as an anchor — and an off-scope frame's host is reported as a discovery like any out-of-scope link, never fetched. The browser path, after its network-quiet wait, gathers image candidates from every frame (`page.frames()`, `about:srcdoc` frames included) and from open shadow roots — the same candidates the static extractor reads — and makes the browser load the ones the page has not requested: ordinary routed image requests, so they pass the same proxy, robots verdict and per-page caps, and image bytes still come only from intercepted responses. Out-of-scope frames are not rendered (their navigations are refused before any request, scope and robots checks as before), so the gather finds nothing in one — it keeps only the empty initial document; closed shadow roots stay invisible by design. Bounded: frames per render, elements per frame, candidates per list, loads by the remaining image slots, every step inside the page deadline. | `crawl/extract.ts` (frame srcs; the shared candidate rules), `browser/browser-worker.ts` (`GATHER_SCRIPT`, `gatherFrameImages`). | `tests/unit/frames-extract.test.ts`; `tests/integration/frames.test.ts` (real Chromium against `buildFramesFixture`: the static path follows an in-scope iframe gallery and a `<frameset>` frame page and hashes both planted images; the rendered page's shadow-root, iframe and srcdoc galleries exist only as `data-src` their lazy loaders never load, and all their planted images are hashed and credited to the embedding page; the off-scope iframe is never contacted — not even robots.txt — and its in-pool canary never matches, while its host is reported as a discovery) |
 | **Decoder safety.** Magic-byte allowlist (JPEG, PNG, GIF, WebP, AVIF) runs before sharp sees any byte; sharp's detected format must agree (AVIF must be AV1, so HEIC cannot pass); 25 MP pixel limit checked from the header; SVG/PDF/TIFF never decoded; truncated files decode tolerantly (`failOn: "none"`) but stay bounded by the byte cap and pixel limit. | `image/hash-image.ts`, `prepare.ts`. | `tests/unit/image.test.ts` (pixel bomb, 30 MP image, SVG, TIFF, HTML served as image, chimera files, light and heavy truncation, AVIF); fixtures `cut.jpg` (matches), `cut-heavy.jpg` (does not) and `pic.avif` |
 | **Service key only to Asmita.** | `AsmitaClient` has its own agent, builds URLs only from `ASMITA_API_URL`, refuses redirects. The crawl fetcher sends no auth or cookie headers. | `crawl.test.ts` "never sends credentials or cookies to crawled hosts"; `client-findings.test.ts` "refuses redirects" |
 | **No URLs, hostnames, fingerprints or bodies in logs.** Field allowlist, string sanitiser, errors reduced to fixed codes; uncaught errors and Node warnings routed through the logger. | `log.ts`, `errors.ts`, `cli.ts`. | `crawl.test.ts` log scan; `tests/integration/process.test.ts` runs the real `runMain` in a child process and scans all of stdout and stderr |
@@ -384,10 +393,59 @@ User-Agent is Chromium's own with the crawler's appended; there are no
 stealth plugins, no fingerprint spoofing, no proxies beyond this
 policy-enforcing one, and no logins or CAPTCHA solving.
 
+**A lighter browser (crawler v3 WP15).** The worker aborts three families of
+requests before any routing work — before the request cap, before the
+parent's robots verdict, before the network: font requests, audio and video
+media, and requests to a small built-in list of advertising/analytics hosts
+(`src/browser/blocked-requests.ts`, written in code, deliberately never an
+image or video CDN — blocking one would silently lose matches; a host
+matches if it equals an entry or is a subdomain of one). The host check runs
+again on every redirect hop, so nothing that is followed can end on a
+blocked host. Blocked requests never count against the per-page request
+cap, which therefore keeps its room for the page's images; image requests
+(the `image` resource type) are never blocked.
+
+**Network quiet instead of a fixed wait (WP15).** After its scroll steps,
+the worker used to wait a fixed `BROWSER_SCROLL_WAIT_MS` and then wait out
+the requests it already knew about. It now waits for network quiet: no
+request in flight for a 500 ms window (the window is capped by
+`BROWSER_SCROLL_WAIT_MS`), bounded by the page deadline. A slow or chained
+lazy-loader is therefore waited for — each request an onload spawns late
+restarts the window — and a page that is quiet right away costs no more
+time than the old fixed wait did; a page that never goes quiet still ends
+at its deadline.
+
+**Galleries in frames and components (WP16).** A gallery does not have to
+live in the main document: it can sit inside an `<iframe>`, an
+`about:srcdoc` frame, or a web component's open shadow root — and its
+images may never be requested by the page's own scripts (a lazy loader
+waiting for an event that never comes, or a frame nobody scrolls). After
+the network-quiet wait, the worker walks every frame of the page and every
+open shadow root (closed roots are invisible by design), collects the same
+image candidates the static extractor reads — an `<img>` that has not
+loaded, raw srcsets, the lazy `data-*` attributes, `<video>` posters,
+inline background styles, and anchor hrefs straight to an image file — and
+makes the browser load the ones the page has not asked for. Those loads
+are ordinary image requests of the page: same proxy, same robots verdict,
+same request cap and image caps, and the bytes are taken from the same
+intercepted responses — there is no second fetch path and no new way for
+an image to reach the parent. Nothing is loaded that the page requested
+already, served or refused (the render remembers the addresses its
+requests were routed under), nothing beyond the remaining per-page image
+slots, and an out-of-scope frame contributes nothing because its
+navigation was refused before any request left: it keeps only the
+empty initial document. The walk is bounded — frames per
+render, elements per frame, candidates per list — and every step is
+bounded by the page deadline; when the gather started loads, the
+network-quiet wait runs once more so their bytes arrive before the render
+answers. A page whose images all loaded by itself gathers nothing and
+waits no longer than before.
+
 **Caps per page.** A deadline (`BROWSER_PAGE_TIMEOUT_MS`, default 30 s), a
 bounded number of scroll steps (`BROWSER_SCROLLS`, default 5) to trigger
 lazy loading, a request cap (`BROWSER_MAX_REQUESTS_PER_PAGE`, default 300,
-excess aborted before the network), a byte budget at the proxy
+excess aborted before the network; the blocked families above are aborted
+earlier still and do not count against it), a byte budget at the proxy
 (`BROWSER_MAX_PAGE_BYTES`, default 64 MiB over all tunnels; the render is
 aborted and the page reported as an error when it is exceeded), and the
 usual image caps (per-image `MAX_IMAGE_BYTES`, per-page
@@ -588,8 +646,8 @@ network activity and the log names only the offending variable names. See
 | `FRONTIER_CLAIM_LIMIT` | 50 | pages claimed from the app's frontier per request (1..200); the crawler's whole frontier memory is one batch plus its report |
 | `BROWSER_PAGE_TIMEOUT_MS` | 30000 | deadline for one rendered page, scrolls included (WP7) |
 | `BROWSER_SCROLLS` | 5 | scroll steps per rendered page, to trigger lazy loading (0..20) |
-| `BROWSER_SCROLL_WAIT_MS` | 500 | wait after each scroll for late responses |
-| `BROWSER_MAX_REQUESTS_PER_PAGE` | 300 | requests one rendered page may make; the rest are aborted before the network |
+| `BROWSER_SCROLL_WAIT_MS` | 500 | wait after each scroll for late responses; also the upper limit of the network-quiet window that replaces the fixed wait after scrolling (WP15) |
+| `BROWSER_MAX_REQUESTS_PER_PAGE` | 300 | requests one rendered page may make; the rest are aborted before the network. Fonts, audio/video media and the built-in ad/analytics hosts are aborted before routing and do not count (WP15) |
 | `BROWSER_MAX_PAGE_BYTES` | 67108864 | bytes one rendered page may move through the proxy (all tunnels summed) |
 | `BROWSER_TMP_DIR` | /dev/shm | memory-backed directory for Chromium's throwaway profile; must be a tmpfs |
 | `GLOBAL_CONCURRENCY` | 4 | concurrent requests across all hosts |
