@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => {
     consentCreate: vi.fn(),
     consentUpdateMany: vi.fn(),
     hashFindMany: vi.fn(),
+    // WP32: the consent hooks sync the partner feed inside the transaction.
+    feedEventFindMany: vi.fn(),
+    feedEventCreateMany: vi.fn(),
+    caseFindMany: vi.fn(),
   };
 
   // The Kysely recording fake from partner-admin-kysely.test.ts, with one
@@ -99,6 +103,12 @@ vi.mock("@/lib/db", () => {
       updateMany: mocks.prisma.consentUpdateMany,
     },
     hashSubmission: { findMany: mocks.prisma.hashFindMany },
+    // WP32: the consent hooks sync the partner feed inside the transaction.
+    partnerFeedEvent: {
+      findMany: mocks.prisma.feedEventFindMany,
+      createMany: mocks.prisma.feedEventCreateMany,
+    },
+    case: { findMany: mocks.prisma.caseFindMany },
     $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
   };
   return { db };
@@ -341,6 +351,9 @@ describe("partner-share consent, Prisma path", () => {
     mocks.prisma.consentCreate.mockReset().mockResolvedValue({ id: "consent-1" });
     mocks.prisma.consentUpdateMany.mockReset().mockResolvedValue({ count: 1 });
     mocks.prisma.hashFindMany.mockReset().mockResolvedValue(hashRows);
+    mocks.prisma.feedEventFindMany.mockReset().mockResolvedValue([]);
+    mocks.prisma.feedEventCreateMany.mockReset().mockResolvedValue({ count: 0 });
+    mocks.prisma.caseFindMany.mockReset().mockResolvedValue([]);
   });
 
   it("requires a template reviewed by legal, unless the dev bypass is on (Rule 4)", async () => {

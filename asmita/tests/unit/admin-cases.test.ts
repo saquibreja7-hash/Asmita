@@ -10,6 +10,8 @@ vi.mock("@/lib/db", () => ({
     noticeTemplate: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
     hashDispatch: { count: vi.fn() },
     auditLog: { findMany: vi.fn() },
+    // WP32: the case page lists what partner platforms reported (none here).
+    partnerOutcome: { findMany: vi.fn() },
   },
 }));
 
@@ -362,6 +364,8 @@ describe("listAdminCases", () => {
 describe("getAdminCaseDetail", () => {
   beforeEach(() => {
     vi.stubEnv("DATABASE_URL", "postgresql://localhost/test");
+    // WP32: no partner outcomes are reported on the synthetic cases.
+    mocked.partnerOutcome.findMany.mockResolvedValue([]);
   });
   afterEach(() => {
     vi.unstubAllEnvs();

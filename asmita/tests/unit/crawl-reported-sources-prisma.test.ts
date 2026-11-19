@@ -14,8 +14,12 @@ const db = vi.hoisted(() => {
     crawlFinding: { findUnique: fn(), findMany: fn(), deleteMany: fn(), updateMany: fn() },
     crawlConsent: { findMany: fn(), deleteMany: fn() },
     partnerShareConsent: { deleteMany: fn() },
+    // WP32: the erasure sweep withdraws shared fingerprints from the partner
+    // feed (inside the same transaction) and deletes outcome rows.
+    hashSubmission: { updateMany: fn(), findMany: fn() },
+    partnerFeedEvent: { findMany: fn(), createMany: fn() },
+    partnerOutcome: { deleteMany: fn() },
     submittedUrl: { findMany: fn(), findFirst: fn(), findUnique: fn(), create: fn(), updateMany: fn(), deleteMany: fn() },
-    hashSubmission: { updateMany: fn() },
     platform: { findFirst: fn() },
     case: { create: fn(), findMany: fn(), findFirst: fn(), updateMany: fn() },
     user: { findUnique: fn(), updateMany: fn(), update: fn() },
@@ -50,8 +54,10 @@ const CONSENT = { id: "consent-1", hashSubmissionIds: ["h1"], signedAt: new Date
 const zeroCounts: Array<[Record<string, ReturnType<typeof vi.fn>>, string]> = [
   [db.emailDeliveryProof, "deleteMany"], [db.hashDispatch, "updateMany"], [db.escalation, "deleteMany"],
   [db.urlPortalToken, "deleteMany"], [db.submittedUrl, "deleteMany"], [db.crawlFinding, "deleteMany"],
-  [db.crawlConsent, "deleteMany"], [db.partnerShareConsent, "deleteMany"], [db.hashSubmission, "updateMany"], [db.feedback, "deleteMany"],
-  [db.adminAccessLog, "updateMany"], [db.case, "updateMany"], [db.sessionToken, "deleteMany"],
+  [db.crawlConsent, "deleteMany"], [db.partnerShareConsent, "deleteMany"], [db.hashSubmission, "updateMany"],
+  [db.partnerFeedEvent, "createMany"],
+  [db.partnerOutcome, "deleteMany"], [db.feedback, "deleteMany"], [db.adminAccessLog, "updateMany"],
+  [db.case, "updateMany"], [db.sessionToken, "deleteMany"],
   [db.otpToken, "deleteMany"], [db.notice, "deleteMany"],
 ];
 
@@ -89,6 +95,10 @@ beforeEach(() => {
   db.crawlFinding.findMany.mockResolvedValue([]);
   db.crawlFinding.updateMany.mockResolvedValue({ count: 1 });
   db.crawlConsent.findMany.mockResolvedValue([{ ...CONSENT, caseId: "c1" }]);
+  // WP32: the erasure sweep's partner-feed withdrawal finds nothing shared
+  // by default (findMany must answer arrays, not counts).
+  db.hashSubmission.findMany.mockResolvedValue([]);
+  db.partnerFeedEvent.findMany.mockResolvedValue([]);
   db.case.findMany.mockResolvedValue([]);
   db.case.findFirst.mockResolvedValue(null);
   db.case.create.mockResolvedValue({ id: "case-new", referenceNumber: "ASMITA-2026-00001" });

@@ -269,14 +269,24 @@ export async function hardDeleteDueUsers(now = new Date()) {
     let caseCount = 0;
     let links = 0;
     const erasedCaseIds: string[] = [];
+    const erasedCaseRefs = new Map<string, string | null>();
     for (const [caseId, record] of cases.entries()) {
       if (record.userId === userId) {
         caseCount += 1;
         links += record.urls.length;
         erasedCaseIds.push(caseId);
+        erasedCaseRefs.set(caseId, record.referenceNumber);
         cases.delete(caseId);
       }
     }
+    // WP32: partners are told to delete what they hold of hers before the
+    // agreements go (feed WITHDRAW events, ids only), and outcome rows for
+    // her cases go too — they are the only partner rows that can hold one of
+    // her links. The feed's event log stays: it carries ids, never addresses.
+    const { withdrawSharedFingerprintsForErasureMemory } = await import("@/lib/partner-feed");
+    await withdrawSharedFingerprintsForErasureMemory(erasedCaseIds, erasedCaseRefs);
+    const { erasePartnerOutcomesForCases } = await import("@/lib/partner-store");
+    erasePartnerOutcomesForCases(erasedCaseIds);
     eraseCrawlMemoryForCases(erasedCaseIds);
     erasePartnerShareConsentsForCases(erasedCaseIds);
     deactivatedUsers.delete(userId);

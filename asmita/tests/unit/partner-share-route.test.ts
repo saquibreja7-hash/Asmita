@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
   consentCreate: vi.fn(),
   consentUpdateMany: vi.fn(),
   hashFindMany: vi.fn(),
+  // WP32: the consent hooks sync the partner feed inside the transaction.
+  feedEventFindMany: vi.fn(),
+  feedEventCreateMany: vi.fn(),
+  caseFindMany: vi.fn(),
 }));
 
 vi.mock("@/lib/csrf", () => ({ verifyCsrfRequest: () => true }));
@@ -39,6 +43,12 @@ vi.mock("@/lib/db", () => {
       updateMany: mocks.consentUpdateMany,
     },
     hashSubmission: { findMany: mocks.hashFindMany },
+    // WP32: the consent hooks sync the partner feed inside the transaction.
+    partnerFeedEvent: {
+      findMany: mocks.feedEventFindMany,
+      createMany: mocks.feedEventCreateMany,
+    },
+    case: { findMany: mocks.caseFindMany },
     $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
   };
   return { db };
@@ -90,6 +100,9 @@ beforeEach(() => {
   mocks.consentCreate.mockReset().mockResolvedValue({ id: "consent-1" });
   mocks.consentUpdateMany.mockReset().mockResolvedValue({ count: 1 });
   mocks.hashFindMany.mockReset().mockResolvedValue(hashRows);
+  mocks.feedEventFindMany.mockReset().mockResolvedValue([]);
+  mocks.feedEventCreateMany.mockReset().mockResolvedValue({ count: 0 });
+  mocks.caseFindMany.mockReset().mockResolvedValue([]);
 });
 afterEach(() => vi.unstubAllEnvs());
 

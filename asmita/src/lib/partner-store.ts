@@ -47,17 +47,49 @@ export type MemoryPartnerShareConsent = {
   withdrawnAt: Date | null;
 };
 
+/** WP32: the memory twin of PartnerFeedEvent (the partner feed's event log). */
+export type MemoryPartnerFeedEvent = {
+  id: string;
+  seq: number;
+  fingerprintId: string;
+  type: "ADD" | "WITHDRAW";
+  kind: "image" | "video";
+  caseId: string | null;
+  caseRef: string | null;
+  createdAt: Date;
+};
+
+/** WP32: the memory twin of PartnerOutcome (what a partner reported it did). */
+export type MemoryPartnerOutcome = {
+  id: string;
+  partnerId: string;
+  fingerprintId: string | null;
+  /** encryptField output; the URL only ever sits on the partner's own domains. */
+  urlEncrypted: string | null;
+  urlHash: string | null;
+  submittedUrlId: string | null;
+  caseId: string | null;
+  outcome: "REMOVED" | "BLOCKED_REUPLOAD" | "NOT_FOUND" | "NOT_OUR_CONTENT";
+  note: string | null;
+  createdAt: Date;
+};
+
 type PartnerMemory = {
   partners: Map<string, MemoryPlatformPartner>;
   keys: Map<string, MemoryPlatformPartnerKey>;
   /** WP31: the survivor's partner-sharing agreements, the twin of PartnerShareConsent. */
   shareConsents: MemoryPartnerShareConsent[];
+  /** WP32: the feed's event log, ordered by seq; the next seq hands out the counter. */
+  feedEvents: MemoryPartnerFeedEvent[];
+  nextFeedSeq: number;
+  /** WP32: partner-reported outcomes, the twin of PartnerOutcome. */
+  outcomes: MemoryPartnerOutcome[];
 };
 
 const globals = globalThis as typeof globalThis & { __asmitaPartnerStore?: PartnerMemory };
 
 function emptyMemory(): PartnerMemory {
-  return { partners: new Map(), keys: new Map(), shareConsents: [] };
+  return { partners: new Map(), keys: new Map(), shareConsents: [], feedEvents: [], nextFeedSeq: 1, outcomes: [] };
 }
 
 export function partnerMemory(): PartnerMemory {
@@ -67,6 +99,9 @@ export function partnerMemory(): PartnerMemory {
   globals.__asmitaPartnerStore ??= emptyMemory();
   // A store created before the share consents existed (dev hot reload).
   globals.__asmitaPartnerStore.shareConsents ??= [];
+  globals.__asmitaPartnerStore.feedEvents ??= [];
+  globals.__asmitaPartnerStore.nextFeedSeq ??= 1;
+  globals.__asmitaPartnerStore.outcomes ??= [];
   return globals.__asmitaPartnerStore;
 }
 
@@ -80,5 +115,18 @@ export function erasePartnerShareConsentsForCases(caseIds: string[]) {
   const ids = new Set(caseIds);
   globals.__asmitaPartnerStore.shareConsents = globals.__asmitaPartnerStore.shareConsents.filter(
     (consent) => !ids.has(consent.caseId),
+  );
+}
+
+/**
+ * Account erasure, memory path: outcome rows for her cases go too. They are
+ * the only partner rows that can hold one of her links (urlEncrypted); the
+ * feed's event log stays, because it carries ids only, never an address.
+ */
+export function erasePartnerOutcomesForCases(caseIds: string[]) {
+  if (!globals.__asmitaPartnerStore || caseIds.length === 0) return;
+  const ids = new Set(caseIds);
+  globals.__asmitaPartnerStore.outcomes = globals.__asmitaPartnerStore.outcomes.filter(
+    (outcome) => outcome.caseId === null || !ids.has(outcome.caseId),
   );
 }

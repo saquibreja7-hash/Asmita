@@ -158,6 +158,23 @@ enum PlatformPartnerStatus {
   SUSPENDED
 }
 
+// Partner programme part 2 (WP32): one feed event when a fingerprint becomes
+// shareable (ADD) or stops being shareable (WITHDRAW).
+enum PartnerFeedEventType {
+  ADD
+  WITHDRAW
+}
+
+// Partner programme part 2 (WP32): what a partner platform reported it did.
+// Stored lowercase in the API ("removed", ...); the enum keeps the casing of
+// the other status enums.
+enum PartnerOutcomeType {
+  REMOVED
+  BLOCKED_REUPLOAD
+  NOT_FOUND
+  NOT_OUR_CONTENT
+}
+
 enum AuditEventType {
   USER_REGISTERED
   USER_VERIFIED
@@ -204,6 +221,7 @@ enum AuditEventType {
   CRAWL_SOURCE_RESUMED
   PARTNER_SHARE_CONSENT_GIVEN
   PARTNER_SHARE_CONSENT_WITHDRAWN
+  PARTNER_OUTCOME_REPORTED
 }
 
 enum DeletionJobStatus {
@@ -853,6 +871,7 @@ model PlatformPartner {
   updatedAt DateTime @updatedAt
 
   keys PlatformPartnerKey[]
+  outcomes PartnerOutcome[]
 
   @@index([status])
   @@index([createdAt])
@@ -899,6 +918,72 @@ model PartnerShareConsent {
   case Case @relation(fields: [caseId], references: [id])
 
   @@index([caseId])
+}
+
+// Partner programme part 2 (WP32): the append-only feed of fingerprints the
+// partner API serves (GET /api/partner/v1/fingerprints). One row is written
+// when a fingerprint becomes shareable (ADD) or stops being shareable
+// (WITHDRAW) — consent given or withdrawn, hash approval or rejection, case
+// deletion, account erasure — so every partner that replays the feed in seq
+// order ends up holding exactly the currently shareable set and deletes what
+// Asmita withdraws (Rule 2).
+//
+// No partner id: every ACTIVE partner reads the same feed; the survivor's
+// agreement is with the programme as a whole, and the rows carry no URL, so
+// nothing is per-partner. No hash is stored here either: the feed reads the
+// fingerprint from HashSubmission at serve time and only while it is still
+// shareable, so a row can never leak a withdrawn fingerprint. No foreign
+// keys, like AuditLog.actorId and PlatformPartner.createdFromApplicationId:
+// a withdraw for a fingerprint or case that no longer exists is exactly the
+// row that must survive.
+model PartnerFeedEvent {
+  id            String               @id @default(uuid())
+  // Monotonic, from a Postgres sequence; the feed's cursor. Gaps are
+  // expected and harmless — pages are "seq > cursor".
+  seq           Int                  @unique @default(autoincrement())
+  fingerprintId String
+  type          PartnerFeedEventType
+  // "image" (PDQ) or "video" (vPDQ): the kind the API reports, from the
+  // fingerprint's algorithm.
+  kind          String
+  caseId        String?
+  caseRef       String?
+  createdAt     DateTime             @default(now())
+
+  @@index([fingerprintId])
+  @@index([createdAt])
+}
+
+// Partner programme part 2 (WP32): what a partner platform reported it did
+// with a fingerprint it received, or with a link on its own domains
+// (POST /api/partner/v1/outcomes). Shown on the admin case page; a "removed"
+// outcome on a reported SubmittedUrl updates that link's status exactly the
+// way an admin-recorded removal does.
+//
+// The URL is validated against the partner's own domains before the row is
+// written (a partner can never report about another platform's or another
+// partner's pages) and is encrypted at rest like every address Asmita holds;
+// urlHash is the same equality digest SubmittedUrl uses, so the match reuses
+// the submitted-link lookup. Ids are provenance, not integrity (no foreign
+// keys); partnerId is a real relation, like PlatformPartnerKey's.
+model PartnerOutcome {
+  id             String             @id @default(uuid())
+  partnerId      String
+  fingerprintId  String?
+  urlEncrypted   String?
+  urlHash        String?
+  submittedUrlId String?
+  caseId         String?
+  outcome        PartnerOutcomeType
+  note           String?
+  createdAt      DateTime           @default(now())
+
+  partner PlatformPartner @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
+  @@index([caseId])
+  @@index([fingerprintId])
+  @@index([urlHash])
 }
 
 model DeletionJob {

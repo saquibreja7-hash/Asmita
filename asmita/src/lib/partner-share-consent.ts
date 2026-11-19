@@ -176,6 +176,10 @@ export async function recordPartnerShareConsent(
       templateId: input.templateId, templateDigest: input.templateDigest,
       agreedAt: input.agreedAt ?? new Date(), withdrawnAt: null,
     });
+    // WP32: the fingerprints this agreement makes shareable enter the partner
+    // feed at once (partner-feed.ts writes the ADD events).
+    const { syncPartnerFeedForCase } = await import("@/lib/partner-feed");
+    await syncPartnerFeedForCase(input.caseId);
   } else {
     const { db } = await import("@/lib/db");
     try {
@@ -192,6 +196,10 @@ export async function recordPartnerShareConsent(
           },
           select: { id: true },
         });
+        // WP32: the feed's ADD events are written in the same transaction,
+        // so an agreement can never exist without its feed events.
+        const { syncCaseFeedEventsPrisma } = await import("@/lib/partner-feed");
+        await syncCaseFeedEventsPrisma(tx, input.caseId);
         return created.id;
       });
     } catch (err) {
@@ -222,11 +230,22 @@ export async function withdrawPartnerShareConsent(
     const now = new Date();
     for (const consent of live) consent.withdrawnAt = now;
     consentsWithdrawn = live.length;
+    // WP32: the feed's WITHDRAW events follow at once (partner-feed.ts).
+    const { syncPartnerFeedForCase } = await import("@/lib/partner-feed");
+    await syncPartnerFeedForCase(caseId);
   } else {
     const { db } = await import("@/lib/db");
-    const withdrawn = await db.partnerShareConsent.updateMany({ where: { caseId, withdrawnAt: null }, data: { withdrawnAt: new Date() } });
-    if (withdrawn.count === 0) return { ok: false, error: "not_agreed" };
-    consentsWithdrawn = withdrawn.count;
+    // The feed's WITHDRAW events are written in the same transaction, so a
+    // withdrawal can never be left without them (partner-feed.ts).
+    const { syncCaseFeedEventsPrisma } = await import("@/lib/partner-feed");
+    const withdrawn = await db.$transaction(async (tx) => {
+      const result = await tx.partnerShareConsent.updateMany({ where: { caseId, withdrawnAt: null }, data: { withdrawnAt: new Date() } });
+      if (result.count === 0) return 0;
+      await syncCaseFeedEventsPrisma(tx, caseId);
+      return result.count;
+    });
+    if (withdrawn === 0) return { ok: false, error: "not_agreed" };
+    consentsWithdrawn = withdrawn;
   }
   await writeAuditLog({
     eventType: "PARTNER_SHARE_CONSENT_WITHDRAWN",
