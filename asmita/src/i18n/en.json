@@ -802,6 +802,8 @@
   "case.urlStatus.resolved": "Removed",
   "case.urlStatus.escalated": "Followed up",
   "case.urlStatus.rejected": "Not accepted",
+  "case.verification.verifiedRemoved": "Verified removed (checked {n} times)",
+  "case.verification.stillOnline": "Still online: we have followed up",
   "eligibility.single.sub": "These make sure Asmita is the right help for you. Your answers are not saved.",
   "eligibility.ageNow.title": "How old are you now?",
   "eligibility.ageThen.title": "How old were you when the photo or video was made?",

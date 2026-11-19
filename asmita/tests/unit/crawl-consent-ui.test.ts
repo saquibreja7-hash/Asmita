@@ -167,7 +167,7 @@ describe("found links: typed source, status and the survivor switch", () => {
   it("the case page draws no ladder for found links and keeps them out of where-things-stand", () => {
     const page = readFileSync(join(process.cwd(), "src/app/(victim)/case/[caseId]/page.tsx"), "utf8");
     expect(page).toContain("standingOf(ownUrls,");
-    expect(page).toMatch(/showFound && <FoundByAsmita/);
+    expect(page).toMatch(/showFound && \(\s*<FoundByAsmita/);
     const found = readFileSync(join(process.cwd(), "src/app/(victim)/case/[caseId]/FoundByAsmita.tsx"), "utf8");
     expect(found).not.toContain("EscalationLadder");
   });

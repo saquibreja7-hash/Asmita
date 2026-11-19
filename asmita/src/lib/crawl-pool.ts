@@ -175,3 +175,19 @@ export async function findingStillConsented(finding: { caseId: string; hashSubmi
   }
   return rows.some((consent) => consentCoversFinding({ ...consent, signedAt: new Date(consent.signedAt) }, finding));
 }
+
+/**
+ * Whether the case has at least one fingerprint in the pool right now: a
+ * live authorisation that lists an approved fingerprint carrying a pool id
+ * (exactly the inPool rule above). The removal re-check's image-level
+ * conclusion relies on this (watch-and-verify WP23, link-verification.ts):
+ * a fetched page proves her image is gone only while the crawler was
+ * actually matching her fingerprints.
+ */
+export async function caseHasPoolFingerprints(caseId: string): Promise<boolean> {
+  const coverage = await liveCoverage([caseId]);
+  const entry = coverage.get(caseId);
+  if (!entry || entry.ids.size === 0) return false;
+  const candidates = await fingerprintsByIds([...entry.ids]);
+  return candidates.some((candidate) => inPool(candidate, coverage));
+}

@@ -139,6 +139,15 @@ enum CrawlPageStatus {
   DEAD
 }
 
+// Watch-and-verify WP23: the outcome of one scheduled re-check that a link
+// reported removed really stayed down. PENDING until the check ran.
+enum LinkVerificationOutcome {
+  PENDING
+  GONE
+  STILL_ONLINE
+  UNKNOWN
+}
+
 enum HashAlgorithm {
   PDQ
 }
@@ -194,6 +203,7 @@ enum AuditEventType {
   CRAWL_SOURCE_PROMOTED
   CRAWL_SOURCE_PAUSED
   CRAWL_SOURCE_RESUMED
+  CONTENT_STILL_ONLINE
 }
 
 enum DeletionJobStatus {
@@ -410,6 +420,7 @@ model SubmittedUrl {
   crawlFinding CrawlFinding?    @relation(fields: [crawlFindingId], references: [id], onDelete: SetNull)
   notices      Notice[]
   portalTokens UrlPortalToken[]
+  verifications LinkVerification[]
 
   @@index([caseId])
   @@index([crawlSourceChecked])
@@ -575,6 +586,36 @@ model CrawlPage {
   @@unique([sourceId, urlDigest])
   @@index([sourceId, nextDueAt])
   @@index([sourceId, lastFetchedAt])
+}
+
+// Watch-and-verify WP23: one scheduled re-check that a link reported removed
+// really stayed down. When one of her links becomes REMOVED (she marks it, or
+// a platform's recorded reply says so), three checks are scheduled — one day,
+// three days and seven days later (attempt 1..3). The hourly retention cron
+// puts each due check into the crawler frontier as a priority row for its
+// host's source and later resolves the outcome from the crawler's report. No
+// URL is stored here: the check works from the SubmittedUrl it references,
+// which is why nothing in this table needs the retention blanking. Completed
+// rows are the admin case page's verification history; erased with the link.
+model LinkVerification {
+  id             String                 @id @default(uuid())
+  submittedUrlId String
+  dueAt          DateTime
+  // 1, 2 or 3: the +1/+3/+7 day check.
+  attempt        Int
+  outcome        LinkVerificationOutcome @default(PENDING)
+  checkedAt      DateTime?
+  // When the hourly sweep put the check into the crawler frontier; null until
+  // then. Findings are counted against this moment ("since the check was
+  // queued"), and a check that was never answered by a crawler visit gives
+  // up as UNKNOWN a bounded time after it.
+  enqueuedAt     DateTime?
+  createdAt      DateTime               @default(now())
+
+  submittedUrl SubmittedUrl @relation(fields: [submittedUrlId], references: [id])
+
+  @@index([outcome, dueAt])
+  @@index([submittedUrlId])
 }
 
 // Bearer keys for the crawler service. Only a sha256 of the key is stored

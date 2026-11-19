@@ -9,6 +9,7 @@ import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
 import { crawlerFindingsVisibleToSurvivor, survivorActableLinkWhere, survivorMayActOnLink } from "@/lib/crawler-flags";
 import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
+import { scheduleLinkVerifications } from "@/lib/link-verification";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { logSecurityEvent } from "@/lib/security-log";
 import { randomUUID } from "node:crypto";
@@ -784,8 +785,10 @@ export async function markUrlResolved(caseId: string, userId: string, urlId?: st
     const actable = record.urls.filter(survivorMayActOnLink);
     const url = urlId ? actable.find((item) => item.id === urlId) : actable[0];
     if (!url) throw new Error("url_not_found");
+    const wasRemoved = url.status === "REMOVED";
     url.status = "REMOVED";
     await writeAuditLog({ eventType: "CONTENT_REMOVED", entityType: "SubmittedUrl", entityId: url.id, actorId: userId });
+    if (!wasRemoved) await scheduleRemovalChecks(url.id);
     return;
   }
   const db = await getPrismaDb();
@@ -798,8 +801,29 @@ export async function markUrlResolved(caseId: string, userId: string, urlId?: st
 
   if (!url) throw new Error("url_not_found");
 
-  await db.submittedUrl.update({ where: { id: url.id }, data: { status: "REMOVED" } });
+  // The status guard is in the update itself, so two quick taps (or two
+  // devices) cannot both treat this as the transition and double-schedule
+  // the removal re-checks; the loser's update matches nothing.
+  const flipped = await db.submittedUrl.updateMany({
+    where: { id: url.id, status: { not: "REMOVED" } },
+    data: { status: "REMOVED" },
+  });
   await writeAuditLog({ eventType: "CONTENT_REMOVED", entityType: "SubmittedUrl", entityId: url.id });
+  if (flipped.count === 1) await scheduleRemovalChecks(url.id);
+}
+
+/**
+ * Watch-and-verify WP23: a link that just became REMOVED gets three
+ * scheduled re-checks (+1/+3/+7 days, link-verification.ts). Best-effort in
+ * both directions — a failure must never fail the removal she asked for, and
+ * it is logged with a fixed code only.
+ */
+async function scheduleRemovalChecks(urlId: string): Promise<void> {
+  try {
+    await scheduleLinkVerifications(urlId);
+  } catch {
+    console.error("link_verification_schedule_failed");
+  }
 }
 
 /** The survivor filed a form-only platform's own form: start that link's ladder. */
@@ -955,12 +979,13 @@ export type HardDeleteCounts = {
   otpCodes: number;
   crawlFindings: number;
   crawlConsents: number;
+  linkVerifications: number;
 };
 
 function emptyHardDeleteCounts(cases: number): HardDeleteCounts {
   return {
     cases, links: 0, notices: 0, escalations: 0, deliveryProofs: 0, feedback: 0, sessions: 0, otpCodes: 0,
-    crawlFindings: 0, crawlConsents: 0,
+    crawlFindings: 0, crawlConsents: 0, linkVerifications: 0,
   };
 }
 
@@ -1026,6 +1051,8 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
     }
     if (urlIds.length) {
       await tx.deleteFrom("UrlPortalToken").where("urlId", "in", urlIds).execute();
+      // Removal re-checks reference her links, so they are erased with them.
+      counts.linkVerifications = deleted(await tx.deleteFrom("LinkVerification").where("submittedUrlId", "in", urlIds).execute());
       counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
     }
     // Crawler matches and authorisations go; the kept fingerprints leave the pool.
@@ -1090,6 +1117,8 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     counts.escalations = (await tx.escalation.deleteMany({ where: { noticeId: { in: noticeIds } } })).count;
     counts.notices = (await tx.notice.deleteMany({ where: { id: { in: noticeIds } } })).count;
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: urlIds } } });
+    // Removal re-checks reference her links, so they are erased with them.
+    counts.linkVerifications = (await tx.linkVerification.deleteMany({ where: { submittedUrlId: { in: urlIds } } })).count;
     counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
     // Crawler matches and authorisations go; the kept fingerprints leave the pool.
     const findingIds = (await tx.crawlFinding.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);

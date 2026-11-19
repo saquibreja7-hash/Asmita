@@ -23,6 +23,7 @@
       "submit.link.*",
       "submit.hint.*",
       "case.urlStatus.*",
+      "case.verification.*",
       "submit.hash.platforms.sub",
       "flow.step1",
       "flow.step2",

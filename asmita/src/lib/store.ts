@@ -22,7 +22,9 @@ export type UrlRecord = {
   id: string;
   domain: string;
   platformName: string;
-  status: "PENDING_REVIEW" | "NOTICE_QUEUED" | "REMOVED" | "REJECTED";
+  // NOTICE_SENT only appears through the removal re-check finding the content
+  // back online (link-verification.ts): nothing is sent from the memory store.
+  status: "PENDING_REVIEW" | "NOTICE_QUEUED" | "NOTICE_SENT" | "REMOVED" | "REJECTED";
   urlHash: string;
   platformId: string | null;
   flaggedForReview?: boolean;
@@ -40,6 +42,13 @@ export type UrlRecord = {
    * database column's existing rows.
    */
   crawlSourceChecked?: boolean;
+  /**
+   * The link address, encrypted like the database column. The memory store
+   * kept only a digest until the removal re-check needed the address to queue
+   * its page row (link-verification.ts); rows created before then read as
+   * purged, like a link whose retention blanking already ran.
+   */
+  urlEncrypted?: string;
   /** When she added it (admin New links). Absent on demo rows. */
   submittedAt?: string;
 };
@@ -141,6 +150,7 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
         status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
         flaggedForReview,
         flagReason: options?.flagReasons?.join(","),
+        urlEncrypted: encryptField(parsed.normalizedUrl),
       });
       return { ok: true as const, duplicate: false, url: duplicate };
     }
@@ -153,6 +163,7 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
       platformName: parsed.platform?.name || "Unknown - will be reviewed",
       status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
       urlHash: parsed.urlHash,
+      urlEncrypted: encryptField(parsed.normalizedUrl),
       platformId: null,
       flaggedForReview,
       flagReason: options?.flagReasons?.join(","),

@@ -257,6 +257,21 @@ function LinkCard({
           ))}
         </ul>
       )}
+      {link.verifications.length > 0 && (
+        <div className="mt-3">
+          <p className="eyebrow">Removal checks</p>
+          <ul className="mt-1 grid gap-1 text-xs">
+            {link.verifications.map((check) => (
+              <li key={check.id}>
+                Check {check.attempt} of 3:{" "}
+                {check.outcome === "PENDING"
+                  ? `due ${formatIst(new Date(check.dueAt))}`
+                  : `${check.outcome.replaceAll("_", " ").toLowerCase()}${check.checkedAt ? ` ${formatIst(new Date(check.checkedAt))}` : ""}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {link.platformFiledAt && (
         <p className="mt-2 text-xs">Survivor filed the platform form {formatIst(link.platformFiledAt)}.</p>
       )}

@@ -802,6 +802,8 @@
   "case.urlStatus.resolved": "हटा दिया गया",
   "case.urlStatus.escalated": "अनुवर्ती कार्रवाई की गई",
   "case.urlStatus.rejected": "स्वीकृत नहीं",
+  "case.verification.verifiedRemoved": "हटाने की पुष्टि हुई ({n} बार जाँचा गया)",
+  "case.verification.stillOnline": "अभी भी ऑनलाइन है: हमने अनुवर्ती कार्रवाई कर दी है",
   "eligibility.single.sub": "ये सुनिश्चित करते हैं कि अस्मिता आपके लिए सही मदद है। आपके उत्तर सहेजे नहीं गए हैं।",
   "eligibility.ageNow.title": "आपकी उम्र अब कितनी है?",
   "eligibility.ageThen.title": "जब फ़ोटो या वीडियो बनाया गया था, तब आपकी उम्र क्या थी?",

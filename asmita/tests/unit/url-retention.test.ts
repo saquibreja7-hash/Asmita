@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn(), findingUpdateMany: vi.fn() }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn(), findingUpdateMany: vi.fn(), verificationDeleteMany: vi.fn() }));
 vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => false }));
 vi.mock("@/lib/db", () => ({
   db: { crawlFinding: { updateMany: mocks.findingUpdateMany }, $transaction: (fn: (tx: unknown) => unknown) => fn({
     submittedUrl: { findMany: mocks.findMany, updateMany: mocks.updateMany },
     urlPortalToken: { deleteMany: mocks.deleteMany },
+    linkVerification: { deleteMany: mocks.verificationDeleteMany },
   }) },
 }));
 
@@ -29,6 +30,9 @@ describe("reported URL retention", () => {
       where: { submittedAt: { lte: new Date(now.getTime() - URL_RETENTION_MS + 60 * 60 * 1000) }, urlEncrypted: { not: "" } },
     }));
     expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { urlId: { in: ["expired"] } } });
+    // Still-pending removal re-checks of a purged link can never run, so
+    // they go with it (watch-and-verify WP23); completed checks stay.
+    expect(mocks.verificationDeleteMany).toHaveBeenCalledWith({ where: { submittedUrlId: { in: ["expired"] }, outcome: "PENDING" } });
     expect(mocks.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: {
         urlEncrypted: "", urlHash: "", signedNoticePdf: null, signedHashSubmissionIds: [],

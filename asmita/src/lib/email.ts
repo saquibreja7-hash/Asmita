@@ -223,6 +223,71 @@ export async function sendL3FirReadyNotification(
   }, idempotencyKey ? { idempotencyKey } : undefined));
 }
 
+/*
+ * Watch-and-verify WP23: a removal re-check found her content online again
+ * and her link went back to the notice-sent state. Like every survivor email
+ * it carries only her case reference and a sign-in prompt — never the
+ * address, the site, the platform or anything about the content beyond the
+ * fact that it is back. The wording is new legal text created unreviewed
+ * (watch-and-verify spec rule 5): counsel must read it before real use.
+ */
+export function createLinkStillOnlineEmail(
+  referenceNumber: string,
+  dashboardUrl: string,
+  locale: Locale = "en",
+) {
+  // English only for now, like the other escalation emails.
+  void locale;
+  const lines = [
+    "Content you had reported as removed may be online again.",
+    "We have followed up on it. You do not need to do anything right now.",
+    "Sign in to see where your case stands.",
+  ];
+  return {
+    subject: `Update on Asmita case ${referenceNumber}`,
+    text: [
+      "Hello,",
+      "",
+      `An update on Asmita case ${referenceNumber}.`,
+      "",
+      ...lines.flatMap((line) => [line, ""]),
+      `Open your dashboard: ${dashboardUrl}`,
+      "",
+      "For privacy, this email contains no submitted URLs or personal information.",
+    ].join("\n"),
+    html: renderEmailHtml({
+      title: "An update on your case.",
+      paragraphs: lines,
+      highlight: referenceNumber,
+      highlightLabel: "Case reference",
+      cta: { label: "See your next steps", url: dashboardUrl },
+      footerNotes: [PRIVACY_NOTE],
+    }),
+  };
+}
+
+export async function sendLinkStillOnlineNotification(
+  to: string,
+  referenceNumber: string,
+  dashboardUrl: string,
+  locale: Locale = "en",
+  // The hourly sweep sends this once per still-online episode: the key stops
+  // a retry from emailing twice.
+  idempotencyKey?: string,
+) {
+  const { subject, text, html } = createLinkStillOnlineEmail(referenceNumber, dashboardUrl, locale);
+  if (!process.env.RESEND_API_KEY) {
+    return { id: `dev-verify-still-${referenceNumber}` };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text,
+    html,
+  }, idempotencyKey ? { idempotencyKey } : undefined));
+}
+
 export function createLegalPackageReadyEmail(referenceNumber: string, dashboardUrl: string) {
   return {
     subject: `Legal package ready for Asmita case ${referenceNumber}`,

@@ -10,6 +10,8 @@ vi.mock("@/lib/db", () => ({
     noticeTemplate: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
     hashDispatch: { count: vi.fn() },
     auditLog: { findMany: vi.fn() },
+    // Removal re-checks (watch-and-verify WP23): no row by default.
+    linkVerification: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
 
@@ -464,6 +466,11 @@ describe("getAdminCaseDetail", () => {
       expect(args.select).not.toHaveProperty("urlEncrypted");
       expect(args.select).not.toHaveProperty("signedNoticePdf");
     }
+    // The removal re-check history carries no address (link-verification.ts).
+    const verificationRead = mocked.linkVerification.findMany.mock.calls[0]?.[0];
+    expect(verificationRead?.select).toEqual({
+      id: true, submittedUrlId: true, dueAt: true, attempt: true, outcome: true, checkedAt: true, enqueuedAt: true, createdAt: true,
+    });
     expect(mocked.hashSubmission.findMany.mock.calls[0][0].select).not.toHaveProperty("hashEncrypted");
   });
 

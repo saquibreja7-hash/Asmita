@@ -106,6 +106,25 @@ export type MemoryCrawlServiceKey = {
   lastUsedAt: Date | null;
 };
 
+/*
+ * One scheduled re-check that a link reported removed really stayed down
+ * (watch-and-verify WP23, link-verification.ts). caseId is a memory-only
+ * denormalised copy: the database reaches the case through SubmittedUrl, but
+ * the memory erasure (eraseCrawlMemoryForCases below) runs after the case's
+ * link rows are already gone, so it cannot resolve them.
+ */
+export type MemoryLinkVerification = {
+  id: string;
+  caseId: string;
+  submittedUrlId: string;
+  dueAt: Date;
+  attempt: number;
+  outcome: "PENDING" | "GONE" | "STILL_ONLINE" | "UNKNOWN";
+  checkedAt: Date | null;
+  enqueuedAt: Date | null;
+  createdAt: Date;
+};
+
 type CrawlMemory = {
   fingerprints: Map<string, MemoryFingerprint>;
   consents: MemoryCrawlConsent[];
@@ -119,12 +138,14 @@ type CrawlMemory = {
   // Pages fetched per source per UTC day (CrawlSourceDay), keyed by
   // sourceDayKey below.
   sourceDays: Map<string, number>;
+  // Link removal re-checks (watch-and-verify WP23), keyed by row id.
+  linkVerifications: Map<string, MemoryLinkVerification>;
 };
 
 const globals = globalThis as typeof globalThis & { __asmitaCrawlStore?: CrawlMemory };
 
 function emptyMemory(): CrawlMemory {
-  return { fingerprints: new Map(), consents: [], findings: new Map(), sources: new Map(), blockedHosts: new Map(), pages: new Map(), keys: new Map(), sourceDays: new Map() };
+  return { fingerprints: new Map(), consents: [], findings: new Map(), sources: new Map(), blockedHosts: new Map(), pages: new Map(), keys: new Map(), sourceDays: new Map(), linkVerifications: new Map() };
 }
 
 export function crawlMemory(): CrawlMemory {
@@ -134,6 +155,7 @@ export function crawlMemory(): CrawlMemory {
   globals.__asmitaCrawlStore ??= emptyMemory();
   // A store created before the per-day counters existed (dev hot reload).
   globals.__asmitaCrawlStore.sourceDays ??= new Map();
+  globals.__asmitaCrawlStore.linkVerifications ??= new Map();
   return globals.__asmitaCrawlStore;
 }
 
@@ -159,4 +181,6 @@ export function eraseCrawlMemoryForCases(caseIds: string[]) {
   }
   // Sources stay, including REPORTED ones her links created: they carry her
   // host only, never her link or case, so erasing her must not touch them.
+  // Removal re-checks are case data (they reference her links), so they go.
+  for (const [id, verification] of memory.linkVerifications) if (ids.has(verification.caseId)) memory.linkVerifications.delete(id);
 }

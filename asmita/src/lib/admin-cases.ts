@@ -11,6 +11,7 @@ import { db } from "@/lib/db";
 import { listAllCases } from "@/lib/case-ops";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { buildLadder } from "@/lib/escalation-ladder";
+import { listLinkVerifications } from "@/lib/link-verification";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED, platformDirectory } from "@/lib/platforms";
 import { isUrlExpired } from "@/lib/url-retention";
 import { getTier1ApiConfigFromEnv, routeTier1OrFallback } from "@/lib/tier1-api-client";
@@ -680,6 +681,12 @@ export type AdminCaseLink = {
   };
   /** Why the hourly sweep could not send the next ladder step, if it could not. */
   ladderBlock: string | null;
+  /**
+   * Removal re-checks (watch-and-verify WP23), oldest attempt first: what
+   * was scheduled, what came of it and when. Counts and codes only — the
+   * table stores no address.
+   */
+  verifications: Array<{ id: string; attempt: number; outcome: string; dueAt: string; checkedAt: string | null }>;
 };
 
 export type AdminCaseFingerprint = {
@@ -805,6 +812,9 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
     ...links.flatMap((link) => (signedIds.has(link.id) ? link.signedHashSubmissionIds : [])),
     ...record.hashAdvisorySignedHashIds,
   ]);
+  // Removal re-checks (watch-and-verify WP23): one bounded read for the whole
+  // case; the rows carry no address, so the light-columns rule still holds.
+  const verifications = await listLinkVerifications(links.map((link) => link.id));
   const linkFacts: LinkFact[] = links.map((link) => ({
     id: link.id,
     status: link.status,
@@ -971,6 +981,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
             : null;
         })(),
         ladderBlock: fact?.ladderBlock ?? null,
+        verifications: verifications.get(link.id) ?? [],
       };
     }),
     fingerprints: hashes.map((hash) => ({
