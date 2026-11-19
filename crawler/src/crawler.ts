@@ -87,6 +87,7 @@ import { isScriptOnlyStub } from "./crawl/page-redirects.ts";
 import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
 import { BrowserRenderer, type BrowserImage } from "./browser/browser-renderer.ts";
 import type { ImageDecoder } from "./image/decoder-pool.ts";
+import { isPreviewSpriteUrl } from "./image/sprite.ts";
 import { decode, type FetchOptions, type FetchResult, type SafeFetcher } from "./net/safe-fetch.ts";
 import { checkUrl, type NetPolicy } from "./net/policy.ts";
 import { exitCodeFor } from "./exit-codes.ts";
@@ -127,7 +128,7 @@ export type CrawlDeps = {
   api: AsmitaApi;
   fetcher: Pick<SafeFetcher, "fetch">;
   /** Isolated image decoder (child processes). The caller owns its lifecycle. */
-  decoder: Pick<ImageDecoder, "hash" | "stats">;
+  decoder: Pick<ImageDecoder, "hash" | "hashSprite" | "stats">;
   log: Logger;
   /** External stop request (signals). */
   stopSignal?: AbortSignal;
@@ -519,6 +520,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * The shared tail of both image paths: decode in the isolated child
    * process, match, and queue a finding for every pool hit. `imageUrl` is
    * the address after redirects; `pageUrl` is the page as claimed.
+   *
+   * Video previews (video-fingerprints spec WP21): `preview` marks a
+   * candidate extracted as a video's preview (poster, og:image of an
+   * og:video page, JSON-LD VideoObject thumbnail, video-sitemap
+   * thumbnail, or a preview sprite sheet) so the run can count it; the tag
+   * changes nothing else — a preview is hashed and matched like any image.
+   * `sprite` routes the bytes to the decoder child's tile-splitting mode:
+   * one decode, one hash per tile, every tile matched against the pool.
    */
   const decodeMatchReport = async (
     bytes: Buffer,
@@ -526,14 +535,17 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     pageUrl: URL,
     source: Source,
     deferred?: Finding[],
+    opts: { preview?: boolean; sprite?: boolean } = {},
   ): Promise<boolean> => {
-    let hashed;
+    let hashed: { pdq: string; quality: number } | null = null;
+    let tiles: { pdq: string; quality: number }[] | null = null;
     try {
       // Decoding runs in an isolated child process (decoder-pool.ts) that
-      // receives only these bytes and returns only { pdq, quality }. The
-      // pool and matcher never leave this process. The buffer passed in is
-      // the only copy of the bytes here and is dropped when this returns.
-      hashed = await deps.decoder.hash(bytes);
+      // receives only these bytes and returns only hashes. The pool and
+      // matcher never leave this process. The buffer passed in is the only
+      // copy of the bytes here and is dropped when this returns.
+      if (opts.sprite) tiles = await deps.decoder.hashSprite(bytes);
+      else hashed = await deps.decoder.hash(bytes);
     } catch (raw) {
       const err = toCrawlError(raw);
       record(err.code);
@@ -557,7 +569,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       return false;
     }
     metrics.imagesHashed++;
-    if (hashed.quality < MIN_QUALITY) {
+    if (opts.preview) metrics.videoPreviews++;
+    // One image's hashes to match: a single hash, or a sprite's tiles.
+    if (tiles !== null) metrics.spriteTiles += tiles.length;
+    // The single-image quality floor keeps its own skip counter (WP4
+    // behaviour, pinned by tests); a sprite's low-quality tiles are
+    // dropped inside the loop without one — pieces of an image already
+    // counted as hashed, not image fetches of their own.
+    if (tiles === null && hashed!.quality < MIN_QUALITY) {
       metrics.skip("low_quality");
       return false;
     }
@@ -566,28 +585,40 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       metrics.skip("pool_stale");
       return false;
     }
-    const observedAt = new Date(now()).toISOString();
-    for (const hit of m.match(hashed.pdq)) {
-      // Video matches (WP20): the image sits within the threshold of a frame
-      // of a survivor video — the thumbnail clause of the video match rule.
-      // Same finding contract as an image hit: the fingerprint id is the
-      // video submission's pool id, and a person reviews it.
-      if (hit.kind === "video") metrics.videoMatches++;
-      const finding: Finding = {
-        fingerprintId: hit.fingerprintId,
-        pageUrl: pageUrl.href,
-        imageUrl,
-        distance: hit.distance,
-        quality: hashed.quality,
-        observedAt,
-        sourceId: source.id,
-      };
-      // A browser render's findings wait until its final URL passed the
-      // scope check (releaseFindings); everything else is queued now.
-      if (deferred) deferred.push(finding);
-      else releaseFindings([finding]);
+    let decoded = false;
+    for (const h of tiles ?? [hashed!]) {
+      if (h.quality < MIN_QUALITY) continue;
+      decoded = true;
+      const observedAt = new Date(now()).toISOString();
+      for (const hit of m.match(h.pdq)) {
+        // Video matches (WP20): the image — or this tile of a preview
+        // sprite sheet (WP21) — sits within the threshold of a frame of a
+        // survivor video: the thumbnail clause of the video match rule.
+        // Same finding contract as an image hit: the fingerprint id is the
+        // video submission's pool id, and a person reviews it.
+        if (hit.kind === "video") metrics.videoMatches++;
+        const finding: Finding = {
+          fingerprintId: hit.fingerprintId,
+          pageUrl: pageUrl.href,
+          imageUrl,
+          distance: hit.distance,
+          quality: h.quality,
+          observedAt,
+          sourceId: source.id,
+        };
+        // A browser render's findings wait until its final URL passed the
+        // scope check (releaseFindings); everything else is queued now.
+        // releaseFindings keeps one finding per fingerprint and image
+        // address, so several tiles of one sprite hitting the same video
+        // collapse into that one finding (best distance first).
+        if (deferred) deferred.push(finding);
+        else releaseFindings([finding]);
+      }
     }
-    return true;
+    // True whenever the bytes decoded into at least one hash at or above
+    // the quality floor: that is what "the host returned an image" means
+    // to the off-site host caps, matches or not.
+    return decoded;
   };
 
   /** Queue findings for delivery, once per fingerprint and image address. */
@@ -658,7 +689,13 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     seenImages.add(urlKey(img.url));
     metrics.imagesSeen++;
     if (offScope) metrics.imagesOffHost++;
-    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source, deferred);
+    // A preview sprite sheet (WP21) is recognised by its address whatever
+    // path delivered the bytes: the intercepted response of a rendered page
+    // goes through the same tile-splitting decoder call. The markup-level
+    // "video preview" tag does not cross the render boundary (it feeds a
+    // counter only); the sprite name is visible on the address itself.
+    const sprite = isPreviewSpriteUrl(img.url);
+    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source, deferred, { preview: sprite, sprite });
     if (offScope) {
       if (ok) {
         failedOffHosts.delete(host);
@@ -681,7 +718,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * (MAX_OFFSITE_HOST_FAILURES). Images of one source are processed one at a
    * time (crawlSource awaits each), so these sets need no reservation.
    */
-  const processImage = async (img: URL, pageUrl: URL, ctx: SourceCtx): Promise<void> => {
+  const processImage = async (img: URL, pageUrl: URL, ctx: SourceCtx, preview = false): Promise<void> => {
     const { source, scopeHost, offHosts, failedOffHosts } = ctx;
     if (!inScope(pageUrl, scopeHost)) {
       // Unreachable by construction; refuse rather than fetch on a bug.
@@ -763,10 +800,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     // The host that served the image now counts against the cap.
     settleHosts(res.url.hostname);
+    // A preview sprite sheet (WP21) is recognised by its address, the
+    // candidate's or the one that served it after redirects; a sprite is
+    // a video preview candidate wherever the page offered it.
+    const sprite = isPreviewSpriteUrl(img) || isPreviewSpriteUrl(res.url);
     // The image is reported at the address it was actually fetched from
     // (after redirects); mark that address seen too (already done above) and
     // run the shared decode -> match -> report tail.
-    await decodeMatchReport(res.body, res.url.href, pageUrl, source);
+    await decodeMatchReport(res.body, res.url.href, pageUrl, source, undefined, { preview: preview || sprite, sprite });
   };
 
   // --- per source -----------------------------------------------------------
@@ -927,9 +968,11 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   /**
    * A claimed page that answered with a sitemap or feed document (WP4).
    * Sitemap <loc> pages, index children and feed entries become frontier
-   * rows; image sitemap <image:loc> candidates are hashed right away,
-   * attributed to their page (the <loc>), which must be in scope like any
-   * page. Returns the entry's links; bounded by the caps inside.
+   * rows; image sitemap <image:loc> candidates and video-sitemap
+   * <video:thumbnail_loc> preview thumbnails (video-fingerprints spec
+   * WP21, tagged "video preview") are hashed right away, attributed to
+   * their page (the <loc>), which must be in scope like any page.
+   * Returns the entry's links; bounded by the caps inside.
    */
   const xmlLinks = async (ctx: SourceCtx, docUrl: URL, body: Buffer, kind: XmlDocumentKind, depth: number): Promise<ReportedPage["links"]> => {
     const links: ReportedPage["links"] = [];
@@ -994,9 +1037,16 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
           // The image belongs to its page: the page must be in scope (and
           // not obvious non-content) for the image to be a candidate.
           if (!inScope(p.loc, ctx.scopeHost) || isNonContentUrl(p.loc)) continue;
+          // Image-sitemap entries (WP4) and video-sitemap preview
+          // thumbnails (WP21), both hashed for their page; the thumbnail
+          // carries the "video preview" tag.
           for (const image of p.images) {
             if (stop.signal.aborted) break;
             await processImage(image, p.loc, ctx);
+          }
+          for (const thumb of p.videoThumbnails) {
+            if (stop.signal.aborted) break;
+            await processImage(thumb, p.loc, ctx, true);
           }
         }
       }
@@ -1371,12 +1421,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       };
     }
 
-    // Static path: images from the HTML, links from the HTML.
+    // Static path: images from the HTML, links from the HTML. A candidate
+    // the extractor tagged "video preview" (WP21) carries the tag into the
+    // shared tail, where it is counted and — for a sprite address — split.
     recordExtraction(ex);
     for (const img of ex.images) {
       if (stop.signal.aborted) break;
       // pageUrl is the page address as claimed (before any redirect).
-      await processImage(img, url, ctx);
+      await processImage(img, url, ctx, ex.videoPreviews.has(urlKey(img)));
     }
     if (stop.signal.aborted) {
       // The run stopped mid-page (its remaining images were skipped): drop

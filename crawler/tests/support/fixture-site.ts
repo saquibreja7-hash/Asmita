@@ -14,7 +14,7 @@ import { gzipSync } from "node:zlib";
 import sharp from "sharp";
 import type { Pool } from "../../src/asmita/client.ts";
 import { hashImage } from "../../src/image/hash-image.ts";
-import { flipBits, patternImage, pixelBombPng, randomFingerprint } from "./synthetic.ts";
+import { flipBits, patternImage, pixelBombPng, randomFingerprint, spriteSheet } from "./synthetic.ts";
 
 export const SOURCE_DOMAIN = "fixture.test";
 export const CDN_HOST = "cdn.imgcdn.test";
@@ -1903,6 +1903,158 @@ export async function buildVideoPoolFixture(): Promise<Fixture> {
   // Every hash the run touches, for the log scan: the two images it hashes
   // and every frame the pool carries.
   return { site, pool, expected, allHashes: [posterHash, decoyHash, far1, far2, nearPoster] };
+}
+
+/**
+ * The video-previews fixture (video-fingerprints spec WP21): one page that
+ * offers every preview kind — a <video poster>, an og:image on a page that
+ * declares an og:video, a JSON-LD VideoObject thumbnailUrl, a preview
+ * sprite sheet (3x2 grid of 160x90 tiles) and a decoy — plus a video
+ * sitemap whose <video:thumbnail_loc> is hashed for its own page, and a
+ * grid image whose address names no sprite: hashed whole, never split.
+ * Every planted finding comes from a different preview kind, so the run
+ * proves each one end to end. Synthetic images only; the host overlaps no
+ * other fixture's.
+ */
+export const PREV_HOST = "prev.fixture.test";
+
+export async function buildVideoPreviewFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 64 })).hash;
+  const poster = await patternImage(600, 320, 240, "png");
+  const ogPreview = await patternImage(601, 320, 180, "png");
+  const jsonldThumb = await patternImage(602, 300, 200, "png");
+  const sitemapThumb = await patternImage(603, 320, 180, "png");
+  const decoy = await patternImage(630, 320, 240, "png");
+  // The sprite sheet: six 160x90 tiles (seeds 610..615) in a 3x2 grid. The
+  // grid 480x180 admits exactly one 16:9 reading (3x2), so the child cuts
+  // the true tiles and the standalone hashes below are the tile hashes.
+  const spriteSeeds = [610, 611, 612, 613, 614, 615];
+  const sprite = await spriteSheet(spriteSeeds, 160, 90, 3, 2);
+  const tileHashes: string[] = [];
+  for (const s of spriteSeeds) tileHashes.push(await hashOf(await patternImage(s, 160, 90, "png")));
+  // The same grid geometry under a name that is no sprite: hashed whole,
+  // never split — its first tile is a pool frame the run must NOT match.
+  const gridSeeds = [620, 621, 622, 623, 624, 625];
+  const contactSheet = await spriteSheet(gridSeeds, 160, 90, 3, 2);
+  const negTileHash = await hashOf(await patternImage(gridSeeds[0]!, 160, 90, "png"));
+  const contactSheetHash = await hashOf(contactSheet);
+
+  const posterHash = await hashOf(poster);
+  const ogHash = await hashOf(ogPreview);
+  const jsonldHash = await hashOf(jsonldThumb);
+  const sitemapThumbHash = await hashOf(sitemapThumb);
+  const decoyHash = await hashOf(decoy);
+
+  const pool: Pool = {
+    version: "prev-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      // The poster is also an ordinary image fingerprint: one preview,
+      // two findings, both kinds (the WP21 rule: previews are compared
+      // with video frames AND image fingerprints).
+      { id: "fp-img-poster", pdq: posterHash, quality: 100 },
+      { id: "fp-vid-poster", kind: "video", frames: [posterHash] },
+      { id: "fp-vid-og", kind: "video", frames: [ogHash] },
+      { id: "fp-vid-jsonld", kind: "video", frames: [jsonldHash] },
+      // Two tiles of one sprite are frames of one video: two video hits,
+      // one finding (deduplicated per fingerprint and image address).
+      { id: "fp-vid-sprite", kind: "video", frames: [tileHashes[0]!, tileHashes[1]!] },
+      { id: "fp-vid-sitemap", kind: "video", frames: [sitemapThumbHash] },
+      // The frame that only a wrongly split contact sheet could match.
+      { id: "fp-vid-neg", kind: "video", frames: [negTileHash] },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-img-poster", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/poster.png" },
+    { fingerprintId: "fp-vid-poster", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/poster.png" },
+    { fingerprintId: "fp-vid-og", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/og-preview.png" },
+    { fingerprintId: "fp-vid-jsonld", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/jsonld-thumb.png" },
+    { fingerprintId: "fp-vid-sprite", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/sprite.png" },
+    { fingerprintId: "fp-vid-sitemap", pagePath: "/mapped.html", imageHost: PREV_HOST, imagePath: "/img/sitemap-thumb.png" },
+  ];
+
+  site.route(
+    PREV_HOST,
+    "/robots.txt",
+    sendBytes(Buffer.from(`User-agent: *\nAllow: /\nSitemap: ${site.origin(PREV_HOST)}/video-sitemap.xml\n`), "text/plain"),
+  );
+  site.route(
+    PREV_HOST,
+    "/",
+    sendHtml(
+      html(`
+      <h1>Preview gallery</h1>
+      <a href="/watch.html">the clip</a>
+      <img src="/img/contact-sheet.png" width="480" height="180" alt="contact sheet">
+    `),
+    ),
+  );
+  site.route(
+    PREV_HOST,
+    "/watch.html",
+    sendHtml(
+      html(
+        `
+      <h1>Clip page</h1>
+      <video poster="/img/poster.png" src="/clip.webm"></video>
+      <img src="/img/sprite.png" width="480" height="180" alt="sprite">
+      <img src="/img/decoy.png" width="320" height="240" alt="decoy">
+    `,
+        `
+      <meta property="og:video" content="/clip.mp4">
+      <meta property="og:image" content="/img/og-preview.png">
+      <script type="application/ld+json">{"@type":"VideoObject","name":"clip","thumbnailUrl":"/img/jsonld-thumb.png"}</script>
+    `,
+      ),
+    ),
+  );
+  site.route(PREV_HOST, "/mapped.html", sendHtml(html(`<h1>Mapped clip</h1>`)));
+  site.route(
+    PREV_HOST,
+    "/video-sitemap.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:video="http://www.google.com/schemas/sitemap-video/1.0">
+  <url>
+    <loc>${site.origin(PREV_HOST)}/mapped.html</loc>
+    <video:video>
+      <video:thumbnail_loc>${site.origin(PREV_HOST)}/img/sitemap-thumb.png</video:thumbnail_loc>
+    </video:video>
+  </url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  site.route(PREV_HOST, "/img/poster.png", sendBytes(poster, "image/png"));
+  site.route(PREV_HOST, "/img/og-preview.png", sendBytes(ogPreview, "image/png"));
+  site.route(PREV_HOST, "/img/jsonld-thumb.png", sendBytes(jsonldThumb, "image/png"));
+  site.route(PREV_HOST, "/img/sitemap-thumb.png", sendBytes(sitemapThumb, "image/png"));
+  site.route(PREV_HOST, "/img/sprite.png", sendBytes(sprite, "image/png"));
+  site.route(PREV_HOST, "/img/contact-sheet.png", sendBytes(contactSheet, "image/png"));
+  site.route(PREV_HOST, "/img/decoy.png", sendBytes(decoy, "image/png"));
+  // Every hash the run touches or the pool carries, for the log scan: the
+  // pool's frames and previews, the six sprite tile hashes the child cuts,
+  // and the whole-image hashes of the decoy and the unsplit contact sheet.
+  return {
+    site,
+    pool,
+    expected,
+    allHashes: [
+      posterHash,
+      ogHash,
+      jsonldHash,
+      sitemapThumbHash,
+      ...tileHashes,
+      negTileHash,
+      decoyHash,
+      contactSheetHash,
+    ],
+  };
 }
 
 /** Env for a fixture run (test values only, nothing real). */

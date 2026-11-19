@@ -123,6 +123,20 @@ export class RunMetrics {
    * hit like the matches loop finds them; a count only, never a frame.
    */
   videoMatches = 0;
+  /**
+   * Video previews hashed (video-fingerprints spec WP21): image candidates
+   * tagged "video preview" — a video poster, the og:image of a page that
+   * declares an og:video, a JSON-LD VideoObject thumbnailUrl, a
+   * video-sitemap <video:thumbnail_loc>, or a preview sprite sheet. A
+   * sprite counts once here (its tiles are in spriteTiles). A count only.
+   */
+  videoPreviews = 0;
+  /**
+   * Tiles hashed out of preview sprite sheets (video-fingerprints spec
+   * WP21): each tile is matched against the pool like an image of its own.
+   * Bounded by MAX_SPRITE_TILES per sprite.
+   */
+  spriteTiles = 0;
   findingsQueued = 0;
   findingsPosted = 0;
   /** Accepted by the server (new or already known: it no longer says which). */
@@ -213,6 +227,8 @@ export class RunMetrics {
       imagesSkipped: { ...this.imagesSkipped } as Record<string, number>,
       matches: this.matches,
       videoMatches: this.videoMatches,
+      videoPreviews: this.videoPreviews,
+      spriteTiles: this.spriteTiles,
       findingsQueued: this.findingsQueued,
       findingsPosted: this.findingsPosted,
       findingsAccepted: this.findingsAccepted,

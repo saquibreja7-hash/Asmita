@@ -97,6 +97,47 @@ export async function patternImage(
 }
 
 /**
+ * A preview sprite sheet (video-fingerprints spec WP21): a grid of
+ * tiles, each the standalone pattern image of its seed, laid out
+ * left-to-right, top-to-bottom. PNG keeps the tiles pixel-identical to
+ * patternImage(seed, tw, th), so a tile's hash inside the sheet equals
+ * the standalone image's hash — the property the WP21 tests pin.
+ */
+export async function spriteSheet(
+  seeds: number[],
+  tileWidth: number,
+  tileHeight: number,
+  cols: number,
+  rows: number,
+  format: EncodeFormat = "png",
+): Promise<Buffer> {
+  const width = cols * tileWidth;
+  const height = rows * tileHeight;
+  const sheet = Buffer.alloc(width * height * 3);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = patternPixels(seeds[r * cols + c] ?? 1, tileWidth, tileHeight);
+      for (let y = 0; y < tileHeight; y++) {
+        tile.copy(sheet, ((r * tileHeight + y) * width + c * tileWidth) * 3, y * tileWidth * 3, (y + 1) * tileWidth * 3);
+      }
+    }
+  }
+  const img = sharp(sheet, { raw: { width, height, channels: 3 } });
+  switch (format) {
+    case "png":
+      return img.png().toBuffer();
+    case "jpeg":
+      return img.jpeg({ quality: 92 }).toBuffer();
+    case "webp":
+      return img.webp({ lossless: true }).toBuffer();
+    case "gif":
+      return img.gif().toBuffer();
+    case "avif":
+      return img.avif({ quality: 80 }).toBuffer();
+  }
+}
+
+/**
  * A PNG whose header claims enormous dimensions (a "pixel bomb"). The pixel
  * data is a real small image; only the IHDR width/height are rewritten and
  * the chunk CRC recomputed, so a decoder that trusts the header would try to
