@@ -48,7 +48,14 @@ export type MetaRefresh = {
  * examined; the scan is bounded by the HTML byte cap the fetcher already
  * enforced.
  */
-export function parseMetaRefresh(html: string): MetaRefresh | null {
+export function parseMetaRefresh(rawHtml: string): MetaRefresh | null {
+  // Review fix: a refresh inside an HTML comment is no tag at all, and one
+  // inside <noscript> is only for browsers without JavaScript (the page the
+  // browser actually shows does not redirect). Both are cut before the scan;
+  // an unterminated comment hides the rest of the document, as in a browser.
+  const html = rawHtml
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, " ")
+    .replace(/<noscript[\s>][\s\S]*?(?:<\/noscript\s*>|$)/gi, " ");
   const open = new RegExp(META_OPEN.source, "gi");
   for (let m = open.exec(html); m !== null; m = open.exec(html)) {
     const at = m.index;

@@ -140,9 +140,15 @@ export class SafeFetcher {
 
   async fetch(input: string | URL, opts: FetchOptions): Promise<FetchResult> {
     let url = checkUrl(input, this.policy);
+    /** Every address this fetch has requested (fragment-less), for the meta-refresh loop check. */
+    const visited = new Set<string>();
+    /** beforeHop already ran for `url` (a meta-refresh target, checked before it was taken). */
+    let admitted = false;
     for (let hop = 0; ; hop++) {
       if (hop > this.config.maxRedirects) throw new CrawlError("too_many_redirects");
-      if (opts.beforeHop) await opts.beforeHop(url, hop);
+      if (opts.beforeHop && !admitted) await opts.beforeHop(url, hop);
+      admitted = false;
+      visited.add(withoutHash(url));
       const hopUrl = url;
       const result = opts.gate ? await opts.gate(() => this.fetchHop(hopUrl, opts)) : await this.fetchHop(hopUrl, opts);
       if (result.kind === "redirect") {
@@ -156,18 +162,36 @@ export class SafeFetcher {
         continue;
       }
       // A redirect that lives in the page body (WP12): same loop, same
-      // checks, same budget. A target that does not parse is ignored — the
-      // page itself is valid content, unlike a malformed Location header.
+      // checks, same budget. Unlike a Location header, the page that carries
+      // a refresh is valid content in its own right, so a refresh that may
+      // not be followed leaves this page as the answer instead of failing it
+      // (review fix): a target that does not parse, that the address policy
+      // refuses, that is off scope or robots-disallowed (beforeHop refuses
+      // it, before any request), or that this fetch already requested (a
+      // self-refresh or a refresh loop).
       if (opts.followMetaRefresh && opts.kind === "html") {
         const target = htmlMetaRefreshTarget(result.value.contentType, result.value.body);
         if (target !== null) {
           let next: URL;
           try {
-            next = new URL(target, url);
+            next = checkUrl(new URL(target, url), this.policy);
           } catch {
             return result.value;
           }
-          url = checkUrl(next, this.policy);
+          if (visited.has(withoutHash(next))) return result.value;
+          // The shared budget still bounds a chain of distinct targets.
+          if (hop + 1 > this.config.maxRedirects) throw new CrawlError("too_many_redirects");
+          if (opts.beforeHop) {
+            try {
+              await opts.beforeHop(next, hop + 1);
+            } catch (raw) {
+              const err = toCrawlError(raw);
+              if (err.code === "aborted" || opts.signal?.aborted) throw err;
+              return result.value;
+            }
+            admitted = true;
+          }
+          url = next;
           continue;
         }
       }
@@ -258,6 +282,13 @@ export class SafeFetcher {
   async close(): Promise<void> {
     await this.agent.close().catch(() => undefined);
   }
+}
+
+/** A URL's address without its fragment (fragments never reach the server). */
+function withoutHash(u: URL): string {
+  const copy = new URL(u.href);
+  copy.hash = "";
+  return copy.href;
 }
 
 function header(v: string | string[] | undefined): string | undefined {

@@ -5,14 +5,15 @@
  *     page as claimed, with the target's links reported (the redirector's
  *     own candidates are discarded, like an HTTP redirect's);
  *   - an off-scope meta refresh is never followed: the other host is not
- *     contacted, not even for robots.txt, the page reports an error, and no
- *     discovery is recorded for it;
+ *     contacted, not even for robots.txt, no discovery is recorded for it,
+ *     and the page itself is the answer (fetched; review fix — it used to
+ *     fail with an error);
  *   - a refresh slower than 10 seconds is page content: its own image is
  *     found and the target is never requested;
- *   - a self-refresh loop is bounded by the shared redirect-hop budget
- *     (exactly the six requests the budget allows, then an error);
+ *   - a self-refresh is caught as a loop: the page is requested once and is
+ *     the answer (review fix — it used to burn the redirect budget and fail);
  *   - a refresh target that robots.txt disallows is never requested and the
- *     page reports blocked;
+ *     page itself is the answer (review fix — it used to report blocked);
  *   - a location.replace() stub page of an AUTO source is rendered in the
  *     browser (a tiny script-only page with no links and no images), and
  *     the images of the page it redirects to are hashed; a small script-less
@@ -84,14 +85,16 @@ describe("redirects that live in the page", () => {
     expect(fx.site.requested(REDIR_HOST, "/refreshed-child")).toBe(true);
   });
 
-  it("never follows an off-scope meta refresh, not even for robots.txt", () => {
+  it("never follows an off-scope meta refresh, not even for robots.txt, and keeps the page", () => {
     expect(requestsTo(AWAY_HOST)).toBe(0);
+    expect(requestsTo(REDIR_HOST, "/meta-offsite")).toBe(1);
     const row = [...api.pages.values()].find((p) => p.url.endsWith("/meta-offsite"));
-    expect(row?.status).toBe("ERROR");
+    // Review fix: the refresh page is the answer, not a failure.
+    expect(row?.status).toBe("FETCHED");
     // Not a link either: only anchors become discoveries.
     expect(api.discoveryReports.some((r) => r.hosts.includes(AWAY_HOST))).toBe(false);
     const errors = result.summary.errors as Record<string, number>;
-    expect(errors.out_of_scope).toBe(1);
+    expect(errors.out_of_scope).toBeUndefined();
   });
 
   it("treats a refresh slower than 10 seconds as page content", () => {
@@ -102,20 +105,24 @@ describe("redirects that live in the page", () => {
     expect(finding!.imageUrl).toBe(`http://${REDIR_HOST}:${port()}/img/slow-own.png`);
   });
 
-  it("bounds a self-refresh chain with the shared redirect budget", () => {
-    expect(requestsTo(REDIR_HOST, "/meta-loop")).toBe(6); // the initial hop plus the five redirects the budget allows
+  it("catches a self-refresh as a loop: one request, the page is the answer", () => {
+    // Review fix: a refresh to the address already requested is not
+    // followed (it used to be requested six times and fail the page).
+    expect(requestsTo(REDIR_HOST, "/meta-loop")).toBe(1);
     const row = [...api.pages.values()].find((p) => p.url.endsWith("/meta-loop"));
-    expect(row?.status).toBe("ERROR");
+    expect(row?.status).toBe("FETCHED");
     const errors = result.summary.errors as Record<string, number>;
-    expect(errors.too_many_redirects).toBe(1);
+    expect(errors.too_many_redirects).toBeUndefined();
   });
 
-  it("robots-checks the refresh target and reports the page blocked", () => {
+  it("robots-checks the refresh target, never requests it, and keeps the page", () => {
     expect(requestsTo(REDIR_HOST, "/private/target")).toBe(0);
     const row = [...api.pages.values()].find((p) => p.url.endsWith("/meta-robots"));
-    expect(row?.status).toBe("BLOCKED");
+    // Review fix: a disallowed refresh target does not block the page that
+    // carries it; the page itself is the answer.
+    expect(row?.status).toBe("FETCHED");
     const errors = result.summary.errors as Record<string, number>;
-    expect(errors.robots_disallowed).toBe(1);
+    expect(errors.robots_disallowed).toBeUndefined();
   });
 
   it("renders a location.replace stub of an AUTO source and hashes its target's images", () => {

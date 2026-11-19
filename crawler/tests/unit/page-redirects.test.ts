@@ -70,6 +70,17 @@ describe("parseMetaRefresh", () => {
     expect(parseMetaRefresh(slowThenFast)?.url).toBe("/now");
   });
 
+  it("ignores a refresh inside an HTML comment or <noscript> (review fix)", () => {
+    expect(parseMetaRefresh(page(`<!-- <meta http-equiv="refresh" content="0; url=/old"> -->`))).toBeNull();
+    expect(parseMetaRefresh(page(`<noscript><meta http-equiv="refresh" content="0; url=/nojs"></noscript>`))).toBeNull();
+    expect(parseMetaRefresh(page(`<NOSCRIPT class="x"><meta http-equiv="refresh" content="0; url=/nojs"></NOSCRIPT>`))).toBeNull();
+    // An unterminated comment hides the rest of the document, as in a browser.
+    expect(parseMetaRefresh(`<!-- open <meta http-equiv="refresh" content="0; url=/hidden">`)).toBeNull();
+    // A real refresh after a commented-out one is still found.
+    const both = page(`<!-- <meta http-equiv="refresh" content="0; url=/old"> --><noscript><meta http-equiv="refresh" content="0; url=/nojs"></noscript><meta http-equiv="refresh" content="0; url=/real">`);
+    expect(parseMetaRefresh(both)?.url).toBe("/real");
+  });
+
   it("ignores lookalike tag names and honours the cap as a constant", () => {
     expect(parseMetaRefresh(page("<metalFan>fan page</metalFan>"))).toBeNull();
     expect(MAX_META_REFRESH_DELAY_S).toBe(10);
@@ -133,6 +144,10 @@ describe("SafeFetcher follows a meta refresh as one more hop", () => {
       if (url === "/redirector") return send(page(`<meta http-equiv="refresh" content="0; url=/final">`));
       if (url === "/final") return send(page("", "<p>the target page</p>"));
       if (url === "/self") return send(page(`<meta http-equiv="refresh" content="0; url=/self">`));
+      if (url === "/loop-a") return send(page(`<meta http-equiv="refresh" content="0; url=/loop-b">`));
+      if (url === "/loop-b") return send(page(`<meta http-equiv="refresh" content="0; url=/loop-a#again">`));
+      // /m0 -> /m1 -> ...: an endless chain of distinct meta refresh targets.
+      if (/^\/m\d+$/.test(url)) return send(page(`<meta http-equiv="refresh" content="0; url=/m${Number(url.slice(2)) + 1}">`));
       if (url === "/slow") return send(page(`<meta http-equiv="refresh" content="11; url=/final">`));
       if (url === "/no-url") return send(page(`<meta http-equiv="refresh" content="5">`));
       if (url === "/meta-as-image") return send(page(`<meta http-equiv="refresh" content="0; url=/final">`), "image/png");
@@ -212,10 +227,17 @@ describe("SafeFetcher follows a meta refresh as one more hop", () => {
     await f.close();
   });
 
-  it("policy-checks the target like a Location header", async () => {
+  it("policy-checks the target, and keeps the page when the policy refuses it (review fix)", async () => {
+    // Review fix: the refresh page is content in its own right, so a target
+    // the address policy refuses is simply not followed (nothing is sent to
+    // it) and the page itself is the answer, instead of failing the page.
     const f = fetcher();
-    expect(await code(f.fetch(url("/meta-js"), htmlOpts))).toBe("blocked_scheme");
-    expect(await code(f.fetch(url("/meta-literal"), htmlOpts))).toBe("blocked_address");
+    const before = hits.length;
+    const js = await f.fetch(url("/meta-js"), htmlOpts);
+    expect(js.url.pathname).toBe("/meta-js");
+    const literal = await f.fetch(url("/meta-literal"), htmlOpts);
+    expect(literal.url.pathname).toBe("/meta-literal");
+    expect(hits.slice(before)).toEqual(["/meta-js", "/meta-literal"]);
     await f.close();
   });
 
@@ -227,18 +249,46 @@ describe("SafeFetcher follows a meta refresh as one more hop", () => {
   });
 
   it("runs beforeHop before the meta hop's request, so a scope or robots refusal needs no fetch", async () => {
+    // Review fix: a refused refresh target no longer fails the page — the
+    // page that carries the refresh is returned instead.
     const f = fetcher();
-    const before = hits.length;
-    const err = await code(
-      f.fetch(url("/redirector"), {
+    for (const refusal of ["robots_disallowed", "out_of_scope"] as const) {
+      const before = hits.length;
+      const result = await f.fetch(url("/redirector"), {
         ...htmlOpts,
         beforeHop: async (u) => {
-          if (u.pathname === "/final") throw new CrawlError("robots_disallowed");
+          if (u.pathname === "/final") throw new CrawlError(refusal);
         },
-      }),
-    );
-    expect(err).toBe("robots_disallowed");
-    expect(hits.slice(before).filter((h) => h === "/final")).toEqual([]);
+      });
+      expect(result.url.pathname).toBe("/redirector");
+      expect(result.body.toString("utf8")).toContain("url=/final");
+      expect(hits.slice(before).filter((h) => h === "/final")).toEqual([]);
+    }
+    // An aborted politeness wait still aborts the fetch.
+    expect(
+      await code(
+        f.fetch(url("/redirector"), {
+          ...htmlOpts,
+          beforeHop: async (u) => {
+            if (u.pathname === "/final") throw new CrawlError("aborted");
+          },
+        }),
+      ),
+    ).toBe("aborted");
+    await f.close();
+  });
+
+  it("never loops: a self-refresh or a refresh back to a visited page returns the page (review fix)", async () => {
+    const f = fetcher();
+    const selfBefore = hits.length;
+    const self = await f.fetch(url("/self"), htmlOpts);
+    expect(self.url.pathname).toBe("/self");
+    expect(hits.slice(selfBefore)).toEqual(["/self"]);
+    // /loop-a -> /loop-b -> /loop-a: the second page is the answer, each fetched once.
+    const loopBefore = hits.length;
+    const loop = await f.fetch(url("/loop-a"), htmlOpts);
+    expect(loop.url.pathname).toBe("/loop-b");
+    expect(hits.slice(loopBefore)).toEqual(["/loop-a", "/loop-b"]);
     await f.close();
   });
 
@@ -248,10 +298,12 @@ describe("SafeFetcher follows a meta refresh as one more hop", () => {
     // Five HTTP redirect hops to reach the meta page: no room left for it.
     expect(await code(f.fetch(url("/r0"), htmlOpts))).toBe("too_many_redirects");
     expect(hits.slice(before).filter((h) => h === "/final")).toEqual([]);
-    // A self-refresh chain burns the budget exactly like a redirect loop.
-    const selfBefore = hits.length;
-    expect(await code(f.fetch(url("/self"), htmlOpts))).toBe("too_many_redirects");
-    expect(hits.slice(selfBefore).filter((h) => h === "/self").length).toBe(6); // hop 0..5
+    // A chain of distinct refresh targets burns the budget exactly like a
+    // redirect chain (review fix: a self-refresh no longer does — it is
+    // caught as a loop, see the test above — so the chain is /m0 -> /m1 ...).
+    const chainBefore = hits.length;
+    expect(await code(f.fetch(url("/m0"), htmlOpts))).toBe("too_many_redirects");
+    expect(hits.slice(chainBefore).filter((h) => h.startsWith("/m")).length).toBe(6); // hop 0..5
     // An HTTP redirect plus one meta hop is well inside it.
     const mixed = await f.fetch(url("/hop302"), htmlOpts);
     expect(mixed.url.pathname).toBe("/final");
