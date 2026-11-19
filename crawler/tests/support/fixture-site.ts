@@ -87,6 +87,24 @@ export class FixtureSite {
 
 const html = (body: string, head = "") => `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
 
+/**
+ * Deterministic distinct letters for a number (1 -> a, 26 -> z, 27 -> aa):
+ * a per-page word that survives the soft-404 body digest's digit stripping
+ * (crawler v3 WP14), so pages that differ only by digits in their markup —
+ * which the digest must treat as one template — can be kept apart on purpose
+ * by giving each a letter tag.
+ */
+const letterTag = (n: number): string => {
+  let s = "";
+  let x = Math.max(1, Math.floor(n));
+  while (x > 0) {
+    const m = (x - 1) % 26;
+    s = String.fromCharCode(97 + m) + s;
+    x = Math.floor((x - 1) / 26);
+  }
+  return s;
+};
+
 function sendHtml(content: string, extra: Record<string, string> = {}): Handler {
   return (res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...extra });
@@ -432,17 +450,27 @@ export async function buildFixture(): Promise<Fixture> {
   // ---- link flood: approve flood.fixture.test ----
   // Every page is ~1.6 MB of links to 40,000 further pages (a hostile site
   // trying to exhaust the frontier). The home page also has one real image.
+  // Each page carries its own letter tag: the flood test wants every claimed
+  // page to offer its links, and the soft-404 body digest (crawler v3 WP14)
+  // would read digit-only-identical bodies as one repeated template.
   const F = `flood.${S}`;
-  const floodPage = (seed: number, withImage: boolean) =>
+  const floodPage = (tag: string, seed: number, withImage: boolean) =>
     html(
       (withImage ? `<img src="/img/flood.png">` : "") +
+        `<p>page ${tag}</p>` +
         Array.from({ length: 40_000 }, (_, i) => `<a href="/p/${seed}-${i}">x</a>`).join(""),
     );
-  const home = floodPage(0, true);
+  const home = floodPage("home", 0, true);
   site.route(F, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
   site.route(F, "/", sendHtml(home));
   site.route(F, "/img/flood.png", sendBytes(img.flood, "image/png"));
-  site.routeAny(F, (path) => sendHtml(floodPage(Number(path.split("-")[1] ?? 0) + 1, false)));
+  site.routeAny(F, (path) => {
+    // Today's rule kept: the link index that led here is the next seed.
+    const m = /^\/p\/(\d+)-(\d+)/.exec(path);
+    const seed = m ? Number(m[2]) + 1 : 1;
+    const tag = m ? `${letterTag(Number(m[1]) + 1)}-${letterTag(seed)}` : "any";
+    return sendHtml(floodPage(tag, seed, false));
+  });
 
   // ---- conditional-GET fixture: approve etag.fixture.test ----
   // Three pages: two that always serve the same ETag (a 304 answers the
@@ -795,7 +823,11 @@ ${Array.from({ length: 3 }, (_, i) => `  <entry><title>Post ${i + 1}</title><lin
       `/listing?page=${n}`,
       sendHtml(
         html(
-          `${plantedImg}${next}
+          // The heading word makes every listing page genuinely distinct
+          // content beyond its digits: a real listing's pages differ in more
+          // than numbers, and the soft-404 body digest (WP14) strips digits,
+          // so digit-only variation would read as one repeated template.
+          `<h1>Listing ${letterTag(n)}</h1>${plantedImg}${next}
            <a href="/listing?page=${n}&amp;utm_source=share">share this page</a>
            <a href="/listing?page=${n}&amp;calendar=1">calendar view</a>`,
         ),
@@ -852,7 +884,11 @@ ${Array.from({ length: 3 }, (_, i) => `  <entry><title>Post ${i + 1}</title><lin
       const nextPath = `/cal/${next.toISOString().slice(0, 10)}`;
       return send(`<a rel="next" class="next-day" href="${nextPath}">Next day</a>`);
     }
-    return send(`<p>nothing here</p>`);
+    // The admitted /t?u=N variants each get their own word: the query-trap
+    // test wants all eight fetched, and the soft-404 body digest (WP14)
+    // would otherwise read digit-only-identical bodies as one template.
+    const u = Number(/\/t\?u=(\d+)/.exec(path)?.[1] ?? 0);
+    return send(`<p>nothing here (${letterTag(u)})</p>`);
   });
 
   return { site, pool, expected, allHashes };
@@ -1057,6 +1093,89 @@ export async function buildPermanentFailuresFixture(): Promise<Fixture> {
   site.route(RATE429_HOST, "/", statusPage(429, "<html><body>slow down</body></html>", { "retry-after": "0" }));
   const pool: Pool = { version: "permfail-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
   return { site, pool, expected: [], allHashes: [] };
+}
+
+/*
+ * The soft-404 fixture (crawler v3 WP14). soft404.fixture.test answers every
+ * unknown path with the same "not found" page over HTTP 200; its hub links
+ * twelve missing paths, so the first five distinct URLs carrying that body
+ * digest are processed normally and every further one is a soft-404: nothing
+ * extracted, reported gone. The not-found page plants an in-pool image and
+ * one link so the cut is observable (exactly one finding, exactly one row
+ * under it, every gone report entry linkless). alike.fixture.test is the
+ * negative: nine genuinely similar gallery pages — same layout, digits in
+ * the body, a different word and image each — that must all be fetched,
+ * extracted and reported fetched. No host overlaps the other fixtures' hosts.
+ */
+export const SOFT404_HOST = `soft404.${SOURCE_DOMAIN}`;
+export const ALIKE_HOST = `alike.${SOURCE_DOMAIN}`;
+export const SOFT404_MISSING = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet", "kilo", "lima"];
+export const ALIKE_GALLERIES = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india"];
+
+export async function buildSoft404Fixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const N = SOFT404_HOST;
+  const L = ALIKE_HOST;
+
+  const img: Record<string, Buffer> = { soft404: await patternImage(250, 300, 300, "png") };
+  for (const [i, w] of ALIKE_GALLERIES.entries()) img[w] = await patternImage(255 + i, 300, 300, "png");
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 1 })).hash;
+  const allHashes: string[] = [];
+  const fingerprints: Array<{ id: string; pdq: string; quality: number }> = [];
+  const planted: Array<{ fp: string; key: string; page: string; path: string; host: string }> = [
+    { fp: "fp-soft404", key: "soft404", page: "/missing/alpha", path: "/img/soft404.png", host: N },
+    ...ALIKE_GALLERIES.map((w) => ({ fp: `fp-alike-${w}`, key: w, page: `/gallery/${w}`, path: `/img/gal-${w}.png`, host: L })),
+  ];
+  for (const p of planted) {
+    const h = await hashOf(img[p.key]!);
+    allHashes.push(h);
+    fingerprints.push({ id: p.fp, pdq: h, quality: 100 });
+  }
+  const pool: Pool = { version: "soft404-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints };
+  const expected: Expected[] = planted.map((p) => ({ fingerprintId: p.fp, pagePath: p.page, imageHost: p.host, imagePath: p.path }));
+
+  // ---- the soft-404 site: every unknown path answers the same page ----
+  const robots = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+  site.route(N, "/robots.txt", robots);
+  site.route(
+    N,
+    "/",
+    sendHtml(html(SOFT404_MISSING.map((w) => `<a href="/missing/${w}">${w}</a>`).join(""))),
+  );
+  // Identical for every unknown path, digits included, HTTP 200: the fake
+  // "not found" the crawler must learn to recognise within one run.
+  const notFound = html(`
+    <h1>Page not found</h1>
+    <p>Sorry, the page you are looking for does not exist. Error code 404 was
+       raised for this address in 2026.</p>
+    <a href="/loop-deeper">back to the gallery</a>
+    <img src="/img/soft404.png" width="300" height="300">
+  `);
+  site.routeAny(N, () => sendHtml(notFound));
+  site.route(N, "/img/soft404.png", sendBytes(img.soft404!, "image/png"));
+
+  // ---- the genuinely-similar galleries: same layout, different images ----
+  site.route(L, "/robots.txt", robots);
+  site.route(L, "/", sendHtml(html(ALIKE_GALLERIES.map((w) => `<a href="/gallery/${w}">${w}</a>`).join(""))));
+  for (const [i, w] of ALIKE_GALLERIES.entries()) {
+    site.route(
+      L,
+      `/gallery/${w}`,
+      sendHtml(
+        html(
+          // Same layout and the same digits everywhere; only the word and
+          // the image address differ — real gallery pages — so no two of
+          // these bodies may share a digest.
+          `<h1>Gallery ${w}</h1>
+           <p>Photo ${i + 1} of ${ALIKE_GALLERIES.length}, published in 2026.</p>
+           <img src="/img/gal-${w}.png" width="300" height="300">`,
+        ),
+      ),
+    );
+    site.route(L, `/img/gal-${w}.png`, sendBytes(img[w]!, "image/png"));
+  }
+
+  return { site, pool, expected, allHashes };
 }
 
 /** Env for a fixture run (test values only, nothing real). */

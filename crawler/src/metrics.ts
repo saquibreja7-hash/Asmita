@@ -51,6 +51,14 @@ export class RunMetrics {
   feedEntriesTaken = 0;
   /** Sitemap/feed documents that hit the MAX_SITEMAP_URLS cap (WP4). */
   docsTruncated = 0;
+  /**
+   * Fetched HTML pages whose normalised body digest had already appeared on
+   * five or more distinct URLs of the same source this run (crawler v3
+   * WP14): soft-404s — nothing extracted from them, reported `gone`. They
+   * are still pages fetched (the body must be read to recognise one), so
+   * they count in pagesFetched too.
+   */
+  pagesSoft404 = 0;
   /** Links skipped as obvious non-content: login, cart, search, calendar (WP4). */
   linksSkippedNonContent = 0;
   /** Links dropped by the per-path query-variant cap (WP4). */
@@ -163,6 +171,7 @@ export class RunMetrics {
       pagesNotModified: this.pagesNotModified,
       pagesNonHtml: this.pagesNonHtml,
       pagesXml: this.pagesXml,
+      pagesSoft404: this.pagesSoft404,
       sitemapDocs: this.sitemapDocs,
       sitemapUrlsTaken: this.sitemapUrlsTaken,
       sitemapImages: this.sitemapImages,

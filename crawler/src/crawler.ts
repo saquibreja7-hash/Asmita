@@ -30,9 +30,10 @@
  * The crawler keeps no frontier of its own: the queue, the seen set and the
  * scheduling live in the app (CrawlPage rows). The only page state here is
  * the claimed batch (at most FRONTIER_CLAIM_LIMIT entries) and the report
- * built from it — plus two small bounded per-source structures (WP4): the
- * query-variant guard (path/variant hashes) and the one-shot robots sitemap
- * stash — so a second run resumes where the last one stopped, and a killed
+ * built from it — plus three small bounded per-source structures: the
+ * query-variant guard (path/variant hashes, WP4), the one-shot robots
+ * sitemap stash (WP4) and the soft-404 digest map (WP14, body digests only)
+ * — so a second run resumes where the last one stopped, and a killed
  * run loses at most its claimed batch, which the app hands out again after
  * the 30-minute claim window.
  *
@@ -54,6 +55,7 @@ import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robots.ts";
 import { isNonContentUrl, QueryGuardStore, type QueryVariantGuard } from "./crawl/traps.ts";
+import { Soft404Tracker, soft404Digest } from "./crawl/soft404.ts";
 import { inScope, normalizeUrl, sourceHost, urlKey } from "./crawl/url.ts";
 import { isScriptOnlyStub } from "./crawl/page-redirects.ts";
 import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
@@ -157,6 +159,17 @@ type SourceCtx = {
    * once per batch and cleared; the run-wide dedup and cap live in the run.
    */
   discoveredHosts: string[];
+  /**
+   * Per-source soft-404 tracker (crawler v3 WP14): a digest of each fetched
+   * HTML body (whitespace collapsed, digits stripped) with the distinct
+   * claimed-URL keys that carried it. Once one digest has appeared on
+   * SOFT404_THRESHOLD distinct URLs, further pages with it are soft-404s —
+   * nothing is extracted and they are reported `gone`. Holds 16-byte hashes
+   * only, never a URL or body, is never logged, and is bounded (at most
+   * SOFT404_DIGEST_CAP digests, least recently used dropped); a killed run
+   * loses it whole, which is safe — the app's rows keep their schedules.
+   */
+  soft404: Soft404Tracker;
   /**
    * Set once this source's home page (the depth-0 seed) failed permanently
    * (WP13), so the run summary counts it once per source, not per page.
@@ -940,6 +953,13 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * retried inside this run either. Links are reported only under
    * MAX_DEPTH, deduplicated per page, in scope.
    *
+   * Fake "not found" pages (crawler v3 WP14): a fetched HTML body whose
+   * digest (whitespace collapsed, digits stripped) has already appeared on
+   * five or more distinct URLs of this source is a soft-404 — no images or
+   * links are extracted from it and it is reported "gone" — so a site that
+   * answers every unknown path with the same 200 "not found" page cannot
+   * keep the frontier busy forever. The digest is in-memory only (rule 3).
+   *
    * Redirects that live in the page (crawler v3 WP12): on the static path a
    * qualifying `<meta http-equiv="refresh">` (up to 10 s) is followed inside
    * the same fetch — scope-, robots- and hop-budget-checked, never
@@ -1057,6 +1077,15 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     metrics.pagesFetched++;
     const html = body.toString("utf8");
+    // WP14: a body digest that already appeared on five or more distinct
+    // URLs of this source marks this page a soft-404: extract nothing (no
+    // images, no links, no render) and report it gone, like a 404. The
+    // page was still fetched — a soft-404 is recognised retrospectively —
+    // and the digest never leaves memory and is never logged.
+    if (ctx.soft404.observe(soft404Digest(html), urlKey(url))) {
+      metrics.pagesSoft404++;
+      return { id: page.id, status: "gone", links: [] };
+    }
     const ex = extract(html, result.url, result.xRobotsTag, {
       maxLinks: config.MAX_LINKS_PER_PAGE,
       maxImages: config.MAX_IMAGES_PER_PAGE,
@@ -1136,6 +1165,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       queryGuard: queryGuards.guardFor(source.id),
       robotsSitemaps: null,
       discoveredHosts: [],
+      soft404: new Soft404Tracker(),
       homePermanentCounted: false,
     };
     let pages = 0;
