@@ -369,6 +369,7 @@
   "review.sign.sub": "Read the notice in full, then add your details and signature below.",
   "review.sign.previewLabel": "Notice preview",
   "review.sign.hashPreviewLabel": "Fingerprint advisory preview",
+  "review.sign.openNotice": "Open the notice (PDF)",
   "review.sign.details.title": "Your details",
   "review.sign.name.label": "Full name",
   "review.sign.name.sub": "This will appear in the notice as the complainant.",

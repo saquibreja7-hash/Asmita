@@ -360,6 +360,7 @@
   "review.sign.sub": "ज़रा पूरा notice पढ़ लीजिए, फिर नीचे अपनी details और signature डाल दीजिए।",
   "review.sign.previewLabel": "NOTICE का पूर्वावलोकन",
   "review.sign.hashPreviewLabel": "Fingerprint advisory का preview",
+  "review.sign.openNotice": "सूचना खोलें (PDF)",
   "review.sign.details.title": "आपकी जानकारी",
   "review.sign.name.label": "पूरा नाम",
   "review.sign.name.sub": "यह notice में complainant के तौर पर दिखाई देगा।",
