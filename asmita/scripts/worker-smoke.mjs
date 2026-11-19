@@ -16,6 +16,7 @@ import { spawn } from "node:child_process";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
 import { VOICE_AGENT_PATH } from "../src/lib/helpline.ts";
+import { CSP_REPORT_PATH } from "../src/lib/csp.ts";
 
 const databaseUrl = process.env.E2E_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5433/asmita_e2e";
 const target = new URL(databaseUrl);
@@ -180,8 +181,72 @@ try {
   if (!talk.headers.get("permissions-policy")?.includes("microphone=(self)") || !talk.headers.get("content-security-policy")?.includes("wss://apps.sarvam.ai")) {
     throw new Error(`/talk is missing its voice headers: ${talk.headers.get("permissions-policy")} | ${talk.headers.get("content-security-policy")}`);
   }
+  // WP46: CSP violation reporting, the report-only Trusted Types policy, the
+  // extended Permissions-Policy and the cross-origin opener/resource headers.
+  const health = await fetch(`http://127.0.0.1:${port}/api/health`);
+  const checkedHeaders = [
+    ["/", home.headers],
+    ["/talk", talk.headers],
+    ["/api/health", health.headers],
+  ];
+  for (const [label, headers] of checkedHeaders) {
+    if (headers.get("cross-origin-opener-policy") !== "same-origin" || headers.get("cross-origin-resource-policy") !== "same-origin") {
+      throw new Error(`${label} is missing the same-origin opener/resource policy headers`);
+    }
+    const csp = headers.get("content-security-policy") ?? "";
+    if (!csp.includes("'report-sample'") || !csp.includes(`report-uri ${CSP_REPORT_PATH}`) || !csp.includes("report-to csp-endpoint")) {
+      throw new Error(`${label} has no CSP reporting directives: ${csp}`);
+    }
+    if (csp.includes("'strict-dynamic'") || csp.includes("require-trusted-types-for")) {
+      throw new Error(`${label} enforces something it must not: ${csp}`);
+    }
+  }
+  const homePermissions = home.headers.get("permissions-policy") ?? "";
+  const talkPermissions = talk.headers.get("permissions-policy") ?? "";
+  for (const denied of ["payment=()", "usb=()", "serial=()", "bluetooth=()", "accelerometer=()", "gyroscope=()", "magnetometer=()", "display-capture=()", "browsing-topics=()"]) {
+    if (!homePermissions.includes(denied) || !talkPermissions.includes(denied)) {
+      throw new Error(`A permissions-policy is missing ${denied}: ${homePermissions} | ${talkPermissions}`);
+    }
+  }
+  if (!homePermissions.includes("microphone=()") || !talkPermissions.includes("microphone=(self)")) {
+    throw new Error(`The microphone rules changed: ${homePermissions} | ${talkPermissions}`);
+  }
+  if (!home.headers.get("reporting-endpoints")?.includes(CSP_REPORT_PATH)) {
+    throw new Error(`The Reporting-Endpoints header is missing: ${home.headers.get("reporting-endpoints")}`);
+  }
+  if (!home.headers.get("content-security-policy-report-only")?.includes("require-trusted-types-for 'script'")) {
+    throw new Error(`The Trusted Types report-only header is missing: ${home.headers.get("content-security-policy-report-only")}`);
+  }
+  // The report endpoint itself: browsers POST without cookies or CSRF.
+  const cspReport = await fetch(`http://127.0.0.1:${port}${CSP_REPORT_PATH}`, {
+    method: "POST",
+    headers: { "content-type": "application/csp-report" },
+    body: JSON.stringify({
+      "csp-report": {
+        "document-uri": "https://asmita.test/review-sign?x=1",
+        "blocked-uri": "https://blocked.example/a.js?y=2",
+        "effective-directive": "script-src-elem",
+      },
+    }),
+  });
+  if (cspReport.status !== 204) throw new Error(`A legacy CSP report returned ${cspReport.status}, expected 204`);
+  const reportBatch = await fetch(`http://127.0.0.1:${port}${CSP_REPORT_PATH}`, {
+    method: "POST",
+    headers: { "content-type": "application/reports+json" },
+    body: JSON.stringify([
+      { type: "deprecation-report", body: {} },
+      { type: "csp-violation", url: "https://asmita.test/talk", body: { blockedURL: "https://blocked.example/b.js", effectiveDirective: "script-src-elem" } },
+    ]),
+  });
+  if (reportBatch.status !== 204) throw new Error(`A reports+json CSP report returned ${reportBatch.status}, expected 204`);
+  const notAReport = await fetch(`http://127.0.0.1:${port}${CSP_REPORT_PATH}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  if (notAReport.status !== 415) throw new Error(`A non-report POST returned ${notAReport.status}, expected 415`);
   // Pages carry a per-request script nonce, and vinext puts it on its scripts.
-  const homeNonce = home.headers.get("content-security-policy")?.match(/script-src 'self' 'nonce-([^']+)'(;|$)/)?.[1];
+  const homeNonce = home.headers.get("content-security-policy")?.match(/'nonce-([^']+)'/)?.[1];
   const homeHtml = await home.text();
   if (!homeNonce || !homeHtml.includes(`nonce="${homeNonce}"`)) {
     throw new Error(`The home page has no script nonce: ${home.headers.get("content-security-policy")}`);
@@ -212,7 +277,7 @@ ${output.slice(-3000)}`);
 
   if (smokeCrawler) await crawlerSmoke();
 
-  console.log("Worker smoke passed: Prisma runs in workerd, each request gets its own connection, the provenance check is off, and voice headers, session limits and the chat route work.");
+  console.log("Worker smoke passed: Prisma runs in workerd, each request gets its own connection, the provenance check is off, and voice headers, session limits, the chat route, the CSP reporting endpoint and the WP46 security headers work.");
   exitCode = 0;
 } catch (err) {
   console.error(err);
