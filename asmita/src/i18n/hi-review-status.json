@@ -16,8 +16,15 @@
     "Platform-specific reporting notes in /resources - references English-language UIs"
   ],
   "machineTranslated": {
-    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request",
+    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request. Site-chrome keys added by the web audit (WP39) machine-translated by Hermes (GLM 5.3) on 2026-11-19, same formal register, pending native review.",
     "keys": [
+      "nav.menuClose",
+      "nav.skipToMain",
+      "nav.primary",
+      "nav.mobile",
+      "nav.home",
+      "nav.language",
+      "flow.progress",
       "talk.*",
       "privacy.s08.i5.*",
       "chat.*",

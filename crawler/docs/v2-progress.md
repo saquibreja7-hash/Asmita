@@ -315,3 +315,49 @@ A review of the app side of crawler v2 found eight defects. Each is fixed in its
 - **Bulk inserts only claim their own rows.** On the Prisma path, `insertImportedSources` (WP2) and `insertDiscoveredSources` (WP5) re-read by domain after `createMany({ skipDuplicates })`, so a row another request created for the same host was reported as created and audited as this admin's import or this run's discovery. Both now generate the ids, insert them, and re-read by those ids only (the new reported-source sweep does the same). Kysely already used `INSERT ... ON CONFLICT DO NOTHING RETURNING`; memory is single-threaded. Tests: a concurrent-row case each in `crawl-import-prisma.test.ts` and `crawl-discoveries-prisma.test.ts`; their existing re-read assertions now expect the id filter.
 
 Verification after all eight fixes: `npm run lint` (0 errors, 3 pre-existing warnings in an untouched script), `npm run type-check`, `npm run prisma:validate` and `npm run test` all pass: 137 test files passed and 1 skipped, 1131 tests passed and 3 skipped (the skipped file is the pre-existing, environment-gated `tests/integration/crawler-client-contract.test.ts`, untouched). Not verified: the two new migrations and the new queries have run only against mocks, the recording Kysely fake and the memory store, not a real Postgres (the runbook's go-live item now lists both migrations).
+
+## WP39. Site chrome, navigation, target sizes and CSS accessibility (app) — 2026-11-19
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+Web-audit work package (accessibility/forms/performance/security audit, owner-approved 2026-11-20), not one of this spec's WPs; the spec's "Rules that do not change" and "How to work" applied alongside the audit rules. Branch `fix/a11y-chrome-css`, cut from `feat/platform-partners` and built on its Header/MobileMenu/Footer/globals.css changes. No `crawler/` source was touched; nothing here changes crawler behaviour, so `crawler/README.md`, the runbook and the CLAUDE.md crawler row needed no update.
+
+**What was built** (paths relative to `asmita/`)
+
+- A1: "Skip to main content" link as the first focusable element of the page chrome (`src/components/layout/Header.tsx`, first child of the shell in `AppShell.tsx`), visually hidden until focused; `<main>` gained `id="main"` and `tabIndex={-1}`. `nav.skipToMain` in en and hi.
+- A14: the mobile menu button's accessible name now matches its visible state — no `aria-label` overriding "Menu" while showing "×"; open state = aria-hidden glyph + visually hidden "Close menu" (`nav.menuClose`).
+- A15: Escape and outside-tap close the mobile menu and return focus to the menu button; nested `details/summary` submenus replaced by `button aria-expanded aria-controls` toggles (current-page group still starts open).
+- A16: footer language toggle buttons are ≥44px, wrapped in `role="group"` with an `aria-label` (`nav.language`), `lang="hi"` on "हिंदी"; segmented look kept.
+- A18: pages that render the fixed Quick Exit pill get bottom clearance so nothing focusable sits under it (`html:has(.quick-exit) body { padding-bottom }` plus `scroll-padding-bottom` on html).
+- A19: CopyDraft copy button ≥44px; the live region moved outside the button.
+- A20: eligibility Back button ≥44px; the question heading is focused on every index change, including back to question 1 (not on first render).
+- A22: FAQ chevron uses `content: "↓" / ""` so it is not announced.
+- A24: hard-coded English accessible names moved to i18n keys in FlowProgress (`flow.progress`), MobileMenu (`nav.mobile`), Header (`nav.primary`, `nav.home`) and Footer (`nav.home`); all seven new keys added to `en.json` and `hi.json` and listed as machine translated in `hi-review-status.json`.
+- A26: `.field:focus-visible`/`.input:focus-visible` outline restored (2px `var(--brand)`).
+- P6: `.field`/`.input` and `.filing-input` borders drawn in smoke (`var(--color-smoke)`, ~5.7:1 on parchment) instead of ash (~1.5:1) or transparent — full borders, no side stripes.
+- P7: `html { font-size: 16px }` removed; every px font size in globals.css (tokens, rules, clamp bounds) converted to rem; `<meta name="text-scale" content="scale">` added via Next `metadata.other` in `src/app/layout.tsx`.
+- P9: `text-wrap: pretty` scoped to `.reading-body p` and `.faq-answer`; `overflow-wrap: anywhere` on `.reading-body` and the chat bubbles (new `chat-bubble` class in `HomeChat.tsx`).
+- P10: hover lifts on `.link-card` and `.home-help-tile` moved inside `@media (prefers-reduced-motion: no-preference)`.
+- P12: `color-scheme: light` on `:root`.
+- Home axe flake: `tests/e2e/accessibility.spec.ts` hardened — `page.emulateMedia({ reducedMotion: "reduce" })`, a global reduced-motion CSS rule that turns off all transitions/animations, `document.fonts.ready` awaited before analyze, routes /eligibility, /track, /check-image, /start and /get-help added, plus new tests: skip link as first Tab stop moving focus to main; language toggle ≥44px (mobile project); wizard heading focus on every step change.
+
+**Tests** (all run, all passing)
+
+- New: `tests/unit/site-chrome-a11y.test.ts` (24 tests: chrome markup in both locales, menu button semantics, focus-return source guards, language group, CopyDraft live region, wizard heading, globals.css regression guards incl. no px font sizes left, i18n parity and review-status listing). New e2e tests inside the hardened accessibility spec as above.
+- No existing test needed to change: nothing else asserted the old markup.
+- Package totals, from the final `check.sh` run (Node 22) — `crawler`: lint, type-check, 29 test files / 350 tests, build, all passed (re-run to capture counts; no crawler source touched). `asmita`: lint 0 errors (3 pre-existing warnings in an untouched script), type-check clean, `prisma validate` ok, 145 test files / 1206 tests all passed.
+- Playwright: the full suite runs in the separate verify step; the accessibility spec itself was additionally run here against a throwaway local Postgres 17, both projects: 29 passed, 1 skipped (the 44px toggle test is mobile-project-only), 24 axe scans over 12 routes, no flake.
+
+**Not done or not verified**
+
+- The optional second commit converting Tailwind `text-[Npx]` classes in tsx to rem was not done (the brief marks it optional; globals.css is fully rem).
+- No screenshot diff was run; "identical output at default settings" holds by construction (rem = px/16 at the default 16px root) and by the passing e2e, not by pixel comparison.
+- Observed, left alone (pre-existing on master, outside this WP): `/my-cases` renders the Quick Exit button twice — once from `(victim)/layout.tsx` and once from the page itself. Both render at the same fixed spot, so it looks like one pill; two DOM buttons. Worth folding into a later WP.
+- The Worker smoke was not run (not part of this WP's checks; the CSS/markup changes are Worker-neutral).
+
+**Deviations from the brief, with reasons**
+
+- A18 clearance is scoped in CSS with `html:has(.quick-exit)` instead of adding a class to every page that renders the pill: the pill renders inside `main` on the auth pages but outside the page shell on victim pages, so one structural hook per page would not cover both positions.
+- The skip link is rendered by `Header.tsx` (the brief named AppShell.tsx and Header.tsx): Header is the first child of the page shell, synchronous, and unit-testable; AppShell is an async server component that cannot be statically rendered in vitest.
+- Under `prefers-reduced-motion: reduce` all transitions and animations are disabled globally (`*, *::before, *::after`), which subsumes the previous per-selector list and is what the flake hardening asked for.
+- The seven new Hindi strings are machine translated by the implementing agent (no Sarvam run for this batch) and are listed in `hi-review-status.json` with the batch and date recorded in `machineTranslated.by`; they await the same native-speaker review as the other machine-translated keys.
