@@ -2,7 +2,9 @@
 // adult when the content was made, may add links before confirming their
 // email. Nothing they type reaches the server until they have a session; the
 // cookie only lets the server render /submit for them.
-export const ELIGIBLE_COOKIE = "asmita_eligible";
+import { COOKIE_BASE_NAMES } from "@/lib/cookie-names";
+
+export const ELIGIBLE_COOKIE = COOKIE_BASE_NAMES.eligibleAdult;
 const ELIGIBLE_KEY = "asmita_eligibility";
 export const DRAFT_KEY = "asmita_submit_draft";
 

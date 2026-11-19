@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Locale } from "@/lib/i18n";
+import { COOKIE_BASE_NAMES } from "@/lib/cookie-names";
 
 export function LanguageToggle({ initialLocale }: { initialLocale: Locale }) {
   const router = useRouter();
@@ -14,7 +15,7 @@ export function LanguageToggle({ initialLocale }: { initialLocale: Locale }) {
       mounted.current = true;
       return;
     }
-    document.cookie = `asmita_lang=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    document.cookie = `${COOKIE_BASE_NAMES.language}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
     document.documentElement.lang = locale;
   }, [locale]);
 

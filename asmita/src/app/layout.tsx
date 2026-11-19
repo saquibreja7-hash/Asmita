@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Noto_Sans } from "next/font/google";
+import { COOKIE_BASE_NAMES } from "@/lib/cookie-names";
 import "@fontsource/noto-sans-devanagari/400.css";
 import "@fontsource/noto-sans-devanagari/500.css";
 import "@fontsource/noto-sans-devanagari/600.css";
@@ -68,7 +69,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const cookieStore = await cookies();
-  const lang = cookieStore.get("asmita_lang")?.value === "hi" ? "hi" : "en";
+  const lang = cookieStore.get(COOKIE_BASE_NAMES.language)?.value === "hi" ? "hi" : "en";
   return (
     <html
       lang={lang}

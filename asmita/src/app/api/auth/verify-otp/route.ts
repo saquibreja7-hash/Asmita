@@ -7,6 +7,7 @@ import { findVerifiedUserByEmail, listCaseIdsForUser, upsertVerifiedUser } from 
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { logSecurityEvent } from "@/lib/security-log";
 import { hashEmail } from "@/lib/hash";
+import { sessionCookieName } from "@/lib/cookie-names";
 
 // "file" (the default) is the File a complaint flow, which asks her age first.
 // "track" is Track your case: it never creates an account, and it sends her to
@@ -26,7 +27,7 @@ async function withSession(body: Record<string, unknown>, user: { id: string; em
     emailHash: user.emailHash,
   });
   const response = NextResponse.json(body);
-  response.cookies.set("asmita_session", session, {
+  response.cookies.set(sessionCookieName(), session, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

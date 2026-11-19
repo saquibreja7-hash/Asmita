@@ -1,7 +1,8 @@
 // Content-Security-Policy for every response. next.config.ts sets the
 // nonce-less policy (API routes, and pages under `next dev`); the Worker entry
 // (src/cloudflare-worker.ts) replaces it on pages with one carrying a
-// per-request nonce. There is no middleware file; the CSP is set only in these
+// per-request nonce. src/proxy.ts (the Fetch Metadata guard) runs before
+// routes but never sets headers, so the CSP is still set only in these
 // two places.
 
 export type CspOptions = {
