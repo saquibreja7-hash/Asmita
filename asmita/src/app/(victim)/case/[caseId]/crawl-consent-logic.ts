@@ -6,7 +6,16 @@
 import type { DisplayUrl } from "@/lib/case-ops";
 
 export type Draft = { subject: string; body: string; templateRef: string };
-export type ConsentState = { status: "none" | "signed" | "withdrawn"; available: boolean; draft: Draft | null };
+export type ConsentState = {
+  status: "none" | "signed" | "withdrawn";
+  available: boolean;
+  draft: Draft | null;
+  /**
+   * Watch-and-verify WP24: the live authorisation's re-upload window, when
+   * the case has resolved and the watch started. Null on every other state.
+   */
+  watchUntil: string | null;
+};
 
 /** "hidden" when switching on is unavailable and it is not on (never show a broken control). */
 export function consentView(consent: ConsentState | null): "hidden" | "on" | "off" {
@@ -15,8 +24,20 @@ export function consentView(consent: ConsentState | null): "hidden" | "on" | "of
   return consent.available && consent.draft ? "off" : "hidden";
 }
 
-export function parseConsent(data: { status?: ConsentState["status"]; available?: boolean; draft?: Draft | null }): ConsentState {
-  return { status: data.status ?? "none", available: Boolean(data.available), draft: data.draft ?? null };
+export function parseConsent(data: { status?: ConsentState["status"]; available?: boolean; draft?: Draft | null; watchUntil?: string | null }): ConsentState {
+  return { status: data.status ?? "none", available: Boolean(data.available), draft: data.draft ?? null, watchUntil: data.watchUntil ?? null };
+}
+
+/**
+ * Watch-and-verify WP24: the re-upload watch view — the authorisation is
+ * live, the case is no longer open and the window's end is known, so her
+ * dashboard says "Watching for re-uploads until <date>" instead of the open
+ * case's copy, and stopping says "Stop watching". Open cases and live
+ * authorisations without a window keep the ordinary search view.
+ */
+export function reuploadWatchView(consent: ConsentState | null, caseOpen: boolean): { until: string } | null {
+  if (!consent || consent.status !== "signed" || caseOpen || !consent.watchUntil) return null;
+  return { until: consent.watchUntil };
 }
 
 export type SignOutcome = "changed" | "alreadySigned" | "unavailable" | "generic";

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
-import { consentView, parseConsent, requestConsent, requestStop, type ConsentState } from "./crawl-consent-logic";
+import { consentView, parseConsent, reuploadWatchView, requestConsent, requestStop, type ConsentState } from "./crawl-consent-logic";
 
 /*
  * The survivor's choice to let Asmita look for copies of her images
@@ -47,6 +47,7 @@ export function CrawlConsent({
   initialConsent = null,
   watch = false,
   onNowOn,
+  caseOpen = true,
 }: {
   caseId: string;
   locale: Locale;
@@ -55,6 +56,8 @@ export function CrawlConsent({
   watch?: boolean;
   /** Called once when the tick switches the search on (the /watch flow then sends her to her watch page). */
   onNowOn?: () => void;
+  /** Watch-and-verify WP24: false once her case is closed, so a live authorisation reads as the re-upload watch. */
+  caseOpen?: boolean;
 }) {
   const router = useRouter();
   const [consent, setConsent] = useState<ConsentState | null>(initialConsent);
@@ -90,6 +93,13 @@ export function CrawlConsent({
   // Hidden: not loaded yet, or unavailable and not already on. No broken control.
   if (!consent || view === "hidden") return <p role="status" aria-live="polite" className="sr-only">{announce}</p>;
   const on = view === "on";
+  // Watch-and-verify WP24: after the case closes, the live authorisation
+  // watches for re-uploads until its window ends; the copy and the stop
+  // button say that instead of the open case's search copy.
+  const reupload = reuploadWatchView(consent, caseOpen);
+  const reuploadDate = reupload
+    ? new Date(reupload.until).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" })
+    : null;
 
   async function switchOn() {
     if (!consent?.draft) return;
@@ -177,7 +187,19 @@ export function CrawlConsent({
 
       {busy && !on && <p className="muted mt-3 text-sm">{t(locale, "crawl.cta.working")}</p>}
 
-      {on && !confirmingStop && (
+      {on && !confirmingStop && reupload && reuploadDate && (
+        <div className="mt-4">
+          <p className="inline-flex items-center rounded-full bg-[var(--brand-soft)] px-2.5 py-0.5 text-[12px] font-medium text-[var(--brand-strong)]">
+            {t(locale, "crawl.watch.until").replace("{date}", reuploadDate)}
+          </p>
+          <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "crawl.watch.sub")}</p>
+          <button type="button" className="btn btn-secondary mt-4" disabled={busy} onClick={() => setConfirmingStop(true)}>
+            {t(locale, "crawl.watch.stop")}
+          </button>
+        </div>
+      )}
+
+      {on && !confirmingStop && !reupload && (
         <div className="mt-4">
           <p className="inline-flex items-center rounded-full bg-[var(--brand-soft)] px-2.5 py-0.5 text-[12px] font-medium text-[var(--brand-strong)]">
             {t(locale, k("crawl.state.on", "watch.state.on"))}
@@ -188,16 +210,18 @@ export function CrawlConsent({
 
       {on && confirmingStop && (
         <div role="group" aria-labelledby="crawl-stop-title" className="mt-5 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--page)] p-5">
-          <p id="crawl-stop-title" className="text-sm font-medium text-[var(--ink)]">{t(locale, k("crawl.stop.title", "watch.stop.title"))}</p>
+          <p id="crawl-stop-title" className="text-sm font-medium text-[var(--ink)]">
+            {t(locale, reupload ? "crawl.watch.stop.title" : k("crawl.stop.title", "watch.stop.title"))}
+          </p>
           <ul className="muted mt-3 list-disc space-y-1.5 pl-5 text-sm leading-[1.65]">
             {stopKeys.map((key) => <li key={key}>{t(locale, key)}</li>)}
           </ul>
           <div className="mt-5 flex flex-wrap gap-3">
             <button type="button" className="btn btn-primary" disabled={busy} onClick={stop}>
-              {busy ? t(locale, "crawl.stop.working") : t(locale, k("crawl.stop.confirm", "watch.stop.confirm"))}
+              {busy ? t(locale, "crawl.stop.working") : t(locale, reupload ? "crawl.watch.stop.confirm" : k("crawl.stop.confirm", "watch.stop.confirm"))}
             </button>
             <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setConfirmingStop(false)}>
-              {t(locale, k("crawl.stop.keep", "watch.stop.keep"))}
+              {t(locale, reupload ? "crawl.watch.stop.keep" : k("crawl.stop.keep", "watch.stop.keep"))}
             </button>
           </div>
         </div>

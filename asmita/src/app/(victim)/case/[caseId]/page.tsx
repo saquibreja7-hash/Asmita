@@ -10,6 +10,8 @@ import { WatchFoundList } from "./WatchFoundList";
 import { AddMoreImages } from "./AddMoreImages";
 import { getCrawlConsentState } from "@/lib/crawl-consent";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
+import { isCaseOpen } from "@/lib/crawl-pool";
+import { getLinkVerificationSummaries, type LinkVerificationSummary } from "@/lib/link-verification";
 import { splitUrls } from "./crawl-consent-logic";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { CloseDashboardButton } from "../../CloseDashboardButton";
@@ -63,6 +65,27 @@ function rejectedReason(stored: string | null | undefined, locale: Locale) {
       <span className="font-medium text-[var(--ink)]">{t(locale, "case.rejectedReason.label")}</span> {text}
     </p>
   );
+}
+
+/*
+ * Watch-and-verify WP23: what the removal re-checks found, in her words and
+ * with no address. Shown only once no check is still waiting, so a new round
+ * of checks (she marked it removed again) clears the old note on its own.
+ */
+function verificationNote(summary: LinkVerificationSummary | undefined, status: string, locale: Locale) {
+  if (!summary || summary.pending > 0) return null;
+  if (status === "REMOVED") {
+    if (summary.goneCount < 3) return null;
+    return (
+      <p className="muted mt-1 text-xs">
+        {t(locale, "case.verification.verifiedRemoved").replace("{n}", String(summary.checked))}
+      </p>
+    );
+  }
+  if (summary.latestOutcome === "STILL_ONLINE") {
+    return <p className="mt-1 text-xs text-[var(--danger)]">{t(locale, "case.verification.stillOnline")}</p>;
+  }
+  return null;
 }
 
 // One plain sentence about where the case stands, picked from the most
@@ -164,6 +187,7 @@ export default async function CasePage({
   // for found links promise no follow-up, so they never say "we follow up".
   const standing = standingOf(ownUrls, hashSubmissions.length);
   const showFound = crawlerFindingsVisibleToSurvivor();
+  const verifications = await getLinkVerificationSummaries(record.id);
   const created = new Date(record.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 
   // "Watch for my images" (WP22): a watch renders its own view — no links are
@@ -246,7 +270,7 @@ export default async function CasePage({
                 </section>
               )}
 
-              {hashUploadEnabled && <CrawlConsent caseId={record.id} locale={locale} watch />}
+              {hashUploadEnabled && <CrawlConsent caseId={record.id} locale={locale} watch caseOpen={isCaseOpen(record.status)} />}
 
               <nav aria-label={t(locale, "case.more.label")} className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[var(--line)] pt-6 text-sm">
                 <Link className="link-underline text-[var(--ink)]" href="/get-help">{t(locale, "case.more.help")}</Link>
@@ -328,6 +352,7 @@ export default async function CasePage({
                         <p className="font-mono mt-0.5 text-[12px] text-[var(--text-muted)]">{url.domain}</p>
                         {!url.urlHash && <p className="muted mt-1 text-xs">{t(locale, "case.urlExpired")}</p>}
                         {url.status === "REJECTED" && rejectedReason(url.flagReason, locale)}
+                        {verificationNote(verifications.get(url.id), url.status, locale)}
                       </div>
                       <div className="flex flex-col items-end gap-1.5">
                         {/* She filed the platform's own form: for her, it has been sent. */}
@@ -358,7 +383,14 @@ export default async function CasePage({
               )}
             </section>
 
-            {showFound && <FoundByAsmita urls={foundUrls} locale={locale} badge={(status) => <StatusBadge status={status} locale={locale} />} />}
+            {showFound && (
+              <FoundByAsmita
+                urls={foundUrls}
+                locale={locale}
+                badge={(status) => <StatusBadge status={status} locale={locale} />}
+                note={(urlId, status) => verificationNote(verifications.get(urlId), status, locale)}
+              />
+            )}
 
             {hashUploadEnabled && hashSubmissions.length > 0 && (
               <section id="fingerprints" aria-labelledby="case-fingerprints-title" className="scroll-mt-24">
@@ -379,7 +411,9 @@ export default async function CasePage({
               </section>
             )}
 
-            {hashUploadEnabled && hashSubmissions.length > 0 && <CrawlConsent caseId={record.id} locale={locale} />}
+            {hashUploadEnabled && hashSubmissions.length > 0 && (
+              <CrawlConsent caseId={record.id} locale={locale} caseOpen={isCaseOpen(record.status)} />
+            )}
 
             <div className="space-y-3">
               <FoldedSection id="actions" title={t(locale, "case.actions.title")} hint={t(locale, "case.actions.hint")}>

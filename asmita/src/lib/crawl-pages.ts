@@ -413,6 +413,63 @@ async function insertSeed(seed: SeedInsert): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Verification priority row (watch-and-verify WP23; see link-verification.ts)
+
+/**
+ * A removal re-check's page row: the link's page as a frontier row due
+ * immediately, ahead of every scheduled revisit (the queue is ordered by
+ * nextDueAt, so a row due now is fetched before any future-scheduled page).
+ * The URL must be a valid crawl page address (http(s), in scope of the
+ * source); callers validate it first.
+ *
+ * An existing row is reset to a fresh pre-visit state — a purposeful
+ * re-check by the app, not a late report (reports still never resurrect a
+ * DEAD or GONE row, and nothing here touches other rows): PENDING, failCount
+ * 0, no validators (the check is a full fetch, never a 304), lastFetchedAt
+ * cleared (so any report after this moment is the check's own evidence).
+ * A row currently out with a crawler keeps its claim. Called only by
+ * link-verification.ts, once per due check.
+ */
+export async function ensurePriorityCrawlPage(sourceId: string, url: string, now = new Date()): Promise<boolean> {
+  const digest = crawlPageDigest(sourceId, url);
+  if (digest === null) return false;
+  const urlEncrypted = encryptField(url);
+  const reset = { status: "PENDING" as const, etag: null, lastModified: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0 };
+
+  if (isDevNoDb()) {
+    const memory = crawlMemory();
+    const existing = [...memory.pages.values()].find((p) => p.sourceId === sourceId && p.urlDigest === digest);
+    if (existing) {
+      Object.assign(existing, reset);
+      return true;
+    }
+    const id = randomUUID();
+    memory.pages.set(id, {
+      id, sourceId, urlEncrypted, urlDigest: digest,
+      depth: 0, kind: "PAGE", etag: null, lastModified: null, status: "PENDING",
+      claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: now,
+    });
+    return true;
+  }
+
+  if (usesWorkerKysely()) {
+    await getWorkerDb().insertInto("CrawlPage").values({
+      id: randomUUID(), sourceId, urlEncrypted, urlDigest: digest,
+      depth: 0, kind: "PAGE", ...reset,
+    }).onConflict((oc) => oc.columns(["sourceId", "urlDigest"]).doUpdateSet(reset)).execute();
+    return true;
+  }
+
+  const { db } = await import("@/lib/db");
+  await db.crawlPage.upsert({
+    where: { sourceId_urlDigest: { sourceId, urlDigest: digest } },
+    create: { id: randomUUID(), sourceId, urlEncrypted, urlDigest: digest, depth: 0, ...reset },
+    update: reset,
+  });
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Report
 
 export type PageUpdatePlan = {

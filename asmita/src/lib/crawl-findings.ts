@@ -6,6 +6,7 @@ import { crawlMemory, type MemoryCrawlFinding } from "@/lib/crawl-store";
 import { consentCoversFinding, findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
 import { enabledCrawlSourceDomain, ensureCrawlSourceForReportedHost } from "@/lib/crawl-sources";
 import { promoteDiscoveredSource } from "@/lib/crawl-discoveries";
+import { notifyReuploadFinding } from "@/lib/crawl-watch";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
@@ -616,6 +617,19 @@ async function ensureSourceForApprovedFinding(host: string) {
   }
 }
 
+/**
+ * Watch-and-verify WP24: when this approval is a re-upload found while her
+ * case is closed and inside its watch window, she gets the reference-only
+ * email. Never allowed to fail the approval, which is already committed.
+ */
+async function notifyReuploadIfWatching(caseId: string, findingId: string, now: Date) {
+  try {
+    await notifyReuploadFinding(caseId, findingId, now);
+  } catch {
+    console.error("reupload_email_failed"); // fixed code only, never an address
+  }
+}
+
 export async function reviewCrawlFinding(input: { findingId: string; decision: ReviewDecision; reviewerId: string; now?: Date }): Promise<ReviewOutcome> {
   const now = input.now ?? new Date();
   if (isDevNoDb()) return reviewInMemory(input.findingId, input.decision, input.reviewerId, now);
@@ -698,6 +712,10 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
   await ensureSourceForApprovedFinding(parsed.domain);
   // A watch (WP22): her copy-found alert, reference only, best-effort.
   await notifyWatchCopyFound(finding.caseId, finding.id);
+  // A re-upload found on her closed, still-watching case (WP24): the same
+  // reference-only alert. The two conditions are disjoint (an open watch vs a
+  // closed case inside its re-upload window).
+  await notifyReuploadIfWatching(finding.caseId, finding.id, now);
   return { ok: true, status: "APPROVED", ...outcome };
 }
 
@@ -739,6 +757,7 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
       platformName: parsed.platform?.name || "Unknown - will be reviewed",
       status: crawlerUrlStatus(parsed),
       urlHash: parsed.urlHash,
+      urlEncrypted: encryptField(parsed.normalizedUrl),
       platformId: null,
       flaggedForReview: false,
       source: "CRAWLER",
@@ -749,6 +768,8 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
   await ensureSourceForApprovedFinding(parsed.domain);
   // A watch (WP22): her copy-found alert, reference only, best-effort.
   await notifyWatchCopyFound(finding.caseId, finding.id);
+  // A re-upload found on her closed, still-watching case (WP24), same rules.
+  await notifyReuploadIfWatching(finding.caseId, finding.id, now);
   return { ok: true, status: "APPROVED", submittedUrlId: submittedUrlId!, createdUrl: !existing };
 }
 

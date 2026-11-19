@@ -123,8 +123,8 @@ export function WatchForm({ locale }: { locale: Locale }) {
 
   if (created) {
     const initial: ConsentState | null = created.draft
-      ? { status: "none", available: true, draft: created.draft }
-      : { status: "none", available: false, draft: null };
+      ? { status: "none", available: true, draft: created.draft, watchUntil: null }
+      : { status: "none", available: false, draft: null, watchUntil: null };
     return (
       <div className="mt-10 space-y-6">
         <p role="status" className="rounded-[var(--radius-box)] bg-[var(--brand-soft)] px-4 py-3 text-sm leading-[1.6] text-[var(--brand-strong)]">

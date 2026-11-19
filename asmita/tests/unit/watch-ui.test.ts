@@ -24,8 +24,8 @@ import { deriveCaseWork, NEXT_ACTIONS, type CaseFacts, type Gates } from "@/lib/
 import type { ConsentState } from "@/app/(victim)/case/[caseId]/crawl-consent-logic";
 
 const draft = { subject: "Watch authorisation for case X", body: "Body of the watch authorisation", templateRef: "ref-1" };
-const off: ConsentState = { status: "none", available: true, draft };
-const on: ConsentState = { status: "signed", available: true, draft: null };
+const off: ConsentState = { status: "none", available: true, draft, watchUntil: null };
+const on: ConsentState = { status: "signed", available: true, draft: null, watchUntil: null };
 
 describe("the watch tick (CrawlConsent, watch variant)", () => {
   const render = (initialConsent: ConsentState | null) =>
@@ -46,7 +46,7 @@ describe("the watch tick (CrawlConsent, watch variant)", () => {
     expect(html).not.toContain("Searching is on");
     // After stop-watching the draft is rebuilt while the search is off, so the
     // withdrawn note with the watch-only wording shows under the tick.
-    const withdrawn = render({ status: "withdrawn", available: true, draft });
+    const withdrawn = render({ status: "withdrawn", available: true, draft, watchUntil: null });
     expect(withdrawn).toContain("Watching was stopped and your fingerprints were deleted.");
     expect(withdrawn).not.toContain("Searching was switched off");
     // The stop confirmation carries the watch wording with the fingerprint

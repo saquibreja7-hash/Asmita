@@ -56,9 +56,15 @@ export type CrawlConsentState = {
   fingerprintCount: number;
   /** What a live (or last) authorisation covers; null on rows from before scopes existed. */
   scope?: "SEARCH_AND_NOTICE" | "WATCH_ONLY" | null;
+  /**
+   * Watch-and-verify WP24: the re-upload window of the live authorisation
+   * (null while the case is open or no watch has started). The survivor's
+   * case page shows "Watching for re-uploads until <date>" from it.
+   */
+  watchUntil: string | null;
 };
 
-type ConsentRow = { hashSubmissionIds: string[]; signedAt: Date; withdrawnAt: Date | null; scope?: "SEARCH_AND_NOTICE" | "WATCH_ONLY" | null };
+type ConsentRow = { hashSubmissionIds: string[]; signedAt: Date; withdrawnAt: Date | null; scope?: "SEARCH_AND_NOTICE" | "WATCH_ONLY" | null; watchUntil?: Date | null };
 
 function toState(rows: ConsentRow[]): CrawlConsentState {
   const live = rows.find((row) => !row.withdrawnAt);
@@ -69,16 +75,18 @@ function toState(rows: ConsentRow[]): CrawlConsentState {
       withdrawnAt: null,
       fingerprintCount: live.hashSubmissionIds.length,
       scope: live.scope ?? "SEARCH_AND_NOTICE",
+      watchUntil: live.watchUntil ? new Date(live.watchUntil).toISOString() : null,
     };
   }
   const latest = [...rows].sort((a, b) => b.signedAt.getTime() - a.signedAt.getTime())[0];
-  if (!latest) return { status: "none", signedAt: null, withdrawnAt: null, fingerprintCount: 0, scope: null };
+  if (!latest) return { status: "none", signedAt: null, withdrawnAt: null, fingerprintCount: 0, scope: null, watchUntil: null };
   return {
     status: "withdrawn",
     signedAt: latest.signedAt.toISOString(),
     withdrawnAt: latest.withdrawnAt!.toISOString(),
     fingerprintCount: 0,
     scope: latest.scope ?? "SEARCH_AND_NOTICE",
+    watchUntil: null,
   };
 }
 
@@ -87,7 +95,7 @@ export async function getCrawlConsentState(caseId: string): Promise<CrawlConsent
   const { db } = await import("@/lib/db");
   const rows = await db.crawlConsent.findMany({
     where: { caseId },
-    select: { hashSubmissionIds: true, signedAt: true, withdrawnAt: true, scope: true },
+    select: { hashSubmissionIds: true, signedAt: true, withdrawnAt: true, scope: true, watchUntil: true },
   });
   return toState(rows);
 }
@@ -211,7 +219,7 @@ export async function recordCrawlConsent(input: RecordConsentInput): Promise<{ o
     memory.consents.push({
       id: consentId, caseId: input.caseId, signedPdfEncrypted: input.signedPdfEncrypted,
       hashSubmissionIds: [...input.hashSubmissionIds], templateId: input.templateId, templateDigest: input.templateDigest,
-      signedAt: input.signedAt ?? new Date(), withdrawnAt: null, scope, convertedFromId,
+      signedAt: input.signedAt ?? new Date(), withdrawnAt: null, scope, convertedFromId, watchUntil: null,
     });
     for (const id of input.hashSubmissionIds) {
       const fingerprint = memory.fingerprints.get(id);
