@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { LanguageToggle } from "@/components/layout/LanguageToggle";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { NavLinks } from "@/components/layout/NavLinks";
 import { navGroups } from "@/components/layout/nav-config";
@@ -37,8 +36,7 @@ export function Header({ locale }: { locale: Locale }) {
           <nav className="hidden items-center lg:flex" aria-label="Primary">
             <NavLinks groups={navGroups(locale)} />
             <div className="ml-4 flex items-center gap-3">
-              <LanguageToggle initialLocale={locale} />
-              <Link href="/track" className="btn btn-secondary !min-h-[44px] !px-5">
+              <Link href="/start" className="btn btn-secondary !min-h-[44px] !px-5">
                 {isHi ? "अपना मामला देखें" : "Track your case"}
               </Link>
               <Link href="/get-help" className="btn btn-primary btn-arrow !min-h-[44px] !px-6">
@@ -48,7 +46,6 @@ export function Header({ locale }: { locale: Locale }) {
           </nav>
 
           <div className="flex items-center gap-2.5 lg:hidden">
-            <LanguageToggle initialLocale={locale} />
             <MobileMenu locale={locale} groups={navGroups(locale)} />
           </div>
         </div>

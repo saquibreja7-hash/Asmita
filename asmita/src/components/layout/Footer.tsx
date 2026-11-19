@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { type Locale } from "@/lib/i18n";
 import { HELPLINE } from "@/lib/helpline";
+import { LanguageToggle } from "@/components/layout/LanguageToggle";
 
 // Public uptime page (Better Stack), outside the app so it stays up when the site is down.
 export const STATUS_URL = "https://status.meriasmita.org";
@@ -96,6 +97,10 @@ export function Footer({ locale }: { locale: Locale }) {
                 Not affiliated with any government body.
               </p>
             )}
+            <div className="site-footer-lang">
+              <span className="site-footer-col-title !mb-0">{isHi ? "भाषा" : "Language"}</span>
+              <LanguageToggle initialLocale={locale} />
+            </div>
           </div>
 
           {columns.map((col) => (

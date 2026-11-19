@@ -48,7 +48,7 @@ export function navGroups(locale: Locale): NavGroup[] {
       items: [
         { href: "/get-help", label: say("Ways to get help", "मदद के तरीके") },
         { href: "/start", label: say("File a complaint", "शिकायत दर्ज करें") },
-        { href: "/track", label: say("Track your case", "अपना मामला देखें") },
+        { href: "/start", label: say("Track your case", "अपना मामला देखें") },
         { href: "/talk", label: say("Talk to the assistant", "सहायक से बात करें"), reload: true },
         { href: "/check-image", label: t(locale, "nav.checkImage") },
         { href: "/minor-support", label: say("Under 18", "18 से कम उम्र") },

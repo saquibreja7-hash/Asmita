@@ -1642,6 +1642,12 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   filter: grayscale(1) contrast(1.1);
 }
 
+.site-footer-lang {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+}
 .site-footer-desc {
   max-width: 320px;
   color: var(--color-graphite);

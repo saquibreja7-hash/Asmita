@@ -61,7 +61,7 @@ export function MobileMenu({ locale, groups }: { locale: Locale; groups: NavGrou
               </summary>
               <ul className="m-0 list-none p-0 pb-2">
                 {group.items.map((item) => (
-                  <li key={item.href}>
+                  <li key={item.href + item.label}>
                     <NavItemLink item={item} className="nav-dropdown-link" onClick={() => setOpen(false)} />
                   </li>
                 ))}
@@ -69,7 +69,7 @@ export function MobileMenu({ locale, groups }: { locale: Locale; groups: NavGrou
             </details>
           ))}
           <Link
-            href="/track"
+            href="/start"
             className="btn btn-secondary mt-3 w-full"
             onClick={() => setOpen(false)}
           >
