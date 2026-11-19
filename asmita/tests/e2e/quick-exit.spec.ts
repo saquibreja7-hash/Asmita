@@ -61,6 +61,9 @@ test("double-Escape does the same thing from any victim page", async ({ page }, 
   test.setTimeout(120_000);
   await completeAdultRegistration(page, `quickexit-esc-${Date.now()}-${testInfo.workerIndex}@example.com`);
   await createCaseAndOpenDashboard(page);
+  // The shortcut is attached once the page has hydrated; pressing before
+  // then would drop the first Escape on a slow runner.
+  await expect(page.locator(".quick-exit[data-armed='true']")).toBeVisible({ timeout: 15_000 });
 
   // One Escape does nothing; the second inside the window exits.
   await page.keyboard.press("Escape");

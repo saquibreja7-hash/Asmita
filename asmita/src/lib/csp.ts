@@ -34,6 +34,13 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, nonce, env 
     // The browser opens the signed voice WebSocket straight to Sarvam; the
     // session route refuses any signed URL on another host.
     `connect-src 'self'${voice ? " wss://apps.sarvam.ai" : ""}`,
+    // vPDQ (WP18) reads her chosen video into a hidden <video> from a
+    // same-origin blob: object URL, on whatever document the filing flow is
+    // running under (soft navigations keep the source document's policy, so
+    // this cannot be scoped to /submit). A blob: media URL is page-created
+    // data the page already holds — it grants no cross-origin media — and
+    // script-src stays closed to blob: everywhere except /talk's worklet.
+    "media-src 'self' blob:",
     "font-src 'self' data:",
     "object-src 'none'",
     `frame-ancestors ${frameAncestors}`,

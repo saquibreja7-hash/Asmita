@@ -22,7 +22,10 @@ describe("buildCsp", () => {
     expect(directive(talk, "script-src")).toBe("script-src 'self' 'nonce-abc123' blob:");
     expect(directive(talk, "connect-src")).toBe("connect-src 'self' wss://apps.sarvam.ai");
     const home = buildCsp({ nonce: "abc123", env: "production" });
-    expect(home).not.toContain("blob:");
+    // blob: is allowed for MEDIA on every page (WP18: the fingerprint picker
+    // reads her video from a same-origin object URL under whatever document
+    // the filing flow runs on), but the SCRIPT worklet stays /talk-only.
+    expect(directive(home, "script-src")).not.toContain("blob:");
     expect(home).not.toContain("sarvam.ai");
   });
 
@@ -101,5 +104,22 @@ describe("withPageCsp", () => {
       "/",
     );
     expect(page.request.headers.get("content-security-policy")).not.toContain("attacker");
+  });
+
+  it("allows blob: media for vPDQ video fingerprinting on every page, scripts never (WP18)", () => {
+    // The fingerprint picker runs under whatever document the filing flow is
+    // on (soft navigations keep the source document's CSP), so media-src
+    // must allow the object URL everywhere; script-src stays closed to blob:.
+    for (const pathname of ["/", "/submit", "/case/abc", "/review-sign"]) {
+      const { policy } = withPageCsp(new Request(`https://meriasmita.org${pathname}`), pathname);
+      expect(directive(policy!, "media-src")).toBe("media-src 'self' blob:");
+      expect(directive(policy!, "script-src")).not.toContain("blob:");
+    }
+    // /talk keeps its worklet exception in script-src (pinned by the test
+    // above) and gains the same media-src as every other page.
+    const talk = withPageCsp(new Request("https://meriasmita.org/talk"), "/talk");
+    expect(directive(talk.policy!, "media-src")).toBe("media-src 'self' blob:");
+    // The nonce-less policy (API routes, PDFs, next.config headers) is the same.
+    expect(directive(buildCsp({ env: "production" }), "media-src")).toBe("media-src 'self' blob:");
   });
 });
