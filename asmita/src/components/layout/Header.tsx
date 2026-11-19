@@ -36,8 +36,8 @@ export function Header({ locale }: { locale: Locale }) {
           <nav className="hidden items-center lg:flex" aria-label="Primary">
             <NavLinks groups={navGroups(locale)} />
             <div className="ml-4 flex items-center gap-3">
-              <Link href="/get-help" className="btn btn-primary btn-arrow !min-h-[44px] !px-6">
-                {isHi ? "मदद लें" : "Get help"}
+              <Link href="/start" className="btn btn-primary btn-arrow !min-h-[44px] !px-6">
+                {isHi ? "शिकायत दर्ज करें" : "File a complaint"}
               </Link>
             </div>
           </nav>

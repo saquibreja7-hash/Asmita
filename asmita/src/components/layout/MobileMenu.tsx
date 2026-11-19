@@ -69,11 +69,11 @@ export function MobileMenu({ locale, groups }: { locale: Locale; groups: NavGrou
             </details>
           ))}
           <Link
-            href="/get-help"
+            href="/start"
             className="btn btn-primary btn-arrow mt-3 w-full"
             onClick={() => setOpen(false)}
           >
-            {locale === "hi" ? "मदद लें" : "Get help"}
+            {locale === "hi" ? "शिकायत दर्ज करें" : "File a complaint"}
           </Link>
         </nav>
       )}
