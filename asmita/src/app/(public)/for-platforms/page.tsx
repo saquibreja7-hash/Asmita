@@ -173,19 +173,17 @@ export default function ForPlatformsPage() {
         <section className="section-pad" aria-labelledby="offer-heading">
           <div className="container">
             <SectionHead eyebrow="What partners get" title="Four ways we work with you" id="offer-heading" />
-            <div className="mx-auto mt-12 grid max-w-6xl items-center gap-8 lg:grid-cols-[5fr_7fr]">
-              <div className="pf-art-panel">
-                <Illustration name="audience-platforms" className="mx-auto max-w-[460px]" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {offers.map((offer) => (
-                  <div key={offer.title} className="pf-card flex flex-col p-6">
-                    <Chip icon={offer.icon} />
-                    <h3 className="mt-4 text-[18px] font-medium leading-[1.3] text-[var(--ink)]">{offer.title}</h3>
-                    <p className="mt-2 text-sm leading-[1.65] text-[var(--text)]">{offer.body}</p>
-                  </div>
-                ))}
-              </div>
+            <div className="mx-auto mt-12 grid max-w-5xl auto-rows-fr gap-5 md:grid-cols-2">
+              {offers.map((offer, i) => (
+                <div key={offer.title} className="pf-card pf-offer flex flex-col p-7 md:p-8">
+                  <span aria-hidden="true" className="pf-offer-n">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <Chip icon={offer.icon} />
+                  <h3 className="mt-5 text-[20px] font-medium leading-[1.3] text-[var(--ink)]">{offer.title}</h3>
+                  <p className="mt-3 text-[15px] leading-[1.7] text-[var(--text)]">{offer.body}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -212,37 +210,38 @@ export default function ForPlatformsPage() {
         <section className="section-pad" aria-labelledby="share-heading">
           <div className="container">
             <SectionHead eyebrow="Privacy by design" title="What we share with you, and what we never share" id="share-heading" />
-            <div className="mx-auto mt-12 grid max-w-6xl items-center gap-8 lg:grid-cols-[7fr_4fr]">
-              <div className="grid gap-4">
-                <div className="pf-card p-7">
+            <div className="pf-split mx-auto mt-12 grid max-w-5xl md:grid-cols-2">
+              <div className="pf-split-half p-7 md:p-9">
+                <div className="flex items-center gap-3">
+                  <Chip icon="check" tone="teal" />
                   <h3 className="subsection-title">We share</h3>
-                  <ul className="mt-5 space-y-3 text-[15px] leading-[1.6] text-[var(--text)]">
-                    {shared.map((item) => (
-                      <li key={item} className="flex gap-3">
-                        <span className="pf-tick pf-tick-teal">{icons.check}</span>
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
-                <div className="pf-card pf-card-quiet p-7">
-                  <h3 className="subsection-title">We never share</h3>
-                  <ul className="mt-5 space-y-3 text-[15px] leading-[1.6] text-[var(--text)]">
-                    {neverShared.map((item) => (
-                      <li key={item} className="flex gap-3">
-                        <span className="pf-tick pf-tick-flame">{icons.lock}</span>
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="mt-6 space-y-4 text-[15px] leading-[1.6] text-[var(--text)]">
+                  {shared.map((item) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="pf-tick pf-tick-teal">{icons.check}</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="hidden lg:block">
-                <Illustration name="how-3-protect" className="mx-auto max-w-[380px]" />
+              <div className="pf-split-half pf-split-never p-7 md:p-9">
+                <div className="flex items-center gap-3">
+                  <Chip icon="lock" />
+                  <h3 className="subsection-title">We never share</h3>
+                </div>
+                <ul className="mt-6 space-y-4 text-[15px] leading-[1.6] text-[var(--text)]">
+                  {neverShared.map((item) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="pf-tick pf-tick-flame">{icons.lock}</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
 
-            <div className="pf-asks mx-auto mt-6 max-w-6xl p-7 md:p-9">
+            <div className="pf-asks mx-auto mt-6 max-w-5xl p-7 md:p-9">
               <h3 className="subsection-title">What we ask of partners</h3>
               <ul className="mt-5 grid gap-x-10 gap-y-3 text-[15px] leading-[1.6] text-[var(--text)] md:grid-cols-2">
                 {asks.map((item) => (
@@ -298,15 +297,16 @@ export default function ForPlatformsPage() {
         {/* CONTACT, with the envelope */}
         <section className="zone-sunset" aria-labelledby="contact-heading">
           <div className="zone-sunset-content container section-pad">
-            <div className="mx-auto grid max-w-5xl items-center gap-8 md:grid-cols-[3fr_2fr]">
-              <div className="text-center md:text-left">
+            <div className="mx-auto max-w-2xl">
+              <div className="text-center">
                 <h2 id="contact-heading" className="section-title">
                   Prefer to talk first?
                 </h2>
-                <p className="muted mt-5 max-w-lg text-base leading-[1.75] max-md:mx-auto">
+                <span aria-hidden="true" className="pf-rule mx-auto mt-5" />
+                <p className="muted mx-auto mt-5 max-w-lg text-base leading-[1.75]">
                   Write to us and tell us a little about your platform. We are happy to walk your Trust &amp; Safety team through how it works.
                 </p>
-                <div className="mt-8 flex flex-wrap justify-center gap-3 md:justify-start">
+                <div className="mt-8 flex flex-wrap justify-center gap-3">
                   <a className="btn btn-primary btn-arrow !m-0" href="mailto:hello@meriasmita.org?subject=Platform%20partner%20programme">
                     hello@meriasmita.org
                   </a>
@@ -315,7 +315,6 @@ export default function ForPlatformsPage() {
                   </Link>
                 </div>
               </div>
-              <Illustration name="how-2-send" className="mx-auto max-w-[300px] md:max-w-[340px]" />
             </div>
           </div>
         </section>

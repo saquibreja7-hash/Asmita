@@ -971,15 +971,49 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
   letter-spacing: -0.02em;
   color: var(--brand);
 }
-.pf-art-panel {
-  border-radius: calc(var(--radius-box) + 12px);
-  padding: 28px 20px;
-  background:
-    radial-gradient(70% 70% at 30% 30%, rgba(245, 185, 75, 0.26), transparent 70%),
-    radial-gradient(60% 60% at 80% 85%, rgba(10, 94, 90, 0.12), transparent 70%),
-    var(--card);
-  border: 1px solid var(--line);
+/* Offer cards: a large outlined number in the corner, flame glow on hover. */
+.pf-offer {
+  position: relative;
+  overflow: hidden;
 }
+.pf-offer::before {
+  content: "";
+  position: absolute;
+  inset: auto -40px -60px auto;
+  width: 180px;
+  height: 180px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(245, 185, 75, 0.22), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.pf-offer:hover::before { opacity: 1; }
+.pf-offer-n {
+  position: absolute;
+  top: 18px;
+  right: 24px;
+  font-family: var(--font-display);
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 600;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(245, 185, 75, 0.75);
+  pointer-events: none;
+}
+/* Share / never share: one panel split in two even halves. */
+.pf-split {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-box) + 6px);
+  background: var(--card);
+}
+.pf-split-never {
+  background:
+    radial-gradient(70% 90% at 100% 0%, rgba(245, 185, 75, 0.20), transparent 70%),
+    var(--pf-flame-soft);
+}
+.pf-split-never .pf-tick, .pf-split-never .pf-chip { background: var(--card); }
 .pf-tick {
   display: inline-flex;
   width: 24px;
@@ -996,9 +1030,9 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
 .pf-asks {
   border-radius: calc(var(--radius-box) + 4px);
   background:
-    radial-gradient(60% 120% at 100% 0%, rgba(245, 185, 75, 0.22), transparent 70%),
-    var(--pf-flame-soft);
-  border: 1px solid rgba(245, 185, 75, 0.45);
+    radial-gradient(40% 90% at 100% 0%, rgba(245, 185, 75, 0.14), transparent 70%),
+    var(--card);
+  border: 1px solid var(--line);
 }
 /* Timeline: numbered flame dots joined by a dashed line. */
 .pf-step {
@@ -1040,7 +1074,6 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
     border-top: 2px dashed rgba(125, 76, 12, 0.35);
   }
 }
-.pf-asks .pf-tick { background: var(--card); }
 .pf-faq .faq-item summary::after { color: var(--pf-flame-ink); }
 
 /* Platform partner form (/for-platforms) */
