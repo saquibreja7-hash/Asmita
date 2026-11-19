@@ -1016,8 +1016,15 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     mayProbe: () => boolean,
   ): Promise<ReportedPage["links"] | null> => {
     // robots.txt first, per origin: a probe the rules refuse never reaches
-    // the network, so it costs no budget and no request either.
-    if (!(await robots.rulesFor(target)).isAllowed(target)) return null;
+    // the network, so it costs no budget and no request either. A robots
+    // fetch that fails outright (a parent domain with no DNS, a bad
+    // certificate: robots.ts rethrows those) is a quiet miss like any other
+    // probe failure — it must never fail the source (review fix).
+    try {
+      if (!(await robots.rulesFor(target)).isAllowed(target)) return null;
+    } catch {
+      return null;
+    }
     if (!mayProbe()) return null;
     metrics.sitemapProbes++;
     let res: FetchResult;
@@ -1512,7 +1519,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         } else {
           // A permanently dead host rethrows from its robots fetch (WP13):
           // no sitemap list then — every claimed page below reports its own
-          // permanent failure, which is what the run summary counts.
+          // permanent failure, which is what the run summary counts — and no
+          // sitemap probing either (review fix): the source's own host is
+          // unreachable, so probing its paths can only fail again.
+          let robotsFailed = false;
           try {
             const rules = await robots.rulesFor(first);
             const seen = new Set<string>();
@@ -1526,11 +1536,12 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
             ctx.robotsSitemaps = list;
           } catch {
             ctx.robotsSitemaps = [];
+            robotsFailed = true;
           }
           // robots.txt named no sitemap (WP9): probe the conventional paths
           // once per source per run, counted against the page budget.
           ctx.probeLinks =
-            (ctx.robotsSitemaps ?? []).length === 0
+            !robotsFailed && (ctx.robotsSitemaps ?? []).length === 0
               ? await probeSitemapPaths(ctx, first, batch[0]!.depth, () => mayProbe(batch.length))
               : [];
         }

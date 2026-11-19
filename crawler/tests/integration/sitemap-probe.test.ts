@@ -179,3 +179,32 @@ describe("the probes count against the page budget", () => {
     }
   }, 60_000);
 });
+
+describe("a probe never fails its source (review fix)", () => {
+  it("a healthy subdomain source whose parent domain has no DNS still crawls", async () => {
+    // probe.test is left out of the test DNS: its robots.txt fetch fails
+    // with ENOTFOUND, which robots.ts rethrows as permanent. The parent
+    // probe must swallow that; the source's own pages are crawled as usual.
+    const api2 = await new MockAsmita({
+      key: TEST_KEY,
+      pool: fx.pool,
+      sources: [siteSource({ id: "src-dead-parent", domain: PROBE_SUB_HOST, pageBudget: 12, delayMs: 0 })],
+      seedUrl: fixtureSeedUrl(fx.site.port),
+    }).start();
+    servers.push(api2);
+    const lines: string[] = [];
+    const { result: run } = await runFixtureCrawl(fx.site, api2, {
+      hosts: [PROBE_PLAIN_HOST, PROBE_INDEX_HOST, PROBE_SUB_HOST, PROBE_SIB_HOST],
+      lines,
+    });
+    expect(run.exitCode).toBe(0);
+    expect(run.outcome).toBe("completed");
+    // The home page was reported fetched: the source did not fail.
+    expect(api2.reports.length).toBeGreaterThanOrEqual(1);
+    const rows = [...api2.pages.values()].filter((p) => p.sourceId === "src-dead-parent");
+    expect(rows.some((p) => p.depth === 0 && p.status === "FETCHED")).toBe(true);
+    expect(lines.some((l) => l.includes('"source_failed"'))).toBe(false);
+    // The two own-host probes still ran; the parent probe asked nothing of the network.
+    expect(run.summary.sitemapProbes).toBe(2);
+  }, 60_000);
+});
