@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
 import type { DisplayUrl } from "@/lib/case-ops";
 import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale } from "@/lib/i18n";
 import { foundLinkView } from "./crawl-consent-logic";
+import { StatusBadge } from "./StatusBadge";
 
 /*
  * The possible copies on her watch page (WP22). Site name only — no link,
@@ -22,12 +22,10 @@ export function WatchFoundList({
   caseId,
   urls,
   locale,
-  badge,
 }: {
   caseId: string;
   urls: Array<Pick<DisplayUrl, "id" | "domain" | "platformName" | "status" | "crawlConsentWithdrawn" | "representativeNoticeSentAt">>;
   locale: Locale;
-  badge: (status: string) => ReactNode;
 }) {
   const router = useRouter();
   const [deferred, setDeferred] = useState<Set<string>>(new Set());
@@ -86,7 +84,7 @@ export function WatchFoundList({
                     {t(locale, "case.found.withdrawn")}
                   </span>
                 ) : (
-                  badge(view.status)
+                  <StatusBadge status={view.status} locale={locale} />
                 )}
                 {!choseNotNow && view.kind !== "sent" && (
                   <div className="flex flex-wrap justify-end gap-2">

@@ -7,6 +7,7 @@ import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submis
 import { CrawlConsent } from "./CrawlConsent";
 import { FoundByAsmita } from "./FoundByAsmita";
 import { WatchFoundList } from "./WatchFoundList";
+import { StatusBadge } from "./StatusBadge";
 import { AddMoreImages } from "./AddMoreImages";
 import { getCrawlConsentState } from "@/lib/crawl-consent";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
@@ -26,34 +27,8 @@ import { findVoidedSignatures } from "@/lib/voided-signatures";
 import { localizeRejectionReason } from "@/lib/rejection-reasons";
 
 // Wording that matches what has actually happened: "prepared" is not "sent",
-// and "sent" is not "removed".
-const URL_STATUS_KEYS = {
-  PENDING_REVIEW: "case.urlStatus.pendingReview",
-  NOTICE_QUEUED: "case.urlStatus.queued",
-  NOTICE_SENT: "case.urlStatus.sent",
-  REMOVED: "case.urlStatus.resolved",
-  UNRESOLVED: "case.urlStatus.unresolved",
-  ESCALATED: "case.urlStatus.escalated",
-  REJECTED: "case.urlStatus.rejected",
-} as const;
-
-function StatusBadge({ status, locale, unknown = false }: { status: string; locale: Locale; unknown?: boolean }) {
-  const key = URL_STATUS_KEYS[status as keyof typeof URL_STATUS_KEYS];
-  const label = unknown && status === "PENDING_REVIEW" ? (locale === "hi" ? "रिपोर्टिंग रास्ते की जाँच जारी" : "Reporting route under review") : key ? t(locale, key) : status.replaceAll("_", " ");
-  const color =
-    status === "REMOVED"
-      ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
-      : status === "NOTICE_SENT" || status === "NOTICE_QUEUED"
-      ? "bg-[var(--warning-soft)] text-[var(--warning)]"
-      : status === "ESCALATED"
-      ? "bg-[var(--danger-soft)] text-[var(--danger)]"
-      : "bg-[var(--page)] text-[var(--text-muted)]";
-  return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-medium ${color}`}>
-      {label}
-    </span>
-  );
-}
+// and "sent" is not "removed". The pill itself is the shared StatusBadge
+// component (also rendered by the client WatchFoundList).
 
 // Only a rejected link's reason is the admin's note to her; before a decision
 // the same field holds internal flag codes, which are never shown.
@@ -241,7 +216,7 @@ export default async function CasePage({
                 )}
               </section>
 
-              {showFound && <WatchFoundList caseId={record.id} urls={foundUrls} locale={locale} badge={(status) => <StatusBadge status={status} locale={locale} />} />}
+              {showFound && <WatchFoundList caseId={record.id} urls={foundUrls} locale={locale} />}
 
               {hashUploadEnabled && hashSubmissions.length > 0 && (
                 <section id="fingerprints" aria-labelledby="watch-fingerprints-title" className="scroll-mt-24">

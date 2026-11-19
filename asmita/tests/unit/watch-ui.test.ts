@@ -79,7 +79,6 @@ describe("the found copies on her watch page", () => {
       caseId: "c1",
       urls: list,
       locale: "en",
-      badge: (s: string) => createElement("span", null, `status:${s}`),
     }));
 
   it("shows the site name only, with her two choices and no link", () => {
@@ -104,6 +103,21 @@ describe("the found copies on her watch page", () => {
     const sentOnly = draw([sent]);
     expect(sentOnly).not.toContain("Take it down");
     expect(sentOnly).not.toContain("Not now");
+  });
+
+  // WP34: the found-copies list is a client component ("use client" — its
+  // buttons call the API), so the server page must never hand it a function
+  // prop: Next.js refuses functions across the server→client boundary, which
+  // crashed every watch page render until the badge became a shared component.
+  it("renders the status pill itself, and the server page passes it no function prop", () => {
+    const html = draw();
+    // The pill of the PENDING_REVIEW copy, rendered by the shared StatusBadge.
+    expect(html).toContain("Finding the right contact");
+    const page = readFileSync("src/app/(victim)/case/[caseId]/page.tsx", "utf8");
+    expect(page).toMatch(/<WatchFoundList caseId=\{record\.id\} urls=\{foundUrls\} locale=\{locale\} \/>/);
+    expect(page).not.toMatch(/<WatchFoundList[^/]*badge=/);
+    const list = readFileSync("src/app/(victim)/case/[caseId]/WatchFoundList.tsx", "utf8");
+    expect(list).toContain('<StatusBadge status={view.status} locale={locale} />');
   });
 });
 
