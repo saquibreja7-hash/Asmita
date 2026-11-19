@@ -33,3 +33,4 @@ Working notes for `partner-sharing-spec.md`, one entry per work package, appende
 - `createdFromApplicationId` carries no foreign key, like `AuditLog.actorId`: provenance, not integrity.
 - Same-status changes answer `409 no_change`; re-approving or re-declining a terminal application answers `409 invalid_status`.
 - Suspending a partner keeps its keys but they stop authenticating until reactivation.
+- Follow-up (same day): `prisma/schema.prisma` and the partners console page had been committed with CRLF line endings, against this repository's LF convention (`core.autocrlf=false`, no `.gitattributes`), which made the branch diff show ~900 phantom changes. Both were normalised back to LF with no content change (verified with `git diff --ignore-cr-at-eol`); every other WP30 file was already LF.
