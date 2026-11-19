@@ -78,6 +78,7 @@
       "track.*",
       "myCases.*",
       "case.fingerprints.item",
+      "case.fingerprints.videoItem",
       "case.close",
       "case.close.closing",
       "start.dangerCall.label"

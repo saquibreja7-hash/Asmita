@@ -975,6 +975,7 @@
   "myCases.open": "खोलें",
   "myCases.new": "नया मामला शुरू करें",
   "case.fingerprints.item": "तस्वीर {n}",
+  "case.fingerprints.videoItem": "वीडियो {n}",
   "case.close": "मेरा मामला बंद करें",
   "case.close.closing": "बंद हो रहा है...",
   "start.adult.eyebrow": "मामला शुरू कीजिए",

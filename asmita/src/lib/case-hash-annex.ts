@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/encryption";
-import { buildHashAnnex } from "@/lib/notice-generator";
+import { buildHashAnnex, type HashAnnexVideo } from "@/lib/notice-generator";
 import { writeAuditLog } from "@/lib/audit";
 
 /*
@@ -13,19 +13,71 @@ import { writeAuditLog } from "@/lib/audit";
  * - For dispatch: exactly the ids the signed document lists, and only once
  *   every one of them is approved. Nothing added after signing is ever sent,
  *   and nothing is sent while the email would differ from the PDF.
+ * - A video fingerprint (algorithm VPDQ, video-fingerprints spec WP19) is
+ *   one annex entry, "Video fingerprint (vPDQ, N frames)", listing at most
+ *   200 evenly spaced frame hashes - the same single builder, so signing,
+ *   dispatch, URL notices, representative notices and the crawl
+ *   authorisation all describe it the same way.
  */
 export type HashAnnex = { text: string; hashSubmissionIds: string[] };
 
-type Row = { id: string; hashEncrypted: string; quality: number; clientVersion: string | null };
+type Row = {
+  id: string;
+  algorithm: string;
+  hashEncrypted: string;
+  quality: number;
+  clientVersion: string | null;
+  videoFramesEncrypted: string | null;
+  videoFrameCount: number | null;
+  videoDurationSec: number | null;
+};
 
 const EMPTY: HashAnnex = { text: "", hashSubmissionIds: [] };
 
+type StoredFrame = { hash?: unknown };
+
+/*
+ * The frame hashes a VPDQ row lists in the annex, in stored (sampling)
+ * order. The frame list is the JSON the submission route validated and
+ * stored encrypted; if it is gone or unreadable - account erasure clears it
+ * while keeping the row - the entry falls back to the stored best frame's
+ * hash (hashEncrypted), so an entry never silently vanishes.
+ */
+function videoAnnexEntry(row: Row): HashAnnexVideo {
+  let frames: string[] = [];
+  if (row.videoFramesEncrypted) {
+    try {
+      const parsed: unknown = JSON.parse(decryptField(row.videoFramesEncrypted));
+      if (Array.isArray(parsed)) {
+        frames = parsed.flatMap((frame) =>
+          typeof frame === "object" && frame !== null && typeof (frame as StoredFrame).hash === "string"
+            ? [(frame as StoredFrame).hash as string]
+            : [],
+        );
+      }
+    } catch {
+      // Not the stored JSON shape: fall through to the best frame below.
+    }
+  }
+  if (frames.length === 0) {
+    frames = [decryptField(row.hashEncrypted)];
+  }
+  return { frameCount: row.videoFrameCount ?? frames.length, frames };
+}
+
 function render(rows: Row[]): HashAnnex {
   if (rows.length === 0) return EMPTY;
+  const images: Array<{ value: string; quality: number }> = [];
+  const videos: HashAnnexVideo[] = [];
+  for (const row of rows) {
+    if (row.algorithm === "VPDQ") videos.push(videoAnnexEntry(row));
+    else images.push({ value: decryptField(row.hashEncrypted), quality: row.quality });
+  }
   return {
     text: buildHashAnnex({
       algorithm: "PDQ",
-      hashes: rows.map((h) => ({ value: decryptField(h.hashEncrypted), quality: h.quality })),
+      hashes: images,
+      ...(videos.length > 0 ? { videos } : {}),
       clientVersion: rows[0].clientVersion,
     }),
     hashSubmissionIds: rows.map((h) => h.id),

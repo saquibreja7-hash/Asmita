@@ -20,11 +20,14 @@ import * as store from "@/lib/store";
  * She agrees with one tick on her case page; no name or signature is asked
  * for. The record still follows the notice-integrity pattern: the
  * authorisation lists the fingerprints it covers (the same annex the hash
- * advisory uses), the PDF (the full text, the fingerprint list and a record
- * of when the account holder ticked the box) is stored encrypted with the
- * template id and digest, and agreeing refuses when the text or fingerprints
- * changed since the page loaded them (templateRef). Unreviewed templates are
- * refused unless DEV_SKIP_LEGAL_REVIEW is on.
+ * advisory uses; a video fingerprint appears there as one entry,
+ * "Video fingerprint (vPDQ, N frames)", per video-fingerprints spec WP19 -
+ * the authorisation template text itself is never edited), the PDF (the full
+ * text, the fingerprint list and a record of when the account holder ticked
+ * the box) is stored encrypted with the template id and digest, and agreeing
+ * refuses when the text or fingerprints changed since the page loaded them
+ * (templateRef). Unreviewed templates are refused unless
+ * DEV_SKIP_LEGAL_REVIEW is on.
  */
 
 export const CRAWL_AUTHORISATION_TYPE = "CRAWL_AUTHORISATION" as const;
