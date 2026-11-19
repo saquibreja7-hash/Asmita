@@ -1076,6 +1076,83 @@ export async function buildCanonicalFixture(): Promise<Fixture> {
   return { site, pool, expected: [], allHashes: [] };
 }
 
+/*
+ * The crawl-order fixture (crawler v3 WP11): one source whose home page
+ * links a pagination page, a plain page and a feed, whose robots.txt names
+ * a sitemap with <lastmod> entries — one newer than any fetch the fixture
+ * will ever see, one an old date-only value — and whose feed lists one
+ * entry page. The mock mirrors the app's priorities, so a run claims the
+ * sitemap before the feed before the pagination page before the plain
+ * page, and a later run (after the sitemap re-reports it) fetches the
+ * newer-lastmod page ahead of the older plain one. No images, no host
+ * overlaps with the other fixtures.
+ */
+export const PRIO_HOST = "prio.fixture.test";
+/** The sitemap's new entry: newer than every fetch the fixture's clock sees. */
+export const PRIO_LASTMOD_NEW = "2026-11-19T12:00:00Z";
+/** The sitemap's old entry: a date-only value far in the past. */
+export const PRIO_LASTMOD_OLD = "2026-11-09";
+/** The ISO forms the crawler normalises those to before reporting. */
+export const PRIO_LASTMOD_NEW_ISO = "2026-11-19T12:00:00.000Z";
+export const PRIO_LASTMOD_OLD_ISO = "2026-11-09T00:00:00.000Z";
+
+export async function buildPriorityFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const o = (host: string) => site.origin(host);
+  const P = PRIO_HOST;
+
+  const page = (body: string, head = "") => sendHtml(html(body, head));
+  site.route(P, "/robots.txt", sendBytes(
+    Buffer.from(`User-agent: *\nAllow: /\nSitemap: ${o(P)}/sitemap.xml\n`),
+    "text/plain",
+  ));
+  site.route(
+    P,
+    "/",
+    page(
+      `
+      <a href="/listing?page=2" rel="next">next page</a>
+      <a href="/plain">a plain page</a>
+    `,
+      `<link rel="alternate" type="application/rss+xml" href="/feed.rss">`,
+    ),
+  );
+  site.route(
+    P,
+    "/sitemap.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${o(P)}/gallery</loc><lastmod>${PRIO_LASTMOD_NEW}</lastmod></url>
+  <url><loc>${o(P)}/stale</loc><lastmod>${PRIO_LASTMOD_OLD}</lastmod></url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  site.route(
+    P,
+    "/feed.rss",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <title>prio</title><link>${o(P)}/</link>
+  <item><title>one</title><link>${o(P)}/from-feed</link></item>
+</channel></rss>`,
+      ),
+      "application/rss+xml",
+    ),
+  );
+  for (const path of ["/listing?page=2", "/plain", "/gallery", "/stale", "/from-feed"]) {
+    site.route(P, path, page(`<p>${path}</p>`));
+  }
+
+  const pool: Pool = { version: "prio-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
+  return { site, pool, expected: [], allHashes: [] };
+}
+
 /**
  * The parallel-sources fixture (crawler v2 WP6): twenty independent sites of
  * mixed speed plus one that never answers its home page. A run against all

@@ -41,6 +41,13 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * 14 days; after "error" back off 1 h, 6 h, 24 h and mark the page dead
  * after 5 failures; "gone" is dead. "blocked" (robots or a 401/403 answer)
  * is rechecked after 24 h — the spec does not give it a schedule.
+ *
+ * Crawl order (crawler v3 WP11): every row carries a priority, lower runs
+ * first, and the claim sorts by priority, then nextDueAt. A reported link
+ * sets the priority of the row it stores (sitemap 10, feed 20, pagination
+ * 30, other pages 50 plus 10 per depth level, capped at the default 100);
+ * a sitemap link whose lastmod is newer than the row's last fetch sets 5
+ * and makes the row due immediately. Rows stored before WP11 keep 100.
  */
 
 /** How long a claimed row is withheld from other claims. */
@@ -55,6 +62,13 @@ export const FRONTIER_ERROR_BACKOFF_MS = [60 * 60 * 1000, 6 * 60 * 60 * 1000, 24
 export const FRONTIER_MAX_FAILURES = 5;
 /** Recheck interval after a blocked page (spec gives none; see header). */
 export const FRONTIER_BLOCKED_REVISIT_MS = 24 * 60 * 60 * 1000;
+/**
+ * The priority every row keeps until a report says otherwise (crawler v3
+ * WP11): lower runs first, so the default runs last.
+ */
+export const FRONTIER_PRIORITY_DEFAULT = 100;
+/** A sitemap entry whose lastmod is newer than the row's last fetch (WP11). */
+export const FRONTIER_PRIORITY_LASTMOD = 5;
 
 /** Server-side caps, mirrored in the route schemas. */
 export const FRONTIER_CLAIM_LIMIT_MAX = 200;
@@ -105,6 +119,12 @@ export const frontierReportPageSchema = z
           .object({
             url: z.string().min(10).max(MAX_PAGE_URL_LENGTH),
             kind: z.enum(["page", "sitemap", "feed"]),
+            // Crawler v3 WP11: a pagination link runs before plain pages
+            // (priority 30), and a sitemap link may carry the entry's
+            // <lastmod> as a strict ISO date — an entry newer than the
+            // row's last fetch jumps the queue. Optional on both sides.
+            pagination: z.boolean().optional(),
+            lastmod: z.iso.datetime({ offset: true }).optional(),
           })
           .strict(),
       )
@@ -146,6 +166,18 @@ export function crawlPageDigest(sourceId: string, url: string): string | null {
   const key = crawlPageKey(url);
   if (key === null) return null;
   return sha256(`crawl-page\u0000${sourceId}\u0000${key}`);
+}
+
+/**
+ * The priority a reported link stores its row with (crawler v3 WP11): the
+ * useful pages run first — sitemap 10, feed 20, pagination 30, other pages
+ * 50 plus 10 per depth level, capped at the default 100. Lower runs first.
+ */
+export function linkPriority(link: { kind: "page" | "sitemap" | "feed"; pagination?: boolean }, depth: number): number {
+  if (link.kind === "sitemap") return 10;
+  if (link.kind === "feed") return 20;
+  if (link.pagination === true) return 30;
+  return Math.min(50 + 10 * Math.max(depth, 0), FRONTIER_PRIORITY_DEFAULT);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +324,8 @@ async function claimDue(source: SourceRow, limit: number, now: Date): Promise<Cl
           p.status !== "GONE" &&
           (!p.claimedUntil || p.claimedUntil < now),
       )
-      .sort((a, b) => a.nextDueAt.getTime() - b.nextDueAt.getTime())
+      // Crawl order (WP11): lowest priority first, then the longest-due.
+      .sort((a, b) => a.priority - b.priority || a.nextDueAt.getTime() - b.nextDueAt.getTime())
       .slice(0, take);
     return due.map((row) => {
       row.claimedUntil = claimedUntil;
@@ -326,12 +359,14 @@ async function claimDue(source: SourceRow, limit: number, now: Date): Promise<Cl
       if (take <= 0) return [];
       // FOR UPDATE SKIP LOCKED: two crawler instances (or two Workers) never
       // get the same row; a concurrent claim simply takes the next ones.
+      // Crawl order (WP11): lowest priority first, then the longest-due.
       const rows = await trx.selectFrom("CrawlPage")
         .select(["id", "urlEncrypted", "depth", "etag", "lastModified"])
         .where("sourceId", "=", source.id)
         .where("nextDueAt", "<=", now)
         .where("status", "not in", ["DEAD", "GONE"])
         .where((eb) => eb.or([eb("claimedUntil", "is", null), eb("claimedUntil", "<", now)]))
+        .orderBy("priority", "asc")
         .orderBy("nextDueAt", "asc")
         .limit(take)
         .forUpdate()
@@ -363,7 +398,7 @@ async function claimDue(source: SourceRow, limit: number, now: Date): Promise<Cl
         AND "nextDueAt" <= ${now}
         AND "status" NOT IN ('DEAD', 'GONE')
         AND ("claimedUntil" IS NULL OR "claimedUntil" < ${now})
-      ORDER BY "nextDueAt" ASC LIMIT ${take}
+      ORDER BY "priority" ASC, "nextDueAt" ASC LIMIT ${take}
       FOR UPDATE SKIP LOCKED`;
     if (rows.length > 0) {
       await tx.crawlPage.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { claimedUntil } });
@@ -389,7 +424,7 @@ async function insertSeed(seed: SeedInsert): Promise<void> {
     if (!exists) {
       memory.pages.set(seed.id, {
         id: seed.id, sourceId: seed.sourceId, urlEncrypted: seed.urlEncrypted, urlDigest: seed.urlDigest,
-        depth: 0, kind: "PAGE", etag: null, lastModified: null, status: "PENDING",
+        depth: 0, kind: "PAGE", priority: FRONTIER_PRIORITY_DEFAULT, etag: null, lastModified: null, status: "PENDING",
         claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: new Date(),
       });
     }
@@ -493,6 +528,8 @@ type NewLinkRow = {
   urlDigest: string;
   depth: number;
   kind: "PAGE" | "SITEMAP" | "FEED";
+  /** Crawl order (crawler v3 WP11); tombstones keep the default. */
+  priority: number;
   /** "DEAD" only for canonical-alias tombstones (WP10); links are "PENDING". */
   status: "PENDING" | "DEAD";
 };
@@ -554,10 +591,14 @@ export async function reportCrawlPages(
         urlDigest: digest,
         depth: row.depth,
         kind: "PAGE",
+        priority: FRONTIER_PRIORITY_DEFAULT,
         status: "DEAD",
       });
     }
   }
+
+  /** Reported sitemap lastmods by link digest (crawler v3 WP11). */
+  const lastmodByDigest = new Map<string, Date>();
 
   // Pass 2: the page updates and the link rows (an alias digest never
   // becomes a live row, whatever page reported it).
@@ -580,12 +621,31 @@ export async function reportCrawlPages(
         urlDigest: digest,
         depth: row.depth + 1,
         kind: link.kind === "page" ? "PAGE" : link.kind === "sitemap" ? "SITEMAP" : "FEED",
+        priority: linkPriority(link, row.depth + 1),
         status: "PENDING",
       });
+      if (link.lastmod !== undefined && !lastmodByDigest.has(digest)) lastmodByDigest.set(digest, new Date(link.lastmod));
     }
   }
 
-  await applyReport(sourceId, updates, [...aliasDigests], [...links.values()], [...tombstones.values()], accepted, now);
+  // Crawler v3 WP11: a reported sitemap link whose lastmod is newer than
+  // the row's last fetch jumps the queue — priority 5, due now. A row this
+  // same report moved was just fetched, so it keeps its fresh schedule; a
+  // dead row is final; a row never fetched has no last fetch to compare
+  // and is due anyway, so it keeps the priority its link stored.
+  const reportedIds = new Set(updates.map((u) => u.id));
+  const bumps: Array<{ id: string }> = [];
+  if (lastmodByDigest.size > 0) {
+    const rows = await rowsByDigest(sourceId, [...lastmodByDigest.keys()]);
+    for (const row of rows.values()) {
+      if (reportedIds.has(row.id) || row.status === "DEAD" || row.status === "GONE") continue;
+      const lastmod = lastmodByDigest.get(row.urlDigest);
+      if (lastmod === undefined || row.lastFetchedAt === null) continue;
+      if (lastmod.getTime() > row.lastFetchedAt.getTime()) bumps.push({ id: row.id });
+    }
+  }
+
+  await applyReport(sourceId, updates, [...aliasDigests], [...links.values()], [...tombstones.values()], bumps, accepted, now);
   return { accepted };
 }
 
@@ -620,13 +680,47 @@ async function pageRows(sourceId: string, ids: string[]): Promise<Map<string, Cu
 type CurrentRow = SchedulablePage & { id: string; status: MemoryCrawlPage["status"]; depth: number; urlDigest: string };
 
 /**
+ * The rows for the given link digests, keyed by digest — what the WP11
+ * lastmod check needs. One chunked read per path; rows that do not exist
+ * (the link is new) are simply absent.
+ */
+async function rowsByDigest(sourceId: string, digests: string[]): Promise<Map<string, CurrentRow>> {
+  const out = new Map<string, CurrentRow>();
+  for (let i = 0; i < digests.length; i += LINK_INSERT_CHUNK) {
+    const chunk = digests.slice(i, i + LINK_INSERT_CHUNK);
+    if (isDevNoDb()) {
+      const memory = crawlMemory();
+      const wanted = new Set(chunk);
+      for (const page of memory.pages.values()) {
+        if (page.sourceId === sourceId && wanted.has(page.urlDigest)) out.set(page.urlDigest, page);
+      }
+      continue;
+    }
+    if (usesWorkerKysely()) {
+      const rows = await getWorkerDb().selectFrom("CrawlPage")
+        .select(["id", "status", "nextDueAt", "lastFetchedAt", "failCount", "etag", "lastModified", "depth", "urlDigest"])
+        .where("sourceId", "=", sourceId).where("urlDigest", "in", chunk).execute();
+      for (const row of rows) out.set(row.urlDigest, row as CurrentRow);
+      continue;
+    }
+    const { db } = await import("@/lib/db");
+    const rows = await db.crawlPage.findMany({
+      where: { sourceId, urlDigest: { in: chunk } },
+      select: { id: true, status: true, nextDueAt: true, lastFetchedAt: true, failCount: true, etag: true, lastModified: true, depth: true, urlDigest: true },
+    });
+    for (const row of rows) out.set(row.urlDigest, row as unknown as CurrentRow);
+  }
+  return out;
+}
+
+/**
  * Writes the planned updates, the alias kills, the new link rows, the alias
- * tombstones and the source counters. Alias digests are applied first: any
- * live row carrying one is marked dead (never claimed again), then the links
- * are inserted, then tombstones for aliases without a row — a digest-only
- * dead row whose unique digest swallows any later link to the same page.
- * Tombstones count against the same per-source cap, after the links: real
- * coverage wins over bookkeeping when the cap bites.
+ * tombstones, the WP11 lastmod bumps and the source counters. Alias digests
+ * are applied first: any live row carrying one is marked dead (never claimed
+ * again), then the links are inserted, then tombstones for aliases without a
+ * row — a digest-only dead row whose unique digest swallows any later link
+ * to the same page. Tombstones count against the same per-source cap, after
+ * the links: real coverage wins over bookkeeping when the cap bites.
  */
 async function applyReport(
   sourceId: string,
@@ -634,6 +728,8 @@ async function applyReport(
   aliasDigests: string[],
   links: NewLinkRow[],
   tombstones: NewLinkRow[],
+  /** Rows whose reported lastmod jumps the queue: priority 5, due now (WP11). */
+  bumps: Array<{ id: string }>,
   accepted: number,
   now: Date,
 ): Promise<void> {
@@ -648,6 +744,13 @@ async function applyReport(
     for (const { id, plan } of updates) {
       const row = memory.pages.get(id)!;
       Object.assign(row, { status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt, failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null });
+    }
+    // A newer-than-last-fetch lastmod jumps the queue (WP11): due now.
+    for (const bump of bumps) {
+      const row = memory.pages.get(bump.id);
+      if (!row || row.sourceId !== sourceId || row.status === "DEAD" || row.status === "GONE") continue;
+      row.priority = FRONTIER_PRIORITY_LASTMOD;
+      row.nextDueAt = now;
     }
     // Kill live rows for the report's aliases (WP10).
     for (const row of memory.pages.values()) {
@@ -666,7 +769,7 @@ async function applyReport(
       room -= 1;
       memory.pages.set(row.id, {
         id: row.id, sourceId: row.sourceId, urlEncrypted: row.urlEncrypted, urlDigest: row.urlDigest,
-        depth: row.depth, kind: row.kind, etag: null, lastModified: null, status: row.status,
+        depth: row.depth, kind: row.kind, priority: row.priority, etag: null, lastModified: null, status: row.status,
         claimedUntil: null, lastFetchedAt: null, nextDueAt: row.status === "DEAD" ? now : new Date(0), failCount: 0, createdAt: now,
       });
     };
@@ -695,6 +798,16 @@ async function applyReport(
           failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null,
         }).where("id", "=", id).where("sourceId", "=", sourceId).execute();
       }
+      // A newer-than-last-fetch lastmod jumps the queue (WP11): due now.
+      // The bump reads already filtered dead rows and this same report's
+      // pages; the status guard only keeps a concurrent kill final.
+      for (let i = 0; i < bumps.length; i += LINK_INSERT_CHUNK) {
+        await trx.updateTable("CrawlPage").set({ priority: FRONTIER_PRIORITY_LASTMOD, nextDueAt: now })
+          .where("id", "in", bumps.slice(i, i + LINK_INSERT_CHUNK).map((b) => b.id))
+          .where("sourceId", "=", sourceId)
+          .where("status", "not in", ["DEAD", "GONE"])
+          .execute();
+      }
       // Kill live rows for the report's aliases (WP10), digest-chunked.
       for (let i = 0; i < aliasDigests.length; i += LINK_INSERT_CHUNK) {
         await trx.updateTable("CrawlPage").set({ status: "DEAD", nextDueAt: now, claimedUntil: null })
@@ -717,7 +830,7 @@ async function applyReport(
       for (let i = 0; i < cappedLinks.length + cappedTombstones.length; i += LINK_INSERT_CHUNK) {
         const rows = [...cappedLinks, ...cappedTombstones].slice(i, i + LINK_INSERT_CHUNK).map((row) => ({
           id: row.id, sourceId: row.sourceId, urlEncrypted: row.urlEncrypted, urlDigest: row.urlDigest,
-          depth: row.depth, kind: row.kind, status: row.status, nextDueAt: row.status === "DEAD" ? now : new Date(0),
+          depth: row.depth, kind: row.kind, priority: row.priority, status: row.status, nextDueAt: row.status === "DEAD" ? now : new Date(0),
         }));
         await trx.insertInto("CrawlPage").values(rows)
           .onConflict((oc) => oc.columns(["sourceId", "urlDigest"]).doNothing()).execute();
@@ -748,6 +861,18 @@ async function applyReport(
         },
       });
     }
+    // A newer-than-last-fetch lastmod jumps the queue (WP11): due now. The
+    // status guard keeps a concurrent kill final (see the Kysely path).
+    for (let i = 0; i < bumps.length; i += LINK_INSERT_CHUNK) {
+      await tx.crawlPage.updateMany({
+        where: {
+          id: { in: bumps.slice(i, i + LINK_INSERT_CHUNK).map((b) => b.id) },
+          sourceId,
+          status: { notIn: ["DEAD", "GONE"] },
+        },
+        data: { priority: FRONTIER_PRIORITY_LASTMOD, nextDueAt: now },
+      });
+    }
     // Kill live rows for the report's aliases (WP10), digest-chunked.
     for (let i = 0; i < aliasDigests.length; i += LINK_INSERT_CHUNK) {
       await tx.crawlPage.updateMany({
@@ -768,7 +893,7 @@ async function applyReport(
     for (let i = 0; i < cappedLinks.length + cappedTombstones.length; i += LINK_INSERT_CHUNK) {
       const chunk = [...cappedLinks, ...cappedTombstones].slice(i, i + LINK_INSERT_CHUNK).map((row) => ({
         id: row.id, sourceId: row.sourceId, urlEncrypted: row.urlEncrypted, urlDigest: row.urlDigest,
-        depth: row.depth, kind: row.kind, status: row.status, nextDueAt: row.status === "DEAD" ? now : new Date(0),
+        depth: row.depth, kind: row.kind, priority: row.priority, status: row.status, nextDueAt: row.status === "DEAD" ? now : new Date(0),
       }));
       await tx.crawlPage.createMany({ data: chunk, skipDuplicates: true });
     }

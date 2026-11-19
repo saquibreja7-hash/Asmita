@@ -557,6 +557,13 @@ model CrawlPage {
   // at its MAX_DEPTH, so depths stay bounded by the crawler's own config.
   depth         Int             @default(0)
   kind          CrawlPageKind   @default(PAGE)
+  // Crawl order (crawler v3 WP11): lower runs first; the claim orders by
+  // priority, then nextDueAt. 100 is the default every row stored before
+  // WP11 keeps; a reported link sets it — sitemap 10, feed 20, pagination
+  // 30, other pages 50 plus 10 per depth level (capped at 100) — and a
+  // sitemap entry whose lastmod is newer than the row's last fetch jumps
+  // the queue at 5, due immediately.
+  priority      Int             @default(100)
   // Validators the crawler sent as If-None-Match / If-Modified-Since.
   etag          String?
   lastModified  String?
@@ -575,6 +582,7 @@ model CrawlPage {
   @@unique([sourceId, urlDigest])
   @@index([sourceId, nextDueAt])
   @@index([sourceId, lastFetchedAt])
+  @@index([sourceId, priority, nextDueAt])
 }
 
 // Bearer keys for the crawler service. Only a sha256 of the key is stored

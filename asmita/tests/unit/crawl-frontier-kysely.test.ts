@@ -40,7 +40,12 @@ const kysely = vi.hoisted(() => {
             else if (prop === "returning") detail.returning = args[0];
             else if (prop === "where") detail.wheres = [...((detail.wheres as unknown[]) ?? []), args];
             else if (prop === "limit") detail.limit = args[0];
-            else if (prop === "orderBy") detail.orderBy = args[0];
+            else if (prop === "orderBy") {
+              // Every orderBy call, in order (WP11 claims sort by two keys);
+              // the last one also lands in `orderBy` as before.
+              detail.orderBys = [...((detail.orderBys as unknown[]) ?? []), args[0]];
+              detail.orderBy = args[0];
+            }
             else if (prop === "forUpdate") detail.forUpdate = true;
             else if (prop === "skipLocked") detail.skipLocked = true;
             else if (prop === "onConflict") detail.onConflict = true; // the callback never runs in the fake
@@ -236,6 +241,80 @@ describe("reportCrawlPages, Kysely path", () => {
     expect((inserts[0]!.detail.values as unknown[]).length).toBe(500);
     expect((inserts[1]!.detail.values as unknown[]).length).toBe(200);
     for (const insert of inserts) expect(insert.detail.onConflict).toBe(true);
+  });
+});
+
+describe("crawl order (WP11), Kysely path", () => {
+  it("orders the locked claim by priority, then nextDueAt", async () => {
+    kysely.state.rows.CrawlPage = [pageRow()];
+    await claimCrawlPages(SOURCE.id, 10, NOW);
+    const select = callsOn("CrawlPage").find((call) => call.op === "select" && call.detail.forUpdate === true);
+    expect(select).toBeDefined();
+    expect(select!.detail.orderBys).toEqual(["priority", "nextDueAt"]);
+  });
+
+  it("stores each link with the priority its kind implies", async () => {
+    kysely.state.rows.CrawlPage = [pageRow()];
+    await reportCrawlPages(SOURCE.id, "run-1", [
+      {
+        id: "page-1", status: "fetched",
+        links: [
+          { url: "https://k.example/s.xml", kind: "sitemap" },
+          { url: "https://k.example/f.rss", kind: "feed" },
+          { url: "https://k.example/list?page=2", kind: "page", pagination: true },
+          { url: "https://k.example/deep", kind: "page" },
+        ],
+      },
+    ], NOW);
+    const inserts = callsOn("CrawlPage").filter((call) => call.op === "insert");
+    expect(inserts).toHaveLength(1);
+    const rows = inserts[0]!.detail.values as Array<Record<string, unknown>>;
+    expect(rows.find((r) => r.kind === "SITEMAP")).toMatchObject({ priority: 10, depth: 1, status: "PENDING" });
+    expect(rows.find((r) => r.kind === "FEED")).toMatchObject({ priority: 20, depth: 1 });
+    expect(rows.find((r) => r.kind === "PAGE" && r.priority === 30)).toMatchObject({ depth: 1 }); // the pagination link
+    expect(rows.find((r) => r.kind === "PAGE" && r.priority === 60)).toMatchObject({ depth: 1 }); // the plain page
+  });
+
+  it("bumps a row whose reported lastmod is newer than its last fetch", async () => {
+    const childUrl = "https://k.example/child";
+    const childDigest = crawlPageDigest(SOURCE.id, childUrl);
+    kysely.state.rows.CrawlPage = [
+      pageRow({ id: "page-1", urlDigest: "d-1" }),
+      pageRow({ id: "page-child", urlDigest: childDigest, status: "FETCHED", lastFetchedAt: new Date("2026-11-17T08:00:00Z"), urlEncrypted: encryptField(childUrl) }),
+    ];
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", links: [{ url: childUrl, kind: "page", lastmod: "2026-11-17T10:00:00Z" }] },
+    ], NOW);
+    expect(accepted).toBe(1);
+    // The digest read (WP11): by urlDigest, for the reported lastmods.
+    const read = callsOn("CrawlPage").find((call) => call.op === "select" && call.detail.forUpdate === undefined && (call.detail.select as unknown[])?.includes("urlDigest") && (call.detail.wheres as unknown[])?.some((w) => Array.isArray(w) && String(w[0]) === "urlDigest"));
+    expect(read).toBeDefined();
+    // The bump: priority 5, due now, live rows only.
+    const bump = callsOn("CrawlPage").find((call) => call.op === "update" && (call.detail.set as Record<string, unknown>).priority === 5);
+    expect(bump).toBeDefined();
+    expect(bump!.detail.wheres).toEqual(expect.arrayContaining([
+      ["id", "in", ["page-child"]],
+      ["sourceId", "=", SOURCE.id],
+      ["status", "not in", ["DEAD", "GONE"]],
+    ]));
+    expect((bump!.detail.set as Record<string, unknown>).nextDueAt).toEqual(NOW);
+  });
+
+  it("no bump when the lastmod is older, the row was never fetched, or it is dead", async () => {
+    const childUrl = "https://k.example/child";
+    const childDigest = crawlPageDigest(SOURCE.id, childUrl);
+    for (const overrides of [
+      { status: "FETCHED", lastFetchedAt: new Date("2026-11-17T10:30:00Z") }, // lastmod older than the fetch
+      { status: "PENDING", lastFetchedAt: null }, // never fetched
+      { status: "GONE", lastFetchedAt: new Date("2026-11-17T08:00:00Z") }, // dead
+    ] as const) {
+      kysely.state.calls.length = 0;
+      kysely.state.rows.CrawlPage = [pageRow({ id: "page-1", urlDigest: "d-1" }), pageRow({ id: "page-child", urlDigest: childDigest, ...overrides })];
+      await reportCrawlPages(SOURCE.id, "run-1", [
+        { id: "page-1", status: "fetched", links: [{ url: childUrl, kind: "page", lastmod: "2026-11-17T10:00:00Z" }] },
+      ], NOW);
+      expect(callsOn("CrawlPage").filter((call) => call.op === "update" && (call.detail.set as Record<string, unknown>).priority !== undefined)).toHaveLength(0);
+    }
   });
 });
 

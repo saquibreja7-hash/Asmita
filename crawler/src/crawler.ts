@@ -31,6 +31,13 @@
  * (in scope only, never fetched just because it is canonical), which the
  * app turns into dead rows so the same content is never fetched twice.
  *
+ * The useful pages first (crawler v3 WP11): pagination links are flagged
+ * and sitemap <lastmod> values (strict ISO, quietly dropped when unusable)
+ * ride on the reported links, so the app can run sitemaps before feeds
+ * before pagination before plain pages and make a page whose sitemap
+ * entry is newer than its last fetch due at once. The crawler stays
+ * priority-blind: the queue and its order live in the app.
+ *
  * Discovery (crawler v2 WP5): the out-of-scope hosts linked from in-scope
  * pages are reported to the app (hosts only, deduplicated per run, capped
  * by MAX_DISCOVERY_HOSTS); the app decides which become crawl sources. The
@@ -796,7 +803,9 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       if (seenOnPage.has(key)) return true;
       if (links.length >= cap) return false;
       seenOnPage.add(key);
-      links.push({ url: candidate.href, kind });
+      // A pagination link is flagged (crawler v3 WP11) so the app runs it
+      // before plain pages; the flag is data, the priority is the app's.
+      links.push(pagination ? { url: candidate.href, kind, pagination: true } : { url: candidate.href, kind });
       return true;
     };
     for (const link of ex.links) {
@@ -890,8 +899,12 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     const cap = linkCap();
     /** Key -> index in `links`, so a same-key entry can be upgraded (WP10). */
     const seen = new Map<string, number>();
-    /** Add one candidate; false only when the entry is full. */
-    const admit = (candidate: URL, linkKind: "page" | "sitemap" | "feed"): boolean => {
+    /**
+     * Add one candidate; false only when the entry is full. `lastmod` is the
+     * candidate's sitemap <lastmod> in strict ISO (crawler v3 WP11): the app
+     * makes a row whose entry is newer than its last fetch due immediately.
+     */
+    const admit = (candidate: URL, linkKind: "page" | "sitemap" | "feed", lastmod?: string | null): boolean => {
       if (!inScope(candidate, ctx.scopeHost)) return true;
       if (isNonContentUrl(candidate)) {
         metrics.linksSkippedNonContent++;
@@ -905,15 +918,19 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       const at = seen.get(key);
       if (at !== undefined) {
         // The same page in a second form (WP10): the host form seen first is
-        // kept, but an https form replaces an http one.
+        // kept, but an https form replaces an http one. A lastmod this form
+        // carries wins; otherwise the one already reported is kept.
         if (candidate.protocol === "https:" && links[at]!.url.startsWith("http://")) {
-          links[at] = { url: candidate.href, kind: linkKind };
+          // A null lastmod (a present but unusable value) means "none", the
+          // same as an absent one; a previously reported one is kept.
+          const kept = lastmod ?? links[at]!.lastmod;
+          links[at] = kept != null ? { url: candidate.href, kind: linkKind, lastmod: kept } : { url: candidate.href, kind: linkKind };
         }
         return true;
       }
       if (links.length >= cap) return false;
       seen.set(key, links.length);
-      links.push({ url: candidate.href, kind: linkKind });
+      links.push(lastmod != null ? { url: candidate.href, kind: linkKind, lastmod } : { url: candidate.href, kind: linkKind });
       return true;
     };
     if (kind === "urlset" || kind === "sitemapindex") {
@@ -924,7 +941,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         metrics.sitemapUrlsTaken += parsed.children.length;
         if (depth < config.MAX_DEPTH) {
           for (const child of parsed.children) {
-            if (!admit(child, "sitemap")) break;
+            if (!admit(child.loc, "sitemap", child.lastmod)) break;
           }
         }
       } else {
@@ -932,7 +949,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         metrics.sitemapImages += parsed.pages.reduce((n, p) => n + p.images.length, 0);
         if (depth < config.MAX_DEPTH) {
           for (const p of parsed.pages) {
-            if (!admit(p.loc, "page")) break;
+            if (!admit(p.loc, "page", p.lastmod)) break;
           }
         }
         for (const p of parsed.pages) {

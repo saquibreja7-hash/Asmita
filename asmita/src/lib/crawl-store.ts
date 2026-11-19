@@ -87,6 +87,8 @@ export type MemoryCrawlPage = {
   urlDigest: string;
   depth: number;
   kind: "PAGE" | "SITEMAP" | "FEED";
+  /** Crawl order (crawler v3 WP11): lower runs first; claim sorts by it, then nextDueAt. */
+  priority: number;
   etag: string | null;
   lastModified: string | null;
   status: "PENDING" | "FETCHED" | "NOT_MODIFIED" | "GONE" | "BLOCKED" | "ERROR" | "DEAD";

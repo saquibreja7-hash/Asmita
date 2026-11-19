@@ -25,7 +25,9 @@ main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
                 per-host delay, so a slow or failing source holds only its
                 own worker slot):
          loop: POST /frontier/claim  (batch of due pages, claimed for 30 min;
-                first claim seeds https://<domain>/ app-side; the source's
+                lowest priority first: sitemap 10, feed 20, pagination 30,
+                other pages 50 + 10 per depth level — WP11; first claim seeds
+                https://<domain>/ app-side; the source's
                 robots.txt Sitemap: lines ride on the first report, and
                 when it names none the conventional sitemap paths are
                 probed directly — WP9: /sitemap.xml, then /sitemap_index.xml,
@@ -42,7 +44,8 @@ main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
                 inflated in memory) and RSS/Atom feeds, sniffed by root
                 element, become more frontier rows; image sitemap entries
                 are hashed for their page
-         extract.ts -> links (pagination markers first; login, cart, search
+         extract.ts -> links (pagination markers first and flagged as such
+                for the app's queue — WP11; login, cart, search
                 and calendar links skipped) + image candidates (lazy attrs,
                 srcset, background-image, video poster, image_src, JSON-LD,
                 noscript, thumbnail hrefs); one page offered in several
@@ -51,7 +54,10 @@ main.ts -> cli.ts (config, signals, exit codes; `run` one pass, `run --loop`
          per image: SafeFetcher -> Buffer -> hash-image.ts (sniff, sharp,
                     prepare.ts, pdq.ts) -> Matcher -> FindingsSink
          POST /frontier/report (page outcomes + links of kinds page,
-                sitemap and feed + the page's in-scope <link
+                sitemap and feed — pagination links flagged, sitemap
+                <lastmod> entries riding as strict ISO so the app can make a
+                changed page due at once (WP11) — + the page's in-scope
+                <link
                 rel="canonical"> targets as aliases, max 20, so the app
                 never fetches the same content twice (WP10), body-bounded
                 chunks)
@@ -74,6 +80,15 @@ hands out again after the 30-minute claim window. Sitemap, sitemap-index and
 feed documents are frontier rows like any page (kinds `sitemap` / `feed`),
 fetched through the same claimed-row path — there is no second fetch path,
 and they cost page budget like any page.
+
+Claims come back lowest-priority first (crawler v3 WP11): every row the app
+stores from a report carries a priority — sitemap 10, feed 20, pagination 30,
+other pages 50 plus 10 per depth level, capped at the default 100 that rows
+stored before WP11 keep — and a sitemap entry whose `<lastmod>` is newer
+than the row's last fetch is priority 5 and due immediately, so a page the
+site says changed is crawled without waiting out its own schedule. The
+crawler is priority-blind: it only reports the facts (the pagination flag,
+the lastmod) the app decides from.
 
 Pages that need a browser (WP7) are rendered by one more child process
 (`dist/browser-worker.js`, Playwright Chromium, one page at a time), whose
@@ -442,8 +457,8 @@ Base URL `ASMITA_API_URL`, header `Authorization: Bearer <CRAWLER_SERVICE_KEY>`.
 
 - `GET /api/crawler/pool` -> `{ version, generatedAt, threshold, fingerprints: [{ id, pdq, quality }] }`
 - `GET /api/crawler/sources` -> `{ sources: [{ id, kind: "site", domain, pageBudget, delayMs, origin: "admin" | "reported" | "discovered", hops, render: "http" | "browser" | "auto" }] }`. `origin` says how a site entered the list: an admin added it, a survivor's submitted link or an approved finding named its host (crawler v2 WP1; the app copies the host only, never the link or the case), or the crawler discovered it by following links (WP5). `hops` is how far it sits from a human-added or survivor-reported site. `render` (WP7) says how its pages are fetched: `http` never launches a browser, `browser` renders every page in Chromium, `auto` renders only pages whose HTML has scripts and no image candidates. The crawler treats every enabled source the same whatever its origin.
-- `POST /api/crawler/frontier/claim` `{ sourceId, limit (1..200) }` -> `{ urls: [{ id, url, depth, etag?, lastModified? }] }` (crawler v2 WP3). The app's frontier: the next due pages of one source, claimed for 30 minutes so two crawler instances never get the same URL. A source with no rows yet gets its seed (`https://<domain>/`) created on the first claim. An empty batch means nothing is due (the daily `pageBudget` counts too); an unknown or disabled source answers empty, never an error.
-- `POST /api/crawler/frontier/report` `{ sourceId, runId, pages: [{ id, status: "fetched" | "not_modified" | "gone" | "blocked" | "error", etag?, lastModified?, aliases?: [{ in-scope canonical URL }] (max 20, crawler v3 WP10), links: [{ url, kind: "page" | "sitemap" | "feed" }] (max 500) }] }` -> `{ accepted: number }` (crawler v2 WP3). The app schedules the next visit (24 h after fetched, doubling after not_modified up to 14 days, 1 h / 6 h / 24 h after error and dead after five failures, gone dead), stores the new in-scope links deduplicated per source on a keyed digest and counts the pages against the source budget. The optional `aliases` are a fetched page's `<link rel="canonical">` targets (in scope, never fetched because they are canonical): the app marks any live row for an alias dead and stores a digest-only dead "tombstone" row when there is none, so the same content is never fetched twice and a later link to it never becomes a live row; the digest applies the same shared normalisation as the crawler's dedup key, and rows stored before it keep their stored digest. Retry-safe: a report the server applied but the crawler never saw answered only moves schedules forward. The scope check the crawler does is repeated by the app on every link and alias.
+- `POST /api/crawler/frontier/claim` `{ sourceId, limit (1..200) }` -> `{ urls: [{ id, url, depth, etag?, lastModified? }] }` (crawler v2 WP3). The app's frontier: the next due pages of one source, in priority order (priority, then nextDueAt — crawler v3 WP11), claimed for 30 minutes so two crawler instances never get the same URL. A source with no rows yet gets its seed (`https://<domain>/`) created on the first claim. An empty batch means nothing is due (the daily `pageBudget` counts too); an unknown or disabled source answers empty, never an error.
+- `POST /api/crawler/frontier/report` `{ sourceId, runId, pages: [{ id, status: "fetched" | "not_modified" | "gone" | "blocked" | "error", etag?, lastModified?, aliases?: [{ in-scope canonical URL }] (max 20, crawler v3 WP10), links: [{ url, kind: "page" | "sitemap" | "feed", pagination?: true, lastmod?: ISO date }] (max 500) }] }` -> `{ accepted: number }` (crawler v2 WP3). The app schedules the next visit (24 h after fetched, doubling after not_modified up to 14 days, 1 h / 6 h / 24 h after error and dead after five failures, gone dead), stores the new in-scope links deduplicated per source on a keyed digest and counts the pages against the source budget. The optional `pagination` flag and `lastmod` (crawler v3 WP11) set the stored row's priority — sitemap 10, feed 20, pagination 30, other pages 50 plus 10 per depth level — and an entry whose lastmod is newer than the row's last fetch makes it priority 5 and due now; a row never fetched, a dead row and a row the same report fetched are never jumped. The optional `aliases` are a fetched page's `<link rel="canonical">` targets (in scope, never fetched because they are canonical): the app marks any live row for an alias dead and stores a digest-only dead "tombstone" row when there is none, so the same content is never fetched twice and a later link to it never becomes a live row; the digest applies the same shared normalisation as the crawler's dedup key, and rows stored before it keep their stored digest. Retry-safe: a report the server applied but the crawler never saw answered only moves schedules forward. The scope check the crawler does is repeated by the app on every link and alias.
 - `POST /api/crawler/discoveries` `{ sourceId, runId, hosts: [string] (max 200) }` -> `{ accepted: number }` (crawler v2 WP5). The out-of-scope hosts linked from in-scope pages — hosts only, deduplicated per run by the crawler. The app applies the discovery rules: never-crawl hosts and hosts that are already sources are skipped; the rest become `DISCOVERED` sources one hop deeper than the reporting source, switched on automatically while within `CRAWLER_MAX_DISCOVERY_HOPS` (default 2) and at most `CRAWLER_MAX_NEW_SITES_PER_DAY` (default 200) per UTC day — everything else is stored switched off for an admin to enable. A discovered site that later produces a match is promoted (hops 0, reported-source budget); one that spends its page budget three days running without a match is paused for 30 days by the hourly sweep. `accepted` counts the hosts stored as sources, enabled or not. Best-effort for the crawler: a failed report only delays discovery to the next run.
 - `POST /api/crawler/findings` `{ runId, findings: [{ fingerprintId, pageUrl, imageUrl, distance, quality, observedAt, sourceId }] }` -> `{ results: [{ status: "accepted" | "rejected", reason? }] }`. `accepted` covers new and already-known findings alike, so the crawler cannot tell whether two pool ids belong to one case; the old `"created"` / `"duplicate"` are still tolerated and counted as accepted. A page must be on its source's host or a subdomain (`page_not_in_source`, which also sets exit code 4); the image may be on another public host. A page or image address with credentials or a non-default port is refused (`invalid_url`); the crawler never fetches one
 

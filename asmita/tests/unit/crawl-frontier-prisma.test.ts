@@ -221,6 +221,80 @@ describe("per-source frontier cap, Prisma path (review fix)", () => {
   });
 });
 
+describe("crawl order (WP11), Prisma path", () => {
+  it("orders the locked claim by priority, then nextDueAt", async () => {
+    db.crawlPage.count.mockResolvedValueOnce(1); // hasPages: rows exist
+    db.crawlPage.count.mockResolvedValueOnce(0); // fetched today: none
+    db.crawlPage.count.mockResolvedValueOnce(0); // out with a crawler: none
+    db.$queryRaw.mockResolvedValueOnce([{ ...SEED_ROW }]);
+    const urls = await claimCrawlPages(SOURCE.id, 10, NOW);
+    expect(urls).toHaveLength(1);
+    const raw = String(db.$queryRaw.mock.calls.at(-1)![0]);
+    expect(raw).toContain("FOR UPDATE SKIP LOCKED");
+    expect(raw).toContain('ORDER BY "priority" ASC, "nextDueAt" ASC');
+  });
+
+  it("stores each link with the priority its kind implies", async () => {
+    db.crawlPage.findMany.mockResolvedValue([{ ...CURRENT_ROW }]);
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      {
+        id: "page-1", status: "fetched",
+        links: [
+          { url: "https://k.example/s.xml", kind: "sitemap" },
+          { url: "https://k.example/f.rss", kind: "feed" },
+          { url: "https://k.example/list?page=2", kind: "page", pagination: true },
+          { url: "https://k.example/deep", kind: "page" },
+        ],
+      },
+    ], NOW);
+    expect(accepted).toBe(1);
+    expect(db.crawlPage.createMany).toHaveBeenCalledTimes(1);
+    const data = db.crawlPage.createMany.mock.calls[0]![0].data as Array<Record<string, unknown>>;
+    expect(data.find((r) => r.kind === "SITEMAP")).toMatchObject({ priority: 10, depth: 1, status: "PENDING" });
+    expect(data.find((r) => r.kind === "FEED")).toMatchObject({ priority: 20, depth: 1 });
+    expect(data.find((r) => r.kind === "PAGE" && r.priority === 30)).toMatchObject({ depth: 1 }); // the pagination link
+    expect(data.find((r) => r.kind === "PAGE" && r.priority === 60)).toMatchObject({ depth: 1 }); // the plain page
+  });
+
+  it("bumps a row whose reported lastmod is newer than its last fetch", async () => {
+    const childUrl = "https://k.example/child";
+    const childDigest = crawlPageDigest(SOURCE.id, childUrl);
+    db.crawlPage.findMany
+      .mockResolvedValueOnce([{ ...CURRENT_ROW }]) // the claimed page rows
+      // The WP11 digest read: the linked page's row, fetched an hour ago.
+      .mockResolvedValueOnce([{ ...CURRENT_ROW, id: "page-child", urlDigest: childDigest, status: "FETCHED", lastFetchedAt: new Date("2026-11-17T08:00:00Z") }]);
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", links: [{ url: childUrl, kind: "page", lastmod: "2026-11-17T10:00:00Z" }] },
+    ], NOW);
+    expect(accepted).toBe(1);
+    expect(db.crawlPage.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["page-child"] }, sourceId: SOURCE.id, status: { notIn: ["DEAD", "GONE"] } },
+      data: { priority: 5, nextDueAt: NOW },
+    });
+  });
+
+  it("no bump when the lastmod is older, the row was never fetched, or it is dead", async () => {
+    const childUrl = "https://k.example/child";
+    const childDigest = crawlPageDigest(SOURCE.id, childUrl);
+    for (const row of [
+      { ...CURRENT_ROW, id: "page-child", urlDigest: childDigest, status: "FETCHED", lastFetchedAt: new Date("2026-11-17T10:30:00Z") }, // lastmod older than the fetch
+      { ...CURRENT_ROW, id: "page-child", urlDigest: childDigest, status: "PENDING", lastFetchedAt: null }, // never fetched
+      { ...CURRENT_ROW, id: "page-child", urlDigest: childDigest, status: "GONE", lastFetchedAt: new Date("2026-11-17T08:00:00Z") }, // dead
+    ]) {
+      vi.clearAllMocks();
+      db.crawlPage.findMany.mockReset();
+      db.crawlPage.updateMany.mockClear();
+      db.crawlPage.findMany
+        .mockResolvedValueOnce([{ ...CURRENT_ROW }])
+        .mockResolvedValueOnce([row]);
+      await reportCrawlPages(SOURCE.id, "run-1", [
+        { id: "page-1", status: "fetched", links: [{ url: childUrl, kind: "page", lastmod: "2026-11-17T10:00:00Z" }] },
+      ], NOW);
+      expect(db.crawlPage.updateMany).not.toHaveBeenCalled(); // no bump, no aliases to kill
+    }
+  });
+});
+
 describe("canonical aliases, Prisma path (WP10)", () => {
   it("kills live rows for the alias digests and inserts dead tombstones, never a live alias row", async () => {
     db.crawlPage.findMany.mockResolvedValue([
