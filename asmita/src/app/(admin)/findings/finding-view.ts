@@ -2,7 +2,24 @@
 
 import type { CrawlFindingListRow, FindingPlatformView } from "@/lib/crawl-findings";
 
-export const STATUS_LABELS = { CANDIDATE: "Needs review", APPROVED: "Approved", DISMISSED: "Dismissed" } as const;
+export const STATUS_LABELS = {
+  CANDIDATE: "Needs review",
+  APPROVED: "Approved",
+  DISMISSED: "Dismissed",
+  MINOR_PROTOCOL: "Minor protocol",
+} as const;
+
+/** The label names as the console shows them (review labels WP37). */
+export const LABEL_TEXT = { aiMade: "Looks AI-made", sexual: "Sexual content", possibleMinor: "Possible minor" } as const;
+
+/** The labels set on a row, in a fixed order; empty when none are. */
+export function labelList(row: Pick<CrawlFindingListRow, "labels">): string[] {
+  const labels: string[] = [];
+  if (row.labels.aiMade.set) labels.push(LABEL_TEXT.aiMade);
+  if (row.labels.sexual.set) labels.push(LABEL_TEXT.sexual);
+  if (row.labels.possibleMinor.set) labels.push(LABEL_TEXT.possibleMinor);
+  return labels;
+}
 
 /** Unreviewed first, waiting-for-second-reviewer ahead of the rest, then oldest first. */
 export function sortFindings(rows: CrawlFindingListRow[]): CrawlFindingListRow[] {
@@ -35,7 +52,7 @@ export function noticeLabel(row: Pick<CrawlFindingListRow, "reviewStatus" | "rep
 
 export type NoticeGateInput = Pick<
   CrawlFindingListRow,
-  "reviewStatus" | "representativeNoticeSentAt" | "noticeAttemptUnconfirmed" | "crawlConsentWithdrawn" | "urlsPurged" | "linkStatus"
+  "reviewStatus" | "representativeNoticeSentAt" | "noticeAttemptUnconfirmed" | "crawlConsentWithdrawn" | "urlsPurged" | "linkStatus" | "labels"
 > & { crawlerEnabled: boolean };
 
 export type NoticeGate =
@@ -50,6 +67,13 @@ export type NoticeGate =
  */
 export function noticeGate(state: NoticeGateInput): NoticeGate {
   if (state.representativeNoticeSentAt) return { kind: "sent", sentAt: state.representativeNoticeSentAt };
+  if (state.labels.possibleMinor.set) {
+    return {
+      kind: "blocked",
+      code: "possible_minor_label_set",
+      message: "Possible minor: this finding is marked for the minors protocol, so no representative notice can be sent for it while the label is set.",
+    };
+  }
   if (state.crawlConsentWithdrawn) {
     return { kind: "blocked", code: "consent_withdrawn", message: "Consent withdrawn: the survivor withdrew her authorisation for the crawler, so no notice can be sent for this finding." };
   }

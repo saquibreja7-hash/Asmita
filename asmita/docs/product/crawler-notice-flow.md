@@ -58,6 +58,7 @@ Checked in this order, on both preview and dispatch, server-side at send time.
 | `crawler_disabled` | 503 | `ENABLE_CRAWLER` is off |
 | `database_required` | 503 | Memory store (local dev without `DATABASE_URL`) |
 | `finding_not_found` | 404 | No such finding, or it belongs to another case than `caseId` |
+| `possible_minor_label_set` | 409 | The finding carries the possible-minor label (review labels WP37): it sits in the minors protocol, out of the adult flow, and no representative notice can be prepared or sent for it while the label is set. A second, different admin must clear the label with a reason |
 | `finding_not_approved` | 409 | Not `APPROVED` |
 | `second_review_required` | 409 | Distance above 20 and no second reviewer |
 | `finding_expired` | 410 | Finding past 30-day retention or its addresses purged |

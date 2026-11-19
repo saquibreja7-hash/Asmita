@@ -181,6 +181,10 @@ export async function prepareRepresentativeNotice(input: {
   // reported exactly like a missing finding.
   const finding = await db.crawlFinding.findUnique({ where: { id: input.findingId } });
   if (!finding || finding.caseId !== input.caseId) return refuse(404, "finding_not_found");
+  // A finding marked possible minor is out of the adult flow entirely
+  // (review labels WP37): no representative notice may be prepared or sent
+  // for it while the label is set, whatever its review status.
+  if (finding.labelPossibleMinor) return refuse(409, "possible_minor_label_set");
   if (finding.reviewStatus !== "APPROVED") return refuse(409, "finding_not_approved");
   if (finding.distance > SECOND_REVIEW_DISTANCE && !finding.secondReviewedById) return refuse(409, "second_review_required");
   if (findingUrlsExpired(finding, now) || !finding.imageUrlEncrypted) return refuse(410, "finding_expired");

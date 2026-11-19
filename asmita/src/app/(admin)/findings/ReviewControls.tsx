@@ -27,15 +27,18 @@ export function ReviewControls({
   distance,
   currentAdminGaveFirstReview = false,
   crawlerEnabled = true,
+  possibleMinorLabel = false,
 }: {
   findingId: string;
-  reviewStatus: "CANDIDATE" | "APPROVED" | "DISMISSED";
+  reviewStatus: "CANDIDATE" | "APPROVED" | "DISMISSED" | "MINOR_PROTOCOL";
   needsSecondReview: boolean;
   awaitingSecondReview: boolean;
   distance: number;
   /** From the server: whether the admin viewing gave the first review. */
   currentAdminGaveFirstReview?: boolean;
   crawlerEnabled?: boolean;
+  /** The possible-minor label is set (review labels WP37): the adult flow is stopped. */
+  possibleMinorLabel?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [decision, setDecision] = useState<Decision>("approve");
@@ -69,6 +72,18 @@ export function ReviewControls({
           : "Dismissed.",
     );
     router.refresh();
+  }
+
+  // The safety switch first: while the possible-minor label is set, no
+  // adult-flow action is offered at all, whatever the review status.
+  if (possibleMinorLabel || reviewStatus === "MINOR_PROTOCOL") {
+    return (
+      <p className="text-sm" data-testid="minor-protocol-note" role="status">
+        This finding is marked possible minor. The adult flow is stopped: it cannot be approved or dismissed and no
+        representative notice can be sent. It sits in the minors protocol for crawler findings; a second, different
+        admin must clear the label with a reason before review can resume.
+      </p>
+    );
   }
 
   if (reviewStatus !== "CANDIDATE") {

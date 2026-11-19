@@ -54,6 +54,11 @@ function addFinding(id: string, runId: string, status: MemoryCrawlFinding["revie
     urlDigest: `digest-${id}`, distance: 5, quality: 80, firstSeenAt, lastSeenAt,
     sourceId: srcA, runId, reviewStatus: status, reviewedById: null, reviewedAt: null,
     secondReviewedById: null, secondReviewedAt: null,
+    labelAiMade: false, labelAiMadeById: null, labelAiMadeAt: null,
+    labelSexual: false, labelSexualById: null, labelSexualAt: null,
+    labelPossibleMinor: false, labelPossibleMinorById: null, labelPossibleMinorAt: null,
+    labelPossibleMinorClearedById: null, labelPossibleMinorClearedAt: null, labelPossibleMinorClearReason: null,
+    minorProtocolBefore: null,
   });
 }
 
@@ -160,7 +165,26 @@ describe("getCrawlerStats, memory path", () => {
 
   it("counts matches awaiting review and the decided ones", async () => {
     const stats = await getCrawlerStats(T);
-    expect(stats.findings).toEqual({ awaitingReview: 2, approved: 1, dismissed: 1 });
+    expect(stats.findings).toEqual({ awaitingReview: 2, approved: 1, dismissed: 1, minorProtocol: 0, labels: { aiMade: 0, sexual: 0, possibleMinor: 0 } });
+  });
+
+  it("counts findings by analyst label and the minors protocol", async () => {
+    // f1: all three labels, so it moves from CANDIDATE into the minors
+    // protocol state. f3 is DISMISSED: the possible-minor label is recorded
+    // on it, but a dismissed finding keeps its dismissal (it is out of the
+    // adult flow already), so it does not move.
+    const f1 = crawlMemory().findings.get("f1")!;
+    Object.assign(f1, { labelAiMade: true, labelSexual: true, labelPossibleMinor: true, reviewStatus: "MINOR_PROTOCOL", minorProtocolBefore: "CANDIDATE" });
+    Object.assign(crawlMemory().findings.get("f3")!, { labelAiMade: true, labelPossibleMinor: true });
+    const stats = await getCrawlerStats(T);
+    expect(stats.findings).toEqual({
+      awaitingReview: 1, approved: 1, dismissed: 1,
+      minorProtocol: 1,
+      labels: { aiMade: 2, sexual: 1, possibleMinor: 2 },
+    });
+    // Counts by label only: no address, host, fingerprint or case reference.
+    const text = JSON.stringify(stats.findings);
+    for (const banned of ["example.org", "http", "secret", "case-"]) expect(text, banned).not.toContain(banned);
   });
 
   it("reports the last run the app can see and the last activity of any kind", async () => {
@@ -194,7 +218,7 @@ describe("getCrawlerStats, memory path", () => {
       pagesCrawledToday: 0,
       queue: { live: 0, pending: 0, due: 0, claimed: 0, scheduled: 0, dead: 0 },
       discoveredSitesToday: 0,
-      findings: { awaitingReview: 0, approved: 0, dismissed: 0 },
+      findings: { awaitingReview: 0, approved: 0, dismissed: 0, minorProtocol: 0, labels: { aiMade: 0, sexual: 0, possibleMinor: 0 } },
       pagesByStatus: { pending: 0, fetched: 0, notModified: 0, gone: 0, blocked: 0, error: 0, dead: 0 },
       lastRun: { activityAt: null, findingRun: null },
     });
@@ -224,7 +248,7 @@ describe("GET /api/admin/crawler/stats", () => {
         sites: { total: number; enabled: number; disabled: number; byOrigin: Record<string, { total: number; enabled: number; disabled: number }> };
         queue: { live: number; pending: number; dead: number };
         pagesByStatus: Record<string, number>;
-        findings: { awaitingReview: number; approved: number; dismissed: number };
+        findings: { awaitingReview: number; approved: number; dismissed: number; minorProtocol: number; labels: { aiMade: number; sexual: number; possibleMinor: number } };
         lastRun: { findingRun: { runId: string } | null };
       };
       crawlerEnabled: boolean;
@@ -243,7 +267,7 @@ describe("GET /api/admin/crawler/stats", () => {
     // fixed now (due, claimed, scheduled and the day counts move with time).
     expect(body.stats.queue).toMatchObject({ live: 8, pending: 3, dead: 2 });
     expect(body.stats.pagesByStatus).toEqual({ pending: 3, fetched: 2, notModified: 1, gone: 1, blocked: 1, error: 1, dead: 1 });
-    expect(body.stats.findings).toEqual({ awaitingReview: 2, approved: 1, dismissed: 1 });
+    expect(body.stats.findings).toEqual({ awaitingReview: 2, approved: 1, dismissed: 1, minorProtocol: 0, labels: { aiMade: 0, sexual: 0, possibleMinor: 0 } });
     expect(body.stats.lastRun.findingRun?.runId).toBe("run-new");
     const text = JSON.stringify(body);
     for (const banned of ["example.org", "http", "secret"]) expect(text, banned).not.toContain(banned);

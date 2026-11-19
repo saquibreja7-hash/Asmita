@@ -45,11 +45,25 @@ export type MemoryCrawlFinding = {
   lastSeenAt: Date;
   sourceId: string;
   runId: string;
-  reviewStatus: "CANDIDATE" | "APPROVED" | "DISMISSED";
+  reviewStatus: "CANDIDATE" | "APPROVED" | "DISMISSED" | "MINOR_PROTOCOL";
   reviewedById: string | null;
   reviewedAt: Date | null;
   secondReviewedById: string | null;
   secondReviewedAt: Date | null;
+  // Review labels (review labels WP37), stored exactly as the database does.
+  labelAiMade: boolean;
+  labelAiMadeById: string | null;
+  labelAiMadeAt: Date | null;
+  labelSexual: boolean;
+  labelSexualById: string | null;
+  labelSexualAt: Date | null;
+  labelPossibleMinor: boolean;
+  labelPossibleMinorById: string | null;
+  labelPossibleMinorAt: Date | null;
+  labelPossibleMinorClearedById: string | null;
+  labelPossibleMinorClearedAt: Date | null;
+  labelPossibleMinorClearReason: string | null;
+  minorProtocolBefore: string | null;
 };
 
 export type MemoryCrawlSource = {

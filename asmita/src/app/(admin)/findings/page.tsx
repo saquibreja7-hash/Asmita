@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { FINDING_STATUSES, listCrawlFindings, type FindingStatus } from "@/lib/crawl-findings";
+import { FINDING_STATUSES, findingLabelForQuery, LABEL_QUERY_KEYS, listCrawlFindings, type FindingLabel, type FindingStatus } from "@/lib/crawl-findings";
 import { crawlerEnabled } from "@/lib/crawler-auth";
 import { adminFor } from "../page-permission";
 import { CrawlerOffBanner } from "./CrawlerOffBanner";
-import { noticeLabel, platformLabel, reviewLabel, shortDate, sortFindings, STATUS_LABELS } from "./finding-view";
+import { LABEL_TEXT, labelList, noticeLabel, platformLabel, reviewLabel, shortDate, sortFindings, STATUS_LABELS } from "./finding-view";
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +18,16 @@ export default async function FindingsPage({
   const raw = (await searchParams) || {};
   const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? "";
   const status = FINDING_STATUSES.find((value) => value === one(raw.status));
+  const label = findingLabelForQuery(one(raw.label));
   const caseId = one(raw.caseId).trim().slice(0, 64);
 
-  const rows = sortFindings(await listCrawlFindings({ status, caseId: caseId || undefined, limit: 500 }, adminId));
-  const href = (next: { status?: FindingStatus | ""; caseId?: string }) => {
+  const rows = sortFindings(await listCrawlFindings({ status, caseId: caseId || undefined, ...(label ? { label } : {}), limit: 500 }, adminId));
+  const href = (next: { status?: FindingStatus | ""; label?: FindingLabel | ""; caseId?: string }) => {
     const query = new URLSearchParams();
     const s = next.status ?? "";
     if (s) query.set("status", s);
+    const l = next.label ?? "";
+    if (l) query.set("label", LABEL_QUERY_KEYS[l]);
     if (next.caseId) query.set("caseId", next.caseId);
     const text = query.toString();
     return `/admin/findings${text ? `?${text}` : ""}`;
@@ -49,18 +52,30 @@ export default async function FindingsPage({
       {!crawlerEnabled() && <CrawlerOffBanner />}
 
       <nav aria-label="Finding status" className="mt-6 flex flex-wrap gap-2">
-        <Link aria-current={!status ? "page" : undefined} className="a-chip" href={href({ caseId })}>
+        <Link aria-current={!status ? "page" : undefined} className="a-chip" href={href({ label: label ?? "", caseId })}>
           All
         </Link>
         {FINDING_STATUSES.map((value) => (
-          <Link aria-current={status === value ? "page" : undefined} className="a-chip" href={href({ status: value, caseId })} key={value}>
+          <Link aria-current={status === value ? "page" : undefined} className="a-chip" href={href({ status: value, label: label ?? "", caseId })} key={value}>
             {STATUS_LABELS[value]}
+          </Link>
+        ))}
+      </nav>
+
+      <nav aria-label="Finding label" className="mt-3 flex flex-wrap gap-2">
+        <Link aria-current={!label ? "page" : undefined} className="a-chip" href={href({ status, caseId })}>
+          Any label
+        </Link>
+        {(Object.keys(LABEL_QUERY_KEYS) as FindingLabel[]).map((value) => (
+          <Link aria-current={label === value ? "page" : undefined} className="a-chip" href={href({ status, label: value, caseId })} key={value}>
+            {LABEL_TEXT[value]}
           </Link>
         ))}
       </nav>
 
       <form action="/admin/findings" className="mt-4 flex flex-wrap items-end gap-3" method="get">
         {status && <input name="status" type="hidden" value={status} />}
+        {label && <input name="label" type="hidden" value={LABEL_QUERY_KEYS[label]} />}
         <label className="grid gap-1 text-sm" htmlFor="finding-case">
           <span>Case id</span>
           <input className="field" defaultValue={caseId} id="finding-case" maxLength={64} name="caseId" />
@@ -69,7 +84,7 @@ export default async function FindingsPage({
           Filter
         </button>
         {caseId && (
-          <Link className="link-underline text-sm" href={href({ status: status ?? "" })}>
+          <Link className="link-underline text-sm" href={href({ status: status ?? "", label: label ?? "" })}>
             Clear case filter
           </Link>
         )}
@@ -86,6 +101,7 @@ export default async function FindingsPage({
               <th className="eyebrow" scope="col">Quality</th>
               <th className="eyebrow" scope="col">Source</th>
               <th className="eyebrow" scope="col">Platform</th>
+              <th className="eyebrow" scope="col">Labels</th>
               <th className="eyebrow" scope="col">First seen</th>
               <th className="eyebrow" scope="col">Last seen</th>
               <th className="eyebrow" scope="col">Review</th>
@@ -106,6 +122,17 @@ export default async function FindingsPage({
                 <td className="tabular-nums">{row.quality}/100</td>
                 <td>{row.sourceDomain ?? "-"}</td>
                 <td>{platformLabel(row.platform)}</td>
+                <td>
+                  {labelList(row).length === 0 ? (
+                    "-"
+                  ) : (
+                    <ul className="grid gap-1">
+                      {labelList(row).map((name) => (
+                        <li key={name}>{name}</li>
+                      ))}
+                    </ul>
+                  )}
+                </td>
                 <td className="a-nowrap tabular-nums">{shortDate(row.firstSeenAt)}</td>
                 <td className="a-nowrap tabular-nums">{shortDate(row.lastSeenAt)}</td>
                 <td>{reviewLabel(row)}</td>

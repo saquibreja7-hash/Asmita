@@ -277,6 +277,12 @@ describe("representative notice: gates (each with its own code)", () => {
     await expectRefusal("finding_not_approved");
   });
 
+  it("possible-minor label set (WP37): possible_minor_label_set, whatever the review status", async () => {
+    // The finding stays APPROVED — the label alone stops the notice.
+    state.findings.get("cf-1")!.labelPossibleMinor = true;
+    await expectRefusal("possible_minor_label_set");
+  });
+
   it("a distant match without its second review: second_review_required", async () => {
     Object.assign(state.findings.get("cf-1")!, { distance: 25, secondReviewedById: null });
     await expectRefusal("second_review_required");

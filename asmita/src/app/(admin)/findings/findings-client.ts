@@ -78,7 +78,41 @@ export const REVIEW_ERRORS: Record<string, string> = {
   second_reviewer_required: "This match needs a second, different reviewer. You gave the first review, so another admin must give the second.",
   case_not_found: "The case for this finding no longer exists.",
   invalid_url: "The address no longer passes the link checks, so it cannot be added to the case.",
+  minor_protocol_active:
+    "This finding is marked possible minor and sits in the minors protocol, so it cannot be approved or dismissed. Another admin must clear the label with a reason first.",
 };
+
+/** One sentence for every code the label route can return (review labels WP37). */
+export const LABEL_ERRORS: Record<string, string> = {
+  ...COMMON,
+  label_not_set: "That label is not set on this finding, so there is nothing to clear. Reload to see the current labels.",
+  label_conflict: "The finding changed while you acted (another admin, or a review). Nothing was changed. Reload and try again.",
+  reason_required: "Clearing the possible-minor label needs a written reason. Say why it is being cleared.",
+  second_admin_required:
+    "You set the possible-minor label, so another admin must clear it with a reason. Nothing was changed.",
+};
+
+/** The labels on one finding, as the summary route returns them. */
+export type FindingLabels = {
+  aiMade: { set: boolean; setAt: string | null };
+  sexual: { set: boolean; setAt: string | null };
+  possibleMinor: { set: boolean; setAt: string | null; clearedAt: string | null; clearReason: string | null };
+};
+
+export type LabelCallResult = { ok: true; changed: boolean };
+
+export const setFindingLabel = (id: string, label: "aiMade" | "sexual" | "possibleMinor") =>
+  call<LabelCallResult>(LABEL_ERRORS, () =>
+    csrfFetch(`/api/admin/findings/${encodeURIComponent(id)}/labels`, { method: "POST", body: JSON.stringify({ action: "set", label }) }),
+  );
+
+export const clearFindingLabel = (id: string, label: "aiMade" | "sexual" | "possibleMinor", reason?: string) =>
+  call<LabelCallResult>(LABEL_ERRORS, () =>
+    csrfFetch(`/api/admin/findings/${encodeURIComponent(id)}/labels`, {
+      method: "POST",
+      body: JSON.stringify({ action: "clear", label, ...(label === "possibleMinor" ? { reason } : {}) }),
+    }),
+  );
 
 /**
  * One sentence for every code the preview and dispatch routes can return.
@@ -89,6 +123,8 @@ export const NOTICE_ERRORS: Record<string, string> = {
   ...COMMON,
   access_log_failed: "The preview could not be recorded as a reveal, so it was not shown. Nothing was sent.",
   database_required: "Notices need the database. This environment runs on the in-memory store, so nothing can be previewed or sent.",
+  possible_minor_label_set:
+    "This finding is marked possible minor and sits in the minors protocol, so no representative notice can be sent for it. Another admin must clear the label with a reason first. Nothing was sent.",
   finding_not_approved: "Only an approved finding can have a notice. Nothing was sent.",
   second_review_required: "This match needs a second, different reviewer's approval before a notice can be prepared. Nothing was sent.",
   crawler_link_not_found:

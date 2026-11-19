@@ -73,6 +73,10 @@ export type CrawlerFindingsStats = {
   awaitingReview: number;
   approved: number;
   dismissed: number;
+  /** Findings the possible-minor label moved into the minors protocol. */
+  minorProtocol: number;
+  /** How many findings carry each analyst label (review labels WP37), whatever their status. */
+  labels: { aiMade: number; sexual: number; possibleMinor: number };
 };
 
 /** Page rows by the outcome code of their last report. */
@@ -109,7 +113,7 @@ export type CrawlerStats = {
 
 type PageStatus = MemoryCrawlPage["status"];
 type Origin = "ADMIN" | "REPORTED" | "DISCOVERED";
-type FindingStatus = "CANDIDATE" | "APPROVED" | "DISMISSED";
+type FindingStatus = "CANDIDATE" | "APPROVED" | "DISMISSED" | "MINOR_PROTOCOL";
 
 /** The raw per-path counts; assembleStats turns them into CrawlerStats. */
 type RawCounts = {
@@ -122,13 +126,14 @@ type RawCounts = {
   claimed: number;
   lastPageFetchAt: Date | null;
   findingsByStatus: Record<FindingStatus, number>;
+  labelCounts: { aiMade: number; sexual: number; possibleMinor: number };
   newestRun: { runId: string; firstSeenAt: Date; lastSeenAt: Date; findings: number } | null;
 };
 
 const ZERO_STATUSES: Record<PageStatus, number> = {
   PENDING: 0, FETCHED: 0, NOT_MODIFIED: 0, GONE: 0, BLOCKED: 0, ERROR: 0, DEAD: 0,
 };
-const ZERO_FINDINGS: Record<FindingStatus, number> = { CANDIDATE: 0, APPROVED: 0, DISMISSED: 0 };
+const ZERO_FINDINGS: Record<FindingStatus, number> = { CANDIDATE: 0, APPROVED: 0, DISMISSED: 0, MINOR_PROTOCOL: 0 };
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -201,6 +206,8 @@ function assembleStats(raw: RawCounts, now: Date): CrawlerStats {
       awaitingReview: raw.findingsByStatus.CANDIDATE,
       approved: raw.findingsByStatus.APPROVED,
       dismissed: raw.findingsByStatus.DISMISSED,
+      minorProtocol: raw.findingsByStatus.MINOR_PROTOCOL,
+      labels: raw.labelCounts,
     },
     pagesByStatus: {
       pending: statuses.PENDING,
@@ -260,9 +267,13 @@ function rawMemory(now: Date, dayStart: Date): RawCounts {
   }
 
   const findingsByStatus = { ...ZERO_FINDINGS };
+  const labelCounts = { aiMade: 0, sexual: 0, possibleMinor: 0 };
   let newest: MemoryCrawlFinding | null = null;
   for (const finding of memory.findings.values()) {
     findingsByStatus[finding.reviewStatus as FindingStatus]++;
+    if (finding.labelAiMade) labelCounts.aiMade++;
+    if (finding.labelSexual) labelCounts.sexual++;
+    if (finding.labelPossibleMinor) labelCounts.possibleMinor++;
     if (!newest || finding.lastSeenAt > newest.lastSeenAt) newest = finding;
   }
   let newestRun: RawCounts["newestRun"] = null;
@@ -289,6 +300,7 @@ function rawMemory(now: Date, dayStart: Date): RawCounts {
     claimed,
     lastPageFetchAt,
     findingsByStatus,
+    labelCounts,
     newestRun,
   };
 }
@@ -347,6 +359,19 @@ async function rawKysely(now: Date, dayStart: Date): Promise<RawCounts> {
     .select((eb) => ["reviewStatus", eb.fn.countAll<string>().as("count")])
     .groupBy("reviewStatus")
     .execute();
+  // Findings carrying each analyst label (review labels WP37), three counts.
+  const aiMadeRow = await db.selectFrom("CrawlFinding")
+    .select((eb) => eb.fn.countAll<string>().as("count"))
+    .where("labelAiMade", "=", true)
+    .executeTakeFirst();
+  const sexualRow = await db.selectFrom("CrawlFinding")
+    .select((eb) => eb.fn.countAll<string>().as("count"))
+    .where("labelSexual", "=", true)
+    .executeTakeFirst();
+  const possibleMinorRow = await db.selectFrom("CrawlFinding")
+    .select((eb) => eb.fn.countAll<string>().as("count"))
+    .where("labelPossibleMinor", "=", true)
+    .executeTakeFirst();
   const newestRow = await db.selectFrom("CrawlFinding")
     .select(["runId", "lastSeenAt"])
     .orderBy("lastSeenAt", "desc")
@@ -373,6 +398,11 @@ async function rawKysely(now: Date, dayStart: Date): Promise<RawCounts> {
     const status = row.reviewStatus as FindingStatus;
     if (status in findingsByStatus) findingsByStatus[status] = toCount(row.count);
   }
+  const labelCounts = {
+    aiMade: toCount(aiMadeRow?.count),
+    sexual: toCount(sexualRow?.count),
+    possibleMinor: toCount(possibleMinorRow?.count),
+  };
   const newestRun = newestRow && runRow?.first && runRow.last
     ? { runId: newestRow.runId, firstSeenAt: runRow.first, lastSeenAt: runRow.last, findings: toCount(runRow.count) }
     : null;
@@ -391,6 +421,7 @@ async function rawKysely(now: Date, dayStart: Date): Promise<RawCounts> {
     claimed: toCount(claimedRow?.count),
     lastPageFetchAt: pageLastRow?.last ?? null,
     findingsByStatus,
+    labelCounts,
     newestRun,
   };
 }
@@ -415,6 +446,9 @@ async function rawPrisma(now: Date, dayStart: Date): Promise<RawCounts> {
   const pageLast = await db.crawlPage.aggregate({ _max: { lastFetchedAt: true } });
 
   const findingRows = await db.crawlFinding.groupBy({ by: ["reviewStatus"], _count: { _all: true } });
+  const aiMade = await db.crawlFinding.count({ where: { labelAiMade: true } });
+  const sexual = await db.crawlFinding.count({ where: { labelSexual: true } });
+  const possibleMinor = await db.crawlFinding.count({ where: { labelPossibleMinor: true } });
   const newest = await db.crawlFinding.findFirst({ orderBy: { lastSeenAt: "desc" }, select: { runId: true } });
   const runAgg = newest
     ? await db.crawlFinding.aggregate({
@@ -435,6 +469,7 @@ async function rawPrisma(now: Date, dayStart: Date): Promise<RawCounts> {
     const status = row.reviewStatus as FindingStatus;
     if (status in findingsByStatus) findingsByStatus[status] = row._count._all;
   }
+  const labelCounts = { aiMade, sexual, possibleMinor };
   const newestRun = newest && runAgg?._min.firstSeenAt && runAgg._max.lastSeenAt
     ? { runId: newest.runId, firstSeenAt: runAgg._min.firstSeenAt, lastSeenAt: runAgg._max.lastSeenAt, findings: runAgg._count._all }
     : null;
@@ -453,6 +488,7 @@ async function rawPrisma(now: Date, dayStart: Date): Promise<RawCounts> {
     claimed,
     lastPageFetchAt: pageLast._max.lastFetchedAt ?? null,
     findingsByStatus,
+    labelCounts,
     newestRun,
   };
 }

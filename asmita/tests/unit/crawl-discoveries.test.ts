@@ -301,6 +301,11 @@ describe("the unproductive-site pause sweep", () => {
       firstSeenAt: new Date(dayStart(1).getTime() + 3_600_000), lastSeenAt: new Date(dayStart(1).getTime() + 3_600_000),
       sourceId: matched.id, runId: "run-1", reviewStatus: "CANDIDATE", reviewedById: null, reviewedAt: null,
       secondReviewedById: null, secondReviewedAt: null,
+      labelAiMade: false, labelAiMadeById: null, labelAiMadeAt: null,
+      labelSexual: false, labelSexualById: null, labelSexualAt: null,
+      labelPossibleMinor: false, labelPossibleMinorById: null, labelPossibleMinorAt: null,
+      labelPossibleMinorClearedById: null, labelPossibleMinorClearedAt: null, labelPossibleMinorClearReason: null,
+      minorProtocolBefore: null,
     });
 
     const short = await discoveredSite("short.example.org", 2);

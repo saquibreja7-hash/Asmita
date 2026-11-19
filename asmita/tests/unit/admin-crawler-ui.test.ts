@@ -9,11 +9,12 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { ADMIN_NAV } from "@/app/(admin)/admin-nav";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { AddressDisplay } from "@/app/(admin)/findings/AddressDisplay";
+import { LabelControls } from "@/app/(admin)/findings/LabelControls";
 import { ReviewControls } from "@/app/(admin)/findings/ReviewControls";
 import { NoticeStep, PreviewView } from "@/app/(admin)/findings/NoticeStep";
 import { SafetyNote } from "@/app/(admin)/findings/SafetyNote";
-import { messageFor, NOTICE_ERRORS, REVIEW_ERRORS, type NoticePreview, type SendResult } from "@/app/(admin)/findings/findings-client";
-import { noticeGate, noticeLabel, platformLabel, reviewLabel, sortFindings, type NoticeGateInput } from "@/app/(admin)/findings/finding-view";
+import { LABEL_ERRORS, messageFor, NOTICE_ERRORS, REVIEW_ERRORS, type NoticePreview, type SendResult } from "@/app/(admin)/findings/findings-client";
+import { labelList, noticeGate, noticeLabel, platformLabel, reviewLabel, sortFindings, type NoticeGateInput } from "@/app/(admin)/findings/finding-view";
 import { checkBudget, checkDelay, checkDomain } from "@/app/(admin)/crawl-sources/source-validation";
 import { IMPORT_STATUS_LABELS, ImportResults, originLabel, discoveryStateLabel, SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
 import { BlockedHostsManager } from "@/app/(admin)/crawl-sources/BlockedHostsManager";
@@ -49,6 +50,7 @@ describe("crawler admin sources never fetch or embed addresses", () => {
   const files = [
     "findings/AddressDisplay.tsx",
     "findings/RevealAddress.tsx",
+    "findings/LabelControls.tsx",
     "findings/ReviewControls.tsx",
     "findings/NoticeStep.tsx",
     "findings/page.tsx",
@@ -106,8 +108,66 @@ describe("review controls", () => {
   it("shows a decided finding without buttons", () => {
     expect(render({ reviewStatus: "APPROVED" })).not.toContain("<button");
   });
+  it("offers no review at all while the possible-minor label is set, whatever the status", () => {
+    const html = render({ reviewStatus: "CANDIDATE", possibleMinorLabel: true });
+    expect(html).toContain("minor-protocol-note");
+    expect(html).toContain("cannot be approved or dismissed");
+    expect(html).not.toContain("<button");
+    const dismissed = render({ reviewStatus: "DISMISSED", possibleMinorLabel: true });
+    expect(dismissed).toContain("minor-protocol-note");
+    expect(render({ reviewStatus: "MINOR_PROTOCOL" })).toContain("minor-protocol-note");
+  });
   it("maps the second-reviewer error to a sentence", () => {
     expect(REVIEW_ERRORS.second_reviewer_required).toMatch(/different/);
+    expect(REVIEW_ERRORS.minor_protocol_active).toMatch(/possible minor/);
+  });
+});
+
+describe("label controls (WP37)", () => {
+  const labels = {
+    aiMade: { set: false, setAt: null },
+    sexual: { set: false, setAt: null },
+    possibleMinor: { set: false, setAt: null, clearedAt: null, clearReason: null },
+  };
+  const render = (over: Partial<Parameters<typeof LabelControls>[0]> = {}) =>
+    renderToStaticMarkup(createElement(LabelControls, { findingId: "f1", labels, crawlerEnabled: true, currentAdminSetMinorLabel: false, ...over }));
+
+  it("lists all three labels with their state and an action for each", () => {
+    const html = render();
+    for (const name of ["Looks AI-made", "Sexual content", "Possible minor"]) expect(html, name).toContain(name);
+    expect(html).toContain("Not set");
+    expect(html).toMatch(/aria-label="Set Looks AI-made"/);
+    expect(html).toMatch(/aria-label="Set Sexual content"/);
+    expect(html).toMatch(/aria-label="Set Possible minor"/);
+  });
+
+  it("shows a set label with when, and a clear action", () => {
+    const html = render({ labels: { ...labels, aiMade: { set: true, setAt: "2026-11-19T09:30:00.000Z" } } });
+    expect(html).toContain("Set 2026-11-19 09:30 UTC");
+    expect(html).toMatch(/aria-label="Clear Looks AI-made"/);
+  });
+
+  it("tells the setter they cannot clear the possible-minor label, and shows a cleared label's reason", () => {
+    const blocked = render({ labels: { ...labels, possibleMinor: { set: true, setAt: "2026-11-19T09:30:00.000Z", clearedAt: null, clearReason: null } }, currentAdminSetMinorLabel: true });
+    expect(blocked).toContain("minor-clear-blocked");
+    expect(blocked).toContain("You set this label, so another admin must clear it.");
+    expect(blocked).toMatch(/disabled=""[^>]*>Clear…|>Clear…[^<]*<\/button>/);
+    const cleared = render({
+      labels: { ...labels, possibleMinor: { set: false, setAt: "2026-11-19T09:30:00.000Z", clearedAt: "2026-11-19T11:00:00.000Z", clearReason: "checked the case file" } },
+    });
+    expect(cleared).toContain("Cleared 2026-11-19 11:00 UTC by a second admin: checked the case file");
+  });
+
+  it("offers no label change while the crawler is off", () => {
+    expect(render({ crawlerEnabled: false })).toContain("Labels cannot be changed while the crawler is switched off");
+    expect(render({ crawlerEnabled: false })).not.toContain("<button");
+  });
+
+  it("gives a sentence for every label error code", () => {
+    for (const code of ["label_not_set", "label_conflict", "reason_required", "second_admin_required"]) {
+      expect(LABEL_ERRORS[code], code).toBeTruthy();
+      expect(LABEL_ERRORS[code], code).not.toContain(code);
+    }
   });
 });
 
@@ -115,6 +175,7 @@ describe("notice step and error messages", () => {
   const state: NoticeGateInput = {
     reviewStatus: "APPROVED", representativeNoticeSentAt: null, noticeAttemptUnconfirmed: false,
     crawlConsentWithdrawn: false, urlsPurged: false, linkStatus: "NOTICE_QUEUED", crawlerEnabled: true,
+    labels: { aiMade: { set: false, setAt: null }, sexual: { set: false, setAt: null }, possibleMinor: { set: false, setAt: null, clearedAt: null, clearReason: null } },
   };
   const render = (over: Partial<typeof state> = {}) =>
     renderToStaticMarkup(createElement(NoticeStep, { findingId: "f1", caseId: "c1", state: { ...state, ...over } }));
@@ -230,6 +291,8 @@ describe("safety note and list helpers", () => {
     representativeNoticeSentAt: null,
     noticeAttemptUnconfirmed: false,
     crawlConsentWithdrawn: false,
+    labels: { aiMade: { set: false, setAt: null }, sexual: { set: false, setAt: null }, possibleMinor: { set: false, setAt: null, clearedAt: null, clearReason: null } },
+    currentAdminSetMinorLabel: false,
     ...over,
   });
   it("labels platform and notice state", () => {
@@ -240,6 +303,14 @@ describe("safety note and list helpers", () => {
     expect(noticeLabel(row({ reviewStatus: "APPROVED", crawlConsentWithdrawn: true }))).toBe("Consent withdrawn");
     expect(noticeLabel(row({ reviewStatus: "APPROVED", noticeAttemptUnconfirmed: true }))).toBe("Attempt unconfirmed");
     expect(noticeGate({ ...row({ reviewStatus: "APPROVED", linkStatus: "NOTICE_QUEUED" }), crawlerEnabled: true })).toEqual({ kind: "open", warning: null });
+  });
+  it("lists the set labels in a fixed order and blocks the notice while possible minor is set", () => {
+    expect(labelList(row({}))).toEqual([]);
+    expect(labelList(row({ labels: { aiMade: { set: true, setAt: "2026-11-19T09:30:00.000Z" }, sexual: { set: false, setAt: null }, possibleMinor: { set: true, setAt: "2026-11-19T09:30:00.000Z", clearedAt: null, clearReason: null } } })))
+      .toEqual(["Looks AI-made", "Possible minor"]);
+    const blocked = noticeGate({ ...row({ reviewStatus: "APPROVED", linkStatus: "NOTICE_QUEUED", labels: { aiMade: { set: false, setAt: null }, sexual: { set: false, setAt: null }, possibleMinor: { set: true, setAt: "2026-11-19T09:30:00.000Z", clearedAt: null, clearReason: null } } }), crawlerEnabled: true });
+    expect(blocked).toMatchObject({ kind: "blocked", code: "possible_minor_label_set" });
+    expect(blocked.kind === "blocked" && blocked.message).toContain("minors protocol");
   });
   it("sorts unreviewed first, second-review waiting ahead of them", () => {
     const sorted = sortFindings([
@@ -420,7 +491,7 @@ describe("crawler overview page (WP8)", () => {
     pagesCrawledToday: 4,
     queue: { live: 8, pending: 3, due: 1, claimed: 2, scheduled: 5, dead: 2 },
     discoveredSitesToday: 2,
-    findings: { awaitingReview: 2, approved: 1, dismissed: 1 },
+    findings: { awaitingReview: 2, approved: 1, dismissed: 1, minorProtocol: 1, labels: { aiMade: 2, sexual: 1, possibleMinor: 1 } },
     pagesByStatus: { pending: 3, fetched: 2, notModified: 1, gone: 1, blocked: 1, error: 1, dead: 1 },
     lastRun: {
       activityAt: "2026-11-17T08:40:00.000Z",
@@ -433,7 +504,7 @@ describe("crawler overview page (WP8)", () => {
     pagesCrawledToday: 0,
     queue: { live: 0, pending: 0, due: 0, claimed: 0, scheduled: 0, dead: 0 },
     discoveredSitesToday: 0,
-    findings: { awaitingReview: 0, approved: 0, dismissed: 0 },
+    findings: { awaitingReview: 0, approved: 0, dismissed: 0, minorProtocol: 0, labels: { aiMade: 0, sexual: 0, possibleMinor: 0 } },
     pagesByStatus: { pending: 0, fetched: 0, notModified: 0, gone: 0, blocked: 0, error: 0, dead: 0 },
     lastRun: { activityAt: null, findingRun: null },
   };
@@ -451,7 +522,8 @@ describe("crawler overview page (WP8)", () => {
     // Headline numbers and their details.
     expect(html).toContain("3 switched on");
     expect(html).toContain("1 due · 2 claimed");
-    expect(html).toContain("1 approved · 1 dismissed");
+    expect(html).toContain("1 approved · 1 dismissed · 1 in the minors protocol");
+    expect(html).toContain("2 look AI-made · 1 sexual content · 1 possible minor");
     expect(html).toContain("since 00:00 UTC");
     expect(html).toContain("Generated 2026-11-17 09:00 UTC");
   });
