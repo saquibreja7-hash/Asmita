@@ -18,7 +18,11 @@ import { TemplateType } from "@prisma/client";
 // - Variables: {{caseReference}}, {{platformName}}, {{url}}, {{declarationReference}};
 //   ESCALATION_L1 also uses {{originalSentAt}}.
 // - Rule 3(2)(b) removal period is TWO HOURS since G.S.R. 120(E) (in force
-//   20.02.2026). The ladder's PLATFORM_DEADLINE_HOURS must match.
+//   20.02.2026). Owner decision, 19 November 2026 (WP26): every sentence that
+//   asks the platform to act asks for TWENTY-FOUR (24) HOURS, phrased as
+//   Asmita's request and never attributed to the Rule; every sentence that
+//   states what the Rule requires keeps TWO HOURS. The ladder's
+//   PLATFORM_DEADLINE_HOURS carries the 24-hour ask and must match the asks.
 
 // The Indian-law core shared by the IT Rules notice and the joint notice, so
 // both say exactly the same thing about Indian law.
@@ -95,11 +99,11 @@ export const templateSeeds = [
   {
     templateType: TemplateType.IT_RULES_2021,
     subjectTemplate:
-      "Complaint under Rule 3(2)(b) of the IT Rules, 2021 for removal of non-consensual intimate imagery within two hours - {{caseReference}}",
+      "Complaint under Rule 3(2)(b) of the IT Rules, 2021 for removal of non-consensual intimate imagery within twenty-four hours - {{caseReference}}",
     bodyTemplate: [
       "To: The Grievance Officer / Resident Grievance Officer, {{platformName}}",
       "",
-      "Subject: Complaint under Rule 3(2)(b) of the IT Rules, 2021 for removal of non-consensual intimate imagery within two hours - {{caseReference}}",
+      "Subject: Complaint under Rule 3(2)(b) of the IT Rules, 2021 for removal of non-consensual intimate imagery within twenty-four hours - {{caseReference}}",
       "",
       "Madam / Sir,",
       "",
@@ -133,7 +137,7 @@ export const templateSeeds = [
       "",
       "The Complainant, through Asmita, calls upon the Noticee to:",
       "",
-      "(i)   REMOVE or DISABLE ACCESS to the content identified at paragraph 2 within TWO (2) HOURS of receipt of this complaint, as Rule 3(2)(b) of the IT Rules requires;",
+      "(i)   REMOVE or DISABLE ACCESS to the content identified at paragraph 2 within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests (Rule 3(2)(b) of the IT Rules requires it within two hours);",
       "",
       "(ii)  ACKNOWLEDGE this complaint within TWENTY-FOUR (24) HOURS, by reply to Notice@meriasmita.org quoting the case reference at paragraph 2;",
       "",
@@ -352,7 +356,7 @@ export const templateSeeds = [
       "",
       "The Complainant, through Asmita, calls upon the Noticee to:",
       "",
-      "(i)   REMOVE or DISABLE ACCESS to the content identified at paragraph 3 within TWO (2) HOURS of receipt of this complaint, as Rule 3(2)(b) of the IT Rules requires (the United States period of forty-eight hours is longer and does not extend it);",
+      "(i)   REMOVE or DISABLE ACCESS to the content identified at paragraph 3 within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests (Rule 3(2)(b) of the IT Rules requires it within two hours; the United States period of forty-eight hours is longer and does not extend it);",
       "",
       "(ii)  ACKNOWLEDGE this complaint within TWENTY-FOUR (24) HOURS, by reply to Notice@meriasmita.org quoting the case reference at paragraph 3;",
       "",
@@ -651,7 +655,7 @@ export const templateSeeds = [
       "",
       "3.  In the authorisation referred to above, the Complainant has declared that the images from which her fingerprints were made are intimate images of her, and that she did not consent to any copy of them being shared or published. The content at the location above matched one of those fingerprints.",
       "",
-      "4.  Asmita requests that you remove or disable access to the content at the location above, and preserve the related records. Applicable removal period: within two (2) hours of receipt of this notice, under Rule 3(2)(b) of the IT Rules as amended by G.S.R. 120(E) (in force from 20 February 2026).",
+      "4.  Asmita requests that you remove or disable access to the content at the location above, and preserve the related records. Applicable removal period: within twenty-four (24) hours of receipt of this notice, as Asmita requests; Rule 3(2)(b) of the IT Rules as amended by G.S.R. 120(E) (in force from 20 February 2026) requires removal within two (2) hours.",
       "",
       "5.  Please reply to this notice with the case reference above.",
     ].join("\n"),

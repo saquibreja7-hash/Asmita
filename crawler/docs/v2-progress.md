@@ -433,3 +433,39 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+## Owner changes
+
+### WP26. 24-hour platform deadline (owner decision, 19 November 2026) — 2026-11-19
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, final run on the committed tree).
+
+**What was built**
+
+- `PLATFORM_DEADLINE_HOURS` (`asmita/src/lib/escalation-ladder.ts`) is 24: the survivor's ladder, the admin case work and every test that derives from it now give the platform 24 hours. Its doc comment states both facts: Rule 3(2)(b) sets 2 hours (G.S.R. 120(E), in force 20.02.2026; PRD Section 4); 24 hours is the period our notices ask for.
+- `asmita/prisma/template-seeds.ts`: every sentence in which a notice asked the platform to act within 2 hours now asks for 24 hours, phrased as Asmita's request and never attributed to the Rule. Changed sentences: the IT_RULES_2021 subject line (twice: `subjectTemplate` and the body's `Subject:` line), demand (i) of IT_RULES_2021, demand (i) of IT_RULES_AND_DMCA, and item 4 of CRAWL_REPRESENTATIVE_NOTICE. Every sentence that states what the Rule requires (the legal-basis paragraphs, the SOP note, the hash advisory's 5.2, the L1 cover's item 2, the FIR package's item 4) keeps the two-hour period, and every `legalCitations` entry is unchanged — no law is misstated and no citation added. The changed sentences are listed before -> after in the commit message for the owner's approval; the seed logic that resets `reviewedByLegal` when text changes is untouched, and nothing sets `reviewedByLegal`.
+- Survivor-facing copy that tells her when the platform must act already said 24 hours everywhere (`home.blockA.*`, `hiw.tl1.body`, `faq.s2.a4` in en.json and their hi.json counterparts, the public home page, resources, chat knowledge, the L2 email), and the ladder's deadline step now computes 24 hours from the constant. No en.json or hi.json value needed a change, so `hi-review-status.json` is untouched and nothing new is machine translated.
+- `asmita/src/app/(public)/for-platforms/page.tsx` does not exist on this branch; there was nothing to leave alone.
+- `asmita/src/lib/escalation-engine.ts`: comment-only update — the L1 cover states the Rule's two-hour deadline, which the representative notice does not demand (it asks for twenty-four hours), so the exclusion rationale still holds and is now worded for the new text.
+- Docs: `asmita/docs/product/escalation-ladder.md` (step 2 is 24h; the Deadlines section states the ask and the Rule's period separately; a WP26 sentence in the Notice redraft section), `asmita/docs/product/crawler-notice-flow.md` (the two stale two-hour sentences), `asmita/docs/legal/notice-redraft-2026-11.md` (a dated **Update 2026-11-19** note: the changed sentences reset `reviewedByLegal` on the next seed and are listed before -> after in the commit for re-review), and the legal pack `asmita/docs/legal/Asmita-Legal-Notices-2026-11.docx` regenerated from the changed templates with `node scripts/generate-notice-pack.mjs` (Node 22 helper), as that memo requires after any template change.
+
+**Decisions, recorded per the standing rule**
+
+- The survivor's copyable appeal wording `ladder.draft.appeal` (en.json and hi.json) keeps "a platform must take all reasonable and practicable measures to remove it within two hours": it is a statement of what Rule 3(2)(b) requires, the legal reviewer confirmed that exact wording on 2026-11-17, and restating the Rule at 24 hours would misstate the law to her and to the Grievance Appellate Committee. The survivor-facing bullet is met by the deadline copy, which says 24 hours; the appeal states the law, like the for-platforms page the WP shields.
+- The IT_RULES_2021 subject line changed to "within twenty-four hours": the subject states the relief the complaint seeks, so it must match the demand; the Rule's own two-hour period is stated in the legal-basis section the subject sits over.
+- In the two demand items, "as Rule 3(2)(b) of the IT Rules requires" became "as Asmita requests (Rule 3(2)(b) of the IT Rules requires it within two hours)": keeping the attribution to the Rule would misstate it (it sets two hours, not twenty-four), and dropping the citation would weaken a legal demand; the parenthetical keeps the citation and both periods correctly attributed. The joint notice's forty-eight-hour parenthetical is unchanged (still true against both periods).
+- The L1 follow-up cover, the FIR package and the hash advisory are unchanged: all their two-hour sentences state what the Rule requires, and none of them asks the platform to act within two hours. The L1 still fires at 24 hours — now exactly when the asked period ends; the engine's own schedule (L1 24h, L2 48h, L3 7 days) was never computed from `PLATFORM_DEADLINE_HOURS` and is unchanged.
+- No crawler behaviour changed, so `crawler/README.md` and the runbook are untouched; root `CLAUDE.md` contains no deadline statement and was not edited.
+
+**Tests** (all run, all passing)
+
+- `tests/unit/notice-template-seeds.test.ts`: the "Indian templates demand removal within two hours" test now asserts the split — statements of the Rule keep "TWO (2) HOURS" in IT_RULES_2021, IT_RULES_AND_DMCA, HASH_ADVISORY and ESCALATION_L1; the two demands ask "within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests"; a negative regex proves the 24 hours are never attributed to the Rule; the CRAWL_REPRESENTATIVE_NOTICE assertions pin the new ask sentence and the Rule's two-hour statement. Each changed assertion carries a WP26 note saying why (owner decision; the law keeps its true period).
+- `tests/unit/escalation-ladder.test.ts` and `tests/unit/escalation-ladder-view.test.ts`: notes only — both assert through the constant, so they move with it; the view test's "two-hour deadline" comment now says 24-hour. `tests/unit/admin-cases.test.ts` needed no change (it derives from the constant).
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors (the 3 pre-existing warnings in an untouched script, no new ones), type-check clean, `prisma validate` ok, 152 test files / 1250 tests all passed.
+
+**Not done or not verified**
+
+- The PDF copy of the legal pack was not regenerated: no docx-to-pdf converter exists on this host, and the 2026-11-17 regeneration updated the docx only, so the PDF already lagged one review cycle. The docx is the artifact counsel reads, per the memo that requires regeneration.
+- `reviewedByLegal` is not set anywhere, so nothing can be sent from the changed templates until the legal reviewer records the review on each row in production. That is the owner's and counsel's step, deliberately outside this WP.
+- The regenerated docx was verified by extracting its text (all five changed sentences present) but not opened in a Word processor.
+
+

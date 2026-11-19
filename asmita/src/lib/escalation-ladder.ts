@@ -3,12 +3,14 @@
 // all agree. The automated platform follow-ups live in escalation-engine.ts.
 // Plan: docs/product/escalation-ladder.md
 
-/** Hours a platform has to remove the content: the 2 hours Rule 3(2)(b) has
- *  set since the 2026 amendment (G.S.R. 120(E), in force 20.02.2026; PRD
- *  Section 4), and that the signed notice demands (prisma/template-seeds.ts).
- *  Change it only together with the templates, so the ladder never contradicts
- *  what the survivor signed. */
-export const PLATFORM_DEADLINE_HOURS = 2;
+/** Hours Asmita gives the platform to act: 24, the period our notices ask for
+ *  as Asmita's request (prisma/template-seeds.ts; owner decision, 19 November
+ *  2026). Rule 3(2)(b) sets 2 hours since the 2026 amendment (G.S.R. 120(E),
+ *  in force 20.02.2026; PRD Section 4); the notices state that period as law
+ *  and ask for 24 hours, so the ladder shows our request, never the Rule's
+ *  shorter window. Change it only together with the templates, so the ladder
+ *  never contradicts what the survivor signed. */
+export const PLATFORM_DEADLINE_HOURS = 24;
 /** Days the grievance officer has to resolve a complaint (7 since the February
  *  2026 amendment, PRD Section 4). After that, or after a refusal, the survivor
  *  can appeal to the Grievance Appellate Committee. */
