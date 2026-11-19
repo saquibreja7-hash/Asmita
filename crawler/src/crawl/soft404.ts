@@ -4,12 +4,14 @@
  * Some sites answer every unknown path with a "not found" page and HTTP 200
  * (a soft 404): the frontier keeps scheduling those URLs, and every one of
  * them is fetched, extracted and re-scheduled forever. Within one run and
- * one source the crawler keeps a digest of each fetched HTML body —
- * normalised so that a template page which echoes only the requested id or
- * path digits is recognised across URLs — and once one digest has appeared
- * on `SOFT404_THRESHOLD` distinct URLs, every further page with that digest
- * is treated as a soft-404: no images or links are extracted from it and it
- * is reported `gone`, so the app kills the row like any dead page.
+ * one source the crawler keeps a digest of each fetched HTML body that will
+ * not be rendered (whitespace collapsed only), and once one digest has
+ * appeared on `SOFT404_THRESHOLD` distinct URLs, every further page with
+ * that digest is treated as a soft-404: no images or links are extracted
+ * from it and it is reported `error`, so the app backs the row off (and
+ * kills it after the usual five failures) — a wrong guess is recoverable.
+ * Rendered pages and script-only stubs (app shells: the same HTML on every
+ * URL by design) are never judged.
  *
  * The digests live in memory only and are never logged (rule 3). The tracker
  * holds 16-byte hashes only — never a URL, never a body — and is bounded:
@@ -38,14 +40,15 @@ export const SOFT404_DIGEST_CAP = 256;
 const hash16 = (s: string): string => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
 /**
- * The body digest: whitespace collapsed and digits stripped, so two bodies
- * that differ only in formatting or in the numbers a template echoes (ids,
- * page numbers, years) share one digest — exactly the shape of a soft-404
- * template. Genuinely different pages (different words, different image
- * addresses) stay distinct, because their non-digit content differs.
+ * The body digest: whitespace collapsed, nothing else removed (review fix).
+ * Digits stay: gallery pages that differ only by a numeric id or an image
+ * path such as `/img/photo-12.jpg` are different pages, and stripping
+ * digits made them one digest and got them killed. Only bodies identical up
+ * to formatting share a digest — the shape of a site that answers every
+ * unknown path with the very same "not found" page.
  */
 export function soft404Digest(html: string): string {
-  return hash16(html.replace(/\s+/g, " ").replace(/\d+/g, ""));
+  return hash16(html.replace(/\s+/g, " ").trim());
 }
 
 /**

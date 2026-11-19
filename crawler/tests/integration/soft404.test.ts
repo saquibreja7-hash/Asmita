@@ -2,7 +2,7 @@
  * Crawler v3 WP14, the "done when" fixture: a site that answers every
  * unknown path with the same 200 "not found" page is cut off — the first
  * five distinct URLs carrying that body digest are processed normally, every
- * further one is a soft-404 (no images, no links, reported `gone`) — and a
+ * further one is a soft-404 (no images, no links, reported `error` since the review fix) — and a
  * site of genuinely similar gallery pages (same layout, digits in the body,
  * a different image each) is not affected.
  */
@@ -77,7 +77,7 @@ describe("the fake \"not found\" site is cut off", () => {
     expect([...api.pages.values()].filter((p) => p.sourceId === "src-soft404")).toHaveLength(1 + SOFT404_MISSING.length + 1);
   });
 
-  it("reports the first five template URLs fetched, the rest gone with nothing extracted", () => {
+  it("reports the first five template URLs fetched, the rest error with nothing extracted", () => {
     const entries = entriesFor("src-soft404");
     expect(entries.size).toBe(1 + SOFT404_MISSING.length + 1);
     expect(entries.get(pageUrl(SOFT404_HOST, "/"))?.status).toBe("fetched");
@@ -86,15 +86,17 @@ describe("the fake \"not found\" site is cut off", () => {
       expect(e, `/missing/${w}`).toBeDefined();
       // The spec's "5 or more": URLs 1..5 are processed normally, further
       // ones are soft-404s — no images, no links, reported gone.
-      expect(e!.status, `/missing/${w}`).toBe(i < 5 ? "fetched" : "gone");
+      // Review fix: a soft-404 guess is recoverable (error), never an instant kill.
+      expect(e!.status, `/missing/${w}`).toBe(i < 5 ? "fetched" : "error");
       if (i >= 5) expect(e!.links, `/missing/${w}`).toEqual([]);
     }
     const loop = entries.get(pageUrl(SOFT404_HOST, "/loop-deeper"));
-    expect(loop?.status).toBe("gone");
+    expect(loop?.status).toBe("error");
     expect(loop?.links).toEqual([]);
-    // The soft-404 rows are dead in the app, like any gone page.
-    const goneRows = [...api.pages.values()].filter((p) => p.sourceId === "src-soft404" && p.url.includes("/missing/"));
-    expect(goneRows.filter((p) => p.status === "GONE")).toHaveLength(SOFT404_MISSING.length - 5);
+    // The soft-404 rows back off in the app (first error step), none killed.
+    const cutRows = [...api.pages.values()].filter((p) => p.sourceId === "src-soft404" && p.url.includes("/missing/"));
+    expect(cutRows.filter((p) => p.status === "ERROR" && p.failCount === 1)).toHaveLength(SOFT404_MISSING.length - 5);
+    expect(cutRows.filter((p) => p.status === "GONE" || p.status === "DEAD")).toHaveLength(0);
   });
 
   it("extracts the template's image exactly once and reports exactly one finding", () => {

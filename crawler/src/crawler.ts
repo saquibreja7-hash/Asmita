@@ -1157,12 +1157,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * retried inside this run either. Links are reported only under
    * MAX_DEPTH, deduplicated per page, in scope.
    *
-   * Fake "not found" pages (crawler v3 WP14): a fetched HTML body whose
-   * digest (whitespace collapsed, digits stripped) has already appeared on
-   * five or more distinct URLs of this source is a soft-404 — no images or
-   * links are extracted from it and it is reported "gone" — so a site that
-   * answers every unknown path with the same 200 "not found" page cannot
-   * keep the frontier busy forever. The digest is in-memory only (rule 3).
+   * Fake "not found" pages (crawler v3 WP14, review fix): a fetched HTML
+   * body that will not be rendered, whose digest (whitespace collapsed,
+   * nothing else removed) has already appeared on five or more distinct
+   * URLs of this source is a soft-404 — no images or links are extracted
+   * from it and it is reported "error" (recoverable backoff, not "gone") —
+   * so a site that answers every unknown path with the same 200 "not found"
+   * page cannot keep the frontier busy forever. Rendered pages and
+   * script-only stubs are never judged. The digest is in-memory only (rule 3).
    *
    * Redirects that live in the page (crawler v3 WP12): on the static path a
    * qualifying `<meta http-equiv="refresh">` (up to 10 s) is followed inside
@@ -1281,15 +1283,6 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     metrics.pagesFetched++;
     const html = body.toString("utf8");
-    // WP14: a body digest that already appeared on five or more distinct
-    // URLs of this source marks this page a soft-404: extract nothing (no
-    // images, no links, no render) and report it gone, like a 404. The
-    // page was still fetched — a soft-404 is recognised retrospectively —
-    // and the digest never leaves memory and is never logged.
-    if (ctx.soft404.observe(soft404Digest(html), urlKey(url))) {
-      metrics.pagesSoft404++;
-      return { id: page.id, status: "gone", links: [] };
-    }
     const ex = extract(html, result.url, result.xRobotsTag, {
       maxLinks: config.MAX_LINKS_PER_PAGE,
       maxImages: config.MAX_IMAGES_PER_PAGE,
@@ -1305,6 +1298,20 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       source.render === "browser" ||
       (source.render === "auto" && ex.images.length === 0 && HAS_SCRIPT.test(html)) ||
       stub;
+    // WP14 soft-404s (review fix): only a page that will NOT be rendered is
+    // judged by its static body. A page the browser renders (and any page
+    // the WP12 stub rule describes, whatever the render mode) is an app
+    // shell whose static HTML is the same on every URL by design, so its
+    // body says nothing about whether the URL exists. A body digest (the
+    // whole page, whitespace collapsed only: digits and image addresses
+    // count) already seen on five or more distinct URLs of this source marks
+    // the page a soft-404: nothing extracted, reported `error` — recoverable,
+    // so a wrong guess costs a backoff, never the row. The digest never
+    // leaves memory and is never logged.
+    if (!wantBrowser && !isScriptOnlyStub(html, ex) && ctx.soft404.observe(soft404Digest(html), urlKey(url))) {
+      metrics.pagesSoft404++;
+      return { id: page.id, status: "error", links: [] };
+    }
     if (wantBrowser) {
       const rendered = await renderPageInBrowser(page, url, ctx);
       if (rendered === "dropped") return null; // stopped mid-render: redo whole

@@ -1764,6 +1764,39 @@ export async function buildSoft404Fixture(): Promise<Fixture> {
   return { site, pool, expected, allHashes };
 }
 
+/*
+ * Soft-404 exemptions (crawler v3 review fix for WP14). spa.fixture.test is
+ * an app shell: every URL answers the same script-only HTML (no links, no
+ * images), which must never be judged a soft-404. numeric.fixture.test is a
+ * gallery whose pages differ only by a numeric id and image path, which
+ * must never share a digest. Both hubs link more than the threshold's worth
+ * of pages.
+ */
+export const SPA_HOST = `spa.${SOURCE_DOMAIN}`;
+export const NUMERIC_HOST = `numeric.${SOURCE_DOMAIN}`;
+export const SOFT404_EXEMPT_PAGES = 9;
+
+export async function buildSoft404ExemptFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const robots = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+  const ids = Array.from({ length: SOFT404_EXEMPT_PAGES }, (_, i) => 1001 + i);
+
+  site.route(SPA_HOST, "/robots.txt", robots);
+  site.route(SPA_HOST, "/", sendHtml(html(ids.map((n) => `<a href="/app/${n}">${n}</a>`).join(""))));
+  const shell = html(`<div id="root"></div><script src="/static/app.js"></script>`);
+  site.routeAny(SPA_HOST, () => sendHtml(shell));
+
+  const tile = await patternImage(260, 300, 300, "png");
+  site.route(NUMERIC_HOST, "/robots.txt", robots);
+  site.route(NUMERIC_HOST, "/", sendHtml(html(ids.map((n) => `<a href="/photo/${n}">${n}</a>`).join(""))));
+  for (const n of ids) {
+    site.route(NUMERIC_HOST, `/photo/${n}`, sendHtml(html(`<h1>Photo ${n}</h1><img src="/img/${n}.png" width="300" height="300">`)));
+    site.route(NUMERIC_HOST, `/img/${n}.png`, sendBytes(tile, "image/png"));
+  }
+  const pool: Pool = { version: "soft404-exempt-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
+  return { site, pool, expected: [], allHashes: [] };
+}
+
 /** Env for a fixture run (test values only, nothing real). */
 export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, string> = {}): Record<string, string> {
   return {

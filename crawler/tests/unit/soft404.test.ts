@@ -1,11 +1,9 @@
 /**
  * Crawler v3 WP14: the soft-404 body digest and the per-source tracker.
  *
- * The digest normalises a fetched HTML body by collapsing whitespace and
- * stripping digits, so a "not found" template that echoes only the
- * requested id or page number is recognised across URLs — while genuinely
- * different pages (different words, different image addresses) stay
- * distinct. The tracker counts the distinct URLs that carried each digest
+ * The digest normalises a fetched HTML body by collapsing whitespace only
+ * (review fix: digits and image addresses count), so only bodies identical
+ * up to formatting share a digest. The tracker counts the distinct URLs that carried each digest
  * and flags a digest from the spec's "5 or more" on; it holds hashes only,
  * never a URL or body, and is bounded.
  */
@@ -19,10 +17,12 @@ describe("soft404Digest", () => {
     expect(a).toBe(b);
   });
 
-  it("strips digits", () => {
+  it("keeps digits: pages that differ only by a numeric id or image path stay distinct (review fix)", () => {
     const a = soft404Digest('<h1>Item 12 of 348</h1><img src="/img/photo-12.jpg">');
     const b = soft404Digest('<h1>Item 99 of 1077</h1><img src="/img/photo-99.jpg">');
-    expect(a).toBe(b);
+    expect(a).not.toBe(b);
+    // Only the image address differs: still two pages.
+    expect(soft404Digest('<h1>Photo</h1><img src="/img/p/1001.jpg">')).not.toBe(soft404Digest('<h1>Photo</h1><img src="/img/p/1002.jpg">'));
   });
 
   it("keeps genuinely different pages distinct", () => {
@@ -34,12 +34,10 @@ describe("soft404Digest", () => {
     expect(digests.size).toBe(3);
   });
 
-  it("ignores digit-only variation the same way whichever comes first", () => {
-    // The same template with different ids, in both orders: one digest.
-    const a = soft404Digest("<p>Sorry, the page /missing/12345 does not exist.</p>");
-    const b = soft404Digest("<p>Sorry, the page /missing/6789 does not exist.</p>");
-    expect(a).toBe(soft404Digest("<p>Sorry, the page /missing/6789 does not exist.</p>"));
-    expect(a).toBe(b);
+  it("an identical body is one digest whichever URL served it", () => {
+    const body = "<p>Sorry, the page you asked for does not exist (error 404).</p>";
+    expect(soft404Digest(body)).toBe(soft404Digest(body));
+    expect(soft404Digest(`  ${body}\n`)).toBe(soft404Digest(body));
   });
 
   it("is a short fixed-shape hash, never body content", () => {
