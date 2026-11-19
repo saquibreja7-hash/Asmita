@@ -44,7 +44,7 @@
 import { randomUUID } from "node:crypto";
 import type { Config } from "./config.ts";
 import { userAgentToken } from "./config.ts";
-import { CrawlError, toCrawlError, type ErrorCode } from "./errors.ts";
+import { CrawlError, fetchFailureClass, toCrawlError, type ErrorCode } from "./errors.ts";
 import { FindingsSink } from "./findings.ts";
 import type { Logger } from "./log.ts";
 import { MIN_QUALITY, Matcher } from "./match/matcher.ts";
@@ -157,6 +157,11 @@ type SourceCtx = {
    * once per batch and cleared; the run-wide dedup and cap live in the run.
    */
   discoveredHosts: string[];
+  /**
+   * Set once this source's home page (the depth-0 seed) failed permanently
+   * (WP13), so the run summary counts it once per source, not per page.
+   */
+  homePermanentCounted: boolean;
 };
 
 export type RunOutcome = "completed" | "disabled" | "stopped" | "time_limit" | "pool_stale" | "budget" | "unauthorized";
@@ -405,7 +410,9 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       },
     });
 
-  const record = (code: ErrorCode) => metrics.error(code);
+  const record = (code: ErrorCode, status?: number): void => {
+    metrics.error(code, status);
+  };
 
   // --- browser rendering (WP7) ------------------------------------------------
   /**
@@ -679,7 +686,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         return metrics.skip("image_host_failures_capped");
       }
       if (touchedOffHost) metrics.imagesOffHost++;
-      record(err.code);
+      record(err.code, err.status);
       return metrics.skip(err.code === "robots_disallowed" ? "robots" : "fetch_failed");
     }
     if (touchedOffHost) metrics.imagesOffHost++;
@@ -926,8 +933,12 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * runs on the claimed URL (the app's data, never trusted blindly) and on
    * every redirect hop (beforeHop). A 304 becomes "not_modified"; 404/410
    * "gone"; a robots block or a 401/403 answer "blocked"; anything else that
-   * fails "error" (the app backs off and eventually marks the page dead).
-   * Links are reported only under MAX_DEPTH, deduplicated per page, in scope.
+   * fails "error" (the app backs off and eventually marks the page dead) —
+   * except permanent fetch failures (crawler v3 WP13: a DNS name not found,
+   * a TLS certificate failure), which are reported "gone" straight away so
+   * the app kills the row without the five error retries, and are never
+   * retried inside this run either. Links are reported only under
+   * MAX_DEPTH, deduplicated per page, in scope.
    *
    * Redirects that live in the page (crawler v3 WP12): on the static path a
    * qualifying `<meta http-equiv="refresh">` (up to 10 s) is followed inside
@@ -978,8 +989,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       });
     } catch (raw) {
       const err = toCrawlError(raw);
-      record(err.code);
+      record(err.code, err.status);
       if (err.code === "out_of_scope") metrics.pagesOutOfScope++;
+      // WP13: a DNS name that does not exist or a TLS certificate failure
+      // cannot be fixed by retrying, so the page is `gone` on the first
+      // attempt and the app kills the row without the five error retries.
+      // Temporary failures (timeouts, resets, 5xx) keep the error backoff;
+      // 429/503 are unchanged.
+      const permanent = fetchFailureClass(err) === "permanent";
       const status: ReportedPage["status"] =
         err.code === "http_status" && (err.status === 404 || err.status === 410)
           ? "gone"
@@ -987,7 +1004,16 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
             ? "blocked"
             : err.code === "robots_disallowed"
               ? "blocked"
-              : "error";
+              : permanent
+                ? "gone"
+                : "error";
+      // A source's home page (the depth-0 seed) failing permanently means
+      // the whole site is dead: count it once per source in the summary —
+      // a count only, never a hostname (rule 3).
+      if (permanent && page.depth === 0 && !ctx.homePermanentCounted) {
+        ctx.homePermanentCounted = true;
+        metrics.homePermanentFailures++;
+      }
       return { id: page.id, status, links: [] };
     }
     const validators = {
@@ -1110,6 +1136,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       queryGuard: queryGuards.guardFor(source.id),
       robotsSitemaps: null,
       discoveredHosts: [],
+      homePermanentCounted: false,
     };
     let pages = 0;
     /** Set once this source claims real work (WP6: sourcesActive). */
@@ -1218,16 +1245,23 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         if (first === null) {
           ctx.robotsSitemaps = [];
         } else {
-          const rules = await robots.rulesFor(first);
-          const seen = new Set<string>();
-          const list: URL[] = [];
-          for (const raw of rules.sitemaps.slice(0, ROBOTS_SITEMAP_CAP)) {
-            const s = normalizeUrl(raw, first);
-            if (s === null || seen.has(urlKey(s))) continue;
-            seen.add(urlKey(s));
-            list.push(s);
+          // A permanently dead host rethrows from its robots fetch (WP13):
+          // no sitemap list then — every claimed page below reports its own
+          // permanent failure, which is what the run summary counts.
+          try {
+            const rules = await robots.rulesFor(first);
+            const seen = new Set<string>();
+            const list: URL[] = [];
+            for (const raw of rules.sitemaps.slice(0, ROBOTS_SITEMAP_CAP)) {
+              const s = normalizeUrl(raw, first);
+              if (s === null || seen.has(urlKey(s))) continue;
+              seen.add(urlKey(s));
+              list.push(s);
+            }
+            ctx.robotsSitemaps = list;
+          } catch {
+            ctx.robotsSitemaps = [];
           }
-          ctx.robotsSitemaps = list;
         }
       }
       for (const page of batch) {

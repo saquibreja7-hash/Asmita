@@ -1014,6 +1014,51 @@ export async function buildPageRedirectsFixture(): Promise<Fixture> {
   return { site, pool, expected, allHashes };
 }
 
+/*
+ * The permanent-failure fixture (crawler v3 WP13): fetch failures that can
+ * never be fixed by retrying, and the temporary ones that keep today's
+ * backoff. temp500.test answers its home page with a plain 500 — temporary,
+ * but not in today's in-run retry set, so it is fetched once; temp502.test
+ * answers 502 and reset.test breaks the connection mid-answer — both
+ * retried in-run like today; rate429.test answers 429 with Retry-After: 0
+ * (429/503 keep today's backoff). All of them report `error`, so the app
+ * keeps the 1 h / 6 h / 24 h backoff. dead.test is never in the test
+ * policy's DNS, so resolving it fails with ENOTFOUND: permanent, reported
+ * `gone` on the first attempt. No host here overlaps the other fixtures'
+ * hosts.
+ */
+export const TEMP500_HOST = "temp500.test";
+export const TEMP502_HOST = "temp502.test";
+export const RESET_HOST = "reset.test";
+export const RATE429_HOST = "rate429.test";
+/** Never resolvable in the test policy: a DNS name that does not exist. */
+export const DEAD_HOST = "dead.test";
+export const PERMANENT_FAILURE_HOSTS = [TEMP500_HOST, TEMP502_HOST, RESET_HOST, RATE429_HOST];
+
+export async function buildPermanentFailuresFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const robots = sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain");
+  const statusPage = (status: number, body: string, extra: Record<string, string> = {}): Handler => (res) => {
+    res.writeHead(status, { "content-type": "text/html; charset=utf-8", ...extra });
+    res.end(body);
+  };
+  site.route(TEMP500_HOST, "/robots.txt", robots);
+  site.route(TEMP500_HOST, "/", statusPage(500, "<html><body>server error</body></html>"));
+  site.route(TEMP502_HOST, "/robots.txt", robots);
+  site.route(TEMP502_HOST, "/", statusPage(502, "<html><body>bad gateway</body></html>"));
+  site.route(RESET_HOST, "/robots.txt", robots);
+  // The connection breaks after the headers: a reset, not a status.
+  site.route(RESET_HOST, "/", (res) => {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.write("<html><body>hal");
+    res.destroy();
+  });
+  site.route(RATE429_HOST, "/robots.txt", robots);
+  site.route(RATE429_HOST, "/", statusPage(429, "<html><body>slow down</body></html>", { "retry-after": "0" }));
+  const pool: Pool = { version: "permfail-1", generatedAt: new Date().toISOString(), threshold: 31, fingerprints: [] };
+  return { site, pool, expected: [], allHashes: [] };
+}
+
 /** Env for a fixture run (test values only, nothing real). */
 export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, string> = {}): Record<string, string> {
   return {

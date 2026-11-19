@@ -26,6 +26,11 @@ export async function runFixtureCrawl(
     extraDns?: Record<string, string[]>;
     /** Query-variant guards shared with an earlier pass (run --loop). */
     queryGuards?: QueryGuardStore;
+    /**
+     * Wraps the SafeFetcher the crawl uses (WP13 tests count fetch attempts
+     * to prove a permanent failure is never retried).
+     */
+    wrapFetcher?: (inner: SafeFetcher) => Pick<SafeFetcher, "fetch">;
   } = {},
 ): Promise<{ result: RunResult; lines: string[] }> {
   const lines = opts.lines ?? [];
@@ -57,7 +62,7 @@ export async function runFixtureCrawl(
     const result = await runCrawl({
       config,
       api: client,
-      fetcher,
+      fetcher: opts.wrapFetcher ? opts.wrapFetcher(fetcher) : fetcher,
       decoder,
       log: new Logger({ sink: (l) => lines.push(l), level: "debug" }),
       stopSignal: opts.stopSignal,

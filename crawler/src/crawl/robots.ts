@@ -10,12 +10,16 @@
  *                         one we prefer not to crawl.
  *   429, 5xx, network error, timeout, too large, redirect loop
  *                      -> "disallow all" for the rest of this run
- *                         (RFC 9309 2.3.1.4 "unreachable" -> complete disallow).
+ *                        (RFC 9309 2.3.1.4 "unreachable" -> complete disallow).
+ *   DNS name not found / TLS certificate failure (WP13)
+ *                      -> rethrown: the host is dead, so the fetch that asked
+ *                         reports a permanent failure (`gone`) instead of a
+ *                         robots block; no request is ever made to it.
  *   Body over the cap (500 KiB) -> disallow all.
  * The cache never outlives the process.
  */
 import robotsParserModule from "robots-parser";
-import { CrawlError, toCrawlError } from "../errors.ts";
+import { CrawlError, fetchFailureClass, toCrawlError } from "../errors.ts";
 import type { FetchResult } from "../net/safe-fetch.ts";
 
 type Robot = {
@@ -105,6 +109,13 @@ export class RobotsCache {
       return parseRobots(robotsUrl.href, res.body.toString("utf8"), this.uaToken);
     } catch (raw) {
       const err = toCrawlError(raw);
+      // WP13: a host whose name does not resolve or whose certificate fails
+      // is dead, not "robots unreachable". The robots.txt fetch shares the
+      // page's origin, so whatever killed it kills the page fetch too;
+      // rethrow so the caller reports the permanent failure (the page goes
+      // `gone` on the first attempt) instead of a robots block that would
+      // be rechecked every 24 h forever.
+      if (fetchFailureClass(err) === "permanent") throw err;
       if (err instanceof CrawlError && err.code === "http_status" && err.status !== undefined) {
         if (err.status === 401 || err.status === 403) {
           this.onOutcome?.("denied");
