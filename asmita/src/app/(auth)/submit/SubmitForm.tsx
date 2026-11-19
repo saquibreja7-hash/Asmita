@@ -3,20 +3,52 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { computePdqHash, PDQ_CLIENT_VERSION } from "@/lib/pdq/pdq";
+import {
+  fingerprintVideo,
+  toVideoHashItem,
+  VpdqError,
+  type VideoFrameHash,
+  type VpdqErrorCode,
+} from "@/lib/pdq/vpdq";
 import type { HashPickerPlatform } from "@/lib/hash-submission";
 import { DRAFT_KEY } from "@/lib/eligibility";
-import { t, type Locale } from "@/lib/i18n";
+import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { checkLink, matchPlatform, type LinkCheckError, type PlatformPattern } from "@/lib/link-check";
 import { FormHandoff } from "@/components/FormHandoff";
 import { UnsureHandoff } from "@/components/UnsureHandoff";
 
 const MAX_HASH_FILES = 10;
 
+// A video is fingerprinted in her browser too (vPDQ, WP18): one frame per
+// second, only the frame fingerprint codes are ever sent.
+const VIDEO_TYPE_PATTERN = /^video\//;
+const VIDEO_NAME_PATTERN = /\.(webm|mp4|m4v|mov|mkv|ogv)$/i;
+
+function isVideoFile(file: File): boolean {
+  return VIDEO_TYPE_PATTERN.test(file.type) || (file.type === "" && VIDEO_NAME_PATTERN.test(file.name));
+}
+
 type FileHashState = {
   name: string;
+  kind: "image" | "video";
   status: "hashing" | "hashed" | "error";
   hash?: string;
   quality?: number;
+  // Video entries: the kept frames, the whole-second duration, live progress
+  // and, on failure, which message to show.
+  frames?: VideoFrameHash[];
+  durationSec?: number;
+  progress?: number;
+  error?: VpdqErrorCode;
+};
+
+// Each video failure has its own plain sentence; every one says nothing was
+// sent. ("video_cancelled" never becomes an error entry: a cancelled read
+// just drops the file.)
+const VIDEO_ERROR_KEYS: Partial<Record<VpdqErrorCode, MessageKey>> = {
+  video_cannot_read: "submit.hash.video.error.read",
+  video_too_long: "submit.hash.video.error.tooLong",
+  video_no_frames: "submit.hash.video.error.noFrames",
 };
 
 async function hashImageFile(file: File): Promise<{ hash: string; quality: number }> {
@@ -100,34 +132,77 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   // The fingerprint section is optional, so it starts folded away.
   const [hashOpen, setHashOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Stops the in-flight video read when she cancels or leaves the page.
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const id = window.setTimeout(() => setHydrated(true), 0);
-    return () => window.clearTimeout(id);
+    return () => {
+      window.clearTimeout(id);
+      abortRef.current?.abort();
+    };
   }, []);
+
+  function cancelHashing() {
+    abortRef.current?.abort();
+  }
 
   async function onSelectFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files ?? []).slice(0, MAX_HASH_FILES);
     if (selected.length === 0) return;
     setHashOpen(true);
-    setHashFiles(selected.map((f) => ({ name: f.name, status: "hashing" as const })));
-    const next: FileHashState[] = [];
-    for (const file of selected) {
+    setHashFiles(
+      selected.map((f) => ({ name: f.name, kind: isVideoFile(f) ? ("video" as const) : ("image" as const), status: "hashing" as const })),
+    );
+    // A new selection replaces any run still in flight.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    // A run that was superseded by a newer selection writes no state.
+    const isActive = () => abortRef.current === controller;
+    const finished: (FileHashState | undefined)[] = [];
+    for (const [index, file] of selected.entries()) {
+      if (controller.signal.aborted) break;
+      const isVideo = isVideoFile(file);
       try {
-        const { hash, quality } = await hashImageFile(file);
-        next.push({ name: file.name, status: "hashed", hash, quality });
-      } catch {
-        next.push({ name: file.name, status: "error" });
+        if (isVideo) {
+          const { frames, durationSec } = await fingerprintVideo(file, {
+            signal: controller.signal,
+            onProgress: (progress) => {
+              if (!isActive()) return;
+              setHashFiles((current) =>
+                current.map((entry, i) => (i === index && entry.status === "hashing" ? { ...entry, progress } : entry)),
+              );
+            },
+          });
+          if (frames.length === 0) throw new VpdqError("video_no_frames");
+          finished[index] = { name: file.name, kind: "video", status: "hashed", frames, durationSec };
+        } else {
+          const { hash, quality } = await hashImageFile(file);
+          finished[index] = { name: file.name, kind: "image", status: "hashed", hash, quality };
+        }
+      } catch (err) {
+        if (controller.signal.aborted) break;
+        finished[index] = {
+          name: file.name,
+          kind: isVideo ? "video" : "image",
+          status: "error",
+          error: err instanceof VpdqError ? err.code : undefined,
+        };
       }
-      setHashFiles([
-        ...next,
-        ...selected.slice(next.length).map((f) => ({ name: f.name, status: "hashing" as const })),
-      ]);
+      const done = finished[index];
+      if (done && isActive()) setHashFiles((current) => current.map((entry, i) => (i === index ? done : entry)));
+    }
+    if (controller.signal.aborted && isActive()) {
+      // A cancelled read keeps whatever finished and drops the rest; nothing was sent.
+      setHashFiles(finished.filter((entry): entry is FileHashState => Boolean(entry)));
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  const hashedFiles = hashFiles.filter((f) => f.status === "hashed" && f.hash);
+  const hashedFiles = hashFiles.filter(
+    (f) => f.status === "hashed" && (f.kind === "video" ? (f.frames?.length ?? 0) > 0 : Boolean(f.hash)),
+  );
   const lineChecks = checkLines(urls, knownPlatforms);
   const parsedUrls = lineChecks.flatMap((c) => (c.url ? [c.url] : []));
   const skippedLines = lineChecks.filter((c) => c.problem).length;
@@ -175,7 +250,13 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
       const hasRemaining = remainingUrls.length > 0 || (hashOnly && remainingPlatforms.length > 0);
       const buildDraft = (urls: string[]) => JSON.stringify({
         urls,
-        hashes: hashedFiles.map((f) => ({ hash: f.hash!, quality: f.quality ?? 0, clientVersion: PDQ_CLIENT_VERSION })),
+        // One entry per fingerprinted file: the existing image item, or the
+        // WP17 video item (frame hashes and timestamps only, never media).
+        hashes: hashedFiles.map((f) =>
+          f.kind === "video"
+            ? toVideoHashItem({ frames: f.frames ?? [], durationSec: f.durationSec ?? 1 })
+            : { hash: f.hash!, quality: f.quality ?? 0, clientVersion: PDQ_CLIENT_VERSION },
+        ),
         platformIds: hashOnly ? remainingPlatforms.map((p) => p.id) : [],
         emailPlatformIds: remainingPlatforms.filter((p) => p.hasEmail).map((p) => p.id),
         // Display only: the review step names the platforms; never sent.
@@ -218,7 +299,8 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     } : undefined} error={error} />;
   }
 
-  const lowQuality = hashFiles.some((f) => f.status === "hashed" && (f.quality ?? 100) < 50);
+  // Only images can come out weak: video frames below quality 50 are already dropped.
+  const lowQuality = hashFiles.some((f) => f.kind === "image" && f.status === "hashed" && (f.quality ?? 100) < 50);
 
   return (
     <div>
@@ -328,7 +410,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             onChange={onSelectFiles}
             aria-label={t(locale, "submit.hash.fileLabel")}
@@ -348,33 +430,71 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
               {hashFiles.map((file, i) => (
                 <li
                   key={`${file.name}-${i}`}
-                  className="flex items-center justify-between rounded-[var(--radius-box)] border border-[var(--line)] px-3 py-2"
+                  className="rounded-[var(--radius-box)] border border-[var(--line)] px-3 py-2"
                 >
-                  <span className="truncate text-[var(--ink)]">{file.name}</span>
-                  <span className={`ml-2 shrink-0 text-xs ${
-                    file.status === "hashed" ? "text-[var(--brand)]"
-                    : file.status === "error" ? "text-[var(--danger)]"
-                    : "text-[var(--text-muted)]"
-                  }`}>
-                    {file.status === "hashing" && t(locale, "submit.hash.processing")}
-                    {file.status === "hashed" && `${t(locale, "submit.hash.ready")} ${file.quality}${t(locale, "submit.hash.readySuffix")}`}
-                    {file.status === "error" && t(locale, "submit.hash.error")}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="truncate text-[var(--ink)]">{file.name}</span>
+                    <span className={`ml-2 shrink-0 text-xs ${
+                      file.status === "hashed" ? "text-[var(--brand)]"
+                      : file.status === "error" ? "text-[var(--danger)]"
+                      : "text-[var(--text-muted)]"
+                    }`}>
+                      {file.status === "hashing" && (file.kind === "video"
+                        ? `${t(locale, "submit.hash.video.reading")} ${file.progress ?? 0}%`
+                        : t(locale, "submit.hash.processing"))}
+                      {file.status === "hashed" && (file.kind === "video"
+                        ? `${t(locale, "submit.hash.video.ready")} · ${t(locale, "submit.hash.video.frames").replace("{n}", String(file.frames?.length ?? 0))}`
+                        : `${t(locale, "submit.hash.ready")} ${file.quality}${t(locale, "submit.hash.readySuffix")}`)}
+                      {file.status === "error" && file.kind === "image" && t(locale, "submit.hash.error")}
+                    </span>
+                  </div>
+                  {(() => {
+                    const errorKey = file.status === "error" && file.kind === "video" && file.error ? VIDEO_ERROR_KEYS[file.error] : undefined;
+                    return errorKey ? (
+                      <p className="mt-1.5 text-xs leading-[1.6] text-[var(--danger)]">
+                        {t(locale, errorKey)}
+                      </p>
+                    ) : null;
+                  })()}
                 </li>
               ))}
             </ul>
           )}
 
-          {hashFiles.some((f) => f.status === "hashing") && (
+          {hashFiles.some((f) => f.kind === "image" && f.status === "hashing") && (
             <p className="muted text-sm leading-[1.6]">
               {t(locale, "submit.hash.processingNote")}
             </p>
           )}
 
+          {hashFiles.some((f) => f.kind === "video" && f.status === "hashing") && (
+            <div className="flex items-start justify-between gap-3">
+              <p className="muted text-sm leading-[1.6]">
+                {t(locale, "submit.hash.video.notUploaded")}
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary shrink-0 !px-3 !py-1.5 text-xs"
+                onClick={cancelHashing}
+              >
+                {t(locale, "submit.hash.video.cancel")}
+              </button>
+            </div>
+          )}
+
           {hashedFiles.length > 0 && hashFiles.every((f) => f.status !== "hashing") && (
-            <p className="text-sm leading-[1.6] font-medium text-[var(--brand)]">
-              {t(locale, "submit.hash.doneNote")}
-            </p>
+            <div className="space-y-1.5">
+              {hashedFiles.some((f) => f.kind === "image") && (
+                <p className="text-sm leading-[1.6] font-medium text-[var(--brand)]">
+                  {t(locale, "submit.hash.doneNote")}
+                </p>
+              )}
+              {hashedFiles.some((f) => f.kind === "video") && (
+                <p className="text-sm leading-[1.6] font-medium text-[var(--brand)]">
+                  {t(locale, "submit.hash.video.doneNote")}
+                </p>
+              )}
+            </div>
           )}
 
           {lowQuality && (
