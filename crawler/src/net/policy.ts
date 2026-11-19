@@ -84,8 +84,9 @@ export async function resolveAllowed(hostname: string, policy: NetPolicy): Promi
     addrs = await policy.resolve(host);
   } catch (err) {
     // WP13: a name that does not exist is permanent — never retried in this
-    // run, reported `gone` so the app kills the row without five tries.
-    // Any other resolver failure (timeout, temporary error) keeps the
+    // run, reported `error` with the `permanent` hint, so the app kills the
+    // row only on a second permanent failure at least 24 h later (review
+    // fix). Any other resolver failure (timeout, temporary error) keeps the
     // retryable dns_failed.
     if (err !== null && typeof err === "object" && (err as { code?: unknown }).code === "ENOTFOUND") {
       throw new CrawlError("dns_not_found");

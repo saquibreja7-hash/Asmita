@@ -1128,7 +1128,6 @@ describe("the visit reset and the seed's priority (crawler v3 review fix, WP11)"
     const batch = await claimCrawlPages(sourceId, 10, nowAt(1 * MIN));
     expect(batch.map((u) => u.url)).toEqual(["https://forum.example.com/sitemap.xml", "https://forum.example.com/future"]);
     const sitemapId = batch[0]!.id;
-    const futureId = batch[1]!.id;
     await reportCrawlPages(sourceId, "run-1", batch.map((u) => ({ id: u.id, status: "fetched" as const, links: [] })), nowAt(2 * MIN));
     // A sitemap report at minute 3 carries a lastmod ten years ahead: clamped
     // to now (minute 3), still newer than the minute-2 fetch, so it jumps.
