@@ -1060,3 +1060,37 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The full Playwright suite runs in the separate verify step.
 
 
+
+### WP63. Merge master into feat/watch-mode; resolve conflicts — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP63 is a merge-resolution package, defined outside this spec like the other lane packages: master had moved on (video fingerprints WP17/WP20/WP21, the SSCD layer WP28, crawler v3, the web-audit lane) and this branch's open PR could not merge. A merge of origin/master into this branch had been started and left with conflicts in six files. This WP resolved them keeping both sides' behaviour and tests, fixed the real breakage the merge caused, and added no feature work. No `crawler/` file was touched by the resolutions or the fixes — the crawler side of the merge was conflict-free and arrived whole.
+
+**What was resolved** (merge commit `1f7eda0`)
+
+- `asmita/src/app/start/page.tsx`: the branch's conditional watch card joined master's restructured path-cards grid, and master's new `/track` link follows the branch's minor-link paragraph below the grid, so nothing renders twice.
+- `asmita/src/lib/crawl-pool.ts`: the branch's watch pool rule (`OPEN_CASE_STATUSES`, `isCaseOpen`, `poolCoverage` — live consents further cut to open cases or a running re-upload window) is the coverage master's WP20 video entries and WP28 SSCD embeddings are read through; master's pool entry types (`CrawlPoolImageEntry | CrawlPoolVideoEntry`, `sscd`) replace the branch's pre-WP20 image-only shape the rest of the merged file already uses.
+- `asmita/src/lib/crawl-store.ts`: both new memory maps kept — master's `embeddings` (WP28) and the branch's `linkVerifications` (WP23) — in the seed object and the hot-reload backfills.
+- `asmita/tests/unit/notice-template-seeds.test.ts`: all three tests kept — the branch's watch-only authorisation wording (WP22) and master's two WP28 authorisation-text tests.
+- `asmita/tests/unit/video-hash-kysely-path.test.ts` and `video-hash-submission.test.ts`: master's WP20 expectations win — a VPDQ fingerprint resolves by pool id and is served as `{ kind: "video", frames }`, because WP20 supersedes the pre-WP20 rule 3 the branch's assertions still encoded and the merged `crawl-pool.ts` implements WP20 — with the branch's open-`Case` fixture kept, because the merged pool serves fingerprints only while the case is open or inside its re-upload window (WP24).
+
+**Merge breakage fixed** (rule 6: every existing-test change and its reason is in the merge commit message)
+
+- Type-level: the branch's memory-finding fixtures gained master's required `sscdSimilarity`/`method` fields (`null`/`"PDQ"` — they are ordinary PDQ findings): `crawl-watch.test.ts`, `link-verification.test.ts`, `watch-flow.test.ts`. The branch's select-shape assertions gained master's `videoFramesEncrypted` column: `crawl-watch-kysely.test.ts`, `crawl-watch-prisma.test.ts`, `link-verification-prisma.test.ts`.
+- Behaviour-level: master's embeddings fixtures (`crawl-embeddings-kysely/prisma.test.ts`) and video pool memory test (`video-crawl-pool.test.ts`) gained the open `Case` row the branch's pool rule reads. `ensurePriorityCrawlPage` (branch, WP23) stores its depth-0 re-check row at `FRONTIER_PRIORITY_SEED` (50) on all three backends like master's seed rows, instead of the column default 100.
+- The merge closed a new static import cycle `crawl-findings -> watch-ops -> crawl-consent -> crawl-embeddings -> crawl-findings`, whose initialisation order left `crawlUrlSchema` undefined while `crawl-embeddings` built its Zod schemas at module top level (8 embeddings tests failed with `Invalid element at key "pageUrl"`). Fixed by making `crawl-consent`'s withdrawal import `deleteEmbeddingsForCase` lazily at its single call site — the same pattern master's `crawl-pool` already uses for the reverse edge, for the same written reason. Runtime behaviour is unchanged.
+- The i18n merges were verified beyond git's say-so: every key from both sides present, no duplicates, valid JSON — `en.json`/`hi.json` 1065 keys each, `hi-review-status.json` 18.
+
+**Tests** (all run, all passing)
+
+- Package totals, from the final `check.sh` run on the committed merge tree (Node 22) — `crawler`: lint, type-check, 58 test files / 628 tests all passed, build ok (untouched by this WP, re-verified green). `asmita`: lint 0 errors (the same 4 pre-existing warnings WP41 recorded), type-check clean, `prisma validate` ok, 181 test files / 1679 tests all passed.
+
+**Not done or not verified**
+
+- The e2e Playwright suite and the Worker smoke were not run; they live in the separate verify step, as for the other packages.
+- Nothing was pushed: the PR merge is the owner's action, and the task said not to.
+
+**Deviations from the spec, with reasons**
+
+- The branch's two video-pool assertions that still encoded the pre-WP20 rule 3 could not be kept alongside master's WP20 behaviour; WP20 supersedes rule 3 by design, so master's expectations won and the branch's fixture requirement (the open case) was kept — both sides' intent, none of either side's tests dropped. The reason is recorded in the merge commit message per rule 6.
