@@ -14,7 +14,19 @@ import { ReviewControls } from "@/app/(admin)/findings/ReviewControls";
 import { NoticeStep, PreviewView } from "@/app/(admin)/findings/NoticeStep";
 import { SafetyNote } from "@/app/(admin)/findings/SafetyNote";
 import { LABEL_ERRORS, messageFor, NOTICE_ERRORS, REVIEW_ERRORS, type NoticePreview, type SendResult } from "@/app/(admin)/findings/findings-client";
-import { labelList, noticeGate, noticeLabel, platformLabel, reviewLabel, sortFindings, type NoticeGateInput } from "@/app/(admin)/findings/finding-view";
+import {
+  borderlineScoreLine,
+  labelList,
+  matchLine,
+  noticeGate,
+  noticeLabel,
+  platformLabel,
+  reviewLabel,
+  similarityText,
+  sortFindings,
+  sscdMatchLine,
+  type NoticeGateInput,
+} from "@/app/(admin)/findings/finding-view";
 import { checkBudget, checkDelay, checkDomain } from "@/app/(admin)/crawl-sources/source-validation";
 import { IMPORT_STATUS_LABELS, ImportResults, originLabel, discoveryStateLabel, SourcesManager } from "@/app/(admin)/crawl-sources/SourcesManager";
 import { BlockedHostsManager } from "@/app/(admin)/crawl-sources/BlockedHostsManager";
@@ -120,6 +132,16 @@ describe("review controls", () => {
   it("maps the second-reviewer error to a sentence", () => {
     expect(REVIEW_ERRORS.second_reviewer_required).toMatch(/different/);
     expect(REVIEW_ERRORS.minor_protocol_active).toMatch(/possible minor/);
+  });
+  it("explains that an SSCD match always needs the second reviewer, with no distance to quote", () => {
+    const html = render({ needsSecondReview: true, distance: null });
+    expect(html).toContain("second-review-note");
+    expect(html).toContain("SSCD");
+    expect(html).toContain("always needs two different reviewers");
+    expect(html).not.toContain("above the limit");
+    const waiting = render({ needsSecondReview: true, awaitingSecondReview: true, distance: null, currentAdminGaveFirstReview: true });
+    expect(waiting).toContain("You gave the first approval");
+    expect(waiting).not.toContain("<button");
   });
 });
 
@@ -274,6 +296,9 @@ describe("safety note and list helpers", () => {
     caseId: "c",
     caseReference: "ASMITA-2026-00001",
     distance: 3,
+    // WP28 (ADR 008): the list row now carries how the finding matched.
+    method: "PDQ",
+    sscdSimilarity: null,
     quality: 80,
     firstSeenAt: "2026-11-01T00:00:00.000Z",
     lastSeenAt: "2026-11-01T00:00:00.000Z",
@@ -320,6 +345,26 @@ describe("safety note and list helpers", () => {
     ]);
     expect(sorted.map((r) => r.id)).toEqual(["wait", "new", "done"]);
     expect(reviewLabel(sorted[0])).toBe("Waiting for second reviewer");
+  });
+  it("labels how a finding matched: the distance line for PDQ and VPDQ, the SSCD line for the second layer (WP28)", () => {
+    expect(similarityText(0.8712345)).toBe("0.87");
+    expect(similarityText(null)).toBe("-");
+    // PDQ keeps today's display exactly.
+    expect(matchLine(row({ method: "PDQ", distance: 26 }))).toBe("Distance 26 (lower is closer)");
+    // VPDQ keeps today's display exactly (the method is derived).
+    expect(matchLine(row({ method: "VPDQ", distance: 26 }))).toBe("Distance 26 (lower is closer)");
+    // An SSCD finding has no distance; the SSCD line replaces it.
+    expect(sscdMatchLine(row({ method: "SSCD", distance: null, sscdSimilarity: 0.87 }))).toBe("Matched by SSCD · similarity 0.87");
+    expect(matchLine(row({ method: "SSCD", distance: null, sscdSimilarity: 0.87 }))).toBe("Matched by SSCD · similarity 0.87");
+  });
+  it("shows the borderline SSCD score of a PDQ finding as information for the reviewer, never a decision", () => {
+    expect(borderlineScoreLine(row({ method: "PDQ", distance: 28, sscdSimilarity: 0.86 }))).toBe(
+      "SSCD score 0.86 · information for the reviewer, never an automatic accept or reject",
+    );
+    // Nothing to show without a score, and never on an SSCD or VPDQ finding.
+    expect(borderlineScoreLine(row({ method: "PDQ", distance: 28, sscdSimilarity: null }))).toBeNull();
+    expect(borderlineScoreLine(row({ method: "SSCD", distance: null, sscdSimilarity: 0.9 }))).toBeNull();
+    expect(borderlineScoreLine(row({ method: "VPDQ", distance: 28, sscdSimilarity: 0.9 }))).toBeNull();
   });
 });
 

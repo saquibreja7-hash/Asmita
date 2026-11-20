@@ -3,7 +3,7 @@ import { FINDING_STATUSES, findingLabelForQuery, LABEL_QUERY_KEYS, listCrawlFind
 import { crawlerEnabled } from "@/lib/crawler-auth";
 import { adminFor } from "../page-permission";
 import { CrawlerOffBanner } from "./CrawlerOffBanner";
-import { LABEL_TEXT, labelList, noticeLabel, platformLabel, reviewLabel, shortDate, sortFindings, STATUS_LABELS } from "./finding-view";
+import { LABEL_TEXT, labelList, noticeLabel, platformLabel, reviewLabel, shortDate, sortFindings, sscdMatchLine, STATUS_LABELS } from "./finding-view";
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +118,8 @@ export default async function FindingsPage({
                   </Link>
                 </td>
                 <td className="font-mono">{row.fingerprintRef ? `${row.fingerprintRef}…` : "-"}</td>
-                <td className="tabular-nums">{row.distance}</td>
+                {/* PDQ and VPDQ keep today's bare distance; an SSCD finding has none, so the cell shows the SSCD line. */}
+                <td className="tabular-nums">{row.method === "SSCD" ? sscdMatchLine(row) : row.distance}</td>
                 <td className="tabular-nums">{row.quality}/100</td>
                 <td>{row.sourceDomain ?? "-"}</td>
                 <td>{platformLabel(row.platform)}</td>

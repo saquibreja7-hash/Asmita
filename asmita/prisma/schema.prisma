@@ -158,6 +158,15 @@ enum HashSubmissionStatus {
   REJECTED
 }
 
+// How a crawler finding matched (ADR 008, WP28): PDQ or VPDQ (a hash
+// distance), or SSCD (a deep-descriptor similarity, no distance). Default
+// PDQ: rows written before the second layer existed are image matches.
+enum CrawlFindingMethod {
+  PDQ
+  VPDQ
+  SSCD
+}
+
 enum AuditEventType {
   USER_REGISTERED
   USER_VERIFIED
@@ -470,13 +479,22 @@ model CrawlFinding {
   pageUrlEncrypted  String
   imageUrlEncrypted String
   urlDigest         String?
-  distance          Int
+  // Null for an SSCD finding (ADR 008, WP28): the second layer has no PDQ
+  // distance. A widening — old rows and old code always wrote one.
+  distance          Int?
+  // The SSCD similarity when the second layer matched or scored a borderline
+  // PDQ match; information for the analyst, never an automatic accept or
+  // reject. Null on pure PDQ/VPDQ findings.
+  sscdSimilarity    Float?
   quality           Int
   firstSeenAt       DateTime           @default(now())
   lastSeenAt        DateTime           @default(now())
   sourceId          String
   runId             String
   reviewStatus      CrawlFindingStatus @default(CANDIDATE)
+  // Which layer matched (ADR 008, WP28). Default PDQ; a video finding is
+  // derived from its VPDQ submission, an SSCD finding carries sscdSimilarity.
+  method            CrawlFindingMethod @default(PDQ)
   reviewedById      String?
   reviewedAt        DateTime?
   // A second, different analyst confirms an approval before anything acts on it.
@@ -509,11 +527,44 @@ model CrawlFinding {
   hashSubmission HashSubmission @relation(fields: [hashSubmissionId], references: [id])
   source         CrawlSource    @relation(fields: [sourceId], references: [id])
   submittedUrl   SubmittedUrl?
+  embeddings     FindingEmbedding[]
 
   @@unique([caseId, urlDigest])
   @@index([reviewStatus])
   @@index([firstSeenAt])
   @@index([sourceId])
+}
+
+// An SSCD embedding of an ANALYST-CONFIRMED copy (ADR 008, WP28): the crawler
+// — never the survivor's device, never the app — computes the descriptor from
+// the image bytes it already holds in memory on a match and posts it to
+// /api/crawler/embeddings; the app stores it only for APPROVED findings under
+// a live authorisation. The vector is encrypted at rest like every other
+// secret and never logged; never an image, crop or thumbnail is stored. It is
+// deleted with the fingerprint's rejection, the consent's withdrawal or the
+// case's erasure (and cascades with its finding); it is NOT subject to the
+// 30-day URL blanking.
+model FindingEmbedding {
+  id               String   @id @default(uuid())
+  // The confirmed finding this embedding was seeded from; one per finding.
+  findingId        String   @unique
+  // The fingerprint the confirmed finding matched (denormalised for the pool
+  // lookup and the deletion paths).
+  hashSubmissionId String
+  caseId           String
+  // Which descriptor produced the vector: only rows matching the configured
+  // model id + version are served or accepted, so a model change never mixes
+  // incomparable vectors.
+  model            String
+  version          String
+  // The L2-normalised float vector, encrypted at rest (encryptField).
+  vectorEncrypted  String
+  createdAt        DateTime @default(now())
+
+  finding CrawlFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([hashSubmissionId])
+  @@index([caseId])
 }
 
 // A public site the crawler may visit. ADMIN rows are approved by a human
@@ -598,6 +649,16 @@ model CrawlPage {
   // at its MAX_DEPTH, so depths stay bounded by the crawler's own config.
   depth         Int             @default(0)
   kind          CrawlPageKind   @default(PAGE)
+  // Crawl order (crawler v3 WP11): lower runs first; the claim orders by
+  // priority, then nextDueAt. 100 is the default every row stored before
+  // WP11 keeps; a reported link sets it — sitemap 10, feed 20, pagination
+  // 30, other pages 50 plus 10 per depth level (capped at 100) — and a
+  // sitemap entry whose lastmod is newer than the row's last fetch jumps
+  // the queue at 5, due immediately.
+  priority      Int             @default(100)
+  // Stored from a pagination link (crawler v3 review fix): the canonical
+  // aliases such a page reports (page 2 naming page 1) are ignored.
+  viaPagination Boolean         @default(false)
   // Validators the crawler sent as If-None-Match / If-Modified-Since.
   etag          String?
   lastModified  String?
@@ -607,6 +668,11 @@ model CrawlPage {
   // again when the claim expires.
   claimedUntil  DateTime?
   lastFetchedAt DateTime?
+  // Crawler v3 review fix (WP13): the first permanent fetch failure (a DNS
+  // name that does not exist, a definite TLS certificate failure) — the row
+  // dies only on a permanent failure at least 24 h after this one; a
+  // successful visit clears it. Null before the first permanent failure.
+  lastPermanentFailAt DateTime?
   nextDueAt     DateTime        @default(now())
   failCount     Int             @default(0)
   createdAt     DateTime        @default(now())
@@ -616,6 +682,7 @@ model CrawlPage {
   @@unique([sourceId, urlDigest])
   @@index([sourceId, nextDueAt])
   @@index([sourceId, lastFetchedAt])
+  @@index([sourceId, priority, nextDueAt])
 }
 
 // Bearer keys for the crawler service. Only a sha256 of the key is stored
@@ -831,6 +898,30 @@ model Feedback {
 
   @@index([caseId])
   @@index([createdAt])
+}
+
+// A platform asking to join the partner programme (/for-platforms). Business
+// contact details only, never survivor data. Name, email, phone and message
+// are encrypted at rest (encryptField); the rest is plain so the console can
+// sort and filter. status: NEW, CONTACTED, ONBOARDED or DECLINED.
+model PlatformPartnerApplication {
+  id               String   @id @default(uuid())
+  organisationName String
+  platformName     String
+  websiteDomain    String
+  platformType     String
+  userBase         String
+  contactName      String
+  contactRole      String
+  contactEmail     String
+  contactPhone     String?
+  interests        String[] @default([])
+  message          String?
+  status           String   @default("NEW")
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([status])
 }
 
 model DeletionJob {

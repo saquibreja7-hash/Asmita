@@ -56,7 +56,7 @@ export function NavLinks({ groups }: { groups: NavGroup[] }) {
               <div className="absolute left-0 top-full z-[60] pt-2">
                 <ul className="nav-dropdown">
                   {group.items.map((item) => (
-                    <li key={item.href}>
+                    <li key={item.href + item.label}>
                       <NavItemLink item={item} className="nav-dropdown-link" onClick={() => setOpen(null)} />
                     </li>
                   ))}

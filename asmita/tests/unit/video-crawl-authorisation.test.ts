@@ -124,10 +124,13 @@ describe("the crawl authorisation's fingerprint list", () => {
     expect(draft.templateRef).toBe(templateRef(draft.template, [IMG_ID, VID_ID]));
   });
 
-  it("is not offered for a case whose only fingerprint is a video (the crawler cannot search videos yet, WP20)", async () => {
+  it("is offered for a case whose only fingerprint is a video (the crawler searches videos since WP20)", async () => {
     state.rows = [videoRow(VID_ID, new Date("2026-11-02T00:00:00Z"))];
     const draft = await buildCrawlAuthorisationDraft("case-1", "ASMITA-2026-00001", false);
-    expect(draft).toEqual({ error: "no_hashes" });
+    expect("error" in draft).toBe(false);
+    if ("error" in draft) return;
+    expect(draft.hashSubmissionIds).toEqual([VID_ID]);
+    expect(draft.body).toContain("Video fingerprint (vPDQ, 3 frames)");
   });
 
   it("still refuses when there is no fingerprint to cover", async () => {

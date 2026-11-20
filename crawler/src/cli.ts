@@ -27,6 +27,7 @@ import { EXIT } from "./exit-codes.ts";
 import { Logger, type LogSink } from "./log.ts";
 import { productionPolicy, type NetPolicy } from "./net/policy.ts";
 import { DecoderPool } from "./image/decoder-pool.ts";
+import { SscdPool } from "./image/sscd-pool.ts";
 import { SafeFetcher } from "./net/safe-fetch.ts";
 import { takeSecrets } from "./secrets.ts";
 
@@ -96,6 +97,20 @@ export async function runMain(opts: MainOptions): Promise<number> {
     taskTimeoutMs: config.DECODE_TIMEOUT_MS,
     minSide: config.MIN_IMAGE_SIDE,
   });
+  // The SSCD embedder (WP28): a second isolated child, started only when
+  // the second layer is switched on. A missing model file is not a config
+  // error (the config validated the path exists syntactically); the child
+  // reports sscd_model_missing per image and the run counts it, exactly
+  // like a decoder that cannot load sharp.
+  const sscd = config.ENABLE_SSCD
+    ? new SscdPool({
+        size: 1,
+        taskTimeoutMs: config.SSCD_TIMEOUT_MS,
+        minSide: config.MIN_IMAGE_SIDE,
+        modelPath: config.SSCD_MODEL_FILE,
+        expectedDim: config.SSCD_EMBED_DIM,
+      })
+    : undefined;
 
   try {
     // One store of query-variant guards for every pass of --loop, so a
@@ -108,6 +123,8 @@ export async function runMain(opts: MainOptions): Promise<number> {
         api,
         fetcher,
         decoder,
+        // WP28: the isolated SSCD embedder, only when the layer is on.
+        ...(sscd ? { sscd } : {}),
         log,
         stopSignal: stop.signal,
         // The same policy object safe-fetch uses; the browser proxy (WP7)
@@ -151,7 +168,7 @@ export async function runMain(opts: MainOptions): Promise<number> {
     return exitCode;
   } finally {
     cleanupSignals();
-    await Promise.all([fetcher.close(), api.close(), decoder.close()]);
+    await Promise.all([fetcher.close(), api.close(), decoder.close(), sscd?.close() ?? Promise.resolve()]);
   }
 }
 
