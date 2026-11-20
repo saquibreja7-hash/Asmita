@@ -11,7 +11,8 @@ const db = vi.hoisted(() => {
   };
   return {
     tx,
-    crawlConsent: { findMany: vi.fn() },
+    crawlConsent: { findMany: vi.fn(), findFirst: vi.fn() },
+    case: { findMany: vi.fn(), findUnique: vi.fn() },
     hashSubmission: { findMany: vi.fn(), findUnique: vi.fn() },
     crawlFinding: { findUnique: vi.fn() },
     crawlSource: { findUnique: vi.fn() },
@@ -19,7 +20,6 @@ const db = vi.hoisted(() => {
     // WP33: the partner lookup behind the findings gate and the channel
     // alert; no partners in these fixtures, so nothing is gated or sent.
     platformPartner: { findMany: vi.fn() },
-    case: { findUnique: vi.fn() },
     $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
   };
 });
@@ -41,6 +41,10 @@ beforeEach(() => {
   // passes and no channel alert is ever sent.
   db.platformPartner.findMany.mockResolvedValue([]);
   db.case.findUnique.mockResolvedValue({ referenceNumber: "ASMITA-2026-00001" });
+  // WP24: the pool keeps an open case's fingerprints, and the re-upload alert
+  // reads the live consent's window (none here).
+  db.case.findMany.mockResolvedValue([{ id: "c1", status: "OPEN" }]);
+  db.crawlConsent.findFirst.mockResolvedValue(live);
   // The case-row lock (case-link-lock.ts) finds the case; consent locks find `live`.
   db.tx.$queryRaw.mockImplementation(async (q: string[]) => (q.join("?").includes('FROM "Case"') ? [{ id: "c1" }] : [live]));
 });

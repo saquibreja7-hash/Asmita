@@ -185,7 +185,9 @@ describe("account erasure, Kysely path", () => {
     // PartnerShareConsent rows are deleted with the crawl authorisations, and
     // WP32's partner outcome rows go too (they can hold one of her links), so
     // nothing of hers stays shareable with a partner platform.
+    // WP28 (ADR 008): the erasure also deletes the case's SSCD embeddings,
+    // before the findings they belong to.
     expect(kysely.state.calls.filter((call) => call.op === "delete").map((call) => call.table).sort())
-      .toEqual(["CrawlConsent", "CrawlFinding", "Feedback", "OtpToken", "PartnerOutcome", "PartnerShareConsent", "SessionToken"]);
+      .toEqual(["CrawlConsent", "CrawlFinding", "Feedback", "FindingEmbedding", "OtpToken", "PartnerOutcome", "PartnerShareConsent", "SessionToken"]);
   });
 });

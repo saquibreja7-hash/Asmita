@@ -415,6 +415,15 @@ export async function listHashesForCase(caseId: string): Promise<DisplayHashSubm
   return records.map(toDisplay);
 }
 
+/**
+ * Memory path only: forgets the case's dev hash-store records. Used by
+ * stop-watching (WP22), whose database paths delete the HashSubmission rows
+ * themselves (src/lib/watch-ops.ts).
+ */
+export function clearMemoryHashesForCase(caseId: string) {
+  if (isDevNoDb()) devHashStore().delete(caseId);
+}
+
 export type HashReviewQueueRow = DisplayHashSubmission & {
   caseId: string;
   referenceNumber: string;
@@ -561,6 +570,18 @@ export async function reviewHashSubmission(input: {
     await syncCaseFeedEventsPrisma(tx, record.caseId);
     return row;
   });
+
+  if (input.decision === "reject") {
+    // A rejected fingerprint's SSCD embeddings go at once (ADR 008, WP28):
+    // the pool stops serving them on the next build. Best-effort only — the
+    // rejection is already committed and must never fail because of this.
+    try {
+      const { deleteEmbeddingsForSubmission } = await import("@/lib/crawl-embeddings");
+      await deleteEmbeddingsForSubmission(input.hashSubmissionId);
+    } catch {
+      console.error("crawl_embedding_rejection_cleanup_failed");
+    }
+  }
 
   await writeAuditLog({
     eventType: input.decision === "approve" ? "HASH_APPROVED" : "HASH_REJECTED",

@@ -95,7 +95,11 @@ export const RenderedMessageSchema = z.strictObject({
   html: z.string(),
   truncated: z.boolean(),
   stats: z.strictObject({
-    /** Requests the page made (before any was aborted by a cap). */
+    /**
+     * Requests the page made that were routed (capped). Fonts, audio/video
+     * media and the built-in ad/analytics hosts are aborted before routing
+     * and are not counted (crawler v3 WP15).
+     */
     requests: z.number().int().min(0),
     /** Image responses not handed over: over the per-page cap or too large. */
     imagesSkipped: z.number().int().min(0),

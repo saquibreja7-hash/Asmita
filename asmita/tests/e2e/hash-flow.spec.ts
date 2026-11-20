@@ -99,7 +99,11 @@ test("hash-only survivor who does not know where the image is gets StopNCII guid
   });
   await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
   await page.getByLabel(/I declare/).check();
-  await expect(page.getByRole("button", { name: "Continue to review" })).toBeDisabled();
+  // The button is never disabled to block validation (WP40 A9): without a
+  // platform choice, submitting focuses the platform question and says why.
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page.getByRole("group", { name: "Which platforms is the content on?" })).toBeFocused();
+  await expect(page.getByRole("status").filter({ hasText: /Choose where the image is/ })).toBeVisible();
   const unsure = page.getByRole("checkbox", { name: /I am not sure where it is/ });
   await unsure.check();
   // Choosing a platform clears "not sure", and the other way round.

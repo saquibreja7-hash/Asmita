@@ -85,6 +85,7 @@ enum TemplateType {
   CRAWL_AUTHORISATION
   CRAWL_REPRESENTATIVE_NOTICE
   PARTNER_SHARING_CONSENT
+  WATCH_AUTHORISATION
 }
 
 // Where a SubmittedUrl came from: the survivor, or an analyst-approved
@@ -98,6 +99,23 @@ enum CrawlFindingStatus {
   CANDIDATE
   APPROVED
   DISMISSED
+}
+
+// What a case is (watch-and-verify WP22). CASE: a takedown complaint with
+// links. WATCH: "Watch for my images" — no links, only fingerprints watched
+// for copies; nothing is sent to any platform until she chooses "Take it down".
+enum CaseMode {
+  CASE
+  WATCH
+}
+
+// What a crawl authorisation covers (WP22). SEARCH_AND_NOTICE: comparison and
+// representative notices (the existing tick). WATCH_ONLY: comparison and
+// alerting her only; a representative notice is refused (watch_only_consent)
+// until she converts the watch into a case and ticks the full authorisation.
+enum CrawlConsentScope {
+  SEARCH_AND_NOTICE
+  WATCH_ONLY
 }
 
 enum CrawlSourceKind {
@@ -139,6 +157,15 @@ enum CrawlPageStatus {
   BLOCKED
   ERROR
   DEAD
+}
+
+// Watch-and-verify WP23: the outcome of one scheduled re-check that a link
+// reported removed really stayed down. PENDING until the check ran.
+enum LinkVerificationOutcome {
+  PENDING
+  GONE
+  STILL_ONLINE
+  UNKNOWN
 }
 
 // Phase 2 fingerprints: PDQ for images, VPDQ for videos (one PDQ hash per
@@ -186,6 +213,15 @@ enum PartnerOutcomeType {
 enum PartnerChannelSendKind {
   NOTICE
   FINDING_ALERT
+}
+
+// How a crawler finding matched (ADR 008, WP28): PDQ or VPDQ (a hash
+// distance), or SSCD (a deep-descriptor similarity, no distance). Default
+// PDQ: rows written before the second layer existed are image matches.
+enum CrawlFindingMethod {
+  PDQ
+  VPDQ
+  SSCD
 }
 
 enum AuditEventType {
@@ -237,6 +273,9 @@ enum AuditEventType {
   PARTNER_OUTCOME_REPORTED
   PARTNER_CHANNEL_SENT
   PARTNER_CHANNEL_FAILED
+  WATCH_CONVERTED
+  CONTENT_STILL_ONLINE
+  CRAWL_WATCH_STARTED
 }
 
 enum DeletionJobStatus {
@@ -273,6 +312,8 @@ model Case {
   userId                String
   registrationKeyHash   String?
   status                CaseStatus @default(OPEN)
+  // "Watch for my images" (WP22): a watch holds fingerprints and no links.
+  mode                  CaseMode   @default(CASE)
   state                 String?
   city                  String?
   ngoVerified           Boolean    @default(false)
@@ -463,6 +504,7 @@ model SubmittedUrl {
   crawlFinding CrawlFinding?    @relation(fields: [crawlFindingId], references: [id], onDelete: SetNull)
   notices      Notice[]
   portalTokens UrlPortalToken[]
+  verifications LinkVerification[]
 
   @@index([caseId])
   @@index([crawlSourceChecked])
@@ -483,6 +525,17 @@ model CrawlConsent {
   templateDigest     String
   signedAt           DateTime  @default(now())
   withdrawnAt        DateTime?
+  // What the authorisation covers (WP22). Defaults to the original scope.
+  scope              CrawlConsentScope @default(SEARCH_AND_NOTICE)
+  // Set on the full (SEARCH_AND_NOTICE) authorisation she signs when she
+  // turns a watch into a case ("Take it down"): the WATCH_ONLY authorisation
+  // it replaces. Findings recorded under that one stay covered by this one.
+  convertedFromId    String?
+  // Watch-and-verify WP24: when the case is resolved (or every link on it is
+  // verified removed), the live authorisation keeps her fingerprints in the
+  // crawler pool until this date (start + 12 months) instead of only while
+  // the case is open. Null while the case is open and no watch has started.
+  watchUntil         DateTime?
 
   case Case @relation(fields: [caseId], references: [id])
 
@@ -504,13 +557,22 @@ model CrawlFinding {
   pageUrlEncrypted  String
   imageUrlEncrypted String
   urlDigest         String?
-  distance          Int
+  // Null for an SSCD finding (ADR 008, WP28): the second layer has no PDQ
+  // distance. A widening — old rows and old code always wrote one.
+  distance          Int?
+  // The SSCD similarity when the second layer matched or scored a borderline
+  // PDQ match; information for the analyst, never an automatic accept or
+  // reject. Null on pure PDQ/VPDQ findings.
+  sscdSimilarity    Float?
   quality           Int
   firstSeenAt       DateTime           @default(now())
   lastSeenAt        DateTime           @default(now())
   sourceId          String
   runId             String
   reviewStatus      CrawlFindingStatus @default(CANDIDATE)
+  // Which layer matched (ADR 008, WP28). Default PDQ; a video finding is
+  // derived from its VPDQ submission, an SSCD finding carries sscdSimilarity.
+  method            CrawlFindingMethod @default(PDQ)
   reviewedById      String?
   reviewedAt        DateTime?
   // A second, different analyst confirms an approval before anything acts on it.
@@ -521,11 +583,44 @@ model CrawlFinding {
   hashSubmission HashSubmission @relation(fields: [hashSubmissionId], references: [id])
   source         CrawlSource    @relation(fields: [sourceId], references: [id])
   submittedUrl   SubmittedUrl?
+  embeddings     FindingEmbedding[]
 
   @@unique([caseId, urlDigest])
   @@index([reviewStatus])
   @@index([firstSeenAt])
   @@index([sourceId])
+}
+
+// An SSCD embedding of an ANALYST-CONFIRMED copy (ADR 008, WP28): the crawler
+// — never the survivor's device, never the app — computes the descriptor from
+// the image bytes it already holds in memory on a match and posts it to
+// /api/crawler/embeddings; the app stores it only for APPROVED findings under
+// a live authorisation. The vector is encrypted at rest like every other
+// secret and never logged; never an image, crop or thumbnail is stored. It is
+// deleted with the fingerprint's rejection, the consent's withdrawal or the
+// case's erasure (and cascades with its finding); it is NOT subject to the
+// 30-day URL blanking.
+model FindingEmbedding {
+  id               String   @id @default(uuid())
+  // The confirmed finding this embedding was seeded from; one per finding.
+  findingId        String   @unique
+  // The fingerprint the confirmed finding matched (denormalised for the pool
+  // lookup and the deletion paths).
+  hashSubmissionId String
+  caseId           String
+  // Which descriptor produced the vector: only rows matching the configured
+  // model id + version are served or accepted, so a model change never mixes
+  // incomparable vectors.
+  model            String
+  version          String
+  // The L2-normalised float vector, encrypted at rest (encryptField).
+  vectorEncrypted  String
+  createdAt        DateTime @default(now())
+
+  finding CrawlFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([hashSubmissionId])
+  @@index([caseId])
 }
 
 // A public site the crawler may visit. ADMIN rows are approved by a human
@@ -610,6 +705,16 @@ model CrawlPage {
   // at its MAX_DEPTH, so depths stay bounded by the crawler's own config.
   depth         Int             @default(0)
   kind          CrawlPageKind   @default(PAGE)
+  // Crawl order (crawler v3 WP11): lower runs first; the claim orders by
+  // priority, then nextDueAt. 100 is the default every row stored before
+  // WP11 keeps; a reported link sets it — sitemap 10, feed 20, pagination
+  // 30, other pages 50 plus 10 per depth level (capped at 100) — and a
+  // sitemap entry whose lastmod is newer than the row's last fetch jumps
+  // the queue at 5, due immediately.
+  priority      Int             @default(100)
+  // Stored from a pagination link (crawler v3 review fix): the canonical
+  // aliases such a page reports (page 2 naming page 1) are ignored.
+  viaPagination Boolean         @default(false)
   // Validators the crawler sent as If-None-Match / If-Modified-Since.
   etag          String?
   lastModified  String?
@@ -619,6 +724,11 @@ model CrawlPage {
   // again when the claim expires.
   claimedUntil  DateTime?
   lastFetchedAt DateTime?
+  // Crawler v3 review fix (WP13): the first permanent fetch failure (a DNS
+  // name that does not exist, a definite TLS certificate failure) — the row
+  // dies only on a permanent failure at least 24 h after this one; a
+  // successful visit clears it. Null before the first permanent failure.
+  lastPermanentFailAt DateTime?
   nextDueAt     DateTime        @default(now())
   failCount     Int             @default(0)
   createdAt     DateTime        @default(now())
@@ -628,6 +738,37 @@ model CrawlPage {
   @@unique([sourceId, urlDigest])
   @@index([sourceId, nextDueAt])
   @@index([sourceId, lastFetchedAt])
+  @@index([sourceId, priority, nextDueAt])
+}
+
+// Watch-and-verify WP23: one scheduled re-check that a link reported removed
+// really stayed down. When one of her links becomes REMOVED (she marks it, or
+// a platform's recorded reply says so), three checks are scheduled — one day,
+// three days and seven days later (attempt 1..3). The hourly retention cron
+// puts each due check into the crawler frontier as a priority row for its
+// host's source and later resolves the outcome from the crawler's report. No
+// URL is stored here: the check works from the SubmittedUrl it references,
+// which is why nothing in this table needs the retention blanking. Completed
+// rows are the admin case page's verification history; erased with the link.
+model LinkVerification {
+  id             String                 @id @default(uuid())
+  submittedUrlId String
+  dueAt          DateTime
+  // 1, 2 or 3: the +1/+3/+7 day check.
+  attempt        Int
+  outcome        LinkVerificationOutcome @default(PENDING)
+  checkedAt      DateTime?
+  // When the hourly sweep put the check into the crawler frontier; null until
+  // then. Findings are counted against this moment ("since the check was
+  // queued"), and a check that was never answered by a crawler visit gives
+  // up as UNKNOWN a bounded time after it.
+  enqueuedAt     DateTime?
+  createdAt      DateTime               @default(now())
+
+  submittedUrl SubmittedUrl @relation(fields: [submittedUrlId], references: [id])
+
+  @@index([outcome, dueAt])
+  @@index([submittedUrlId])
 }
 
 // Bearer keys for the crawler service. Only a sha256 of the key is stored

@@ -77,11 +77,16 @@ export function EnrolMfa() {
 
   return (
     <div>
-      <div
-        className="card !p-6"
-        // SVG produced server-side by the qrcode library from a URI we built; no user input.
-        dangerouslySetInnerHTML={{ __html: enrolment.qrSvg }}
-      />
+      <div className="card !p-6">
+        {/* The SVG is produced server-side by the qrcode library from a URI we
+            built; shown through a data: URL (img-src allows data:) so no HTML
+            is injected into the page. */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- data: URL of a library-generated SVG, not a fetchable asset */}
+        <img
+          src={`data:image/svg+xml,${encodeURIComponent(enrolment.qrSvg)}`}
+          alt="Authenticator setup QR code"
+        />
+      </div>
       <div className="card mt-4 !p-6">
         <p className="eyebrow">Manual entry key</p>
         <p className="mt-2 break-all font-mono text-sm tracking-widest select-all">

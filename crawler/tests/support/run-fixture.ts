@@ -26,6 +26,19 @@ export async function runFixtureCrawl(
     extraDns?: Record<string, string[]>;
     /** Query-variant guards shared with an earlier pass (run --loop). */
     queryGuards?: QueryGuardStore;
+    /**
+     * Wraps the SafeFetcher the crawl uses (WP13 tests count fetch attempts
+     * to prove a permanent failure is never retried).
+     */
+    wrapFetcher?: (inner: SafeFetcher) => Pick<SafeFetcher, "fetch">;
+    /**
+     * The isolated SSCD embedder (WP28): tests inject a deterministic
+     * in-process stand-in for the real child so the second layer's
+     * pipeline (scope, budget, seeding, borderline scores, findings) is
+     * proven without the model file. Production wires the real SscdPool
+     * (src/cli.ts); with ENABLE_SSCD unset this is never used.
+     */
+    sscd?: { embed(bytes: Buffer): Promise<number[]> };
   } = {},
 ): Promise<{ result: RunResult; lines: string[] }> {
   const lines = opts.lines ?? [];
@@ -57,8 +70,10 @@ export async function runFixtureCrawl(
     const result = await runCrawl({
       config,
       api: client,
-      fetcher,
+      fetcher: opts.wrapFetcher ? opts.wrapFetcher(fetcher) : fetcher,
       decoder,
+      // WP28: a test-provided stand-in for the isolated SSCD child.
+      ...(opts.sscd ? { sscd: opts.sscd } : {}),
       log: new Logger({ sink: (l) => lines.push(l), level: "debug" }),
       stopSignal: opts.stopSignal,
       now: opts.now,

@@ -183,7 +183,9 @@ export async function prepareRepresentativeNotice(input: {
   const finding = await db.crawlFinding.findUnique({ where: { id: input.findingId } });
   if (!finding || finding.caseId !== input.caseId) return refuse(404, "finding_not_found");
   if (finding.reviewStatus !== "APPROVED") return refuse(409, "finding_not_approved");
-  if (finding.distance > SECOND_REVIEW_DISTANCE && !finding.secondReviewedById) return refuse(409, "second_review_required");
+  // An SSCD finding has no PDQ distance and always needs the second reviewer,
+  // exactly like the least-certain PDQ matches (ADR 008, WP28).
+  if ((finding.distance === null || finding.distance > SECOND_REVIEW_DISTANCE) && !finding.secondReviewedById) return refuse(409, "second_review_required");
   if (findingUrlsExpired(finding, now) || !finding.imageUrlEncrypted) return refuse(410, "finding_expired");
 
   // The link final approval created for this finding. When the survivor had
@@ -216,6 +218,11 @@ export async function prepareRepresentativeNotice(input: {
     where: { caseId: finding.caseId, withdrawnAt: null },
     orderBy: { signedAt: "desc" },
   });
+  // A watch-only authorisation (WP22 "Watch for my images") never covers a
+  // notice: she has not asked for removal yet. She must choose "Take it
+  // down", which converts the watch into a case and asks for the full
+  // authorisation on the spot, before anything can be sent.
+  if (consent?.scope === "WATCH_ONLY") return refuse(409, "watch_only_consent");
   // It must list the matched fingerprint, and the finding must have been
   // recorded under it: a finding from an earlier authorisation is never sent
   // under a later one (consentCoversFinding).

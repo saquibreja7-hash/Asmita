@@ -7,7 +7,13 @@ import { listHashesForCase, type DisplayHashSubmission } from "@/lib/hash-submis
 import { CrawlConsent } from "./CrawlConsent";
 import { PartnerShareConsent } from "./PartnerShareConsent";
 import { FoundByAsmita } from "./FoundByAsmita";
+import { WatchFoundList } from "./WatchFoundList";
+import { StatusBadge } from "./StatusBadge";
+import { AddMoreImages } from "./AddMoreImages";
+import { getCrawlConsentState } from "@/lib/crawl-consent";
 import { crawlerFindingsVisibleToSurvivor } from "@/lib/crawler-flags";
+import { isCaseOpen } from "@/lib/crawl-pool";
+import { getLinkVerificationSummaries, type LinkVerificationSummary } from "@/lib/link-verification";
 import { splitUrls } from "./crawl-consent-logic";
 import { CaseDashboardActions } from "./CaseDashboardActions";
 import { CloseDashboardButton } from "../../CloseDashboardButton";
@@ -23,34 +29,8 @@ import { findVoidedSignatures } from "@/lib/voided-signatures";
 import { localizeRejectionReason } from "@/lib/rejection-reasons";
 
 // Wording that matches what has actually happened: "prepared" is not "sent",
-// and "sent" is not "removed".
-const URL_STATUS_KEYS = {
-  PENDING_REVIEW: "case.urlStatus.pendingReview",
-  NOTICE_QUEUED: "case.urlStatus.queued",
-  NOTICE_SENT: "case.urlStatus.sent",
-  REMOVED: "case.urlStatus.resolved",
-  UNRESOLVED: "case.urlStatus.unresolved",
-  ESCALATED: "case.urlStatus.escalated",
-  REJECTED: "case.urlStatus.rejected",
-} as const;
-
-function StatusBadge({ status, locale, unknown = false }: { status: string; locale: Locale; unknown?: boolean }) {
-  const key = URL_STATUS_KEYS[status as keyof typeof URL_STATUS_KEYS];
-  const label = unknown && status === "PENDING_REVIEW" ? (locale === "hi" ? "रिपोर्टिंग रास्ते की जाँच जारी" : "Reporting route under review") : key ? t(locale, key) : status.replaceAll("_", " ");
-  const color =
-    status === "REMOVED"
-      ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
-      : status === "NOTICE_SENT" || status === "NOTICE_QUEUED"
-      ? "bg-[var(--warning-soft)] text-[var(--warning)]"
-      : status === "ESCALATED"
-      ? "bg-[var(--danger-soft)] text-[var(--danger)]"
-      : "bg-[var(--page)] text-[var(--text-muted)]";
-  return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-medium ${color}`}>
-      {label}
-    </span>
-  );
-}
+// and "sent" is not "removed". The pill itself is the shared StatusBadge
+// component (also rendered by the client WatchFoundList).
 
 // Only a rejected link's reason is the admin's note to her; before a decision
 // the same field holds internal flag codes, which are never shown.
@@ -62,6 +42,27 @@ function rejectedReason(stored: string | null | undefined, locale: Locale) {
       <span className="font-medium text-[var(--ink)]">{t(locale, "case.rejectedReason.label")}</span> {text}
     </p>
   );
+}
+
+/*
+ * Watch-and-verify WP23: what the removal re-checks found, in her words and
+ * with no address. Shown only once no check is still waiting, so a new round
+ * of checks (she marked it removed again) clears the old note on its own.
+ */
+function verificationNote(summary: LinkVerificationSummary | undefined, status: string, locale: Locale) {
+  if (!summary || summary.pending > 0) return null;
+  if (status === "REMOVED") {
+    if (summary.goneCount < 3) return null;
+    return (
+      <p className="muted mt-1 text-xs">
+        {t(locale, "case.verification.verifiedRemoved").replace("{n}", String(summary.checked))}
+      </p>
+    );
+  }
+  if (summary.latestOutcome === "STILL_ONLINE") {
+    return <p className="mt-1 text-xs text-[var(--danger)]">{t(locale, "case.verification.stillOnline")}</p>;
+  }
+  return null;
 }
 
 // One plain sentence about where the case stands, picked from the most
@@ -166,7 +167,108 @@ export default async function CasePage({
   // for found links promise no follow-up, so they never say "we follow up".
   const standing = standingOf(ownUrls, hashSubmissions.length);
   const showFound = crawlerFindingsVisibleToSurvivor();
+  const verifications = await getLinkVerificationSummaries(record.id);
   const created = new Date(record.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+
+  // "Watch for my images" (WP22): a watch renders its own view — no links are
+  // asked for or listed as hers, only her fingerprints, the watch status and
+  // the copies Asmita's search found (site name only, with her two choices).
+  if (record.mode === "WATCH") {
+    const consentState = await getCrawlConsentState(record.id);
+    const watching = consentState.status === "signed";
+    const watchingSince = watching && consentState.signedAt
+      ? new Date(consentState.signedAt).toLocaleDateString(locale === "hi" ? "hi-IN" : "en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" })
+      : null;
+    // Possible copies: the found links no notice has gone out for yet. A
+    // stopped or sent link is history, not a choice.
+    const copies = foundUrls.filter((url) => !url.representativeNoticeSentAt).length;
+    return (
+      <AppShell>
+        <div className="page-canvas">
+          <div className="container py-8 md:py-20">
+            <div className="mx-auto max-w-2xl space-y-10">
+
+              <header>
+                <div className="flex items-start justify-between gap-4">
+                  <p className="eyebrow">{t(locale, "case.watch.pill")}</p>
+                  <CloseDashboardButton locale={locale} />
+                </div>
+                <h1 className="page-title-sm mt-4">{t(locale, "watch.title")}</h1>
+                <p className="muted mt-3 text-sm leading-[1.7]">
+                  {t(locale, "case.reference")}{" "}
+                  <span className="font-mono text-[var(--ink)]">{record.referenceNumber}</span>
+                  <span aria-hidden> · </span>
+                  {t(locale, "case.created")} {created} {t(locale, "case.ist")}
+                </p>
+              </header>
+
+              <section aria-labelledby="watch-status-title" className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
+                {watching ? (
+                  <>
+                    <p className="eyebrow text-[var(--brand)]">{t(locale, "case.watch.watchingSince")} {watchingSince}</p>
+                    <h2 id="watch-status-title" className="subsection-title mt-2">
+                      {copies === 0
+                        ? t(locale, "case.watch.noCopies")
+                        : `${copies} ${t(locale, copies === 1 ? "case.watch.copyFound" : "case.watch.copiesFound")}`}
+                    </h2>
+                  </>
+                ) : (
+                  <>
+                    <p className="eyebrow">{t(locale, "case.watch.pill")}</p>
+                    <h2 id="watch-status-title" className="subsection-title mt-2">{t(locale, "case.watch.notWatching.title")}</h2>
+                    {/* A stop deleted her fingerprints: the record says so,
+                        instead of the generic "off" line that would hide a
+                        data deletion from her. */}
+                    <p className="muted mt-3 text-sm leading-[1.75]">
+                      {t(locale, consentState.status === "withdrawn" ? "watch.state.withdrawn" : "case.watch.notWatching.sub")}
+                    </p>
+                  </>
+                )}
+              </section>
+
+              {showFound && <WatchFoundList caseId={record.id} urls={foundUrls} locale={locale} />}
+
+              {hashUploadEnabled && hashSubmissions.length > 0 && (
+                <section id="fingerprints" aria-labelledby="watch-fingerprints-title" className="scroll-mt-24">
+                  <h2 id="watch-fingerprints-title" className="subsection-title">{t(locale, "case.fingerprints.title")}</h2>
+                  <ul className="mt-4 divide-y divide-[var(--line)] overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
+                    {hashSubmissions.map((submission, index) => (
+                      <li key={submission.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+                        <span className="flex items-center gap-3">
+                          <span className="text-[15px] font-medium text-[var(--ink)]">{t(locale, "case.fingerprints.item").replace("{n}", String(index + 1))}</span>
+                          <span aria-hidden="true" className="select-none font-mono text-[15px] tracking-[0.2em] text-[var(--text-muted)]">••••••••</span>
+                        </span>
+                        <StatusBadge status={submission.status} locale={locale} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {hashUploadEnabled && (
+                <section aria-label={t(locale, "case.watch.addImages")} className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
+                  <h2 className="subsection-title">{t(locale, "case.watch.addImages")}</h2>
+                  <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "case.watch.addImages.hint")}</p>
+                  <div className="mt-5">
+                    <AddMoreImages caseId={record.id} locale={locale} />
+                  </div>
+                </section>
+              )}
+
+              {hashUploadEnabled && <CrawlConsent caseId={record.id} locale={locale} watch caseOpen={isCaseOpen(record.status)} />}
+
+              <nav aria-label={t(locale, "case.more.label")} className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[var(--line)] pt-6 text-sm">
+                <Link className="link-underline text-[var(--ink)]" href="/get-help">{t(locale, "case.more.help")}</Link>
+                <Link className="link-underline text-[var(--ink)]" href="/resources">{t(locale, "case.tools.resources")}</Link>
+                <Link className="link-underline text-[var(--text-muted)] hover:text-[var(--danger)]" href="/delete-account">{t(locale, "case.tools.delete")}</Link>
+              </nav>
+
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -235,6 +337,7 @@ export default async function CasePage({
                         <p className="font-mono mt-0.5 text-[12px] text-[var(--text-muted)]">{url.domain}</p>
                         {!url.urlHash && <p className="muted mt-1 text-xs">{t(locale, "case.urlExpired")}</p>}
                         {url.status === "REJECTED" && rejectedReason(url.flagReason, locale)}
+                        {verificationNote(verifications.get(url.id), url.status, locale)}
                       </div>
                       <div className="flex flex-col items-end gap-1.5">
                         {/* She filed the platform's own form: for her, it has been sent. */}
@@ -265,7 +368,14 @@ export default async function CasePage({
               )}
             </section>
 
-            {showFound && <FoundByAsmita urls={foundUrls} locale={locale} badge={(status) => <StatusBadge status={status} locale={locale} />} />}
+            {showFound && (
+              <FoundByAsmita
+                urls={foundUrls}
+                locale={locale}
+                badge={(status) => <StatusBadge status={status} locale={locale} />}
+                note={(urlId, status) => verificationNote(verifications.get(urlId), status, locale)}
+              />
+            )}
 
             {hashUploadEnabled && hashSubmissions.length > 0 && (
               <section id="fingerprints" aria-labelledby="case-fingerprints-title" className="scroll-mt-24">
@@ -289,7 +399,9 @@ export default async function CasePage({
               </section>
             )}
 
-            {hashUploadEnabled && hashSubmissions.length > 0 && <CrawlConsent caseId={record.id} locale={locale} />}
+            {hashUploadEnabled && hashSubmissions.length > 0 && (
+              <CrawlConsent caseId={record.id} locale={locale} caseOpen={isCaseOpen(record.status)} />
+            )}
 
             {hashUploadEnabled && hashSubmissions.length > 0 && (
               <PartnerShareConsent caseId={record.id} locale={locale} eligibleCount={shareableHashes.length} />

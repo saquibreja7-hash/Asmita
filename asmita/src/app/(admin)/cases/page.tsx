@@ -323,6 +323,7 @@ function toTableRow(row: AdminCaseListRow, now: Date): CaseTableRow {
     platforms: platformText(row.platforms),
     age: shortDuration(now.getTime() - Date.parse(row.createdAt)),
     ageTitle: formatIst(row.createdAt),
+    watch: row.mode === "WATCH",
   };
 }
 

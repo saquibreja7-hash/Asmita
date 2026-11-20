@@ -11,6 +11,8 @@ const db = vi.hoisted(() => {
     partnerShareConsent: { updateMany: vi.fn() },
     hashSubmission: { updateMany: vi.fn() },
     crawlFinding: { deleteMany: vi.fn() },
+    // WP28 (ADR 008): a withdrawal now deletes the case's SSCD embeddings too.
+    findingEmbedding: { deleteMany: vi.fn() },
     platform: { findFirst: vi.fn() },
     submittedUrl: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
     $transaction: vi.fn(),

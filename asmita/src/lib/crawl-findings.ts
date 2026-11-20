@@ -6,6 +6,7 @@ import { crawlMemory, type MemoryCrawlFinding } from "@/lib/crawl-store";
 import { consentCoversFinding, findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
 import { enabledCrawlSourceDomain, ensureCrawlSourceForReportedHost } from "@/lib/crawl-sources";
 import { promoteDiscoveredSource } from "@/lib/crawl-discoveries";
+import { notifyReuploadFinding } from "@/lib/crawl-watch";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
@@ -13,6 +14,7 @@ import { alertPartnerChannelOfFinding, partnerCrawlPermissionMissing } from "@/l
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { isUrlExpired } from "@/lib/url-retention";
+import { notifyWatchCopyFound } from "@/lib/watch-ops";
 import * as store from "@/lib/store";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
@@ -50,7 +52,9 @@ function isDevNoDb() {
 
 // Media-like payloads never get past the schema: only an explicit http(s)
 // URL of bounded length with no whitespace, and nothing base64-shaped.
-const crawlUrl = z
+// Exported so the embeddings route (ADR 008, WP28) validates addresses with
+// exactly the same rules.
+export const crawlUrlSchema = z
   .string()
   .min(10)
   .max(MAX_URL_LENGTH)
@@ -60,14 +64,45 @@ const crawlUrl = z
 export const crawlFindingSchema = z
   .object({
     fingerprintId: z.string().min(1).max(100).regex(/^[A-Za-z0-9_-]+$/),
-    pageUrl: crawlUrl,
-    imageUrl: crawlUrl,
-    distance: z.number().int().min(0).max(CRAWL_MATCH_THRESHOLD),
+    pageUrl: crawlUrlSchema,
+    imageUrl: crawlUrlSchema,
+    // Absent only on an SSCD finding (ADR 008, WP28): the second layer
+    // matches by descriptor similarity and has no PDQ Hamming distance.
+    distance: z.number().int().min(0).max(CRAWL_MATCH_THRESHOLD).optional(),
     quality: z.number().int().min(0).max(100),
     observedAt: z.iso.datetime({ offset: true }),
     sourceId: z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/),
+    // Which layer matched (ADR 008): absent means the old contract — a
+    // hash-distance finding, labelled from the fingerprint's algorithm.
+    method: z.enum(["pdq", "vpdq", "sscd"]).optional(),
+    // The SSCD similarity: required on an SSCD finding; on a labelled pdq
+    // finding it is the borderline score the crawler computed against that
+    // fingerprint's own embeddings (information for the analyst, never an
+    // automatic accept or reject); a vpdq finding never carries one.
+    sscdSimilarity: z.number().min(0).max(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((item, ctx) => {
+    if (item.method === "sscd") {
+      if (item.distance !== undefined) {
+        ctx.addIssue({ code: "custom", message: "sscd_finding_has_no_distance", path: ["distance"] });
+      }
+      if (item.sscdSimilarity === undefined) {
+        ctx.addIssue({ code: "custom", message: "sscd_similarity_required", path: ["sscdSimilarity"] });
+      }
+      return;
+    }
+    // PDQ, VPDQ and the unlabelled old contract all match by hash distance.
+    if (item.distance === undefined) {
+      ctx.addIssue({ code: "custom", message: "distance_required", path: ["distance"] });
+    }
+    // Borderline scores attach to pdq findings only: the second layer never
+    // samples videos, and an old crawler cannot send a score it never
+    // computed (the field did not exist for it).
+    if (item.sscdSimilarity !== undefined && item.method !== "pdq") {
+      ctx.addIssue({ code: "custom", message: "sscd_similarity_not_allowed", path: ["sscdSimilarity"] });
+    }
+  });
 
 // The envelope is checked whole (400 when wrong); each finding is checked on
 // its own, so one malformed item is "rejected" without losing the others.
@@ -86,7 +121,12 @@ export type CrawlFindingResult = { status: "accepted" | "rejected"; reason?: str
 // unknown id from a withdrawn or unapproved one.
 const FINGERPRINT_REFUSED = "fingerprint_not_accepted";
 
-function findingDigest(caseId: string, consentId: string, pageUrl: string, imageUrl: string) {
+/**
+ * The dedup digest of one sighting, exported so the embeddings route (ADR 008,
+ * WP28) recomputes it exactly as recordCrawlFindings does — the embedding is
+ * keyed to the very finding the crawler reported.
+ */
+export function findingDigest(caseId: string, consentId: string, pageUrl: string, imageUrl: string) {
   return sha256(`crawl-finding\u0000${caseId}\u0000${consentId}\u0000${pageUrl}\u0000${imageUrl}`);
 }
 
@@ -97,17 +137,25 @@ type NewFinding = {
   pageUrl: string;
   imageUrl: string;
   urlDigest: string;
-  distance: number;
+  /** Null for an SSCD finding: the second layer has no PDQ distance (ADR 008). */
+  distance: number | null;
+  /** The borderline SSCD score on a labelled pdq finding, else null. */
+  sscdSimilarity: number | null;
   quality: number;
   sourceId: string;
   runId: string;
+  /** Which layer matched: PDQ, VPDQ (derived from the submission) or SSCD. */
+  method: "PDQ" | "VPDQ" | "SSCD";
 };
 
-// A closer sighting replaces the matched fingerprint and distance only while
-// nobody has reviewed the finding: once an analyst approved it (even the
+// While nobody has reviewed the finding (CANDIDATE, no first reviewer), a
+// closer sighting replaces the stored match. Closer means: a sighting with a
+// PDQ distance beats one without (an SSCD match has none), and between two
+// distances the lower wins. Once an analyst approved the finding (even the
 // first of two), the fingerprint the analysts confirmed is the one a
 // representative notice names (src/lib/crawl-notice.ts).
-const CLOSER_WHILE_CANDIDATE = sql`excluded."distance" < "CrawlFinding"."distance" AND "CrawlFinding"."reviewStatus" = 'CANDIDATE' AND "CrawlFinding"."reviewedById" IS NULL`;
+const CANDIDATE_UNREVIEWED = sql`"CrawlFinding"."reviewStatus" = 'CANDIDATE' AND "CrawlFinding"."reviewedById" IS NULL`;
+const CLOSER_WHILE_CANDIDATE = sql`${CANDIDATE_UNREVIEWED} AND (("CrawlFinding"."distance" IS NULL AND excluded."distance" IS NOT NULL) OR ("CrawlFinding"."distance" IS NOT NULL AND excluded."distance" IS NOT NULL AND excluded."distance" < "CrawlFinding"."distance"))`;
 
 /**
  * Inserts or merges one finding, only while the authorisation it was matched
@@ -125,16 +173,35 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
     const existing = [...memory.findings.values()].find((f) => f.caseId === input.caseId && f.urlDigest === input.urlDigest);
     if (existing) {
       existing.lastSeenAt = now;
-      if (existing.reviewStatus === "CANDIDATE" && existing.reviewedById === null && input.distance < existing.distance) {
-        Object.assign(existing, { distance: input.distance, quality: input.quality, hashSubmissionId: input.hashSubmissionId, sourceId: input.sourceId, runId: input.runId });
+      const mergeable = existing.reviewStatus === "CANDIDATE" && existing.reviewedById === null;
+      // A closer sighting replaces the stored match while CANDIDATE and
+      // unreviewed; a sighting with a distance beats one without (an SSCD
+      // match has none), and the lower of two distances wins (WP28).
+      const replaces =
+        mergeable &&
+        ((existing.distance === null && input.distance !== null) ||
+          (existing.distance !== null && input.distance !== null && input.distance < existing.distance));
+      const oldSimilarity = existing.sscdSimilarity;
+      if (replaces) {
+        Object.assign(existing, {
+          distance: input.distance, quality: input.quality, hashSubmissionId: input.hashSubmissionId,
+          sourceId: input.sourceId, runId: input.runId, method: input.method, sscdSimilarity: input.sscdSimilarity,
+        });
+      }
+      // A carried SSCD score never lowers the stored one while the finding is
+      // still open: the best score the crawler saw is the one the analyst sees
+      // (the same GREATEST as the Kysely statement above).
+      if (mergeable && input.sscdSimilarity !== null) {
+        existing.sscdSimilarity = Math.max(oldSimilarity ?? input.sscdSimilarity, input.sscdSimilarity);
       }
       return { id: existing.id, created: false };
     }
     const row: MemoryCrawlFinding = {
       id: randomUUID(), caseId: input.caseId, hashSubmissionId: input.hashSubmissionId, crawlConsentId: input.crawlConsentId,
       pageUrlEncrypted: encryptField(input.pageUrl), imageUrlEncrypted: encryptField(input.imageUrl),
-      urlDigest: input.urlDigest, distance: input.distance, quality: input.quality, firstSeenAt: now, lastSeenAt: now,
-      sourceId: input.sourceId, runId: input.runId, reviewStatus: "CANDIDATE",
+      urlDigest: input.urlDigest, distance: input.distance, sscdSimilarity: input.sscdSimilarity,
+      quality: input.quality, firstSeenAt: now, lastSeenAt: now,
+      sourceId: input.sourceId, runId: input.runId, reviewStatus: "CANDIDATE", method: input.method,
       reviewedById: null, reviewedAt: null, secondReviewedById: null, secondReviewedAt: null,
     };
     memory.findings.set(row.id, row);
@@ -148,10 +215,14 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
         .forShare().executeTakeFirst();
       if (!live) return null;
       // One statement, so concurrent reports of the same copy cannot race.
+      // A carried SSCD score never lowers the stored one while the finding
+      // is still open (GREATEST ignores NULLs, like Math.max below); a
+      // replacing sighting carries its own score, or none.
       const row = await trx.insertInto("CrawlFinding").values({
         id: randomUUID(), caseId: input.caseId, hashSubmissionId: input.hashSubmissionId, crawlConsentId: input.crawlConsentId,
         pageUrlEncrypted: encryptField(input.pageUrl), imageUrlEncrypted: encryptField(input.imageUrl),
-        urlDigest: input.urlDigest, distance: input.distance, quality: input.quality,
+        urlDigest: input.urlDigest, distance: input.distance, sscdSimilarity: input.sscdSimilarity,
+        quality: input.quality, method: input.method,
         firstSeenAt: now, lastSeenAt: now, sourceId: input.sourceId, runId: input.runId,
       }).onConflict((oc) => oc.columns(["caseId", "urlDigest"]).doUpdateSet({
         lastSeenAt: now,
@@ -159,7 +230,9 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
         quality: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."quality" ELSE "CrawlFinding"."quality" END`,
         sourceId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."sourceId" ELSE "CrawlFinding"."sourceId" END`,
         runId: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."runId" ELSE "CrawlFinding"."runId" END`,
+        method: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."method" ELSE "CrawlFinding"."method" END`,
         distance: sql`CASE WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."distance" ELSE "CrawlFinding"."distance" END`,
+        sscdSimilarity: sql`CASE WHEN ${CANDIDATE_UNREVIEWED} AND excluded."sscdSimilarity" IS NOT NULL THEN GREATEST("CrawlFinding"."sscdSimilarity", excluded."sscdSimilarity") WHEN ${CLOSER_WHILE_CANDIDATE} THEN excluded."sscdSimilarity" ELSE "CrawlFinding"."sscdSimilarity" END`,
       })).returning(["id", sql<boolean>`(xmax = 0)`.as("inserted")]).executeTakeFirstOrThrow();
       return { id: row.id, created: Boolean(row.inserted) };
     });
@@ -170,14 +243,28 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
   const attempt = () => db.$transaction(async (tx) => {
     const live = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "CrawlConsent" WHERE "id" = ${input.crawlConsentId} AND "withdrawnAt" IS NULL FOR SHARE`;
     if (live.length === 0) return null;
-    const existing = await tx.crawlFinding.findUnique({ where, select: { id: true, distance: true, reviewStatus: true, reviewedById: true } });
+    const existing = await tx.crawlFinding.findUnique({ where, select: { id: true, distance: true, sscdSimilarity: true, reviewStatus: true, reviewedById: true } });
     if (existing) {
+      const mergeable = existing.reviewStatus === "CANDIDATE" && existing.reviewedById === null;
+      // The Kysely twin's rules, read above: a closer sighting (a distance
+      // beats none, the lower of two wins) replaces the stored match; a
+      // carried SSCD score never lowers the stored one (WP28).
+      const replaces =
+        mergeable &&
+        ((existing.distance === null && input.distance !== null) ||
+          (existing.distance !== null && input.distance !== null && input.distance < existing.distance));
       await tx.crawlFinding.update({
         where: { id: existing.id },
         data: {
           lastSeenAt: now,
-          ...(existing.reviewStatus === "CANDIDATE" && existing.reviewedById === null && input.distance < existing.distance
-            ? { distance: input.distance, quality: input.quality, hashSubmissionId: input.hashSubmissionId, sourceId: input.sourceId, runId: input.runId }
+          ...(replaces
+            ? {
+                distance: input.distance, quality: input.quality, hashSubmissionId: input.hashSubmissionId,
+                sourceId: input.sourceId, runId: input.runId, method: input.method, sscdSimilarity: input.sscdSimilarity,
+              }
+            : {}),
+          ...(mergeable && input.sscdSimilarity !== null
+            ? { sscdSimilarity: Math.max(existing.sscdSimilarity ?? input.sscdSimilarity, input.sscdSimilarity) }
             : {}),
         },
       });
@@ -187,7 +274,8 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
       data: {
         caseId: input.caseId, hashSubmissionId: input.hashSubmissionId, crawlConsentId: input.crawlConsentId,
         pageUrlEncrypted: encryptField(input.pageUrl), imageUrlEncrypted: encryptField(input.imageUrl),
-        urlDigest: input.urlDigest, distance: input.distance, quality: input.quality,
+        urlDigest: input.urlDigest, distance: input.distance, sscdSimilarity: input.sscdSimilarity,
+        quality: input.quality, method: input.method,
         firstSeenAt: now, lastSeenAt: now, sourceId: input.sourceId, runId: input.runId,
       },
       select: { id: true },
@@ -295,6 +383,10 @@ export async function recordCrawlFindings(
       continue;
     }
 
+    // The stored method (ADR 008, WP28): an SSCD finding says so; anything
+    // else is labelled from the matched fingerprint's algorithm, so a video
+    // finding reported without a method (old crawler, SSCD off) is still
+    // VPDQ and a borderline pdq finding stays PDQ.
     const stored = await upsertFinding({
       caseId: fingerprint.caseId,
       hashSubmissionId: fingerprint.hashSubmissionId,
@@ -302,10 +394,12 @@ export async function recordCrawlFindings(
       pageUrl: page.normalizedUrl,
       imageUrl: image.normalizedUrl,
       urlDigest: findingDigest(fingerprint.caseId, fingerprint.consentId, page.normalizedUrl, image.normalizedUrl),
-      distance: item.distance,
+      distance: item.distance ?? null,
+      sscdSimilarity: item.sscdSimilarity ?? null,
       quality: item.quality,
       sourceId: item.sourceId,
       runId: body.runId,
+      method: item.method === "sscd" ? "SSCD" : fingerprint.algorithm === "VPDQ" ? "VPDQ" : "PDQ",
     }, now);
     if (!stored) {
       // The authorisation was withdrawn after the pool id was resolved.
@@ -354,7 +448,16 @@ export type CrawlFindingListRow = {
   id: string;
   caseId: string;
   caseReference: string | null;
-  distance: number;
+  /** Null for an SSCD finding: the second layer has no PDQ distance (ADR 008). */
+  distance: number | null;
+  /** Which layer matched: PDQ, VPDQ (derived from the submission) or SSCD. */
+  method: "PDQ" | "VPDQ" | "SSCD";
+  /**
+   * The SSCD similarity on an SSCD finding, or the borderline score the
+   * crawler computed for a PDQ match (ADR 008). Information for the
+   * analyst, never an automatic accept or reject; null when absent.
+   */
+  sscdSimilarity: number | null;
   quality: number;
   firstSeenAt: string;
   lastSeenAt: string;
@@ -365,7 +468,7 @@ export type CrawlFindingListRow = {
   /** The link's platform once approved; before that, the platform the source site belongs to, if known. */
   platform: FindingPlatformView | null;
   needsSecondReview: boolean;
-  /** Same as needsSecondReview: distance above SECOND_REVIEW_DISTANCE. */
+  /** Same as needsSecondReview: an SSCD finding, or distance above SECOND_REVIEW_DISTANCE. */
   secondReviewRequired: boolean;
   awaitingSecondReview: boolean;
   firstReviewedAt: string | null;
@@ -383,6 +486,12 @@ export type CrawlFindingListRow = {
   noticeAttemptUnconfirmed: boolean;
   /** She withdrew the authorisation this finding was matched under, so no notice can go out for it. */
   crawlConsentWithdrawn: boolean;
+  /**
+   * The finding's case is a watch (WP22): she has not asked for removal yet,
+   * so a representative notice is refused (watch_only_consent) until she
+   * chooses "Take it down".
+   */
+  watchOnly: boolean;
 };
 
 type FindingRow = Omit<MemoryCrawlFinding, "reviewStatus"> & { reviewStatus: string };
@@ -394,16 +503,21 @@ type ListExtras = {
   platform: FindingPlatformView | null;
   link: { status: string; sentAt: Date | string | null; claimPending: boolean; stopped: boolean } | null;
   consentWithdrawn: boolean;
+  watchOnly: boolean;
 };
 
 function toListRow(row: FindingRow, extras: ListExtras, viewerId?: string): CrawlFindingListRow {
-  const needsSecondReview = row.distance > SECOND_REVIEW_DISTANCE;
+  // An SSCD finding has no PDQ distance, so it is always among the
+  // least-certain matches: a new layer starts strict (ADR 008, WP28).
+  const needsSecondReview = row.distance === null || row.distance > SECOND_REVIEW_DISTANCE;
   const sentAt = extras.link?.sentAt ? new Date(extras.link.sentAt).toISOString() : null;
   return {
     id: row.id,
     caseId: row.caseId,
     caseReference: extras.caseReference,
     distance: row.distance,
+    method: row.method,
+    sscdSimilarity: row.sscdSimilarity,
     quality: row.quality,
     firstSeenAt: row.firstSeenAt.toISOString(),
     lastSeenAt: row.lastSeenAt.toISOString(),
@@ -422,6 +536,7 @@ function toListRow(row: FindingRow, extras: ListExtras, viewerId?: string): Craw
     noticeAttemptUnconfirmed: Boolean(extras.link?.claimPending) && !sentAt,
     // A sent notice is never undone by a withdrawal.
     crawlConsentWithdrawn: !sentAt && (Boolean(extras.link?.stopped) || extras.consentWithdrawn),
+    watchOnly: extras.watchOnly,
   };
 }
 
@@ -437,9 +552,14 @@ function platformView(
 /** Whether the authorisation a finding was matched under is no longer live. */
 function consentGone(
   finding: { caseId: string; crawlConsentId: string | null },
-  consents: Array<{ id: string; caseId: string; withdrawnAt: Date | null }>,
+  consents: Array<{ id: string; caseId: string; withdrawnAt: Date | null; convertedFromId?: string | null }>,
 ) {
-  if (finding.crawlConsentId) return !consents.some((c) => c.id === finding.crawlConsentId && !c.withdrawnAt);
+  if (finding.crawlConsentId) {
+    // The recorded authorisation is gone only while no live one replaced it
+    // at "Take it down" (convertedFromId; WP22).
+    const converted = consents.some((c) => !c.withdrawnAt && c.convertedFromId === finding.crawlConsentId);
+    return !converted && !consents.some((c) => c.id === finding.crawlConsentId && !c.withdrawnAt);
+  }
   return !consents.some((c) => c.caseId === finding.caseId && !c.withdrawnAt);
 }
 
@@ -481,6 +601,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
           // Nothing is ever sent from the memory store.
           link: link ? { status: link.status, sentAt: null, claimPending: false, stopped: Boolean(link.crawlConsentWithdrawnAt) } : null,
           consentWithdrawn: consentGone(f, memory.consents),
+          watchOnly: record?.mode === "WATCH",
         }, viewerId);
       });
   }
@@ -494,7 +615,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
       ...(filter.id ? { id: filter.id } : {}),
     },
     include: {
-      case: { select: { referenceNumber: true } },
+      case: { select: { referenceNumber: true, mode: true } },
       source: { select: { domain: true } },
       hashSubmission: { select: { hashDigest: true } },
       submittedUrl: {
@@ -514,7 +635,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
   });
   const caseIds = [...new Set(rows.map((row) => row.caseId))];
   const consents = caseIds.length
-    ? await db.crawlConsent.findMany({ where: { caseId: { in: caseIds } }, select: { id: true, caseId: true, withdrawnAt: true } })
+    ? await db.crawlConsent.findMany({ where: { caseId: { in: caseIds } }, select: { id: true, caseId: true, withdrawnAt: true, convertedFromId: true } })
     : [];
   // Before approval there is no link: show the platform the source site belongs to.
   const domains = [...new Set(rows.filter((row) => !row.submittedUrl).map((row) => row.source.domain))];
@@ -542,6 +663,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
           }
         : null,
       consentWithdrawn: consentGone(row, consents),
+      watchOnly: row.case.mode === "WATCH",
     }, viewerId);
   });
 }
@@ -585,9 +707,13 @@ export type ReviewOutcome =
 
 type ReviewState = { reviewStatus: string; reviewedById: string | null };
 
-/** Decides what a review does, without touching storage. */
+/**
+ * Decides what a review does, without touching storage. A null distance (an
+ * SSCD finding, ADR 008) means the two-step approval path, like a distance
+ * above the threshold: a new layer starts strict.
+ */
 export function planReview(
-  finding: { distance: number } & ReviewState,
+  finding: { distance: number | null } & ReviewState,
   decision: ReviewDecision,
   reviewerId: string,
 ): { action: "dismiss" | "first_approval" | "final_approval"; second: boolean } | { error: "already_reviewed" | "second_reviewer_required" } {
@@ -595,7 +721,7 @@ export function planReview(
   const firstDone = finding.reviewedById !== null;
   if (firstDone && finding.reviewedById === reviewerId) return { error: "second_reviewer_required" };
   if (decision === "dismiss") return { action: "dismiss", second: firstDone };
-  if (finding.distance > SECOND_REVIEW_DISTANCE && !firstDone) return { action: "first_approval", second: false };
+  if ((finding.distance === null || finding.distance > SECOND_REVIEW_DISTANCE) && !firstDone) return { action: "first_approval", second: false };
   return { action: "final_approval", second: firstDone };
 }
 
@@ -652,6 +778,19 @@ async function alertPartnerChannelOfApprovedFinding(input: {
   }
 }
 
+/**
+ * Watch-and-verify WP24: when this approval is a re-upload found while her
+ * case is closed and inside its watch window, she gets the reference-only
+ * email. Never allowed to fail the approval, which is already committed.
+ */
+async function notifyReuploadIfWatching(caseId: string, findingId: string, now: Date) {
+  try {
+    await notifyReuploadFinding(caseId, findingId, now);
+  } catch {
+    console.error("reupload_email_failed"); // fixed code only, never an address
+  }
+}
+
 export async function reviewCrawlFinding(input: { findingId: string; decision: ReviewDecision; reviewerId: string; now?: Date }): Promise<ReviewOutcome> {
   const now = input.now ?? new Date();
   if (isDevNoDb()) return reviewInMemory(input.findingId, input.decision, input.reviewerId, now);
@@ -700,7 +839,7 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
     // Checked again under a lock in this transaction: a withdrawal either
     // committed first (refused here) or waits for this approval and then
     // stops the link it creates.
-    const live = await tx.$queryRaw<Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date }>>`SELECT "id", "hashSubmissionIds", "signedAt" FROM "CrawlConsent" WHERE "caseId" = ${finding.caseId} AND "withdrawnAt" IS NULL FOR SHARE`;
+    const live = await tx.$queryRaw<Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date; convertedFromId: string | null }>>`SELECT "id", "hashSubmissionIds", "signedAt", "convertedFromId" FROM "CrawlConsent" WHERE "caseId" = ${finding.caseId} AND "withdrawnAt" IS NULL FOR SHARE`;
     if (!live.some((consent) => consentCoversFinding({ ...consent, signedAt: new Date(consent.signedAt) }, finding))) return "consent_withdrawn" as const;
     const claimed = await tx.crawlFinding.updateMany({ where: unchanged, data: { reviewStatus: "APPROVED", ...reviewerFields } });
     if (claimed.count === 0) return null;
@@ -742,6 +881,12 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
     fingerprintId: finding.hashSubmissionId,
     reviewerId: input.reviewerId,
   });
+  // A watch (WP22): her copy-found alert, reference only, best-effort.
+  await notifyWatchCopyFound(finding.caseId, finding.id);
+  // A re-upload found on her closed, still-watching case (WP24): the same
+  // reference-only alert. The two conditions are disjoint (an open watch vs a
+  // closed case inside its re-upload window).
+  await notifyReuploadIfWatching(finding.caseId, finding.id, now);
   return { ok: true, status: "APPROVED", ...outcome };
 }
 
@@ -783,6 +928,7 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
       platformName: parsed.platform?.name || "Unknown - will be reviewed",
       status: crawlerUrlStatus(parsed),
       urlHash: parsed.urlHash,
+      urlEncrypted: encryptField(parsed.normalizedUrl),
       platformId: null,
       flaggedForReview: false,
       source: "CRAWLER",
@@ -800,12 +946,16 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
     fingerprintId: finding.hashSubmissionId,
     reviewerId,
   });
+  // A watch (WP22): her copy-found alert, reference only, best-effort.
+  await notifyWatchCopyFound(finding.caseId, finding.id);
+  // A re-upload found on her closed, still-watching case (WP24), same rules.
+  await notifyReuploadIfWatching(finding.caseId, finding.id, now);
   return { ok: true, status: "APPROVED", submittedUrlId: submittedUrlId!, createdUrl: !existing };
 }
 
 async function auditReview(
   eventType: "CRAWL_FINDING_APPROVED" | "CRAWL_FINDING_DISMISSED",
-  finding: { id: string; caseId: string; distance: number },
+  finding: { id: string; caseId: string; distance: number | null },
   reviewerId: string,
   extra: Record<string, unknown>,
 ) {

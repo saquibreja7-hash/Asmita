@@ -85,7 +85,19 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
 
       <dl className="mt-6 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="Status">{STATUS_LABELS[detail.status] ?? detail.status}</Fact>
-        <Fact label="Next action">{nextActionLabel(detail.work.nextAction, detail.work.actionCount)}</Fact>
+        <Fact label="Type">{detail.mode === "WATCH" ? "Watch for my images" : "Takedown case"}</Fact>
+        <Fact label="Next action">
+          {detail.mode === "WATCH" && detail.work.nextAction === "review_findings" ? (
+            <>
+              {nextActionLabel(detail.work.nextAction, detail.work.actionCount)}{" "}
+              <Link className="link-underline" href="/admin/findings?status=CANDIDATE">
+                Open the findings console
+              </Link>
+            </>
+          ) : (
+            nextActionLabel(detail.work.nextAction, detail.work.actionCount)
+          )}
+        </Fact>
         <Fact label="Due">
           <span className={due.overdue ? "text-[var(--danger)]" : undefined}>
             {due.overdue && <span aria-hidden="true">! </span>}
@@ -301,6 +313,21 @@ function LinkCard({
             </li>
           ))}
         </ul>
+      )}
+      {link.verifications.length > 0 && (
+        <div className="mt-3">
+          <p className="eyebrow">Removal checks</p>
+          <ul className="mt-1 grid gap-1 text-xs">
+            {link.verifications.map((check) => (
+              <li key={check.id}>
+                Check {check.attempt} of 3:{" "}
+                {check.outcome === "PENDING"
+                  ? `due ${formatIst(new Date(check.dueAt))}`
+                  : `${check.outcome.replaceAll("_", " ").toLowerCase()}${check.checkedAt ? ` ${formatIst(new Date(check.checkedAt))}` : ""}`}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {link.platformFiledAt && (
         <p className="mt-2 text-xs">Survivor filed the platform form {formatIst(link.platformFiledAt)}.</p>

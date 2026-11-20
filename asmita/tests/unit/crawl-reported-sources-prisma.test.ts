@@ -12,6 +12,8 @@ const db = vi.hoisted(() => {
     crawlSource: { findFirst: fn(), findMany: fn(), create: fn(), createMany: fn(), deleteMany: fn(), updateMany: fn() },
     crawlBlockedHost: { findFirst: fn(), findMany: fn() },
     crawlFinding: { findUnique: fn(), findMany: fn(), deleteMany: fn(), updateMany: fn() },
+    // WP28 (ADR 008): the erasure deletes the case's SSCD embeddings too.
+    findingEmbedding: { deleteMany: fn() },
     crawlConsent: { findMany: fn(), deleteMany: fn() },
     partnerShareConsent: { deleteMany: fn() },
     // WP32: the erasure sweep withdraws shared fingerprints from the partner
@@ -32,6 +34,7 @@ const db = vi.hoisted(() => {
     hashDispatch: { updateMany: fn() },
     escalation: { deleteMany: fn() },
     urlPortalToken: { deleteMany: fn() },
+    linkVerification: { deleteMany: fn() },
     feedback: { deleteMany: fn() },
     adminAccessLog: { updateMany: fn() },
     sessionToken: { deleteMany: fn() },
@@ -56,10 +59,9 @@ const CONSENT = { id: "consent-1", hashSubmissionIds: ["h1"], signedAt: new Date
 
 const zeroCounts: Array<[Record<string, ReturnType<typeof vi.fn>>, string]> = [
   [db.emailDeliveryProof, "deleteMany"], [db.hashDispatch, "updateMany"], [db.escalation, "deleteMany"],
-  [db.urlPortalToken, "deleteMany"], [db.submittedUrl, "deleteMany"], [db.crawlFinding, "deleteMany"],
+  [db.urlPortalToken, "deleteMany"], [db.linkVerification, "deleteMany"], [db.submittedUrl, "deleteMany"], [db.crawlFinding, "deleteMany"],
   [db.crawlConsent, "deleteMany"], [db.partnerShareConsent, "deleteMany"], [db.hashSubmission, "updateMany"],
-  [db.partnerFeedEvent, "createMany"],
-  [db.partnerOutcome, "deleteMany"], [db.feedback, "deleteMany"], [db.adminAccessLog, "updateMany"],
+  [db.partnerFeedEvent, "createMany"], [db.partnerOutcome, "deleteMany"], [db.feedback, "deleteMany"], [db.adminAccessLog, "updateMany"],
   [db.case, "updateMany"], [db.sessionToken, "deleteMany"],
   [db.otpToken, "deleteMany"], [db.notice, "deleteMany"],
 ];

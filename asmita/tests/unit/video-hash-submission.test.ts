@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Video fingerprints on the server (video-fingerprints spec WP17): the
 // validator, the dev memory store, the erasure of the frame list, and the
-// pool exclusion (rule 3). Synthetic frame hashes only — no video bytes
-// exist anywhere in this suite.
+// pool serving them as video entries (WP20). Synthetic frame hashes only —
+// no video bytes exist anywhere in this suite.
 
 vi.mock("@/lib/db", () => ({ db: new Proxy({}, { get: () => { throw new Error("prisma path must not run here"); } }) }));
 
@@ -182,14 +182,22 @@ describe("addHashesToCase, memory store", () => {
   });
 });
 
-describe("crawler pool excludes video fingerprints (rule 3)", () => {
-  it("never lists a VPDQ fingerprint under its consent, memory path", async () => {
+describe("crawler pool serves video fingerprints (WP20)", () => {
+  it("lists a VPDQ fingerprint as { id, kind: \"video\", frames } under its consent, memory path", async () => {
+    // The pool keeps fingerprints only while the case is open or inside its
+    // re-upload window (watch-and-verify WP24), so the fixture needs an open
+    // case for the consent to cover anything.
+    store.cases.set("case-9", {
+      id: "case-9", referenceNumber: "ASMITA-2026-V0009", userId: "user-video",
+      createdAt: new Date().toISOString(), status: "OPEN", urls: [],
+    });
     crawlMemory().fingerprints.set("hs-img", {
       id: "hs-img", caseId: "case-9", hashEncrypted: encryptField(H1), quality: 80, status: "APPROVED", crawlPoolId: null,
     });
     crawlMemory().fingerprints.set("hs-vid", {
       id: "hs-vid", caseId: "case-9", hashEncrypted: encryptField(H2), quality: 90, status: "APPROVED", crawlPoolId: null,
       algorithm: "VPDQ",
+      videoFramesEncrypted: encryptField(JSON.stringify([{ hash: H2, quality: 90, t: 0 }, { hash: H3, quality: 70, t: 1 }])),
     });
     expect(
       (await recordCrawlConsent({
@@ -199,8 +207,15 @@ describe("crawler pool excludes video fingerprints (rule 3)", () => {
     ).toBe(true);
 
     const pool = await buildCrawlPool();
-    expect(pool.fingerprints).toHaveLength(1);
-    expect(pool.fingerprints[0].pdq).toBe(H1);
+    expect(pool.fingerprints).toHaveLength(2);
+    const image = pool.fingerprints.find((f) => "pdq" in f);
+    expect(image).toEqual({ id: expect.stringMatching(/^fp_/), pdq: H1, quality: 80 });
+    const video = pool.fingerprints.find((f) => "kind" in f);
+    expect(video).toEqual({ id: expect.stringMatching(/^fp_/), kind: "video", frames: [H2, H3] });
+    // The video's pool id is its own; a finding against it resolves to the row.
+    const { resolvePoolFingerprint } = await import("@/lib/crawl-pool");
+    const resolved = await resolvePoolFingerprint((video as { id: string }).id);
+    expect(resolved).toMatchObject({ hashSubmissionId: "hs-vid", caseId: "case-9" });
   });
 });
 
