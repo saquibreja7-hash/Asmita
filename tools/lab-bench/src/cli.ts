@@ -1,10 +1,11 @@
 /**
- * The lab-bench CLI: build-set, match, detect, report (see README for the
- * full flow). Exit codes: 0 ok, 64 usage, 1 failure.
+ * The lab-bench CLI: build-set, match, detect, trace, report (see README for
+ * the full flow). Exit codes: 0 ok, 64 usage, 1 failure.
  */
 import { buildSet } from "./buildset.ts";
 import { runMatch } from "./matchcmd.ts";
 import { runDetect } from "./detectcmd.ts";
+import { runTrace } from "./tracecmd.ts";
 import { runReport } from "./reportcmd.ts";
 import { HumanFaceLocator } from "./landmarks.ts";
 
@@ -18,6 +19,10 @@ commands:
                                         background-PDQ, recall at 1% FMR
   detect <set-dir>                      run the detector adapters (keyless
                                         adapters are skipped)
+  trace <set-dir>                       run the site's trace scoring over every
+                                        probe x original pair, report the
+                                        charter E3 metric (right source first,
+                                        wrong-source strong rate)
   report <run-dir>                      write report.md and report.html into a
                                         match or detect run directory
 
@@ -74,6 +79,15 @@ export async function runCli(argv: string[]): Promise<number> {
         `detect results in ${runDir} (${results.detectors.length} detector(s)` +
           `${results.skipped.length ? `, ${results.skipped.length} skipped` : ""})\n`,
       );
+      return 0;
+    }
+    if (command === "trace") {
+      const [setDir] = args;
+      if (!setDir) return usage();
+      // Like match: the production run wants landmarks when the locator can
+      // load; the trace core reports honestly when it cannot.
+      const { runDir } = await runTrace(setDir, { faceLocator: new HumanFaceLocator() });
+      process.stdout.write(`trace results in ${runDir}\n`);
       return 0;
     }
     if (command === "report") {

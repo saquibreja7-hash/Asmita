@@ -9,6 +9,7 @@
     "build-set": "tsx src/cli.ts build-set",
     "match": "tsx src/cli.ts match",
     "detect": "tsx src/cli.ts detect",
+    "trace": "tsx src/cli.ts trace",
     "report": "tsx src/cli.ts report",
     "models:fetch": "node scripts/fetch-models.mjs",
     "test": "vitest run",
