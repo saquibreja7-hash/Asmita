@@ -114,3 +114,5 @@ If she later signs a new authorisation, findings are deduplicated per authorisat
 ## For counsel
 
 The particulars block and the signature line are the only text that code adds. Please review the wording in `src/lib/crawl-notice.ts` (`particulars`, `signatureBlock`). Both template seeds still carry `[CITATION REQUIRED — verify with legal advisor]` for the legal basis of acting as representative and for the removal period.
+
+The perceptual-hash annex appended to every representative notice (and to hash advisories and URL notices, from the same single builder, `src/lib/case-hash-annex.ts` / `buildHashAnnex` in `src/lib/notice-generator.ts`) now also lists video fingerprints (vPDQ, video-fingerprints spec WP19): each is one entry, "Video fingerprint (vPDQ, N frames)", followed by at most 200 evenly spaced frame hashes and one plain sentence on how vPDQ is matched. That entry wording is new platform-facing text and has not been legally reviewed; counsel must read it before any video fingerprint is dispatched to a platform.

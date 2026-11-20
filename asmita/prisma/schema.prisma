@@ -139,8 +139,12 @@ enum CrawlPageStatus {
   DEAD
 }
 
+// Phase 2 fingerprints: PDQ for images, VPDQ for videos (one PDQ hash per
+// sampled frame). The crawler pool serves PDQ rows only until the video
+// matcher ships (video-fingerprints spec, rule 3 and WP20).
 enum HashAlgorithm {
   PDQ
+  VPDQ
 }
 
 enum HashSubmissionStatus {
@@ -265,6 +269,12 @@ model Case {
 // Phase 2: client-generated perceptual hashes. The hash is the ONLY artifact
 // the server ever receives — never image bytes. Encrypted at rest; digest
 // column exists solely for dedup/lookup.
+// Video fingerprints (video-fingerprints spec WP17): a VPDQ row keeps its
+// frame list here (JSON, encrypted like the hash itself); the video never
+// reaches the server, only frame hashes, qualities and timestamps. Nullable:
+// PDQ image rows have none of these. For a VPDQ row, hashEncrypted holds the
+// highest-quality frame's hash and hashDigest the sha256 of the sorted unique
+// frame hashes, so the existing unique index dedups re-uploads.
 model HashSubmission {
   id                  String               @id @default(uuid())
   caseId              String
@@ -272,6 +282,9 @@ model HashSubmission {
   hashEncrypted       String
   hashDigest          String
   quality             Int
+  videoFramesEncrypted String?
+  videoFrameCount     Int?
+  videoDurationSec    Int?
   clientVersion       String?
   status              HashSubmissionStatus @default(PENDING_REVIEW)
   flaggedForReview    Boolean              @default(false)
