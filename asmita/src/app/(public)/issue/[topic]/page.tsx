@@ -67,6 +67,14 @@ export default async function IssueTopicPage({
               <p className="font-size-large mt-6 max-w-2xl text-[var(--ink)]">
                 {content.definition}
               </p>
+              {content.research && (
+                <p className="mt-3 max-w-2xl text-sm leading-[1.7] text-[var(--text-muted)]">
+                  {content.research.text}{" "}
+                  <a className="text-link" href={content.research.url} target="_blank" rel="noopener noreferrer">
+                    {say("Read the survey", "सर्वेक्षण पढ़ें")} <span aria-hidden>↗</span>
+                  </a>
+                </p>
+              )}
               <p className="eyebrow mt-6">
                 {content.term}<ReadingTime label={say("{n} min read", "{n} मिनट में पढ़ें")} />
               </p>
