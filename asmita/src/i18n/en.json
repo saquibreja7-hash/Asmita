@@ -1219,5 +1219,12 @@
   "check.c2pa.validation.untrusted": "Validated, but the signer is not on the public trusted list.",
   "check.meta.title": "Metadata labels inside the file (not signed)",
   "check.google.line": "You can also check Google's SynthID watermark yourself: ask 'Is this made with AI?' about the image in the Gemini app, or with Google Lens / Circle to Search. Asmita does not send your image to Google, and this does not catch every AI image.",
-  "review.sign.openNotice": "Open the notice (PDF)"
+  "review.sign.openNotice": "Open the notice (PDF)",
+  "nav.menuClose": "Close menu",
+  "nav.skipToMain": "Skip to main content",
+  "nav.primary": "Primary",
+  "nav.mobile": "Mobile",
+  "nav.home": "Asmita home",
+  "nav.language": "Language",
+  "flow.progress": "Progress"
 }

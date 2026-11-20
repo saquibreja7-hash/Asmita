@@ -1219,5 +1219,12 @@
   "check.c2pa.validation.untrusted": "हस्ताक्षर जाँच पास, पर हस्ताक्षरकर्ता सार्वजनिक भरोसेमंद सूची में नहीं है।",
   "check.meta.title": "फ़ाइल के अंदर के मेटाडेटा लेबल (हस्ताक्षरित नहीं)",
   "check.google.line": "Google का SynthID watermark आप खुद भी जाँच सकते हैं: Gemini ऐप में, या Google Lens / Circle to Search से, इमेज के बारे में पूछिए 'Is this made with AI?'। Asmita आपकी इमेज Google को नहीं भेजता, और यह हर AI इमेज को नहीं पकड़ता।",
-  "review.sign.openNotice": "सूचना खोलें (PDF)"
+  "review.sign.openNotice": "सूचना खोलें (PDF)",
+  "nav.menuClose": "मेनू बंद करें",
+  "nav.skipToMain": "मुख्य सामग्री पर जाएँ",
+  "nav.primary": "मुख्य",
+  "nav.mobile": "मोबाइल",
+  "nav.home": "अस्मिता होम पेज",
+  "nav.language": "भाषा",
+  "flow.progress": "प्रगति"
 }

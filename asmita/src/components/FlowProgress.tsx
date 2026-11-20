@@ -30,7 +30,7 @@ export function FlowProgress({ step, locale }: { step: 1 | 2 | 3 | 4; locale: Lo
           />
         ))}
       </div>
-      <ol className="mt-4 hidden flex-wrap items-center gap-y-3 sm:flex" aria-label="Progress">
+      <ol className="mt-4 hidden flex-wrap items-center gap-y-3 sm:flex" aria-label={t(locale, "flow.progress")}>
         {Array.from({ length: TOTAL }, (_, i) => {
           const n = (i + 1) as 1 | 2 | 3 | 4;
           const state = n < step ? "done" : n === step ? "current" : "todo";
