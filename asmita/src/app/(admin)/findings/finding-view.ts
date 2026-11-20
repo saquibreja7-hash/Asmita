@@ -26,8 +26,9 @@ export function platformLabel(platform: FindingPlatformView | null) {
   return platform.contactVerified ? `${platform.name} (verified contact)` : `${platform.name} (contact not verified)`;
 }
 
-export function noticeLabel(row: Pick<CrawlFindingListRow, "reviewStatus" | "representativeNoticeSentAt" | "noticeAttemptUnconfirmed" | "crawlConsentWithdrawn">) {
+export function noticeLabel(row: Pick<CrawlFindingListRow, "reviewStatus" | "representativeNoticeSentAt" | "noticeAttemptUnconfirmed" | "crawlConsentWithdrawn" | "watchOnly">) {
   if (row.representativeNoticeSentAt) return `Sent ${shortDate(row.representativeNoticeSentAt)}`;
+  if (row.watchOnly) return "Watch only";
   if (row.crawlConsentWithdrawn) return "Consent withdrawn";
   if (row.noticeAttemptUnconfirmed) return "Attempt unconfirmed";
   return row.reviewStatus === "APPROVED" ? "Not sent" : "-";
@@ -35,7 +36,7 @@ export function noticeLabel(row: Pick<CrawlFindingListRow, "reviewStatus" | "rep
 
 export type NoticeGateInput = Pick<
   CrawlFindingListRow,
-  "reviewStatus" | "representativeNoticeSentAt" | "noticeAttemptUnconfirmed" | "crawlConsentWithdrawn" | "urlsPurged" | "linkStatus"
+  "reviewStatus" | "representativeNoticeSentAt" | "noticeAttemptUnconfirmed" | "crawlConsentWithdrawn" | "watchOnly" | "urlsPurged" | "linkStatus"
 > & { crawlerEnabled: boolean };
 
 export type NoticeGate =
@@ -52,6 +53,12 @@ export function noticeGate(state: NoticeGateInput): NoticeGate {
   if (state.representativeNoticeSentAt) return { kind: "sent", sentAt: state.representativeNoticeSentAt };
   if (state.crawlConsentWithdrawn) {
     return { kind: "blocked", code: "consent_withdrawn", message: "Consent withdrawn: the survivor withdrew her authorisation for the crawler, so no notice can be sent for this finding." };
+  }
+  if (state.watchOnly) {
+    // WP22: the case is a watch. Nothing can be sent until she chooses
+    // "Take it down" and signs the full authorisation; the server refuses
+    // with watch_only_consent.
+    return { kind: "blocked", code: "watch_only_consent", message: "Watch only: she has not asked for removal yet. When she chooses \"Take it down\", her watch becomes a case and she signs the full authorisation." };
   }
   if (state.reviewStatus !== "APPROVED") return { kind: "blocked", code: "finding_not_approved", message: "A notice can be prepared only after the finding is approved." };
   if (state.urlsPurged) return { kind: "blocked", code: "finding_expired", message: "The addresses passed the 30-day retention period and were deleted, so no notice can be sent." };

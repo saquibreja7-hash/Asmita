@@ -18,6 +18,7 @@ const db = vi.hoisted(() => {
   return {
     tx,
     crawlConsent: { findMany: fn() },
+    case: { findMany: fn() },
     hashSubmission: { findUnique: fn(), findFirst: fn(), update: fn() },
     crawlFinding: { findMany: fn() },
     findingEmbedding: { findMany: fn(), deleteMany: fn(), create: fn() },
@@ -58,6 +59,10 @@ beforeEach(() => {
   vi.stubEnv("ENABLE_CRAWLER", "true");
   vi.stubEnv("ENABLE_SSCD", "true");
   db.crawlConsent.findMany.mockResolvedValue([{ id: "consent-1", caseId: "case-1", hashSubmissionIds: ["hs-1"], signedAt: new Date("2026-11-01T00:00:00Z") }]);
+  // The pool keeps fingerprints only while the case is open or inside its
+  // re-upload window (watch-and-verify WP24), so the id resolves while the
+  // fixture's case is open.
+  db.case.findMany.mockResolvedValue([{ id: "case-1", status: "OPEN" }]);
   db.hashSubmission.findUnique.mockResolvedValue({ id: "hs-1", caseId: "case-1", crawlPoolId: "fp_1", hashEncrypted: "x", quality: 80, status: "APPROVED", algorithm: "PDQ" });
   db.tx.$queryRaw.mockResolvedValue([{ id: "consent-1" }]);
   db.tx.crawlFinding.findUnique.mockResolvedValue({ id: "cf-1", hashSubmissionId: "hs-1", reviewStatus: "APPROVED" });

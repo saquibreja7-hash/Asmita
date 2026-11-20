@@ -129,7 +129,12 @@
       "check.c2pa.validation.invalid",
       "check.c2pa.validation.untrusted",
       "check.meta.title",
-      "check.google.line"
+      "check.google.line",
+      "case.verification.*",
+      "crawl.watch.*",
+      "start.watch.*",
+      "watch.*",
+      "case.watch.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",

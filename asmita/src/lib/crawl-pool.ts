@@ -3,6 +3,7 @@ import { sha256 } from "@/lib/hash";
 import { crawlMemory } from "@/lib/crawl-store";
 import { sscdEnabled, sscdModelId, sscdModelVersion } from "@/lib/crawler-flags";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import * as store from "@/lib/store";
 
 /*
  * The fingerprint pool the crawler service matches against.
@@ -10,6 +11,9 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * A fingerprint is in the pool only while all of these hold:
  * - an analyst approved it (APPROVED, or DISPATCHED after an advisory went out);
  * - its case has a live crawl authorisation (signed, not withdrawn) that lists it;
+ * - the case is open, or the authorisation's re-upload window is still running
+ *   (watch-and-verify WP24: CrawlConsent.watchUntil, set when the case was
+ *   resolved — crawl-watch.ts);
  * - it has a crawlPoolId, set when that authorisation was signed.
  *
  * The pool lists each fingerprint under its crawlPoolId: random, unrelated to
@@ -42,6 +46,20 @@ export const MAX_POOL_EMBEDDINGS_PER_FINGERPRINT = 16;
 const POOL_STATUSES = ["APPROVED", "DISPATCHED"] as const;
 const PDQ = /^[0-9a-f]{64}$/;
 
+/**
+ * Watch-and-verify WP24: the case statuses under which a live authorisation
+ * keeps her fingerprints in the pool on their own. PARTIALLY_RESOLVED and
+ * ESCALATED are still open — notices are moving and follow-ups run. Once the
+ * case is RESOLVED (or CLOSED, which today only a deletion request does, and
+ * that withdraws the authorisation anyway), only the re-upload window
+ * (`CrawlConsent.watchUntil`) keeps them (crawl-watch.ts).
+ */
+export const OPEN_CASE_STATUSES = ["OPEN", "PARTIALLY_RESOLVED", "ESCALATED"] as const;
+
+export function isCaseOpen(status: string): boolean {
+  return (OPEN_CASE_STATUSES as readonly string[]).includes(status);
+}
+
 export type CrawlPoolSscd = { model: string; version: string; vectors: number[][] };
 export type CrawlPoolImageEntry = { id: string; pdq: string; quality: number; sscd?: CrawlPoolSscd };
 export type CrawlPoolVideoEntry = { id: string; kind: "video"; frames: string[] };
@@ -64,29 +82,69 @@ function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
 }
 
-type Coverage = Map<string, { consentId: string; ids: Set<string> }>;
+type Coverage = Map<string, { consentId: string; ids: Set<string>; watchUntil: Date | null }>;
 
 /** Live consents, as caseId -> the live consent and the ids it covers (one live consent per case). */
 async function liveCoverage(caseIds?: string[]): Promise<Coverage> {
-  let rows: Array<{ id: string; caseId: string; hashSubmissionIds: string[] }>;
+  let rows: Array<{ id: string; caseId: string; hashSubmissionIds: string[]; watchUntil?: Date | null }>;
   if (isDevNoDb()) {
     rows = crawlMemory().consents.filter((c) => !c.withdrawnAt && (!caseIds || caseIds.includes(c.caseId)));
   } else if (usesWorkerKysely()) {
-    let query = getWorkerDb().selectFrom("CrawlConsent").select(["id", "caseId", "hashSubmissionIds"]).where("withdrawnAt", "is", null);
+    let query = getWorkerDb().selectFrom("CrawlConsent").select(["id", "caseId", "hashSubmissionIds", "watchUntil"]).where("withdrawnAt", "is", null);
     if (caseIds) query = query.where("caseId", "in", caseIds.length ? caseIds : [""]);
     rows = await query.execute();
   } else {
     const { db } = await import("@/lib/db");
     rows = await db.crawlConsent.findMany({
       where: { withdrawnAt: null, ...(caseIds ? { caseId: { in: caseIds } } : {}) },
-      select: { id: true, caseId: true, hashSubmissionIds: true },
+      select: { id: true, caseId: true, hashSubmissionIds: true, watchUntil: true },
     });
   }
   const coverage: Coverage = new Map();
   for (const row of rows) {
-    const entry = coverage.get(row.caseId) ?? { consentId: row.id, ids: new Set<string>() };
+    const entry = coverage.get(row.caseId) ?? { consentId: row.id, ids: new Set<string>(), watchUntil: row.watchUntil ?? null };
     for (const id of row.hashSubmissionIds ?? []) entry.ids.add(id);
     coverage.set(row.caseId, entry);
+  }
+  return coverage;
+}
+
+/** The statuses of the given cases, as caseId -> status. */
+async function caseStatuses(caseIds: string[]): Promise<Map<string, string>> {
+  const statuses = new Map<string, string>();
+  if (caseIds.length === 0) return statuses;
+  if (isDevNoDb()) {
+    for (const caseId of caseIds) {
+      const status = store.cases.get(caseId)?.status;
+      if (status) statuses.set(caseId, status);
+    }
+    return statuses;
+  }
+  if (usesWorkerKysely()) {
+    const rows = await getWorkerDb().selectFrom("Case").select(["id", "status"]).where("id", "in", caseIds).execute();
+    for (const row of rows) statuses.set(row.id, row.status);
+    return statuses;
+  }
+  const { db } = await import("@/lib/db");
+  const rows = await db.case.findMany({ where: { id: { in: caseIds } }, select: { id: true, status: true } });
+  for (const row of rows) statuses.set(row.id, row.status);
+  return statuses;
+}
+
+/**
+ * The pool's own rule (watch-and-verify WP24): live consents, further cut to
+ * the cases whose fingerprints the crawler may still be matched against —
+ * either the case is open, or the re-upload window is still running. A
+ * resolved case outside its window leaves the pool, exactly as a withdrawn
+ * authorisation does, without touching the consent itself.
+ */
+async function poolCoverage(caseIds?: string[], now = new Date()): Promise<Coverage> {
+  const coverage = await liveCoverage(caseIds);
+  const statuses = await caseStatuses([...coverage.keys()]);
+  for (const [caseId, entry] of coverage) {
+    const open = isCaseOpen(statuses.get(caseId) ?? "");
+    const inWindow = entry.watchUntil !== null && entry.watchUntil.getTime() > now.getTime();
+    if (!open && !inWindow) coverage.delete(caseId);
   }
   return coverage;
 }
@@ -180,7 +238,7 @@ function videoFramesOf(candidate: Candidate & { crawlPoolId: string }): string[]
 }
 
 export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
-  const coverage = await liveCoverage();
+  const coverage = await poolCoverage(undefined, now);
   const candidates = await fingerprintsByIds([...new Set([...coverage.values()].flatMap((entry) => [...entry.ids]))]);
   // inPool is the type guard, so the filter keeps the narrowed non-null pool id.
   const inPoolCandidates = candidates.filter((candidate): candidate is Candidate & { crawlPoolId: string } => inPool(candidate, coverage));
@@ -240,7 +298,7 @@ export async function buildCrawlPool(now = new Date()): Promise<CrawlPool> {
 export async function resolvePoolFingerprint(poolId: string): Promise<{ hashSubmissionId: string; caseId: string; consentId: string; algorithm: string } | null> {
   const candidate = await fingerprintByPoolId(poolId);
   if (!candidate) return null;
-  const coverage = await liveCoverage([candidate.caseId]);
+  const coverage = await poolCoverage([candidate.caseId]);
   if (!inPool(candidate, coverage)) return null;
   return {
     hashSubmissionId: candidate.id,
@@ -258,32 +316,51 @@ export async function fingerprintStillConsented(caseId: string, hashSubmissionId
 
 /**
  * Whether a live authorisation covers a finding: it lists the matched
- * fingerprint, and the finding was recorded under it. A finding recorded
- * under an earlier authorisation (crawlConsentId) is never covered by a
- * later one; a row from before crawlConsentId existed is covered only if it
- * was first seen after this authorisation was signed. A copy seen again
+ * fingerprint, and the finding was recorded under it or under the watch-only
+ * authorisation this full one replaced at "Take it down" (convertedFromId;
+ * WP22). A finding recorded under an earlier authorisation is never covered
+ * by a later one; a row from before crawlConsentId existed is covered only
+ * if it was first seen after this authorisation was signed. A copy seen again
  * under a new authorisation is a new finding, reviewed from the start.
  */
 export function consentCoversFinding(
-  consent: { id: string; hashSubmissionIds: string[]; signedAt: Date },
+  consent: { id: string; hashSubmissionIds: string[]; signedAt: Date; convertedFromId?: string | null },
   finding: { hashSubmissionId: string; crawlConsentId?: string | null; firstSeenAt: Date },
 ): boolean {
   if (!consent.hashSubmissionIds.includes(finding.hashSubmissionId)) return false;
-  if (finding.crawlConsentId) return finding.crawlConsentId === consent.id;
+  if (finding.crawlConsentId) {
+    return finding.crawlConsentId === consent.id || finding.crawlConsentId === consent.convertedFromId;
+  }
   return consent.signedAt.getTime() <= finding.firstSeenAt.getTime();
 }
 
 /** Whether the live authorisation on the finding's case covers it (consentCoversFinding). */
 export async function findingStillConsented(finding: { caseId: string; hashSubmissionId: string; crawlConsentId?: string | null; firstSeenAt: Date }): Promise<boolean> {
-  let rows: Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date }>;
+  let rows: Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date; convertedFromId?: string | null }>;
   if (isDevNoDb()) {
     rows = crawlMemory().consents.filter((c) => c.caseId === finding.caseId && !c.withdrawnAt);
   } else if (usesWorkerKysely()) {
-    rows = await getWorkerDb().selectFrom("CrawlConsent").select(["id", "hashSubmissionIds", "signedAt"])
+    rows = await getWorkerDb().selectFrom("CrawlConsent").select(["id", "hashSubmissionIds", "signedAt", "convertedFromId"])
       .where("caseId", "=", finding.caseId).where("withdrawnAt", "is", null).execute();
   } else {
     const { db } = await import("@/lib/db");
-    rows = await db.crawlConsent.findMany({ where: { caseId: finding.caseId, withdrawnAt: null }, select: { id: true, hashSubmissionIds: true, signedAt: true } });
+    rows = await db.crawlConsent.findMany({ where: { caseId: finding.caseId, withdrawnAt: null }, select: { id: true, hashSubmissionIds: true, signedAt: true, convertedFromId: true } });
   }
   return rows.some((consent) => consentCoversFinding({ ...consent, signedAt: new Date(consent.signedAt) }, finding));
+}
+
+/**
+ * Whether the case has at least one fingerprint in the pool right now: a
+ * live authorisation that lists an approved fingerprint carrying a pool id
+ * (exactly the inPool rule above), on an open case or inside its re-upload
+ * window. The removal re-check's image-level conclusion relies on this
+ * (watch-and-verify WP23, link-verification.ts): a fetched page proves her
+ * image is gone only while the crawler was actually matching her fingerprints.
+ */
+export async function caseHasPoolFingerprints(caseId: string, now = new Date()): Promise<boolean> {
+  const coverage = await poolCoverage([caseId], now);
+  const entry = coverage.get(caseId);
+  if (!entry || entry.ids.size === 0) return false;
+  const candidates = await fingerprintsByIds([...entry.ids]);
+  return candidates.some((candidate) => inPool(candidate, coverage));
 }

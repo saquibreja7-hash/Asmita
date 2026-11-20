@@ -28,6 +28,24 @@ export type CspOptions = {
   env?: string | undefined;
 };
 
+/** Where browsers POST CSP violation reports (S5). */
+export const CSP_REPORT_PATH = "/api/csp-report";
+/** The Reporting-Endpoints name the CSP report-to directive points at. */
+export const CSP_REPORT_ENDPOINT_NAME = "csp-endpoint";
+/** Value of the Reporting-Endpoints header, kept beside the CSP that names it. */
+export const CSP_REPORTING_ENDPOINTS = `${CSP_REPORT_ENDPOINT_NAME}="${CSP_REPORT_PATH}"`;
+
+/**
+ * Trusted Types, report-only (S6): measuring violations before any
+ * enforcement. Sent as a SEPARATE Content-Security-Policy-Report-Only
+ * header; the enforced policy above never carries this directive.
+ */
+export const TRUSTED_TYPES_REPORT_ONLY = [
+  "require-trusted-types-for 'script'",
+  `report-uri ${CSP_REPORT_PATH}`,
+  `report-to ${CSP_REPORT_ENDPOINT_NAME}`,
+].join("; ");
+
 export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = false, nonce, env = process.env.NODE_ENV }: CspOptions = {}) {
   const isProd = env === "production";
   const isDev = env === "development";
@@ -35,11 +53,14 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = fals
   // the nonce. Without a nonce (API routes, PDFs, and development, where Vite
   // and React's dev tooling also need eval) 'unsafe-inline' stays as before.
   // No 'strict-dynamic': it would also drop the blob: worklet source.
+  // 'report-sample' (S4) makes any blocked script or style attach a short
+  // sample of itself to the violation report.
   const scriptSrc = [
     "'self'",
     isProd && nonce ? `'nonce-${nonce}'` : "'unsafe-inline'",
     ...(isDev ? ["'unsafe-eval'"] : []),
     ...(voice ? ["blob:"] : []),
+    "'report-sample'",
     // WP38: WebAssembly compilation of the first-party C2PA engine. This
     // keyword permits WebAssembly (compile/instantiate) only — it never
     // allows eval of JavaScript strings.
@@ -48,7 +69,7 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = fals
   return [
     "default-src 'self'",
     `script-src ${scriptSrc.join(" ")}`,
-    "style-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' 'report-sample'",
     "img-src 'self' data:",
     // The browser opens the signed voice WebSocket straight to Sarvam; the
     // session route refuses any signed URL on another host.
@@ -70,6 +91,11 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = fals
     "base-uri 'self'",
     "form-action 'self'",
     ...(isProd ? ["upgrade-insecure-requests"] : []),
+    // CSP violation reporting (S5): report-to is the Reporting API target
+    // named in the Reporting-Endpoints header; report-uri is the fallback for
+    // browsers without Reporting API support.
+    `report-uri ${CSP_REPORT_PATH}`,
+    `report-to ${CSP_REPORT_ENDPOINT_NAME}`,
   ].join("; ");
 }
 

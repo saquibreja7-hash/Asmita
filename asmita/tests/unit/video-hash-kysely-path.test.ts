@@ -88,6 +88,9 @@ describe("crawler pool, Kysely path", () => {
     kysely.state.rows.CrawlConsent = [
       { id: "consent-1", caseId: "case-1", hashSubmissionIds: ["hs-img", "hs-vid"] },
     ];
+    // The pool keeps fingerprints only while the case is open or inside its
+    // re-upload window (watch-and-verify WP24), so the case read sees it open.
+    kysely.state.rows.Case = [{ id: "case-1", status: "OPEN" }];
 
     const pool = await buildCrawlPool();
     expect(pool.fingerprints).toEqual([
@@ -111,6 +114,9 @@ describe("crawler pool, Kysely path", () => {
     kysely.state.rows.CrawlConsent = [
       { id: "consent-1", caseId: "case-1", hashSubmissionIds: ["hs-vid"] },
     ];
+    // The pool keeps fingerprints only while the case is open or inside its
+    // re-upload window (watch-and-verify WP24).
+    kysely.state.rows.Case = [{ id: "case-1", status: "OPEN" }];
     expect(await resolvePoolFingerprint("fp_2")).toMatchObject({ hashSubmissionId: "hs-vid", caseId: "case-1" });
   });
 });

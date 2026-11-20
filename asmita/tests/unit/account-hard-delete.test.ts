@@ -28,6 +28,7 @@ const fake = vi.hoisted(() => {
     ["crawlFinding", "caseId", "case", "RESTRICT"],
     ["crawlFinding", "hashSubmissionId", "hashSubmission", "RESTRICT"],
     ["submittedUrl", "crawlFindingId", "crawlFinding", "SET NULL"],
+    ["linkVerification", "submittedUrlId", "submittedUrl", "RESTRICT"],
   ];
 
   function matches(row: Row, where: Where = {}): boolean {
@@ -179,6 +180,10 @@ function seed() {
     ],
     escalation: [{ id: "e1", noticeId: "n1" }],
     urlPortalToken: [{ id: "t1", urlId: "url2" }],
+    linkVerification: [
+      { id: "v1", submittedUrlId: "url1", attempt: 1, outcome: "GONE", checkedAt: due, enqueuedAt: due, dueAt: due },
+      { id: "v2", submittedUrlId: "url1", attempt: 2, outcome: "PENDING", checkedAt: null, enqueuedAt: null, dueAt: due },
+    ],
     hashSubmission: [
       { id: "h1", caseId: "c1", hashEncrypted: "enc:fingerprint-1", hashDigest: "digest-1", crawlPoolId: "fp_pool-1" },
       { id: "h2", caseId: "c1", hashEncrypted: "enc:fingerprint-2", hashDigest: "digest-2", crawlPoolId: null },
@@ -266,6 +271,8 @@ describe("hardDeleteDueUsers (database path)", () => {
     // Crawler authorisations and findings go; kept fingerprints leave the pool.
     expect(fake.tables.crawlConsent.map((r) => r.id)).toEqual(["cc2"]);
     expect(fake.tables.crawlFinding.map((r) => r.id)).toEqual(["cf3"]);
+    // Removal re-checks are her links' rows, so they go with the links.
+    expect(fake.tables.linkVerification).toEqual([]);
     expect(fake.tables.hashSubmission.map((r) => [r.id, r.crawlPoolId])).toEqual([["h1", null], ["h2", null], ["h3", "fp_pool-3"]]);
 
     expect(fake.tables.case.find((c) => c.id === "c1")).toMatchObject({
@@ -308,7 +315,7 @@ describe("hardDeleteDueUsers (database path)", () => {
         removed: {
           cases: 1, links: 2, notices: 2, escalations: 1,
           deliveryProofs: 3, feedback: 1, sessions: 1, otpCodes: 1,
-          crawlFindings: 2, crawlConsents: 1,
+          crawlFindings: 2, crawlConsents: 1, linkVerifications: 2,
         },
         retained: HARD_DELETE_RETAINED,
       },

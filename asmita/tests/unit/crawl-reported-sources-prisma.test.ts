@@ -26,6 +26,7 @@ const db = vi.hoisted(() => {
     hashDispatch: { updateMany: fn() },
     escalation: { deleteMany: fn() },
     urlPortalToken: { deleteMany: fn() },
+    linkVerification: { deleteMany: fn() },
     feedback: { deleteMany: fn() },
     adminAccessLog: { updateMany: fn() },
     sessionToken: { deleteMany: fn() },
@@ -50,7 +51,7 @@ const CONSENT = { id: "consent-1", hashSubmissionIds: ["h1"], signedAt: new Date
 
 const zeroCounts: Array<[Record<string, ReturnType<typeof vi.fn>>, string]> = [
   [db.emailDeliveryProof, "deleteMany"], [db.hashDispatch, "updateMany"], [db.escalation, "deleteMany"],
-  [db.urlPortalToken, "deleteMany"], [db.submittedUrl, "deleteMany"], [db.crawlFinding, "deleteMany"],
+  [db.urlPortalToken, "deleteMany"], [db.linkVerification, "deleteMany"], [db.submittedUrl, "deleteMany"], [db.crawlFinding, "deleteMany"],
   [db.crawlConsent, "deleteMany"], [db.hashSubmission, "updateMany"], [db.feedback, "deleteMany"],
   [db.adminAccessLog, "updateMany"], [db.case, "updateMany"], [db.sessionToken, "deleteMany"],
   [db.otpToken, "deleteMany"], [db.notice, "deleteMany"],
