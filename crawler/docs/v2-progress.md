@@ -974,4 +974,37 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
 
+## Lane merges
+
+### WP65. Merge master into feat/deadline-docs (merge-conflict resolution) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, final run on the committed merge tree).
+
+**What was done**
+
+- The branch's open PR could not merge because master had moved on (crawler v3 WP9–WP16, video WP20/WP21, SSCD WP28, platform partners, the assistant safety review, the web audit, the LCP/font work and the docs/constraints-scope change). A merge of origin/master into `feat/deadline-docs` was started and left one conflicted file, `crawler/README.md` — the only file both sides had edited with overlapping intent.
+- The conflict: this branch (WP27) had documented the app's `CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE` (default 50,000) frontier cap in the Bounded-frontier row; master had meanwhile added crawler v3 WP9 (the probe link stash, conventional sitemap probing), WP10 (the canonical alias cap), WP14 (the soft-404 digest map) and video WP21 (video-sitemap previews) to the same two rows — and an earlier merge inside master had left the **Bounded frontier** and **Deep coverage** rows duplicated (two variants of each).
+- Resolution: one **Bounded frontier** row and one **Deep coverage** row, each carrying the union of every fact from both sides — master's WP4/WP9/WP10/WP14/WP5 structures plus the branch's frontier-cap sentence in the first, master's WP9 probing plus WP21 previews in the second. Every phrase was taken verbatim from the parent commits (nothing retyped); the diff against master is exactly the four duplicated rows becoming the two merged rows.
+- Everything else merged cleanly with no code change. The five files both sides had touched were each checked by hand: root `CLAUDE.md` (master's restructure keeps the branch's crawler-sources sentence), `asmita/prisma/template-seeds.ts` (master's WP28 authorisation sentence and the branch's 24-hour demands sit in different templates), `asmita/tests/unit/notice-template-seeds.test.ts` (master's two new WP28 tests beside the branch's WP26 test), `crawler/docs/v2-progress.md` (both sides' entries kept verbatim by the auto-merge) and `crawler/README.md` itself. `asmita/src/i18n/hi-review-status.json` is valid JSON and exactly the union of both parents' keys (the branch's nine plus master's `machineTranslatedWp48`).
+- No feature work, no code, no test and no behaviour was changed to make the merge pass; nothing was weakened.
+
+**Decisions, recorded per the standing rule**
+
+- Master's duplicated rows were combined rather than kept four-deep: the duplication was an accident of an earlier merge inside master, a safety table stating the same guarantee twice is a defect rather than intent, and the union keeps every documented behaviour from both variants. Within the combined row, WP14's "adds a third" was reworded to "adds one more bounded per-source structure" because the ordinal no longer holds once WP9's probe stash sits in the same row.
+- The pre-existing heading/content misalignment this file already has on master (the WP17 heading with no content under it, WP17's content under the WP9 heading, and so on — residue of earlier lane merges inside master) was left exactly as master has it: reordering another lane's 900 lines is outside this WP and risked losing content. Both sides' entries are present verbatim, which is what this merge had to guarantee.
+
+**Tests** (all run, all passing)
+
+- Final `check.sh` run on the committed merge tree (Node 22): `crawler` — lint, type-check, 58 test files / 628 tests all passed, build ok. `asmita` — lint 0 errors (4 pre-existing warnings, all in master's own untouched files: three in `scripts/translate-faq.mjs`, one in `src/components/QuickExit.tsx`), type-check clean, `prisma validate` ok, 167 test files / 1504 tests all passed.
+
+**Not done or not verified**
+
+- The heading/content misalignment in this file described above is still present (master's state, inherited by the merge).
+- The merge was verified by the full check suite and by reading the five both-sides files; the roughly 200 files that only master changed were taken as-is and are covered by master's own checks plus this run.
+- Nothing was pushed; the merge commit and this entry stay on the branch.
+
+**Deviations from the spec, with reasons**
+
+- None against the crawler spec — no crawler behaviour changed. WP65 itself is a lane instruction that sits outside the spec's work-package list; this entry follows the spec's Reporting section for it.
+
 
