@@ -253,6 +253,11 @@ export function cancelUserDeletion(userId: string) {
   return deactivatedUsers.delete(userId);
 }
 
+// Same text as HARD_DELETE_RETAINED.fingerprints in case-ops.ts (the memory
+// audit names the same retention), pinned by the account-deletion tests.
+const RETAINED_FINGERPRINTS_TEXT =
+  "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool; a video fingerprint's frame list is removed with the erasure, its row keeps the best frame's hash";
+
 export async function hardDeleteDueUsers(now = new Date()) {
   assertDevOrTest();
   const deletedUserIds: string[] = [];
@@ -277,13 +282,20 @@ export async function hardDeleteDueUsers(now = new Date()) {
       }
     }
     eraseCrawlMemoryForCases(erasedCaseIds);
+    // Fingerprints are kept, as on the database path, but a kept video
+    // fingerprint loses its frame list with the erasure (WP17).
+    for (const caseId of erasedCaseIds) {
+      for (const row of globalThis.__asmitaHashStore?.get(caseId) ?? []) {
+        if (row.algorithm === "VPDQ") delete row.videoFrames;
+      }
+    }
     deactivatedUsers.delete(userId);
     deletedUserIds.push(userId);
     await writeAuditLog({
       eventType: "CASE_HARD_DELETED",
       entityType: "User",
       entityId: userId,
-      data: { removed: { cases: caseCount, links }, retained: { fingerprints: "kept so platforms can keep blocking matching images", auditLog: "earlier entries are append-only and unchanged" } },
+      data: { removed: { cases: caseCount, links }, retained: { fingerprints: RETAINED_FINGERPRINTS_TEXT, auditLog: "earlier entries are append-only and unchanged" } },
     });
   }
   return deletedUserIds;
