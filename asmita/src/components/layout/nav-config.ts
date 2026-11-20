@@ -48,7 +48,7 @@ export function navGroups(locale: Locale): NavGroup[] {
       items: [
         { href: "/get-help", label: say("Ways to get help", "मदद के तरीके") },
         { href: "/start", label: say("File a complaint", "शिकायत दर्ज करें") },
-        { href: "/track", label: say("Track your case", "अपना मामला देखें") },
+        { href: "/start", label: say("Track your case", "अपना मामला देखें") },
         { href: "/talk", label: say("Talk to the assistant", "सहायक से बात करें"), reload: true },
         { href: "/check-image", label: t(locale, "nav.checkImage") },
         { href: "/minor-support", label: say("Under 18", "18 से कम उम्र") },
@@ -73,6 +73,7 @@ export function navGroups(locale: Locale): NavGroup[] {
         { href: "/what-we-do", label: say("What we do", "हम क्या करते हैं") },
         { href: "/how-it-works", label: say("How it works", "यह कैसे काम करता है") },
         { href: "/research", label: say("Research", "शोध") },
+        { href: "/for-platforms", label: say("For platforms", "प्लेटफ़ॉर्म के लिए") },
         { href: "/contact", label: say("Contact", "संपर्क") },
         { href: "/privacy", label: t(locale, "nav.privacy") },
       ],

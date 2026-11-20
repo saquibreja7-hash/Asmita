@@ -477,3 +477,60 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - The age radios' legend reuses the existing "How old are you now?" string, visually hidden — no new sentence was added for it.
 - The wrong-code e2e uses "000000" against a random code; the 1-in-a-million collision is accepted (all codes in every test are synthetic).
 - "Forced submit failure shows an alert" is covered by intercepting `POST /api/auth/request-otp` with a 500 on the email step (no database needed), which exercises the shared FormError on a real failure path.
+## Web audit
+
+### WP41. Leave nothing behind on a shared phone (app) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP41 is one of the owner-approved web best-practice audit packages (20 November 2026, Saquib); like the video lane it is defined outside this spec, so this entry records what the audit asked for and what was built. Everything is in `asmita/`; no `crawler/` source changed, so the crawler contract, `crawler/README.md` and the runbook are untouched. The audit-facing record (what changed, decisions, what was not verified) is `asmita/docs/product/web-audit-progress.md`, new in this WP.
+
+**What was built**
+
+- S1 — sign-out now clears the browser, not just the cookies. Both logout routes (`src/app/api/auth/logout/route.ts`, `src/app/api/admin/auth/logout/route.ts`) send `Clear-Site-Data: "cache", "storage"` next to the Set-Cookie expiry, so with the session the browser drops the origin's HTTP cache and its storage — localStorage, sessionStorage, IndexedDB, service worker registrations. The three client sign-out paths — quick exit, the idle sign-out (`QuickExit.tsx`) and `CloseDashboardButton.tsx` — also clear the tab's sessionStorage before `location.replace` (new helper `src/lib/clear-tab-storage.ts`), because the keepalive logout may never finish; that client-side clear is what actually guarantees the submit draft (`asmita_submit_draft`, her typed URLs and hash metadata) and the eligibility answers (`asmita_eligibility`) are gone from the tab. Storage inventory, every key the app holds: those two sessionStorage keys (cleared client-side on every quick exit, idle sign-out and dashboard close, and by both logout routes' header) and the one localStorage key `asmita-admin-shortcuts` (the admin keyboard-shortcut preference, cleared by the admin logout's header). The `asmita_lang` language-preference cookie stays persistent on purpose (decision below).
+- S2 — authenticated HTML pages (`/case/*`, `/my-cases`, `/review-sign`, `/submit`, `/track`, `/admin/*`) are served `Cache-Control: no-store` via `next.config.ts` headers (rules after the catch-all so they win the key). Verified on the production Worker bundle: `scripts/worker-smoke.mjs` now asserts no-store on `/submit`, so vinext honours the override. `QuickExit` also reloads on a back/forward-cache restore (pageshow with `persisted = true`): a bfcache restore puts a frozen, signed-out copy of a page back on screen with everything it held when it was left, including a filled form.
+- S10 — the `asmita_eligible` cookie is a session cookie with no Max-Age (`src/lib/eligibility.ts`): the 24-hour window let a shared phone reopen `/submit` a day later without the age questions. It still lasts the whole browser session, and everything else about it is unchanged (the deletion cookie keeps its Max-Age=0; the server-side read in `(auth)/submit/page.tsx` is untouched).
+
+**Decisions, recorded per the standing rule**
+
+- The audit puts the pageshow listener "in the victim layout"; it lives in `QuickExit` instead — the component the victim layout renders on every signed-in page — because `/submit`, `/register` and `/track` sit in the `(auth)` route group and can hold a filled form behind the same restore. One implementation covers every page that has quick exit, including the pages the audit's own e2e covers.
+- `asmita_lang` (one-year language preference) is left persistent: a UI preference is not case data or signed-in state, and clearing it would flip the site's language for the next visitor of a shared phone. `/register` keeps default caching (pre-session, not in the audit's page list). The admin sign-out button clears nothing client-side (the audit asks for client-side clears on the three survivor paths only; the admin route's header covers the admin UI's storage).
+- No new or changed user-facing string: `en.json`, `hi.json` and `hi-review-status.json` are untouched (audit rule: every new string would need both locales).
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/logout-clear-site-data.test.ts` (4 tests): both routes send `Clear-Site-Data: "cache", "storage"` and expire the session cookies (the admin cookie at both paths it was ever set); a forged logout clears nothing; the eligibility cookie carries no Max-Age while its deletion keeps Max-Age=0.
+- `tests/e2e/quick-exit.spec.ts` +2 tests, both projects: quick exit from a filled `/submit` leaves `sessionStorage` empty and `page.goBack()` brings no form or case data back; a simulated bfcache restore (a synthetic `pageshow` with `persisted = true`, constructible in Chromium — checked) reloads the page, while an ordinary pageshow (`persisted = false`) does not.
+- `scripts/worker-smoke.mjs`: asserts no-store on one authenticated page (`/submit` with the eligibility cookie) and Clear-Site-Data plus cookie expiry on both logout routes.
+- E2E and Worker runs on this machine against a throwaway Postgres 17: the three specs sharing the changed paths (quick-exit, filing, reporting-audit) — 20 runs passed on both projects against the Node dev server (3.9 min); the worker smoke drove the production bundle in workerd and passed with the new assertions. The full Playwright run happens in the separate verify step.
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors (4 pre-existing warnings: three in the untouched `scripts/translate-faq.mjs` and the pre-existing `buttonRef` cleanup warning in `QuickExit.tsx`, present on the parent commit, its line number only moved), type-check clean, `prisma validate` ok, 153 test files / 1254 tests all passed.
+
+**Not done or not verified**
+
+- The full Playwright suite runs in a separate verify step; this lane ran the three specs that share the changed paths plus the worker smoke. No manual testing on a real shared phone was done.
+- A real back/forward-cache restore is not deterministic in a test runner; the e2e simulates it with a synthetic persisted pageshow event (the constructible `PageTransitionEvent` was verified in Chromium first).
+- Clear-Site-Data is processed only on secure origins; production and staging are HTTPS. The client-side clears do not depend on it.
+- The local TCP forwarder and throwaway Postgres used for the e2e and worker-smoke runs are host tooling, outside the repository (as for the video lane); they were deleted before the commit.
+- Root `CLAUDE.md` was not updated (no crawler behaviour changed; protected agent-instruction file).
+
+### WP53. Fix the branch's one Playwright failure: the deletion request's CSRF token (app) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP53 is a repair package for this branch's verify run, defined outside this spec like the other web-audit WPs: the full Playwright run failed one test, `tests/e2e/smoke.spec.ts:80` ("adult dashboard supports add URL, manual resolve, and deletion request, with no broken tools") — after "Schedule deletion" the POST to `/api/account/delete` came back not-ok, the form showed its error line, and no server-side error appears anywhere in the run log. The audit-facing record (what changed, what was not verified, decisions) is `asmita/docs/product/web-audit-progress.md` (WP53 section). No `crawler/` source changed.
+
+**What was built** — `asmita/src/lib/client-csrf.ts` (`csrfFetch`, used by every mutating client call) no longer trusts every `/api/csrf` answer: a non-OK response, or a 200 body without a token, used to leave `token` undefined and send the POST with the literal header `x-csrf-token: undefined` — a silent server-side 403 `csrf_failed`, exactly the failing run's signature. A bad mint is retried once and otherwise rejects without sending anything. Mints are also serialized per tab: two overlapping `csrfFetch`es used to race, and the second mint's `Set-Cookie` could land before the first POST left, invalidating its token — the same silent 403; the queue holds the turn until the POST's `fetch()` has started (when the browser attaches the cookie). `DeleteAccountForm.tsx` now shows its existing error line when the mint fails instead of hanging on "Scheduling…".
+
+**Tests** (all run, all passing)
+
+- New `asmita/tests/unit/client-csrf.test.ts` (6 tests): the fresh token is sent; a non-OK mint is retried once and no garbage token ever leaves; a tokenless 200 body is treated as a failed mint with nothing sent; nothing is sent after two failed mints; concurrent mints are serialized so the second mint waits for the first POST to leave; the queue stays usable after a failed mint. All six fail against the old code (verified by running them against it before applying the fix) and pass against the new code.
+- E2E on this machine against a throwaway Postgres 17: `smoke.spec.ts` + `quick-exit.spec.ts` — 14 passed, including the previously failing dashboard test and every test WP41 added.
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors, type-check clean, `prisma validate` ok, 154 test files / 1260 tests all passed.
+
+**Not done or not verified**
+
+- The failure did not reproduce: eight further full-suite runs on the unchanged code (one traced, three warm, four with a cold `.next`, plus a standalone instrumented twin of the failing test — roughly 1600 token mints logged, every mint/POST pair matched) all passed. The fix addresses the two mechanisms that can physically produce the observed signature (a resolved non-OK POST with a clean server log); which of them fired in the original run cannot be proven after the fact.
+- The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
+- The full Playwright suite runs in the separate verify step.
+
+

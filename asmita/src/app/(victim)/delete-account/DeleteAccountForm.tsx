@@ -20,13 +20,20 @@ export function DeleteAccountForm({ locale }: { locale: Locale }) {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
-    const response = await csrfFetch("/api/account/delete", { method: "POST" });
-    setSubmitting(false);
-    if (response.ok) {
-      setDone(true);
-      setMessage(t(locale, "delete.done.sub"));
-    } else {
+    try {
+      const response = await csrfFetch("/api/account/delete", { method: "POST" });
+      if (response.ok) {
+        setDone(true);
+        setMessage(t(locale, "delete.done.sub"));
+      } else {
+        setMessage(t(locale, "delete.form.error"));
+      }
+    } catch {
+      // The token mint itself failed (offline, server hiccup): the request
+      // never went out. The same honest message, and she can try again.
       setMessage(t(locale, "delete.form.error"));
+    } finally {
+      setSubmitting(false);
     }
   }
 
