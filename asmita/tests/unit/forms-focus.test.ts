@@ -147,6 +147,29 @@ describe("submit form (A7/A8/A9/S12)", () => {
   });
 });
 
+describe("submit form: the tick must survive the settling checks (WP49)", () => {
+  // The declaration checkbox sits below everything that moves on this form.
+  // A render that commits between the tick's mousedown and mouseup moves the
+  // checkbox out from under the pointer, the browser hands the click to
+  // whatever took its place, and the tick silently never lands.
+  it("settles the line checks on the pause alone, with no blur commit", () => {
+    const src = source("src/app/(auth)/submit/SubmitForm.tsx");
+    // The blur of the links box fires at the mousedown of the very click that
+    // blurred it, so its commit always landed inside the click it caused.
+    expect(src).not.toContain("onBlur={() => setCheckedUrls");
+    expect(src).toContain("setTimeout(() => setCheckedUrls(urls), 600)");
+  });
+
+  it("asks the platform question from the links as they stand, not the settled checks", () => {
+    const src = source("src/app/(auth)/submit/SubmitForm.tsx");
+    // While a fingerprint is made the settled checks lag behind what she
+    // typed, so a settled-checks question appeared at the end of the hashing
+    // and vanished when the checks settled — two layout jumps over the
+    // checkbox, the second exactly when the ready text invites the tick.
+    expect(src).toContain("hashedFiles.length > 0 && liveParsedUrls.length === 0");
+  });
+});
+
 describe("review-sign form (A9/A10/A11)", () => {
   it("signs through a form, focuses its heading on the step change", () => {
     const src = source("src/app/(victim)/review-sign/ReviewSignForm.tsx");
