@@ -433,3 +433,40 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+## Web audit
+
+### WP41. Leave nothing behind on a shared phone (app) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP41 is one of the owner-approved web best-practice audit packages (20 November 2026, Saquib); like the video lane it is defined outside this spec, so this entry records what the audit asked for and what was built. Everything is in `asmita/`; no `crawler/` source changed, so the crawler contract, `crawler/README.md` and the runbook are untouched. The audit-facing record (what changed, decisions, what was not verified) is `asmita/docs/product/web-audit-progress.md`, new in this WP.
+
+**What was built**
+
+- S1 — sign-out now clears the browser, not just the cookies. Both logout routes (`src/app/api/auth/logout/route.ts`, `src/app/api/admin/auth/logout/route.ts`) send `Clear-Site-Data: "cache", "storage"` next to the Set-Cookie expiry, so with the session the browser drops the origin's HTTP cache and its storage — localStorage, sessionStorage, IndexedDB, service worker registrations. The three client sign-out paths — quick exit, the idle sign-out (`QuickExit.tsx`) and `CloseDashboardButton.tsx` — also clear the tab's sessionStorage before `location.replace` (new helper `src/lib/clear-tab-storage.ts`), because the keepalive logout may never finish; that client-side clear is what actually guarantees the submit draft (`asmita_submit_draft`, her typed URLs and hash metadata) and the eligibility answers (`asmita_eligibility`) are gone from the tab. Storage inventory, every key the app holds: those two sessionStorage keys (cleared client-side on every quick exit, idle sign-out and dashboard close, and by both logout routes' header) and the one localStorage key `asmita-admin-shortcuts` (the admin keyboard-shortcut preference, cleared by the admin logout's header). The `asmita_lang` language-preference cookie stays persistent on purpose (decision below).
+- S2 — authenticated HTML pages (`/case/*`, `/my-cases`, `/review-sign`, `/submit`, `/track`, `/admin/*`) are served `Cache-Control: no-store` via `next.config.ts` headers (rules after the catch-all so they win the key). Verified on the production Worker bundle: `scripts/worker-smoke.mjs` now asserts no-store on `/submit`, so vinext honours the override. `QuickExit` also reloads on a back/forward-cache restore (pageshow with `persisted = true`): a bfcache restore puts a frozen, signed-out copy of a page back on screen with everything it held when it was left, including a filled form.
+- S10 — the `asmita_eligible` cookie is a session cookie with no Max-Age (`src/lib/eligibility.ts`): the 24-hour window let a shared phone reopen `/submit` a day later without the age questions. It still lasts the whole browser session, and everything else about it is unchanged (the deletion cookie keeps its Max-Age=0; the server-side read in `(auth)/submit/page.tsx` is untouched).
+
+**Decisions, recorded per the standing rule**
+
+- The audit puts the pageshow listener "in the victim layout"; it lives in `QuickExit` instead — the component the victim layout renders on every signed-in page — because `/submit`, `/register` and `/track` sit in the `(auth)` route group and can hold a filled form behind the same restore. One implementation covers every page that has quick exit, including the pages the audit's own e2e covers.
+- `asmita_lang` (one-year language preference) is left persistent: a UI preference is not case data or signed-in state, and clearing it would flip the site's language for the next visitor of a shared phone. `/register` keeps default caching (pre-session, not in the audit's page list). The admin sign-out button clears nothing client-side (the audit asks for client-side clears on the three survivor paths only; the admin route's header covers the admin UI's storage).
+- No new or changed user-facing string: `en.json`, `hi.json` and `hi-review-status.json` are untouched (audit rule: every new string would need both locales).
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/logout-clear-site-data.test.ts` (4 tests): both routes send `Clear-Site-Data: "cache", "storage"` and expire the session cookies (the admin cookie at both paths it was ever set); a forged logout clears nothing; the eligibility cookie carries no Max-Age while its deletion keeps Max-Age=0.
+- `tests/e2e/quick-exit.spec.ts` +2 tests, both projects: quick exit from a filled `/submit` leaves `sessionStorage` empty and `page.goBack()` brings no form or case data back; a simulated bfcache restore (a synthetic `pageshow` with `persisted = true`, constructible in Chromium — checked) reloads the page, while an ordinary pageshow (`persisted = false`) does not.
+- `scripts/worker-smoke.mjs`: asserts no-store on one authenticated page (`/submit` with the eligibility cookie) and Clear-Site-Data plus cookie expiry on both logout routes.
+- E2E and Worker runs on this machine against a throwaway Postgres 17: the three specs sharing the changed paths (quick-exit, filing, reporting-audit) — 20 runs passed on both projects against the Node dev server (3.9 min); the worker smoke drove the production bundle in workerd and passed with the new assertions. The full Playwright run happens in the separate verify step.
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors (4 pre-existing warnings: three in the untouched `scripts/translate-faq.mjs` and the pre-existing `buttonRef` cleanup warning in `QuickExit.tsx`, present on the parent commit, its line number only moved), type-check clean, `prisma validate` ok, 153 test files / 1254 tests all passed.
+
+**Not done or not verified**
+
+- The full Playwright suite runs in a separate verify step; this lane ran the three specs that share the changed paths plus the worker smoke. No manual testing on a real shared phone was done.
+- A real back/forward-cache restore is not deterministic in a test runner; the e2e simulates it with a synthetic persisted pageshow event (the constructible `PageTransitionEvent` was verified in Chromium first).
+- Clear-Site-Data is processed only on secure origins; production and staging are HTTPS. The client-side clears do not depend on it.
+- The local TCP forwarder and throwaway Postgres used for the e2e and worker-smoke runs are host tooling, outside the repository (as for the video lane); they were deleted before the commit.
+- Root `CLAUDE.md` was not updated (no crawler behaviour changed; protected agent-instruction file).
+
+
