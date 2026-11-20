@@ -479,3 +479,26 @@ Web-audit work package (accessibility/forms/performance/security audit, owner-ap
 - The skip link is rendered by `Header.tsx` (the brief named AppShell.tsx and Header.tsx): Header is the first child of the page shell, synchronous, and unit-testable; AppShell is an async server component that cannot be statically rendered in vitest.
 - Under `prefers-reduced-motion: reduce` all transitions and animations are disabled globally (`*, *::before, *::after`), which subsumes the previous per-selector list and is what the flake hardening asked for.
 - The seven new Hindi strings are machine translated by the implementing agent (no Sarvam run for this batch) and are listed in `hi-review-status.json` with the batch and date recorded in `machineTranslated.by`; they await the same native-speaker review as the other machine-translated keys.
+
+## WP55. Merge master into fix/a11y-chrome-css; resolve conflicts — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22). A merge-lane work package, not in `full-crawler-spec.md`: master had moved on (PR #73 video fingerprints WP17–WP19, PR #75 feat/platform-partners, PR #76 constraints scoping) and this branch's PR could not merge. A merge of `origin/master` (e7eebb4) into `fix/a11y-chrome-css` was started and left with conflicts; this WP resolved them, keeping **both** sides' intent, behaviour and tests, and committed the merge (c23ba69, a true merge commit, no rebase).
+
+**What was done**
+
+- Only four files were touched by both sides, so only they could conflict: `asmita/src/i18n/en.json`, `asmita/src/i18n/hi.json`, `asmita/src/i18n/hi-review-status.json` and `crawler/docs/v2-progress.md`. The three JSON conflicts were resolved and staged as unions; this WP verified each one programmatically against both parents (every key path from HEAD and from master present, valid JSON, no duplicate keys, en/hi parity 1005 = 1005, both sides' `machineTranslated` key lists and both sentences in `machineTranslated.by`), then resolved the remaining conflict in `crawler/docs/v2-progress.md`: master's "## Video" section (WP17, WP19, WP18, in master's order) followed by this branch's WP39 entry, byte-for-byte as each side wrote them, nothing dropped from either.
+- No feature work, no test changes: the merge resolution adds no code. The 48 staged files are master's video lane, its docs and migration, plus this branch's already-committed chrome work; each non-i18n file was touched by one side only, so git merged them without conflict.
+- Full checks after the resolution: **ALL CHECKS PASSED** (`check.sh`, Node 22) on the first run — `crawler`: lint, type-check, build, 29 test files / 350 tests; `asmita`: lint (0 errors), type-check, `prisma validate`, 154 test files / 1283 tests. Both sides' suites run together here for the first time (WP39's `site-chrome-a11y` and the hardened accessibility spec's unit siblings beside the video lane's 10 new test files), which is the real proof the merge dropped neither side's behaviour.
+
+**Decisions, recorded per the standing rule**
+
+- The lane arrived with the three i18n JSON conflicts already resolved and staged in the working tree, leaving only `crawler/docs/v2-progress.md` unmerged. The staged resolutions were audited against both parents (key-set union, duplicate detection, value comparison) instead of being redone, and the audit passed on every count; only the progress-doc conflict was resolved by hand here.
+- In `en.json`/`hi.json` the video lane's rewordings of `submit.hash.fileLabel`, `submit.hash.fileHint` and `review.fingerprints.title` win: WP39 added keys only and never touched those three strings, so both sides' intent is the union of keys plus master's wording — the WP39 reading of those strings ("photos") would have dropped the video lane's deliberate broadening.
+- In `v2-progress.md`, master's Video section comes first and the WP39 entry last: the file is an append log in completion order, the video entries reached master (PR #73) before this branch's WP39 was cut, and keeping our branch's entry as the trailing append is the shape the spec's reporting rule expects when the branch later merges back.
+- No rebase, no force push, no push at all: the lane's instructions forbid them; the merge commit carries both parents (0695abf, e7eebb4).
+
+**Not done or not verified**
+
+- The branch was not pushed (forbidden by this WP's brief); the PR's mergeability after this commit is therefore not observed here.
+- The Playwright e2e suite is not part of `check.sh` and was not run in this WP; both sides' e2e specs (`accessibility.spec.ts`, `quick-exit.spec.ts`, `video-hash-flow.spec.ts`) coexist in the tree untouched, compiled by lint/type-check, but were executed only by their lanes' own runs.
+- Nothing else was verified beyond the full checks: no Worker smoke, no real Postgres, no deployment — all pre-existing open items, unchanged by a merge resolution that adds no code.
