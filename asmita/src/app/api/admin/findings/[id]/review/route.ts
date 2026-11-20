@@ -22,6 +22,7 @@ const STATUS: Record<string, number> = {
   consent_withdrawn: 409,
   invalid_url: 409,
   finding_expired: 410,
+  minor_protocol_active: 409,
 };
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
