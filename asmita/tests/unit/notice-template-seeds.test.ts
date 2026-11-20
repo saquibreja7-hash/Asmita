@@ -53,7 +53,16 @@ describe("notice template seeds", () => {
       expect(others).not.toMatch(/\bRule \d|\bsection \d|\bAct, \d{4}/i);
       expect(template.legalCitations).toEqual(["IT Rules 2021, Rule 3(2)(b) - complaint by any person on her behalf; removal within 2 hours"]);
     }
-    expect(seed("CRAWL_REPRESENTATIVE_NOTICE").bodyTemplate).toMatch(/within two \(2\) hours/);
+    expect(seed("CRAWL_REPRESENTATIVE_NOTICE").bodyTemplate).toContain(
+      // WP26 (owner decision, 19 November 2026): the notice asks the platform
+      // to act within twenty-four hours, phrased as Asmita's request, and
+      // still states the Rule's two-hour period as law, so nothing the notice
+      // says misstates Rule 3(2)(b).
+      "within twenty-four (24) hours of receipt of this notice, as Asmita requests",
+    );
+    expect(seed("CRAWL_REPRESENTATIVE_NOTICE").bodyTemplate).toContain(
+      "requires removal within two (2) hours",
+    );
     expect(seed("CRAWL_AUTHORISATION").bodyTemplate).not.toContain("{{url}}");
   });
 
@@ -104,12 +113,24 @@ describe("notice template seeds", () => {
     }
   });
 
-  it("Indian templates demand removal within two hours under Rule 3(2)(b), as amended in 2026", () => {
+  // WP26 (owner decision, 19 November 2026): every sentence that asks the
+  // platform to act now asks for twenty-four hours, phrased as Asmita's
+  // request and never attributed to the Rule. Every sentence that states what
+  // Rule 3(2)(b) requires keeps the amended two-hour period, so the notices
+  // never misstate the law.
+  it("Indian templates state the Rule's two hours and ask for twenty-four (WP26)", () => {
     for (const type of ["IT_RULES_2021", "IT_RULES_AND_DMCA", "HASH_ADVISORY", "ESCALATION_L1"]) {
       const body = seed(type).bodyTemplate;
+      // What the amended Rule 3(2)(b) requires: kept at two hours.
       expect(body).toContain("TWO (2) HOURS");
       expect(body).toContain("Rule 3(2)(b)");
-      expect(body).not.toContain("TWENTY-FOUR (24) HOURS of receipt of this Notice");
+    }
+    for (const type of ["IT_RULES_2021", "IT_RULES_AND_DMCA"]) {
+      const body = seed(type).bodyTemplate;
+      // The demand asks for 24 hours as Asmita's request.
+      expect(body).toContain("within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests");
+      // The 24 hours are never attributed to the Rule.
+      expect(body).not.toMatch(/TWENTY-FOUR \(24\) HOURS[^;.]*as Rule 3\(2\)\(b\)/);
     }
   });
 

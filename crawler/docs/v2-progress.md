@@ -608,6 +608,40 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+## Owner changes
+
+### WP26. 24-hour platform deadline (owner decision, 19 November 2026) — 2026-11-19
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, final run on the committed tree).
+
+**What was built**
+
+- `PLATFORM_DEADLINE_HOURS` (`asmita/src/lib/escalation-ladder.ts`) is 24: the survivor's ladder, the admin case work and every test that derives from it now give the platform 24 hours. Its doc comment states both facts: Rule 3(2)(b) sets 2 hours (G.S.R. 120(E), in force 20.02.2026; PRD Section 4); 24 hours is the period our notices ask for.
+- `asmita/prisma/template-seeds.ts`: every sentence in which a notice asked the platform to act within 2 hours now asks for 24 hours, phrased as Asmita's request and never attributed to the Rule. Changed sentences: the IT_RULES_2021 subject line (twice: `subjectTemplate` and the body's `Subject:` line), demand (i) of IT_RULES_2021, demand (i) of IT_RULES_AND_DMCA, and item 4 of CRAWL_REPRESENTATIVE_NOTICE. Every sentence that states what the Rule requires (the legal-basis paragraphs, the SOP note, the hash advisory's 5.2, the L1 cover's item 2, the FIR package's item 4) keeps the two-hour period, and every `legalCitations` entry is unchanged — no law is misstated and no citation added. The changed sentences are listed before -> after in the commit message for the owner's approval; the seed logic that resets `reviewedByLegal` when text changes is untouched, and nothing sets `reviewedByLegal`.
+- Survivor-facing copy that tells her when the platform must act already said 24 hours everywhere (`home.blockA.*`, `hiw.tl1.body`, `faq.s2.a4` in en.json and their hi.json counterparts, the public home page, resources, chat knowledge, the L2 email), and the ladder's deadline step now computes 24 hours from the constant. No en.json or hi.json value needed a change, so `hi-review-status.json` is untouched and nothing new is machine translated.
+- `asmita/src/app/(public)/for-platforms/page.tsx` does not exist on this branch; there was nothing to leave alone.
+- `asmita/src/lib/escalation-engine.ts`: comment-only update — the L1 cover states the Rule's two-hour deadline, which the representative notice does not demand (it asks for twenty-four hours), so the exclusion rationale still holds and is now worded for the new text.
+- Docs: `asmita/docs/product/escalation-ladder.md` (step 2 is 24h; the Deadlines section states the ask and the Rule's period separately; a WP26 sentence in the Notice redraft section), `asmita/docs/product/crawler-notice-flow.md` (the two stale two-hour sentences), `asmita/docs/legal/notice-redraft-2026-11.md` (a dated **Update 2026-11-19** note: the changed sentences reset `reviewedByLegal` on the next seed and are listed before -> after in the commit for re-review), and the legal pack `asmita/docs/legal/Asmita-Legal-Notices-2026-11.docx` regenerated from the changed templates with `node scripts/generate-notice-pack.mjs` (Node 22 helper), as that memo requires after any template change.
+
+**Decisions, recorded per the standing rule**
+
+- The survivor's copyable appeal wording `ladder.draft.appeal` (en.json and hi.json) keeps "a platform must take all reasonable and practicable measures to remove it within two hours": it is a statement of what Rule 3(2)(b) requires, the legal reviewer confirmed that exact wording on 2026-11-17, and restating the Rule at 24 hours would misstate the law to her and to the Grievance Appellate Committee. The survivor-facing bullet is met by the deadline copy, which says 24 hours; the appeal states the law, like the for-platforms page the WP shields.
+- The IT_RULES_2021 subject line changed to "within twenty-four hours": the subject states the relief the complaint seeks, so it must match the demand; the Rule's own two-hour period is stated in the legal-basis section the subject sits over.
+- In the two demand items, "as Rule 3(2)(b) of the IT Rules requires" became "as Asmita requests (Rule 3(2)(b) of the IT Rules requires it within two hours)": keeping the attribution to the Rule would misstate it (it sets two hours, not twenty-four), and dropping the citation would weaken a legal demand; the parenthetical keeps the citation and both periods correctly attributed. The joint notice's forty-eight-hour parenthetical is unchanged (still true against both periods).
+- The L1 follow-up cover, the FIR package and the hash advisory are unchanged: all their two-hour sentences state what the Rule requires, and none of them asks the platform to act within two hours. The L1 still fires at 24 hours — now exactly when the asked period ends; the engine's own schedule (L1 24h, L2 48h, L3 7 days) was never computed from `PLATFORM_DEADLINE_HOURS` and is unchanged.
+- No crawler behaviour changed, so `crawler/README.md` and the runbook are untouched; root `CLAUDE.md` contains no deadline statement and was not edited.
+
+**Tests** (all run, all passing)
+
+- `tests/unit/notice-template-seeds.test.ts`: the "Indian templates demand removal within two hours" test now asserts the split — statements of the Rule keep "TWO (2) HOURS" in IT_RULES_2021, IT_RULES_AND_DMCA, HASH_ADVISORY and ESCALATION_L1; the two demands ask "within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests"; a negative regex proves the 24 hours are never attributed to the Rule; the CRAWL_REPRESENTATIVE_NOTICE assertions pin the new ask sentence and the Rule's two-hour statement. Each changed assertion carries a WP26 note saying why (owner decision; the law keeps its true period).
+- `tests/unit/escalation-ladder.test.ts` and `tests/unit/escalation-ladder-view.test.ts`: notes only — both assert through the constant, so they move with it; the view test's "two-hour deadline" comment now says 24-hour. `tests/unit/admin-cases.test.ts` needed no change (it derives from the constant).
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors (the 3 pre-existing warnings in an untouched script, no new ones), type-check clean, `prisma validate` ok, 152 test files / 1250 tests all passed.
+
+**Not done or not verified**
+
+- The PDF copy of the legal pack was not regenerated: no docx-to-pdf converter exists on this host, and the 2026-11-17 regeneration updated the docx only, so the PDF already lagged one review cycle. The docx is the artifact counsel reads, per the memo that requires regeneration.
+- `reviewedByLegal` is not set anywhere, so nothing can be sent from the changed templates until the legal reviewer records the review on each row in production. That is the owner's and counsel's step, deliberately outside this WP.
+- The regenerated docx was verified by extracting its text (all five changed sentences present) but not opened in a Word processor.
 
 ## WP52 (Lab lane) — E1 benchmark harness, tools/lab-bench — 2026-11-20
 
@@ -1075,5 +1109,38 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The failure did not reproduce: eight further full-suite runs on the unchanged code (one traced, three warm, four with a cold `.next`, plus a standalone instrumented twin of the failing test — roughly 1600 token mints logged, every mint/POST pair matched) all passed. The fix addresses the two mechanisms that can physically produce the observed signature (a resolved non-OK POST with a clean server log); which of them fired in the original run cannot be proven after the fact.
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
+
+## Lane merges
+
+### WP65. Merge master into feat/deadline-docs (merge-conflict resolution) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, final run on the committed merge tree).
+
+**What was done**
+
+- The branch's open PR could not merge because master had moved on (crawler v3 WP9–WP16, video WP20/WP21, SSCD WP28, platform partners, the assistant safety review, the web audit, the LCP/font work and the docs/constraints-scope change). A merge of origin/master into `feat/deadline-docs` was started and left one conflicted file, `crawler/README.md` — the only file both sides had edited with overlapping intent.
+- The conflict: this branch (WP27) had documented the app's `CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE` (default 50,000) frontier cap in the Bounded-frontier row; master had meanwhile added crawler v3 WP9 (the probe link stash, conventional sitemap probing), WP10 (the canonical alias cap), WP14 (the soft-404 digest map) and video WP21 (video-sitemap previews) to the same two rows — and an earlier merge inside master had left the **Bounded frontier** and **Deep coverage** rows duplicated (two variants of each).
+- Resolution: one **Bounded frontier** row and one **Deep coverage** row, each carrying the union of every fact from both sides — master's WP4/WP9/WP10/WP14/WP5 structures plus the branch's frontier-cap sentence in the first, master's WP9 probing plus WP21 previews in the second. Every phrase was taken verbatim from the parent commits (nothing retyped); the diff against master is exactly the four duplicated rows becoming the two merged rows.
+- Everything else merged cleanly with no code change. The five files both sides had touched were each checked by hand: root `CLAUDE.md` (master's restructure keeps the branch's crawler-sources sentence), `asmita/prisma/template-seeds.ts` (master's WP28 authorisation sentence and the branch's 24-hour demands sit in different templates), `asmita/tests/unit/notice-template-seeds.test.ts` (master's two new WP28 tests beside the branch's WP26 test), `crawler/docs/v2-progress.md` (both sides' entries kept verbatim by the auto-merge) and `crawler/README.md` itself. `asmita/src/i18n/hi-review-status.json` is valid JSON and exactly the union of both parents' keys (the branch's nine plus master's `machineTranslatedWp48`).
+- No feature work, no code, no test and no behaviour was changed to make the merge pass; nothing was weakened.
+
+**Decisions, recorded per the standing rule**
+
+- Master's duplicated rows were combined rather than kept four-deep: the duplication was an accident of an earlier merge inside master, a safety table stating the same guarantee twice is a defect rather than intent, and the union keeps every documented behaviour from both variants. Within the combined row, WP14's "adds a third" was reworded to "adds one more bounded per-source structure" because the ordinal no longer holds once WP9's probe stash sits in the same row.
+- The pre-existing heading/content misalignment this file already has on master (the WP17 heading with no content under it, WP17's content under the WP9 heading, and so on — residue of earlier lane merges inside master) was left exactly as master has it: reordering another lane's 900 lines is outside this WP and risked losing content. Both sides' entries are present verbatim, which is what this merge had to guarantee.
+
+**Tests** (all run, all passing)
+
+- Final `check.sh` run on the committed merge tree (Node 22): `crawler` — lint, type-check, 58 test files / 628 tests all passed, build ok. `asmita` — lint 0 errors (4 pre-existing warnings, all in master's own untouched files: three in `scripts/translate-faq.mjs`, one in `src/components/QuickExit.tsx`), type-check clean, `prisma validate` ok, 167 test files / 1504 tests all passed.
+
+**Not done or not verified**
+
+- The heading/content misalignment in this file described above is still present (master's state, inherited by the merge).
+- The merge was verified by the full check suite and by reading the five both-sides files; the roughly 200 files that only master changed were taken as-is and are covered by master's own checks plus this run.
+- Nothing was pushed; the merge commit and this entry stay on the branch.
+
+**Deviations from the spec, with reasons**
+
+- None against the crawler spec — no crawler behaviour changed. WP65 itself is a lane instruction that sits outside the spec's work-package list; this entry follows the spec's Reporting section for it.
 
 
