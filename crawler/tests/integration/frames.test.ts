@@ -160,7 +160,7 @@ describe("the browser frame and shadow-root gather (crawler v3 WP16)", () => {
   it("logs no URL, hostname, fingerprint or body", () => {
     assertCleanLog(logLines.join("\n"), {
       hostnames: [FRAMES_HOST, SHADOW_HOST, FRAMES_OFF_HOST],
-      hashes: [...fx.allHashes, ...fx.pool.fingerprints.map((f) => f.pdq)],
+      hashes: [...fx.allHashes, ...fx.pool.fingerprints.flatMap((f) => ("pdq" in f ? [f.pdq] : []))],
       secrets: [TEST_KEY],
     });
   });

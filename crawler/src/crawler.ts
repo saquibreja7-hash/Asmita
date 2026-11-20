@@ -72,10 +72,12 @@ import type { Config } from "./config.ts";
 import { userAgentToken } from "./config.ts";
 import { CrawlError, fetchFailureClass, toCrawlError, type ErrorCode } from "./errors.ts";
 import { FindingsSink } from "./findings.ts";
+import { EmbeddingsSink } from "./embeddings.ts";
 import type { Logger } from "./log.ts";
-import { MIN_QUALITY, Matcher } from "./match/matcher.ts";
+import { MIN_QUALITY } from "./match/matcher.ts";
+import { PoolMatcher } from "./match/pool-matcher.ts";
 import { RunMetrics, type SkipReason } from "./metrics.ts";
-import type { ClaimedPage, Finding, FindingResult, Pool, ReportedPage, Source } from "./asmita/client.ts";
+import type { ClaimedPage, EmbeddingItem, EmbeddingResult, Finding, FindingResult, Pool, ReportedPage, Source } from "./asmita/client.ts";
 import { extract } from "./crawl/extract.ts";
 import { HostScheduler, Semaphore } from "./crawl/limits.ts";
 import { ROBOTS_MAX_BYTES, ROBOTS_SITEMAP_CAP, RobotsCache } from "./crawl/robots.ts";
@@ -86,6 +88,8 @@ import { isScriptOnlyStub } from "./crawl/page-redirects.ts";
 import { isGzipBody, parseFeed, parseSitemap, sniffXmlDoc, type XmlDocumentKind } from "./crawl/xml-docs.ts";
 import { BrowserRenderer, type BrowserImage } from "./browser/browser-renderer.ts";
 import type { ImageDecoder } from "./image/decoder-pool.ts";
+import type { SscdDecoder } from "./image/sscd-pool.ts";
+import { isPreviewSpriteUrl } from "./image/sprite.ts";
 import { decode, type FetchOptions, type FetchResult, type SafeFetcher } from "./net/safe-fetch.ts";
 import { checkUrl, type NetPolicy } from "./net/policy.ts";
 import { exitCodeFor } from "./exit-codes.ts";
@@ -99,6 +103,13 @@ export const FLUSH_INTERVAL_MS = 15_000;
 const QUERY_PATH_TRACK_CAP = 4096;
 /** Sources whose query-variant guards are kept across `run --loop` passes. */
 const QUERY_GUARD_SOURCES_CAP = 64;
+/**
+ * WP28: a PDQ match at this distance or above is "borderline" and, when the
+ * fingerprint carries embeddings of confirmed copies, gets an SSCD score for
+ * the analyst (information only — never an automatic accept or reject). The
+ * upper end is the capped pool threshold (31).
+ */
+export const SSCD_BORDERLINE_MIN_DISTANCE = 25;
 
 /**
  * The query-variant guards for a sequence of passes (`run --loop`): one
@@ -114,6 +125,8 @@ export type AsmitaApi = {
   getPool(signal?: AbortSignal): Promise<Pool>;
   getSources(signal?: AbortSignal): Promise<Source[]>;
   postFindings(runId: string, findings: Finding[], signal?: AbortSignal): Promise<FindingResult[]>;
+  /** SSCD embedding offers (WP28); the app keeps only analyst-confirmed ones. */
+  postEmbeddings(runId: string, embeddings: EmbeddingItem[], signal?: AbortSignal): Promise<EmbeddingResult[]>;
   /** The app-backed frontier (WP3). */
   claimFrontier(sourceId: string, limit: number, signal?: AbortSignal): Promise<ClaimedPage[]>;
   reportFrontier(sourceId: string, runId: string, pages: ReportedPage[], signal?: AbortSignal): Promise<number>;
@@ -126,7 +139,15 @@ export type CrawlDeps = {
   api: AsmitaApi;
   fetcher: Pick<SafeFetcher, "fetch">;
   /** Isolated image decoder (child processes). The caller owns its lifecycle. */
-  decoder: Pick<ImageDecoder, "hash" | "stats">;
+  decoder: Pick<ImageDecoder, "hash" | "hashSprite" | "stats">;
+  /**
+   * Isolated SSCD embedder (WP28, child processes). Present only when the
+   * run enables the second layer; every SSCD path in the crawl is a no-op
+   * without it, whatever ENABLE_SSCD says (fail closed: an unwired embedder
+   * means no embedding, never a wrong one). The caller owns its lifecycle.
+   * Stats are optional: tests inject an in-process stand-in with no child.
+   */
+  sscd?: Pick<SscdDecoder, "embed"> & { stats?: SscdDecoder["stats"] };
   log: Logger;
   /** External stop request (signals). */
   stopSignal?: AbortSignal;
@@ -237,6 +258,13 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   const runId = deps.runId ?? randomUUID();
   const log = deps.log.child({ runId });
   const metrics = new RunMetrics(now());
+  /**
+   * The second matching layer (WP28): active only when both the switch is
+   * on and an isolated embedder is wired. Every SSCD path below checks
+   * this; switched off, none of them run and the run is byte-for-byte the
+   * pre-WP28 crawl.
+   */
+  const sscdActive = config.ENABLE_SSCD && deps.sscd !== undefined;
   /** Per-source query-variant guards: shared across --loop passes when given. */
   const queryGuards = deps.queryGuards ?? newQueryGuardStore(config);
   let outcome: RunOutcome = "completed";
@@ -249,12 +277,15 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   // Assigned once the run is loaded; a stop flushes it straight away so
   // findings reach Asmita inside the shutdown window.
   const sinkRef: { current?: FindingsSink } = {};
+  // The embeddings sink (WP28), same treatment when it exists.
+  const embeddingsRef: { current?: EmbeddingsSink } = {};
   const requestStop = (why: RunOutcome) => {
     if (stop.signal.aborted) return;
     outcome = why;
     log.info("run_stopping", { reason: why });
     stop.abort();
     void sinkRef.current?.flush(true, AbortSignal.timeout(config.SHUTDOWN_GRACE_MS + 3_000));
+    void embeddingsRef.current?.flush(true, AbortSignal.timeout(config.SHUTDOWN_GRACE_MS + 3_000));
     const t = setTimeout(() => hard.abort(), config.SHUTDOWN_GRACE_MS);
     t.unref();
   };
@@ -270,6 +301,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       budgetPages: config.MAX_PAGES,
       budgetImages: config.MAX_IMAGES,
       outcome,
+      sscd: sscdActive,
     });
     const problems = {
       unauthorized,
@@ -283,6 +315,9 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     const summary = {
       ...base,
       decoder: { ...deps.decoder.stats },
+      // The SSCD child's counters (WP28): present only while the second
+      // layer is on and the embedder reports them (tests' stand-ins do not).
+      ...(sscdActive && deps.sscd?.stats ? { sscd: { ...deps.sscd.stats } } : {}),
       exitCode,
       problems: {
         unauthorized: Number(problems.unauthorized),
@@ -317,10 +352,30 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     throw err;
   }
 
-  let matcher = new Matcher(pool.fingerprints, pool.threshold);
+  // The whole pool in one matcher (video-fingerprints spec WP20): the image
+  // fingerprints through the brute-force Matcher, plus the video
+  // fingerprints' frame hashes through the multi-index-hashing index. Same
+  // interface, same withdrawal/re-sync/staleness rules, one pool age.
+  // WP28: with the second layer on, the image fingerprints' SSCD embeddings
+  // (confirmed copies) join the same matcher as a third index.
+  let matcher = new PoolMatcher(pool.fingerprints, pool.threshold, sscdActive ? config.SSCD_THRESHOLD : undefined);
   let poolSyncedAt = now();
   metrics.poolSyncs++;
-  log.info("pool_loaded", { poolSize: matcher.size, count: sources.length });
+  /**
+   * WP28: sources the app flagged as having an accepted finding — the
+   * second layer's default scope. Empty while SSCD is off (the app then
+   * serves no `matched` flag at all, and the layer is off anyway).
+   */
+  const matchedSources = new Set(sources.filter((s) => s.matched === true).map((s) => s.id));
+  log.info("pool_loaded", {
+    poolSize: matcher.size,
+    poolVideos: matcher.videoCount,
+    poolFrames: matcher.frameCount,
+    // WP28: the embedding count is logged only while the layer is on, so
+    // the switched-off line is byte-for-byte what it always was.
+    ...(sscdActive ? { poolEmbeddings: matcher.embeddingCount } : {}),
+    count: sources.length,
+  });
 
   // --- progress heartbeat (WP6) ---------------------------------------------
   // Counts only, like every other line: a mid-run view of the same counters
@@ -337,6 +392,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
         hostsReported: metrics.discoveryHostsReported,
         imagesHashed: metrics.imagesHashed,
         matches: metrics.matches,
+        videoMatches: metrics.videoMatches,
         poolSize: matcher.size,
       }),
     config.PROGRESS_LOG_SECONDS * 1000,
@@ -346,15 +402,24 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   // Fingerprints the server stopped accepting during this run stay excluded
   // even if a later pool re-sync still lists them.
   const withdrawnIds = new Set<string>();
-  const sink = new FindingsSink(runId, (r, f, s) => api.postFindings(r, f, s), metrics, log, (id) => {
+  const withdraw = (id: string) => {
     withdrawnIds.add(id);
     matcher.withdraw(id);
     log.info("fingerprint_withdrawn", { poolSize: matcher.size });
-  });
+  };
+  const sink = new FindingsSink(runId, (r, f, s) => api.postFindings(r, f, s), metrics, log, withdraw);
   sinkRef.current = sink;
+  // Embedding offers (WP28): one per PDQ-match sighting, kept only while
+  // the app can still accept them. Same withdrawal rule as findings: a
+  // pool id the server stops accepting leaves the pool at once.
+  const embeddingsSink = new EmbeddingsSink(runId, (r, e, s) => api.postEmbeddings(r, e, s), metrics, log, withdraw);
+  embeddingsRef.current = embeddingsSink;
   // Post whatever is queued every FLUSH_INTERVAL_MS, not only when 50 have
   // accumulated: a typical run has few matches, and a crash must not lose them.
-  const flushTimer = setInterval(() => void sink.flush(true, AbortSignal.timeout(config.API_TIMEOUT_MS * 2)), FLUSH_INTERVAL_MS);
+  const flushTimer = setInterval(() => {
+    void sink.flush(true, AbortSignal.timeout(config.API_TIMEOUT_MS * 2));
+    if (sscdActive) void embeddingsSink.flush(true, AbortSignal.timeout(config.API_TIMEOUT_MS * 2));
+  }, FLUSH_INTERVAL_MS);
   flushTimer.unref();
 
   // --- pool re-sync ---------------------------------------------------------
@@ -364,14 +429,21 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     resyncing = true;
     try {
       const next = await api.getPool(hard.signal);
-      const fresh = new Matcher(next.fingerprints, next.threshold);
+      const fresh = new PoolMatcher(next.fingerprints, next.threshold, sscdActive ? config.SSCD_THRESHOLD : undefined);
       for (const id of withdrawnIds) fresh.withdraw(id);
       const dropped = [...matcher.idSetView()].filter((id) => !fresh.has(id)).length;
       matcher = fresh;
       poolSyncedAt = now();
       metrics.poolSyncs++;
       sink.purge((id) => fresh.has(id));
-      log.info("pool_resynced", { poolSize: fresh.size, dropped });
+      embeddingsSink.purge((id) => fresh.has(id));
+      log.info("pool_resynced", {
+        poolSize: fresh.size,
+        poolVideos: fresh.videoCount,
+        poolFrames: fresh.frameCount,
+        ...(sscdActive ? { poolEmbeddings: fresh.embeddingCount } : {}),
+        dropped,
+      });
     } catch (raw) {
       const err = toCrawlError(raw);
       metrics.poolSyncFailures++;
@@ -390,7 +462,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   resyncTimer.unref();
 
   /** The matcher, or null once the pool is too old to trust. */
-  const currentMatcher = (): Matcher | null => {
+  const currentMatcher = (): PoolMatcher | null => {
     if (now() - poolSyncedAt > POOL_MAX_AGE_MS) {
       requestStop("pool_stale");
       return null;
@@ -518,6 +590,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * The shared tail of both image paths: decode in the isolated child
    * process, match, and queue a finding for every pool hit. `imageUrl` is
    * the address after redirects; `pageUrl` is the page as claimed.
+   *
+   * Video previews (video-fingerprints spec WP21): `preview` marks a
+   * candidate extracted as a video's preview (poster, og:image of an
+   * og:video page, JSON-LD VideoObject thumbnail, video-sitemap
+   * thumbnail, or a preview sprite sheet) so the run can count it; the tag
+   * changes nothing else — a preview is hashed and matched like any image.
+   * `sprite` routes the bytes to the decoder child's tile-splitting mode:
+   * one decode, one hash per tile, every tile matched against the pool.
    */
   const decodeMatchReport = async (
     bytes: Buffer,
@@ -525,14 +605,17 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     pageUrl: URL,
     source: Source,
     deferred?: Finding[],
+    opts: { preview?: boolean; sprite?: boolean } = {},
   ): Promise<boolean> => {
-    let hashed;
+    let hashed: { pdq: string; quality: number } | null = null;
+    let tiles: { pdq: string; quality: number }[] | null = null;
     try {
       // Decoding runs in an isolated child process (decoder-pool.ts) that
-      // receives only these bytes and returns only { pdq, quality }. The
-      // pool and matcher never leave this process. The buffer passed in is
-      // the only copy of the bytes here and is dropped when this returns.
-      hashed = await deps.decoder.hash(bytes);
+      // receives only these bytes and returns only hashes. The pool and
+      // matcher never leave this process. The buffer passed in is the only
+      // copy of the bytes here and is dropped when this returns.
+      if (opts.sprite) tiles = await deps.decoder.hashSprite(bytes);
+      else hashed = await deps.decoder.hash(bytes);
     } catch (raw) {
       const err = toCrawlError(raw);
       record(err.code);
@@ -556,7 +639,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       return false;
     }
     metrics.imagesHashed++;
-    if (hashed.quality < MIN_QUALITY) {
+    if (opts.preview) metrics.videoPreviews++;
+    // One image's hashes to match: a single hash, or a sprite's tiles.
+    if (tiles !== null) metrics.spriteTiles += tiles.length;
+    // The single-image quality floor keeps its own skip counter (WP4
+    // behaviour, pinned by tests); a sprite's low-quality tiles are
+    // dropped inside the loop without one — pieces of an image already
+    // counted as hashed, not image fetches of their own.
+    if (tiles === null && hashed!.quality < MIN_QUALITY) {
       metrics.skip("low_quality");
       return false;
     }
@@ -565,23 +655,127 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       metrics.skip("pool_stale");
       return false;
     }
-    const observedAt = new Date(now()).toISOString();
-    for (const hit of m.match(hashed.pdq)) {
-      const finding: Finding = {
-        fingerprintId: hit.fingerprintId,
-        pageUrl: pageUrl.href,
-        imageUrl,
-        distance: hit.distance,
-        quality: hashed.quality,
-        observedAt,
-        sourceId: source.id,
-      };
-      // A browser render's findings wait until its final URL passed the
-      // scope check (releaseFindings); everything else is queued now.
-      if (deferred) deferred.push(finding);
-      else releaseFindings([finding]);
+    let decoded = false;
+    // WP28: at most one SSCD embedding per image, computed lazily the first
+    // time any SSCD path needs it (the seeding offer, a borderline score,
+    // the second layer) and shared by all of them — a multi-fingerprint
+    // match embeds once, and a refusal (scope or budget) is also decided
+    // once per image, whatever many hits it had. Whole images only — a
+    // sprite tile is a video preview, not a candidate copy, and a video hit
+    // is never seeded or scored.
+    let sscdVector: number[] | null = null;
+    let sscdEvaluated = false;
+    const embedOnce = async (): Promise<number[] | null> => {
+      if (sscdEvaluated) return sscdVector;
+      sscdEvaluated = true;
+      if (deps.sscd === undefined) return null;
+      // One scope gate for every SSCD inference on a source (ADR 008): a
+      // confirmed finding's own source always carries the matched flag, so
+      // the seeding loses nothing by it.
+      if (config.SSCD_SCOPE === "matched_sources" && !matchedSources.has(source.id)) {
+        metrics.sscdSkippedScope++;
+        return null;
+      }
+      if (metrics.sscdInferences >= config.SSCD_MAX_PER_RUN) {
+        metrics.sscdSkippedBudget++;
+        return null;
+      }
+      metrics.sscdInferences++;
+      try {
+        sscdVector = await deps.sscd.embed(bytes);
+      } catch (raw) {
+        record(toCrawlError(raw).code);
+      }
+      return sscdVector;
+    };
+    let anyHits = false;
+    for (const h of tiles ?? [hashed!]) {
+      if (h.quality < MIN_QUALITY) continue;
+      decoded = true;
+      const observedAt = new Date(now()).toISOString();
+      const hits = m.match(h.pdq);
+      anyHits ||= hits.length > 0;
+      for (const hit of hits) {
+        // Video matches (WP20): the image — or this tile of a preview
+        // sprite sheet (WP21) — sits within the threshold of a frame of a
+        // survivor video: the thumbnail clause of the video match rule.
+        // Same finding contract as an image hit: the fingerprint id is the
+        // video submission's pool id, and a person reviews it.
+        if (hit.kind === "video") metrics.videoMatches++;
+        // WP28: while SSCD is on, findings carry the layer that matched.
+        // Off, the wire is exactly what it always was (no method field).
+        const finding: Finding = {
+          fingerprintId: hit.fingerprintId,
+          pageUrl: pageUrl.href,
+          imageUrl,
+          ...(sscdActive ? { method: hit.kind === "video" ? ("vpdq" as const) : ("pdq" as const) } : {}),
+          distance: hit.distance,
+          quality: h.quality,
+          observedAt,
+          sourceId: source.id,
+        };
+        if (sscdActive && hit.kind === "image") {
+          const vector = await embedOnce();
+          if (vector !== null) {
+            // Borderline PDQ matches (distance 25..31): an SSCD score
+            // against this fingerprint's confirmed copies, shown to the
+            // analyst — information for the reviewer, never an automatic
+            // accept or reject.
+            if (hit.distance >= SSCD_BORDERLINE_MIN_DISTANCE && m.hasEmbeddings(hit.fingerprintId)) {
+              const score = m.embeddingScore(hit.fingerprintId, vector);
+              if (score !== null) finding.sscdSimilarity = Math.round(score * 10_000) / 10_000;
+            }
+            // Seeding (ADR 008): embed the matched image while its bytes
+            // are still held and offer the vector; the app keeps it only
+            // when the finding at this exact location is analyst-confirmed.
+            // Repeats are deduplicated here and idempotent server-side.
+            embeddingsSink.add({
+              fingerprintId: hit.fingerprintId,
+              pageUrl: pageUrl.href,
+              imageUrl,
+              model: config.SSCD_MODEL_ID,
+              version: config.SSCD_MODEL_VERSION,
+              vector,
+            });
+          }
+        }
+        // A browser render's findings wait until its final URL passed the
+        // scope check (releaseFindings); everything else is queued now.
+        // releaseFindings keeps one finding per fingerprint and image
+        // address, so several tiles of one sprite hitting the same video
+        // collapse into that one finding (best distance first).
+        if (deferred) deferred.push(finding);
+        else releaseFindings([finding]);
+      }
     }
-    return true;
+    // The second layer (WP28): an image PDQ did not match — no image and no
+    // video hit — is compared with the confirmed copies' embeddings, on the
+    // scope and budget embedOnce enforces. A hit above the threshold
+    // becomes a finding an analyst reviews, exactly like a PDQ hit.
+    if (sscdActive && tiles === null && decoded && !anyHits && m.embeddingCount > 0) {
+      const vector = await embedOnce();
+      if (vector !== null) {
+        for (const hit of m.matchEmbeddings(vector)) {
+          metrics.sscdMatches++;
+          const finding: Finding = {
+            fingerprintId: hit.fingerprintId,
+            pageUrl: pageUrl.href,
+            imageUrl,
+            method: "sscd",
+            sscdSimilarity: Math.round(hit.similarity * 10_000) / 10_000,
+            quality: hashed!.quality,
+            observedAt: new Date(now()).toISOString(),
+            sourceId: source.id,
+          };
+          if (deferred) deferred.push(finding);
+          else releaseFindings([finding]);
+        }
+      }
+    }
+    // True whenever the bytes decoded into at least one hash at or above
+    // the quality floor: that is what "the host returned an image" means
+    // to the off-site host caps, matches or not.
+    return decoded;
   };
 
   /** Queue findings for delivery, once per fingerprint and image address. */
@@ -652,7 +846,13 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     seenImages.add(urlKey(img.url));
     metrics.imagesSeen++;
     if (offScope) metrics.imagesOffHost++;
-    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source, deferred);
+    // A preview sprite sheet (WP21) is recognised by its address whatever
+    // path delivered the bytes: the intercepted response of a rendered page
+    // goes through the same tile-splitting decoder call. The markup-level
+    // "video preview" tag does not cross the render boundary (it feeds a
+    // counter only); the sprite name is visible on the address itself.
+    const sprite = isPreviewSpriteUrl(img.url);
+    const ok = await decodeMatchReport(img.bytes, img.url.href, pageUrl, source, deferred, { preview: sprite, sprite });
     if (offScope) {
       if (ok) {
         failedOffHosts.delete(host);
@@ -675,7 +875,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
    * (MAX_OFFSITE_HOST_FAILURES). Images of one source are processed one at a
    * time (crawlSource awaits each), so these sets need no reservation.
    */
-  const processImage = async (img: URL, pageUrl: URL, ctx: SourceCtx): Promise<void> => {
+  const processImage = async (img: URL, pageUrl: URL, ctx: SourceCtx, preview = false): Promise<void> => {
     const { source, scopeHost, offHosts, failedOffHosts } = ctx;
     if (!inScope(pageUrl, scopeHost)) {
       // Unreachable by construction; refuse rather than fetch on a bug.
@@ -757,10 +957,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     }
     // The host that served the image now counts against the cap.
     settleHosts(res.url.hostname);
+    // A preview sprite sheet (WP21) is recognised by its address, the
+    // candidate's or the one that served it after redirects; a sprite is
+    // a video preview candidate wherever the page offered it.
+    const sprite = isPreviewSpriteUrl(img) || isPreviewSpriteUrl(res.url);
     // The image is reported at the address it was actually fetched from
     // (after redirects); mark that address seen too (already done above) and
     // run the shared decode -> match -> report tail.
-    await decodeMatchReport(res.body, res.url.href, pageUrl, source);
+    await decodeMatchReport(res.body, res.url.href, pageUrl, source, undefined, { preview: preview || sprite, sprite });
   };
 
   // --- per source -----------------------------------------------------------
@@ -925,9 +1129,11 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   /**
    * A claimed page that answered with a sitemap or feed document (WP4).
    * Sitemap <loc> pages, index children and feed entries become frontier
-   * rows; image sitemap <image:loc> candidates are hashed right away,
-   * attributed to their page (the <loc>), which must be in scope like any
-   * page. Returns the entry's links; bounded by the caps inside.
+   * rows; image sitemap <image:loc> candidates and video-sitemap
+   * <video:thumbnail_loc> preview thumbnails (video-fingerprints spec
+   * WP21, tagged "video preview") are hashed right away, attributed to
+   * their page (the <loc>), which must be in scope like any page.
+   * Returns the entry's links; bounded by the caps inside.
    */
   const xmlLinks = async (ctx: SourceCtx, docUrl: URL, body: Buffer, kind: XmlDocumentKind, depth: number): Promise<ReportedPage["links"]> => {
     const links: ReportedPage["links"] = [];
@@ -992,9 +1198,16 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
           // The image belongs to its page: the page must be in scope (and
           // not obvious non-content) for the image to be a candidate.
           if (!inScope(p.loc, ctx.scopeHost) || isNonContentUrl(p.loc)) continue;
+          // Image-sitemap entries (WP4) and video-sitemap preview
+          // thumbnails (WP21), both hashed for their page; the thumbnail
+          // carries the "video preview" tag.
           for (const image of p.images) {
             if (stop.signal.aborted) break;
             await processImage(image, p.loc, ctx);
+          }
+          for (const thumb of p.videoThumbnails) {
+            if (stop.signal.aborted) break;
+            await processImage(thumb, p.loc, ctx, true);
           }
         }
       }
@@ -1369,12 +1582,14 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
       };
     }
 
-    // Static path: images from the HTML, links from the HTML.
+    // Static path: images from the HTML, links from the HTML. A candidate
+    // the extractor tagged "video preview" (WP21) carries the tag into the
+    // shared tail, where it is counted and — for a sprite address — split.
     recordExtraction(ex);
     for (const img of ex.images) {
       if (stop.signal.aborted) break;
       // pageUrl is the page address as claimed (before any redirect).
-      await processImage(img, url, ctx);
+      await processImage(img, url, ctx, ex.videoPreviews.has(urlKey(img)));
     }
     if (stop.signal.aborted) {
       // The run stopped mid-page (its remaining images were skipped): drop
@@ -1495,9 +1710,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     };
 
     while (!stop.signal.aborted && !reportBroken) {
-      if (sink.disabled || sink.unauthorized) {
-        if (sink.unauthorized) unauthorized = true;
-        requestStop(sink.disabled ? "disabled" : "unauthorized");
+      const sinkDown = sink.disabled || sink.unauthorized || (sscdActive && (embeddingsSink.disabled || embeddingsSink.unauthorized));
+      if (sinkDown) {
+        if (sink.unauthorized || (sscdActive && embeddingsSink.unauthorized)) unauthorized = true;
+        requestStop(sink.disabled || (sscdActive && embeddingsSink.disabled) ? "disabled" : "unauthorized");
         break;
       }
       if (metrics.pagesAttempted >= config.MAX_PAGES) {
@@ -1625,12 +1841,18 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
   // Final flush deadline: short after a signal (the platform kills the
   // process soon after SIGTERM), longer for a normal end of run.
   const flushDeadline = AbortSignal.timeout((outcome as RunOutcome) === "stopped" ? 3_000 : config.API_TIMEOUT_MS * 2);
-  await sink.flush(true, flushDeadline);
+  const finalFlush = async () => {
+    await sink.flush(true, flushDeadline);
+    if (sscdActive) await embeddingsSink.flush(true, flushDeadline);
+  };
+  await finalFlush();
   sink.finish();
+  // Undelivered embedding offers (WP28): a count for the summary, never a vector.
+  if (sscdActive) metrics.sscdEmbeddingsUnsent = embeddingsSink.finish();
   cleanup();
   // The final flush may be what discovers a switch-off or a revoked key.
-  if (sink.disabled) outcome = "disabled";
-  if (sink.unauthorized) {
+  if (sink.disabled || (sscdActive && embeddingsSink.disabled)) outcome = "disabled";
+  if (sink.unauthorized || (sscdActive && embeddingsSink.unauthorized)) {
     unauthorized = true;
     outcome = "unauthorized";
   }

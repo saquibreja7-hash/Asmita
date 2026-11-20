@@ -19,10 +19,19 @@ export function CopyDraft({ label, copy, copied, text }: { label: string; copy: 
     <div>
       <div className="flex items-center justify-between gap-3">
         <p className="font-medium text-[var(--ink)]">{label}</p>
-        <button type="button" onClick={onCopy} className="!text-sm text-[var(--brand-strong)] underline underline-offset-4">
-          <span aria-live="polite">{done ? copied : copy}</span>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="inline-flex min-h-[44px] items-center !text-sm text-[var(--brand-strong)] underline underline-offset-4"
+        >
+          {done ? copied : copy}
         </button>
       </div>
+      {/* Announce the copy result from outside the button: a live region
+          inside the activated element is not reliably announced. */}
+      <span aria-live="polite" className="sr-only">
+        {done ? copied : ""}
+      </span>
       <textarea
         readOnly
         value={text}

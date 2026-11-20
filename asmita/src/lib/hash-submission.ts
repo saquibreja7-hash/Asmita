@@ -9,12 +9,14 @@ function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
 }
 
-// In-memory hash store for dev/test.
+// In-memory hash store for dev/test. A stored row carries the video frame
+// list (the JSON string the database keeps encrypted); it never leaves the
+// store: every caller gets the display projection below.
 declare global {
    
-  var __asmitaHashStore: Map<string, DisplayHashSubmission[]> | undefined;
+  var __asmitaHashStore: Map<string, StoredHashSubmission[]> | undefined;
 }
-function devHashStore(): Map<string, DisplayHashSubmission[]> {
+function devHashStore(): Map<string, StoredHashSubmission[]> {
   globalThis.__asmitaHashStore ??= new Map();
   return globalThis.__asmitaHashStore;
 }
@@ -26,11 +28,26 @@ function devHashStore(): Map<string, DisplayHashSubmission[]> {
 export const PDQ_HASH_PATTERN = /^[0-9a-f]{64}$/i;
 export const LOW_QUALITY_THRESHOLD = 50;
 export const MAX_HASHES_PER_SUBMISSION = 10;
+// Video fingerprints (video-fingerprints spec, "The method"): a video is
+// sampled at one frame per second and a video counts as one item.
+export const MAX_VIDEO_FRAMES = 1000;
+export const MAX_VIDEO_DURATION_SEC = 3600;
 const MAX_CLIENT_VERSION_LENGTH = 50;
 
 export type HashPayloadItem = {
   hash: string;
   quality: number;
+  clientVersion?: string;
+};
+
+/** One sampled frame of a video: its PDQ hash, quality and the playback second. */
+export type VideoFrameItem = { hash: string; quality: number; t: number };
+
+/** A video fingerprint item: frame hashes only, never video bytes (spec rule 1). */
+export type VideoPayloadItem = {
+  kind: "video";
+  frames: VideoFrameItem[];
+  durationSec: number;
   clientVersion?: string;
 };
 
@@ -67,6 +84,70 @@ export function validateHashItem(item: HashPayloadItem): HashValidationResult {
   };
 }
 
+export type VideoValidationResult =
+  | {
+      ok: true;
+      frames: VideoFrameItem[];
+      durationSec: number;
+      clientVersion: string | null;
+      /** The frame whose hash and quality are stored on the row (hashEncrypted / quality). */
+      bestFrame: { hash: string; quality: number };
+      /** sha256 of the sorted unique frame hashes, so a re-upload dedups. */
+      hashDigest: string;
+      lowQuality: boolean;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Validates one client-submitted video item. Every frame hash gets the same
+ * media-smuggling defence as an image hash: a frame is a 256-bit hex string
+ * and nothing else. The video itself never reaches the server.
+ */
+export function validateVideoItem(item: VideoPayloadItem): VideoValidationResult {
+  if (!Array.isArray(item.frames) || item.frames.length === 0) {
+    return { ok: false, error: "no_frames" };
+  }
+  if (item.frames.length > MAX_VIDEO_FRAMES) {
+    return { ok: false, error: "too_many_frames" };
+  }
+  if (!Number.isInteger(item.durationSec) || item.durationSec < 1 || item.durationSec > MAX_VIDEO_DURATION_SEC) {
+    return { ok: false, error: "invalid_duration" };
+  }
+  const frames: VideoFrameItem[] = [];
+  for (const frame of item.frames) {
+    const raw = typeof frame.hash === "string" ? frame.hash.trim() : "";
+    if (/^data:/i.test(raw) || raw.includes(",") || raw.includes("/") || raw.includes("+")) {
+      return { ok: false, error: "media_payload_rejected" };
+    }
+    if (!PDQ_HASH_PATTERN.test(raw)) {
+      return { ok: false, error: "invalid_hash_format" };
+    }
+    if (!Number.isInteger(frame.quality) || frame.quality < 0 || frame.quality > 100) {
+      return { ok: false, error: "invalid_quality" };
+    }
+    if (!Number.isInteger(frame.t) || frame.t < 0 || frame.t > MAX_VIDEO_DURATION_SEC) {
+      return { ok: false, error: "invalid_frame_time" };
+    }
+    frames.push({ hash: raw.toLowerCase(), quality: frame.quality, t: frame.t });
+  }
+  // Highest-quality frame wins; a tie keeps the earliest (deterministic).
+  const best = frames.reduce((acc, frame) => (frame.quality > acc.quality ? frame : acc), frames[0]);
+  const hashDigest = sha256([...new Set(frames.map((frame) => frame.hash))].sort().join("\n"));
+  const clientVersion =
+    typeof item.clientVersion === "string" && item.clientVersion.length <= MAX_CLIENT_VERSION_LENGTH
+      ? item.clientVersion
+      : null;
+  return {
+    ok: true,
+    frames,
+    durationSec: item.durationSec,
+    clientVersion,
+    bestFrame: { hash: best.hash, quality: best.quality },
+    hashDigest,
+    lowQuality: best.quality < LOW_QUALITY_THRESHOLD,
+  };
+}
+
 export type DisplayHashSubmission = {
   id: string;
   algorithm: string;
@@ -76,7 +157,41 @@ export type DisplayHashSubmission = {
   flaggedForReview: boolean;
   flagReason: string | null;
   submittedAt: string;
+  /** Video only (VPDQ): kept frame count and the video's duration in seconds. */
+  videoFrameCount: number | null;
+  videoDurationSec: number | null;
 };
+
+/** A dev-store row: a display row plus the video frame list (never displayed). */
+type StoredHashSubmission = DisplayHashSubmission & { videoFrames?: string };
+
+/** The stored row as every caller sees it: display fields only, never frames. */
+function displayOf(row: StoredHashSubmission): DisplayHashSubmission {
+  return {
+    id: row.id,
+    algorithm: row.algorithm,
+    hashDigest: row.hashDigest,
+    quality: row.quality,
+    status: row.status,
+    flaggedForReview: row.flaggedForReview,
+    flagReason: row.flagReason,
+    submittedAt: row.submittedAt,
+    videoFrameCount: row.videoFrameCount ?? null,
+    videoDurationSec: row.videoDurationSec ?? null,
+  };
+}
+
+/**
+ * How an admin page names a video fingerprint: "Video · 12 frames · 1:05"
+ * (video-fingerprints spec WP17). Null for an image fingerprint.
+ */
+export function videoFingerprintLabel(videoFrameCount: number | null, videoDurationSec: number | null): string | null {
+  if (videoFrameCount === null) return null;
+  const frames = `${videoFrameCount} frame${videoFrameCount === 1 ? "" : "s"}`;
+  const duration = videoDurationSec ?? 0;
+  const label = `${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}`;
+  return `Video · ${frames} · ${label}`;
+}
 
 export type AddHashResult =
   | { ok: false; error: string }
@@ -92,6 +207,8 @@ function toDisplay(record: {
   flaggedForReview: boolean;
   flagReason: string | null;
   submittedAt: Date;
+  videoFrameCount?: number | null;
+  videoDurationSec?: number | null;
 }): DisplayHashSubmission {
   return {
     id: record.id,
@@ -102,6 +219,8 @@ function toDisplay(record: {
     flaggedForReview: record.flaggedForReview,
     flagReason: record.flagReason,
     submittedAt: record.submittedAt.toISOString(),
+    videoFrameCount: record.videoFrameCount ?? null,
+    videoDurationSec: record.videoDurationSec ?? null,
   };
 }
 
@@ -142,9 +261,14 @@ export async function recordChosenAdvisoryPlatforms(caseId: string, platformIds:
   await db.case.updateMany({ where: { id: caseId, signedHashAdvisoryPdf: null }, data: { hashAdvisoryPlatformIds: merged } });
 }
 
+/** Whether this submission item is a video fingerprint (spec WP17). */
+function isVideoItem(item: HashPayloadItem | VideoPayloadItem): item is VideoPayloadItem {
+  return "kind" in item && item.kind === "video";
+}
+
 export async function addHashesToCase(
   caseId: string,
-  items: HashPayloadItem[],
+  items: Array<HashPayloadItem | VideoPayloadItem>,
   options?: { flagReasons?: string[]; requestedPlatformId?: string },
 ): Promise<AddHashResult[]> {
   if (isDevNoDb()) {
@@ -152,21 +276,44 @@ export async function addHashesToCase(
     const existing = devStore.get(caseId) ?? [];
     const results: AddHashResult[] = [];
     for (const item of items.slice(0, MAX_HASHES_PER_SUBMISSION)) {
+      // One video fingerprint is one item, exactly like one image hash.
+      if (isVideoItem(item)) {
+        const validated = validateVideoItem(item);
+        if (!validated.ok) { results.push({ ok: false, error: validated.error }); continue; }
+        const dup = existing.find((s) => s.hashDigest === validated.hashDigest);
+        if (dup) { results.push({ ok: true, duplicate: true, submission: displayOf(dup) }); continue; }
+        const sub: StoredHashSubmission = {
+          id: randomUUID(), algorithm: "VPDQ", hashDigest: validated.hashDigest,
+          quality: validated.bestFrame.quality,
+          status: "PENDING_REVIEW",
+          flaggedForReview: validated.lowQuality,
+          flagReason: validated.lowQuality ? "low_pdq_quality" : null,
+          submittedAt: new Date().toISOString(),
+          videoFrameCount: validated.frames.length,
+          videoDurationSec: validated.durationSec,
+          videoFrames: JSON.stringify(validated.frames),
+        };
+        existing.push(sub);
+        results.push({ ok: true, duplicate: false, submission: displayOf(sub) });
+        continue;
+      }
       const validated = validateHashItem(item);
       if (!validated.ok) { results.push({ ok: false, error: validated.error }); continue; }
       const hashDigest = sha256(validated.hash);
       const dup = existing.find((s) => s.hashDigest === hashDigest);
-      if (dup) { results.push({ ok: true, duplicate: true, submission: dup }); continue; }
-      const sub: DisplayHashSubmission = {
+      if (dup) { results.push({ ok: true, duplicate: true, submission: displayOf(dup) }); continue; }
+      const sub: StoredHashSubmission = {
         id: randomUUID(), algorithm: "PDQ", hashDigest,
         quality: validated.quality,
         status: "PENDING_REVIEW",
         flaggedForReview: validated.lowQuality,
         flagReason: validated.lowQuality ? "low_pdq_quality" : null,
         submittedAt: new Date().toISOString(),
+        videoFrameCount: null,
+        videoDurationSec: null,
       };
       existing.push(sub);
-      results.push({ ok: true, duplicate: false, submission: sub });
+      results.push({ ok: true, duplicate: false, submission: displayOf(sub) });
     }
     devStore.set(caseId, existing);
     await writeAuditLog({ eventType: "HASH_SUBMITTED", entityType: "Case", entityId: caseId, data: { accepted: results.filter((r) => r.ok).length } });
@@ -176,6 +323,45 @@ export async function addHashesToCase(
   const results: AddHashResult[] = [];
 
   for (const item of items.slice(0, MAX_HASHES_PER_SUBMISSION)) {
+    // One video fingerprint is one item, exactly like one image hash.
+    if (isVideoItem(item)) {
+      const validated = validateVideoItem(item);
+      if (!validated.ok) {
+        results.push({ ok: false, error: validated.error });
+        continue;
+      }
+
+      const existing = await db.hashSubmission.findFirst({ where: { caseId, hashDigest: validated.hashDigest } });
+      if (existing) {
+        results.push({ ok: true, duplicate: true, submission: toDisplay(existing) });
+        continue;
+      }
+
+      const flagReasons = [
+        ...(options?.flagReasons ?? []),
+        ...(validated.lowQuality ? ["low_pdq_quality"] : []),
+      ];
+      const created = await db.hashSubmission.create({
+        data: {
+          caseId,
+          algorithm: "VPDQ",
+          hashEncrypted: encryptField(validated.bestFrame.hash),
+          hashDigest: validated.hashDigest,
+          quality: validated.bestFrame.quality,
+          videoFramesEncrypted: encryptField(JSON.stringify(validated.frames)),
+          videoFrameCount: validated.frames.length,
+          videoDurationSec: validated.durationSec,
+          clientVersion: validated.clientVersion,
+          status: "PENDING_REVIEW",
+          flaggedForReview: validated.lowQuality,
+          flagReason: flagReasons.length ? flagReasons.join(",") : null,
+          requestedPlatformId: options?.requestedPlatformId ?? null,
+        },
+      });
+      results.push({ ok: true, duplicate: false, submission: toDisplay(created) });
+      continue;
+    }
+
     const validated = validateHashItem(item);
     if (!validated.ok) {
       results.push({ ok: false, error: validated.error });
@@ -221,12 +407,21 @@ export async function addHashesToCase(
 }
 
 export async function listHashesForCase(caseId: string): Promise<DisplayHashSubmission[]> {
-  if (isDevNoDb()) return devHashStore().get(caseId) ?? [];
+  if (isDevNoDb()) return (devHashStore().get(caseId) ?? []).map(displayOf);
   const records = await db.hashSubmission.findMany({
     where: { caseId },
     orderBy: { submittedAt: "asc" },
   });
   return records.map(toDisplay);
+}
+
+/**
+ * Memory path only: forgets the case's dev hash-store records. Used by
+ * stop-watching (WP22), whose database paths delete the HashSubmission rows
+ * themselves (src/lib/watch-ops.ts).
+ */
+export function clearMemoryHashesForCase(caseId: string) {
+  if (isDevNoDb()) devHashStore().delete(caseId);
 }
 
 export type HashReviewQueueRow = DisplayHashSubmission & {
@@ -367,6 +562,18 @@ export async function reviewHashSubmission(input: {
       reviewedById: input.reviewerId ?? null,
     },
   });
+
+  if (input.decision === "reject") {
+    // A rejected fingerprint's SSCD embeddings go at once (ADR 008, WP28):
+    // the pool stops serving them on the next build. Best-effort only — the
+    // rejection is already committed and must never fail because of this.
+    try {
+      const { deleteEmbeddingsForSubmission } = await import("@/lib/crawl-embeddings");
+      await deleteEmbeddingsForSubmission(input.hashSubmissionId);
+    } catch {
+      console.error("crawl_embedding_rejection_cleanup_failed");
+    }
+  }
 
   await writeAuditLog({
     eventType: input.decision === "approve" ? "HASH_APPROVED" : "HASH_REJECTED",

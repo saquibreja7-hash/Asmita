@@ -156,7 +156,7 @@ describe("browser sandbox self-test in a real crawl (WP25)", () => {
     for (const lines of [strictLines, overrideLines]) {
       assertCleanLog(lines.join("\n"), {
         hostnames: [JS_HOST, AUTO_HOST],
-        hashes: [...fx.allHashes, ...fx.pool.fingerprints.map((f) => f.pdq)],
+        hashes: [...fx.allHashes, ...fx.pool.fingerprints.flatMap((f) => ("pdq" in f ? [f.pdq] : []))],
         secrets: [TEST_KEY],
       });
     }

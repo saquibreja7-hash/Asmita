@@ -1,25 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale } from "@/lib/i18n";
+import { FormError } from "@/components/FormError";
 
 export function DeleteAccountForm({ locale }: { locale: Locale }) {
   const [confirm, setConfirm] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  // The done screen replaces the form, so focus its heading (WP40 A27).
+  const doneHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (done) doneHeadingRef.current?.focus();
+  }, [done]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
-    const response = await csrfFetch("/api/account/delete", { method: "POST" });
-    setSubmitting(false);
-    if (response.ok) {
-      setDone(true);
-      setMessage(t(locale, "delete.done.sub"));
-    } else {
+    try {
+      const response = await csrfFetch("/api/account/delete", { method: "POST" });
+      if (response.ok) {
+        setDone(true);
+        setMessage(t(locale, "delete.done.sub"));
+      } else {
+        setMessage(t(locale, "delete.form.error"));
+      }
+    } catch {
+      // The token mint itself failed (offline, server hiccup): the request
+      // never went out. The same honest message, and she can try again.
       setMessage(t(locale, "delete.form.error"));
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -29,10 +43,14 @@ export function DeleteAccountForm({ locale }: { locale: Locale }) {
         <p className="eyebrow">
           {t(locale, "delete.done.eyebrow")}
         </p>
-        <p className="font-display mt-4 text-[24px] leading-[1.3] tracking-tight text-[var(--ink)] md:text-[32px]">
+        <h2
+          ref={doneHeadingRef}
+          tabIndex={-1}
+          className="font-display mt-4 text-[24px] leading-[1.3] tracking-tight text-[var(--ink)] outline-none md:text-[32px]"
+        >
           {t(locale, "delete.done.title")}
-        </p>
-        <p className="muted mx-auto mt-5 max-w-md text-base leading-[1.75]">
+        </h2>
+        <p className="muted mx-auto mt-5 max-w-md text-base leading-[1.75]" role="status">
           {message}
         </p>
       </div>
@@ -68,11 +86,7 @@ export function DeleteAccountForm({ locale }: { locale: Locale }) {
         </p>
       </div>
 
-      {message && !done && (
-        <p className="text-center text-sm font-medium text-[var(--danger)]">
-          {message}
-        </p>
-      )}
+      <FormError message={message} className="text-center" />
 
       <div className="text-center">
         <button

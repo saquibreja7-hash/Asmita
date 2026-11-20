@@ -24,6 +24,12 @@
  *    caller can report the in-scope ones as aliases.
  * Crawler v3 WP16: <iframe src> and <frame src> become page links, so a
  * gallery inside a frame is reached by claiming the frame's own address.
+ *
+ * Video-fingerprints spec WP21: video posters, the og:image preview of a
+ * page that declares an og:video, and JSON-LD VideoObject thumbnailUrl
+ * are the same image candidates as before — fetched, hashed and matched
+ * exactly like any <img> — but tagged "video preview", so the run can
+ * count them (the tag never leaves the process).
  */
 import { load } from "cheerio";
 import { isNonContentUrl } from "./traps.ts";
@@ -48,6 +54,15 @@ export type Extracted = {
   /** urlKeys of `links` that are pagination markers (priority; query-cap exempt). */
   pagination: Set<string>;
   images: URL[];
+  /**
+   * urlKeys of `images` tagged "video preview" (video-fingerprints spec
+   * WP21): a <video poster>, the og:image of a page that declares an
+   * og:video, a JSON-LD VideoObject thumbnailUrl. The tag is bookkeeping
+   * for the run's counters only — a tagged candidate is fetched, hashed
+   * and matched exactly like any other image, and the tag never leaves
+   * the process.
+   */
+  videoPreviews: Set<string>;
   /**
    * The page's <link rel="canonical"> targets (crawler v3 WP10), resolved
    * against the base, deduplicated by key, at most MAX_CANONICAL_PER_PAGE.
@@ -80,6 +95,8 @@ export const IMAGE_EXT = /\.(jpe?g|png|gif|webp|avif)$/i;
 export const LAZY_SRC_ATTRS = ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-url", "data-full-src", "data-hi-res-src"];
 export const LAZY_SRCSET_ATTRS = ["data-srcset", "data-lazy-srcset"];
 const META_IMAGE = ["og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src"];
+/** Open Graph video properties: any of them marks the page a video page (WP21). */
+const OG_VIDEO = ["og:video", "og:video:url", "og:video:secure_url"];
 
 /** Feed autodiscovery: <link rel="alternate" type="application/atom+xml">. */
 const FEED_TYPE = /(?:rss|atom)/i;
@@ -165,7 +182,7 @@ function marksPagination(rel: string[], text: string, cls: string[]): boolean {
 }
 
 /** Collect the image URLs of one JSON-LD "image"/"images" value. */
-function jsonLdImage(value: unknown, addImage: (raw: string) => void): void {
+function jsonLdImage(value: unknown, addImage: (raw: string, preview?: boolean) => void): void {
   if (typeof value === "string") {
     addImage(value);
     return;
@@ -181,11 +198,31 @@ function jsonLdImage(value: unknown, addImage: (raw: string) => void): void {
   }
 }
 
+/** Collect a JSON-LD VideoObject's thumbnailUrl (video-fingerprints spec WP21). */
+function jsonLdVideoThumbnail(value: unknown, addImage: (raw: string, preview?: boolean) => void): void {
+  if (typeof value === "string") {
+    addImage(value, true);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) jsonLdVideoThumbnail(item, addImage);
+  }
+}
+
+/** Whether a JSON-LD node's @type names a VideoObject (case-insensitive). */
+function isVideoObject(node: Record<string, unknown>): boolean {
+  const t = node["@type"];
+  if (typeof t === "string") return t.toLowerCase() === "videoobject";
+  if (Array.isArray(t)) return t.some((x) => typeof x === "string" && x.toLowerCase() === "videoobject");
+  return false;
+}
+
 /** Walk a JSON-LD graph (bounded) and collect every image value. */
-function walkJsonLd(node: unknown, depth: number, addImage: (raw: string) => void): void {
+function walkJsonLd(node: unknown, depth: number, addImage: (raw: string, preview?: boolean) => void): void {
   if (depth > 6 || node === null || typeof node !== "object") return;
   for (const [key, value] of Object.entries(node)) {
     if (key === "image" || key === "images") jsonLdImage(value, addImage);
+    else if (key === "thumbnailUrl" && isVideoObject(node as Record<string, unknown>)) jsonLdVideoThumbnail(value, addImage);
     else if (value !== null && typeof value === "object") walkJsonLd(value, depth + 1, addImage);
   }
 }
@@ -217,6 +254,8 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
   const skipped = { data_uri: 0, svg: 0, tiny: 0, invalid: 0 };
   const skippedDocs = { jsonld: 0, noscript: 0 };
   const dropped = { links: 0, images: 0 };
+  /** urlKeys of image candidates tagged "video preview" (WP21). */
+  const videoPreviews = new Set<string>();
   // Bounded collections: a hostile page full of links or images cannot grow
   // these beyond the per-page caps.
   const keepImage = (key: string, url: URL) => {
@@ -243,7 +282,7 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
   const nofollow = hasNofollow(metaRobots) || hasNofollow(xRobotsTag);
 
   const images = new Map<string, URL>();
-  const addImage = (raw: string | undefined) => {
+  const addImage = (raw: string | undefined, preview = false) => {
     if (raw === undefined) return;
     const v = raw.trim();
     if (v === "") return;
@@ -261,7 +300,12 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
       return;
     }
     // First occurrence wins: keep the address as the page first wrote it.
-    keepImage(urlKey(url), url);
+    const key = urlKey(url);
+    keepImage(key, url);
+    // Tag only what was kept (WP21): a candidate dropped by the per-page
+    // cap is never processed, and the same address reached once as a
+    // poster and once as a plain <img> is one tagged candidate.
+    if (preview && images.has(key)) videoPreviews.add(key);
   };
   const addSrcset = (srcset: string | undefined) => {
     if (!srcset) return;
@@ -316,8 +360,13 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
     addSrcset(s.attr("srcset") ?? s.attr("data-srcset"));
   });
 
+  // Open Graph image previews (WP4) — and the "video preview" tag (WP21):
+  // a page that declares an og:video is a video page, so its og:image is
+  // the video's preview thumbnail. Only the og:image family is tagged;
+  // twitter:image and a plain og:image page stay ordinary candidates.
+  const hasOgVideo = OG_VIDEO.some((prop) => $(`meta[property="${prop}" i], meta[name="${prop}" i]`).length > 0);
   for (const prop of META_IMAGE) {
-    $(`meta[property="${prop}" i], meta[name="${prop}" i]`).each((_, el) => addImage($(el).attr("content")));
+    $(`meta[property="${prop}" i], meta[name="${prop}" i]`).each((_, el) => addImage($(el).attr("content"), hasOgVideo && prop.startsWith("og:image")));
   }
 
   // CSS background-image in inline styles.
@@ -325,8 +374,8 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
     for (const u of styleBackgroundImages($(el).attr("style") ?? "")) addImage(u);
   });
 
-  // <video poster>.
-  $("video[poster]").each((_, el) => addImage($(el).attr("poster")));
+  // <video poster> (WP4 candidate; WP21 tags it "video preview").
+  $("video[poster]").each((_, el) => addImage($(el).attr("poster"), true));
 
   // <noscript> fallbacks. When the parser kept the content as elements the
   // <img> loop above already collected it; only raw-text noscript needs a
@@ -506,6 +555,7 @@ export function extract(html: string, pageUrl: URL, xRobotsTag = "", limits: Ext
     feeds: feedsKept,
     pagination,
     images: [...images.values()],
+    videoPreviews,
     canonical,
     nofollow,
     skipped,

@@ -77,6 +77,13 @@ export const ERROR_CODES = [
   // other
   "robots_disallowed",
   "internal",
+  // SSCD embeddings (WP28). The worker never puts a path, a model name or a
+  // vector in a message: only these fixed codes cross the child boundary.
+  "sscd_model_missing",
+  "sscd_bad_model",
+  "sscd_inference_failed",
+  "sscd_timeout",
+  "sscd_worker_crashed",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

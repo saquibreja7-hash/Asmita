@@ -297,7 +297,10 @@ describe("the unproductive-site pause sweep", () => {
     seedFetchedDay(matched.id, dayStart(2), 2);
     crawlMemory().findings.set("f-1", {
       id: "f-1", caseId: "case-1", hashSubmissionId: "hs-1", crawlConsentId: null,
-      pageUrlEncrypted: "", imageUrlEncrypted: "", urlDigest: null, distance: 4, quality: 90,
+      pageUrlEncrypted: "", imageUrlEncrypted: "", urlDigest: null, distance: 4,
+      // WP28 (ADR 008): the memory finding now carries how it matched.
+      sscdSimilarity: null, method: "PDQ",
+      quality: 90,
       firstSeenAt: new Date(dayStart(1).getTime() + 3_600_000), lastSeenAt: new Date(dayStart(1).getTime() + 3_600_000),
       sourceId: matched.id, runId: "run-1", reviewStatus: "CANDIDATE", reviewedById: null, reviewedAt: null,
       secondReviewedById: null, secondReviewedAt: null,

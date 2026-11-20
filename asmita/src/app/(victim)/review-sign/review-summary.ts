@@ -29,7 +29,7 @@ export function linkPlatformName(url: string): string | null {
   return parsed.ok ? matchPlatform(parsed.domain, platformDirectory)?.name ?? null : null;
 }
 
-export function numbered(locale: Locale, key: "review.links.item" | "review.fingerprints.item", index: number) {
+export function numbered(locale: Locale, key: "review.links.item" | "review.fingerprints.item" | "review.fingerprints.videoItem", index: number) {
   return t(locale, key).replace("{n}", String(index + 1));
 }
 

@@ -14,7 +14,8 @@ import { gzipSync } from "node:zlib";
 import sharp from "sharp";
 import type { Pool } from "../../src/asmita/client.ts";
 import { hashImage } from "../../src/image/hash-image.ts";
-import { flipBits, patternImage, pixelBombPng, randomFingerprint } from "./synthetic.ts";
+import { packHex, popcount32 } from "../../src/match/matcher.ts";
+import { fakeSscdEmbed, flipBits, patternImage, pixelBombPng, randomFingerprint, spriteSheet } from "./synthetic.ts";
 
 export const SOURCE_DOMAIN = "fixture.test";
 export const CDN_HOST = "cdn.imgcdn.test";
@@ -1841,6 +1842,222 @@ export async function buildNeverQuietFixture(): Promise<Fixture> {
   };
 }
 
+/*
+ * The video-pool fixture (video-fingerprints spec WP20). vpdq.fixture.test
+ * serves one page with a poster image and a decoy; the pool holds the
+ * poster's hash both as an image entry and as a frame of two video
+ * fingerprints (one exact, one near-duplicate), plus far frames that match
+ * nothing. The poster must produce three findings — the image entry, and one
+ * per video, each at its own best frame distance — and the decoy none.
+ * Synthetic images only; no host overlaps the other fixtures' hosts.
+ */
+export const VPDQ_HOST = `vpdq.${SOURCE_DOMAIN}`;
+
+export async function buildVideoPoolFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const poster = await patternImage(300, 320, 240, "png");
+  const decoy = await patternImage(301, 320, 240, "png");
+  const posterHash = (await hashImage(poster, { minSide: 1 })).hash;
+  const decoyHash = (await hashImage(decoy, { minSide: 1 })).hash;
+  // Far frames of the two videos: real hashes of images the site never serves.
+  const far1 = (await hashImage(await patternImage(302, 300, 300, "png"), { minSide: 1 })).hash;
+  const far2 = (await hashImage(await patternImage(303, 300, 300, "png"), { minSide: 1 })).hash;
+  const NEAR = 6;
+  const nearPoster = flipBits(posterHash, NEAR);
+
+  const pool: Pool = {
+    version: "vpdq-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      // The poster is also planted as an ordinary image fingerprint: one
+      // image, three findings, two kinds.
+      { id: "fp-poster-img", pdq: posterHash, quality: 100 },
+      // Video A carries the poster's exact hash as one of its frames.
+      { id: "fp-vid-a", kind: "video", frames: [far1, posterHash, far2] },
+      // Video B only near-misses it: its best frame distance is NEAR.
+      { id: "fp-vid-b", kind: "video", frames: [nearPoster, far2] },
+      // A video with no frame near anything on the page.
+      { id: "fp-vid-c", kind: "video", frames: [far1, far2] },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-poster-img", pagePath: "/", imageHost: VPDQ_HOST, imagePath: "/img/poster.png" },
+    { fingerprintId: "fp-vid-a", pagePath: "/", imageHost: VPDQ_HOST, imagePath: "/img/poster.png" },
+    { fingerprintId: "fp-vid-b", pagePath: "/", imageHost: VPDQ_HOST, imagePath: "/img/poster.png" },
+  ];
+
+  site.route(VPDQ_HOST, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(
+    VPDQ_HOST,
+    "/",
+    sendHtml(
+      html(`
+      <h1>Sample clip</h1>
+      <video poster="/img/poster.png" src="/clip.webm"></video>
+      <img src="/img/decoy.png" width="320" height="240">
+    `),
+    ),
+  );
+  site.route(VPDQ_HOST, "/img/poster.png", sendBytes(poster, "image/png"));
+  site.route(VPDQ_HOST, "/img/decoy.png", sendBytes(decoy, "image/png"));
+  // Every hash the run touches, for the log scan: the two images it hashes
+  // and every frame the pool carries.
+  return { site, pool, expected, allHashes: [posterHash, decoyHash, far1, far2, nearPoster] };
+}
+
+/**
+ * The video-previews fixture (video-fingerprints spec WP21): one page that
+ * offers every preview kind — a <video poster>, an og:image on a page that
+ * declares an og:video, a JSON-LD VideoObject thumbnailUrl, a preview
+ * sprite sheet (3x2 grid of 160x90 tiles) and a decoy — plus a video
+ * sitemap whose <video:thumbnail_loc> is hashed for its own page, and a
+ * grid image whose address names no sprite: hashed whole, never split.
+ * Every planted finding comes from a different preview kind, so the run
+ * proves each one end to end. Synthetic images only; the host overlaps no
+ * other fixture's.
+ */
+export const PREV_HOST = "prev.fixture.test";
+
+export async function buildVideoPreviewFixture(): Promise<Fixture> {
+  const site = await new FixtureSite().start();
+  const hashOf = async (b: Buffer) => (await hashImage(b, { minSide: 64 })).hash;
+  const poster = await patternImage(600, 320, 240, "png");
+  const ogPreview = await patternImage(601, 320, 180, "png");
+  const jsonldThumb = await patternImage(602, 300, 200, "png");
+  const sitemapThumb = await patternImage(603, 320, 180, "png");
+  const decoy = await patternImage(630, 320, 240, "png");
+  // The sprite sheet: six 160x90 tiles (seeds 610..615) in a 3x2 grid. The
+  // grid 480x180 admits exactly one 16:9 reading (3x2), so the child cuts
+  // the true tiles and the standalone hashes below are the tile hashes.
+  const spriteSeeds = [610, 611, 612, 613, 614, 615];
+  const sprite = await spriteSheet(spriteSeeds, 160, 90, 3, 2);
+  const tileHashes: string[] = [];
+  for (const s of spriteSeeds) tileHashes.push(await hashOf(await patternImage(s, 160, 90, "png")));
+  // The same grid geometry under a name that is no sprite: hashed whole,
+  // never split — its first tile is a pool frame the run must NOT match.
+  const gridSeeds = [620, 621, 622, 623, 624, 625];
+  const contactSheet = await spriteSheet(gridSeeds, 160, 90, 3, 2);
+  const negTileHash = await hashOf(await patternImage(gridSeeds[0]!, 160, 90, "png"));
+  const contactSheetHash = await hashOf(contactSheet);
+
+  const posterHash = await hashOf(poster);
+  const ogHash = await hashOf(ogPreview);
+  const jsonldHash = await hashOf(jsonldThumb);
+  const sitemapThumbHash = await hashOf(sitemapThumb);
+  const decoyHash = await hashOf(decoy);
+
+  const pool: Pool = {
+    version: "prev-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      // The poster is also an ordinary image fingerprint: one preview,
+      // two findings, both kinds (the WP21 rule: previews are compared
+      // with video frames AND image fingerprints).
+      { id: "fp-img-poster", pdq: posterHash, quality: 100 },
+      { id: "fp-vid-poster", kind: "video", frames: [posterHash] },
+      { id: "fp-vid-og", kind: "video", frames: [ogHash] },
+      { id: "fp-vid-jsonld", kind: "video", frames: [jsonldHash] },
+      // Two tiles of one sprite are frames of one video: two video hits,
+      // one finding (deduplicated per fingerprint and image address).
+      { id: "fp-vid-sprite", kind: "video", frames: [tileHashes[0]!, tileHashes[1]!] },
+      { id: "fp-vid-sitemap", kind: "video", frames: [sitemapThumbHash] },
+      // The frame that only a wrongly split contact sheet could match.
+      { id: "fp-vid-neg", kind: "video", frames: [negTileHash] },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-img-poster", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/poster.png" },
+    { fingerprintId: "fp-vid-poster", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/poster.png" },
+    { fingerprintId: "fp-vid-og", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/og-preview.png" },
+    { fingerprintId: "fp-vid-jsonld", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/jsonld-thumb.png" },
+    { fingerprintId: "fp-vid-sprite", pagePath: "/watch.html", imageHost: PREV_HOST, imagePath: "/img/sprite.png" },
+    { fingerprintId: "fp-vid-sitemap", pagePath: "/mapped.html", imageHost: PREV_HOST, imagePath: "/img/sitemap-thumb.png" },
+  ];
+
+  site.route(
+    PREV_HOST,
+    "/robots.txt",
+    sendBytes(Buffer.from(`User-agent: *\nAllow: /\nSitemap: ${site.origin(PREV_HOST)}/video-sitemap.xml\n`), "text/plain"),
+  );
+  site.route(
+    PREV_HOST,
+    "/",
+    sendHtml(
+      html(`
+      <h1>Preview gallery</h1>
+      <a href="/watch.html">the clip</a>
+      <img src="/img/contact-sheet.png" width="480" height="180" alt="contact sheet">
+    `),
+    ),
+  );
+  site.route(
+    PREV_HOST,
+    "/watch.html",
+    sendHtml(
+      html(
+        `
+      <h1>Clip page</h1>
+      <video poster="/img/poster.png" src="/clip.webm"></video>
+      <img src="/img/sprite.png" width="480" height="180" alt="sprite">
+      <img src="/img/decoy.png" width="320" height="240" alt="decoy">
+    `,
+        `
+      <meta property="og:video" content="/clip.mp4">
+      <meta property="og:image" content="/img/og-preview.png">
+      <script type="application/ld+json">{"@type":"VideoObject","name":"clip","thumbnailUrl":"/img/jsonld-thumb.png"}</script>
+    `,
+      ),
+    ),
+  );
+  site.route(PREV_HOST, "/mapped.html", sendHtml(html(`<h1>Mapped clip</h1>`)));
+  site.route(
+    PREV_HOST,
+    "/video-sitemap.xml",
+    sendBytes(
+      Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:video="http://www.google.com/schemas/sitemap-video/1.0">
+  <url>
+    <loc>${site.origin(PREV_HOST)}/mapped.html</loc>
+    <video:video>
+      <video:thumbnail_loc>${site.origin(PREV_HOST)}/img/sitemap-thumb.png</video:thumbnail_loc>
+    </video:video>
+  </url>
+</urlset>`,
+      ),
+      "application/xml",
+    ),
+  );
+  site.route(PREV_HOST, "/img/poster.png", sendBytes(poster, "image/png"));
+  site.route(PREV_HOST, "/img/og-preview.png", sendBytes(ogPreview, "image/png"));
+  site.route(PREV_HOST, "/img/jsonld-thumb.png", sendBytes(jsonldThumb, "image/png"));
+  site.route(PREV_HOST, "/img/sitemap-thumb.png", sendBytes(sitemapThumb, "image/png"));
+  site.route(PREV_HOST, "/img/sprite.png", sendBytes(sprite, "image/png"));
+  site.route(PREV_HOST, "/img/contact-sheet.png", sendBytes(contactSheet, "image/png"));
+  site.route(PREV_HOST, "/img/decoy.png", sendBytes(decoy, "image/png"));
+  // Every hash the run touches or the pool carries, for the log scan: the
+  // pool's frames and previews, the six sprite tile hashes the child cuts,
+  // and the whole-image hashes of the decoy and the unsplit contact sheet.
+  return {
+    site,
+    pool,
+    expected,
+    allHashes: [
+      posterHash,
+      ogHash,
+      jsonldHash,
+      sitemapThumbHash,
+      ...tileHashes,
+      negTileHash,
+      decoyHash,
+      contactSheetHash,
+    ],
+  };
+}
+
 /** Env for a fixture run (test values only, nothing real). */
 export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, string> = {}): Record<string, string> {
   return {
@@ -1870,3 +2087,112 @@ export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, st
 }
 
 export const TEST_KEY = "test-service-key-0123456789-abcdefghij";
+
+/*
+ * The SSCD second-layer fixture (WP28). sscd.fixture.test serves three
+ * pages: a confirmed copy of the survivor's image (an exact PDQ match that
+ * seeds an embedding), an altered version of it (a crop plus a colour
+ * filter plus a JPEG re-encode — the transformations PDQ does not survive)
+ * and an unrelated decoy. The pool holds the confirmed copy's fingerprint
+ * twice — exactly and at distance 27 (the borderline band, so the analyst
+ * score path runs) — each entry carrying the fake embedder's descriptor of
+ * the confirmed copy, exactly as the app would serve a stored embedding.
+ *
+ * The real SSCD model is never loaded here: the crawl runs with a
+ * deterministic in-process stand-in for the isolated child
+ * (fakeSscdEmbed, tests/support/synthetic.ts) whose descriptor is chosen
+ * to survive the planted alteration by construction. The model's own
+ * tolerance for crops and filters is what scripts/eval-sscd.ts measures.
+ * Synthetic images only; no host overlaps the other fixtures' hosts.
+ */
+export const SSCD_HOST = "sscd.fixture.test";
+
+/** The SSCD fixture plus the numbers that pin its honest premise. */
+export type SscdFixture = Fixture & {
+  /** PDQ distance of the altered variant from the confirmed copy: above the pool threshold. */
+  variantPdqDistance: number;
+  /** The fake descriptor's cosine for the altered variant: above the test threshold. */
+  variantSimilarity: number;
+  /** The fake descriptor's cosine for the decoy: below everything. */
+  decoySimilarity: number;
+};
+
+export async function buildSscdFixture(): Promise<SscdFixture> {
+  const site = await new FixtureSite().start();
+  const confirmed = await patternImage(4001, 640, 480, "png");
+  // ~13% crop (16% of the area) plus a colour filter and a JPEG re-encode:
+  // enough that PDQ cannot see the copy (verified by the test's own
+  // distance check), mild enough that a coarse descriptor still can.
+  const variant = await sharp(confirmed)
+    .extract({ left: 42, top: 32, width: 556, height: 416 })
+    .modulate({ saturation: 0.55, brightness: 1.08 })
+    .blur(0.7)
+    .jpeg({ quality: 72 })
+    .toBuffer();
+  const decoy = await patternImage(4002, 640, 480, "png");
+  const confirmedHash = (await hashImage(confirmed, { minSide: 1 })).hash;
+  const variantHash = (await hashImage(variant, { minSide: 1 })).hash;
+  const borderHash = flipBits(confirmedHash, 27);
+  const vector = await fakeSscdEmbed(confirmed);
+  const variantVector = await fakeSscdEmbed(variant);
+  const decoyVector = await fakeSscdEmbed(decoy);
+  const cos = (a: number[], b: number[]) => a.reduce((s, x, i) => s + x * b[i]!, 0);
+  // What the fixture itself claims, so the test can pin the honest premise:
+  // PDQ cannot see the altered copy, the coarse descriptor can, and the
+  // decoy matches nothing.
+  const variantPdqDistance = hamming(confirmedHash, variantHash);
+  const variantSimilarity = cos(vector, variantVector);
+  const decoySimilarity = cos(vector, decoyVector);
+
+  const pool: Pool = {
+    version: "sscd-1",
+    generatedAt: new Date().toISOString(),
+    threshold: 31,
+    fingerprints: [
+      // The confirmed copy, with the embedding the app would serve for it.
+      { id: "fp-sscd", pdq: confirmedHash, quality: 100, sscd: { model: "sscd_disc_mixup", version: "onnx-1", vectors: [vector] } },
+      // The same image at PDQ distance 27 (the borderline band), with the
+      // same embedding: a borderline match must carry the analyst score.
+      { id: "fp-border", pdq: borderHash, quality: 100, sscd: { model: "sscd_disc_mixup", version: "onnx-1", vectors: [vector] } },
+    ],
+  };
+  const expected: Expected[] = [
+    { fingerprintId: "fp-sscd", pagePath: "/confirmed.html", imageHost: SSCD_HOST, imagePath: "/img/confirmed.png" },
+    { fingerprintId: "fp-border", pagePath: "/confirmed.html", imageHost: SSCD_HOST, imagePath: "/img/confirmed.png" },
+    { fingerprintId: "fp-sscd", pagePath: "/altered.html", imageHost: SSCD_HOST, imagePath: "/img/variant.png" },
+    { fingerprintId: "fp-border", pagePath: "/altered.html", imageHost: SSCD_HOST, imagePath: "/img/variant.png" },
+  ];
+
+  site.route(SSCD_HOST, "/robots.txt", sendBytes(Buffer.from("User-agent: *\nAllow: /\n"), "text/plain"));
+  site.route(
+    SSCD_HOST,
+    "/",
+    sendHtml(
+      html(`
+      <h1>Gallery</h1>
+      <a href="/confirmed.html">confirmed</a>
+      <a href="/altered.html">altered</a>
+      <a href="/decoy.html">decoy</a>
+    `),
+    ),
+  );
+  site.route(SSCD_HOST, "/confirmed.html", sendHtml(html(`<img src="/img/confirmed.png" width="640" height="480">`)));
+  site.route(SSCD_HOST, "/altered.html", sendHtml(html(`<img src="/img/variant.png" width="640" height="480">`)));
+  site.route(SSCD_HOST, "/decoy.html", sendHtml(html(`<img src="/img/decoy.png" width="640" height="480">`)));
+  site.route(SSCD_HOST, "/img/confirmed.png", sendBytes(confirmed, "image/png"));
+  site.route(SSCD_HOST, "/img/variant.png", sendBytes(variant, "image/jpeg"));
+  site.route(SSCD_HOST, "/img/decoy.png", sendBytes(decoy, "image/png"));
+
+  return { site, pool, expected, allHashes: [confirmedHash, borderHash], variantPdqDistance, variantSimilarity, decoySimilarity };
+}
+
+/** Hamming distance of two 64-hex PDQ hashes (the matcher's own packing). */
+function hamming(a: string, b: string): number {
+  const wa = new Uint32Array(8);
+  const wb = new Uint32Array(8);
+  packHex(a, wa, 0);
+  packHex(b, wb, 0);
+  let d = 0;
+  for (let i = 0; i < 8; i++) d += popcount32(wa[i]! ^ wb[i]!);
+  return d;
+}

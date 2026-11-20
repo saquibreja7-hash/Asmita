@@ -190,31 +190,34 @@ export function HomeChat({
         )}
 
         {(phase === "open" || phase === "error") && (
-          <ol role="log" aria-live="polite" className="space-y-3">
-            <li>
+          // role="log" is a live region (polite by default); a list role here
+          // would only strip the list semantics, so the children are plain
+          // paragraphs and no aria-live is repeated on the container.
+          <div role="log" className="space-y-3">
+            <p>
               <span className="sr-only">{copy["chat.assistant"]}: </span>
-              <span className="inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] bg-[var(--surface-muted)] px-4 py-2 text-sm leading-[1.55] text-[var(--ink)]">
+              <span className="chat-bubble inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] bg-[var(--surface-muted)] px-4 py-2 text-sm leading-[1.55] text-[var(--ink)]">
                 {copy["chat.greeting"]}
               </span>
-            </li>
+            </p>
             {messages.map((m, i) => (
-              <li key={i} className={m.role === "user" ? "text-right" : ""}>
+              <p key={i} className={m.role === "user" ? "text-right" : ""}>
                 <span className="sr-only">{m.role === "user" ? copy["chat.you"] : copy["chat.assistant"]}: </span>
                 <span
-                  className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] px-4 py-2 text-left text-sm leading-[1.55] text-[var(--ink)] ${
+                  className={`chat-bubble inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] px-4 py-2 text-left text-sm leading-[1.55] text-[var(--ink)] ${
                     m.role === "user" ? "bg-[var(--brand-soft)]" : "bg-[var(--surface-muted)]"
                   }`}
                 >
                   {m.content}
                 </span>
-              </li>
+              </p>
             ))}
             {waiting && (
-              <li className="text-sm text-[var(--text)]" role="status">
+              <p className="text-sm text-[var(--text)]" role="status">
                 {copy["chat.typing"]}
-              </li>
+              </p>
             )}
-          </ol>
+          </div>
         )}
 
         {phase === "error" && (

@@ -231,10 +231,12 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
      * A representative notice (crawler link, crawl-notice.ts) is excluded
      * from every automated step for now: the follow-up cover (ESCALATION_L1)
      * restates the notice as a complaint "on behalf of the Complainant" under
-     * Rule 3(2)(b) with a two-hour deadline, which the representative notice
-     * does not state, and the 48-hour and 7-day survivor emails tell her a
-     * deadline passed. Nothing is recorded, so including them later needs no
-     * data repair. The query filters them out too; this is the backstop.
+     * Rule 3(2)(b) with the Rule's two-hour deadline, which the representative
+     * notice does not demand (WP26: it asks for twenty-four hours, stating the
+     * Rule's period as law), and the 48-hour and 7-day survivor emails tell
+     * her a deadline passed. Nothing is recorded, so including them later
+     * needs no data repair. The query filters them out too; this is the
+     * backstop.
      */
     if (notice.submittedUrl.source === "CRAWLER") {
       summary.skipped.push({ noticeId: notice.id, reason: "representative_notice" });

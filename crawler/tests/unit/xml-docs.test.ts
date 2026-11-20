@@ -10,7 +10,9 @@ import { ReportedPageSchema } from "../../src/asmita/client.ts";
 import { decodeEntities, isGzipBody, parseFeed, parseSitemap, sniffXmlDoc } from "../../src/crawl/xml-docs.ts";
 
 const base = new URL("https://deep.example/sitemap.xml");
-const loc = (u: string) => ({ loc: new URL(u), images: [] as URL[], lastmod: null });
+// SitemapPage gained videoThumbnails (video-fingerprints spec WP21); the
+// helper builds the whole page shape the parser answers with.
+const loc = (u: string) => ({ loc: new URL(u), images: [] as URL[], videoThumbnails: [] as URL[], lastmod: null });
 
 describe("sniffXmlDoc", () => {
   it("recognises the four document kinds by root element, whatever the prologue", () => {
@@ -143,6 +145,63 @@ ${entries}
     // An index with urlset children and vice versa: kind rules what counts.
     const mixed = parseSitemap(Buffer.from(urlset("<sitemap><loc>https://deep.example/child</loc></sitemap>")), base, "urlset", 10);
     expect(mixed.children).toEqual([]);
+  });
+
+  it("collects video-sitemap <video:thumbnail_loc> previews for their page (WP21)", () => {
+    const xml = urlset(`
+  <url><loc>https://deep.example/clip</loc>
+       <video:video>
+         <video:thumbnail_loc>https://cdn.example/clip-thumb.jpg</video:thumbnail_loc>
+         <video:thumbnail_loc>/thumb-2.png</video:thumbnail_loc>
+       </video:video>
+       <image:image><image:loc>/shot.png</image:loc></image:image>
+  </url>
+  <url><loc>https://deep.example/other</loc>
+       <video:video><video:thumbnail_loc><![CDATA[https://cdn.example/raw.png]]></video:thumbnail_loc></video:video>
+  </url>`);
+    const parsed = parseSitemap(Buffer.from(xml), base, "urlset", 100);
+    expect(parsed.pages[0]!.videoThumbnails.map((t) => t.href)).toEqual([
+      "https://cdn.example/clip-thumb.jpg",
+      "https://deep.example/thumb-2.png",
+    ]);
+    // The image-sitemap entries of the same page stay their own list.
+    expect(parsed.pages[0]!.images.map((i) => i.href)).toEqual(["https://deep.example/shot.png"]);
+    expect(parsed.pages[1]!.videoThumbnails.map((t) => t.href)).toEqual(["https://cdn.example/raw.png"]);
+    expect(parsed.truncated).toBe(false);
+  });
+
+  it("drops unusable video thumbnails and counts every taken one against the cap (WP21)", () => {
+    const xml = urlset(`
+  <url><loc>https://deep.example/a</loc>
+       <video:thumbnail_loc>javascript:void(0)</video:thumbnail_loc>
+       <video:thumbnail_loc>   </video:thumbnail_loc>
+  </url>
+  <url><loc>https://deep.example/b</loc>
+       <video:thumbnail_loc>/t1.png</video:thumbnail_loc>
+       <video:thumbnail_loc>/t2.png</video:thumbnail_loc>
+  </url>`);
+    const parsed = parseSitemap(Buffer.from(xml), base, "urlset", 100);
+    // The javascript: thumbnail spends its slot exactly like an unusable
+    // image:loc does; the blank one never takes one.
+    expect(parsed.pages[0]!.videoThumbnails).toEqual([]);
+    expect(parsed.pages[1]!.videoThumbnails.map((t) => t.href)).toEqual(["https://deep.example/t1.png", "https://deep.example/t2.png"]);
+    expect(parsed.truncated).toBe(false);
+  });
+
+  it("counts video thumbnails against the same cap as every taken address (WP21)", () => {
+    // Two pages, one thumbnail each. A thumbnail's slot is spent when its
+    // element closes — before its page's <loc>, which is taken at the
+    // <url> close — so with a cap of three (a's thumb, a's loc, b's thumb)
+    // page b cannot take its loc slot and is dropped, with its thumbnail.
+    const xml = urlset(`
+  <url><loc>https://deep.example/a</loc><video:thumbnail_loc>/ta.png</video:thumbnail_loc></url>
+  <url><loc>https://deep.example/b</loc><video:thumbnail_loc>/tb.png</video:thumbnail_loc></url>`);
+    const parsed = parseSitemap(Buffer.from(xml), base, "urlset", 100);
+    expect(parsed.pages).toHaveLength(2);
+    const capped = parseSitemap(Buffer.from(xml), base, "urlset", 3);
+    expect(capped.pages).toHaveLength(1);
+    expect(capped.pages[0]!.videoThumbnails.map((t) => t.href)).toEqual(["https://deep.example/ta.png"]);
+    expect(capped.truncated).toBe(true);
   });
 });
 

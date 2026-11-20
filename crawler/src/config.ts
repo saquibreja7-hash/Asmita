@@ -133,6 +133,42 @@ export const ConfigSchema = z.object({
   /** robots.txt Crawl-delay is honoured up to this cap. */
   MAX_CRAWL_DELAY_MS: int(0, 600_000, 30_000),
   POOL_RESYNC_MINUTES: int(1, 60, 30),
+  // --- SSCD second matching layer (WP28) ---------------------------------------
+  // Off by default: nothing about the crawl changes while ENABLE_SSCD is not
+  // exactly "true" (no inference, no embeddings route call, no new log fields).
+  ENABLE_SSCD: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  /**
+   * Where the second layer runs: only on sources the app flagged as having an
+   * accepted finding (default), or everywhere. One gate covers every SSCD
+   * inference on a source — the second layer, the borderline score and the
+   * seeding — because a confirmed finding's own source always carries the
+   * flag, so the seeding loses nothing.
+   */
+  SSCD_SCOPE: z.enum(["matched_sources", "all"]).default("matched_sources"),
+  /** Per-run cap on SSCD inferences (second layer, borderline scores, seeding). */
+  SSCD_MAX_PER_RUN: int(0, 1_000_000, 2000),
+  /**
+   * Cosine similarity (the vectors are L2-normalised) at which an SSCD hit
+   * becomes a finding for an analyst to review. Measured on the synthetic
+   * evaluation set; see asmita/docs/adr/008-sscd-second-layer.md.
+   */
+  SSCD_THRESHOLD: z.coerce.number().min(0.5).max(1).default(0.85),
+  /**
+   * The descriptor identity both sides must agree on. The app serves and
+   * accepts only this model id + version pair, so vectors of different models
+   * never mix. Defaults must match asmita/src/lib/crawler-flags.ts.
+   */
+  SSCD_MODEL_ID: z.string().min(1).max(64).default("sscd_disc_mixup"),
+  SSCD_MODEL_VERSION: z.string().min(1).max(64).default("onnx-1"),
+  /** Where the ONNX weights live (downloaded at image build, never in git). */
+  SSCD_MODEL_FILE: z.string().min(1).max(1024).default(""),
+  /** The embedding dimension the child must answer with (sscd_disc_mixup: 512). */
+  SSCD_EMBED_DIM: int(16, 2048, 512),
+  /** Per-image deadline for one embedding; the child is killed and replaced. */
+  SSCD_TIMEOUT_MS: int(1000, 120_000, 20_000),
   CONNECT_TIMEOUT_MS: int(100, 60_000, 10_000),
   HEADERS_TIMEOUT_MS: int(100, 120_000, 15_000),
   BODY_TIMEOUT_MS: int(100, 120_000, 15_000),
@@ -142,7 +178,15 @@ export const ConfigSchema = z.object({
   API_ATTEMPTS: int(1, 10, 4),
   SHUTDOWN_GRACE_MS: int(0, 60_000, 5_000),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
-});
+})
+  // Fail closed: the second layer cannot start without its weights. The
+  // Dockerfile pins the model file (URL + sha256); a container that lost it
+  // stops here, before any network activity.
+  .superRefine((cfg, ctx) => {
+    if (cfg.ENABLE_SSCD && !cfg.SSCD_MODEL_FILE.startsWith("/")) {
+      ctx.addIssue({ code: "custom", path: ["SSCD_MODEL_FILE"], message: "an absolute model path is required when ENABLE_SSCD=true" });
+    }
+  });
 
 export type Config = z.infer<typeof ConfigSchema>;
 

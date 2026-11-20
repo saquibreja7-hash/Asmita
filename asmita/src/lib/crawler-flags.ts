@@ -81,6 +81,46 @@ export function maxFrontierPagesPerSource(env: Record<string, string | undefined
   return clampedInt(env, "CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE", 50_000, 1000, 1_000_000);
 }
 
+/*
+ * SSCD, the second matching layer (ADR 008, WP28): the crawler — never the
+ * app — computes a deep descriptor of an image an analyst has already
+ * confirmed, posts it to /api/crawler/embeddings, and the app stores it
+ * encrypted, serving it back through the pool under the same consent gating
+ * as the PDQ hashes. Read in this one place, client-safe (no imports).
+ *
+ * ENABLE_SSCD is a deployment switch like ENABLE_CRAWLER in crawler-auth.ts,
+ * off by default and deliberately NOT in wrangler.jsonc: nothing changes in
+ * any environment until the owner turns it on. While it is off the
+ * embeddings route answers 503 crawler_disabled and the pool serves no
+ * vectors, exactly as before this feature existed.
+ */
+
+/** Whether the SSCD second layer is switched on (ADR 008). Off unless exactly "true". */
+export function sscdEnabled(env: Record<string, string | undefined> = process.env) {
+  return env.ENABLE_SSCD === "true";
+}
+
+const SSCD_MODEL_DEFAULT = "sscd_disc_mixup";
+const SSCD_VERSION_DEFAULT = "onnx-1";
+
+/**
+ * The SSCD model id the deployment serves and accepts (ADR 008: the released
+ * `sscd_disc_mixup`). Vectors are comparable only within one model + version,
+ * so the pool serves, and the embeddings route accepts, only this id. An
+ * unset, empty or over-long value falls back to the default — a deployment
+ * knob must never silently stop the pool from serving what it already holds.
+ */
+export function sscdModelId(env: Record<string, string | undefined> = process.env) {
+  const raw = env.SSCD_MODEL_ID;
+  return typeof raw === "string" && raw.length >= 1 && raw.length <= 64 ? raw : SSCD_MODEL_DEFAULT;
+}
+
+/** The version tag of the SSCD model (ADR 008: "onnx-1"), same rules as sscdModelId. */
+export function sscdModelVersion(env: Record<string, string | undefined> = process.env) {
+  const raw = env.SSCD_MODEL_VERSION;
+  return typeof raw === "string" && raw.length >= 1 && raw.length <= 64 ? raw : SSCD_VERSION_DEFAULT;
+}
+
 /**
  * Which of her case's links a survivor may act on. With crawler findings
  * hidden from her a crawler-found link behaves exactly as if it did not exist:

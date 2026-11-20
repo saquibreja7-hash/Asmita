@@ -117,6 +117,26 @@ export class RunMetrics {
   /** Images refused because the source hit MAX_OFFSITE_HOST_FAILURES. */
   imageHostFailuresCapped = 0;
   matches = 0;
+  /**
+   * Matches against video fingerprints (video-fingerprints spec WP20): the
+   * image sat within the threshold of a survivor video's frame. Counted per
+   * hit like the matches loop finds them; a count only, never a frame.
+   */
+  videoMatches = 0;
+  /**
+   * Video previews hashed (video-fingerprints spec WP21): image candidates
+   * tagged "video preview" — a video poster, the og:image of a page that
+   * declares an og:video, a JSON-LD VideoObject thumbnailUrl, a
+   * video-sitemap <video:thumbnail_loc>, or a preview sprite sheet. A
+   * sprite counts once here (its tiles are in spriteTiles). A count only.
+   */
+  videoPreviews = 0;
+  /**
+   * Tiles hashed out of preview sprite sheets (video-fingerprints spec
+   * WP21): each tile is matched against the pool like an image of its own.
+   * Bounded by MAX_SPRITE_TILES per sprite.
+   */
+  spriteTiles = 0;
   findingsQueued = 0;
   findingsPosted = 0;
   /** Accepted by the server (new or already known: it no longer says which). */
@@ -168,6 +188,25 @@ export class RunMetrics {
    * rest of its rows do. A count only, never a hostname.
    */
   homePermanentFailures = 0;
+  // --- SSCD second layer (WP28). Only reported while ENABLE_SSCD is on
+  // (see summary): counts only, never a vector, a similarity of an
+  // individual image or a model name.
+  /** SSCD inferences run this pass (second layer, borderline scores, seeding). */
+  sscdInferences = 0;
+  /** Second-layer hits above the threshold that became findings. */
+  sscdMatches = 0;
+  /** Images that wanted an SSCD inference past SSCD_MAX_PER_RUN. */
+  sscdSkippedBudget = 0;
+  /** Images on a source outside SSCD_SCOPE that wanted an SSCD inference. */
+  sscdSkippedScope = 0;
+  /** Embedding offers posted to the app. */
+  sscdEmbeddingsPosted = 0;
+  /** Embedding offers the app stored (or already had — idempotent). */
+  sscdEmbeddingsStored = 0;
+  /** Embedding offers the app refused (not confirmed, wrong model, ...). */
+  sscdEmbeddingsRejected = 0;
+  /** Embedding offers still undelivered at exit. */
+  sscdEmbeddingsUnsent = 0;
 
   constructor(now: number = Date.now()) {
     this.startedAt = now;
@@ -183,8 +222,8 @@ export class RunMetrics {
     if (cls !== null) this.failures[cls]++;
   }
 
-  summary(opts: { now?: number; budgetPages: number; budgetImages: number; outcome: string }): Record<string, number | string | boolean | Record<string, number | boolean>> {
-    return {
+  summary(opts: { now?: number; budgetPages: number; budgetImages: number; outcome: string; sscd?: boolean }): Record<string, number | string | boolean | Record<string, number | boolean>> {
+    const base: Record<string, number | string | boolean | Record<string, number | boolean>> = {
       outcome: opts.outcome,
       durationMs: (opts.now ?? Date.now()) - this.startedAt,
       sourcesCrawled: this.sourcesCrawled,
@@ -221,6 +260,9 @@ export class RunMetrics {
       imageHostFailuresCapped: this.imageHostFailuresCapped,
       imagesSkipped: { ...this.imagesSkipped } as Record<string, number>,
       matches: this.matches,
+      videoMatches: this.videoMatches,
+      videoPreviews: this.videoPreviews,
+      spriteTiles: this.spriteTiles,
       findingsQueued: this.findingsQueued,
       findingsPosted: this.findingsPosted,
       findingsAccepted: this.findingsAccepted,
@@ -242,5 +284,19 @@ export class RunMetrics {
       budgetImagesUsed: this.imagesSeen,
       budgetImages: opts.budgetImages,
     };
+    // WP28: the SSCD counters exist in the summary only while the second
+    // layer is on — switched off, the log line is byte-for-byte what it
+    // always was ("nothing changes when off"). Counts only (rule 3).
+    if (opts.sscd) {
+      base.sscdInferences = this.sscdInferences;
+      base.sscdMatches = this.sscdMatches;
+      base.sscdSkippedBudget = this.sscdSkippedBudget;
+      base.sscdSkippedScope = this.sscdSkippedScope;
+      base.sscdEmbeddingsPosted = this.sscdEmbeddingsPosted;
+      base.sscdEmbeddingsStored = this.sscdEmbeddingsStored;
+      base.sscdEmbeddingsRejected = this.sscdEmbeddingsRejected;
+      base.sscdEmbeddingsUnsent = this.sscdEmbeddingsUnsent;
+    }
+    return base;
   }
 }

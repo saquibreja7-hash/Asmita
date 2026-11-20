@@ -3,9 +3,13 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { Illustration } from "@/components/Illustration";
+import { crawlerEnabled } from "@/lib/crawler-auth";
 
 export default async function StartPage() {
   const locale = await getLocale();
+  // The watch entry point is offered only while the features it needs are on:
+  // no dead links. /watch itself says the same if it is reached directly.
+  const watchAvailable = process.env.ENABLE_HASH_UPLOAD === "true" && crawlerEnabled();
 
   return (
     <AppShell>
@@ -29,9 +33,9 @@ export default async function StartPage() {
           <div className="hairline" />
         </div>
 
-        {/* PATH CARD */}
+        {/* PATH CARDS */}
         <section className="container section-pad">
-          <div className="mx-auto max-w-lg">
+          <div className="mx-auto grid max-w-3xl gap-5 sm:grid-cols-2">
 
             <div className="card flex flex-col">
               <span className="eyebrow">{t(locale, "start.adult.eyebrow")}</span>
@@ -42,13 +46,29 @@ export default async function StartPage() {
               </Link>
             </div>
 
-            <p className="mt-5 text-center text-sm text-[var(--text-muted)]">
-              <Link href="/start/minor" className="link-underline text-[var(--text-muted)] hover:text-[var(--ink)]">
-                {t(locale, "start.minor.link")}
-              </Link>
-            </p>
+            {watchAvailable && (
+              <div className="card flex flex-col">
+                <span className="eyebrow">{t(locale, "watch.pill")}</span>
+                <h2 className="mt-4">{t(locale, "start.watch.title")}</h2>
+                <p className="muted mt-4 text-sm leading-[1.7]">{t(locale, "start.watch.body")}</p>
+                <Link className="btn btn-secondary mt-8 w-full justify-center" href="/watch">
+                  {t(locale, "start.watch.cta")}
+                </Link>
+              </div>
+            )}
 
           </div>
+
+          <p className="mx-auto mt-5 max-w-lg text-center text-sm text-[var(--text-muted)]">
+            <Link href="/start/minor" className="link-underline text-[var(--text-muted)] hover:text-[var(--ink)]">
+              {t(locale, "start.minor.link")}
+            </Link>
+          </p>
+          <p className="mx-auto mt-2 max-w-lg text-center text-sm text-[var(--text-muted)]">
+            <Link href="/track" className="link-underline text-[var(--text-muted)] hover:text-[var(--ink)]">
+              {t(locale, "start.track.link")}
+            </Link>
+          </p>
         </section>
 
         <div className="container">
