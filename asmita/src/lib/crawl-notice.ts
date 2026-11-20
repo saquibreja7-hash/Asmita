@@ -13,6 +13,7 @@ import {
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
 import { assertVerifiedNoticeRecipient, dispatchTier2Notice } from "@/lib/notice-dispatch";
+import { copyNoticeToPartnerChannel } from "@/lib/partner-channel";
 import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
 import { checkSignedTemplate, templateDigest } from "@/lib/signed-template";
 import { parseSubmittedUrl } from "@/lib/url-parser";
@@ -354,7 +355,16 @@ export async function previewRepresentativeNotice(input: { findingId: string; ca
 }
 
 export type DispatchResult =
-  | { ok: true; dispatched: boolean; transport: typeof REPRESENTATIVE_TRANSPORT; messageId: string; sentAt: string; contentDigest: string }
+  | {
+      ok: true;
+      dispatched: boolean;
+      transport: typeof REPRESENTATIVE_TRANSPORT;
+      messageId: string;
+      sentAt: string;
+      contentDigest: string;
+      /** WP33: the partner channel copy, when the platform is a partner with one. */
+      partnerChannel?: { sent: boolean; reason?: string; partnerId?: string };
+    }
   | Refusal;
 
 /**
@@ -483,6 +493,33 @@ export async function dispatchRepresentativeNotice(input: {
         transport: REPRESENTATIVE_TRANSPORT,
       },
     });
+    // WP33: the platform partner's channel gets a copy of the same notice
+    // — in addition to the verified grievance contact, never instead of it.
+    // Never allowed to fail or retry-block the dispatch above: a channel
+    // problem is audited inside, not surfaced here.
+    let partnerChannel: { sent: boolean; reason?: string; partnerId?: string } | undefined;
+    try {
+      const page = parseSubmittedUrl(decryptField(link.urlEncrypted));
+      if (page.ok) {
+        const copy = await copyNoticeToPartnerChannel({
+          caseId: notice.caseId,
+          urlId: notice.urlId,
+          domain: page.domain,
+          subject: notice.subject,
+          body: notice.emailBody,
+          signedNoticePdf: pdf,
+          fingerprintIds: notice.fingerprintIds,
+          actorId: input.adminId,
+        });
+        partnerChannel = copy.sent
+          ? { sent: true, partnerId: copy.partnerId }
+          : copy.reason === "no_partner"
+            ? undefined
+            : { sent: false, reason: copy.reason };
+      }
+    } catch {
+      // The copy never fails the dispatch.
+    }
     return {
       ok: true,
       dispatched: result.dispatched,
@@ -490,6 +527,7 @@ export async function dispatchRepresentativeNotice(input: {
       messageId: result.notice.messageId,
       sentAt: result.notice.sentAt,
       contentDigest: notice.contentDigest,
+      ...(partnerChannel ? { partnerChannel } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "";

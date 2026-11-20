@@ -727,6 +727,37 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+## WP54. Merge master into feat/partner-sharing — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+This WP overrides the spec (assigned as a lane brief, not present in `full-crawler-spec.md`): a merge-conflict resolution, not feature work. master had just merged PR #75 (`feat/platform-partners`) and the video-fingerprint lane (WP17–19); this branch carries the partner-sharing lane (WP31–33). No feature code was added, no test was deleted, skipped or loosened.
+
+**Conflicts resolved, both sides' intent kept**
+
+- `asmita/src/i18n/hi-review-status.json` — both sides appended keys to the same list; both kept: the branch's `partnerShare.*` and master's `submit.hash.video.*`, `submit.hash.fileLabel`, `submit.hash.fileHint`, `review.fingerprints.videoItem`, `review.fingerprints.video`. Valid JSON, no duplicate keys. Verified programmatically: every string either side added is present in the merged file; the same check over `en.json` and `hi.json` (auto-merged by git) found nothing lost either.
+- `asmita/src/lib/case-ops.ts` — three conflicts, all in the hard-delete path. `HARD_DELETE_RETAINED.fingerprints` now states both: fingerprints are kept encrypted, removed from the crawler pool **and withdrawn from the partner feed**, and a video fingerprint's frame list is removed with the erasure (its row keeps the best frame's hash). The Kysely and Prisma erase twins keep the branch's WP32 steps (feed WITHDRAW events written in the transaction before the agreements go, `PartnerOutcome` rows deleted, `PartnerShareConsent` rows deleted) and master's change to the same closing `HashSubmission` update, which now clears `crawlPoolId` and `videoFramesEncrypted` together.
+- `asmita/src/lib/store.ts` — the memory erase keeps the branch's `erasePartnerShareConsentsForCases(erasedCaseIds)` and master's loop that drops a kept VPDQ row's `videoFrames` list.
+
+**Real breakage the merge caused, fixed (fakes extended, assertions untouched)**
+
+- `tests/unit/video-annex-sign-dispatch.test.ts` (master's): the branch's WP32 wraps `reviewHashSubmission` in `db.$transaction` and syncs the partner feed inside it. The test's `@/lib/db` fake had no `$transaction`, no `case.findMany`, and no partner delegates, so approval threw and the route answered 404. The fake gained a `$transaction` passthrough (the same pattern as the branch's own `hash-one-signature.test.ts`), a `case.findMany`, and partner-feed reads that answer empty — the suite signs no partner-sharing agreement, so no feed event is ever appended. All 10 tests pass with their original assertions.
+- `tests/unit/video-hash-prisma-path.test.ts` (master's): the merged `eraseUserWithPrisma` calls `tx.partnerOutcome.deleteMany` and `tx.partnerShareConsent.deleteMany` (branch, WP32), which the fixed tx mock lacked; the erasure threw, the job was marked FAILED and `hardDeleteDueUsers` returned `[]`. The tx mock gained the two delegates plus `partnerFeedEvent.findMany/createMany` (the shared-fingerprint read returns nothing here, so no event is written). The test's assertions, including `data: { crawlPoolId: null, videoFramesEncrypted: null }`, are unchanged and now pass against the merged code.
+
+No production code was changed to make tests pass.
+
+**Tests** — final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors, type-check clean, `prisma validate` ok, 169 test files / 1456 tests all passed.
+
+**Not done or not verified**
+
+- The two sides' migrations (master's `20261119000000_video_fingerprints`, the branch's partner tables) and the merged queries have run only against the memory store and the mocked/faked Prisma and Kysely clients, never against a real Postgres.
+- The E2E suites (`npm run test:e2e`) are not part of `check.sh` and were not run.
+- No `crawler/` source changed in this WP, so `crawler/README.md` and the runbook needed no further update; the merged tree already carries master's video documentation changes to them.
+
+**Deviations**
+
+- WP54 itself is the deviation from the spec's work-package list: it was assigned by lane brief as merge-conflict resolution only. No other work was started. Recorded here per the standing rule.
+
 
 ## WP39. Site chrome, navigation, target sizes and CSS accessibility (app) — 2026-11-19
 
@@ -1660,6 +1691,42 @@ WP59 is defined outside this spec (a lane work package): master had moved on (as
 
 **Commits.** Merge commit `8a793bf` "Merge master into feat/legal-pages; resolve conflicts" (parents: `32cc3ed` WP29, `4a7df76` master #83), then this entry. Not pushed, per the work package. Not run: the Playwright e2e suite (check.sh does not include it and the work package defines done as check.sh passing); `npm run build` for asmita (not part of the checks).
 
+
+## WP70. Merge master into feat/partner-sharing — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, on the merge commit `512dcdd`).
+
+This WP overrides the spec (assigned as a lane brief, not present in `full-crawler-spec.md`): a merge-conflict resolution, not feature work. Since this branch's WP54 merge, master had merged the watch-mode lane (#93: watch-and-verify WP22–WP24, link verification WP23), csp-reporting-headers (#86), forms-focus (#87) and more (SSCD WP28 app side, the lab and robustness tools, the legal-pages WP29 merge). A merge of `origin/master` into `feat/partner-sharing` had been started and left with conflicts in the working tree. No feature code was added, no test was deleted, skipped or weakened, and `reviewedByLegal` was not set anywhere.
+
+**Conflicts resolved (11 files), both sides' intent kept**
+
+- `asmita/prisma/schema.prisma` — three conflicts, all additions beside additions. `TemplateType` keeps the branch's `PARTNER_SHARING_CONSENT` and master's `WATCH_AUTHORISATION`; the branch's four partner enums (`PlatformPartnerStatus`, `PartnerFeedEventType`, `PartnerOutcomeType`, `PartnerChannelSendKind`) sit closed and complete beside master's `CrawlFindingMethod` (the shared trailing `}` closes the last one); `AuditEventType` keeps the branch's five `PARTNER_*` events and master's `WATCH_CONVERTED`, `CONTENT_STILL_ONLINE`, `CRAWL_WATCH_STARTED`. Verified programmatically: every model, enum, value and field either side has is in the merged schema (63 + 59 sides → 69 definitions), nothing new invented.
+- `asmita/prisma/template-seeds.ts` — both new templates kept whole, spliced from each side's blob: the branch's `PARTNER_SHARING_CONSENT` (WP31) and master's `WATCH_AUTHORISATION` (watch WP22), each with its own comment, body and citations.
+- `asmita/src/lib/case-ops.ts` — `HardDeleteCounts` keeps the branch's `partnerShareConsents` / `partnerFeedEvents` / `partnerOutcomes` and master's `linkVerifications`, in the type and in `emptyHardDeleteCounts` (the two overlapping counter lines became one line listing both sides' fields). The Kysely and Prisma erase twins already carried both sides' deletes (branch: partner feed WITHDRAW, outcome and agreement rows; master: `FindingEmbedding`, `LinkVerification`) — the auto-merge was correct there.
+- `asmita/src/lib/crawl-findings.ts` — both post-approval paths kept: the branch's WP33 partner channel alert and master's watch copy-found plus re-upload alerts, in the database path and in the memory path; both helper functions spliced whole from each side's blob (the shared closing brace would otherwise have swallowed the first one).
+- `asmita/tests/unit/account-hard-delete.test.ts` — the audit-entry expectation is the union: master's `linkVerifications: 2` (two seeded re-check rows, deleted with her links) and the branch's `partnerFeedEvents: 0, partnerOutcomes: 0` (no partner rows in that seed, comment kept).
+- `asmita/tests/unit/crawl-reported-sources-kysely.test.ts` — the delete-table assertion is the union list: master's `FindingEmbedding` added to the branch's `PartnerOutcome` and `PartnerShareConsent` (the Kysely delete list is exactly these eight tables when no SubmittedUrl rows exist, matching the merged implementation).
+- `asmita/tests/unit/crawl-reported-sources-prisma.test.ts` — the zero-count delegate list keeps the branch's `partnerShareConsent` / `partnerFeedEvent` / `partnerOutcome` entries and master's `linkVerification`; the auto-merged fake already had every delegate the merged erase path calls.
+- `asmita/tests/unit/admin-cases.test.ts` — both mock entries kept: the branch's `partnerOutcome` and master's `linkVerification` (with its default empty result the WP23 re-check reads).
+- `asmita/tests/unit/crawler-prisma-path.test.ts` — both beforeEach blocks kept (no partners for the WP33 gate; an open case for the WP24 re-upload read).
+- `asmita/tests/unit/notice-template-seeds.test.ts` — the template list keeps both new types; the addressed-to-Asmita exclusion now names all three (`CRAWL_AUTHORISATION`, `PARTNER_SHARING_CONSENT`, `WATCH_AUTHORISATION`) so the platform-addressed templates still must render `platformName`.
+- `asmita/tests/unit/video-hash-prisma-path.test.ts` — both mock delegate groups kept: the branch's partner rows and master's `linkVerification`.
+
+**Real breakage the merge caused, fixed (fakes extended, assertions untouched)**
+
+- `asmita/tests/unit/crawler-prisma-path.test.ts`: both sides had added a `case` mock property at different spots and the auto-merge kept both (TS1117; the later literal silently won, breaking master's `findMany`). master's `case: { findMany, findUnique }` is a superset of the branch's `case: { findUnique }`, so the branch's duplicate line was dropped — both sides' methods stay available and both sides' beforeEach calls work.
+- `asmita/tests/unit/crawl-embeddings-prisma.test.ts`: master's test faked the hash review against master's non-transactional `reviewHashSubmission`; the merged tree runs the branch's WP32 transaction there (`tx.hashSubmission.update` plus the partner-feed sync inside `$transaction`). The fake transaction client gained `hashSubmission` — `update` returns the reviewed row (the same object the test used to hand the non-transactional mock), `findMany` resolves empty so the feed sync writes no event (this file has no partner fixtures) — and the two `mockResolvedValue` calls moved to the transaction client. Every assertion is unchanged.
+
+**Everything else merged clean.** The files both sides touched but git auto-merged were each verified programmatically: every line either side added survives verbatim in the merged file (the only differences are the intentional unions above); the three i18n JSONs are valid JSON and exactly the union of both parents' keys with no duplicates (`en.json` / `hi.json`: the branch's 1023 plus master's 1196 → 1221; `hi-review-status.json`: 10 keys); this progress doc keeps every heading from both sides (55 headings). Both sides' suites run and pass together in the merged tree — master's watch/link-verification/SSCD/crawler-v3 tests and the branch's partner tests (feed, outcomes, channel alerts, sharing consent) all green.
+
+**Checks (run, not assumed).** Full `check.sh` (Node 22, both packages) on the resolved tree, which is exactly the tree committed as the merge: `crawler` — npm ci, lint, type-check, **58 test files / 628 tests passed**, build ok (`dist/main.js`, `browser-worker.js`, `decoder-worker.js`, `sscd-worker.js` all emitted). `asmita` — npm ci, `prisma generate`, lint 0 errors, type-check clean, `prisma validate` ok, **206 test files / 1981 tests passed**. Three full runs were needed: the first found the duplicate `case` property (type-check), the second found the embeddings-test fake, the third printed ALL CHECKS PASSED.
+
+**Commits.** Merge commit `512dcdd` "Merge master into feat/partner-sharing; resolve conflicts" (parents: `2037b2b` WP54, `1153843` master #93), then this entry. Not pushed, per the work package. Not run: the Playwright e2e suite (check.sh does not include it and the work package defines done as check.sh passing); `npm run build` for asmita (not part of the checks).
+
+**Deviations from the spec, with reasons**
+
+- None against the crawler spec — no crawler behaviour changed. WP70 itself is a lane instruction that sits outside the spec's work-package list (like WP54 before it); this entry follows the spec's Reporting section for it.
+- Decision recorded: in `template-seeds.ts` and the seeds test the branch's `PARTNER_SHARING_CONSENT` is ordered before master's `WATCH_AUTHORISATION` — both orders compile and pass; the branch-first order keeps this branch's diff minimal.
 ### WP72. Resolve the master merge on perf/hash-worker — 2026-11-20
 
 **Status: complete. All checks passed** (`check.sh`, both packages, Node 22, on the merge commit `3c8ddb7`). This was a merge-conflict resolution, not feature work: master had moved on (PR #86 `feat/csp-reporting-headers`, PR #93 `feat/watch-mode`, and the merges under them), and a merge of `origin/master` into `perf/hash-worker` had been started and left with conflicts. No feature code was added, no test was deleted or skipped, and `reviewedByLegal` was not set anywhere.

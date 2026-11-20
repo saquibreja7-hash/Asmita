@@ -666,6 +666,36 @@ export const templateSeeds = [
     legalCitations: ["IT Rules 2021, Rule 3(2)(b) - complaint by any person on her behalf; removal within 2 hours"],
   },
   {
+    // The survivor's agreement, given with one tick on her case page, that
+    // Asmita may share her fingerprints with platforms that joined the
+    // partner programme (src/lib/partner-share-consent.ts, WP31). Addressed
+    // to Asmita, not to a platform; nothing is sent when she ticks. No PDF
+    // and no signature: the template id and digest pin the exact text she
+    // ticked against, and the fingerprint ids she was shown are stored on
+    // the consent row. The wording starts from the plain text the owner
+    // approved for drafting (partner-sharing-spec.md, WP31) and is unreviewed
+    // until a human legal reviewer records the review. Platform obligations
+    // match what /for-platforms promises partners.
+    templateType: TemplateType.PARTNER_SHARING_CONSENT,
+    subjectTemplate:
+      "Agreement to share my image fingerprints with partner platforms - {{caseReference}}",
+    bodyTemplate: [
+      "AGREEMENT TO SHARE MY IMAGE FINGERPRINTS WITH PARTNER PLATFORMS",
+      "",
+      "Asmita Case Reference: {{caseReference}}",
+      "Declaration Reference: {{declarationReference}}",
+      "",
+      "1.  I agree that Asmita may send the fingerprints listed at the end of this agreement to online platforms that have joined Asmita's partner programme, so they can find and remove copies of my images and stop them being uploaded again.",
+      "",
+      "2.  Platforms receive only the fingerprints, never my images or my name. The platforms undertake to use the fingerprints only to find and remove the content, to block it being uploaded again, and to delete the fingerprints when Asmita tells them to.",
+      "",
+      "3.  I can withdraw this agreement at any time from my case page, and Asmita will ask the platforms to delete them.",
+      "",
+      "[The list of fingerprints covered by this agreement is appended below.]",
+    ].join("\n"),
+    legalCitations: ["MeitY NCII SOP v.1 (October 2025) - crawler and hash technology to identify and take down such content"],
+  },
+  {
     // The watch-only authorisation for "Watch for my images"
     // (watch-and-verify WP22). She lets Asmita compare her fingerprints with
     // images on public websites and alert her; nothing is sent to any

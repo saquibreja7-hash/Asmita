@@ -934,8 +934,13 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
   // during the 30-day grace period her sessions are refused, so she could
   // not withdraw herself, and no notice may go out in her name.
   const { withdrawCrawlConsentsForDeletion } = await import("@/lib/crawl-consent");
+  // Sharing with partner platforms stops too (partner-share-consent.ts):
+  // nothing new may reach a partner while her deletion is pending.
+  const { withdrawPartnerShareConsentsForDeletion } = await import("@/lib/partner-share-consent");
   if (isDevNoDb()) {
-    await withdrawCrawlConsentsForDeletion([...store.cases.values()].filter((c) => c.userId === userId).map((c) => c.id), userId);
+    const caseIds = [...store.cases.values()].filter((c) => c.userId === userId).map((c) => c.id);
+    await withdrawCrawlConsentsForDeletion(caseIds, userId);
+    await withdrawPartnerShareConsentsForDeletion(caseIds, userId);
     return store.deactivateUser(userId);
   }
   const db = await getPrismaDb();
@@ -945,6 +950,7 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
   // Withdraw first: if it fails, she is not left locked out with the search live.
   const cases = await db.case.findMany({ where: { userId }, select: { id: true } });
   await withdrawCrawlConsentsForDeletion(cases.map((c) => c.id), userId);
+  await withdrawPartnerShareConsentsForDeletion(cases.map((c) => c.id), userId);
 
   await db.user.update({ where: { id: userId }, data: { deactivatedAt } });
 
@@ -962,7 +968,7 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
 export const HARD_DELETE_RETAINED = {
   user: "id, role, verification flags, declared age and created date; no email or email hash",
   case: "id, reference number, status CLOSED, NGO-verified flag and created/updated dates",
-  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool; a video fingerprint's frame list is removed with the erasure, its row keeps the best frame's hash",
+  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool and withdrawn from the partner feed; a video fingerprint's frame list is removed with the erasure, its row keeps the best frame's hash",
   deletionJob: "id, case id, dates and status",
   adminAccessLog: "which admin opened which case or link, and when; the reason text is cleared",
   auditLog: "earlier entries are append-only and unchanged",
@@ -983,13 +989,18 @@ export type HardDeleteCounts = {
   otpCodes: number;
   crawlFindings: number;
   crawlConsents: number;
+  partnerShareConsents: number;
+  /** WP32: feed WITHDRAW events written so partners delete what they hold. */
+  partnerFeedEvents: number;
+  /** WP32: partner-reported outcomes for her cases (they can hold her links). */
+  partnerOutcomes: number;
   linkVerifications: number;
 };
 
 function emptyHardDeleteCounts(cases: number): HardDeleteCounts {
   return {
     cases, links: 0, notices: 0, escalations: 0, deliveryProofs: 0, feedback: 0, sessions: 0, otpCodes: 0,
-    crawlFindings: 0, crawlConsents: 0, linkVerifications: 0,
+    crawlFindings: 0, crawlConsents: 0, partnerShareConsents: 0, partnerFeedEvents: 0, partnerOutcomes: 0, linkVerifications: 0,
   };
 }
 
@@ -1067,6 +1078,17 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
     const findingIds = (await tx.selectFrom("CrawlFinding").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
     counts.crawlFindings = deleted(await tx.deleteFrom("CrawlFinding").where("caseId", "in", caseIds).execute());
     counts.crawlConsents = deleted(await tx.deleteFrom("CrawlConsent").where("caseId", "in", caseIds).execute());
+    // WP32: the partner feed is told to delete what it holds of hers before
+    // the agreements go (WITHDRAW events, ids only, written in this
+    // transaction), and outcome rows for her cases go too — they are the only
+    // partner rows that can hold one of her links.
+    const caseRefById = new Map(caseRows.map((row) => [row.id, row.referenceNumber]));
+    const { withdrawSharedFingerprintsForErasureKysely } = await import("@/lib/partner-feed");
+    counts.partnerFeedEvents = await withdrawSharedFingerprintsForErasureKysely(tx, caseIds, caseRefById);
+    counts.partnerOutcomes = deleted(await tx.deleteFrom("PartnerOutcome").where("caseId", "in", caseIds).execute());
+    // Partner-sharing agreements go too, so nothing of hers stays shareable
+    // (the kept fingerprints stop being shared the moment the row is gone).
+    counts.partnerShareConsents = deleted(await tx.deleteFrom("PartnerShareConsent").where("caseId", "in", caseIds).execute());
     await tx.updateTable("HashSubmission").set({ crawlPoolId: null, videoFramesEncrypted: null }).where("caseId", "in", caseIds).execute();
     counts.feedback = deleted(await tx.deleteFrom("Feedback").where((eb) => eb.or([
       eb("caseId", "in", caseIds),
@@ -1136,6 +1158,17 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     const findingIds = (await tx.crawlFinding.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
     counts.crawlFindings = (await tx.crawlFinding.deleteMany({ where: { caseId: { in: caseIds } } })).count;
     counts.crawlConsents = (await tx.crawlConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
+    // WP32: the partner feed is told to delete what it holds of hers before
+    // the agreements go (WITHDRAW events, ids only, written in this
+    // transaction), and outcome rows for her cases go too — they are the only
+    // partner rows that can hold one of her links.
+    const caseRefById = new Map(caseRows.map((row) => [row.id, row.referenceNumber]));
+    const { withdrawSharedFingerprintsForErasurePrisma } = await import("@/lib/partner-feed");
+    counts.partnerFeedEvents = await withdrawSharedFingerprintsForErasurePrisma(tx, caseIds, caseRefById);
+    counts.partnerOutcomes = (await tx.partnerOutcome.deleteMany({ where: { caseId: { in: caseIds } } })).count;
+    // Partner-sharing agreements go too, so nothing of hers stays shareable
+    // (the kept fingerprints stop being shared the moment the row is gone).
+    counts.partnerShareConsents = (await tx.partnerShareConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
     await tx.hashSubmission.updateMany({ where: { caseId: { in: caseIds } }, data: { crawlPoolId: null, videoFramesEncrypted: null } });
     counts.feedback = (await tx.feedback.deleteMany({
       where: { OR: [{ caseId: { in: caseIds } }, { caseReference: { in: caseRows.map((row) => row.referenceNumber) } }] },
