@@ -52,6 +52,11 @@ const fakeDb = vi.hoisted(() => {
         return { count };
       },
     },
+    // WP28 (ADR 008): a withdrawal now deletes the case's SSCD embeddings
+    // too; this fake has none to delete.
+    findingEmbedding: {
+      deleteMany: async () => ({ count: 0 }),
+    },
     submittedUrl: {
       findFirst: async ({ where, include }: { where: Row; include?: Row }) => {
         const row = [...s().urls.values()].find((u) => matches(u, where));

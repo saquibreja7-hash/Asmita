@@ -1029,7 +1029,10 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
       counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
     }
     // Crawler matches and authorisations go; the kept fingerprints leave the
-    // pool, and a kept video fingerprint loses its frame list (WP17).
+    // pool, and a kept video fingerprint loses its frame list (WP17). The
+    // SSCD embeddings of her confirmed copies go with the findings (ADR 008,
+    // WP28) — before the CrawlFinding delete, in the same transaction.
+    await tx.deleteFrom("FindingEmbedding").where("caseId", "in", caseIds).execute();
     const findingIds = (await tx.selectFrom("CrawlFinding").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
     counts.crawlFindings = deleted(await tx.deleteFrom("CrawlFinding").where("caseId", "in", caseIds).execute());
     counts.crawlConsents = deleted(await tx.deleteFrom("CrawlConsent").where("caseId", "in", caseIds).execute());
@@ -1093,7 +1096,10 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: urlIds } } });
     counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
     // Crawler matches and authorisations go; the kept fingerprints leave the
-    // pool, and a kept video fingerprint loses its frame list (WP17).
+    // pool, and a kept video fingerprint loses its frame list (WP17). The
+    // SSCD embeddings of her confirmed copies go with the findings (ADR 008,
+    // WP28) — before the CrawlFinding delete, in the same transaction.
+    await tx.findingEmbedding.deleteMany({ where: { caseId: { in: caseIds } } });
     const findingIds = (await tx.crawlFinding.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
     counts.crawlFindings = (await tx.crawlFinding.deleteMany({ where: { caseId: { in: caseIds } } })).count;
     counts.crawlConsents = (await tx.crawlConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
