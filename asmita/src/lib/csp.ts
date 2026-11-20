@@ -69,6 +69,17 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = fals
   return [
     "default-src 'self'",
     `script-src ${scriptSrc.join(" ")}`,
+    // The PDQ hashing Web Worker (WP42) is a real same-origin script the
+    // bundler emits, so 'self' covers it on every page; blob: is
+    // deliberately absent because the worker is never an inline blob (its
+    // URL is a file the bundler emits, in dev and in both production
+    // builds). The C2PA engine's worker (WP38) is the one exception —
+    // same-origin in production (https), an inline blob: URL over plain
+    // http (local development) — so /check-image and the /c2pa/* assets
+    // additionally allow blob:, inside the SAME directive: a policy enforces
+    // only its first worker-src, so a second, later blob: entry would be
+    // silently ignored and the dev reader's worker would be blocked.
+    ...(c2pa ? ["worker-src 'self' blob:"] : ["worker-src 'self'"]),
     "style-src 'self' 'unsafe-inline' 'report-sample'",
     "img-src 'self' data:",
     // The browser opens the signed voice WebSocket straight to Sarvam; the
@@ -81,10 +92,6 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = fals
     // data the page already holds — it grants no cross-origin media — and
     // script-src stays closed to blob: everywhere except /talk's worklet.
     "media-src 'self' blob:",
-    // WP38: the C2PA engine's worker — same-origin in production (https),
-    // an inline blob: URL in local development. Scoped to the one page; on
-    // every other page workers stay governed by script-src 'self'.
-    ...(c2pa ? ["worker-src 'self' blob:"] : []),
     "font-src 'self' data:",
     "object-src 'none'",
     `frame-ancestors ${frameAncestors}`,

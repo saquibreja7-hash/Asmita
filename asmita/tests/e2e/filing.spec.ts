@@ -82,6 +82,11 @@ test("links can be added before the email code, and nothing reaches the server u
   await expect(page).toHaveURL(/\/submit$/);
 
   await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
+  // Wait for the debounced link checks to settle before anything is clicked:
+  // the textarea keeps focus after typing, and a click inside the 600 ms
+  // debounce window blurs it, flushing the checks mid-click — the reflow
+  // moves the declaration card under the pointer and the click misses it.
+  await expect(page.locator("#url-checks")).toBeVisible();
   await page.getByText(/I declare that I am the person depicted/).click();
   await page.getByRole("button", { name: "Continue to review" }).click();
   await expect(page).toHaveURL(/\/register$/);
@@ -108,6 +113,8 @@ test("someone under 18 when the content was made goes to the minor pathway, even
   await answer("18 or over");
   await expect(page).toHaveURL(/\/submit$/);
   await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
+  // Same as above: let the debounced checks settle before the click.
+  await expect(page.locator("#url-checks")).toBeVisible();
   await page.getByText(/I declare that I am the person depicted/).click();
   await page.getByRole("button", { name: "Continue to review" }).click();
   await expect(page).toHaveURL(/\/register$/);

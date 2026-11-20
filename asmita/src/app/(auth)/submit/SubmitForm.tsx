@@ -2,14 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { computePdqHash, PDQ_CLIENT_VERSION } from "@/lib/pdq/pdq";
-import {
-  fingerprintVideo,
-  toVideoHashItem,
-  VpdqError,
-  type VideoFrameHash,
-  type VpdqErrorCode,
-} from "@/lib/pdq/vpdq";
+import type { VideoFrameHash, VpdqErrorCode } from "@/lib/pdq/vpdq";
 import type { HashPickerPlatform } from "@/lib/hash-submission";
 import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
@@ -51,26 +44,6 @@ const VIDEO_ERROR_KEYS: Partial<Record<VpdqErrorCode, MessageKey>> = {
   video_too_long: "submit.hash.video.error.tooLong",
   video_no_frames: "submit.hash.video.error.noFrames",
 };
-
-async function hashImageFile(file: File): Promise<{ hash: string; quality: number }> {
-  const bitmap = await createImageBitmap(file);
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) throw new Error("canvas_unavailable");
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(bitmap, 0, 0);
-    const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
-    const result = computePdqHash(imageData);
-    canvas.width = 0;
-    canvas.height = 0;
-    return result;
-  } finally {
-    bitmap.close();
-  }
-}
 
 type Props = {
   // Without a session the draft waits in this tab while the email is confirmed.
@@ -183,6 +156,27 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     abortRef.current = controller;
     // A run that was superseded by a newer selection writes no state.
     const isActive = () => abortRef.current === controller;
+    // The PDQ/vPDQ code and the hashing worker load only now, when a file is
+    // chosen, keeping them out of the form's initial chunk (WP42 P13).
+    let hashing: typeof import("@/lib/pdq/hash-file");
+    try {
+      hashing = await import("@/lib/pdq/hash-file");
+    } catch {
+      // The hashing module itself could not load: every chosen file gets the
+      // same kind error it would get from a failed read. Nothing was sent.
+      if (isActive()) {
+        setHashFiles((current) =>
+          current.map((entry) =>
+            entry.status === "hashing"
+              ? { ...entry, status: "error" as const, error: entry.kind === "video" ? ("video_cannot_read" as VpdqErrorCode) : undefined }
+              : entry,
+          ),
+        );
+      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    const { hashImageFile, fingerprintVideo, VpdqError } = hashing;
     const finished: (FileHashState | undefined)[] = [];
     for (const [index, file] of selected.entries()) {
       if (controller.signal.aborted) break;
@@ -205,6 +199,11 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             },
           });
           if (frames.length === 0) throw new VpdqError("video_no_frames");
+          // One macrotask before "ready" replaces the reading line: the
+          // worker's async tail otherwise lets React batch the final 100%
+          // progress tick (which WP40 A8 always keeps) with this update, so
+          // the reading line never visibly reaches 100%.
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
           finished[index] = { name: file.name, kind: "video", status: "hashed", frames, durationSec };
         } else {
           const { hash, quality } = await hashImageFile(file);
@@ -280,7 +279,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   }
 
   // The declaration is logged on the review step, once there is a session.
-  function submit() {
+  async function submit() {
     setError("");
     if (focusFirstSubmitError()) return;
     const parsed = parsedUrlsAtSubmit();
@@ -291,6 +290,10 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     }
     setSubmitting(true);
     try {
+      // The video item builder and the PDQ client version come from the same
+      // lazily loaded module that hashed the files (WP42 P13). No file was
+      // hashed means there is nothing to build, so nothing extra loads.
+      const pdq = hashedFiles.length > 0 ? await import("@/lib/pdq/hash-file") : null;
       const selectedPlatforms = hashOnly ? platforms.filter((p) => selectedPlatformIds.includes(p.id)) : [];
       const formLinks = new Map<string, { name: string; formUrl: string }>();
       const remainingUrls = parsed.filter((url) => {
@@ -312,10 +315,11 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
         urls,
         // One entry per fingerprinted file: the existing image item, or the
         // WP17 video item (frame hashes and timestamps only, never media).
+        // pdq is non-null exactly when hashedFiles is non-empty (above).
         hashes: hashedFiles.map((f) =>
           f.kind === "video"
-            ? toVideoHashItem({ frames: f.frames ?? [], durationSec: f.durationSec ?? 1 })
-            : { hash: f.hash!, quality: f.quality ?? 0, clientVersion: PDQ_CLIENT_VERSION },
+            ? pdq!.toVideoHashItem({ frames: f.frames ?? [], durationSec: f.durationSec ?? 1 })
+            : { hash: f.hash!, quality: f.quality ?? 0, clientVersion: pdq!.PDQ_CLIENT_VERSION },
         ),
         platformIds: hashOnly ? remainingPlatforms.map((p) => p.id) : [],
         emailPlatformIds: remainingPlatforms.filter((p) => p.hasEmail).map((p) => p.id),
