@@ -489,4 +489,29 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
 
+### WP62. Merge master into fix/host-cookies-fetch-metadata; resolve conflicts (repo-wide) — 2026-11-20
 
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP62 is a merge-conflict resolution lane, defined outside this spec like the other recent WPs: master had moved on (several PRs merged, among them the WP41 and WP53 lanes) and the merge of `origin/master` into this branch was left with conflicts in the working tree. No feature work was added, no test was deleted, skipped or loosened, and no `crawler/` source was touched.
+
+**What was done**
+
+- The two conflicted files, `asmita/src/app/api/auth/logout/route.ts` and `asmita/src/app/api/admin/auth/logout/route.ts`, are resolved so both sides' intent holds: master's `Clear-Site-Data: "cache", "storage"` header (web audit WP41 — the shared-phone wipe) is kept, and so is this branch's `__Host-` cookie-name clearing: the `withLegacyFallback` loop expires the current `__Host-` name and the pre-migration plain name (Secure, Path=/), and the admin route keeps its `/admin`-scoped plain-name append. In production both names are expired, in dev/test exactly the plain one — master's `tests/unit/logout-clear-site-data.test.ts` and this branch's `tests/unit/cookie-migration.test.ts` both pass unchanged against the merged code.
+- The files both sides had changed that git auto-merged were verified by reading them, not just compiling: `asmita/src/lib/eligibility.ts` keeps the branch's `COOKIE_BASE_NAMES` constant and master's session-cookie-without-Max-Age (WP41 S10); `asmita/docs/product/web-audit-progress.md` keeps the WP47, WP41 and WP53 sections; this progress file keeps both sides' entries.
+- The i18n JSON (`en.json`, `hi.json`, `hi-review-status.json`) was checked programmatically: valid JSON, no duplicates, and the merged key set is exactly the union of both sides (only master changed them — the `chat.reply.*` keys and `machineTranslatedWp48` are all present).
+- The merge itself was committed first (`88f191f`, "Merge master into fix/host-cookies-fetch-metadata; resolve conflicts"), as the lane instructs; this entry is the second and final commit. Not pushed, not rebased.
+
+**Tests** (all run, all passing — from the final `check.sh` on the merged tree, Node 22)
+
+- `crawler`: lint, type-check, 29 test files / 350 tests, build ok (untouched by this lane, re-confirmed green).
+- `asmita`: lint 0 errors, type-check clean, `prisma validate` ok, 162 test files / 1421 tests all passed.
+
+**Not done or not verified**
+
+- The Playwright e2e suite and `scripts/worker-smoke.mjs` are not part of this lane's checks and were not run; they run in the separate verify step.
+
+**Deviations and decisions**
+
+- The merge-commit message follows the lane instruction ("Merge master into fix/host-cookies-fetch-metadata; resolve conflicts" plus the Co-Authored-By line) rather than a spec-style WP message; the second commit carries this entry.
+- Where the two logout sides overlapped, master's hardcoded base-name `response.cookies.set(...)` calls were dropped in favour of the branch's cookie-name helpers, because `withLegacyFallback` expires the same base name (plus the `__Host-` name) with the attributes both sides wanted — keeping both spellings would have emitted the same Set-Cookie twice. No route is left clearing only one name.
