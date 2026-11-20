@@ -727,6 +727,221 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+
+## WP40. Web audit: forms, errors and focus in the survivor flow — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22). This is an owner-approved best-practice audit work package (A3, A4, A7–A13, A23, A27, S12), not a crawler-spec WP; no `crawler/` source changed, and the crawler re-ran green only to confirm nothing broke.
+
+**What was built**
+
+- A3: the registration code entry is one single box (`RegisterForm.tsx`): `type=text`, `inputmode=numeric`, `autocomplete=one-time-code`, `maxlength=6`, `pattern=[0-9]{6}`, letter-spacing, visible label. The six per-digit boxes and their hard-coded "Verification code digits" group name are gone; typed, pasted and autofilled codes all land in it. The admin sign-in already used a single box and does not share the component.
+- A4: one shared `asmita/src/components/FormError.tsx` (`role="alert"`) now carries the failure messages of `SubmitForm`, `ReviewSignForm` (sign step), `SignNoticeForm`, `DeleteAccountForm` and `CaseDashboardActions` (success lines stay polite `role="status"`). RegisterForm's local copy is the component that was promoted. ImageChecker is WP43's, untouched.
+- A7: the per-line link checks left the `aria-live` list; they recompute after a 600 ms pause or on blur (the draft is always parsed fresh at submit, so a quick submit sends what was typed), and one summary sentence ("Links ready to file: N. Lines that will be left out: M.") is announced in a `role="status"`.
+- A8: video hashing shows a native `<progress>` element; React progress updates are throttled to about four a second (first and final ticks always land). The file list is no longer a live region; the start ("Your video is not uploaded.") and finish ("Video fingerprint created on this device.") sentences are polite statuses.
+- A9: `SubmitForm`, `ReviewSignForm` (sign step), `SignNoticeForm` and `FeedbackForm` wrap their fields in a real `<form>` with a `type="submit"` button, so Enter submits. The buttons are disabled only while submitting; validation runs on submit and focuses the first problem. Request bodies, signed text and the fingerprint annex logic are untouched.
+- A10: the sign forms' contact email is checked on blur, sets `aria-invalid`, links its error and existing hint via `aria-describedby`, clears on input, and gets `autocapitalize=none autocorrect=off spellcheck=false`.
+- A11: focus moves to each new step's heading (`tabIndex=-1`) — registration age → email → code (and the track-mode "no case" screen), review → sign, and the helpline call start; after a wrong code, focus returns to the code box.
+- A12: the registration age radios are a `fieldset` with a visually hidden legend (the existing "How old are you now?" string) and share the `ageNow` name; the second question's radios share `ageThen`.
+- A13: the submit form's platform checkboxes are a `fieldset` with the existing question as `legend`; the fieldset takes the focus when a hash-only submit has no platform chosen.
+- A23: every `FeedbackForm` field is described by its hint (`aria-describedby`).
+- A27: after the account deletion request, the done screen's message is a `role="status"` and focus moves to its heading.
+- S12: the submit form's links textarea gets `autocomplete=off autocorrect=off autocapitalize=off`.
+- New strings in `en.json` + `hi.json`, listed as machine translated in `hi-review-status.json`: the link summary, six sign-form field errors (name / contact / confirmation, in both the review-sign and case-sign wordings), and the hidden helpline-call heading.
+- Docs: `asmita/docs/product/web-audit-progress.md` created with the WP40 entry (what changed, what was not verified, sentences needing the owner's approval, decisions made alone).
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/forms-focus.test.ts` — 15 tests: the shared FormError markup, the age fieldset/legend/shared name, the single code box (source-pinned: `one-time-code`, `maxlength=6`, `pattern=[0-9]{6}`, no per-digit ids), the sign form's form/hint linkage/autocorrect-off, the feedback form's described hints, the submit form's never-disabled button, no `aria-live` anywhere in it, the `<progress>` element and the 250 ms throttle, and the eight new keys present in both languages and listed as machine translated.
+- New `tests/e2e/forms-focus.spec.ts` — 4 tests: a failed code request shows `getByRole("alert")`; Enter submits the feedback form; the helpline call start focuses the new screen's heading; and the database journey (chromium only, the reviewer marks the template reviewed as in notice-integrity.spec.ts) — Enter on the sign screen announces and focuses each missing field, then signs from the Enter key and lands on the confirmation page.
+- `tests/e2e/reporting-journey-polish.spec.ts`: the six-digit-boxes test rewritten for the single box (typed, paste-equivalent insertion, autofill-style fill, registration completes) plus a new wrong-code test (alert + focus back on the box) — the old markup it asserted is gone by design.
+- `tests/e2e/filing.spec.ts`, `hash-flow.spec.ts`, `video-hash-flow.spec.ts`: the three `toBeDisabled()` assertions on "Continue to review" became click-then-assert (status hint + focus on the first problem), because A9 removes validation-blocking disabled states on purpose; `video-hash-flow.spec.ts` also gains the visible `progress` element assertion.
+- Package totals, from the final `check.sh` run (Node 22) — `crawler`: lint, type-check, 29 test files / 350 tests all passed, build ok (no `crawler/` source touched). `asmita`: lint 0 errors (4 pre-existing warnings in untouched files), type-check clean, `prisma validate` ok, 153 test files / 1265 tests all passed.
+
+**Not done or not verified**
+
+- The full Playwright run is the separate verify step and was not run here (this host has no throwaway Postgres 17 on the E2E port); the new and changed specs are written and type-checked with the rest of the app.
+- The Hindi sentences were drafted by machine, not read by a native speaker (flagged in `hi-review-status.json`).
+- Screen-reader behaviour was reasoned from ARIA semantics, not listened to with a running screen reader.
+
+**Deviations and decisions, with reasons**
+
+- The line checks lag 600 ms behind typing (the audit asked for "blur or a short pause"); the submit path always parses the current text, so nothing typed is lost by submitting quickly.
+- The video progress keeps its visible "Reading your video on this device: N%" text beside the new `<progress>` bar: the audit's complaint was the per-tick announcement, which the removed live region and the throttle fix; the committed e2e's recorded progress (two distinct values, ending at 100) still holds because the first and final ticks always render.
+- The registration and code-entry buttons keep their existing gating (loading, 6 digits): A9 names only the submit, review-sign, sign and feedback forms, so their rule was not extended beyond the list.
+- The age radios' legend reuses the existing "How old are you now?" string, visually hidden — no new sentence was added for it.
+- The wrong-code e2e uses "000000" against a random code; the 1-in-a-million collision is accepted (all codes in every test are synthetic).
+- "Forced submit failure shows an alert" is covered by intercepting `POST /api/auth/request-otp` with a 500 on the email step (no database needed), which exercises the shared FormError on a real failure path.
+## Owner changes
+
+### WP26. 24-hour platform deadline (owner decision, 19 November 2026) — 2026-11-19
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, final run on the committed tree).
+
+**What was built**
+
+- `PLATFORM_DEADLINE_HOURS` (`asmita/src/lib/escalation-ladder.ts`) is 24: the survivor's ladder, the admin case work and every test that derives from it now give the platform 24 hours. Its doc comment states both facts: Rule 3(2)(b) sets 2 hours (G.S.R. 120(E), in force 20.02.2026; PRD Section 4); 24 hours is the period our notices ask for.
+- `asmita/prisma/template-seeds.ts`: every sentence in which a notice asked the platform to act within 2 hours now asks for 24 hours, phrased as Asmita's request and never attributed to the Rule. Changed sentences: the IT_RULES_2021 subject line (twice: `subjectTemplate` and the body's `Subject:` line), demand (i) of IT_RULES_2021, demand (i) of IT_RULES_AND_DMCA, and item 4 of CRAWL_REPRESENTATIVE_NOTICE. Every sentence that states what the Rule requires (the legal-basis paragraphs, the SOP note, the hash advisory's 5.2, the L1 cover's item 2, the FIR package's item 4) keeps the two-hour period, and every `legalCitations` entry is unchanged — no law is misstated and no citation added. The changed sentences are listed before -> after in the commit message for the owner's approval; the seed logic that resets `reviewedByLegal` when text changes is untouched, and nothing sets `reviewedByLegal`.
+- Survivor-facing copy that tells her when the platform must act already said 24 hours everywhere (`home.blockA.*`, `hiw.tl1.body`, `faq.s2.a4` in en.json and their hi.json counterparts, the public home page, resources, chat knowledge, the L2 email), and the ladder's deadline step now computes 24 hours from the constant. No en.json or hi.json value needed a change, so `hi-review-status.json` is untouched and nothing new is machine translated.
+- `asmita/src/app/(public)/for-platforms/page.tsx` does not exist on this branch; there was nothing to leave alone.
+- `asmita/src/lib/escalation-engine.ts`: comment-only update — the L1 cover states the Rule's two-hour deadline, which the representative notice does not demand (it asks for twenty-four hours), so the exclusion rationale still holds and is now worded for the new text.
+- Docs: `asmita/docs/product/escalation-ladder.md` (step 2 is 24h; the Deadlines section states the ask and the Rule's period separately; a WP26 sentence in the Notice redraft section), `asmita/docs/product/crawler-notice-flow.md` (the two stale two-hour sentences), `asmita/docs/legal/notice-redraft-2026-11.md` (a dated **Update 2026-11-19** note: the changed sentences reset `reviewedByLegal` on the next seed and are listed before -> after in the commit for re-review), and the legal pack `asmita/docs/legal/Asmita-Legal-Notices-2026-11.docx` regenerated from the changed templates with `node scripts/generate-notice-pack.mjs` (Node 22 helper), as that memo requires after any template change.
+
+**Decisions, recorded per the standing rule**
+
+- The survivor's copyable appeal wording `ladder.draft.appeal` (en.json and hi.json) keeps "a platform must take all reasonable and practicable measures to remove it within two hours": it is a statement of what Rule 3(2)(b) requires, the legal reviewer confirmed that exact wording on 2026-11-17, and restating the Rule at 24 hours would misstate the law to her and to the Grievance Appellate Committee. The survivor-facing bullet is met by the deadline copy, which says 24 hours; the appeal states the law, like the for-platforms page the WP shields.
+- The IT_RULES_2021 subject line changed to "within twenty-four hours": the subject states the relief the complaint seeks, so it must match the demand; the Rule's own two-hour period is stated in the legal-basis section the subject sits over.
+- In the two demand items, "as Rule 3(2)(b) of the IT Rules requires" became "as Asmita requests (Rule 3(2)(b) of the IT Rules requires it within two hours)": keeping the attribution to the Rule would misstate it (it sets two hours, not twenty-four), and dropping the citation would weaken a legal demand; the parenthetical keeps the citation and both periods correctly attributed. The joint notice's forty-eight-hour parenthetical is unchanged (still true against both periods).
+- The L1 follow-up cover, the FIR package and the hash advisory are unchanged: all their two-hour sentences state what the Rule requires, and none of them asks the platform to act within two hours. The L1 still fires at 24 hours — now exactly when the asked period ends; the engine's own schedule (L1 24h, L2 48h, L3 7 days) was never computed from `PLATFORM_DEADLINE_HOURS` and is unchanged.
+- No crawler behaviour changed, so `crawler/README.md` and the runbook are untouched; root `CLAUDE.md` contains no deadline statement and was not edited.
+
+**Tests** (all run, all passing)
+
+- `tests/unit/notice-template-seeds.test.ts`: the "Indian templates demand removal within two hours" test now asserts the split — statements of the Rule keep "TWO (2) HOURS" in IT_RULES_2021, IT_RULES_AND_DMCA, HASH_ADVISORY and ESCALATION_L1; the two demands ask "within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests"; a negative regex proves the 24 hours are never attributed to the Rule; the CRAWL_REPRESENTATIVE_NOTICE assertions pin the new ask sentence and the Rule's two-hour statement. Each changed assertion carries a WP26 note saying why (owner decision; the law keeps its true period).
+- `tests/unit/escalation-ladder.test.ts` and `tests/unit/escalation-ladder-view.test.ts`: notes only — both assert through the constant, so they move with it; the view test's "two-hour deadline" comment now says 24-hour. `tests/unit/admin-cases.test.ts` needed no change (it derives from the constant).
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors (the 3 pre-existing warnings in an untouched script, no new ones), type-check clean, `prisma validate` ok, 152 test files / 1250 tests all passed.
+
+**Not done or not verified**
+
+- The PDF copy of the legal pack was not regenerated: no docx-to-pdf converter exists on this host, and the 2026-11-17 regeneration updated the docx only, so the PDF already lagged one review cycle. The docx is the artifact counsel reads, per the memo that requires regeneration.
+- `reviewedByLegal` is not set anywhere, so nothing can be sent from the changed templates until the legal reviewer records the review on each row in production. That is the owner's and counsel's step, deliberately outside this WP.
+- The regenerated docx was verified by extracting its text (all five changed sentences present) but not opened in a Word processor.
+
+## Legal pages
+
+### WP29. Bring the legal pages up to date with every new feature — 2026-11-19
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, final run on the committed tree). Owner decision, 19 November 2026 (Saquib). Counsel must review every paragraph listed below before the pages are published; both pages stay marked "Draft pending legal review" and no `reviewedByLegal` was set anywhere.
+
+**Scope.** `asmita/src/app/(public)/privacy/page.tsx` (copy in `src/i18n/en.json`), `asmita/src/app/(public)/terms/page.tsx` (inline English), and `asmita/src/app/legal/page.tsx` (the `/legal` alias, file unchanged — it re-exports the terms page). Every other public page was searched for statements about what Asmita collects, keeps or shares (home, about, what-we-do, how-it-works, faq, check-image, research, contact, talk, resources): none makes a claim the eight WP29 features make false, so none was changed. No tick box, consent template, notice template or crawler code was touched; `prisma/template-seeds.ts` is untouched.
+
+**New section ids** (stable, so tick boxes elsewhere can link: `#fingerprints`, `#video`, `#crawler`, `#watch`, `#partner-sharing`, `#sscd`, `#platform-partners` on `/privacy`; `#search-and-watch` on `/terms`). Each appears in the page's contents list and in `tests/unit/legal-pages.test.ts`.
+
+**What was written — every new or changed paragraph, for owner and counsel approval**
+
+Privacy policy (all values are English in `en.json`; see the English-only decision below for `hi.json`):
+
+- Edited: `privacy.hero.version` — "Last updated · 19 November 2026 · Version 1.1" (was 17 May 2026, Version 1.0).
+- Edited: `privacy.tldr.p1.detail` (the "We never see your content" promise) — now says the app never opens a link you submit, fingerprints are computed on your device, and when you ask for the web search a separate Asmita service visits public websites and compares what it sees with your codes, keeping nothing but the matches, which a person reviews.
+- Edited: `privacy.s01.p1` (scope) — now also covers the crawler and the information platform staff give when they join the partner programme.
+- Edited: `privacy.s03.intro` — "five categories" → "six categories".
+- Edited: `privacy.s03.i2.detail` (case data) — fingerprints are image codes (PDQ) or video codes (vPDQ), generated on your device; the images and the video are never sent.
+- New: `privacy.s03.i5` — "Web-search and watch data." — what the search stores (encrypted found addresses, match records, the one-tick authorisation; purged 30 days after first seen; site names of confirmed copies on the case page).
+- New: `privacy.s03.i6` — "Partner programme contacts." — work contact details of platform staff, encrypted at rest.
+- Edited: `privacy.s04.i1.detail` ("The intimate content itself") — never receive or store your image or video; the deeper AI check exception; the crawler holds public pages and images in memory only for the moment it takes to fingerprint each one and then throws them away; nothing is written to its disk.
+- Edited: `privacy.s05.i2b` — retitled "Fingerprint codes -"; purposes extended: notices, the web search when you ask for it, and partner platforms only under your separate tick.
+- New: `privacy.s05.i5` — "Web-search and watch data -" (find copies, check removed content stays down, alert you).
+- New: `privacy.s05.i6` — "Partner programme contacts -" (verify and run the programme).
+- Edited: `privacy.s07.i1` — appended: found addresses are purged on the same 30-day schedule as reported links.
+- New: `privacy.s07.i6` — "Fingerprints (images and videos):" — kept with your case; on account deletion kept detached from your identity so platforms can keep blocking, a video's per-second list deleted; stopping a watch deletes the fingerprints it covers.
+- New: `privacy.s07.i7` — "Found copies and web-search records:" — 30-day purge; the signed authorisation kept as a record; site names never linked to you.
+- New: `privacy.s07.i8` — "Partner programme contacts:" — kept while the programme may need to reach that platform; Grievance Officer deletes on request. No period invented (none exists in code or spec).
+- Edited: `privacy.s08.i1` (platforms) — appended: every notice asks the platform to act within 24 hours, alongside the timelines the law itself sets.
+- New: `privacy.s08.i6` — "Partner platforms, only with your separate tick." — only the fingerprint code and a case reference, plus the links from your case on that partner's own platform; never your image, video or name; partners must delete on withdrawal.
+- New: `privacy.s09.i7` — "Crawler isolation." — separate service, nothing written to disk, images fingerprinted in an isolated child process and thrown away, logs carry counts only.
+- Edited: `privacy.s10.i3` (right to erasure) — appended the exception: fingerprint codes are kept, detached from you, so platforms can keep blocking.
+- Edited: `privacy.s13.p1` — "All personal data is stored on servers physically located in India" narrowed to the truth: account, case, notice and fingerprint records are stored encrypted on servers in India.
+- Edited: `privacy.s13.p2` (transfers) — the two cross-border exceptions: a notice you ask us to send to a platform outside India; and, when you have asked for the web search, your fingerprint codes held in the crawler's memory for each pass (up to 50 minutes, hourly) because the crawler runs on Cloudflare's container platform, which cannot place a container in India — nothing is written there, every stored record stays in Mumbai.
+- New section `#fingerprints` ("Your image fingerprints") — `privacy.fp.p1` + 5 cards (what we collect, why, where processed, how long, who shared with) + a callout that a rough, blurry likeness can sometimes be reconstructed from a PDQ hash (already stated to platforms in the notice templates and in the FAQ), which is why fingerprints are encrypted.
+- New section `#video` ("Video fingerprints") — `privacy.video.p1` + 5 cards + `privacy.video.p2`: vPDQ, one code per sampled second made on her device, at most 1,000 codes, the video never leaves her device ("not one frame of it is ever sent"); on account deletion the entry is kept detached and its per-second list is deleted; browsers cannot read every format and nothing is sent if hers cannot be read.
+- New section `#crawler` ("How Asmita searches the web") — `privacy.crawl.p1`/`p2` + 5 cards + callout: what it fetches (public pages and images, held in memory only, thrown away after fingerprinting, nothing written to disk, logs carry counts only, non-matches never reported); what it stores (encrypted match records purged 30 days after first seen, encrypted page addresses still to visit, site names never linked to you; confirmed copies appear by website name only and in the export); the one-tick authorisation (covers comparison and representative notices); representative notices sent by Asmita in its own name, never her signature, same verified-contact and legal-review gates, 24-hour ask; withdrawal (fingerprints leave the pool at once, unreviewed matches deleted, unsent copies stopped for good, search stops within about an hour, sent notices cannot be recalled, account deletion withdraws every case); where it runs (Cloudflare Containers, hourly, ≤ 50-minute pass, pool in memory outside India, records and keys in Mumbai).
+- New section `#watch` ("Watch for copies, and checks that content stays down") — `privacy.watch.p1` + 3 cards + `privacy.watch.p2`: watch without filing a complaint (no links collected, nothing sent to any platform unless you choose, alert email carries only the case reference, page shows the site name, "take it down" converts and asks for the full authorisation, stopping deletes your fingerprints); removal checks (revisited about one, three and seven days after a link is marked removed, check record holds no address, with fingerprints and a live authorisation it can tell whether your image is still on the page, otherwise only whether the page is up, three clean checks mark it verified removed, if back: notice-sent state, follow-ups restart, email reference-only); the 12-month re-upload watch after a case is resolved (under the authorisation already signed, no new permission, stop watching withdraws it).
+- New section `#partner-sharing` ("Sharing fingerprints with partner platforms") — `privacy.pshare.p1` + 5 cards: separate tick; what leaves Asmita (only the fingerprint code, a case reference, and the links from your case on that partner's own platform); what partners must agree to (find/remove/block only, never identify or profile, secure, human review of every match, delete on withdrawal); how to withdraw; what partners do not get (nothing beyond a signed notice; notices to a partner also go to its agreed channel; only with the platform's written permission are its pages watched by the search).
+- New section `#sscd` ("A second matching layer (SSCD)") — `privacy.sscd.p1` + 5 cards: an encrypted numerical description (an embedding) computed from a confirmed copy the search found, never from her original; finds crops, filters, re-encodes; deleted with her fingerprint, authorisation or case; never leaves Asmita, never sent to platforms, not even under the partner tick; and the layer is off until switched on — nothing changes while it is off.
+- New section `#platform-partners` ("Platform partner sign-ups") — `privacy.ppartners.p1` + 4 cards: what is collected (organisation, platform, domain, kind, audience size, interests, contact name, role, work email, optional phone and message; name, email, phone and message encrypted at rest); why (verify the sign-up, agree the programme, run it); kept while the programme may need to reach them, Grievance Officer deletes on request; shared with Asmita staff running the programme only, and a sign-up never causes survivor data to be shared.
+
+Terms of use (inline English text on the page):
+
+- Edited: hero stamp — "Last updated · 19 November 2026 · Version 0.5 · Draft pending legal review" (was 17 May 2026, Version 0.4).
+- Edited: how-a-case-works, first paragraph — fingerprints of your images or videos, generated on your device, only the code reaches Asmita.
+- Edited: how-a-case-works, second paragraph — appended: every notice asks the platform to act within 24 hours, alongside the timelines the law itself sets.
+- New section `#search-and-watch` ("When you ask Asmita to search, watch or share") — intro (optional services, off until switched on, explained in the Privacy Policy, stoppable at any time) + five cards (the one-tick web search and representative notices; watching without a complaint; checks that content stays down; the 12-month re-upload watch; sharing fingerprints with partner platforms) + a callout that none of this promises every copy is found or removed and a person reviews every possible match.
+- Edited: our-role, fourth "does not do" item — "Hold or view your images or videos" with the web-search exception spelled out (separate crawler service, public websites, memory only, nothing kept but match records, human review before anything is sent).
+
+**Decisions, recorded per the standing rule**
+
+- English only. The owner's instruction keeps these pages English only. The privacy copy lives in i18n, and the June 2026 pass (commit 03eb3df) had already translated the sixteen original sections to Hindi — so "English only" was applied to this WP's own text: every new and every edited key carries the English text in `hi.json` too, and the Hindi page shows the new sections in English. The date stamp `privacy.hero.version` keeps its Hindi label with the new date. `hi-review-status.json` records this under `excludedFromTranslation`. A later Hindi pass can translate the WP29 keys; `tests/unit/legal-pages.test.ts` derives the English-only key set (en value equals hi value) and says so in its name, so a translation pass updates that test on purpose.
+- Version bumps: privacy 1.0 → 1.1, terms 0.4 → 0.5. The WP fixes only the "Last updated" date; the versions were bumped because both policies changed materially, and both stamps keep their existing wording otherwise (the terms stamp keeps "Draft pending legal review").
+- "Fingerprints of found copies" in the WP's crawler list is the SSCD embedding (WP28, not yet built): the crawler's default storage is match records and encrypted addresses, and the embedding is described in the `#sscd` section as off until switched on. No fingerprint of a found copy is stored while SSCD is off.
+- The 24-hour ask is written as the owner worded it — notices ask platforms to act within 24 hours, alongside the law's own timelines. The templates themselves demand removal within the statutory window (two hours under Rule 3(2)(b) as amended in 2026, per `prisma/template-seeds.ts`) and acknowledgement within 24 hours; the pages do not restate those numbers beyond "the timelines the law itself sets", so no citation question is opened.
+- No retention period was invented for partner-programme contacts (none exists in code or spec): the pages say they are kept while the programme may need to reach the platform and that the Grievance Officer deletes a sign-up on request.
+- Watch, removal checks, partner sharing and platform partner sign-ups are specified on `origin/feat/watch-verify`, `origin/feat/watch-w1`, `origin/feat/watch-w2`, `origin/feat/partner-sharing` and `origin/feat/platform-partners`, and are not yet merged into master; SSCD is designed but not built (WP28 waits on video Phase 2). The pages describe these features as specified, as the owner asked; the SSCD section says the layer is off, and counsel should read those sections with particular care because they describe not-yet-live behaviour.
+- The FAQ answer `faq.s1.a2` ("The link itself never reaches our server") predates WP29 and is inconsistent with the policy's own statement that submitted URLs are stored as text for 30 days. None of the eight WP29 features makes it false, so it was left untouched (out of this WP's scope), and it is flagged here for the owner.
+- `asmita/docs/ops/crawler-runbook.md`, `crawler/README.md` and root `CLAUDE.md` are unchanged: no crawler behaviour, config or migration changed in this WP, and root `CLAUDE.md` stays a protected agent-instruction file (same decision as WP17-WP19).
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/legal-pages.test.ts` — 13 tests: the seven new privacy section ids exist as `ReadingSection`s with matching contents entries; the contents list and rendered sections stay in step with unique ids on both pages; `/legal` still re-exports the terms page; no `border-l` stripes on either page; both pages stamp 19 November 2026; every i18n key the privacy page references (literal and list-built) exists in both dictionaries; the WP29 English-only key set is derived and asserted; `hi-review-status.json` records the exclusion; the owner's facts appear (24 hours, 12 months, at most 1,000 codes, "not one frame of it is ever sent", Cloudflare, Mumbai, one/three/seven-day checks, "Never your image, your video or your name", encrypted at rest, SSCD deleted with fingerprint/authorisation/case, and the terms counterparts); SSCD stays honestly off; every Act/Rules/Sanhita/Section mention on either legal page is inside the allowed set (DPDP Act, Section 7, Information Technology Act 2000, IT Rules, BNS Section 199) with no open `[CITATION REQUIRED` tag; and no promise of removal.
+- No existing test was changed, deleted, skipped or loosened.
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors (4 pre-existing warnings in untouched files: three unused-variable warnings in the translate scripts, one react-hooks warning in `QuickExit.tsx`), type-check clean, `prisma validate` ok, 153 test files / 1263 tests all passed (13 of them new in this WP). An earlier standalone `npm run test` in the same container skipped the pre-existing, environment-gated `tests/integration/crawler-client-contract.test.ts` (1 file / 3 tests); in the final `check.sh` run it ran and passed, so the committed tree is 153/153 files and 1263/1263 tests green.
+
+**Not done or not verified**
+
+- The pages were not rendered in a browser in this WP: the markup reuses only existing components (`ReadingSection`, `ItemCards`, `ItemTable`, `Callout`), the e2e accessibility spec already visits `/privacy`, and e2e is not part of `check.sh`.
+- No Hindi pass was run on the WP29 copy (see the English-only decision); the Hindi privacy page now shows the seven new sections, the edited cards and the edited paragraphs in English until one is.
+- Nothing under `crawler/`, no API route, no schema, no migration and no consent template was touched, so there was nothing to verify beyond the app's own checks.
+## WP52 (Lab lane) — E1 benchmark harness, tools/lab-bench — 2026-11-20
+
+WP52 is not part of the crawler v2 spec: it is a Meri Asmita AI Lab work
+package (owner-approved 20 November 2026; charter committed as
+`asmita/docs/lab/charter.md`). This entry is the pointer the work package
+asked for; the full record — every decision, every verification — lives in
+`asmita/docs/lab/progress.md`.
+
+**What was built.** A standalone Node 22 + TypeScript package at
+`tools/lab-bench/` (own `package.json` + lockfile, vitest, `npm run check` =
+type-check plus tests), implementing experiment E1 of the Lab charter:
+
+- `build-set <portraits-dir> <out-dir>` makes the charter's variants per
+  portrait — untouched original, crop, resize, mirror, sticker overlay,
+  screenshot with borders, WhatsApp-style re-encode (long edge 1600, JPEG
+  quality about 70), an eye-aligned face-swap composite (colour-matched
+  patch through a feathered elliptical mask, CPU only) and that composite
+  through the WhatsApp re-encode (the stop-rule combination); a labelled
+  `real/` + `fake/` deepfake-dataset folder is imported as-is. Manifest:
+  ids, transforms, labels — nothing about a person.
+- `match <set-dir>` scores whole-image PDQ (`asmita/src/lib/pdq/pdq.ts`
+  imported, never copied; decode via a faithful copy of the crawler's
+  `prepare.ts` recipe; production quality floor 50), the pinned
+  `sscd_disc_mixup` ONNX (loading approach copied from
+  `origin/feat/crawler-sscd`'s `sscd-pool.ts`; that branch is NOT merged),
+  face-crop PDQ and background-masked PDQ — recall at a 1% false-match rate
+  per transform.
+- `detect <set-dir>` runs the charter's detector adapters — OpenAI vision,
+  Hive, Sightengine, and the Community Forensics ViT-S/16 384 (MIT, arXiv
+  2411.04125) as the local onnxruntime-node model — skipping any without a
+  key or weights; accuracy and AUC per transform.
+- `report <run-dir>` writes local HTML/Markdown. `data/`, `runs/` and
+  `models/` are gitignored; `npm run models:fetch` downloads the two pinned
+  ONNX weights with sha256 checks; tests use tiny synthetic images and
+  invented `example.test` fixtures only. `asmita/docs/lab/e1.md` carries
+  the method and an empty results table for the real run.
+
+**Checks (all run on Node 22, final run on the committed tree).**
+`tools/lab-bench`: tsc clean, 11 test files / 82 tests. Crawler: lint,
+type-check, 29 test files / 350 tests, build. Asmita: lint 0 errors,
+type-check clean, `prisma validate` ok, 152 test files / 1250 tests.
+`check.sh` printed ALL CHECKS PASSED. No crawler or asmita source changed.
+
+**Not done or not verified.** No real E1 run happened: there is no
+portraits folder of Indian faces on this machine, so `e1.md`'s tables stay
+empty for the owner's real run. The hosted detector adapters are written
+from the providers' public API docs and tested only against invented
+fixtures with an injected fetch (no keys; the first keyed run must
+spot-check the recorded raw responses). `crawler/README.md` and the runbook
+are untouched (no crawler behaviour change).
+
+**Deviations.** None from the crawler spec (this WP sits outside it, and
+nothing in `asmita/` or `crawler/` changed). The complaint workflow's
+no-fetch lint rule and `no-url-fetch` test were not edited: asmita's ESLint
+runs from `asmita/` and does not cover `tools/`, so no narrowing was
+needed for this work package — recorded as a decision in
+`asmita/docs/lab/progress.md`, where the charter's narrowing becomes live
+with the first lab WP that adds `src/lib/lab/**` or `src/app/**/lab/**`.
+## Thorn-inspired
+
+Owner decisions, 19 November 2026 (Saquib), from research into Thorn's published work. Copy no Thorn text or code except where a licence is stated; everything below is written in our own words. Thorn's research is cited by name and link only.
+
+### WP35. Wording on the "Is this image AI-made?" page (app) — 2026-11-19
 - New shared module `asmita/src/lib/crawl-page-key.ts` (dependency-free; the crawler imports it read-only like `asmita/src/lib/pdq/pdq.ts` and esbuild inlines it into `dist/main.js`): the page-URL identity both sides now share. `http`/`https`, one leading `www.` label, a trailing slash on a non-root path and a final `/index.html`, `/index.htm` or `/index.php` are one page; tracking parameters are dropped and the rest sorted; a non-default port stays distinct (another server); the root keeps its `/`. The crawler's `urlKey`/`queryKey` (`crawler/src/crawl/url.ts`) and the app's `crawlPageKey` (`asmita/src/lib/crawl-pages.ts`, the digest under every `CrawlPage` row) both delegate to it, so a page the two sides spell differently is stored and fetched once. Addresses keep their real form everywhere — the key is identity only, never an address that is fetched, reported or logged — and existing frontier rows keep the digest they were stored with (the digest is computed once, at insert; a same-page duplicate against an old-rule row is accepted until that row ages out).
 - "Fetch the canonical form": within one extraction (a page's link buckets, a sitemap or feed document) the first spelling seen is kept and an `https` spelling upgrades an `http` one; across pages the app's digest keeps whichever spelling was reported first. `extract`'s own dedup and the sitemap/feed `xmlLinks` path share the rule.
 - `<link rel="canonical">` on fetched HTML (static, the AUTO fallback and the rendered DOM): collected by `extract` as metadata — never links, collected on nofollow pages too, deduplicated by key, capped at `MAX_CANONICAL_PER_PAGE` (20, the report contract's limit) — and `crawler.ts` reports the targets that are in scope and not obvious non-content as the new optional `aliases` field of a reported page (max 20, deduplicated by key). A canonical address is never fetched just because it is canonical; a self-referencing canonical is no alias; an off-scope canonical is neither fetched nor reported as a discovery.
@@ -764,6 +979,78 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 
 **What was built**
 
+- `/check-image` now tells her, directly under the hero subtitle and above the tool: an image of her made or edited by AI "can be reported exactly like a real one, and you will be believed. Fake images of you are abuse." New key `check.hero.report` (en + hi), rendered with the page's existing text styles — no new cards, no coloured left-border stripes.
+- One research line follows it (new keys `check.research.line`, `check.research.read`): "One US survey — Thorn's 'Deepfake Nudes & Young People' (2025) — found that about 1 in 17 young people surveyed had deepfake nudes made of them." It is always labelled a US survey, and "Read the survey" links to https://www.thorn.org/research/library/deepfake-nudes-and-young-people/ . The URL lives once, in `asmita/src/lib/ai-image-research.ts`. No other statistic was added anywhere, and the line never presents the figure as Indian data.
+- Check results no longer verdict an image. `check.result.noneFound.body` dropped "this does not mean the image is genuine ... a real-looking image" and now states only what was not found ("This file does not carry any AI credential — that is all this result says ..."); `check.deep.result.none.body` dropped "this does not mean the image is genuine" the same way; `check.disclaimer` replaced "a clear result here is not legal proof ... a fake or AI-made image" with "what it finds is not legal proof ... an AI-made or edited image of you". All three were reworded in Hindi to match. The found-signal strings already described only what was found and are unchanged in both languages.
+- The deepfakes issue page (`/issue/deepfakes`, which carries the same message) received the same three parts: its definition now says "A fake image of you is abuse — you can report it exactly like a real one, and you will be believed" (replacing "The image is not real, but the harm is"), its "What you can do" card says a report works exactly as for any other image, and the one research line renders under the definition through a new optional `research` field on `IssueTopic` — only the deepfakes topic sets it (`issue-content.ts`, `issue-content-hi.ts`).
+- Victim-blame review: every `check.*` string and all deepfakes topic copy were scanned for "don't share nudes"-style advice; none existed, so no line had to be removed. The one "do not upload" line is the under-18 gate, which routes to `/minor-support` and stays (root CLAUDE.md: minors never reach the case flow).
+- Hindi: all new and reworded survivor strings are in `hi.json` and `issue-content-hi.ts` and are listed in `hi-review-status.json` — the six keys in `machineTranslated.keys`, the issue-page strings in `machineTranslated.inline`, and this batch's translator in `by`. Machine translated; no native review yet.
+
+**Decisions, recorded per the standing rule**
+
+- The one research line appears on both in-scope pages in identical wording. The WP's bullets govern "these pages"; the deepfakes page carries the same abuse-and-report message, and a statistic about deepfake nudes belongs on it. Each page still carries exactly one research line and that one statistic.
+- The statistic is linked, not pasted as a raw URL: the line keeps the full attribution ("Thorn's ... (2025)") and a "Read the survey" link carries the URL — the site's established external-link pattern (`target="_blank" rel="noopener noreferrer"`, as on /get-help). Thorn's published work is cited by name and link only; no text was copied from it.
+- "Near the top" is the hero on `/check-image` (above the age gate and the tool) and the definition paragraph on the deepfakes page — the first survivor-facing text each page shows.
+- The never-real-or-fake rule was applied to the checker's result strings (`check.result.*`, `check.deep.result.*`, `check.deep.limitation`), which the new test scans in both languages. The required "report it exactly like a real one" message keeps the word "real" (it compares how she can report; it does not verdict an image), and the deepfakes definition keeps "the harm done to you is real" — about the harm, not the image.
+- `issueContentHi` is now typed `Record<slug, Omit<IssueTopic, "slug">>` (it was an untyped `as const` object) so the template's optional `research` access type-checks; rendering is unchanged for the topics without research copy.
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/ai-image-copy.test.ts` — 11 tests: the report-believe-abuse line in both languages; the one research line (US-survey label, Thorn attribution, 1 in 17, the link constant, only those numbers in the line, never presented as India); every result string verdict-free in both languages; no blame-pattern advice in any `check.*` string or the deepfakes topic in either language; the under-18 line stays safe routing; the machine-translation listing; the deepfakes page carries the same message and research line with the same URL; only that topic has research copy; and no other statistic appears anywhere on the deepfakes page.
+- No existing test asserted the replaced copy — the suites were searched for the old phrases ("genuine", "real-looking", "clear result", the old definition) and none appear; the `/check-image` e2e journey (`hash-flow.spec.ts`) asserts only the age gate and the file picker, which are unchanged. The i18n key-parity test covers the new keys.
+- Package totals from the final `check.sh` run (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source touched; re-confirmed green). `asmita` — lint 0 errors (4 pre-existing warnings, all in untouched files), type-check clean, `prisma validate` ok, 153 test files / 1261 tests all passed. The asmita production build was also run and passed (not a `check.sh` gate; done to prove the two changed pages compile).
+
+**Not done or not verified**
+
+- The Hindi strings are machine translated and listed as such; no native speaker has read them. The pages were verified by the unit tests on the copy, by type-check and by the production build; no browser run (dev server, Playwright, e2e) was made in this WP — e2e is not part of `check.sh`, and the `/check-image` journey's assertions are untouched by the copy change.
+- Copy on other pages that also mentions AI-made images (home, /get-help triage, FAQ, who-we-help, chat) was deliberately left alone: the WP names the check-image page, its shared copy and the deepfakes page. What those pages already say ("A fake image is still abuse", "Asmita treats synthetic intimate images the same as real ones") agrees with the new wording, so the site does not contradict itself.
+- No crawler behaviour, config or migration changed, so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval).
+
+**Deviations from the spec, with reasons**
+
+- None beyond the decisions above: every change sits inside the WP's named pages (check-image, the copy it shares, the deepfakes issue page), and nothing outside that scope was touched.
+
+## Web best-practice audit
+
+Work packages WP39–WP43 come from a web best-practice audit of the site (accessibility, forms, performance, security headers), owner-approved on 20 November 2026 (Saquib). They are defined by the audit brief, not by this spec; this spec's "Rules that do not change" and "How to work" still apply, together with the audit's own rules. The per-WP audit log (what changed, what was not verified, what needs the owner's approval) lives in `asmita/docs/product/web-audit-progress.md`.
+
+### WP43. Accessibility of the "Is this image AI-made?" page (app) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, run on the finished code tree; the only edits after the run were these progress-log lines, which no check reads).
+
+**What was built**
+
+- A5 — the states of the on-device check on `/check-image` (`src/app/(public)/check-image/ImageChecker.tsx`) are announced. The "Reading credentials on your device..." line is a `role="status"` paragraph (polite), the result is announced by moving focus to its heading, and the error card is a `role="alert"`. For the result the WP offered a `role="status"` wrapper or a focused heading; the focused heading was chosen — the pattern `EligibilityWizard`, `HomeChat` and `CasePeek` already use — because it reads one line instead of politely replaying the whole result card. "What we found" therefore became a real `<h2>` (it was a `<span>` carrying the same classes): same classes, same look, but a focusable (`tabIndex={-1}`, `outline-none`) heading a screen reader can also jump to by heading navigation. Focus moves there on every completion, including a second image picked after a first result.
+- A4 — every error message on the page is a `role="alert"`: the "We could not read this file" card and the deeper check's "could not be completed right now" line.
+- A6 — the hidden file input is never a tab stop any more (`tabIndex={-1}` at all times; it was `{ageConfirmed ? 0 : -1}`, so after the age gate it sat in the tab order beside the visible button) and now carries an accessible name: `aria-label` from the existing `check.upload.label` ("Choose an image to check"), the same pattern as `SubmitForm`'s hidden picker. The visible "Choose image" button is the only tab stop. `aria-hidden={!ageConfirmed}` stays: the input is disabled while the gate is up.
+- The deeper check's states (WP38's addition) got the same treatment: its "Checking with OpenAI..." line is `role="status"`, its error line is `role="alert"`, and its result title receives focus when it arrives (its button unmounts on completion, so focus would otherwise fall back to the page).
+- WP35 and WP38 wording is untouched: no `en.json`/`hi.json` value changed, no new key was added, so `hi-review-status.json` is unchanged too.
+
+**Decisions, recorded per the standing rule**
+
+- The result is announced by focus, not a live-region wrapper: a `role="status"` region around the result would politely read out the whole card (C2PA details, metadata list, technical-details entries) on every check; the focused heading reads one line and leaves the rest to browse. The WP allowed either mechanism.
+- The input's accessible name reuses `check.upload.label`: it is exactly the right name for the picker, it already exists in both languages, and the audit's "every new user-facing string goes in en.json AND hi.json" rule then adds nothing.
+- `/check-image` was not added to the axe route list in `tests/e2e/accessibility.spec.ts`: that list change belongs to WP39's lane (its brief names those routes); duplicating it here would collide when the audit lanes merge.
+- The deeper check got the same announcements although the brief names the page's main states: it is part of "whatever WP38 added", and its result otherwise arrives unannounced.
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/check-image-a11y.test.ts` — 8 tests: the hidden input carries its accessible name, `tabindex="-1"` and `sr-only` and stays disabled behind the age gate while the visible button renders (and the old conditional `tabIndex` is gone from the source); the label exists in both languages; the two checking lines are `role="status"`, both error messages are `role="alert"`, the result heading is the focused `<h2>`, and both focus effects are wired. The conditional states are pinned on the component source because `renderToStaticMarkup` reaches only the idle state — the same pinning style `admin-crawler-ui.test.ts` uses.
+- New `tests/e2e/check-image-a11y.spec.ts` (run on the chromium and mobile projects, both passing): the hidden input has `tabindex="-1"` and the `aria-label`; after a synthetic image is picked, focus lands on the "What we found" heading; after focus is deliberately moved off it, a second pick announces again. Run before the commit through the Node 22 container against a throwaway Postgres 17 (2 tests, 20.8 s); the full Playwright suite remains the separate verify step.
+- The existing `/check-image` assertions in `hash-flow.spec.ts` (age-gated picker) are untouched and still hold: one file input, disabled until the age tick, enabled after.
+- Package totals from the final `check.sh` run (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source touched; re-confirmed green). `asmita` — lint 0 errors (the 4 pre-existing warnings, all in untouched files, no new ones), type-check clean, `prisma validate` ok, 157 test files / 1309 tests all passed.
+
+**Not done or not verified**
+
+- No real screen reader was run. The announcements use the standard mechanisms (`role="status"`, `role="alert"`, programmatic focus to a heading) and are asserted structurally (unit) and by focus (e2e).
+- The deeper check's announcements cannot be reached in e2e: the harness sets no OpenAI key, so the page shows "temporarily unavailable" and the deeper check's states never run there. They are pinned by the unit tests only.
+- The "We could not read this file" card is defensive: both on-device readers resolve instead of throwing (`readImageProvenance` catches internally, `readC2paCredentials` resolves to "unavailable"), so no real pick reaches it; its `role="alert"` is pinned by the unit test, not exercised by a live run.
+- The new e2e spec was run alone (both projects), not with the whole Playwright suite; that full run is the audit's separate verify step.
+- No crawler behaviour, config or migration changed, so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval).
+
+**Deviations from the spec, with reasons**
+
+- None beyond the decisions above: every change sits inside the WP's named page (check-image and what WP38 added to it), and nothing outside that scope was touched.
 - App: `CrawlPage.priority` (additive migration `20261119060000_crawl_page_priority`: `INTEGER NOT NULL DEFAULT 100`, plus the index `(sourceId, priority, nextDueAt)` the claim's new order reads; existing rows keep 100). Every claim now hands out the due rows of a source `ORDER BY priority, nextDueAt` — the memory path's sort, the Kysely (Worker) path's `orderBy` chain and the Prisma path's raw claim all changed in one shape, so two crawler instances still never share a URL and the 30-minute claim window is untouched. `linkPriority` (exported, tested) is the report-to-row rule: sitemap 10, feed 20, pagination 30, other pages 50 plus 10 per depth level, capped at the default 100; the seed row keeps 100 (the app's own, not from a report). The report's link entries gained two optional strict fields on both sides: `pagination` (a flag the crawler sets on `rel="next"` and its siblings) and `lastmod` (a sitemap `<lastmod>` as a strict ISO date) — a link's kind/flag/depth sets the priority of the row it stores, and a live row whose reported lastmod is newer than its last fetch is bumped to priority 5 and made due immediately (`FRONTIER_PRIORITY_LASTMOD`, one chunked digest read + one chunked update per report, status-guarded so a concurrent kill stays final). A row never fetched, a dead row and a row the very same report fetched are never jumped; a claimed row keeps its claim and becomes due when the window expires. Prisma, Kysely and memory paths aligned; Kysely table types regenerate from the schema on install as before.
 - Crawler: `parseSitemap` collects `<lastmod>` for urlset `<url>` entries and sitemap-index children, normalising to strict ISO UTC (`isoLastmod`: a full ISO date-time with offset or Z, or an ISO date; partial formats and junk are quietly dropped, never guessed — so what the parser produces always passes the report contract, tested). `xmlLinks` carries the lastmod on the links it reports (and keeps a previously reported one through the WP10 https upgrade); `collectLinks` flags pagination links with `pagination: true`; robots.txt `Sitemap:` stash links and feed entries carry no lastmod (the spec names sitemap links; a feed's pubDate/updated are publication dates, not modification times). The crawler stays priority-blind: it reports facts, the app owns the policy — the schemas accept no `priority` from the wire.
 - Test support: the mock API mirrors the app's WP11 rules on purpose (priorities on stored rows, claim order, the lastmod jump and its refusals) and its strict server schema accepts the new fields; new `buildPriorityFixture()` (synthetic pages only, no images, hosts disjoint from every other fixture) serves the robots-named sitemap with a newer-than-any-fetch and an old date-only lastmod, a pagination link, a feed and plain pages.
@@ -1059,6 +1346,7 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
 
+## WP59. Merge master into fix/forms-focus: resolve the conflicts — 2026-11-20
 
 
 ### WP63. Merge master into feat/watch-mode; resolve conflicts — 2026-11-20
@@ -1094,3 +1382,97 @@ WP63 is a merge-resolution package, defined outside this spec like the other lan
 **Deviations from the spec, with reasons**
 
 - The branch's two video-pool assertions that still encoded the pre-WP20 rule 3 could not be kept alongside master's WP20 behaviour; WP20 supersedes rule 3 by design, so master's expectations won and the branch's fixture requirement (the open case) was kept — both sides' intent, none of either side's tests dropped. The reason is recorded in the merge commit message per rule 6.
+## Merge lane
+
+### WP68. Merge master into feat/csp-reporting-headers; resolve conflicts — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP68 is defined outside this spec (owner instruction, 20 November 2026): not feature work but the merge of `origin/master` (1826dcc, lab-bench PR #94) into `feat/csp-reporting-headers` (39f07dc, WP46), whose PR could not merge because master had moved on — crawler v3 WP9-WP16 and its review fixes, SSCD WP28, C2PA WP38, platform partners, lab-bench, assistant safety, web audit WP41/WP53 and more.
+
+**What was done**
+
+- Exactly one file conflicted, `asmita/src/lib/csp.ts`, and the resolution keeps both sides' intent: the branch's WP46 CSP reporting (the `CSP_REPORT_*` constants, the separate report-only Trusted Types policy, the unconditional `'report-sample'` in script-src and style-src, and `report-uri`/`report-to` closing the enforced policy) plus master's WP38 `c2pa` option (`'wasm-unsafe-eval'` in script-src and `worker-src 'self' blob:`, scoped to `/check-image` and `/c2pa/*`). The enforced policy on a C2PA page is the union of both.
+- Everything else auto-merged. The three merged i18n files (`en.json`, `hi.json`, `hi-review-status.json`) were verified programmatically against both parents: valid JSON, no duplicate keys, every key from both sides present. `crawler/docs/v2-progress.md` itself merged clean and keeps both sides' entries; no entry was appended before the merge commit, per the work package's own ordering.
+- No feature work added; nothing touched beyond the one conflict and the one test assertion below.
+
+**Decisions, recorded per the standing rule**
+
+- One existing assertion changed on purpose (spec rule 6; the reason is also in the merge commit message): `asmita/tests/unit/csp.test.ts` pinned the exact script-src of the C2PA page from master's WP38 (`script-src 'self' 'nonce-abc123' 'wasm-unsafe-eval'`). The merged policy also carries the branch's unconditional `'report-sample'`, so the assertion now expects the union string `script-src 'self' 'nonce-abc123' 'report-sample' 'wasm-unsafe-eval'` — still an exact match on a strictly larger policy, not a loosened test.
+- In script-src, `'report-sample'` is placed before the conditional `'wasm-unsafe-eval'`, keeping the unconditional keywords first; every other exact-string assertion from either side passes unchanged.
+- The single-file editor diagnostic "Cannot find name 'process'" on `csp.ts` was judged a project-less-LSP false positive (the same `process.env.NODE_ENV` expression pre-dates the merge on both sides) and confirmed so by the clean project type-check.
+
+**Tests** (final `check.sh` run on the committed merge tree, Node 22)
+
+- `crawler`: lint, type-check, 58 test files / 628 tests, build — all passed.
+- `asmita`: lint, type-check, `prisma validate`, 173 test files / 1576 tests — all passed.
+
+**Not done or not verified**
+
+- The Playwright e2e suite (`npm run test:e2e`) was not part of this package's checks and was not run; the checks run are the spec's full checks above.
+- No rebase and no push, both forbidden by the work package; the merge commit `9d5cd2f` carries both parents (39f07dc, 1826dcc).
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP59 is defined outside this spec (a lane work package): master had moved on (assistant-safety WP48 / PR #89, platform partner applications, the pdq-robustness tool, the sign-out clear-site-data lane) and the branch's open PR could not merge, so `origin/master` was merged into `fix/forms-focus` and the two conflicted files resolved by hand. No feature work was added and no test was weakened; the merge is a plain merge commit, no rebase, not pushed.
+
+**What was resolved**
+
+- Both conflicts (`asmita/src/i18n/en.json`, `asmita/src/i18n/hi.json`) were the same hunk around the `talk.*` keys. `talk.call.heading` is kept from this branch: WP40's focus heading, rendered by `TalkToUs.tsx` and required by `tests/unit/forms-focus.test.ts` and `hi-review-status.json`. `talk.error.busy` takes master's WP48 copy in both locales: the branch had not changed that value since the merge base, while master's WP48 review rewrote it, documented it in `asmita/docs/product/assistant-safety-review.md` and listed it in `hi-review-status.json` under `machineTranslatedWp48`; keeping the branch's wording would have silently reverted master's copy change in both locales.
+- Verified on the resolved tree: both JSONs parse with no duplicate keys; every key from either side is present (branch 1005 + master 1006 = 1014 keys per file, none dropped, none added beyond the union) and en/hi key parity holds. The four files both sides had touched and git auto-merged were checked by hand: `crawler/docs/v2-progress.md` and `asmita/docs/product/web-audit-progress.md` keep both sides' entries (WP40/WP49 plus WP41/WP53), `DeleteAccountForm.tsx` keeps the WP40 focus-on-done heading and master's WP53 `csrfFetch` error path, and `hi-review-status.json` keeps both the human-reviewed key list and the `machineTranslatedWp48` section.
+
+**Tests** — final `check.sh` run on the resolved tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source changed by the merge). `asmita` — lint 0 errors (4 pre-existing warnings: three in `scripts/translate-faq.mjs`, the `buttonRef` cleanup warning in `QuickExit.tsx`), type-check clean, `prisma validate` ok, 160 test files / 1397 tests all passed.
+
+**Not done or not verified**
+
+- The Playwright e2e suite is not part of `check.sh`; it runs in the separate verify step. No crawler behaviour changed, so `crawler/README.md` and the runbook needed no update. The merge was not pushed.
+## Lane merges
+
+### WP65. Merge master into feat/deadline-docs (merge-conflict resolution) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, final run on the committed merge tree).
+
+**What was done**
+
+- The branch's open PR could not merge because master had moved on (crawler v3 WP9–WP16, video WP20/WP21, SSCD WP28, platform partners, the assistant safety review, the web audit, the LCP/font work and the docs/constraints-scope change). A merge of origin/master into `feat/deadline-docs` was started and left one conflicted file, `crawler/README.md` — the only file both sides had edited with overlapping intent.
+- The conflict: this branch (WP27) had documented the app's `CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE` (default 50,000) frontier cap in the Bounded-frontier row; master had meanwhile added crawler v3 WP9 (the probe link stash, conventional sitemap probing), WP10 (the canonical alias cap), WP14 (the soft-404 digest map) and video WP21 (video-sitemap previews) to the same two rows — and an earlier merge inside master had left the **Bounded frontier** and **Deep coverage** rows duplicated (two variants of each).
+- Resolution: one **Bounded frontier** row and one **Deep coverage** row, each carrying the union of every fact from both sides — master's WP4/WP9/WP10/WP14/WP5 structures plus the branch's frontier-cap sentence in the first, master's WP9 probing plus WP21 previews in the second. Every phrase was taken verbatim from the parent commits (nothing retyped); the diff against master is exactly the four duplicated rows becoming the two merged rows.
+- Everything else merged cleanly with no code change. The five files both sides had touched were each checked by hand: root `CLAUDE.md` (master's restructure keeps the branch's crawler-sources sentence), `asmita/prisma/template-seeds.ts` (master's WP28 authorisation sentence and the branch's 24-hour demands sit in different templates), `asmita/tests/unit/notice-template-seeds.test.ts` (master's two new WP28 tests beside the branch's WP26 test), `crawler/docs/v2-progress.md` (both sides' entries kept verbatim by the auto-merge) and `crawler/README.md` itself. `asmita/src/i18n/hi-review-status.json` is valid JSON and exactly the union of both parents' keys (the branch's nine plus master's `machineTranslatedWp48`).
+- No feature work, no code, no test and no behaviour was changed to make the merge pass; nothing was weakened.
+
+**Decisions, recorded per the standing rule**
+
+- Master's duplicated rows were combined rather than kept four-deep: the duplication was an accident of an earlier merge inside master, a safety table stating the same guarantee twice is a defect rather than intent, and the union keeps every documented behaviour from both variants. Within the combined row, WP14's "adds a third" was reworded to "adds one more bounded per-source structure" because the ordinal no longer holds once WP9's probe stash sits in the same row.
+- The pre-existing heading/content misalignment this file already has on master (the WP17 heading with no content under it, WP17's content under the WP9 heading, and so on — residue of earlier lane merges inside master) was left exactly as master has it: reordering another lane's 900 lines is outside this WP and risked losing content. Both sides' entries are present verbatim, which is what this merge had to guarantee.
+
+**Tests** (all run, all passing)
+
+- Final `check.sh` run on the committed merge tree (Node 22): `crawler` — lint, type-check, 58 test files / 628 tests all passed, build ok. `asmita` — lint 0 errors (4 pre-existing warnings, all in master's own untouched files: three in `scripts/translate-faq.mjs`, one in `src/components/QuickExit.tsx`), type-check clean, `prisma validate` ok, 167 test files / 1504 tests all passed.
+
+**Not done or not verified**
+
+- The heading/content misalignment in this file described above is still present (master's state, inherited by the merge).
+- The merge was verified by the full check suite and by reading the five both-sides files; the roughly 200 files that only master changed were taken as-is and are covered by master's own checks plus this run.
+- Nothing was pushed; the merge commit and this entry stay on the branch.
+
+**Deviations from the spec, with reasons**
+
+- None against the crawler spec — no crawler behaviour changed. WP65 itself is a lane instruction that sits outside the spec's work-package list; this entry follows the spec's Reporting section for it.
+
+
+
+
+## Merge
+
+### WP61. Resolve the master merge on feat/legal-pages — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, on the merge commit `8a793bf`). This was a merge-conflict resolution, not feature work: master had moved on (PRs #77–#83: SSCD, crawler v3 lanes, partner pages, assistant safety, fonts, web audit), and a merge of `origin/master` into `feat/legal-pages` (the WP29 legal-pages branch) had been started and left with conflicts. No feature code was added, no test was changed, weakened or skipped, and `reviewedByLegal` was not set anywhere.
+
+**Conflicts.** Exactly one file was conflicted: `asmita/src/i18n/hi-review-status.json` (`excludedFromTranslation`). Resolution keeps both sides' intent: master's new entry `/for-platforms - written for platform Trust & Safety and grievance teams, English only` (from the platform-partners PR) and this branch's WP29 `/privacy` entry (s01–s16 translated 2026-06-16; the sections added or reworded on 19 November 2026 are English only, per the owner's instruction). Valid JSON, every entry from both sides, no duplicates (8 entries; the base file had 7).
+
+**Decision recorded** (both sides touched the same region, so the union had to choose one `/privacy` wording): master's `/privacy - legal document, English only` was the unchanged merge-base value — master only added `/for-platforms` above it — while this branch deliberately rewrote the `/privacy` line as part of WP29 to record the partial Hindi pass and the owner's English-only instruction for the WP29 sections. The branch's wording was kept because it is the more specific statement of the same exclusion (the privacy page stays English-only for the untranslated parts) and dropping it would have lost WP29's recorded intent; master's change (the `/for-platforms` entry) is kept in full. The `/privacy` line remains under `excludedFromTranslation`, so master's behaviour — the privacy page is not translated — is unchanged either way.
+
+**Everything else merged clean.** Only three other files were touched by both sides (`asmita/src/i18n/en.json`, `hi.json`, `crawler/docs/v2-progress.md`) and git merged them without conflict; the merged progress doc keeps both sides' entries (master's v3/SSCD/web-audit sections and this branch's Legal pages/WP29 section). Spot checks confirm both sides' content survived: `en.json` carries the branch's `privacy.*` WP29 sections and master's platform-partners/chat keys; the branch's `tests/unit/legal-pages.test.ts` and master's new suites both run.
+
+**Checks (run, not assumed).** Full `check.sh` (Node 22, both packages) on the resolved tree, which is exactly the tree committed as the merge: `crawler` — npm ci, lint, type-check, **58 test files / 628 tests passed**, build ok (`dist/main.js`, `browser-worker.js`, `decoder-worker.js`, `sscd-worker.js` all emitted). `asmita` — npm ci, `prisma generate`, lint 0 errors, type-check clean, `prisma validate` ok, **168 test files / 1517 tests passed**. Both sides' suites run and pass together in the merged tree: this branch's `legal-pages.test.ts` and master's new suites (SSCD, crawler v3, platform-partners, chat, web-audit) all green — nothing was dropped or weakened to make the merge compile.
+
+**Commits.** Merge commit `8a793bf` "Merge master into feat/legal-pages; resolve conflicts" (parents: `32cc3ed` WP29, `4a7df76` master #83), then this entry. Not pushed, per the work package. Not run: the Playwright e2e suite (check.sh does not include it and the work package defines done as check.sh passing); `npm run build` for asmita (not part of the checks).
