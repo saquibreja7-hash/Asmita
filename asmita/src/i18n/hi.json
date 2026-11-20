@@ -1126,5 +1126,6 @@
   "start.danger": "अगर आपको फ़ौरन ख़तरा है, तो फ़ोन कीजिए",
   "start.dangerCta": "112",
   "start.dangerSuffix": "और किसी चीज़ से पहले।",
-  "start.dangerCall.label": "आपातकालीन सेवा 112 पर कॉल करें"
+  "start.dangerCall.label": "आपातकालीन सेवा 112 पर कॉल करें",
+  "review.sign.openNotice": "सूचना खोलें (PDF)"
 }
