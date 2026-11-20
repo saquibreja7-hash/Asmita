@@ -10,8 +10,8 @@ export function SafetyNote() {
         <li>Do not open the address on a personal device or personal account. Use only the equipment set aside for this work.</li>
         <li>This console never opens, loads or previews the address for you. You see it as text only.</li>
         <li>
-          If the page appears to involve a child: stop, do not save, copy or share anything, and tell the SUPER_ADMIN
-          straight away.
+          If the page appears to involve a child: stop, do not save, copy or share anything, mark the finding
+          &quot;Possible minor&quot; (that stops the adult flow for it), and tell the SUPER_ADMIN straight away.
         </li>
       </ul>
     </aside>
