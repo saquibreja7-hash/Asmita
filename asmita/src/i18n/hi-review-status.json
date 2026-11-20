@@ -8,6 +8,7 @@
   "excludedFromTranslation": [
     "/faq - pending translation",
     "/for-platforms - written for platform Trust & Safety and grievance teams, English only",
+    "/for-platforms/trusted-flagger - written for platform Trust & Safety and grievance teams, English only",
     "/privacy - legal document, English only",
     "/terms - legal document, English only",
     "/case/[caseId]/sign - declaration is legally consequential, English only",
@@ -16,7 +17,7 @@
     "Platform-specific reporting notes in /resources - references English-language UIs"
   ],
   "machineTranslated": {
-    "by": "Machine translated by Hermes (GLM 5.3), 2026-11-20, for the organization pages (docs/org/spec.md, WP56); previously: Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request",
+    "by": "Machine translated by Hermes (GLM 5.3), 2026-11-21 for the partnerships pages (docs/org/spec.md, WP57) and 2026-11-20 for the other organization pages (WP56); previously: Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request",
     "keys": [
       "talk.*",
       "privacy.s08.i5.*",

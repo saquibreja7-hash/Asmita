@@ -133,3 +133,80 @@ export const TRAINING_MODES = {
   IN_PERSON: "In person",
   EITHER: "Either works",
 } as const;
+
+// Partner inquiry types (57.2), one option set per partner type page. The
+// keys are stored; the labels appear in the form and the admin detail view.
+
+// The /partners/[type] slugs, shared by the server page and the client form
+// (defined here, not in the client module, so the server can read the array).
+export const PARTNER_FORM_TYPE_SLUGS = ["ngos", "legal", "law-enforcement", "academic"] as const;
+export type PartnerFormType = (typeof PARTNER_FORM_TYPE_SLUGS)[number];
+
+export const NGO_PARTNER_TYPES = {
+  NGO: "NGO or community organization",
+  HELPLINE: "Helpline",
+  COMMUNITY_GROUP: "Community or support group",
+  OTHER: "Other",
+} as const;
+
+export const NGO_SERVICES = {
+  COUNSELLING: "Counselling and emotional support",
+  LEGAL_AID: "Legal aid or advice",
+  SHELTER: "Shelter or safe space",
+  MEDICAL: "Medical help",
+  HELPLINE: "Running a helpline",
+  AWARENESS: "Awareness and education",
+  OTHER: "Other",
+} as const;
+
+// Offered with the states select: means they work across India.
+export const PAN_INDIA = "Pan-India";
+
+export const LEGAL_PARTNER_TYPES = {
+  LAWYER: "Individual lawyer",
+  LAW_FIRM: "Law firm",
+  LEGAL_AID_CLINIC: "Legal aid clinic",
+  LAW_SCHOOL_CLINIC: "Law school clinic",
+} as const;
+
+export const LEGAL_PRACTICE_AREAS = {
+  CYBER_CRIME: "Cyber crime",
+  CRIMINAL: "Criminal law",
+  FAMILY: "Family law",
+  WOMEN_CHILD: "Women and child protection",
+  TECH_MEDIA: "Technology and media law",
+  OTHER: "Other",
+} as const;
+
+export const PRO_BONO_HOURS = {
+  UP_TO_2: "Up to 2 hours a month",
+  FROM_2_TO_5: "2 to 5 hours a month",
+  FROM_5_TO_10: "5 to 10 hours a month",
+  MORE_THAN_10: "More than 10 hours a month",
+} as const;
+
+export const POLICE_PARTNER_TYPES = {
+  POLICE_STATION: "Police station",
+  CYBER_CELL: "Cyber cell or cyber police",
+  OTHER_UNIT: "Other police unit",
+} as const;
+
+export const POLICE_INTERESTS = {
+  TRAINING: "Training for our unit",
+  REFERRAL: "A referral pathway with Asmita",
+  OTHER: "Something else",
+} as const;
+
+export const ACADEMIC_PARTNER_TYPES = {
+  DEPARTMENT: "University department",
+  RESEARCH_CENTRE: "Research centre or institute",
+  RESEARCHER: "Independent researcher",
+  STUDENT_GROUP: "Student group or committee",
+} as const;
+
+export const ACADEMIC_INTERESTS = {
+  RESEARCH: "Research collaboration",
+  CAMPUS: "Campus programme",
+  INTERNSHIPS: "Internships and fellowships",
+  OTHER: "Something else",
+} as const;

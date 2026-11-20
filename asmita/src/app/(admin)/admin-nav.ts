@@ -34,6 +34,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/admin/org/submissions", label: "Outreach inbox", permission: "outreach:manage" },
       { href: "/admin/org/jobs", label: "Org jobs", permission: "content:manage" },
       { href: "/admin/org/events", label: "Org events", permission: "content:manage" },
+      { href: "/admin/org/partners", label: "Org partners", permission: "content:manage" },
       { href: "/admin/org/newsletter", label: "Newsletter", permission: "outreach:manage" },
     ],
   },

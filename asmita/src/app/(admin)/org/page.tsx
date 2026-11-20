@@ -25,6 +25,11 @@ const INDEX_LINKS: IndexLink[] = [
   { href: "/admin/org/jobs", label: "Org jobs", line: "Open roles; people apply by email, and no applications are stored." },
   { href: "/admin/org/events", label: "Org events", line: "Training and workshop sessions, online and in person." },
   {
+    href: "/admin/org/partners",
+    label: "Org partners",
+    line: "The partner list on /partners; partners appear once they are marked public.",
+  },
+  {
     href: "/admin/org/newsletter",
     label: "Newsletter",
     line: "The subscriber list and its CSV export. Newsletters are sent from an external tool for now; this page only manages the list.",

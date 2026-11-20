@@ -53,6 +53,10 @@ export const siteMap: SiteGroup[] = [
     links: [
       { href: "/get-involved", label: "Get involved", note: "Every way to help, in one place" },
       { href: "/partners", label: "Partner with us", note: "NGOs, legal, police, universities, platforms" },
+      { href: "/partners/ngos", label: "NGOs and helplines" },
+      { href: "/partners/legal", label: "Legal partners" },
+      { href: "/partners/law-enforcement", label: "Police and cyber cells" },
+      { href: "/partners/academic", label: "Universities and researchers" },
       { href: "/volunteer", label: "Volunteer" },
       { href: "/careers", label: "Careers" },
       { href: "/training", label: "Training and workshops" },
@@ -67,6 +71,7 @@ export const siteMap: SiteGroup[] = [
       { href: "/how-it-works", label: "How it works" },
       { href: "/research", label: "Research" },
       { href: "/for-platforms", label: "For platforms" },
+      { href: "/for-platforms/trusted-flagger", label: "What a notice contains", note: "For trust and safety teams" },
       { href: "/contact", label: "Contact" },
       { href: "/feedback", label: "Feedback" },
     ],

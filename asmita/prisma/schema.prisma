@@ -222,6 +222,9 @@ enum AuditEventType {
   ORG_SUBMISSION_NOTED
   ORG_SUBMISSION_EXPORTED
   ORG_NEWSLETTER_EXPORTED
+  ORG_PARTNER_SAVED
+  ORG_PARTNER_VISIBILITY_CHANGED
+  ORG_PARTNER_REORDERED
 }
 
 enum DeletionJobStatus {
@@ -1094,4 +1097,24 @@ model NewsletterSubscriber {
 
   @@index([status])
   @@index([createdAt])
+}
+
+// An organization partner in the 'Current partners' section of /partners
+// (docs/org/spec.md, WP57). Admin-managed only; isPublic gates whether the
+// site shows it, and sortOrder (ascending) sets the display order. type is an
+// app-validated string: NGO | LEGAL | LAW_ENFORCEMENT | ACADEMIC | PLATFORM.
+model OrgPartner {
+  id        String   @id @default(uuid())
+  name      String
+  type      String
+  logoPath  String?
+  url       String?
+  blurbEn   String
+  blurbHi   String?
+  isPublic  Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isPublic, sortOrder])
 }

@@ -4,8 +4,18 @@ import { decryptField, encryptField } from "@/lib/encryption";
 import { hashEmail } from "@/lib/hash";
 import { writeAuditLog } from "@/lib/audit";
 import {
+  ACADEMIC_INTERESTS,
+  ACADEMIC_PARTNER_TYPES,
   AUDIENCE_SIZES,
   INDIAN_STATE_OPTIONS,
+  LEGAL_PARTNER_TYPES,
+  LEGAL_PRACTICE_AREAS,
+  NGO_PARTNER_TYPES,
+  NGO_SERVICES,
+  PAN_INDIA,
+  POLICE_INTERESTS,
+  POLICE_PARTNER_TYPES,
+  PRO_BONO_HOURS,
   TRAINING_AUDIENCES,
   TRAINING_MODES,
   VOLUNTEER_HOURS,
@@ -23,12 +33,20 @@ import {
  * form — volunteer applications, training requests, partner inquiries —
  * validates against the Zod schema registered for its kind, stores one
  * OrgSubmission row with the whole form payload encrypted at rest, and
- * notifies the organization inbox. WP57 adds more partner kinds to the same
- * registry. Security (CSRF, body cap, rate limits, honeypot) lives in the
- * route: src/app/api/org/submissions/route.ts.
+ * notifies the organization inbox. WP57 adds the typed partner inquiry
+ * kinds (one per /partners/[type] page). Security (CSRF, body cap, rate
+ * limits, honeypot) lives in the route: src/app/api/org/submissions/route.ts.
  */
 
-export const ORG_SUBMISSION_KINDS = ["VOLUNTEER", "TRAINING_REQUEST", "PARTNER_INQUIRY"] as const;
+export const ORG_SUBMISSION_KINDS = [
+  "VOLUNTEER",
+  "TRAINING_REQUEST",
+  "PARTNER_INQUIRY",
+  "PARTNER_NGO",
+  "PARTNER_LEGAL",
+  "PARTNER_LAW_ENFORCEMENT",
+  "PARTNER_ACADEMIC",
+] as const;
 export type OrgSubmissionKind = (typeof ORG_SUBMISSION_KINDS)[number];
 
 export const ORG_SUBMISSION_STATUSES = ["NEW", "IN_REVIEW", "ACCEPTED", "DECLINED", "CLOSED"] as const;
@@ -97,6 +115,74 @@ export const partnerInquirySchema = z
   })
   .strict();
 
+/*
+ * Typed partner inquiries (spec 57.2), one per /partners/[type] page. Each
+ * shares the same contact block and message; each page adds its own fields.
+ */
+const partnerContact = {
+  organizationName: shortText,
+  website: z.string().trim().url().max(300).optional(),
+  contactName: shortText,
+  role: shortText,
+  email: emailSchema,
+  phone: phoneSchema,
+  city: shortText,
+  state: stateField,
+  message: z.string().trim().min(10).max(1500),
+  ...honeypot,
+};
+
+const stateOrPanIndia = z
+  .string()
+  .refine((value) => value === PAN_INDIA || INDIAN_STATE_OPTIONS.includes(value), "unknown_state");
+
+export const partnerNgoSchema = z
+  .object({
+    ...partnerContact,
+    type: z.enum(Object.keys(NGO_PARTNER_TYPES) as [keyof typeof NGO_PARTNER_TYPES, ...(keyof typeof NGO_PARTNER_TYPES)[]]),
+    areasServed: z.array(stateOrPanIndia).min(1).max(36),
+    helplineNumber: phoneSchema,
+    services: z
+      .array(z.enum(Object.keys(NGO_SERVICES) as [keyof typeof NGO_SERVICES, ...(keyof typeof NGO_SERVICES)[]]))
+      .min(1)
+      .max(Object.keys(NGO_SERVICES).length),
+  })
+  .strict();
+
+export const partnerLegalSchema = z
+  .object({
+    ...partnerContact,
+    type: z.enum(Object.keys(LEGAL_PARTNER_TYPES) as [keyof typeof LEGAL_PARTNER_TYPES, ...(keyof typeof LEGAL_PARTNER_TYPES)[]]),
+    barState: stateField.optional(),
+    practiceAreas: z
+      .array(
+        z.enum(Object.keys(LEGAL_PRACTICE_AREAS) as [keyof typeof LEGAL_PRACTICE_AREAS, ...(keyof typeof LEGAL_PRACTICE_AREAS)[]]),
+      )
+      .min(1)
+      .max(Object.keys(LEGAL_PRACTICE_AREAS).length),
+    proBonoHours: z.enum(Object.keys(PRO_BONO_HOURS) as [keyof typeof PRO_BONO_HOURS, ...(keyof typeof PRO_BONO_HOURS)[]]),
+  })
+  .strict();
+
+export const partnerPoliceSchema = z
+  .object({
+    ...partnerContact,
+    type: z.enum(Object.keys(POLICE_PARTNER_TYPES) as [keyof typeof POLICE_PARTNER_TYPES, ...(keyof typeof POLICE_PARTNER_TYPES)[]]),
+    unit: shortText,
+    district: shortText,
+    interest: z.enum(Object.keys(POLICE_INTERESTS) as [keyof typeof POLICE_INTERESTS, ...(keyof typeof POLICE_INTERESTS)[]]),
+  })
+  .strict();
+
+export const partnerAcademicSchema = z
+  .object({
+    ...partnerContact,
+    type: z.enum(Object.keys(ACADEMIC_PARTNER_TYPES) as [keyof typeof ACADEMIC_PARTNER_TYPES, ...(keyof typeof ACADEMIC_PARTNER_TYPES)[]]),
+    department: shortText,
+    interest: z.enum(Object.keys(ACADEMIC_INTERESTS) as [keyof typeof ACADEMIC_INTERESTS, ...(keyof typeof ACADEMIC_INTERESTS)[]]),
+  })
+  .strict();
+
 export type OrgFormDefinition = {
   kind: OrgSubmissionKind;
   schema: z.ZodType;
@@ -117,6 +203,34 @@ const labelled =
   (labels: Record<string, string>, order: string[]) =>
   (payload: Record<string, unknown>) =>
     order.map((key) => ({ label: labels[key] ?? key, value: list(payload[key]) }));
+
+/** Like labelled, but maps stored option keys to their human labels. */
+const labelledOptions =
+  (labels: Record<string, string>, options: Record<string, string>, order: string[]) =>
+  (payload: Record<string, unknown>) =>
+    order.map((key) => ({
+      label: labels[key] ?? key,
+      value: Array.isArray(payload[key])
+        ? (payload[key] as unknown[]).map((entry) => options[String(entry)] ?? String(entry)).join(", ")
+        : options[String(payload[key])] ?? list(payload[key]),
+    }));
+
+const partnerContactRows = (payload: Record<string, unknown>) => [
+  { label: "Organization", value: show(payload.organizationName) },
+  { label: "Website", value: show(payload.website) },
+  { label: "Contact", value: show(payload.contactName) },
+  { label: "Role", value: show(payload.role) },
+  { label: "Email", value: show(payload.email) },
+  { label: "Phone", value: show(payload.phone) },
+  { label: "City", value: show(payload.city) },
+  { label: "State", value: show(payload.state) },
+  { label: "Message", value: show(payload.message) },
+];
+
+const PARTNER_ACK_LINES = [
+  "Thank you for writing. We will reply to discuss what a partnership could look like.",
+  "We never share survivor data with anyone without the survivor's choice.",
+];
 
 export const ORG_FORMS: Record<OrgSubmissionKind, OrgFormDefinition> = {
   VOLUNTEER: {
@@ -217,6 +331,65 @@ export const ORG_FORMS: Record<OrgSubmissionKind, OrgFormDefinition> = {
       "Thank you for writing. We will reply to discuss what a partnership could look like.",
       "We never share survivor data with anyone without the survivor's choice.",
     ],
+  },
+  PARTNER_NGO: {
+    kind: "PARTNER_NGO",
+    schema: partnerNgoSchema,
+    adminTitle: "Partner inquiries: NGOs and helplines",
+    detailRows: (payload) => [
+      ...labelledOptions({ type: "Type" }, NGO_PARTNER_TYPES, ["type"])(payload),
+      { label: "Areas served", value: list(payload.areasServed) },
+      { label: "Helpline number", value: show(payload.helplineNumber) },
+      ...labelledOptions({ services: "Services offered" }, NGO_SERVICES, ["services"])(payload),
+      ...partnerContactRows(payload),
+    ],
+    inboxSubject: (payload) => `NGO partnership inquiry: ${show(payload.organizationName)}`,
+    ackSubject: "We have your partnership inquiry",
+    ackLines: PARTNER_ACK_LINES,
+  },
+  PARTNER_LEGAL: {
+    kind: "PARTNER_LEGAL",
+    schema: partnerLegalSchema,
+    adminTitle: "Partner inquiries: legal",
+    detailRows: (payload) => [
+      ...labelledOptions({ type: "Type" }, LEGAL_PARTNER_TYPES, ["type"])(payload),
+      { label: "Bar enrolment state", value: show(payload.barState) },
+      ...labelledOptions({ practiceAreas: "Practice areas" }, LEGAL_PRACTICE_AREAS, ["practiceAreas"])(payload),
+      ...labelledOptions({ proBonoHours: "Pro bono time" }, PRO_BONO_HOURS, ["proBonoHours"])(payload),
+      ...partnerContactRows(payload),
+    ],
+    inboxSubject: (payload) => `Legal partnership inquiry: ${show(payload.organizationName)}`,
+    ackSubject: "We have your partnership inquiry",
+    ackLines: PARTNER_ACK_LINES,
+  },
+  PARTNER_LAW_ENFORCEMENT: {
+    kind: "PARTNER_LAW_ENFORCEMENT",
+    schema: partnerPoliceSchema,
+    adminTitle: "Partner inquiries: police and cyber cells",
+    detailRows: (payload) => [
+      ...labelledOptions({ type: "Type" }, POLICE_PARTNER_TYPES, ["type"])(payload),
+      { label: "Unit or station", value: show(payload.unit) },
+      { label: "District", value: show(payload.district) },
+      ...labelledOptions({ interest: "Interest" }, POLICE_INTERESTS, ["interest"])(payload),
+      ...partnerContactRows(payload),
+    ],
+    inboxSubject: (payload) => `Police partnership inquiry: ${show(payload.organizationName)}`,
+    ackSubject: "We have your partnership inquiry",
+    ackLines: PARTNER_ACK_LINES,
+  },
+  PARTNER_ACADEMIC: {
+    kind: "PARTNER_ACADEMIC",
+    schema: partnerAcademicSchema,
+    adminTitle: "Partner inquiries: universities and researchers",
+    detailRows: (payload) => [
+      ...labelledOptions({ type: "Type" }, ACADEMIC_PARTNER_TYPES, ["type"])(payload),
+      { label: "Department", value: show(payload.department) },
+      ...labelledOptions({ interest: "Interest" }, ACADEMIC_INTERESTS, ["interest"])(payload),
+      ...partnerContactRows(payload),
+    ],
+    inboxSubject: (payload) => `Academic partnership inquiry: ${show(payload.organizationName)}`,
+    ackSubject: "We have your partnership inquiry",
+    ackLines: PARTNER_ACK_LINES,
   },
 };
 
