@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { csrfFetch } from "@/lib/client-csrf";
+import { clearTabStorage } from "@/lib/clear-tab-storage";
 import { t, type Locale } from "@/lib/i18n";
 
 /*
@@ -14,15 +15,25 @@ import { t, type Locale } from "@/lib/i18n";
  *   1. Instantly blank the page and neutralise the tab title — synchronous
  *      DOM work, no round trip, so nothing sensitive is on screen even
  *      before navigation starts.
- *   2. Sign out (CSRF POST /api/auth/logout — the session cookie is
+ *   2. Wipe the tab's sessionStorage (the submit draft with her typed URLs
+ *      and hash metadata, the eligibility answers) — before anything async,
+ *      so it is gone even if sign-out never finishes.
+ *   3. Sign out (CSRF POST /api/auth/logout — the session cookie is
  *      httpOnly, so only the server can clear it). The screen is already
  *      blank, so we wait for sign-out to actually finish (up to
  *      LOGOUT_WAIT_MS) rather than racing it: navigating away cancels any
  *      request still in flight, which would leave the session live on a slow
  *      connection. The logout POST is sent with keepalive, so once it has
  *      left the page it completes even if the tab navigates or closes.
- *   3. location.replace() the public home page — replace keeps this page
+ *   4. location.replace() the public home page — replace keeps this page
  *      out of the current history slot.
+ *
+ * A pageshow listener also reloads the page whenever the browser restores it
+ * from its back/forward cache: a bfcache restore would put a frozen copy of
+ * a signed-out page back on screen with everything it held (a filled form
+ * survives Quick Exit in that frozen tab). This component is what the victim
+ * layout renders on every signed-in page, and it also covers the pre-session
+ * flow pages (/register, /submit, /track) where the same restore is possible.
  *
  * The idle timer signs the survivor out after inactivity and returns to the
  * same public home page: an unattended machine must not keep a live case open.
@@ -80,13 +91,25 @@ export function QuickExit({ locale, enableIdle = true }: { locale: Locale; enabl
 
     async function quickExit() {
       neutraliseScreen();
+      clearTabStorage();
       await signOut();
       if (!disposed) window.location.replace(QUICK_EXIT_URL);
     }
 
     async function idleExit() {
+      clearTabStorage();
       await signOut();
       if (!disposed) window.location.replace(QUICK_EXIT_URL);
+    }
+
+    // A back/forward cache restore (pageshow with persisted = true) puts a
+    // frozen copy of this page back on screen — with everything it held when
+    // it was left, and even after Quick Exit signed the session out. Reload
+    // so the restored page re-renders from a fresh, signed-out load: the
+    // tab's storage is empty and the server redirects to a public page.
+    // persisted = false is the ordinary page load: no reload.
+    function onPageshow(event: PageTransitionEvent) {
+      if (event.persisted) window.location.reload();
     }
 
     let lastEscapeAt = 0;
@@ -109,6 +132,7 @@ export function QuickExit({ locale, enableIdle = true }: { locale: Locale; enabl
 
     const activityTypes = ["mousemove", "keydown", "click", "touchstart", "scroll"] as const;
     document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pageshow", onPageshow);
     if (enableIdle) {
       // Idle sign-out protects a live session; on pre-session screens it
       // would only throw away half-typed form input.
@@ -125,6 +149,7 @@ export function QuickExit({ locale, enableIdle = true }: { locale: Locale; enabl
       actionsRef.current = null;
       buttonRef.current?.removeAttribute("data-armed");
       document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pageshow", onPageshow);
       activityTypes.forEach((type) => document.removeEventListener(type, resetIdle));
       clearTimeout(idleTimer);
     };

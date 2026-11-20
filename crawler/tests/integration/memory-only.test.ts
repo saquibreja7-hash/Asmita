@@ -15,7 +15,8 @@
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildFixture, fixtureSeedUrl, SOURCE_DOMAIN, TEST_KEY, type Fixture } from "../support/fixture-site.ts";
+import { buildFixture, buildSscdFixture, fixtureSeedUrl, SOURCE_DOMAIN, SSCD_HOST, TEST_KEY, type Fixture, type SscdFixture } from "../support/fixture-site.ts";
+import { fakeSscdEmbed } from "../support/synthetic.ts";
 import { MockAsmita } from "../support/mock-asmita.ts";
 import { runFixtureCrawl } from "../support/run-fixture.ts";
 
@@ -106,6 +107,8 @@ function patchFs(attempts: string[]): () => void {
 let fx: Fixture;
 let api: MockAsmita;
 let apiJs: MockAsmita;
+let fxSscd: SscdFixture;
+let apiSscd: MockAsmita;
 
 beforeAll(async () => {
   fx = await buildFixture();
@@ -122,12 +125,23 @@ beforeAll(async () => {
     sources: [{ id: "src-js", kind: "site", domain: `js.${SOURCE_DOMAIN}`, pageBudget: 20, delayMs: 0, origin: "admin", hops: 0, render: "browser" }],
     seedUrl: fixtureSeedUrl(fx.site.port),
   }).start();
+  // The SSCD second layer (WP28), with its fixture and its mock.
+  fxSscd = await buildSscdFixture();
+  apiSscd = await new MockAsmita({
+    key: TEST_KEY,
+    pool: fxSscd.pool,
+    sources: [{ id: "src-sscd", kind: "site", domain: SSCD_HOST, pageBudget: 20, delayMs: 0, origin: "admin", hops: 0, render: "http", matched: true }],
+    seedUrl: fixtureSeedUrl(fxSscd.site.port),
+    sscd: { model: "sscd_disc_mixup", version: "onnx-1" },
+  }).start();
 }, 60_000);
 
 afterAll(async () => {
   await fx?.site.stop();
   await api?.stop();
   await apiJs?.stop();
+  await fxSscd?.site.stop();
+  await apiSscd?.stop();
 });
 
 describe("memory-only image handling", () => {
@@ -188,4 +202,35 @@ describe("memory-only image handling", () => {
     // The JS-gallery match was found through the real Chromium.
     expect(findings).toBe(1);
   }, 180_000);
+
+  it("runs the SSCD second layer with every fs write API throwing (WP28)", async () => {
+    // The second layer's parent-side path — scope gate, budget, the
+    // in-process embedder stand-in, the seeding offer, the findings — must
+    // attempt no filesystem write either. The real SSCD child is a child
+    // process like the decoder: it cannot write (its permission flags are
+    // proved in tests/unit/sscd-pool.test.ts), and the model file it reads
+    // is the one read grant it has.
+    const attempts: string[] = [];
+    const unpatch = patchFs(attempts);
+    let inferences: number | undefined;
+    try {
+      expect(() => fs.writeFileSync("never-written.txt", "x")).toThrow(/blocked/);
+      attempts.length = 0;
+      const { result } = await runFixtureCrawl(fxSscd.site, apiSscd, {
+        hosts: [SSCD_HOST],
+        env: { ENABLE_SSCD: "true", SSCD_MODEL_FILE: "/test/model/sscd.onnx", SSCD_THRESHOLD: "0.75" },
+        sscd: { embed: fakeSscdEmbed },
+      });
+      inferences = result.summary.sscdInferences as number;
+      expect(result.summary.sscdMatches as number).toBeGreaterThan(0);
+      expect(result.summary.sscdEmbeddingsPosted as number).toBeGreaterThan(0);
+      // Nothing was stored (the mock confirms no finding), but the offers
+      // were made and refused — the gate lives server-side, as designed.
+      expect(apiSscd.postedEmbeddings.length).toBeGreaterThan(0);
+    } finally {
+      unpatch();
+    }
+    expect(attempts).toEqual([]);
+    expect(inferences).toBeGreaterThan(0);
+  }, 60_000);
 });

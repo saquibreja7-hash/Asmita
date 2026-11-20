@@ -915,6 +915,244 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
   border-bottom: 1px solid var(--color-ash);
 }
 
+/* ── /for-platforms: logo flame orange as the second accent ─────── */
+/* #f5b94b is the flame in the wordmark. It is a fill colour: text on it is
+   ink, and orange text uses the darker --pf-flame-ink (AA on the soft tint). */
+:root {
+  --pf-flame: #f5b94b;
+  --pf-flame-soft: #fdf0d6;
+  --pf-flame-ink: #7d4c0c;
+}
+.pf-warm {
+  position: relative;
+  background:
+    radial-gradient(55% 65% at 8% 0%, rgba(245, 185, 75, 0.20), transparent 70%),
+    radial-gradient(50% 60% at 100% 100%, rgba(10, 94, 90, 0.10), transparent 70%),
+    var(--color-parchment);
+}
+.pf-mist {
+  background:
+    radial-gradient(60% 80% at 100% 0%, rgba(245, 185, 75, 0.14), transparent 70%),
+    var(--brand-soft);
+}
+.pf-rule {
+  display: block;
+  width: 56px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--pf-flame);
+}
+.pf-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-box) + 4px);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.pf-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 185, 75, 0.7);
+  box-shadow: 0 10px 28px rgba(125, 76, 12, 0.10);
+}
+.pf-card-quiet { background: var(--surface-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .pf-card, .pf-card:hover { transition: none; transform: none; }
+}
+.pf-chip {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+}
+.pf-chip-flame { background: var(--pf-flame-soft); color: var(--pf-flame-ink); }
+.pf-chip-teal { background: var(--brand-soft); color: var(--brand); }
+.pf-figure {
+  font-family: var(--font-display);
+  font-size: 36px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--brand);
+}
+/* Offer cards: a large outlined number in the corner, flame glow on hover. */
+.pf-offer {
+  position: relative;
+  overflow: hidden;
+}
+.pf-offer::before {
+  content: "";
+  position: absolute;
+  inset: auto -40px -60px auto;
+  width: 180px;
+  height: 180px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(245, 185, 75, 0.22), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.pf-offer:hover::before { opacity: 1; }
+.pf-offer-n {
+  position: absolute;
+  top: 18px;
+  right: 24px;
+  font-family: var(--font-display);
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 600;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(245, 185, 75, 0.75);
+  pointer-events: none;
+}
+/* Share / never share: one panel split in two even halves. */
+.pf-split {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-box) + 6px);
+  background: var(--card);
+}
+.pf-split-never {
+  background:
+    radial-gradient(70% 90% at 100% 0%, rgba(245, 185, 75, 0.20), transparent 70%),
+    var(--pf-flame-soft);
+}
+.pf-split-never .pf-tick, .pf-split-never .pf-chip { background: var(--card); }
+.pf-tick {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+.pf-tick svg { width: 14px; height: 14px; stroke-width: 2.2; }
+.pf-tick-teal { background: var(--brand-soft); color: var(--brand); }
+.pf-tick-flame { background: var(--pf-flame-soft); color: var(--pf-flame-ink); }
+.pf-asks {
+  border-radius: calc(var(--radius-box) + 4px);
+  background:
+    radial-gradient(40% 90% at 100% 0%, rgba(245, 185, 75, 0.14), transparent 70%),
+    var(--card);
+  border: 1px solid var(--line);
+}
+/* Timeline: numbered flame dots joined by a dashed line. */
+.pf-step {
+  position: relative;
+  display: flex;
+  gap: 16px;
+}
+.pf-step-dot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--pf-flame);
+  color: var(--color-off-black);
+  font-weight: 600;
+  box-shadow: 0 0 0 6px rgba(245, 185, 75, 0.22);
+}
+.pf-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 21px;
+  top: 52px;
+  bottom: -28px;
+  border-left: 2px dashed rgba(125, 76, 12, 0.35);
+}
+@media (min-width: 1024px) {
+  .pf-step { flex-direction: column; }
+  .pf-step:not(:last-child)::after {
+    left: 56px;
+    right: -18px;
+    top: 21px;
+    bottom: auto;
+    border-left: 0;
+    border-top: 2px dashed rgba(125, 76, 12, 0.35);
+  }
+}
+.pf-faq .faq-item summary::after { color: var(--pf-flame-ink); }
+/* Home page band linking to /for-platforms. */
+.pf-home-band {
+  border: 1px solid rgba(245, 185, 75, 0.45);
+  border-radius: calc(var(--radius-box) + 12px);
+  background:
+    radial-gradient(55% 80% at 0% 0%, rgba(245, 185, 75, 0.24), transparent 70%),
+    radial-gradient(50% 70% at 100% 100%, rgba(10, 94, 90, 0.10), transparent 70%),
+    var(--pf-flame-soft);
+}
+.pf-home-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: var(--radius-box);
+  background: var(--card);
+  border: 1px solid rgba(245, 185, 75, 0.35);
+}
+.pf-home-item .pf-chip { width: 42px; height: 42px; flex: none; }
+
+/* Platform partner form (/for-platforms) */
+.partner-form {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-box) + 6px);
+  box-shadow: var(--shadow-sm);
+  padding: 28px 20px;
+}
+@media (min-width: 768px) {
+  .partner-form { padding: 44px 48px; }
+}
+.partner-form[role="status"] { padding: 48px 24px; }
+.partner-legend {
+  /* Floated so it sits inside the fieldset, not on its border. */
+  float: left;
+  width: 100%;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.partner-legend + * { clear: both; }
+.partner-form fieldset + fieldset {
+  border-top: 1px solid var(--line);
+  padding-top: 32px;
+}
+.partner-form [aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+.partner-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  padding: 14px 16px;
+  background: var(--card);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.partner-choice:hover { border-color: var(--brand); }
+.partner-choice:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.partner-choice:has(input:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .faq-item summary {
   list-style: none;
   cursor: pointer;
@@ -1245,6 +1483,7 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
 .site-header.scrolled { border-bottom-color: var(--color-ash); }
 
 .nav-link {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1258,15 +1497,28 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.nav-link:hover {
-  background: var(--color-teal-mist);
-  color: var(--color-brand-teal);
+/* Hover and the section you are in: teal text over a short bar in the
+   logo's flame orange, not a filled pill. */
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 2px;
+  height: 3px;
+  border-radius: 999px;
+  background: #f5b94b;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  opacity: 0;
 }
-
-/* The section you are in stays highlighted. */
-.nav-link[data-current] {
-  background: var(--color-brand-teal);
-  color: #ffffff;
+.nav-link:hover { color: var(--color-brand-teal); }
+.nav-link:hover::after { transform: scaleX(0.6); opacity: 0.6; }
+.nav-link[data-current] { color: var(--color-brand-teal); }
+.nav-link[data-current]::after { transform: scaleX(1); opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-link::after { transition: none; }
 }
 
 /* Header dropdowns and the phone menu share these link styles. */
@@ -1306,6 +1558,7 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
 /* Small laptops: tighter spacing so every link stays on one line. */
 @media (max-width: 1279px) {
   .nav-link { padding: 8px 10px; font-size: 14px; }
+  .nav-link::after { left: 10px; right: 10px; }
 }
 
 html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
@@ -1410,6 +1663,12 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   filter: grayscale(1) contrast(1.1);
 }
 
+.site-footer-lang {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+}
 .site-footer-desc {
   max-width: 320px;
   color: var(--color-graphite);
