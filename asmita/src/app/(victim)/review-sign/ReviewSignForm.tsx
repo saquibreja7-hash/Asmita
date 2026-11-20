@@ -588,10 +588,20 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         <div
           className="overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)]"
         >
-          <div className="border-b border-[var(--line)] bg-[var(--page)] px-5 py-3">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--page)] px-5 py-3">
             <p className="eyebrow">
               {isHashSign ? t(locale, "review.sign.hashPreviewLabel") : t(locale, "review.sign.previewLabel")}
             </p>
+            {/* Android Chrome shows no PDF inside a frame; this link opens the
+                same URL the frame holds, so she can read before signing. */}
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="link-underline text-sm font-medium text-[var(--ink)]"
+            >
+              {t(locale, "review.sign.openNotice")}
+            </a>
           </div>
           <iframe
             src={previewUrl}

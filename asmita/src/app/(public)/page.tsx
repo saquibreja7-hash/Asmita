@@ -145,7 +145,7 @@ export default async function HomePage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO: what Asmita does on the left, an illustration on the right. */}
-        <section className="home-hero" aria-label={say("Introduction", "परिचय")}>
+        <section className="home-hero">
           <div className="container relative z-[1] grid items-center gap-10 pb-14 pt-14 md:pb-20 md:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
             <div>
               <span className="eyebrow">{say("Free and confidential, for India", "भारत के लिए नि:शुल्क और गोपनीय")}</span>
@@ -252,9 +252,9 @@ export default async function HomePage() {
         </section>
 
         {/* Pipeline diagram */}
-        <section aria-label={say("How a report moves", "रिपोर्ट के चरण")}>
+        <section>
           <div className="container pt-16 pb-20 md:pt-20 md:pb-28">
-            <div className="pipeline" role="list" aria-label={say("How a report moves", "रिपोर्ट के चरण")}>
+            <div className="pipeline" role="list">
               {pipeline.map((n, i) => (
                 <div key={n.label} className="contents" role="listitem">
                   {i > 0 && <span className="pipeline-link" aria-hidden />}
@@ -482,7 +482,7 @@ export default async function HomePage() {
         </section>
 
         {/* CLOSING */}
-        <section className="relative overflow-hidden section-pad" aria-label={say("Get help", "मदद लें")}>
+        <section className="relative overflow-hidden section-pad">
           <div
             className="wash wash-sky-mint"
             aria-hidden
