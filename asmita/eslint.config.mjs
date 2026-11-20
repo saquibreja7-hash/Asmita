@@ -64,6 +64,10 @@ const eslintConfig = defineConfig([
     "test-results/**",
     "tests/lint/**",
     "docs/archive/**",
+    // The CAI's c2pa-web engine files (WASM + worker script), vendored from
+    // node_modules into public/c2pa on install by scripts/copy-c2pa-assets.mjs
+    // and gitignored there. Third-party generated code; never ours to lint.
+    "public/c2pa/**",
   ]),
 ]);
 

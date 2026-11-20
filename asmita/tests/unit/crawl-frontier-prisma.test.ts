@@ -25,7 +25,7 @@ vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => false, getWorker
 vi.mock("@/lib/db", () => ({ db }));
 
 import { encryptField } from "@/lib/encryption";
-import { claimCrawlPages, reportCrawlPages } from "@/lib/crawl-pages";
+import { claimCrawlPages, crawlPageDigest, crawlPageLegacyDigests, reportCrawlPages } from "@/lib/crawl-pages";
 import { purgeExpiredCrawlPages } from "@/lib/url-retention";
 
 const NOW = new Date("2026-11-17T09:00:00Z");
@@ -218,5 +218,193 @@ describe("per-source frontier cap, Prisma path (review fix)", () => {
     expect(accepted).toBe(1);
     expect(db.crawlPage.createMany).not.toHaveBeenCalled();
     expect(db.crawlPage.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("crawl order (WP11), Prisma path", () => {
+  it("orders the locked claim by priority, then nextDueAt", async () => {
+    db.crawlPage.count.mockResolvedValueOnce(1); // hasPages: rows exist
+    db.crawlPage.count.mockResolvedValueOnce(0); // fetched today: none
+    db.crawlPage.count.mockResolvedValueOnce(0); // out with a crawler: none
+    db.$queryRaw.mockResolvedValueOnce([{ ...SEED_ROW }]);
+    const urls = await claimCrawlPages(SOURCE.id, 10, NOW);
+    expect(urls).toHaveLength(1);
+    const raw = String(db.$queryRaw.mock.calls.at(-1)![0]);
+    expect(raw).toContain("FOR UPDATE SKIP LOCKED");
+    expect(raw).toContain('ORDER BY "priority" ASC, "nextDueAt" ASC');
+  });
+
+  it("stores each link with the priority its kind implies", async () => {
+    db.crawlPage.findMany.mockResolvedValue([{ ...CURRENT_ROW }]);
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      {
+        id: "page-1", status: "fetched",
+        links: [
+          { url: "https://k.example/s.xml", kind: "sitemap" },
+          { url: "https://k.example/f.rss", kind: "feed" },
+          { url: "https://k.example/list?page=2", kind: "page", pagination: true },
+          { url: "https://k.example/deep", kind: "page" },
+        ],
+      },
+    ], NOW);
+    expect(accepted).toBe(1);
+    expect(db.crawlPage.createMany).toHaveBeenCalledTimes(1);
+    const data = db.crawlPage.createMany.mock.calls[0]![0].data as Array<Record<string, unknown>>;
+    expect(data.find((r) => r.kind === "SITEMAP")).toMatchObject({ priority: 10, depth: 1, status: "PENDING" });
+    expect(data.find((r) => r.kind === "FEED")).toMatchObject({ priority: 20, depth: 1 });
+    expect(data.find((r) => r.kind === "PAGE" && r.priority === 30)).toMatchObject({ depth: 1 }); // the pagination link
+    expect(data.find((r) => r.kind === "PAGE" && r.priority === 60)).toMatchObject({ depth: 1 }); // the plain page
+  });
+
+  it("bumps a row whose reported lastmod is newer than its last fetch", async () => {
+    const childUrl = "https://k.example/child";
+    const childDigest = crawlPageDigest(SOURCE.id, childUrl);
+    db.crawlPage.findMany
+      .mockResolvedValueOnce([{ ...CURRENT_ROW }]) // the claimed page rows
+      // The WP11 digest read: the linked page's row, fetched an hour ago.
+      .mockResolvedValueOnce([{ ...CURRENT_ROW, id: "page-child", urlDigest: childDigest, status: "FETCHED", lastFetchedAt: new Date("2026-11-17T08:00:00Z") }]);
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", links: [{ url: childUrl, kind: "page", lastmod: "2026-11-17T10:00:00Z" }] },
+    ], NOW);
+    expect(accepted).toBe(1);
+    expect(db.crawlPage.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["page-child"] }, sourceId: SOURCE.id, status: { notIn: ["DEAD", "GONE"] } },
+      data: { priority: 5, nextDueAt: NOW },
+    });
+  });
+
+  it("no bump when the lastmod is older, the row was never fetched, or it is dead", async () => {
+    const childUrl = "https://k.example/child";
+    const childDigest = crawlPageDigest(SOURCE.id, childUrl);
+    for (const row of [
+      { ...CURRENT_ROW, id: "page-child", urlDigest: childDigest, status: "FETCHED", lastFetchedAt: new Date("2026-11-17T10:30:00Z") }, // lastmod older than the fetch
+      { ...CURRENT_ROW, id: "page-child", urlDigest: childDigest, status: "PENDING", lastFetchedAt: null }, // never fetched
+      { ...CURRENT_ROW, id: "page-child", urlDigest: childDigest, status: "GONE", lastFetchedAt: new Date("2026-11-17T08:00:00Z") }, // dead
+    ]) {
+      vi.clearAllMocks();
+      db.crawlPage.findMany.mockReset();
+      db.crawlPage.updateMany.mockClear();
+      db.crawlPage.findMany
+        .mockResolvedValueOnce([{ ...CURRENT_ROW }])
+        .mockResolvedValueOnce([row]);
+      await reportCrawlPages(SOURCE.id, "run-1", [
+        { id: "page-1", status: "fetched", links: [{ url: childUrl, kind: "page", lastmod: "2026-11-17T10:00:00Z" }] },
+      ], NOW);
+      expect(db.crawlPage.updateMany).not.toHaveBeenCalled(); // no bump, no aliases to kill
+    }
+  });
+});
+
+describe("canonical aliases, Prisma path (WP10, review fix)", () => {
+  it("retires only never-fetched, non-seed rows for the alias digests and inserts no placeholder", async () => {
+    db.crawlPage.findMany.mockResolvedValue([
+      { ...CURRENT_ROW, id: "page-1", urlDigest: "d-1" },
+      { ...CURRENT_ROW, id: "page-2", urlDigest: "d-2", depth: 0 },
+    ]);
+    // /dupe names /twin (trailing-slash form: the same digest after the
+    // WP10 normalisation) as its canonical; /twin is also linked in the same
+    // report and is not stored as a new row.
+    const twinDigest = crawlPageDigest(SOURCE.id, "https://k.example/twin");
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      {
+        id: "page-1", status: "fetched",
+        aliases: ["https://k.example/twin/"],
+        links: [
+          { url: "https://k.example/twin", kind: "page" },
+          { url: "https://k.example/other", kind: "page" },
+        ],
+      },
+      { id: "page-2", status: "fetched", links: [] },
+    ], NOW);
+    expect(accepted).toBe(2);
+    expect(db.crawlPage.updateMany).toHaveBeenCalledWith({
+      where: {
+        sourceId: SOURCE.id, urlDigest: { in: [twinDigest] }, status: { notIn: ["DEAD", "GONE"] },
+        lastFetchedAt: null, depth: { gt: 0 },
+      },
+      data: { status: "DEAD", nextDueAt: NOW, claimedUntil: null },
+    });
+    expect(db.crawlPage.createMany).toHaveBeenCalledTimes(1);
+    const data = db.crawlPage.createMany.mock.calls[0]![0].data as Array<Record<string, unknown>>;
+    expect(data).toHaveLength(1); // the /other link only: no placeholder, no alias link
+    expect(data[0]).toMatchObject({ urlDigest: crawlPageDigest(SOURCE.id, "https://k.example/other"), status: "PENDING", depth: 1, viaPagination: false });
+    expect(db.crawlPage.createMany).toHaveBeenCalledWith({ data: expect.any(Array), skipDuplicates: true });
+  });
+
+  it("ignores the aliases of a page reached via pagination", async () => {
+    db.crawlPage.findMany.mockResolvedValue([{ ...CURRENT_ROW, id: "page-1", urlDigest: "d-1", depth: 1, viaPagination: true }]);
+    await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", aliases: ["https://k.example/list"], links: [] },
+    ], NOW);
+    expect(db.crawlPage.updateMany).not.toHaveBeenCalled();
+    expect(db.crawlPage.createMany).not.toHaveBeenCalled();
+  });
+
+  it("a self-alias kills and stores nothing", async () => {
+    const selfDigest = crawlPageDigest(SOURCE.id, "https://k.example/");
+    db.crawlPage.findMany.mockResolvedValue([{ ...CURRENT_ROW, id: "page-1", urlDigest: selfDigest }]);
+    const { accepted } = await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", aliases: ["https://k.example/index.php"], links: [] },
+    ], NOW);
+    expect(accepted).toBe(1);
+    expect(db.crawlPage.updateMany).not.toHaveBeenCalled(); // no kill statement at all
+    expect(db.crawlPage.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("legacy digests (review fix for WP10), Prisma path", () => {
+  it("reads the legacy digests of a link's spellings and inserts no duplicate of a pre-WP10 row", async () => {
+    const legacy = crawlPageLegacyDigests(SOURCE.id, "https://k.example/old");
+    const oldDigest = legacy[0]!; // e.g. the http:// spelling a pre-WP10 row was stored under
+    db.crawlPage.findMany
+      .mockResolvedValueOnce([{ ...CURRENT_ROW }]) // the claimed page rows
+      .mockResolvedValueOnce([{ ...CURRENT_ROW, id: "page-old", urlDigest: oldDigest, status: "FETCHED", lastFetchedAt: NOW }]);
+    await reportCrawlPages(SOURCE.id, "run-1", [
+      { id: "page-1", status: "fetched", links: [{ url: "https://k.example/old", kind: "page" }, { url: "https://k.example/new", kind: "page" }] },
+    ], NOW);
+    // One digest read covering the legacy spellings.
+    const read = db.crawlPage.findMany.mock.calls[1]![0] as { where: { urlDigest: { in: string[] } } };
+    for (const d of legacy) expect(read.where.urlDigest.in).toContain(d);
+    const data = db.crawlPage.createMany.mock.calls[0]![0].data as Array<Record<string, unknown>>;
+    expect(data.map((r) => r.urlDigest)).toEqual([crawlPageDigest(SOURCE.id, "https://k.example/new")]);
+  });
+});
+
+describe("permanent failures (review fix 7, WP13), Prisma path", () => {
+  it("writes the marker on a permanent error; a second one 24 h later marks the row dead", async () => {
+    db.crawlPage.findMany.mockResolvedValueOnce([{ ...CURRENT_ROW }]); // the claimed page row
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "error", failure: "permanent", links: [] }], NOW);
+    expect(db.crawlPage.update).toHaveBeenCalledWith({
+      where: { id: "page-1" },
+      data: expect.objectContaining({ status: "ERROR", lastPermanentFailAt: NOW }),
+    });
+    expect((db.crawlPage.update.mock.calls[0]![0] as { data: Record<string, unknown> }).data.priority).toBeUndefined();
+
+    db.crawlPage.findMany.mockResolvedValueOnce([{ ...CURRENT_ROW, lastPermanentFailAt: NOW }]);
+    db.crawlPage.update.mockClear();
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "error", failure: "permanent", links: [] }], new Date(NOW.getTime() + 25 * 60 * 60 * 1000));
+    expect(db.crawlPage.update).toHaveBeenCalledWith({
+      where: { id: "page-1" },
+      data: expect.objectContaining({ status: "DEAD" }),
+    });
+  });
+});
+
+describe("the visit reset and the seed's priority (review fix 8, WP11), Prisma path", () => {
+  it("a visit resets the priority and clears the marker; a seed is stored at 50", async () => {
+    db.crawlPage.findMany.mockResolvedValueOnce([{ ...CURRENT_ROW, priority: 5, lastPermanentFailAt: NOW, kind: "PAGE" }]);
+    await reportCrawlPages(SOURCE.id, "run-1", [{ id: "page-1", status: "fetched", links: [] }], NOW);
+    expect(db.crawlPage.update).toHaveBeenCalledWith({
+      where: { id: "page-1" },
+      data: expect.objectContaining({ status: "FETCHED", lastPermanentFailAt: null, priority: 50 }),
+    });
+
+    db.crawlPage.count.mockResolvedValueOnce(0); // hasPages
+    db.crawlPage.count.mockResolvedValueOnce(0); // fetched today
+    db.$queryRaw.mockResolvedValueOnce([]);
+    await claimCrawlPages(SOURCE.id, 10, NOW);
+    expect(db.crawlPage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ sourceId: SOURCE.id, priority: 50, nextDueAt: new Date(0) }),
+    });
   });
 });

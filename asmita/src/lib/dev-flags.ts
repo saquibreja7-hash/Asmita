@@ -8,11 +8,14 @@ export function devFlagEnabled(
   return process.env[name] === "true";
 }
 
-// The server-side provenance check sends survivor images to OpenAI. ADR 002
-// (consented media) is blocked on legal sign-off, so production builds keep
-// it off even if ENABLE_PROVENANCE_CHECK=true is set on the host. Remove the
-// production check in the same change that marks ADR 002 accepted.
+// The server-side provenance check (/api/check-image) sends the image to
+// OpenAI. Owner decision, 19 November 2026: this one route is allowed to
+// run in production when ENABLE_PROVENANCE_CHECK=true ("Decision recorded"
+// in docs/adr/002-consented-encrypted-media.md — the evidence-vault part of
+// ADR 002 stays blocked on legal sign-off). The gates stay: adults-only and
+// an explicit per-check consent tick, both enforced in the route, nothing
+// stored or logged, and OPENAI_API_KEY set only as a Worker secret (the
+// route answers "not configured" without it).
 export function provenanceCheckEnabled() {
-  if (process.env.NODE_ENV === "production") return false;
   return process.env.ENABLE_PROVENANCE_CHECK === "true";
 }

@@ -32,7 +32,8 @@ export function ReviewControls({
   reviewStatus: "CANDIDATE" | "APPROVED" | "DISMISSED";
   needsSecondReview: boolean;
   awaitingSecondReview: boolean;
-  distance: number;
+  /** Null for an SSCD finding: the second layer has no PDQ distance (ADR 008). */
+  distance: number | null;
   /** From the server: whether the admin viewing gave the first review. */
   currentAdminGaveFirstReview?: boolean;
   crawlerEnabled?: boolean;
@@ -43,6 +44,12 @@ export function ReviewControls({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const router = useRouter();
+  // Why two reviewers: a distance above the limit, or an SSCD match — the
+  // second layer always starts strict (ADR 008, WP28).
+  const secondReviewWhy =
+    distance === null
+      ? "An SSCD match has no hash distance, so it always needs two different reviewers"
+      : `Distance ${distance} is above the limit for one reviewer`;
 
   function ask(next: Decision) {
     setDecision(next);
@@ -90,7 +97,7 @@ export function ReviewControls({
   if (awaitingSecondReview && currentAdminGaveFirstReview) {
     return (
       <p className="text-sm" data-testid="second-review-note" role="status">
-        You gave the first approval. Distance {distance} is above the limit for one reviewer, so a second, different admin
+        You gave the first approval. {secondReviewWhy}, so a second, different admin
         must approve or dismiss it.
       </p>
     );
@@ -101,8 +108,8 @@ export function ReviewControls({
       {needsSecondReview && (
         <p className="text-sm" data-testid="second-review-note">
           {awaitingSecondReview
-            ? `Distance ${distance} is above the limit for one reviewer. A first reviewer has approved. A second, different admin must approve it. If you gave the first review, you cannot give the second.`
-            : `Distance ${distance} is above the limit for one reviewer. Approval needs two different admins: you give the first, someone else the second.`}
+            ? `${secondReviewWhy}. A first reviewer has approved. A second, different admin must approve it. If you gave the first review, you cannot give the second.`
+            : `${secondReviewWhy}. Approval needs two different admins: you give the first, someone else the second.`}
         </p>
       )}
       {done && (

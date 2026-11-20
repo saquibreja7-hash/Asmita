@@ -140,15 +140,26 @@ describe("run lifecycle", () => {
   }, 30_000);
 
   describe("exit codes", () => {
-    it("0 for a clean run, even when one source is unreachable", async () => {
+    it("0 for a clean run, even when sources fail", async () => {
       const down: Source = { id: "src-down", kind: "site", domain: "unreachable.test", pageBudget: 5, delayMs: 0, origin: "admin", hops: 0, render: "http" };
-      const api = await mock({ sources: [source(), down] });
-      const { result } = await runFixtureCrawl(fx.site, api);
+      // A source whose robots.txt fails temporarily (connection reset): the
+      // pre-WP13 "unreachable robots" treatment — disallow all, blocked.
+      const flakyHost = "flaky-robots.test";
+      fx.site.route(flakyHost, "/robots.txt", (res) => {
+        res.destroy();
+      });
+      const flaky: Source = { id: "src-flaky", kind: "site", domain: flakyHost, pageBudget: 5, delayMs: 0, origin: "admin", hops: 0, render: "http" };
+      const api = await mock({ sources: [source(), down, flaky] });
+      const { result } = await runFixtureCrawl(fx.site, api, { extraDns: { [flakyHost]: ["127.0.0.1"] } });
       expect(result.exitCode).toBe(EXIT.OK);
       expect(result.summary.exitCode).toBe(0);
       // Its robots.txt could not be fetched, so it was treated as disallow-all.
       expect((result.summary.robots as Record<string, number>).unreachable).toBeGreaterThan(0);
       expect((result.summary.errors as Record<string, number>).robots_disallowed).toBeGreaterThan(0);
+      // The DNS-dead source is permanent since WP13: reported gone on the
+      // first attempt (no robots verdict, no five error retries).
+      expect((result.summary.errors as Record<string, number>).dns_not_found).toBeGreaterThan(0);
+      expect(result.summary.homePermanentFailures).toBe(1);
       expect(api.created.size).toBe(fx.expected.length);
     }, 30_000);
 

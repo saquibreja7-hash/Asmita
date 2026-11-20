@@ -12,7 +12,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CrawlError } from "../../src/errors.ts";
 import { hashImage } from "../../src/image/hash-image.ts";
 import { DecoderPool, decoderEnv, decoderExecArgv, decoderReadPaths, defaultWorkerPath, parseReply } from "../../src/image/decoder-pool.ts";
-import { patternImage } from "../support/synthetic.ts";
+import { MAX_SPRITE_TILES } from "../../src/image/sprite.ts";
+import { patternImage, spriteSheet } from "../support/synthetic.ts";
 
 const FAKE = fileURLToPath(new URL("../support/fake-decoder-worker.mjs", import.meta.url));
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -46,6 +47,28 @@ describe("real decoder child process", () => {
     const local = await hashImage(bytes, { minSide: 1 });
     expect(isolated).toEqual({ pdq: local.hash, quality: local.quality });
     expect(p.stats.started).toBe(1);
+  });
+  it("splits a preview sprite sheet into its tiles through the same boundary (WP21)", async () => {
+    const seeds = [81, 82, 83, 84, 85, 86];
+    const sheet = await spriteSheet(seeds, 160, 90, 3, 2);
+    const p = pool();
+    const isolated = await p.hashSprite(sheet);
+    const standalone: string[] = [];
+    for (const s of seeds) standalone.push((await hashImage(await patternImage(s, 160, 90, "png"), { minSide: 1 })).hash);
+    expect(isolated.map((t) => t.pdq)).toEqual(standalone);
+    expect(isolated.every((t) => t.quality >= 0 && t.quality <= 100)).toBe(true);
+  });
+  it("answers a sprite request that is not decodable with the same error codes", async () => {
+    // minSide 64: the pool's own default rule, so the 60x60 sprite is
+    // refused like a whole image would be, before any tile is cut.
+    const p = pool({ minSide: 64 });
+    expect(await code(p.hashSprite(Buffer.from("<html>not an image</html>")))).toBe("image_sniff_failed");
+    expect(await code(p.hashSprite(await patternImage(87, 60, 60, "png")))).toBe("image_too_small");
+    expect((await p.hash(await patternImage(88, 200, 200, "png"))).pdq).toMatch(/^[0-9a-f]{64}$/);
+    // Error-code answers are replies, not crashes: the same child keeps
+    // serving, exactly like the normal path.
+    expect(p.stats.started).toBe(1);
+    expect(p.stats.crashes).toBe(0);
   });
   it("maps decode failures to error codes and keeps working", async () => {
     const p = pool();
@@ -119,6 +142,9 @@ describe("what the child can see and do", () => {
       expect(flags).not.toContain("parent-secret");
       // 0x06 replies "blocked_port" if argv/execArgv carries the key.
       expect(await code(pool({ workerPath: FAKE }).hash(img(0x06)))).toBe("image_format");
+      // The sprite request carries the same guarantees (WP21): scrubbed env,
+      // keyless argv, and exactly the four request fields.
+      expect(await code(pool({ workerPath: FAKE }).hashSprite(img(0x06)))).toBe("image_format");
     } finally {
       delete process.env.CRAWLER_SERVICE_KEY;
     }
@@ -192,6 +218,15 @@ describe("failure handling", () => {
     // The crashing image is retried once on a fresh child, then given up.
     expect(p.stats).toMatchObject({ crashes: 2, retried: 1, started: 3 });
   });
+  it("an image whose child died before answering is retried as a sprite task too, once (WP21)", async () => {
+    const p = pool({ workerPath: FAKE });
+    // 0x07 answers once, then stops answering and exits: the queued second
+    // sprite task is handed to the dying child and re-run on a fresh one —
+    // as a sprite task, which a normal reply would fail to answer.
+    const [a, b] = await Promise.all([code(p.hashSprite(img(0x07))), code(p.hashSprite(img(0x00)))]);
+    expect([a, b]).toEqual(["ok", "ok"]);
+    expect(p.stats).toMatchObject({ crashes: 1, retried: 1, started: 2 });
+  });
   it("treats malformed or unsolicited replies as a compromised child", async () => {
     const p = pool({ workerPath: FAKE });
     expect(await code(p.hash(img(0x03)))).toBe("image_decoder_crashed");
@@ -226,6 +261,54 @@ describe("failure handling", () => {
     ]) {
       expect(parseReply(bad, 1)).toBeNull();
     }
+  });
+
+  it("parseReply accepts only the exact sprite reply shape (WP21)", () => {
+    const h = "ab".repeat(32);
+    const tiles = [
+      { pdq: h, quality: 60 },
+      { pdq: "cd".repeat(32), quality: 0 },
+    ];
+    expect(parseReply({ id: 1, ok: true, sprite: true, tiles, rss: 5 }, 1)).toEqual({
+      ok: true,
+      sprite: true,
+      tiles: [
+        { pdq: h, quality: 60 },
+        { pdq: "cd".repeat(32), quality: 0 },
+      ],
+      rss: 5,
+    });
+    for (const bad of [
+      // not a tile list at all
+      { id: 1, ok: true, sprite: true, rss: 5 },
+      { id: 1, ok: true, sprite: true, tiles: "not-an-array", rss: 5 },
+      { id: 1, ok: true, sprite: true, tiles: [], rss: 5 },
+      // tile shape
+      { id: 1, ok: true, sprite: true, tiles: [{ pdq: "not-hex", quality: 60 }], rss: 5 },
+      { id: 1, ok: true, sprite: true, tiles: [{ pdq: h.toUpperCase(), quality: 60 }], rss: 5 },
+      { id: 1, ok: true, sprite: true, tiles: [{ pdq: h, quality: 101 }], rss: 5 },
+      { id: 1, ok: true, sprite: true, tiles: [{ pdq: h, quality: 60, url: "https://leak.example/" }], rss: 5 },
+      { id: 1, ok: true, sprite: true, tiles: [[h]], rss: 5 },
+      // more tiles than a sprite may carry
+      { id: 1, ok: true, sprite: true, tiles: Array.from({ length: MAX_SPRITE_TILES + 1 }, () => ({ pdq: h, quality: 60 })), rss: 5 },
+      // the single-hash shape with a sprite field bolted on
+      { id: 1, ok: true, sprite: true, pdq: h, quality: 60, rss: 5 },
+      { id: 1, ok: true, tiles, rss: 5 },
+    ]) {
+      expect(parseReply(bad, 1)).toBeNull();
+    }
+  });
+
+  it("a reply of the wrong kind for its task is a compromised child (WP21)", async () => {
+    // 0x0a: the fake answers a sprite task with the single-hash shape.
+    expect(await code(pool({ workerPath: FAKE }).hashSprite(img(0x0a)))).toBe("image_decoder_crashed");
+    // The malformed sprite replies (bad hash tile, zero tiles, extra tile
+    // field, tiles not an array) are refused the same way.
+    for (const byte of [0x03, 0x0b, 0x0c, 0x0d]) {
+      expect(await code(pool({ workerPath: FAKE }).hashSprite(img(byte)))).toBe("image_decoder_crashed");
+    }
+    // 0x0e: a sprite reply to a NORMAL task never answered is refused too.
+    expect(await code(pool({ workerPath: FAKE }).hash(img(0x0e)))).toBe("image_decoder_crashed");
   });
 });
 

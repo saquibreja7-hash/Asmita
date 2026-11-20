@@ -22,6 +22,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     heading: "Directory",
     items: [
       { href: "/admin/platforms", label: "Platforms", permission: "platforms:edit" },
+      { href: "/admin/partners", label: "Platform partners", permission: "platforms:edit" },
       { href: "/admin/templates", label: "Templates", permission: "templates:edit" },
       { href: "/admin/crawl-sources", label: "Crawler sites", permission: "crawler:manage" },
     ],

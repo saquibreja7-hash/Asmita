@@ -47,6 +47,11 @@ export default async function StartPage() {
                 {t(locale, "start.minor.link")}
               </Link>
             </p>
+            <p className="mt-2 text-center text-sm text-[var(--text-muted)]">
+              <Link href="/track" className="link-underline text-[var(--text-muted)] hover:text-[var(--ink)]">
+                {t(locale, "start.track.link")}
+              </Link>
+            </p>
 
           </div>
         </section>
