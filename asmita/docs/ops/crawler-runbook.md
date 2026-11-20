@@ -192,6 +192,8 @@ At `/admin/findings` (`findings:review`). Interim safety guidance is on every fi
 - The notice preview shows both addresses, so it counts as a reveal (logged, audited, 20 an hour). The analyst confirms that before previewing; nothing previews by itself. Send sends exactly the previewed notice, and only while the preview is on screen: it is cleared, PDF included, after 2 minutes without activity.
 - Downloading the PDF asks for confirmation first: it holds both addresses and must not be kept on a personal device. The file name carries no case reference. Copying a revealed address carries the same caution.
 
+**Watch findings (WP22 "Watch for my images").** A finding can belong to a watch: she fingerprinted her images without filing a complaint, and a watch-only authorisation (`CrawlConsent.scope = WATCH_ONLY`) permits searching and alerting her, nothing else. Review such a finding exactly as any other; on final approval the found link is added and she gets an email that carries only her case reference. While the case is still a watch, the console shows "Watch only: she has not asked for removal yet" and the notice step refuses `watch_only_consent` — nothing can be sent. When she chooses "Take it down", the watch becomes a case, she signs the full authorisation on the spot, and the notice path opens for that finding as usual. Watches never appear in the Needs action queues except under "Found copies to review" (a found copy awaiting review); their fingerprints are reviewed from the Fingerprints queue like any others.
+
 **Crawler overview (crawler v2 WP8).** `/admin/crawler` (`findings:review`, reads only, works with the crawler off) summarises how the crawler's work stands: sites by origin and state, pages crawled today (the same UTC-day count a source's daily `pageBudget` uses), the frontier queue (live, pending, due, claimed, scheduled, dead), sites discovered today, matches awaiting review, the last run the app saw, and page outcomes by the code the crawler reported. It renders from `GET /api/admin/crawler/stats`, an address-free aggregate — counts, timestamps and one run id only, never a host, URL, fingerprint or case reference — computed in the database on the memory, Kysely and Prisma paths (`src/lib/crawl-stats.ts`). Two honest limits are printed on the page itself: the app can name a run only through the matches it reported (a run that found nothing leaves no run id; the crawler's own `run_summary` log line is the full record), and the outcome codes are the page statuses of the frontier report, not the crawler's finer error codes.
 
 ## 7. Kill switch
@@ -246,3 +248,40 @@ Every item, in writing, before a real fingerprint enters the pool, a real site i
 - [ ] Grievance contacts used have `lastContactVerifiedByHuman`.
 - [ ] Each source added by a SUPER_ADMIN with a recorded reason; each automatic (reported) source accounted for in the review, with the never-crawl list (built-in and `CrawlBlockedHost`) reviewed by a human before any real site is touched.
 - [ ] First run on test fingerprints and test sites only, with the results checked, before any real fingerprint is in the pool.
+- [ ] Removal re-checks (WP23) exercised on a real database: the hourly cron's sweep enqueues a removed link's three checks and resolves all three outcomes — GONE, UNKNOWN and STILL_ONLINE (which returns the link to notice-sent, writes the audit entry and sends her the reference-only email) — with the `20261119000000_link_verification` migration applied.
+- [ ] Re-upload watch (WP24) exercised on a real database: the hourly cron's sweep starts the 12-month window on a resolved case's live authorisation, the pool keeps matching her fingerprints inside the window and drops them after it, and an approved finding inside it sends her the reference-only email — with the `20261119120000_crawl_consent_watch_until` migration applied.
+
+## 10. Removal re-checks (watch-and-verify WP23)
+
+When one of her links becomes REMOVED — she marks it removed, or an admin records a platform reply of REMOVED — three re-checks are scheduled: +1 day, +3 days and +7 days. There is no new cron trigger: the sweep rides the existing hourly `/api/cron/purge-expired-urls`, whose answer now also carries `verificationsEnqueued`, `verificationsResolved` and `verificationsStillOnline`. If the link is no longer removed when a check comes due, the checks still waiting for it are dropped.
+
+Each due check is put into the crawler frontier as a priority row for its host's source, creating a REPORTED source through the existing rules when none exists; the crawler then visits the page like any other, through the same claim/report path — there is no second fetch path. While `ENABLE_CRAWLER` is off the sweep does nothing and checks wait as PENDING. A never-crawl host answers UNKNOWN at once, with no source and no frontier row. A check whose link lost its address to the 30-day retention resolves UNKNOWN, and erasure deletes a case's checks with its links.
+
+Outcome rules, from the crawler's report on that page row:
+
+- page gone or blocked (404/410, robots, 401/403) → GONE;
+- page fetched with no finding, while her fingerprints are live in the pool → GONE (the image is no longer there);
+- page fetched without pool fingerprints, a not-modified answer (images not re-hashed), or a page that never answered within 7 days of queuing → UNKNOWN;
+- a finding for that page on her case since the check was queued → STILL_ONLINE, whatever the page row says.
+
+STILL_ONLINE returns the link to the notice-sent state, so the existing escalation sweep follows up on its own schedule; the episode's remaining checks are dropped, a `CONTENT_STILL_ONLINE` audit entry is written, and she receives an email carrying only her case reference and a sign-in prompt.
+
+Operationally: resolution of a fetched page waits two hours after the crawler's report, so findings still in flight can arrive; at most 200 checks are enqueued and 200 resolved per hourly pass, the rest wait an hour; the `LinkVerification` table stores no URL — a check works from the `SubmittedUrl` it references. The admin case page shows each link's removal-check history; her case page shows "Verified removed (checked N times)" after three GONE results and "Still online: we have followed up" after a still-online check.
+
+Legal: the still-online email wording and the whole re-check behaviour — re-visiting pages after a takedown to verify removal — are new and unreviewed. Counsel must read them before real use; both are on the spec's "For legal sign-off before real use" list (`docs/product/watch-and-verify-spec.md`).
+
+## 11. Re-upload watch (watch-and-verify WP24)
+
+When a case is resolved — or every link on it is verified removed by the WP23 re-checks — her live crawl authorisation gains a 12-month window (`CrawlConsent.watchUntil`), and while it runs the crawler keeps matching her fingerprints even though the case is closed. There is no new cron trigger: the sweep rides the existing hourly `/api/cron/purge-expired-urls`, whose answer now also carries `reuploadWatchesStarted`; at most 200 windows start per hourly pass, and the first start wins (a later resolution never moves the date). Starting the window is part of the case's record, not a crawl action, so the sweep runs whatever `ENABLE_CRAWLER` says.
+
+What the window does:
+
+- the pool keeps her approved fingerprints only while the case is open or `now < watchUntil` (`src/lib/crawl-pool.ts`); after that they leave the pool exactly as a withdrawal's do, without touching the consent itself, and a crawler report under one of them is refused (`fingerprint_not_accepted`). The WP23 image-level check follows the same rule.
+- no new site is fetched and no source is added for her: the sources created from her reported links stay as they are, and a re-upload is found on sites the crawler already visits.
+- a re-upload found and approved by an analyst becomes a link on her case like any finding — it appears under "Found by Asmita" on her dashboard and follows the existing representative-notice path, because her full authorisation covers it — and she receives an email carrying only her case reference and a sign-in prompt (one email per approved finding, sent at final approval while the window runs; an open case never triggers it).
+
+Her case page shows "Watching for re-uploads until <date>" in place of the open-case search copy while the window runs, with "Stop watching" — which withdraws the authorisation with the existing effects (fingerprints leave the pool at once, unreviewed possible matches are deleted, unsent crawler links are stopped).
+
+Operationally: the window is a bare nullable date on the consent (migration `20261119120000_crawl_consent_watch_until`), the sweep decides from the case status and GONE-check counts only (no address is read), and a `CRAWL_WATCH_STARTED` audit entry records the consent id and the window's end. Erasure needs no new rule: the column lives on the consent, which erasure already deletes.
+
+Legal: the re-upload alert email wording and the 12-month watch itself are new and unreviewed. Counsel must read them before real use; both are on the spec's "For legal sign-off before real use" list (`docs/product/watch-and-verify-spec.md`).

@@ -219,9 +219,13 @@ describe("hash worker wiring (source pins, WP42 P1/P2/P13)", () => {
     expect(entry).toContain("canvas.width = 0");
   });
 
-  it("allows the same-origin worker in the CSP and never a blob worker", () => {
+  it("allows the same-origin worker in the CSP, a blob worker only on the C2PA pages", () => {
     const csp = readSource("lib/csp.ts");
+    // WP42: the PDQ hashing worker is a real same-origin script the bundler
+    // emits, so the policy's worker-src is 'self'. WP38 (merged with WP42)
+    // keeps blob: for the C2PA engine's inline development worker, behind
+    // the c2pa flag only — never on the pages the hashing worker runs on.
     expect(csp).toContain("\"worker-src 'self'\"");
-    expect(csp).not.toContain("worker-src 'self' blob:");
+    expect(csp).toContain("...(c2pa ? [\"worker-src 'self' blob:\"] : [\"worker-src 'self'\"]),");
   });
 });

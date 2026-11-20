@@ -11,11 +11,13 @@ import { hashEmail } from "@/lib/hash";
 // "file" (the default) is the File a complaint flow, which asks her age first.
 // "track" is Track your case: it never creates an account, and it sends her to
 // her case (or the list of her cases) if this email already has one.
+// "watch" is Watch for my images (WP22): the same age check with minor
+// routing, then the watch flow — no links are ever asked for.
 const schema = z.object({
   email: z.email(),
   otp: z.string().regex(/^\d{6}$/),
   ageOver18: z.boolean().optional(),
-  purpose: z.enum(["file", "track"]).default("file"),
+  purpose: z.enum(["file", "track", "watch"]).default("file"),
 });
 
 async function withSession(body: Record<string, unknown>, user: { id: string; emailHash: string }) {
@@ -42,7 +44,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   const parsed = schema.safeParse(await request.json());
-  if (!parsed.success || (parsed.data.purpose === "file" && parsed.data.ageOver18 === undefined)) {
+  if (!parsed.success || (parsed.data.purpose !== "track" && parsed.data.ageOver18 === undefined)) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
   const emailHash = hashEmail(parsed.data.email);
@@ -71,7 +73,14 @@ export async function POST(request: Request) {
   }
 
   if (!parsed.data.ageOver18) {
+    // A minor is routed to the minor-support flow before anything else; no
+    // account, no session, no watch (WP22: adults only, unchanged).
     return NextResponse.json({ success: true, redirectTo: "/minor-support" });
+  }
+  if (parsed.data.purpose === "watch") {
+    const user = await upsertVerifiedUser(parsed.data.email, true);
+    await writeAuditLog({ eventType: "USER_VERIFIED", entityType: "User", entityId: user.emailHash });
+    return withSession({ success: true, redirectTo: "/watch" }, user);
   }
   const user = await upsertVerifiedUser(parsed.data.email, true);
   await writeAuditLog({ eventType: "USER_VERIFIED", entityType: "User", entityId: user.emailHash });

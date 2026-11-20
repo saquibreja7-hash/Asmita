@@ -217,6 +217,11 @@ export async function prepareRepresentativeNotice(input: {
     where: { caseId: finding.caseId, withdrawnAt: null },
     orderBy: { signedAt: "desc" },
   });
+  // A watch-only authorisation (WP22 "Watch for my images") never covers a
+  // notice: she has not asked for removal yet. She must choose "Take it
+  // down", which converts the watch into a case and asks for the full
+  // authorisation on the spot, before anything can be sent.
+  if (consent?.scope === "WATCH_ONLY") return refuse(409, "watch_only_consent");
   // It must list the matched fingerprint, and the finding must have been
   // recorded under it: a finding from an earlier authorisation is never sent
   // under a later one (consentCoversFinding).

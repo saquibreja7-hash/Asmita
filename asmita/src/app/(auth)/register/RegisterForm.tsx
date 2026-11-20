@@ -11,8 +11,10 @@ import { FormError } from "@/components/FormError";
 type Step = "age" | "email" | "otp";
 
 // mode "track" (Track your case) skips the age question: it only finds a case
-// this email already has, and never starts a new one.
-export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?: "file" | "track" }) {
+// this email already has, and never starts a new one. mode "watch" (Watch for
+// my images) is the same flow as "file" — age check with minor routing, email,
+// one-time code — and continues to the watch flow, which never asks for links.
+export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?: "file" | "track" | "watch" }) {
   const router = useRouter();
   const tracking = mode === "track";
   const [step, setStep] = useState<Step>(tracking ? "email" : "age");
@@ -92,7 +94,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
       const response = await csrfFetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(tracking ? { email, otp, purpose: "track" } : { email, otp, ageOver18: ageConfirmed === "adult" }),
+        body: JSON.stringify(tracking ? { email, otp, purpose: "track" } : { email, otp, ageOver18: ageConfirmed === "adult", purpose: mode === "watch" ? "watch" : "file" }),
       });
       if (!response.ok) {
         setError(t(locale, "reg.error.codeNoMatch"));
@@ -108,6 +110,11 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
           return;
         }
         router.push(result.redirectTo ?? "/my-cases");
+        return;
+      }
+      // The watch flow continues where it left off; no links are ever asked for.
+      if (mode === "watch") {
+        router.push(result.redirectTo ?? "/watch");
         return;
       }
       // Links added before the email code go straight to review and signing.

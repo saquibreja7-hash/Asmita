@@ -17,9 +17,16 @@ vi.mock("@/lib/audit", () => ({
   inMemoryAuditLog: [],
 }));
 
+// Watch-and-verify WP23: the route schedules removal re-checks when a reply
+// says REMOVED (link-verification.ts).
+vi.mock("@/lib/link-verification", () => ({
+  scheduleLinkVerifications: vi.fn().mockResolvedValue({ scheduled: 3 }),
+}));
+
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { writeAuditLog } from "@/lib/audit";
+import { scheduleLinkVerifications } from "@/lib/link-verification";
 import { createCsrfPair } from "@/lib/csrf";
 import { POST } from "@/app/api/admin/notices/[noticeId]/response/route";
 
@@ -113,6 +120,8 @@ describe("POST /api/admin/notices/[noticeId]/response", () => {
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ eventType: "CONTENT_REMOVED", entityId: "u1", actorId: "admin-1" }),
     );
+    // The removal schedules three re-checks for the link (+1/+3/+7 days).
+    expect(scheduleLinkVerifications).toHaveBeenCalledWith("u1");
   });
 
   it("records an acknowledgement on the notice only", async () => {
@@ -122,6 +131,8 @@ describe("POST /api/admin/notices/[noticeId]/response", () => {
     expect(ops).toHaveLength(1);
     expect(ops[0].args.data).toMatchObject({ responseType: "ACKNOWLEDGED" });
     expect(ops[0].args.data).not.toHaveProperty("removedAt");
+    // Nothing was removed, so no re-check is scheduled.
+    expect(scheduleLinkVerifications).not.toHaveBeenCalled();
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: "ADMIN_ACTION",
@@ -152,6 +163,8 @@ describe("POST /api/admin/notices/[noticeId]/response", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "already_removed" });
     expect(writeAuditLog).not.toHaveBeenCalled();
+    // The other admin's removal already scheduled the re-checks; this one did not.
+    expect(scheduleLinkVerifications).not.toHaveBeenCalled();
   });
 
   it("refuses a reply time before the notice or in the future", async () => {

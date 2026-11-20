@@ -665,4 +665,44 @@ export const templateSeeds = [
     ].join("\n"),
     legalCitations: ["IT Rules 2021, Rule 3(2)(b) - complaint by any person on her behalf; removal within 2 hours"],
   },
+  {
+    // The watch-only authorisation for "Watch for my images"
+    // (watch-and-verify WP22). She lets Asmita compare her fingerprints with
+    // images on public websites and alert her; nothing is sent to any
+    // platform unless she later chooses "Take it down" and signs the full
+    // CRAWL_AUTHORISATION. Addressed to Asmita; nothing is sent when she
+    // agrees to it. Unsignable in production until a human legal reviewer
+    // records the review. Item 8 matches CRAWL_AUTHORISATION's declaration,
+    // so the two agree about what her fingerprints are.
+    templateType: TemplateType.WATCH_AUTHORISATION,
+    subjectTemplate:
+      "Authorisation to watch for copies of my images - {{caseReference}}",
+    bodyTemplate: [
+      "AUTHORISATION TO WATCH FOR COPIES OF MY IMAGES",
+      "",
+      "Asmita Case Reference: {{caseReference}}",
+      "Declaration Reference: {{declarationReference}}",
+      "",
+      "1.  I authorise Asmita (meriasmita.org) to compare the fingerprints set out at the end of this authorisation with images that Asmita's search service finds on public websites. Each fingerprint was made on my own device; Asmita has never received the images themselves.",
+      "",
+      "2.  I understand how the search works. A separate Asmita service visits public pages on websites that a person at Asmita has approved. It works out the fingerprint of each image it sees, compares it with my fingerprints, and keeps nothing about an image that does not match. When an image is close to one of my fingerprints, it records only the address of the page and of the image, never the image.",
+      "",
+      "3.  I understand that a match is only a possible match. A person at Asmita reviews every possible match, and a less certain match is checked by a second person, before I am told about it.",
+      "",
+      "4.  Nothing is sent to any website or platform under this authorisation. If a reviewer confirms a possible copy, Asmita tells me, and I choose what happens next. A takedown notice is sent only if I later ask for it, under a separate authorisation.",
+      "",
+      "5.  I understand that the addresses of possible matches are stored encrypted. Asmita deletes each address thirty (30) days after it is found, as with links reported to a case.",
+      "",
+      "6.  I can withdraw this authorisation at any time from my watch page. When I withdraw it, the search for my fingerprints stops, my fingerprints are deleted from Asmita, and possible matches that nobody has reviewed yet are deleted.",
+      "",
+      "7.  I confirm that I am an adult, that the fingerprints listed below were made from images of me, and that I give this authorisation voluntarily.",
+      "",
+      "8.  I declare that the images from which the fingerprints listed below were made are intimate images of me, and that I did not consent to any copy of them being shared or published on a website or platform.",
+      "",
+      "[The list of fingerprints covered by this authorisation is appended below.]",
+    ].join("\n"),
+    legalCitations: [
+      "IT Rules 2021, Rule 3(2)(b) - the removal track a takedown notice would use; this authorisation asks only for comparison and alerting, and sends nothing",
+    ],
+  },
 ] as const;

@@ -4,6 +4,7 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { db } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
+import { scheduleLinkVerifications } from "@/lib/link-verification";
 
 // Records what a platform did with a notice. A removal also marks the link
 // removed, which stops its escalation ladder (the same as the survivor's own
@@ -62,7 +63,7 @@ export async function POST(request: Request, context: { params: Promise<{ notice
   // The removal guard is in the updates themselves, so two admins recording
   // at once cannot both record a removal; replies before it may still be
   // changed (acknowledged, then removed).
-  const [noticeUpdate] = await db.$transaction([
+  const [noticeUpdate, urlUpdate] = await db.$transaction([
     db.notice.updateMany({
       where: { id: notice.id, removedAt: null },
       data: { responseType, responseReceivedAt: receivedAt, ...(removed ? { removedAt: receivedAt } : {}) },
@@ -86,6 +87,18 @@ export async function POST(request: Request, context: { params: Promise<{ notice
       receivedAt: receivedAt.toISOString(),
     },
   });
+
+  // Watch-and-verify WP23: a link that just became REMOVED gets three
+  // scheduled re-checks. Only when this request is what moved it (the link
+  // update above changed a row), and best-effort: a scheduling failure must
+  // never fail the reply the admin recorded.
+  if (removed && (urlUpdate?.count ?? 0) === 1) {
+    try {
+      await scheduleLinkVerifications(notice.urlId);
+    } catch {
+      console.error("link_verification_schedule_failed");
+    }
+  }
 
   return NextResponse.json({ ok: true, responseType, receivedAt: receivedAt.toISOString() });
 }
