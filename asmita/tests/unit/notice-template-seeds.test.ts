@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   assertNoticeBodySafe,
   assertNoticeSubjectSafe,
@@ -60,6 +62,28 @@ describe("notice template seeds", () => {
     expect(body).toMatch(/compare the fingerprints/);
     expect(body).toMatch(/on my behalf and as my authorised representative/);
     expect(body).toMatch(/withdraw this authorisation at any time/);
+  });
+
+  it("the crawl authorisation covers the numerical description of a confirmed copy (WP28, ADR 008)", () => {
+    const body = seed("CRAWL_AUTHORISATION").bodyTemplate;
+    // The exact sentence, as its own sentence at the end of item 2.
+    expect(body).toContain(
+      "Where a person at Asmita has confirmed that a copy matches, Asmita may also keep a numerical description of that confirmed copy — never the image itself — so that altered versions of it can be found too.",
+    );
+    expect(body).toMatch(/records only the address of the page and of the image, never the image\. Where a person at Asmita has confirmed that a copy matches/);
+    // Nothing else in the template changed: item 2 still opens as before.
+    expect(body).toMatch(/2\.  I understand how the search works\./);
+  });
+
+  it("the changed authorisation text seeds unreviewed: seed.ts resets reviewedByLegal on a text change and never sets it true", () => {
+    const seedSource = readFileSync(join(process.cwd(), "prisma", "seed.ts"), "utf8");
+    // The change detector: a differing subject, body or citations resets the
+    // human reviewer's decision to unreviewed on the update path...
+    expect(seedSource).toMatch(/textChanged \? \{ \.\.\.data, reviewedByLegal: false \} : data/);
+    // ...a fresh template is created unreviewed...
+    expect(seedSource).toMatch(/create\(\{[\s\S]{0,200}reviewedByLegal: false/);
+    // ...and nothing anywhere sets it true (only a human reviewer records it).
+    expect(seedSource).not.toMatch(/reviewedByLegal:\s*true/);
   });
 
   it("the crawler templates render into a signable PDF", async () => {

@@ -7,6 +7,7 @@
   "scope": "nav, support panel, age attestation, auth/OTP flow, home page, how-it-works, resources, register page.",
   "excludedFromTranslation": [
     "/faq - pending translation",
+    "/for-platforms - written for platform Trust & Safety and grievance teams, English only",
     "/privacy - sections s01-s16 were translated 2026-06-16 (commit 03eb3df); the sections added or reworded on 19 November 2026 (WP29: fingerprints, video, crawler, watch, partner-sharing, sscd, platform-partners, and the edited tldr/s01/s03/s04/s05/s07/s08/s09/s10/s13 keys) are English only, per the owner's instruction, until a Hindi pass is run on them",
     "/terms - legal document, English only",
     "/case/[caseId]/sign - declaration is legally consequential, English only",
@@ -93,6 +94,21 @@
       "about page Sarvam line",
       "footer helpline label"
     ]
+  },
+  "machineTranslatedWp48": {
+    "by": "AI assistant (WP48 Safety by Design review of the home chat and voice assistant), 2026-11-20, pending human review",
+    "keys": [
+      "chat.reply.crisis",
+      "chat.reply.misuse",
+      "chat.reply.minorOther",
+      "chat.reply.personalData",
+      "chat.reply.safe",
+      "chat.error.busy",
+      "chat.error.unavailable",
+      "talk.error.busy",
+      "talk.error.unavailable"
+    ],
+    "note": "chat.reply.link, chat.reply.minor and chat.reply.private were moved from hard-coded text in the chat route with their wording unchanged; they are covered by the chat.* entry above."
   },
   "pendingNativeReview": {
     "note": "Drafted without a native-speaker review; review before treating as final.",
