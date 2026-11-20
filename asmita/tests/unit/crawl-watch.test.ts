@@ -87,6 +87,8 @@ function seedFinding(id: string, seenAt: Date, pageUrl = LINK_URL, distance = 4)
     pageUrlEncrypted: encryptField(pageUrl),
     imageUrlEncrypted: encryptField("https://cdn.example.net/img.jpg"),
     urlDigest: `digest-${id}`, distance, quality: 90,
+    // WP28 (ADR 008): the memory finding now carries how it matched.
+    sscdSimilarity: null, method: "PDQ",
     firstSeenAt: seenAt, lastSeenAt: seenAt,
     sourceId, runId: "run-1", reviewStatus: "CANDIDATE",
     reviewedById: null, reviewedAt: null, secondReviewedById: null, secondReviewedAt: null,

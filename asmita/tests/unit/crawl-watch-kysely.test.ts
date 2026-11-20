@@ -451,7 +451,7 @@ describe("the pool rule, Kysely path", () => {
     expect(cases.detail.select).toEqual(["id", "status"]);
     expect(cases.detail.wheres).toEqual([["id", "in", ["case-1"]]]);
     const prints = callsOn("HashSubmission")[0]!;
-    expect(prints.detail.select).toEqual(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status", "algorithm"]);
+    expect(prints.detail.select).toEqual(["id", "caseId", "crawlPoolId", "hashEncrypted", "quality", "status", "algorithm", "videoFramesEncrypted"]);
     expect(prints.detail.wheres).toEqual([["id", "in", ["hash-1"]]]);
 
     // PARTIALLY_RESOLVED is still open.

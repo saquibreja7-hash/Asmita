@@ -8,6 +8,7 @@ import { t } from "@/lib/i18n";
 import { CHAT_COPY_KEYS, type ChatCopy } from "./chat-copy";
 import { HomeChat } from "./HomeChat";
 import { AudiencePicker } from "./AudiencePicker";
+import { icons } from "./for-platforms/icons";
 
 /*
  * Home. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
@@ -246,7 +247,7 @@ export default async function HomePage() {
               </p>
             </div>
             <span className="hidden h-12 w-px bg-[var(--line)] md:block" aria-hidden />
-            <SupporterLogos className="supporters-strip-logos justify-center" eager />
+            <SupporterLogos className="supporters-strip-logos justify-center" />
           </div>
         </section>
 
@@ -393,6 +394,45 @@ export default async function HomePage() {
                 art: a.art,
               }))}
             />
+          </div>
+        </section>
+
+        {/* FOR PLATFORMS: the partner programme, linking to /for-platforms. */}
+        <section className="container pb-4 md:pb-8" aria-labelledby="platforms-heading">
+          <div className="pf-home-band mx-auto max-w-6xl p-7 md:p-12">
+            <div className="grid items-center gap-10 lg:grid-cols-[6fr_5fr]">
+              <div>
+                <span className="eyebrow">{say("For platforms", "प्लेटफ़ॉर्म के लिए")}</span>
+                <h2 id="platforms-heading" className="section-title mt-4">
+                  {say("Run a platform? Help us keep abuse off it.", "क्या आप कोई प्लेटफ़ॉर्म चलाते हैं? इस दुर्व्यवहार को रोकने में साथ दें।")}
+                </h2>
+                <span aria-hidden="true" className="pf-rule mt-5" />
+                <p className="mt-5 max-w-xl text-base leading-[1.7] text-[var(--text)] md:text-lg">
+                  {say(
+                    "Join Asmita's partner programme. Get survivors' reports through one channel, with fingerprints you can match, so content comes down quickly and stays down. It is free.",
+                    "अस्मिता के पार्टनर कार्यक्रम से जुड़ें। पीड़ितों की रिपोर्ट एक ही जगह, मिलान योग्य फ़िंगरप्रिंट के साथ पाएँ, ताकि सामग्री जल्दी हटे और दोबारा न आए। यह निःशुल्क है।",
+                  )}
+                </p>
+                <div className="mt-8 flex flex-wrap items-center gap-4">
+                  <Link className="btn btn-primary btn-arrow !m-0" href="/for-platforms">
+                    {say("Become a partner", "पार्टनर बनें")}
+                  </Link>
+                  {locale === "hi" && <span className="muted text-sm">यह पेज अंग्रेज़ी में है।</span>}
+                </div>
+              </div>
+              <ul className="grid gap-3">
+                {[
+                  { icon: "fingerprint" as const, en: "Fingerprint alerts from survivors' cases", hi: "पीड़ितों के मामलों से फ़िंगरप्रिंट अलर्ट" },
+                  { icon: "inbox" as const, en: "One channel for takedown notices", hi: "हटाने की सूचनाओं के लिए एक ही चैनल" },
+                  { icon: "radar" as const, en: "Crawler monitoring, with your permission", hi: "आपकी अनुमति से क्रॉलर निगरानी" },
+                ].map((item) => (
+                  <li key={item.icon} className="pf-home-item">
+                    <span className="pf-chip pf-chip-flame">{icons[item.icon]}</span>
+                    <span className="text-[16px] font-medium leading-[1.4] text-[var(--ink)]">{say(item.en, item.hi)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </section>
 

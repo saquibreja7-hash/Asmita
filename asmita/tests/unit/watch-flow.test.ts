@@ -227,14 +227,14 @@ describe("Not now and Stop watching", () => {
     crawlMemory().findings.set("cf-1", {
       id: "cf-1", caseId: record.id, hashSubmissionId: "hs-1", crawlConsentId: "consent-watch",
       pageUrlEncrypted: encryptField("https://forum.example.com/thread/1"), imageUrlEncrypted: encryptField("https://cdn.example.com/1.jpg"),
-      urlDigest: "digest-1", distance: 8, quality: 90, firstSeenAt: new Date(), lastSeenAt: new Date(),
+      urlDigest: "digest-1", distance: 8, quality: 90, sscdSimilarity: null, method: "PDQ", firstSeenAt: new Date(), lastSeenAt: new Date(),
       sourceId: "src-1", runId: "run-1", reviewStatus: "APPROVED", reviewedById: "admin-1", reviewedAt: new Date(),
       secondReviewedById: null, secondReviewedAt: null,
     });
     crawlMemory().findings.set("cf-2", {
       id: "cf-2", caseId: record.id, hashSubmissionId: "hs-1", crawlConsentId: "consent-watch",
       pageUrlEncrypted: encryptField("https://forum.example.com/thread/2"), imageUrlEncrypted: encryptField("https://cdn.example.com/2.jpg"),
-      urlDigest: "digest-2", distance: 8, quality: 90, firstSeenAt: new Date(), lastSeenAt: new Date(),
+      urlDigest: "digest-2", distance: 8, quality: 90, sscdSimilarity: null, method: "PDQ", firstSeenAt: new Date(), lastSeenAt: new Date(),
       sourceId: "src-1", runId: "run-1", reviewStatus: "CANDIDATE", reviewedById: null, reviewedAt: null,
       secondReviewedById: null, secondReviewedAt: null,
     });

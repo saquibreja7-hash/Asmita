@@ -182,7 +182,9 @@ export async function prepareRepresentativeNotice(input: {
   const finding = await db.crawlFinding.findUnique({ where: { id: input.findingId } });
   if (!finding || finding.caseId !== input.caseId) return refuse(404, "finding_not_found");
   if (finding.reviewStatus !== "APPROVED") return refuse(409, "finding_not_approved");
-  if (finding.distance > SECOND_REVIEW_DISTANCE && !finding.secondReviewedById) return refuse(409, "second_review_required");
+  // An SSCD finding has no PDQ distance and always needs the second reviewer,
+  // exactly like the least-certain PDQ matches (ADR 008, WP28).
+  if ((finding.distance === null || finding.distance > SECOND_REVIEW_DISTANCE) && !finding.secondReviewedById) return refuse(409, "second_review_required");
   if (findingUrlsExpired(finding, now) || !finding.imageUrlEncrypted) return refuse(410, "finding_expired");
 
   // The link final approval created for this finding. When the survivor had

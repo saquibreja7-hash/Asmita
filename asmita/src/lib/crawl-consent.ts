@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { writeAuditLog } from "@/lib/audit";
 import { crawlMemory } from "@/lib/crawl-store";
-import { hasSignableImageFingerprint, buildHashAnnexForSigning } from "@/lib/case-hash-annex";
+import { hasSearchableFingerprint, buildHashAnnexForSigning } from "@/lib/case-hash-annex";
 import { noticeDate } from "@/lib/notice-date";
 import { renderNoticeTemplate } from "@/lib/notice-generator";
 import { templateRef } from "@/lib/signed-template";
@@ -136,9 +136,9 @@ export async function buildCrawlAuthorisationDraft(
   if (!template) return { error: "template_missing" };
   const annex = await buildHashAnnexForSigning(caseId);
   if (annex.hashSubmissionIds.length === 0) return { error: "no_hashes" };
-  // The crawler searches photo fingerprints only until video search is built
-  // (video-fingerprints spec WP20): a video-only case is not offered the search.
-  if (!(await hasSignableImageFingerprint(caseId))) return { error: "no_hashes" };
+  // The crawler searches photo and video fingerprints (video-fingerprints
+  // spec WP20): a case with either may authorise the search.
+  if (!(await hasSearchableFingerprint(caseId))) return { error: "no_hashes" };
   const variables = { caseReference: referenceNumber, declarationReference: referenceNumber };
   return {
     template,
@@ -290,6 +290,16 @@ export async function withdrawCrawlConsent(
         candidatesDeleted += 1;
       }
     }
+    // The SSCD embeddings of her confirmed copies go at once too (ADR 008,
+    // WP28): the pool stops serving them on the next build, exactly as the
+    // withdrawn pool ids stop matching. Imported lazily like the pool's own
+    // crawl-embeddings edge: crawl-embeddings builds its Zod schemas at
+    // module top level from crawl-findings' exports, and the static cycle
+    // crawl-findings -> watch-ops -> here -> crawl-embeddings (the merge of
+    // the watch lane and WP28) would decide by initialisation order whether
+    // those schemas come out whole.
+    const { deleteEmbeddingsForCase } = await import("@/lib/crawl-embeddings");
+    await deleteEmbeddingsForCase([caseId]);
     for (const fingerprint of memory.fingerprints.values()) {
       if (fingerprint.caseId === caseId) fingerprint.crawlPoolId = null;
     }
@@ -309,6 +319,9 @@ export async function withdrawCrawlConsent(
       if (withdrawn.count === 0) return null;
       // Pool ids go first, so the crawler's next report on them is refused.
       await tx.hashSubmission.updateMany({ where: { caseId, crawlPoolId: { not: null } }, data: { crawlPoolId: null } });
+      // The SSCD embeddings of her confirmed copies go in the same
+      // transaction (ADR 008, WP28): the pool stops serving them at once.
+      await tx.findingEmbedding.deleteMany({ where: { caseId } });
       // Approved crawler links with no notice sent can never be sent now, even
       // under a later authorisation (crawl-notice.ts refuses them). Links
       // already sent keep their record untouched.

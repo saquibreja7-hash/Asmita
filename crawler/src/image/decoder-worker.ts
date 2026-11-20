@@ -18,9 +18,9 @@
  * may hold a task, so no image is lost to a recycle.
  */
 import { ERROR_CODES, toCrawlError } from "../errors.ts";
-import { hashImage } from "./hash-image.ts";
+import { hashImage, hashSpriteImage } from "./hash-image.ts";
 
-type Request = { id: number; bytes: Uint8Array; minSide: number };
+type Request = { id: number; bytes: Uint8Array; minSide: number; sprite?: true };
 
 const ERROR_SET = new Set<string>(ERROR_CODES);
 
@@ -39,7 +39,14 @@ function send(msg: unknown): Promise<void> {
 function isRequest(m: unknown): m is Request {
   if (!m || typeof m !== "object") return false;
   const r = m as Record<string, unknown>;
-  return Number.isInteger(r.id) && r.bytes instanceof Uint8Array && Number.isInteger(r.minSide);
+  return (
+    Number.isInteger(r.id) &&
+    r.bytes instanceof Uint8Array &&
+    Number.isInteger(r.minSide) &&
+    // A sprite request (video-fingerprints spec WP21) says so with exactly
+    // `sprite: true`; the parent never sends `false` or any other value.
+    (r.sprite === undefined || r.sprite === true)
+  );
 }
 
 process.on("message", (m: unknown) => {
@@ -51,8 +58,15 @@ process.on("message", (m: unknown) => {
     let reply: Record<string, unknown>;
     try {
       const bytes = Buffer.from(m.bytes.buffer, m.bytes.byteOffset, m.bytes.byteLength);
-      const r = await hashImage(bytes, { minSide: m.minSide });
-      reply = { id: m.id, ok: true, pdq: r.hash, quality: r.quality };
+      if (m.sprite === true) {
+        // One decode, one reply carrying every tile's hash (WP21): the
+        // same fixed shape a normal reply has, never a URL or a name.
+        const r = await hashSpriteImage(bytes, { minSide: m.minSide });
+        reply = { id: m.id, ok: true, sprite: true, tiles: r.tiles.map((t) => ({ pdq: t.hash, quality: t.quality })) };
+      } else {
+        const r = await hashImage(bytes, { minSide: m.minSide });
+        reply = { id: m.id, ok: true, pdq: r.hash, quality: r.quality };
+      }
     } catch (err) {
       const code = toCrawlError(err).code;
       reply = { id: m.id, ok: false, code: ERROR_SET.has(code) ? code : "image_decode_failed" };
