@@ -839,6 +839,70 @@ Web-audit work package (accessibility/forms/performance/security audit, owner-ap
 - The age radios' legend reuses the existing "How old are you now?" string, visually hidden — no new sentence was added for it.
 - The wrong-code e2e uses "000000" against a random code; the 1-in-a-million collision is accepted (all codes in every test are synthetic).
 - "Forced submit failure shows an alert" is covered by intercepting `POST /api/auth/request-otp` with a 500 on the email step (no database needed), which exercises the shared FormError on a real failure path.
+
+
+## WP42. Web audit: image and video fingerprinting off the main thread — 2026-11-19
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22). This is an owner-approved best-practice audit work package (P1, P2, P13 and the fallback, CSP and build checks), not a crawler-spec WP; no `crawler/` source changed (the crawler re-ran green only to confirm nothing broke — it imports `pdq.ts`, whose exports and `computePdqHash` are untouched, and its `pdq-contract` test still pins exactly that).
+
+**What was built**
+
+- P1: a module Web Worker (`asmita/src/lib/pdq/hash.worker.ts`) now does the PDQ hashing. The form hands it her chosen file; the worker decodes it (`createImageBitmap`), draws it to an `OffscreenCanvas` at the image's own size and reads the pixels — the same full-resolution path the main thread used, so hashes stay bit-identical. Only `{ hash, quality }` comes back.
+- P2: the vPDQ sampler keeps its frame selection exactly (same seeks, seconds and keep pipeline) and hands each drawn frame to the same worker as a transferable `ImageBitmap`. The page canvas, object URL and bitmaps are freed as before.
+- P13: `SubmitForm` has no static import from the pdq modules any more (only erased type imports); it loads the hashing entry (`hash-file.ts`, which carries the worker client, PDQ and vPDQ) only when a file is chosen. Verified in the builds: the submit chunk contains none of the hashing code; the worker is a separate file in `next dev`, `next build` (Turbopack) and the vinext/Cloudflare build (`dist/client/_next/static/workers/…`).
+- Fallback: Worker/OffscreenCanvas/createImageBitmap missing, or a worker that fails to load (then not retried for the page) → the exact previous main-thread path runs, for images in `hash-file.ts` and per frame in the sampler; a worker that answered once and crashed is rebuilt. Strict reply validation (id, 64-hex hash, integer quality, fixed codes); anything malformed terminates the worker and the request fails with a fixed code the callers treat as "hash on the main thread".
+- CSP: `worker-src 'self'` on every policy; no `blob:` — both bundlers emit the worker as a real same-origin file (verified by loading it with a 200 in the e2e specs).
+- One-line fix found while verifying: the video entry waits one macrotask before its "ready" line replaces the reading line — the worker's async tail let React batch the final 100% progress tick (which WP40 A8 always keeps) with the completion update, so the reading line never visibly reached 100%.
+
+**Tests** (all run, all passing)
+
+- New `asmita/tests/unit/hash-worker.test.ts` — 20 tests: the worker's message handler returns bit-identical hashes to the direct function on all 8 Meta reference vectors (and through the file and bitmap paths with stubbed decode steps); fixed error codes (`decode_failed`, `hash_failed`, `bad_request`), unanswerable messages return null, every touched bitmap is closed (also on failure), and replies serialise to exactly `{id, ok, hash, quality}` / `{id, ok, code}` with no media; plus source pins for the lazy load (P13), the module-worker construction, the frame transfer, both main-thread fallbacks and the CSP.
+- `tests/unit/pdq-reference-vectors.test.ts` and every existing pdq/vpdq test: unchanged and passing (bit-identical hashes; the pure functions and exports are untouched).
+- `tests/unit/csp.test.ts` +1: `worker-src 'self'` on every policy variant, never `blob:`.
+- E2E (chromium, against a throwaway local Postgres 17): `hash-flow.spec.ts` (5) and `video-hash-flow.spec.ts` (3) pass — both journeys now also assert the worker script loads with 200, the video journey still records its progress line ending at 100%, and a new CPU-throttled test proves Cancel stops the video read mid-hash, drops the file and leaves the form usable (no hang on the in-flight worker request). `filing.spec.ts` (3) also passes.
+- Package totals from the final `check.sh` run (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source touched). `asmita` — lint 0 errors (the 4 pre-existing warnings in untouched files, no new ones), type-check clean, `prisma validate` ok, 154 test files / 1286 tests all passed.
+
+**Not done or not verified**
+
+- The full Playwright run is the separate verify step; the WP's own specs and the neighbouring ones that exercise the same page were run here (see Tests).
+- No real phone and no real 12-MP photo were available: the offload is structural, but the milliseconds saved were not measured on real hardware.
+- Safari and Firefox were not driven; their fallback paths are the previous main-thread code, covered by unit tests and source pins.
+- The `/check-image` page is WP43's and was not touched.
+
+**Deviations and decisions, with reasons**
+
+- The worker decodes her file itself (the WP allowed "createImageBitmap on the main thread (or in the worker from the File)"): decoding is the heaviest step for a 12-MP photo, so it moved too.
+- The protocol has a third request kind, `pixels`, next to `file` and `bitmap`: it is the pure inner step both reduce to, and it is what lets the unit tests drive the real handler with the reference vectors in Node, where no DOM APIs exist. The page never posts it.
+- No request can hang: the worker answers every well-formed message — including its own handler throwing — with a fixed refusal code, and replies are validated strictly.
+- Pre-existing e2e race found and worked around in the specs, not the app: after `fill()` the links textarea keeps focus; a click within the 600 ms debounce window (WP40 A7) blurs it, flushing the checks, which renders the checks list and removes the platform question — a reflow that moves the page under the pointer so the click misses the declaration checkbox (a missed click can land on whatever moved there). It reproduces at HEAD (verified with WP42 stashed), and the worker makes it likelier by finishing inside the same window. The specs now wait for the app's own `#url-checks` list and pin `prefers-reduced-motion: reduce` (like the accessibility spec, which also makes the site's smooth scrolling instant). No assertion was weakened; the product edge is recorded for the owner in `asmita/docs/product/web-audit-progress.md`.
+- Also pre-existing on this host and left as found (verified at HEAD, pages untouched by this WP): `forms-focus.spec.ts`'s alert assertion sees Next's own route announcer as a second `role=alert`, and its sign-form checkbox click has the same blur-reflow race on the review-sign page.
+- Local footnote: running `npm run build` leaves `.next/types` behind, which makes the repo's plain `tsc --noEmit` fail on generated validator types until `.next` is removed — a repo-wide footgun unrelated to this WP (check.sh never builds); worth a look in a housekeeping pass.
+
+
+## WP50. Web audit: WP49's fixes merged into the hash-worker branch — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22) and the eight specs that failed this branch's verify run pass on chromium through `e2e-some.sh`. An owner-approved web-audit work package, not a crawler-spec WP; no `crawler/` source changed.
+
+**What was built**
+
+- `git merge origin/fix/forms-focus` into `perf/hash-worker` (a merge; no rebase, no force-push). The branch was cut before WP49, so the 11 Playwright failures of its full verify run (`logs/verify-hash-worker/e2e.log`) were exactly the two causes WP49 fixed: nine "Clicking the checkbox did not change its state" (the blur-commit/reflow race on `/submit`) and two strict-mode violations where an unscoped `getByRole("alert")` also matched Next.js's own route announcer.
+- The merge needed no source resolution: WP49's `SubmitForm.tsx` fixes (no blur commit on the links box; the platform question asked from the links as they stand) and WP42's worker hashing (the hashing module loads lazily, PDQ/vPDQ run in a Web Worker) touch different regions of the file and compose. The only conflict was in `asmita/docs/product/web-audit-progress.md`, where both branches had appended their section; both were kept, in WP order.
+- After the merge nothing in that log remains: every one of the 11 failures is gone and no new one appeared. The checkbox race WP42's entry had flagged as made likelier by the worker is closed by WP49's fix on this branch too.
+
+**Tests** (all run, all passing)
+
+- `e2e-some.sh` (chromium, throwaway Postgres 17): every spec that had a failure in the log — `crawler-journey` (1), `database-hardening` (1), `escalation-ladder` (2), `forms-focus` (5), `hash-flow` (5), `notice-integrity` (4), `reporting-audit` (2), `reporting-journey-polish` (3) — 23/23 passed (2.5m).
+- Every pdq/vpdq unit test, green in the full check: `pdq.test.ts` (9), `pdq-reference-vectors.test.ts` (8), `vpdq.test.ts` (13), `hash-worker.test.ts` (20), the six `video-hash-*` suites (50 tests), and the crawler's `pdq-contract.test.ts` (3) pinning the exact export list and the golden hash. WP50 changed no hash code; the reference vectors and golden hashes are untouched and bit-identical.
+- Package totals from `check.sh` (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok. `asmita` — lint 0 errors, type-check clean, `prisma validate` ok, 154 test files / 1288 tests.
+
+**Not done or not verified**
+
+- The full Playwright run (mobile project included) and the worker smoke are the separate verify step; this WP ran the chromium project of the affected specs and both packages' unit checks.
+- Screen-reader behaviour is reasoned from the ARIA semantics, not listened to with a running screen reader.
+
+**Deviations and decisions, with reasons**
+
+- None against the spec; the WP's own instruction to merge (never rebase or force-push) was followed. The only judgement call was the progress-file conflict: both sections kept, ordered WP42 then WP49, matching the file's existing order.
 ## Owner changes
 
 ### WP26. 24-hour platform deadline (owner decision, 19 November 2026) — 2026-11-19
@@ -1414,6 +1478,31 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
 
+### WP60. Merge master into perf/hash-worker; resolve conflicts — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP60 is not feature work and not in `full-crawler-spec.md`: this branch had an open PR that could not merge because several PRs had landed on master (assistant safety review WP48, platform partners, the SSCD second layer WP28, crawler v3 lane merges WP9-WP16, the pdq-benchmark tool). A merge of `origin/master` into `perf/hash-worker` was started and left with conflicts; this WP finished it. No behaviour was added, dropped or weakened on either side.
+
+**What was resolved**
+
+- Two files conflicted, both the same shape: `asmita/src/i18n/en.json` and `asmita/src/i18n/hi.json`. Around the `talk.*` voice strings, the branch (WP40, web audit) had added a new key `talk.call.heading` (the sr-only h2 the call screen's focus management moves to, used by `TalkToUs.tsx`, `talk-copy.ts`, `hi-review-status.json` and listed by `tests/unit/forms-focus.test.ts`), while master (WP48, the Safety by Design review of the voice assistant) had rewritten the `talk.error.busy` message to point callers at the alternatives (`meriasmita.org/start`, the Get help page, the helpline) — the same rewrite it had already made to `talk.error.unavailable`, which merged cleanly beside it.
+- Resolution keeps both sides' intent: the branch's `talk.call.heading` key stays (both locales), and `talk.error.busy` carries master's WP48 text (both locales). The branch had not modified the busy text — the merge base, the branch and the base text were identical there — so master's rewrite is the only change on that line and no branch behaviour is lost; the sibling `talk.error.unavailable` already carried master's text after the clean auto-merge, so the pair stays consistent.
+- Verified programmatically: both files parse as strict JSON, no duplicate keys (object_pairs_hook check), 1014 keys each, and the merged key set of each is exactly the union of the two parents' key sets (1005 branch + 1006 master, heavily overlapping) — nothing from either side dropped; `en` and `hi` hold identical key sets.
+- Everything else the merge touched was already auto-staged (206 files: the SSCD layer, platform partners pages, crawler v3 files, docs, migrations); no other file carried conflict markers after resolution (checked across the tree). The auto-merged progress docs keep both sides' entries.
+
+**Checks** (run on the committed merge tree, Node 22 via the n22 helper)
+
+- `crawler`: lint, type-check, 58 test files / 628 tests, build ok.
+- `asmita`: lint, type-check, `prisma validate` ok, 166 test files / 1531 tests all passed.
+- `check.sh` printed ALL CHECKS PASSED.
+
+**Not done or not verified**
+
+- The merge commit and this entry were not pushed (per the WP; the PR merge is a separate step for the owner).
+- The full Playwright e2e suite is not part of `check.sh` and was not run here; `tests/unit/forms-focus.test.ts`, the one vitest suite that lists the resolved `talk.call.heading` key, passed with the rest.
+- No conflict decision beyond the recorded one was needed: `hi-review-status.json`, mentioned by the WP brief as a likely JSON conflict, had in fact merged cleanly before this session started.
+
 ## WP59. Merge master into fix/forms-focus: resolve the conflicts — 2026-11-20
 
 
@@ -1545,6 +1634,30 @@ WP59 is defined outside this spec (a lane work package): master had moved on (as
 
 **Commits.** Merge commit `8a793bf` "Merge master into feat/legal-pages; resolve conflicts" (parents: `32cc3ed` WP29, `4a7df76` master #83), then this entry. Not pushed, per the work package. Not run: the Playwright e2e suite (check.sh does not include it and the work package defines done as check.sh passing); `npm run build` for asmita (not part of the checks).
 
+### WP72. Resolve the master merge on perf/hash-worker — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, on the merge commit `3c8ddb7`). This was a merge-conflict resolution, not feature work: master had moved on (PR #86 `feat/csp-reporting-headers`, PR #93 `feat/watch-mode`, and the merges under them), and a merge of `origin/master` into `perf/hash-worker` had been started and left with conflicts. No feature code was added, no test was deleted or skipped, and `reviewedByLegal` was not set anywhere.
+
+**Conflicts.** Exactly one file was conflicted: `asmita/src/lib/csp.ts`. Both sides had changed the same region: master's WP46 added `'report-sample'` to `style-src`; this branch's WP42 had inserted `worker-src 'self'` (the PDQ hashing Web Worker) just above it. The resolution keeps both: WP46's reporting (`style-src 'self' 'unsafe-inline' 'report-sample'`, with the `script-src` sibling, the reporting constants and `report-uri`/`report-to`, which merged clean) and WP42's worker-src entry.
+
+**The real work was a WP38 × WP42 contradiction the earlier merge had baked in (verified, not assumed).** The branch tip (`807ea0a`, the merge-queue merge of 2026-11-20) already failed 3 tests on Node 22 (vitest run on the branch-tip tree before resolving: 2 in `csp.test.ts`, 1 in `hash-worker.test.ts`, 30 passed): WP38 (c2pa) and WP42 (hashing worker) are parallel branches that had been combined mechanically into TWO `worker-src` directives in one policy — `worker-src 'self'` early, `worker-src 'self' blob:` late. A CSP policy enforces only its FIRST `worker-src`, so on `/check-image` and `/c2pa/*` the blob: entry was silently ignored and the C2PA engine's dev-mode inline worker was blocked: WP38's behaviour was lost, not just its test text. The resolution is ONE conditional directive — `worker-src 'self' blob:` when `c2pa` (WP38's dev reader), `worker-src 'self'` everywhere else (WP42's hashing worker, never a blob) — which keeps both behaviours real; master's own c2pa entry moved up into it, nothing of either side dropped.
+
+**Tests changed because behaviour changed on purpose** (rule 6, also in the merge commit message; none deleted, skipped or loosened — each changed assertion was written against the pre-merge world and is unsatisfiable together with the other side's tests in the same file):
+
+- `csp.test.ts` (WP38-era, master's): two `worker-src` `toBeUndefined()` assertions for non-c2pa pages became `toBe("worker-src 'self'")` plus a `not.toContain("blob:")` check — WP42 added `worker-src 'self'` to every policy on this branch, and the old assertions contradict WP42's own test in the same file. Every WP38 scoping assertion (wasm-unsafe-eval on /check-image only, blob: workers on the c2pa pages only) is unchanged and still enforced, and both updated spots pin the absence of blob: outside the c2pa pages.
+- `hash-worker.test.ts` (WP42-era, this branch's): the raw-source assertion `not.toContain("worker-src 'self' blob:")` pinned "no blob workers anywhere"; written before WP38's c2pa worker-src reached this file, it already failed at the branch tip. Replaced with a pin of the exact conditional — blob: exists in worker-src only behind the c2pa flag — the strongest true invariant after the merge.
+
+**Everything else merged clean.** Only three other files were touched by both sides (`asmita/docs/product/web-audit-progress.md`, `asmita/tests/unit/csp.test.ts`, `crawler/docs/v2-progress.md`) and git merged them without conflict. Verified on the merged tree: the i18n JSONs (`en.json`, `hi.json`, `hi-review-status.json` — the WP72 example file) parse and keep every key of both sides (union check, no key either side added is missing, no duplicates); both progress docs keep every entry each side added (line-level check); `csp.test.ts`'s auto-merge is what carried both sides' contradictory tests, handled above.
+
+**Checks (run, not assumed).** Full `check.sh` (Node 22, both packages) on the resolved tree, which is exactly the tree committed as the merge: `crawler` — npm ci, lint, type-check, **58 test files / 628 tests passed**, build ok (`dist/main.js`, `browser-worker.js`, `decoder-worker.js`, `sscd-worker.js` all emitted). `asmita` — npm ci, `prisma generate`, lint 0 errors, type-check clean, `prisma validate` ok, **191 test files / 1805 tests passed**. The two directly affected files pass 36/36 (`csp.test.ts` 16, `hash-worker.test.ts` 20) against the branch tip's 3 failed / 30 passed.
+
+**Not done or not verified**
+
+- The heading/content misalignment in `web-audit-progress.md` described in the WP65 entry is still present (both sides' content is fully kept; restructuring the doc was out of scope for a merge).
+- The roughly 140 files only master changed were taken as-is; they are covered by master's own checks plus this full run.
+- The Playwright e2e suite and the worker smoke were not run (check.sh does not include them and the work package defines done as check.sh passing).
+
+**Commits.** Merge commit `3c8ddb7` "Merge master into perf/hash-worker; resolve conflicts" (parents: `807ea0a` branch tip, `1153843` master #93), then this entry. Not pushed, per the work package.
 ## WP69. Merge master into fix/a11y-chrome-css; resolve conflicts — 2026-11-20
 
 **Status: complete. All checks passed** (`check.sh`, both packages, Node 22, on the resolved tree committed as the merge). A merge-lane work package, not in `full-crawler-spec.md`: master had moved on again since this branch's WP55 merge (c23ba69) — PRs #77 crawler-sscd (WP28), #78 feat/deadline-docs, #79 feat/legal-pages (WP29), #81 feat/pdq-benchmark, #82 feat/ai-image-copy, #83 perf/lcp-fonts (WP45), #84 fix/notice-preview-link, #87 fix/forms-focus, #89 feat/assistant-safety, #94 feat/lab-bench (WP52), #95 fix/signout-clear-site-data (WP41) — and this branch's PR could not merge. A merge of `origin/master` (117ef0f) into `fix/a11y-chrome-css` was started and left with one conflict; this WP resolved it, keeping **both** sides' intent, behaviour and tests, and committed the merge (110ab9b, a true merge commit, no rebase). No feature code was added, no test was changed, weakened or skipped, and `reviewedByLegal` was not set anywhere.

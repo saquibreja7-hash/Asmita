@@ -53,6 +53,21 @@ describe("buildCsp", () => {
     expect(policy).not.toContain("upgrade-insecure-requests");
   });
 
+  it("allows the same-origin PDQ hashing worker, never a blob worker (WP42)", () => {
+    // The hashing worker is a real script file the bundler emits (dev,
+    // next build, vinext build), so 'self' covers it on every page; blob:
+    // would only be needed for an inline worker, which this is not.
+    for (const options of [
+      { nonce: "abc123", env: "production" },
+      { env: "production" },
+      { nonce: "abc123", voice: true, env: "production" },
+      { nonce: "abc123", env: "development" },
+    ]) {
+      const policy = buildCsp(options);
+      expect(directive(policy, "worker-src")).toBe("worker-src 'self'");
+    }
+  });
+
   it("always locks down plugins, base URI, form targets and framing", () => {
     for (const env of ["production", "development"]) {
       const policy = buildCsp({ nonce: "abc123", env });
@@ -180,7 +195,10 @@ describe("withPageCsp", () => {
     expect(directive(dev, "script-src")).toContain("'wasm-unsafe-eval'");
     expect(directive(dev, "worker-src")).toBe("worker-src 'self' blob:");
 
-    // Every other page keeps the untouched policy.
+    // Every other page keeps the untouched policy, except that WP42 (merged
+    // onto this branch) added worker-src 'self' on every page for the PDQ
+    // hashing Web Worker — still no wasm-unsafe-eval and no blob: worker
+    // outside the C2PA pages.
     for (const options of [
       { nonce: "abc123", env: "production" } as const,
       { env: "production" } as const,
@@ -188,7 +206,8 @@ describe("withPageCsp", () => {
     ]) {
       const policy = buildCsp(options);
       expect(policy).not.toContain("wasm-unsafe-eval");
-      expect(directive(policy, "worker-src")).toBeUndefined();
+      expect(directive(policy, "worker-src")).toBe("worker-src 'self'");
+      expect(directive(policy, "worker-src")).not.toContain("blob:");
     }
   });
 
@@ -201,7 +220,11 @@ describe("withPageCsp", () => {
     for (const pathname of ["/", "/talk", "/submit", "/case/abc"]) {
       const { policy } = withPageCsp(new Request(`https://meriasmita.org${pathname}`), pathname);
       expect(policy).not.toContain("wasm-unsafe-eval");
-      expect(directive(policy!, "worker-src")).toBeUndefined();
+      // WP42 (merged onto this branch): worker-src 'self' on every page for
+      // the PDQ hashing Web Worker; still no blob: worker outside the C2PA
+      // pages.
+      expect(directive(policy!, "worker-src")).toBe("worker-src 'self'");
+      expect(directive(policy!, "worker-src")).not.toContain("blob:");
     }
     // API routes still carry no page policy at all.
     expect(withPageCsp(new Request("https://meriasmita.org/api/csrf"), "/api/csrf").policy).toBeNull();
