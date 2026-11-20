@@ -473,3 +473,46 @@ Owner decisions, 19 November 2026 (Saquib), from research into Thorn's published
 **Deviations from the spec, with reasons**
 
 - None beyond the decisions above: every change sits inside the WP's named pages (check-image, the copy it shares, the deepfakes issue page), and nothing outside that scope was touched.
+
+## Web best-practice audit
+
+Work packages WP39–WP43 come from a web best-practice audit of the site (accessibility, forms, performance, security headers), owner-approved on 20 November 2026 (Saquib). They are defined by the audit brief, not by this spec; this spec's "Rules that do not change" and "How to work" still apply, together with the audit's own rules. The per-WP audit log (what changed, what was not verified, what needs the owner's approval) lives in `asmita/docs/product/web-audit-progress.md`.
+
+### WP43. Accessibility of the "Is this image AI-made?" page (app) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, run on the finished code tree; the only edits after the run were these progress-log lines, which no check reads).
+
+**What was built**
+
+- A5 — the states of the on-device check on `/check-image` (`src/app/(public)/check-image/ImageChecker.tsx`) are announced. The "Reading credentials on your device..." line is a `role="status"` paragraph (polite), the result is announced by moving focus to its heading, and the error card is a `role="alert"`. For the result the WP offered a `role="status"` wrapper or a focused heading; the focused heading was chosen — the pattern `EligibilityWizard`, `HomeChat` and `CasePeek` already use — because it reads one line instead of politely replaying the whole result card. "What we found" therefore became a real `<h2>` (it was a `<span>` carrying the same classes): same classes, same look, but a focusable (`tabIndex={-1}`, `outline-none`) heading a screen reader can also jump to by heading navigation. Focus moves there on every completion, including a second image picked after a first result.
+- A4 — every error message on the page is a `role="alert"`: the "We could not read this file" card and the deeper check's "could not be completed right now" line.
+- A6 — the hidden file input is never a tab stop any more (`tabIndex={-1}` at all times; it was `{ageConfirmed ? 0 : -1}`, so after the age gate it sat in the tab order beside the visible button) and now carries an accessible name: `aria-label` from the existing `check.upload.label` ("Choose an image to check"), the same pattern as `SubmitForm`'s hidden picker. The visible "Choose image" button is the only tab stop. `aria-hidden={!ageConfirmed}` stays: the input is disabled while the gate is up.
+- The deeper check's states (WP38's addition) got the same treatment: its "Checking with OpenAI..." line is `role="status"`, its error line is `role="alert"`, and its result title receives focus when it arrives (its button unmounts on completion, so focus would otherwise fall back to the page).
+- WP35 and WP38 wording is untouched: no `en.json`/`hi.json` value changed, no new key was added, so `hi-review-status.json` is unchanged too.
+
+**Decisions, recorded per the standing rule**
+
+- The result is announced by focus, not a live-region wrapper: a `role="status"` region around the result would politely read out the whole card (C2PA details, metadata list, technical-details entries) on every check; the focused heading reads one line and leaves the rest to browse. The WP allowed either mechanism.
+- The input's accessible name reuses `check.upload.label`: it is exactly the right name for the picker, it already exists in both languages, and the audit's "every new user-facing string goes in en.json AND hi.json" rule then adds nothing.
+- `/check-image` was not added to the axe route list in `tests/e2e/accessibility.spec.ts`: that list change belongs to WP39's lane (its brief names those routes); duplicating it here would collide when the audit lanes merge.
+- The deeper check got the same announcements although the brief names the page's main states: it is part of "whatever WP38 added", and its result otherwise arrives unannounced.
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/check-image-a11y.test.ts` — 8 tests: the hidden input carries its accessible name, `tabindex="-1"` and `sr-only` and stays disabled behind the age gate while the visible button renders (and the old conditional `tabIndex` is gone from the source); the label exists in both languages; the two checking lines are `role="status"`, both error messages are `role="alert"`, the result heading is the focused `<h2>`, and both focus effects are wired. The conditional states are pinned on the component source because `renderToStaticMarkup` reaches only the idle state — the same pinning style `admin-crawler-ui.test.ts` uses.
+- New `tests/e2e/check-image-a11y.spec.ts` (run on the chromium and mobile projects, both passing): the hidden input has `tabindex="-1"` and the `aria-label`; after a synthetic image is picked, focus lands on the "What we found" heading; after focus is deliberately moved off it, a second pick announces again. Run before the commit through the Node 22 container against a throwaway Postgres 17 (2 tests, 20.8 s); the full Playwright suite remains the separate verify step.
+- The existing `/check-image` assertions in `hash-flow.spec.ts` (age-gated picker) are untouched and still hold: one file input, disabled until the age tick, enabled after.
+- Package totals from the final `check.sh` run (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source touched; re-confirmed green). `asmita` — lint 0 errors (the 4 pre-existing warnings, all in untouched files, no new ones), type-check clean, `prisma validate` ok, 157 test files / 1309 tests all passed.
+
+**Not done or not verified**
+
+- No real screen reader was run. The announcements use the standard mechanisms (`role="status"`, `role="alert"`, programmatic focus to a heading) and are asserted structurally (unit) and by focus (e2e).
+- The deeper check's announcements cannot be reached in e2e: the harness sets no OpenAI key, so the page shows "temporarily unavailable" and the deeper check's states never run there. They are pinned by the unit tests only.
+- The "We could not read this file" card is defensive: both on-device readers resolve instead of throwing (`readImageProvenance` catches internally, `readC2paCredentials` resolves to "unavailable"), so no real pick reaches it; its `role="alert"` is pinned by the unit test, not exercised by a live run.
+- The new e2e spec was run alone (both projects), not with the whole Playwright suite; that full run is the audit's separate verify step.
+- No crawler behaviour, config or migration changed, so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval).
+
+**Deviations from the spec, with reasons**
+
+- None beyond the decisions above: every change sits inside the WP's named page (check-image and what WP38 added to it), and nothing outside that scope was touched.
+

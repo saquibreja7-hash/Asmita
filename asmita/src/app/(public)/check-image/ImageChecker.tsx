@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { t, type Locale } from "@/lib/i18n";
 import { readImageProvenance, type ProvenanceResult } from "@/lib/ai-provenance";
@@ -38,6 +38,19 @@ export function ImageChecker({
   const [deepResult, setDeepResult] = useState<DeepResult | null>(null);
   const [deepUnavailable, setDeepUnavailable] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // The result (and the deeper check's result) are announced by moving focus
+  // to their headings: a screen reader reads the new state without replaying
+  // the whole card as a live region (A5).
+  const resultHeadingRef = useRef<HTMLHeadingElement>(null);
+  const deepResultRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (status === "done") resultHeadingRef.current?.focus();
+  }, [status]);
+
+  useEffect(() => {
+    if (deepStatus === "done") deepResultRef.current?.focus();
+  }, [deepStatus]);
 
   const deepCheckOff = deepUnavailable || !deepCheckConfigured;
 
@@ -144,9 +157,10 @@ export function ImageChecker({
           accept="image/jpeg,image/png,image/webp"
           onChange={onInputChange}
           disabled={!ageConfirmed}
+          aria-label={t(locale, "check.upload.label")}
           className="sr-only"
           aria-hidden={!ageConfirmed}
-          tabIndex={ageConfirmed ? 0 : -1}
+          tabIndex={-1}
         />
         <div className="rounded-[var(--radius-box)] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
           <p className="font-medium text-[var(--ink)]">{t(locale, "check.upload.label")}</p>
@@ -171,12 +185,12 @@ export function ImageChecker({
 
       {/* CHECKING */}
       {status === "checking" && (
-        <p className="muted mt-6 text-center text-sm">{t(locale, "check.checking")}</p>
+        <p role="status" className="muted mt-6 text-center text-sm">{t(locale, "check.checking")}</p>
       )}
 
       {/* ERROR */}
       {status === "error" && (
-        <div className="mt-6 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
+        <div role="alert" className="mt-6 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
           <p className="font-display text-[18px] leading-snug tracking-tight">{t(locale, "check.error.title")}</p>
           <p className="muted mt-3 text-sm leading-[1.7]">{t(locale, "check.error.body")}</p>
         </div>
@@ -185,7 +199,9 @@ export function ImageChecker({
       {/* RESULT */}
       {status === "done" && (
         <div className="mt-6">
-          <span className="eyebrow mb-4 block">{t(locale, "check.result.title")}</span>
+          <h2 ref={resultHeadingRef} tabIndex={-1} className="eyebrow mb-4 block outline-none">
+            {t(locale, "check.result.title")}
+          </h2>
 
           {/* FIRST SIGNAL: signed Content Credentials, read on this device. */}
           <p className="muted mb-2 text-xs font-medium uppercase tracking-wide">{t(locale, "check.c2pa.title")}</p>
@@ -375,10 +391,10 @@ export function ImageChecker({
             )}
 
             {deepStatus === "checking" && (
-              <p className="muted mt-4 text-sm">{t(locale, "check.deep.checking")}</p>
+              <p role="status" className="muted mt-4 text-sm">{t(locale, "check.deep.checking")}</p>
             )}
             {deepStatus === "error" && (
-              <p className="mt-4 text-sm text-[var(--danger)]">{t(locale, "check.deep.error")}</p>
+              <p role="alert" className="mt-4 text-sm text-[var(--danger)]">{t(locale, "check.deep.error")}</p>
             )}
 
             {deepStatus === "done" && deepResult && (
@@ -392,7 +408,9 @@ export function ImageChecker({
                 }}
               >
                 <p
-                  className="font-display text-[17px] font-normal leading-snug tracking-tight"
+                  ref={deepResultRef}
+                  tabIndex={-1}
+                  className="font-display text-[17px] font-normal leading-snug tracking-tight outline-none"
                   style={{ color: deepResult.detected ? "var(--brand)" : "var(--ink)" }}
                 >
                   {deepResult.detected
