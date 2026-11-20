@@ -433,3 +433,34 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+## WP54. Merge master into feat/partner-sharing — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+This WP overrides the spec (assigned as a lane brief, not present in `full-crawler-spec.md`): a merge-conflict resolution, not feature work. master had just merged PR #75 (`feat/platform-partners`) and the video-fingerprint lane (WP17–19); this branch carries the partner-sharing lane (WP31–33). No feature code was added, no test was deleted, skipped or loosened.
+
+**Conflicts resolved, both sides' intent kept**
+
+- `asmita/src/i18n/hi-review-status.json` — both sides appended keys to the same list; both kept: the branch's `partnerShare.*` and master's `submit.hash.video.*`, `submit.hash.fileLabel`, `submit.hash.fileHint`, `review.fingerprints.videoItem`, `review.fingerprints.video`. Valid JSON, no duplicate keys. Verified programmatically: every string either side added is present in the merged file; the same check over `en.json` and `hi.json` (auto-merged by git) found nothing lost either.
+- `asmita/src/lib/case-ops.ts` — three conflicts, all in the hard-delete path. `HARD_DELETE_RETAINED.fingerprints` now states both: fingerprints are kept encrypted, removed from the crawler pool **and withdrawn from the partner feed**, and a video fingerprint's frame list is removed with the erasure (its row keeps the best frame's hash). The Kysely and Prisma erase twins keep the branch's WP32 steps (feed WITHDRAW events written in the transaction before the agreements go, `PartnerOutcome` rows deleted, `PartnerShareConsent` rows deleted) and master's change to the same closing `HashSubmission` update, which now clears `crawlPoolId` and `videoFramesEncrypted` together.
+- `asmita/src/lib/store.ts` — the memory erase keeps the branch's `erasePartnerShareConsentsForCases(erasedCaseIds)` and master's loop that drops a kept VPDQ row's `videoFrames` list.
+
+**Real breakage the merge caused, fixed (fakes extended, assertions untouched)**
+
+- `tests/unit/video-annex-sign-dispatch.test.ts` (master's): the branch's WP32 wraps `reviewHashSubmission` in `db.$transaction` and syncs the partner feed inside it. The test's `@/lib/db` fake had no `$transaction`, no `case.findMany`, and no partner delegates, so approval threw and the route answered 404. The fake gained a `$transaction` passthrough (the same pattern as the branch's own `hash-one-signature.test.ts`), a `case.findMany`, and partner-feed reads that answer empty — the suite signs no partner-sharing agreement, so no feed event is ever appended. All 10 tests pass with their original assertions.
+- `tests/unit/video-hash-prisma-path.test.ts` (master's): the merged `eraseUserWithPrisma` calls `tx.partnerOutcome.deleteMany` and `tx.partnerShareConsent.deleteMany` (branch, WP32), which the fixed tx mock lacked; the erasure threw, the job was marked FAILED and `hardDeleteDueUsers` returned `[]`. The tx mock gained the two delegates plus `partnerFeedEvent.findMany/createMany` (the shared-fingerprint read returns nothing here, so no event is written). The test's assertions, including `data: { crawlPoolId: null, videoFramesEncrypted: null }`, are unchanged and now pass against the merged code.
+
+No production code was changed to make tests pass.
+
+**Tests** — final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors, type-check clean, `prisma validate` ok, 169 test files / 1456 tests all passed.
+
+**Not done or not verified**
+
+- The two sides' migrations (master's `20261119000000_video_fingerprints`, the branch's partner tables) and the merged queries have run only against the memory store and the mocked/faked Prisma and Kysely clients, never against a real Postgres.
+- The E2E suites (`npm run test:e2e`) are not part of `check.sh` and were not run.
+- No `crawler/` source changed in this WP, so `crawler/README.md` and the runbook needed no further update; the merged tree already carries master's video documentation changes to them.
+
+**Deviations**
+
+- WP54 itself is the deviation from the spec's work-package list: it was assigned by lane brief as merge-conflict resolution only. No other work was started. Recorded here per the standing rule.
+
