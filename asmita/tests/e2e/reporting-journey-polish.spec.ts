@@ -54,7 +54,9 @@ test("a wrong code is announced as an alert and focus returns to the box", async
   // A code that cannot match (the real one is random six digits).
   await page.getByLabel("6-digit code").fill("000000");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("The code did not match. Please try again.");
+  // Next.js renders its own route announcer with role="alert" too, so the
+  // locator is narrowed to the message it asserts (WP49).
+  await expect(page.getByRole("alert").filter({ hasText: "The code did not match. Please try again." })).toBeVisible();
   await expect(page.getByLabel("6-digit code")).toBeFocused();
 });
 

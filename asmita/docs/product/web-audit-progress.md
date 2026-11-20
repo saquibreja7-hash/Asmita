@@ -108,3 +108,111 @@ A27 and S12.
 - "Focus the first error" on the submit form focuses, in order: the links
   box, the platform fieldset, the declaration checkbox — matching the order
   of the existing status hints.
+
+## WP49 — the survivor can tick the boxes, and our alerts are found — 2026-11-20
+
+Branch `fix/forms-focus`. Fixes the Playwright failures of this branch's
+full verify run (`logs/verify-forms-focus/e2e.log`: 10 failures — two
+`getByRole("alert")` strict-mode violations, eight "Clicking the checkbox
+did not change its state").
+
+**What changed**
+
+- The declaration checkbox on `/submit` was silently un-tickable whenever a
+  click raced a render that committed between its mousedown and mouseup: the
+  checkbox moved out from under the pointer, the browser handed the click to
+  whatever took its place, and the tick never landed (focused but unchecked).
+  Two commits on this form did that, both fixed in
+  `src/app/(auth)/submit/SubmitForm.tsx`:
+  - The links box's `onBlur` committed the pending per-line checks. That blur
+    fires at the mousedown of the very click that blurs the box, so the
+    commit always landed inside the click it caused — the "I declare" tick
+    right after typing a link failed every time. The blur commit is gone;
+    the 600 ms pause (WP40 A7) alone settles the checks, and the draft is
+    still parsed fresh at submit, so nothing typed is lost.
+  - The platform question (`hashedFiles.length > 0 && ...`) was asked from
+    the settled checks. While a fingerprint is made the settled checks lag
+    behind what she typed, so the question appeared when hashing finished
+    and vanished when the checks settled (the debounce timer is pinned
+    behind the main-thread hashing and fires right after the "fingerprint
+    ready" text — exactly when a tick is invited), moving everything below
+    it twice by hundreds of pixels. It is now asked from the links as they
+    stand (`liveParsedUrls`), matching what `canSubmit` and the submit path
+    already used: it renders once, at hash completion, and only for a real
+    hash-only submission.
+- The two failing alert assertions (`forms-focus.spec.ts`,
+  `reporting-journey-polish.spec.ts`) are scoped with
+  `getByRole("alert").filter({ hasText: ... })`: Next.js renders its own
+  route announcer with `role="alert"`, so the unscoped locator resolved to
+  two elements. The assertions still require our message to be `role=alert`,
+  and the focus checks are untouched. The already-scoped `main`/chat alert
+  locators (which pass) were left alone.
+- New e2e (`forms-focus.spec.ts`): "the declaration can be ticked right
+  after typing a link" fills a link and ticks with no wait for the checks —
+  the exact sequence that used to fail every time.
+- New vitest pins (`tests/unit/forms-focus.test.ts`): the checks settle on
+  the pause with no blur commit, and the platform question is asked from
+  the links as they stand.
+
+**How the cause was found**
+
+The failures were reproduced outside the harness by driving the dev server
+with Playwright Chromium through the exact failing sequences (typing, an
+image fingerprint, a 6-second video), with document-level pointer-event
+tracing in the page. The traces show the eaten click: pointerdown on the
+input, the blur/debounce commit moving it hundreds of pixels, pointerup on
+the footer, the click event on a page-level div, and no toggle. With the
+fix the same sequences pass (24/24 typing and image runs, 3/4 video runs —
+the one failure was the video read missing a 60 s text-wait on the
+memory-backed dev server, before any click).
+
+**Not verified**
+
+- The specs named by the work package run through `e2e-some.sh` on chromium
+  only; the mobile project of the full verify run is not exercised here.
+  The chromium run passed: 27/27 tests across the nine spec files
+  (forms-focus, reporting-journey-polish, hash-flow, notice-integrity,
+  reporting-audit, crawler-journey, escalation-ladder, filing,
+  video-hash-flow), and the full check printed ALL CHECKS PASSED
+  (crawler 350, asmita 1267 including the two new pins).
+- Screen-reader behaviour is reasoned from the ARIA semantics, not listened
+  to with a running screen reader.
+- A razor-thin window remains on any dynamic page: a render that commits
+  exactly between a tick's mousedown and mouseup can still move a control.
+  The self-inflicted commits — the one the click itself caused and the
+  appear-then-vanish question — are gone; the remaining ones (the checks
+  list settling on its pause, ~45 px) shift less than the label's height,
+  so a click that races one still lands on the label and activates the
+  checkbox.
+
+**Sentences that need the owner's approval**
+
+- None: no user-facing string changed.
+
+**Decisions made on my own**
+
+- WP40 A7's "or when the links box loses focus" half is withdrawn (the
+  pause half stays): the blur commit is what ate the tick. Worst case for
+  a survivor, the checks now appear up to 600 ms after her last keystroke
+  instead of at the moment she leaves the box; nothing she can do is gated
+  on the settled checks.
+- The platform question now follows the live links, which also means it
+  disappears the moment she types a link while it is showing — that is the
+  correct question state, and it matches what submitting actually requires.
+- The sign forms keep their contact-email blur validation (WP40 A10): the
+  error it inserts is ~24 px, absorbed by the tall confirmation label, and
+  no failing spec or known survivor path is affected. Not in this work
+  package's log, so not touched.
+- The two `filing.spec.ts` failures (URL stayed on `/submit`) were the same
+  checkbox bug through the label-text click, not a navigation bug: no
+  test logic changed there.
+- Machine-level, outside the repo: the first full check failed 15 crawler
+  browser tests (WP7) with zero renders — the shared Playwright browser
+  cache had been rebuilt that morning without the system libraries the
+  bare Node 22 container needs, and no harness script consumes the
+  `system-libs` set the cache ships for exactly this. The crawler's
+  Chromium now resolves those libraries through a
+  `00-asmita-pw-system-libs.conf` linker entry baked into the shared
+  `node:22-bookworm` image (rollback: `docker tag e13726ca6041
+  node:22-bookworm`). No crawler source, test or config changed; the same
+  15 tests then passed in the re-run.

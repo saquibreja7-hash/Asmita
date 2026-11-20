@@ -121,7 +121,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
   const router = useRouter();
   const [urls, setUrls] = useState("");
   // What the per-line checks are computed from: the typed text only after a
-  // short pause or on blur, never on every keystroke (WP40 A7).
+  // short pause, never on every keystroke (WP40 A7).
   const [checkedUrls, setCheckedUrls] = useState("");
   const [declaration, setDeclaration] = useState(false);
   const [error, setError] = useState("");
@@ -155,8 +155,12 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
     };
   }, []);
 
-  // A short pause (or leaving the box) is what makes the line checks move
-  // (WP40 A7): typing stays quiet instead of re-announcing on every keystroke.
+  // The pause alone settles the checks (WP40 A7): typing stays quiet instead
+  // of re-announcing on every keystroke. Nothing commits them on blur: a
+  // commit fired by the blur of this box — mousedown on anything below moves
+  // focus out of it — lands between the mousedown and the mouseup of that very
+  // click, the checkbox moves out from under the pointer and the browser hands
+  // the click to whatever ended up there, so the tick never lands (WP49).
   useEffect(() => {
     const id = window.setTimeout(() => setCheckedUrls(urls), 600);
     return () => window.clearTimeout(id);
@@ -383,7 +387,6 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
           className="filing-input mt-4 min-h-32"
           id="urls"
           onChange={(e) => setUrls(e.target.value)}
-          onBlur={() => setCheckedUrls(urls)}
           aria-describedby={lineChecks.length > 0 ? "url-checks" : undefined}
           value={urls}
           placeholder={"https://example.com/post/1234\nhttps://example.com/post/5678"}
@@ -587,11 +590,16 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             </p>
           )}
 
-          {hashedFiles.length > 0 && parsedUrls.length === 0 && (
+          {hashedFiles.length > 0 && liveParsedUrls.length === 0 && (
             <div>
               {/* One question, one group: the checkboxes are a fieldset with a
                   legend, and the fieldset itself takes the focus when
-                  submitting without a choice (WP40 A9/A13). */}
+                  submitting without a choice (WP40 A9/A13). Asked from the
+                  links as they stand now, not the settled checks: while a
+                  fingerprint is being made the settled checks can lag behind
+                  what she typed, and a question that appears at the end of
+                  the hashing and vanishes when the checks settle moves
+                  everything below it twice (WP49). */}
               <fieldset ref={platformsRef} tabIndex={-1} className="outline-none">
                 <legend className="block text-sm font-medium text-[var(--ink)]">
                   {t(locale, "submit.hash.platforms.title")}

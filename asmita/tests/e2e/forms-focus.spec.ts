@@ -21,9 +21,34 @@ test("a failed code request is announced as an alert", async ({ page }) => {
     await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
   });
   await page.getByRole("button", { name: "Send verification code" }).click();
-  await expect(page.getByRole("alert")).toContainText(/try again in a little while/i);
+  // Next.js renders its own route announcer with role="alert" too, so the
+  // locator is narrowed to the message it asserts (WP49).
+  await expect(page.getByRole("alert").filter({ hasText: /try again in a little while/i })).toBeVisible();
   // The email step stays; she can retry.
   await expect(page.getByLabel("Email address")).toBeVisible();
+});
+
+test("the declaration can be ticked right after typing a link", async ({ page }) => {
+  // WP49: ticking the declaration straight after typing a link used to be
+  // eaten by the settling line checks. The blur of the links box committed
+  // them between the tick's mousedown and mouseup, the checkbox moved out
+  // from under the pointer, and the click never reached it. The checks now
+  // settle on their own pause, so the tick lands whatever they are doing.
+  await page.goto("/eligibility");
+  for (const label of ["18 or over", "18 or over", "Me"]) {
+    await page.getByRole("button", { name: label, exact: true }).click();
+  }
+  await page.getByRole("button", { name: /^Me nude/ }).click();
+  await expect(page).toHaveURL(/\/submit$/);
+
+  await page.getByLabel("Links where the content appears").fill(`https://wa.me/asmita-synthetic-${randomUUID()}`);
+  // Deliberately no wait for the line checks: the tick must land while they
+  // are still settling.
+  await page.getByLabel(/I declare/).check();
+  await expect(page.getByLabel(/I declare/)).toBeChecked();
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  // Not signed in: the typed link waits while she confirms her email.
+  await expect(page).toHaveURL(/\/register$/, { timeout: 30_000 });
 });
 
 test("Enter submits the feedback form from the keyboard", async ({ page }) => {
