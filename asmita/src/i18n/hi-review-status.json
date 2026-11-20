@@ -7,6 +7,7 @@
   "scope": "nav, support panel, age attestation, auth/OTP flow, home page, how-it-works, resources, register page.",
   "excludedFromTranslation": [
     "/faq - pending translation",
+    "/for-platforms - written for platform Trust & Safety and grievance teams, English only",
     "/privacy - legal document, English only",
     "/terms - legal document, English only",
     "/case/[caseId]/sign - declaration is legally consequential, English only",
