@@ -6,6 +6,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   }
   const response = NextResponse.json({ success: true });
+  // Leave nothing behind on a shared phone (web audit WP41): cookies go via
+  // the Set-Cookie headers below, the origin's storage and caches via
+  // Clear-Site-Data ("storage" covers the admin keyboard-shortcut
+  // preference in localStorage too).
+  response.headers.set("Clear-Site-Data", '"cache", "storage"');
   response.cookies.set("asmita_admin_session", "", {
     httpOnly: true,
     sameSite: "lax",

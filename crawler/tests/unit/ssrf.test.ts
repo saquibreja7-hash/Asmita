@@ -93,10 +93,10 @@ describe("resolution: every address must be allowed", () => {
     const p = fakeDnsPolicy({ "ok.example": ["2606:4700::1", "8.8.4.4"] });
     expect(await resolveAllowed("ok.example", p)).toEqual({ address: "8.8.4.4", family: 4 });
   });
-  it("maps DNS failure and empty answers to dns_failed", async () => {
+  it("maps a name that does not exist and empty answers to distinct DNS codes (WP13)", async () => {
     const p = fakeDnsPolicy({ empty: [] });
-    expect(await code(resolveAllowed("missing", p))).toBe("dns_failed");
-    expect(await code(resolveAllowed("empty", p))).toBe("dns_failed");
+    expect(await code(resolveAllowed("missing", p))).toBe("dns_not_found"); // ENOTFOUND: permanent
+    expect(await code(resolveAllowed("empty", p))).toBe("dns_failed"); // an empty answer is not "not found"
   });
 });
 

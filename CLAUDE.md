@@ -4,13 +4,24 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## What This Is
 
-Asmita is a privacy-preserving NCII (non-consensual intimate imagery) support platform for Indian survivors. It generates and routes legally-grounded takedown notices to platforms, and enables survivors to submit perceptual image fingerprints (PDQ hashes) for proactive blocking — all without the server ever seeing the original image.
+Meri Asmita is an organization, and this is its website. The site holds many products and sections: the survivor complaint filing workflow is one of them, alongside the AI Lab, the home chat and voice assistant, the image checker, partner features, information pages and whatever comes next.
 
-It is safety-critical software. Changes touching URL handling, evidence, outbound notices, minors, platform contacts, or survivor data warrant extra care.
+The complaint filing workflow generates and routes legally grounded takedown notices to platforms, and lets survivors submit perceptual image fingerprints (PDQ hashes) for proactive blocking, without the server ever seeing the original image.
 
-## Safety Principles
+## Scope of the constraints below
 
-These are not checklists — they are the reasoning to apply when making decisions:
+The Safety Principles below apply **only to the survivor complaint filing workflow**: case creation, URL takedown, hash submission, notice signing and dispatch, and survivor case data. They are not site-wide.
+
+For everything else on the site (the AI Lab, research tools, public tools, content pages, partner and organization features), build freely:
+- Server-side media processing is allowed.
+- No legal sign-off or legal handoff is needed by default.
+- Don't carry the complaint workflow's gates over.
+- Don't raise these constraints as blockers, caveats or "needs legal review" notes for work outside the complaint workflow. Only mention a constraint when the change actually touches the complaint workflow.
+- Where shared enforcement (lint rules, the no-url-fetch test) gets in the way of non-complaint code, narrow it to the complaint code rather than working around it.
+
+## Safety Principles (complaint filing workflow only)
+
+These are not checklists. They are the reasoning to apply when making decisions inside the complaint filing workflow:
 
 **No media on the server (current rule, under review).** The server must never fetch, preview, scrape, store, or process intimate image content. Hashes are computed client-side; only the 64-hex PDQ string reaches the server. Anything resembling a data URL, base64 blob, or image bytes is rejected at the schema layer. Enforced by architecture and tests (`asmita/tests/lint/`, `src/lib/no-fetch-monitor.ts`). ADR 002 (`asmita/docs/adr/002-consented-encrypted-media.md`) proposes allowing encrypted, consented, time-limited media for the evidence vault; it is blocked on legal sign-off. Until it is accepted this rule holds. When it is, change the ADR status, this section and the tests together; never work around the tests. One narrow exception is built and switched off (ADR 006, `asmita/docs/adr/006-hash-matching-crawler.md`): the separate `crawler/` service outside `asmita/` fetches pages only on admin-approved hosts (and their subdomains) and the images those pages embed, holds each image in memory, fingerprints it, compares it with opted-in survivors' approved fingerprints and discards it, writing nothing to disk and logging no images, addresses or fingerprints. It reports only match metadata. The `asmita/` app still never fetches a submitted or discovered URL; its no-fetch lint rule also covers the crawler's address names (`pageUrl`, `imageUrl`, `findingUrl`, ...). Real fingerprints, real sites and real-case use wait for the ADR 006 go-live gates.
 

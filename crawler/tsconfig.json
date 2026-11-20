@@ -17,6 +17,6 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", "../asmita/src/lib/pdq/pdq.ts"],
+  "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", "../asmita/src/lib/pdq/pdq.ts", "../asmita/src/lib/crawl-page-key.ts"],
   "exclude": ["node_modules", "dist"]
 }

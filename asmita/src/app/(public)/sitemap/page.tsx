@@ -30,6 +30,7 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/what-we-do": { label: "हम क्या करते हैं" },
   "/how-it-works": { label: "प्रक्रिया कैसे काम करती है" },
   "/research": { label: "शोध" },
+  "/for-platforms": { label: "प्लेटफ़ॉर्म के लिए", note: "अंग्रेज़ी में" },
   "/contact": { label: "संपर्क" },
   "/feedback": { label: "प्रतिक्रिया" },
   "/privacy": { label: "निजता" },

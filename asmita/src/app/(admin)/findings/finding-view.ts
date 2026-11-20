@@ -72,3 +72,36 @@ export function noticeGate(state: NoticeGateInput): NoticeGate {
 export function shortDate(iso: string) {
   return iso.slice(0, 16).replace("T", " ");
 }
+
+// ---------------------------------------------------------------------------
+// How the finding matched (ADR 008, WP28): the distance line for PDQ and
+// VPDQ, the SSCD line for a second-layer match, and the borderline score a
+// PDQ finding may carry. Plain text only, no new deps.
+
+/** The similarity as the analysts see it: two decimals, never a raw float. */
+export function similarityText(similarity: number | null) {
+  return similarity === null ? "-" : similarity.toFixed(2);
+}
+
+/** The Match line of the finding detail: today's distance line for PDQ and VPDQ, the SSCD line for SSCD. */
+export function matchLine(row: Pick<CrawlFindingListRow, "method" | "distance" | "sscdSimilarity">) {
+  if (row.method === "SSCD") return `Matched by SSCD · similarity ${similarityText(row.sscdSimilarity)}`;
+  return `Distance ${row.distance} (lower is closer)`;
+}
+
+/** The SSCD line of a second-layer match, shared by the list and the detail page. */
+export function sscdMatchLine(row: Pick<CrawlFindingListRow, "sscdSimilarity">) {
+  return `Matched by SSCD · similarity ${similarityText(row.sscdSimilarity)}`;
+}
+
+/**
+ * The borderline SSCD score a PDQ finding carries (ADR 008): the crawler
+ * scored the match against that fingerprint's own embeddings. Information for
+ * the reviewer, never an automatic accept or reject; null when there is
+ * nothing to show (an SSCD finding shows its similarity in the match line, a
+ * VPDQ finding never carries a score).
+ */
+export function borderlineScoreLine(row: Pick<CrawlFindingListRow, "method" | "sscdSimilarity">) {
+  if (row.method !== "PDQ" || row.sscdSimilarity === null) return null;
+  return `SSCD score ${similarityText(row.sscdSimilarity)} · information for the reviewer, never an automatic accept or reject`;
+}

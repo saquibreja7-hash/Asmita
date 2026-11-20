@@ -12,6 +12,8 @@ const db = vi.hoisted(() => {
     crawlSource: { findFirst: fn(), findMany: fn(), create: fn(), createMany: fn(), deleteMany: fn(), updateMany: fn() },
     crawlBlockedHost: { findFirst: fn(), findMany: fn() },
     crawlFinding: { findUnique: fn(), findMany: fn(), deleteMany: fn(), updateMany: fn() },
+    // WP28 (ADR 008): the erasure deletes the case's SSCD embeddings too.
+    findingEmbedding: { deleteMany: fn() },
     crawlConsent: { findMany: fn(), deleteMany: fn() },
     submittedUrl: { findMany: fn(), findFirst: fn(), findUnique: fn(), create: fn(), updateMany: fn(), deleteMany: fn() },
     hashSubmission: { updateMany: fn() },
