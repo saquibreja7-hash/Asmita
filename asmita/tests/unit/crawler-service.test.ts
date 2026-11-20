@@ -598,3 +598,124 @@ describe("retention and erasure", () => {
     expect(pool.fingerprints.map((f: { pdq: string }) => f.pdq)).toEqual([PDQ_B]);
   });
 });
+
+describe("findings: which layer matched (ADR 008, WP28)", () => {
+  let caseA: store.CaseRecord;
+  let fp: string;
+
+  beforeEach(async () => {
+    caseA = await store.createCase("user-a");
+    seedFingerprint("hs-1", caseA.id, PDQ_A);
+    await consent(caseA.id, ["hs-1"]);
+    fp = poolId("hs-1");
+  });
+
+  const rows = () => listCrawlFindings({ caseId: caseA.id });
+
+  it("accepts an sscd finding only with a similarity and without a distance", async () => {
+    const { body } = await report([
+      finding({ fingerprintId: fp, method: "sscd" }), // no similarity
+      finding({ fingerprintId: fp, method: "sscd", sscdSimilarity: 0.9, distance: 4 }), // no distance allowed
+      finding({ fingerprintId: fp, method: "sscd", sscdSimilarity: 0.9, distance: undefined, pageUrl: "https://forum.example.com/thread/sscd" }),
+    ]);
+    expect(body.results).toEqual([
+      { status: "rejected", reason: "invalid_finding" },
+      { status: "rejected", reason: "invalid_finding" },
+      { status: "accepted" },
+    ]);
+    expect(await rows()).toEqual([
+      expect.objectContaining({ method: "SSCD", distance: null, sscdSimilarity: 0.9, needsSecondReview: true, secondReviewRequired: true }),
+    ]);
+  });
+
+  it("keeps the old contract: a hash finding needs its distance, and only a labelled pdq match may carry a score", async () => {
+    const { body } = await report([
+      finding({ fingerprintId: fp, distance: undefined }), // an old crawler always sent one
+      finding({ fingerprintId: fp, method: "vpdq", sscdSimilarity: 0.9 }), // a video finding never carries a score
+      finding({ fingerprintId: fp, sscdSimilarity: 0.9 }), // an unlabelled finding cannot carry one
+      finding({ fingerprintId: fp, method: "pdq", sscdSimilarity: 0.86, distance: 28, pageUrl: "https://forum.example.com/thread/borderline" }),
+    ]);
+    expect(body.results).toEqual([
+      { status: "rejected", reason: "invalid_finding" },
+      { status: "rejected", reason: "invalid_finding" },
+      { status: "rejected", reason: "invalid_finding" },
+      { status: "accepted" },
+    ]);
+    expect(await rows()).toEqual([
+      // A borderline PDQ match: the score is information for the analyst (WP28).
+      expect.objectContaining({ method: "PDQ", distance: 28, sscdSimilarity: 0.86, needsSecondReview: true }),
+    ]);
+  });
+
+  it("derives the stored method from the fingerprint's algorithm when the crawler sends none", async () => {
+    crawlMemory().fingerprints.set("hs-v", {
+      id: "hs-v", caseId: caseA.id, hashEncrypted: encryptField(PDQ_B), quality: 95, status: "APPROVED", crawlPoolId: null,
+      algorithm: "VPDQ", videoFramesEncrypted: encryptField(JSON.stringify([{ hash: PDQ_B, quality: 90, t: 0 }])),
+    });
+    // One authorisation per case: withdraw the beforeEach one and sign again
+    // with both fingerprints, which issues fresh pool ids for both.
+    const { withdrawCrawlConsent } = await import("@/lib/crawl-consent");
+    expect((await withdrawCrawlConsent(caseA.id)).ok).toBe(true);
+    await consent(caseA.id, ["hs-1", "hs-v"]);
+    fp = poolId("hs-1");
+    const { body } = await report([
+      finding({ fingerprintId: fp, pageUrl: "https://forum.example.com/thread/image" }), // old crawler, SSCD off
+      finding({ fingerprintId: poolId("hs-v"), pageUrl: "https://forum.example.com/thread/video" }),
+    ]);
+    expect(body.results).toEqual([{ status: "accepted" }, { status: "accepted" }]);
+    const all = await rows();
+    expect(all).toHaveLength(2);
+    // The image finding stays PDQ; the video finding is labelled VPDQ even
+    // though this old crawler sent no method at all.
+    expect(all.find((row) => row.method === "PDQ")).toMatchObject({ distance: 5, sscdSimilarity: null });
+    expect(all.find((row) => row.method === "VPDQ")).toMatchObject({ distance: 5, sscdSimilarity: null });
+    expect(all.filter((row) => row.method === "SSCD")).toHaveLength(0);
+  });
+
+  it("merge rules with a null distance: a closer hash sighting replaces an SSCD candidate, never the other way", async () => {
+    const page = "https://forum.example.com/thread/merge";
+    const image = "https://cdn.example.com/merge.jpg";
+    await report([finding({ fingerprintId: fp, pageUrl: page, imageUrl: image, method: "sscd", sscdSimilarity: 0.9, distance: undefined })]);
+    await report([finding({ fingerprintId: fp, pageUrl: page, imageUrl: image, method: "pdq", distance: 12 })]);
+    expect(await rows()).toEqual([expect.objectContaining({ method: "PDQ", distance: 12, sscdSimilarity: null })]);
+
+    const page2 = "https://forum.example.com/thread/merge2";
+    await report([finding({ fingerprintId: fp, pageUrl: page2, imageUrl: image, method: "pdq", distance: 12 })]);
+    // The sscd sighting does not replace the stored match (it has no distance),
+    // but its score is kept as the borderline score, max-raising what is stored.
+    await report([finding({ fingerprintId: fp, pageUrl: page2, imageUrl: image, method: "sscd", sscdSimilarity: 0.9, distance: undefined })]);
+    expect(await rows()).toEqual([
+      expect.objectContaining({ method: "PDQ", distance: 12 }),
+      expect.objectContaining({ method: "PDQ", distance: 12, sscdSimilarity: 0.9 }),
+    ]);
+  });
+
+  it("a carried score never lowers the stored one while the finding is open, and freezes at the first review", async () => {
+    const page = "https://forum.example.com/thread/score";
+    const image = "https://cdn.example.com/score.jpg";
+    const at = (sscdSimilarity: number, distance = 28) => finding({ fingerprintId: fp, pageUrl: page, imageUrl: image, method: "pdq", distance, sscdSimilarity });
+    await report([at(0.7)]);
+    await report([at(0.9)]);
+    expect((await rows())[0]).toMatchObject({ sscdSimilarity: 0.9 });
+    await report([at(0.8)]);
+    expect((await rows())[0]).toMatchObject({ sscdSimilarity: 0.9 });
+
+    const [row] = await rows();
+    expect(await reviewCrawlFinding({ findingId: row.id, decision: "approve", reviewerId: "admin-1" })).toEqual({ ok: true, status: "AWAITING_SECOND_REVIEW" });
+    // Once the first reviewer approved, neither the score nor the match moves.
+    await report([at(0.95, 27)]);
+    const after = (await rows())[0];
+    expect(after).toMatchObject({ sscdSimilarity: 0.9, distance: 28, reviewStatus: "CANDIDATE" });
+    expect(crawlMemory().findings.get(row.id)!.reviewedById).toBe("admin-1");
+  });
+
+  it("an SSCD finding always takes the two-step approval path", async () => {
+    await report([finding({ fingerprintId: fp, method: "sscd", sscdSimilarity: 0.87, distance: undefined })]);
+    const [row] = await rows();
+    expect(await reviewCrawlFinding({ findingId: row.id, decision: "approve", reviewerId: "admin-1" })).toEqual({ ok: true, status: "AWAITING_SECOND_REVIEW" });
+    expect(await reviewCrawlFinding({ findingId: row.id, decision: "approve", reviewerId: "admin-2" })).toMatchObject({ ok: true, status: "APPROVED" });
+    // The plan behind it: a null distance is always a first_approval for a fresh candidate.
+    expect(planReview({ distance: null, reviewStatus: "CANDIDATE", reviewedById: null }, "approve", "a")).toEqual({ action: "first_approval", second: false });
+    expect(planReview({ distance: null, reviewStatus: "CANDIDATE", reviewedById: "a" }, "approve", "b")).toEqual({ action: "final_approval", second: true });
+  });
+});
