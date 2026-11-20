@@ -103,6 +103,10 @@ test("registered adult can fingerprint a synthetic video and submit its frame ha
     buffer: fixture,
   });
 
+  // While the video is read, the page shows a progress element (WP40 A8),
+  // announced only at start and finish.
+  await expect(page.locator("progress")).toBeVisible({ timeout: 30_000 });
+
   await expect(page.getByText(/Video fingerprint ready · 6 frames/)).toBeVisible({ timeout: 60_000 });
   // While it read, the page said it was reading on this device, showed live
   // per-second progress, and said the video is not uploaded.
@@ -180,7 +184,11 @@ test("a video the browser cannot read gets a kind message and nothing is sent", 
   await expect(page.getByText(/We could not read this video\./)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Nothing was sent\./)).toBeVisible();
   await page.getByLabel(/I declare/).check();
-  // No fingerprint came out of it, so there is nothing to submit.
-  await expect(page.getByRole("button", { name: "Continue to review" })).toBeDisabled();
+  // No fingerprint came out of it, so there is nothing to submit: the button
+  // is never disabled to block validation (WP40 A9) — submitting focuses the
+  // link box and says why, and nothing is sent.
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Add at least one link or fingerprint to continue." })).toBeVisible();
+  await expect(page.getByLabel("Links where the content appears")).toBeFocused();
   expect(anyCaseRequest).toBe(false);
 });

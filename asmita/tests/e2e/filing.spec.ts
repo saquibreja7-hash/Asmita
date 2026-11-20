@@ -41,8 +41,12 @@ test("each pasted line is checked where it is typed, and only valid links reach 
   await links.fill("Digital fingerprint");
   await expect(checks.getByText("Not a web link")).toBeVisible();
   await page.getByText(/I declare that I am the person depicted/).click();
-  await expect(cta).toBeDisabled();
+  // The button is never disabled to block validation (WP40 A9): submitting
+  // with nothing to file focuses the link box and says why.
+  await expect(cta).toBeEnabled();
+  await cta.click();
   await expect(page.getByRole("status").filter({ hasText: "Add at least one link or fingerprint" })).toBeVisible();
+  await expect(links).toBeFocused();
 
   // A link without https:// is accepted, a repeat is flagged, and bad lines are left out.
   await links.fill("youtube.com/watch?v=asmita-synthetic\nhttps://youtube.com/watch?v=asmita-synthetic\nDigital fingerprint");

@@ -21,6 +21,13 @@ export default async function PrivacyPage() {
     { id: "legal-basis",       title: t(locale, "privacy.toc.06") },
     { id: "how-long",          title: t(locale, "privacy.toc.07") },
     { id: "who-we-share-with", title: t(locale, "privacy.toc.08") },
+    { id: "fingerprints",      title: t(locale, "privacy.toc.fp") },
+    { id: "video",             title: t(locale, "privacy.toc.video") },
+    { id: "crawler",           title: t(locale, "privacy.toc.crawl") },
+    { id: "watch",             title: t(locale, "privacy.toc.watch") },
+    { id: "partner-sharing",   title: t(locale, "privacy.toc.pshare") },
+    { id: "sscd",              title: t(locale, "privacy.toc.sscd") },
+    { id: "platform-partners", title: t(locale, "privacy.toc.ppartners") },
     { id: "how-we-protect",    title: t(locale, "privacy.toc.09") },
     { id: "your-rights",       title: t(locale, "privacy.toc.10") },
     { id: "children",          title: t(locale, "privacy.toc.11") },
@@ -108,7 +115,7 @@ export default async function PrivacyPage() {
 
                 <ReadingSection id="what-we-collect" icon="clipboard" title={t(locale, "privacy.toc.03")}>
                   <p>{t(locale, "privacy.s03.intro")}</p>
-                  <ItemCards items={cards(locale, "s03", ["i1", "i2", "i3", "i4"])} mark="check" />
+                  <ItemCards items={cards(locale, "s03", ["i1", "i2", "i3", "i4", "i5", "i6"])} mark="check" />
                 </ReadingSection>
 
                 <ReadingSection id="what-we-never-collect" icon="eyeOff" title={t(locale, "privacy.toc.04")}>
@@ -124,7 +131,7 @@ export default async function PrivacyPage() {
 
                 <ReadingSection id="why-we-collect" icon="target" title={t(locale, "privacy.toc.05")}>
                   <p>{t(locale, "privacy.s05.intro")}</p>
-                  <ItemTable head={[t(locale, "privacy.table.data"), t(locale, "privacy.table.why")]} rows={rows(locale, "s05", ["i1", "i2", "i2b", "i3", "i4"])} />
+                  <ItemTable head={[t(locale, "privacy.table.data"), t(locale, "privacy.table.why")]} rows={rows(locale, "s05", ["i1", "i2", "i2b", "i3", "i4", "i5", "i6"])} />
                 </ReadingSection>
 
                 <ReadingSection id="legal-basis" icon="scale" title={t(locale, "privacy.toc.06")}>
@@ -144,17 +151,57 @@ export default async function PrivacyPage() {
 
                 <ReadingSection id="how-long" icon="clock" title={t(locale, "privacy.toc.07")}>
                   <p>{t(locale, "privacy.s07.intro")}</p>
-                  <ItemTable head={[t(locale, "privacy.table.data"), t(locale, "privacy.table.how")]} rows={rows(locale, "s07", ["i1", "i2", "i3", "i4", "i5"])} />
+                  <ItemTable head={[t(locale, "privacy.table.data"), t(locale, "privacy.table.how")]} rows={rows(locale, "s07", ["i1", "i2", "i3", "i4", "i5", "i6", "i7", "i8"])} />
                 </ReadingSection>
 
                 <ReadingSection id="who-we-share-with" icon="users" title={t(locale, "privacy.toc.08")}>
                   <Callout>{t(locale, "privacy.s08.intro")}</Callout>
-                  <ItemCards items={cards(locale, "s08", ["i1", "i2", "i3", "i4", "i5"])} />
+                  <ItemCards items={cards(locale, "s08", ["i1", "i2", "i3", "i4", "i5", "i6"])} />
+                </ReadingSection>
+
+                <ReadingSection id="fingerprints" icon="lock" title={t(locale, "privacy.toc.fp")}>
+                  <p>{t(locale, "privacy.fp.p1")}</p>
+                  <ItemCards items={cards(locale, "fp", ["i1", "i2", "i3", "i4", "i5"])} mark="check" />
+                  <Callout icon="lock">{t(locale, "privacy.fp.callout")}</Callout>
+                </ReadingSection>
+
+                <ReadingSection id="video" icon="clock" title={t(locale, "privacy.toc.video")}>
+                  <p>{t(locale, "privacy.video.p1")}</p>
+                  <ItemCards items={cards(locale, "video", ["i1", "i2", "i3", "i4", "i5"])} mark="check" />
+                  <p>{t(locale, "privacy.video.p2")}</p>
+                </ReadingSection>
+
+                <ReadingSection id="crawler" icon="compass" title={t(locale, "privacy.toc.crawl")}>
+                  <p>{t(locale, "privacy.crawl.p1")}</p>
+                  <p>{t(locale, "privacy.crawl.p2")}</p>
+                  <ItemCards items={cards(locale, "crawl", ["i1", "i2", "i3", "i4", "i5"])} />
+                  <Callout icon="compass">{t(locale, "privacy.crawl.callout")}</Callout>
+                </ReadingSection>
+
+                <ReadingSection id="watch" icon="refresh" title={t(locale, "privacy.toc.watch")}>
+                  <p>{t(locale, "privacy.watch.p1")}</p>
+                  <ItemCards items={cards(locale, "watch", ["i1", "i2", "i3"])} />
+                  <p>{t(locale, "privacy.watch.p2")}</p>
+                </ReadingSection>
+
+                <ReadingSection id="partner-sharing" icon="users" title={t(locale, "privacy.toc.pshare")}>
+                  <p>{t(locale, "privacy.pshare.p1")}</p>
+                  <ItemCards items={cards(locale, "pshare", ["i1", "i2", "i3", "i4", "i5"])} />
+                </ReadingSection>
+
+                <ReadingSection id="sscd" icon="shieldCheck" title={t(locale, "privacy.toc.sscd")}>
+                  <p>{t(locale, "privacy.sscd.p1")}</p>
+                  <ItemCards items={cards(locale, "sscd", ["i1", "i2", "i3", "i4", "i5"])} />
+                </ReadingSection>
+
+                <ReadingSection id="platform-partners" icon="building" title={t(locale, "privacy.toc.ppartners")}>
+                  <p>{t(locale, "privacy.ppartners.p1")}</p>
+                  <ItemCards items={cards(locale, "ppartners", ["i1", "i2", "i3", "i4"])} />
                 </ReadingSection>
 
                 <ReadingSection id="how-we-protect" icon="lock" title={t(locale, "privacy.toc.09")}>
                   <p>{t(locale, "privacy.s09.intro")}</p>
-                  <ItemCards items={cards(locale, "s09", ["i1", "i2", "i3", "i4", "i5", "i6"])} grid />
+                  <ItemCards items={cards(locale, "s09", ["i1", "i2", "i3", "i4", "i5", "i6", "i7"])} grid />
                 </ReadingSection>
 
                 <ReadingSection id="your-rights" icon="shieldCheck" title={t(locale, "privacy.toc.10")}>
@@ -250,7 +297,7 @@ export default async function PrivacyPage() {
   );
 }
 
-type Section = "s03" | "s04" | "s05" | "s07" | "s08" | "s09" | "s10";
+type Section = "s03" | "s04" | "s05" | "s07" | "s08" | "s09" | "s10" | "fp" | "video" | "crawl" | "watch" | "pshare" | "sscd" | "ppartners";
 type Key = Parameters<typeof t>[1];
 
 // The policy's bold-and-detail list items, for ItemCards and ItemTable.
