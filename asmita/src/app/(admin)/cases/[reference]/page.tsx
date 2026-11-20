@@ -35,6 +35,14 @@ const SIGNED_TEMPLATE_REFUSALS: Record<string, string> = {
     "The template the survivor signed is inactive or no longer legally reviewed. Sending is refused. Nothing was sent.",
 };
 
+// WP32: what a partner's outcome report means, in the console's words.
+const PARTNER_OUTCOME_LABELS: Record<string, string> = {
+  removed: "Removed",
+  blocked_reupload: "Blocked re-upload",
+  not_found: "Not found",
+  not_our_content: "Not their content",
+};
+
 export default async function AdminCasePage({ params }: { params: Promise<{ reference: string }> }) {
   const auth = await requireAdminPermission("cases:read");
   if (!auth.ok) {
@@ -77,7 +85,19 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
 
       <dl className="mt-6 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="Status">{STATUS_LABELS[detail.status] ?? detail.status}</Fact>
-        <Fact label="Next action">{nextActionLabel(detail.work.nextAction, detail.work.actionCount)}</Fact>
+        <Fact label="Type">{detail.mode === "WATCH" ? "Watch for my images" : "Takedown case"}</Fact>
+        <Fact label="Next action">
+          {detail.mode === "WATCH" && detail.work.nextAction === "review_findings" ? (
+            <>
+              {nextActionLabel(detail.work.nextAction, detail.work.actionCount)}{" "}
+              <Link className="link-underline" href="/admin/findings?status=CANDIDATE">
+                Open the findings console
+              </Link>
+            </>
+          ) : (
+            nextActionLabel(detail.work.nextAction, detail.work.actionCount)
+          )}
+        </Fact>
         <Fact label="Due">
           <span className={due.overdue ? "text-[var(--danger)]" : undefined}>
             {due.overdue && <span aria-hidden="true">! </span>}
@@ -178,6 +198,33 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
         </div>
       )}
 
+      <h2 className="mt-8">Partner-reported outcomes</h2>
+      {detail.partnerOutcomes.length === 0 ? (
+        <p className="muted mt-3 text-sm">No partner has reported an outcome on this case.</p>
+      ) : (
+        <ul className="mt-4 grid gap-3 text-sm">
+          {detail.partnerOutcomes.map((report) => (
+            <li className="a-card p-4" key={report.id}>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p>
+                  <span className="font-medium">{PARTNER_OUTCOME_LABELS[report.outcome] ?? report.outcome}</span>
+                  {" "}· <span className="font-mono">{report.partnerDomain}</span> ({report.partnerName})
+                </p>
+                <p className="muted">{formatIst(report.createdAt)}</p>
+              </div>
+              <p className="mt-2 text-xs">
+                {report.fingerprintId
+                  ? `About fingerprint ${detail.fingerprints.find((hash) => hash.id === report.fingerprintId)?.digestPrefix ?? "no longer on this case"}…`
+                  : "About a page on their own domain"}
+                {report.matchedLinkId &&
+                  ` · matched reported link ${detail.links.findIndex((link) => link.id === report.matchedLinkId) + 1 || "no longer on this case"}`}
+              </p>
+              {report.note && <p className="muted mt-2 text-xs">{report.note}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {advisoryCase.length > 0 && (
         <>
           <h3 className="mt-8">Send hash advisory</h3>
@@ -266,6 +313,21 @@ function LinkCard({
             </li>
           ))}
         </ul>
+      )}
+      {link.verifications.length > 0 && (
+        <div className="mt-3">
+          <p className="eyebrow">Removal checks</p>
+          <ul className="mt-1 grid gap-1 text-xs">
+            {link.verifications.map((check) => (
+              <li key={check.id}>
+                Check {check.attempt} of 3:{" "}
+                {check.outcome === "PENDING"
+                  ? `due ${formatIst(new Date(check.dueAt))}`
+                  : `${check.outcome.replaceAll("_", " ").toLowerCase()}${check.checkedAt ? ` ${formatIst(new Date(check.checkedAt))}` : ""}`}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {link.platformFiledAt && (
         <p className="mt-2 text-xs">Survivor filed the platform form {formatIst(link.platformFiledAt)}.</p>

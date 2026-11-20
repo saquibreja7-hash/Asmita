@@ -3,13 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 // Admin work items for crawler links, and URL retention blanking the
 // representative notice PDF (it names the page and image addresses).
 
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn(), verificationDeleteMany: vi.fn() }));
 vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => false, getWorkerDb: () => { throw new Error("no worker db"); } }));
 vi.mock("@/lib/db", () => ({
   db: {
     $transaction: (fn: (tx: unknown) => unknown) => fn({
       submittedUrl: { findMany: mocks.findMany, updateMany: mocks.updateMany },
       urlPortalToken: { deleteMany: mocks.deleteMany },
+      linkVerification: { deleteMany: mocks.verificationDeleteMany },
     }),
   },
 }));

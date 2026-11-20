@@ -23,7 +23,7 @@ On 2026-11-16 the owner decided to build a targeted crawler that compares images
 ## Decision
 
 1. **A separate service.** A new top-level folder `crawler/`, outside `asmita/`, holds a separate service with its own dependencies, lint configuration, tests and deployment. It is not part of the Next.js app, the Worker bundle or the `asmita/` lint scope.
-2. **What it does.** For each source on an admin-approved list, it fetches public web pages and the images they reference, holds each image in memory only, computes its PDQ fingerprint, compares it with the matching pool, and discards the image. Nothing is written to disk. The container filesystem is read-only. No image bytes appear in logs.
+2. **What it does.** For each enabled source (the list is no longer admin-only: see "Decisions recorded since acceptance", Survivor-reported hosts and The crawler discovers new sites), it fetches public web pages and the images they reference, holds each image in memory only, computes its PDQ fingerprint, compares it with the matching pool, and discards the image. Nothing is written to disk. The container filesystem is read-only. No image bytes appear in logs.
 3. **What it reports.** For a match, and only for a match, it reports to Asmita: page address, image address, matched pool id, Hamming distance, PDQ quality, and time of the match. It stores no media and reports nothing about images that did not match.
 4. **Findings.** Asmita stores each report as a finding on the survivor's case, with the page and image addresses encrypted, and purges findings on the same 30-day schedule as submitted links (`URL_RETENTION_MS` in `src/lib/url-retention.ts`).
 5. **Matching pool.** The pool contains only approved fingerprints of survivors who have opted in and not withdrawn. Asmita serves it to the crawler through a pool route, with each fingerprint under an opaque id and no case, user or person data. The crawler re-syncs the pool at least once an hour.
@@ -32,7 +32,7 @@ On 2026-11-16 the owner decided to build a targeted crawler that compares images
 8. **Representative notices.** A notice for a crawler-found link is sent by Asmita as the survivor's authorised representative, citing her signed authorisation. Her signature is never copied onto a notice she has not seen. The representative-notice template is a second new template, also created unreviewed. The `reviewedByLegal` and `lastContactVerifiedByHuman` gates apply to it exactly as to existing templates, and only a human legal reviewer sets `reviewedByLegal: true`.
 9. **Kill switch.** `ENABLE_CRAWLER` is a deployment switch, off by default, that turns off the pool route, so the crawler has nothing to match. Each source also has its own on/off flag.
 10. **Minors.** Pool fingerprints come only from the adult case flow. The crawler never classifies or surfaces images that did not match.
-11. **The app still never fetches.** `asmita/` never fetches a submitted URL or a discovered URL. The crawler is the only component that fetches, and it fetches only from the approved source list.
+11. **The app still never fetches.** `asmita/` never fetches a submitted URL or a discovered URL. The crawler is the only component that fetches, and it fetches only from the enabled source list.
 
 Items 1 to 11 are the owner's decisions. Details elsewhere in this ADR that go beyond them are proposed by this ADR to make those decisions enforceable, and are marked "(proposed)".
 
@@ -42,7 +42,7 @@ Each item is meant to be checkable by a test, a lint rule, a configuration check
 
 ### Allowed, in `crawler/` only
 
-- A1. Fetching HTML pages over HTTP(S) only on a host on the admin-approved source list whose per-source flag is on, or a subdomain of it (amended 2026-11-16: scoped to the approved host, not the registrable domain), never following a page link off that host; and fetching the images those pages embed, which may be on other public hosts (for example a CDN), because that is how sites serve images. Every fetch, page or image, passes every network-safety check in N5. The owner is asked to confirm the image rule (runbook).
+- A1. Fetching HTML pages over HTTP(S) only on a host on the enabled source list whose per-source flag is on, or a subdomain of it (amended 2026-11-16: scoped to the approved host, not the registrable domain; the list is no longer admin-approved — see "Decisions recorded since acceptance", Survivor-reported hosts and The crawler discovers new sites), never following a page link off that host; and fetching the images those pages embed, which may be on other public hosts (for example a CDN), because that is how sites serve images. Every fetch, page or image, passes every network-safety check in N5. The owner is asked to confirm the image rule (runbook).
 - A2. Holding a fetched image in process memory long enough to decode it and compute one PDQ fingerprint, then releasing it.
 - A3. Comparing that fingerprint with the pool in memory, by Hamming distance against a threshold set in configuration.
 - A4. Sending one match report per match to Asmita, containing only: page address, image address, opaque pool id, Hamming distance, PDQ quality, time.
@@ -60,8 +60,8 @@ Each item is meant to be checkable by a test, a lint rule, a configuration check
 - N1. `asmita/` fetching, previewing, thumbnailing, proxying or rendering any submitted or discovered URL. ADR 001 is unchanged for the app.
 - N2. Any image bytes, decoded pixels, data URLs or base64 image content in `asmita/`, in a match report, in a log line, in a database row, or on disk in `crawler/`.
 - N3. The crawler writing to the filesystem at all (no cache, no temp files, no core dumps containing images where the platform allows that to be disabled).
-- N4. Any path from `SubmittedUrl` or any survivor-supplied address to the crawler's fetch list. Sources come only from the admin-approved list.
-- N5. The crawler fetching a page on a host that is not an approved host or its subdomain, including hosts reached by redirect or by following a link; or fetching anything (page or embedded image) from a private, loopback, link-local, carrier-grade NAT or metadata address, checked after DNS resolution and on every redirect.
+- N4. Any path from `SubmittedUrl` or any survivor-supplied address to the crawler's fetch list. Sources come only from the admin-approved list. (Superseded in part: see "Decisions recorded since acceptance", Survivor-reported hosts and The crawler discovers new sites — the bare host of a survivor's submitted link or an approved finding, and hosts the crawler discovers, now become sources automatically under the hop, daily-cap and never-crawl rules; the address itself is never copied to the list, the app never fetches it, and a host is fetched only once it is an enabled source.)
+- N5. The crawler fetching a page on a host that is not a source host or a subdomain of one, including hosts reached by redirect or by following a link; or fetching anything (page or embedded image) from a private, loopback, link-local, carrier-grade NAT or metadata address, checked after DNS resolution and on every redirect.
 - N6. The pool carrying a case id, user id, email, name, URL or any other personal data. Pool ids are random and are not derived from the fingerprint or from `HashSubmission.hashDigest`.
 - N7. A fingerprint in the pool from a survivor who has not signed the standing authorisation, who has withdrawn, or whose fingerprint is not approved.
 - N8. Classifying, labelling, storing, counting by content type, or surfacing any image that did not match. The crawler has no nudity, age or abuse classifier.
@@ -128,7 +128,7 @@ Tests and checks that must exist before the crawler handles anything beyond fixt
 
 - **No disk writes.** A test that runs a full crawl of a fixture site and asserts no file is created or modified (for example by running with a read-only filesystem, or by spying on every filesystem write API and failing on any call). The deployment configuration sets a read-only root filesystem, and a check fails the build if it does not.
 - **Lint.** The crawler's own ESLint (or equivalent) configuration forbids importing filesystem write APIs, forbids logging calls whose arguments include address, URL, image, buffer or fingerprint variables, and forbids any persistence client.
-- **SSRF controls.** Tests that a fetch is refused for: a host not on the approved list; a redirect to a host not on the list; private, loopback, link-local, carrier-grade NAT and cloud metadata addresses, checked after DNS resolution and again on every redirect; non-HTTP(S) schemes; and any host whose per-source flag is off.
+- **SSRF controls.** Tests that a fetch is refused for: a host not on the source list; a redirect to a host not on the list; private, loopback, link-local, carrier-grade NAT and cloud metadata addresses, checked after DNS resolution and again on every redirect; non-HTTP(S) schemes; and any host whose per-source flag is off.
 - **Size and time limits.** Tests that a response over the configured byte limit, an image over the configured pixel limit, and a request over the configured timeout are each abandoned without hashing, and that the limits are bounded (a configuration with no limit fails). The values are open items.
 - **No address or fingerprint logging.** A test that captures all log output during a fixture crawl with known addresses and fingerprints and asserts none of them appears.
 - **Report shape.** A test that the match report contains exactly the six permitted fields (A4) and nothing derived from image bytes.
@@ -187,7 +187,7 @@ Gates 1 to 3 come from the owner's decision. Gates 4 to 7 are proposed by this A
 
 4. Every crawler test listed under Enforcement exists and passes, and the deployment runs with a read-only filesystem.
 5. Hosting for the crawler is decided and is in India.
-6. Each source on the approved list has been added by an admin, with a recorded reason.
+6. Each source on the approved list has been added by an admin, with a recorded reason. (Superseded in part: reported and discovered sources are created without an admin — see "Decisions recorded since acceptance", Survivor-reported hosts and The crawler discovers new sites; the owner must re-read this gate for them before real-site use, and the runbook's go-live checklist carries its current form: a recorded reason for each admin-added source, each automatic source accounted for in the review, and the never-crawl list reviewed by a human.)
 7. Grievance contacts used for representative notices have `lastContactVerifiedByHuman` set, as for every other notice.
 
 Production launch of Asmita as a whole remains gated on the items in `CLAUDE.md`; this list adds to them for the crawler.
@@ -214,7 +214,7 @@ Earlier open items, settled for the build (values to revisit with real data befo
 - The analyst confirms a match by reading the address as text, after a reasoned, audited, rate-limited reveal; the app never previews it. Wellbeing protections beyond the interim safety note are the open welfare rule above.
 - Withdrawal: see "Decisions recorded since acceptance".
 - Whether she is told about each finding before a notice goes out: not built; she sees found links on her case page after approval (owner decision above).
-- Sources: a SUPER_ADMIN (`crawler:manage`) adds each host, which starts switched off; every change is audited. Two-person approval of sources is not built.
+- Sources: a SUPER_ADMIN (`crawler:manage`) adds each host, which starts switched off; every change is audited. Two-person approval of sources is not built. (Superseded in part: reported sources start enabled, and discovered sources are switched on automatically within their hop and daily limits — see "Decisions recorded since acceptance", Survivor-reported hosts and The crawler discovers new sites; admin-added sources still start switched off.)
 
 ## Consequences
 

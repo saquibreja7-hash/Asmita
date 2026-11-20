@@ -16,6 +16,12 @@ function onlyChromium(testInfo: { project: { name: string } }) {
 
 const FIXTURE_PATH = join(process.cwd(), "tests/fixtures/video/synthetic-6s.webm");
 
+test.beforeEach(async ({ page }) => {
+  // Pin the motion environment like tests/e2e/accessibility.spec.ts does, so
+  // scroll-into-view is instant and bottom-of-page clicks are deterministic.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+});
+
 // The fixture is six seconds of six different synthetic sources, so one frame
 // per second keeps all six (quality above 50, pairwise Hamming far above 10).
 const EXPECTED_FRAMES = 6;
@@ -97,13 +103,28 @@ test("registered adult can fingerprint a synthetic video and submit its frame ha
   });
 
   await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-video-synthetic");
+  // Wait for the debounced link checks so the textarea's blur cannot flush
+  // them (and reflow the page under the pointer) at the first click; see
+  // hash-flow.spec.ts for the full explanation.
+  await expect(page.locator("#url-checks")).toBeVisible();
+  // WP42 P2: each frame is hashed in the same worker as the images; its
+  // script must load (200) under the page's CSP.
+  const workerScript = page.waitForResponse(
+    (r) => /(hash[._-]?worker|turbopack-worker)/i.test(r.url()) && r.status() === 200,
+    { timeout: 30_000 },
+  );
   await page.locator('input[type="file"]').setInputFiles({
     name: "synthetic-6s.webm",
     mimeType: "video/webm",
     buffer: fixture,
   });
 
+  // While the video is read, the page shows a progress element (WP40 A8),
+  // announced only at start and finish.
+  await expect(page.locator("progress")).toBeVisible({ timeout: 30_000 });
+
   await expect(page.getByText(/Video fingerprint ready · 6 frames/)).toBeVisible({ timeout: 60_000 });
+  expect((await workerScript).ok()).toBe(true);
   // While it read, the page said it was reading on this device, showed live
   // per-second progress, and said the video is not uploaded.
   const seen = await transientVideoUi(page);
@@ -180,7 +201,60 @@ test("a video the browser cannot read gets a kind message and nothing is sent", 
   await expect(page.getByText(/We could not read this video\./)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Nothing was sent\./)).toBeVisible();
   await page.getByLabel(/I declare/).check();
-  // No fingerprint came out of it, so there is nothing to submit.
-  await expect(page.getByRole("button", { name: "Continue to review" })).toBeDisabled();
+  // No fingerprint came out of it, so there is nothing to submit: the button
+  // is never disabled to block validation (WP40 A9) — submitting focuses the
+  // link box and says why, and nothing is sent.
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Add at least one link or fingerprint to continue." })).toBeVisible();
+  await expect(page.getByLabel("Links where the content appears")).toBeFocused();
+  expect(anyCaseRequest).toBe(false);
+});
+
+// WP42: the video read now waits on the hashing worker for every frame.
+// Cancel must still stop it promptly, drop the unfinished file and leave the
+// form usable - no hang on the in-flight worker request.
+test("cancel stops the video read while it is hashing and nothing is sent", async ({ page }, testInfo) => {
+  onlyChromium(testInfo);
+  test.setTimeout(120_000);
+  const fixture = readFileSync(FIXTURE_PATH);
+  let anyCaseRequest = false;
+  page.on("request", (request) => {
+    if (request.url().includes("/api/cases/")) anyCaseRequest = true;
+  });
+
+  await register(page);
+
+  // Slow the page's own work (seeks, canvas draws, the React updates) so the
+  // read is still running when Cancel is pressed; the worker thread is not
+  // throttled, but every frame waits on the page for its seek and draw.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
+
+  try {
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "synthetic-6s.webm",
+      mimeType: "video/webm",
+      buffer: fixture,
+    });
+
+    // The cancel button appears the moment the read starts.
+    const cancel = page.getByRole("button", { name: "Cancel" });
+    await expect(cancel).toBeVisible();
+    await cancel.click();
+
+    // The read stops before finishing: the entry is dropped (a cancelled
+    // read keeps only finished files) and no ready line appears.
+    await expect(page.getByText("synthetic-6s.webm")).toHaveCount(0);
+    await expect(page.locator("progress")).toHaveCount(0);
+    await expect(page.getByText(/Video fingerprint ready/)).toHaveCount(0);
+    // Still nothing after a settle period: the cancel did not hang waiting
+    // on the in-flight worker request, and the form stays usable.
+    await page.waitForTimeout(1500);
+    await expect(page.getByText(/Video fingerprint ready/)).toHaveCount(0);
+    await expect(page.locator("button", { hasText: "Choose photos or videos to fingerprint" })).toBeVisible();
+  } finally {
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 }).catch(() => {});
+  }
+
   expect(anyCaseRequest).toBe(false);
 });

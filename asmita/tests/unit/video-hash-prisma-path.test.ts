@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
   hashFindMany: vi.fn(),
   hashFindUnique: vi.fn(),
   consentFindMany: vi.fn(),
+  caseFindMany: vi.fn(),
   deletionJobFindMany: vi.fn(),
   hashUpdateMany: vi.fn(),
   hashDeleteMany: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("@/lib/db", () => ({
       updateMany: vi.fn(),
     },
     crawlConsent: { findMany: m.consentFindMany },
+    case: { findMany: m.caseFindMany },
     deletionJob: { findMany: m.deletionJobFindMany, updateMany: vi.fn() },
     $transaction: async (run: (tx: unknown) => Promise<unknown>) => run(m.tx),
   },
@@ -42,6 +44,9 @@ beforeEach(() => {
   m.hashFindMany.mockReset().mockResolvedValue([]);
   m.hashFindUnique.mockReset().mockResolvedValue(null);
   m.consentFindMany.mockReset().mockResolvedValue([{ id: "consent-1", caseId: "case-1", hashSubmissionIds: ["hs-img", "hs-vid"] }]);
+  // The pool keeps fingerprints only while the case is open or inside its
+  // re-upload window (watch-and-verify WP24), so the case read sees it open.
+  m.caseFindMany.mockReset().mockResolvedValue([{ id: "case-1", status: "OPEN" }]);
   m.deletionJobFindMany.mockReset().mockResolvedValue([]);
 
   // A Prisma transaction client: counts resolve to zero unless a test says otherwise.
@@ -62,6 +67,14 @@ beforeEach(() => {
     // WP28 (ADR 008): the erasure deletes the case's SSCD embeddings too.
     findingEmbedding: { deleteMany: empty() },
     crawlConsent: { deleteMany: empty() },
+    // WP32: erasure also tells the partner feed to delete what it holds of
+    // hers (WITHDRAW events) and drops her outcome and agreement rows. The
+    // shared-fingerprint read returns nothing here, so no feed event is
+    // written; the delegates exist because the merged path calls them.
+    partnerOutcome: { deleteMany: empty() },
+    partnerShareConsent: { deleteMany: empty() },
+    partnerFeedEvent: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    linkVerification: { deleteMany: empty() },
     hashSubmission: { updateMany: m.hashUpdateMany, deleteMany: m.hashDeleteMany, findMany: vi.fn().mockResolvedValue([]) },
     feedback: { deleteMany: empty() },
     adminAccessLog: { updateMany: empty() },

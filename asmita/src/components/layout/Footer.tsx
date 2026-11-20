@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { HELPLINE } from "@/lib/helpline";
 import { LanguageToggle } from "@/components/layout/LanguageToggle";
 
@@ -82,7 +82,7 @@ export function Footer({ locale }: { locale: Locale }) {
         {/* Thorn-style: logo left, multi-col nav, helpline rightish */}
         <div className="site-footer-grid">
           <div className="site-footer-brand">
-            <Link href="/" className="site-footer-logo-link" aria-label="Asmita home">
+            <Link href="/" className="site-footer-logo-link" aria-label={t(locale, "nav.home")}>
               {/* The logo: teal wordmark with the gold flame. A small static PNG; next/image adds nothing here. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/asmita-wordmark-v2.png" alt="Asmita" width={317} height={94} className="brand-logo brand-logo-footer" />
@@ -98,8 +98,8 @@ export function Footer({ locale }: { locale: Locale }) {
               </p>
             )}
             <div className="site-footer-lang">
-              <span className="site-footer-col-title !mb-0">{isHi ? "भाषा" : "Language"}</span>
-              <LanguageToggle initialLocale={locale} />
+              <span className="site-footer-col-title !mb-0">{t(locale, "nav.language")}</span>
+              <LanguageToggle initialLocale={locale} label={t(locale, "nav.language")} />
             </div>
           </div>
 

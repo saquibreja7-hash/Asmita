@@ -184,6 +184,13 @@ describe("addHashesToCase, memory store", () => {
 
 describe("crawler pool serves video fingerprints (WP20)", () => {
   it("lists a VPDQ fingerprint as { id, kind: \"video\", frames } under its consent, memory path", async () => {
+    // The pool keeps fingerprints only while the case is open or inside its
+    // re-upload window (watch-and-verify WP24), so the fixture needs an open
+    // case for the consent to cover anything.
+    store.cases.set("case-9", {
+      id: "case-9", referenceNumber: "ASMITA-2026-V0009", userId: "user-video",
+      createdAt: new Date().toISOString(), status: "OPEN", urls: [],
+    });
     crawlMemory().fingerprints.set("hs-img", {
       id: "hs-img", caseId: "case-9", hashEncrypted: encryptField(H1), quality: 80, status: "APPROVED", crawlPoolId: null,
     });

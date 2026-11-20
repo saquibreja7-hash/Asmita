@@ -84,6 +84,8 @@ enum TemplateType {
   HASH_ADVISORY
   CRAWL_AUTHORISATION
   CRAWL_REPRESENTATIVE_NOTICE
+  PARTNER_SHARING_CONSENT
+  WATCH_AUTHORISATION
 }
 
 // Where a SubmittedUrl came from: the survivor, or an analyst-approved
@@ -103,6 +105,23 @@ enum CrawlFindingStatus {
   MINOR_PROTOCOL
 }
 
+// What a case is (watch-and-verify WP22). CASE: a takedown complaint with
+// links. WATCH: "Watch for my images" — no links, only fingerprints watched
+// for copies; nothing is sent to any platform until she chooses "Take it down".
+enum CaseMode {
+  CASE
+  WATCH
+}
+
+// What a crawl authorisation covers (WP22). SEARCH_AND_NOTICE: comparison and
+// representative notices (the existing tick). WATCH_ONLY: comparison and
+// alerting her only; a representative notice is refused (watch_only_consent)
+// until she converts the watch into a case and ticks the full authorisation.
+enum CrawlConsentScope {
+  SEARCH_AND_NOTICE
+  WATCH_ONLY
+}
+
 enum CrawlSourceKind {
   SITE
 }
@@ -114,6 +133,7 @@ enum CrawlSourceOrigin {
   ADMIN
   REPORTED
   DISCOVERED
+  PARTNER
 }
 
 // How the crawler fetches a source's pages (crawler v2; HTTP today).
@@ -143,6 +163,15 @@ enum CrawlPageStatus {
   DEAD
 }
 
+// Watch-and-verify WP23: the outcome of one scheduled re-check that a link
+// reported removed really stayed down. PENDING until the check ran.
+enum LinkVerificationOutcome {
+  PENDING
+  GONE
+  STILL_ONLINE
+  UNKNOWN
+}
+
 // Phase 2 fingerprints: PDQ for images, VPDQ for videos (one PDQ hash per
 // sampled frame). The crawler pool serves PDQ rows only until the video
 // matcher ships (video-fingerprints spec, rule 3 and WP20).
@@ -156,6 +185,38 @@ enum HashSubmissionStatus {
   APPROVED
   DISPATCHED
   REJECTED
+}
+
+// A partner platform's lifecycle (WP30): ACTIVE partners alone receive
+// fingerprints and notices; an admin suspends and reactivates.
+enum PlatformPartnerStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+// Partner programme part 2 (WP32): one feed event when a fingerprint becomes
+// shareable (ADD) or stops being shareable (WITHDRAW).
+enum PartnerFeedEventType {
+  ADD
+  WITHDRAW
+}
+
+// Partner programme part 2 (WP32): what a partner platform reported it did.
+// Stored lowercase in the API ("removed", ...); the enum keeps the casing of
+// the other status enums.
+enum PartnerOutcomeType {
+  REMOVED
+  BLOCKED_REUPLOAD
+  NOT_FOUND
+  NOT_OUR_CONTENT
+}
+
+// What a PartnerChannelSend row records (WP33): a copy of a dispatched
+// notice, or the alert that an analyst accepted a crawler finding on the
+// partner's domain.
+enum PartnerChannelSendKind {
+  NOTICE
+  FINDING_ALERT
 }
 
 // How a crawler finding matched (ADR 008, WP28): PDQ or VPDQ (a hash
@@ -213,6 +274,14 @@ enum AuditEventType {
   CRAWL_SOURCE_RESUMED
   CRAWL_FINDING_LABEL_SET
   CRAWL_FINDING_LABEL_CLEARED
+  PARTNER_SHARE_CONSENT_GIVEN
+  PARTNER_SHARE_CONSENT_WITHDRAWN
+  PARTNER_OUTCOME_REPORTED
+  PARTNER_CHANNEL_SENT
+  PARTNER_CHANNEL_FAILED
+  WATCH_CONVERTED
+  CONTENT_STILL_ONLINE
+  CRAWL_WATCH_STARTED
 }
 
 enum DeletionJobStatus {
@@ -249,6 +318,8 @@ model Case {
   userId                String
   registrationKeyHash   String?
   status                CaseStatus @default(OPEN)
+  // "Watch for my images" (WP22): a watch holds fingerprints and no links.
+  mode                  CaseMode   @default(CASE)
   state                 String?
   city                  String?
   ngoVerified           Boolean    @default(false)
@@ -275,6 +346,7 @@ model Case {
   hashSubmissions HashSubmission[]
   crawlConsents   CrawlConsent[]
   crawlFindings   CrawlFinding[]
+  partnerShareConsents PartnerShareConsent[]
 
   @@unique([userId, registrationKeyHash])
   @@index([createdAt])
@@ -438,6 +510,7 @@ model SubmittedUrl {
   crawlFinding CrawlFinding?    @relation(fields: [crawlFindingId], references: [id], onDelete: SetNull)
   notices      Notice[]
   portalTokens UrlPortalToken[]
+  verifications LinkVerification[]
 
   @@index([caseId])
   @@index([crawlSourceChecked])
@@ -458,6 +531,17 @@ model CrawlConsent {
   templateDigest     String
   signedAt           DateTime  @default(now())
   withdrawnAt        DateTime?
+  // What the authorisation covers (WP22). Defaults to the original scope.
+  scope              CrawlConsentScope @default(SEARCH_AND_NOTICE)
+  // Set on the full (SEARCH_AND_NOTICE) authorisation she signs when she
+  // turns a watch into a case ("Take it down"): the WATCH_ONLY authorisation
+  // it replaces. Findings recorded under that one stay covered by this one.
+  convertedFromId    String?
+  // Watch-and-verify WP24: when the case is resolved (or every link on it is
+  // verified removed), the live authorisation keeps her fingerprints in the
+  // crawler pool until this date (start + 12 months) instead of only while
+  // the case is open. Null while the case is open and no watch has started.
+  watchUntil         DateTime?
 
   case Case @relation(fields: [caseId], references: [id])
 
@@ -683,6 +767,36 @@ model CrawlPage {
   @@index([sourceId, nextDueAt])
   @@index([sourceId, lastFetchedAt])
   @@index([sourceId, priority, nextDueAt])
+}
+
+// Watch-and-verify WP23: one scheduled re-check that a link reported removed
+// really stayed down. When one of her links becomes REMOVED (she marks it, or
+// a platform's recorded reply says so), three checks are scheduled — one day,
+// three days and seven days later (attempt 1..3). The hourly retention cron
+// puts each due check into the crawler frontier as a priority row for its
+// host's source and later resolves the outcome from the crawler's report. No
+// URL is stored here: the check works from the SubmittedUrl it references,
+// which is why nothing in this table needs the retention blanking. Completed
+// rows are the admin case page's verification history; erased with the link.
+model LinkVerification {
+  id             String                 @id @default(uuid())
+  submittedUrlId String
+  dueAt          DateTime
+  // 1, 2 or 3: the +1/+3/+7 day check.
+  attempt        Int
+  outcome        LinkVerificationOutcome @default(PENDING)
+  checkedAt      DateTime?
+  // When the hourly sweep put the check into the crawler frontier; null until
+  // then. Findings are counted against this moment ("since the check was
+  // queued"), and a check that was never answered by a crawler visit gives
+  // up as UNKNOWN a bounded time after it.
+  enqueuedAt     DateTime?
+  createdAt      DateTime               @default(now())
+
+  submittedUrl SubmittedUrl @relation(fields: [submittedUrlId], references: [id])
+
+  @@index([outcome, dueAt])
+  @@index([submittedUrlId])
 }
 
 // Bearer keys for the crawler service. Only a sha256 of the key is stored
@@ -922,6 +1036,180 @@ model PlatformPartnerApplication {
 
   @@index([createdAt])
   @@index([status])
+}
+
+// Partner programme, part 2 (WP30): a platform that joined. Created only by
+// an admin approving a PlatformPartnerApplication; fingerprints are shared
+// with ACTIVE partners only, and only under each survivor's agreement
+// (PartnerShareConsent, WP31). Business data, never survivor data; the
+// takedown-channel email is encrypted at rest like the application's contact
+// fields. No foreign key to the application on purpose, like AuditLog's
+// actorId: the reference is provenance, the row outlives the link.
+model PlatformPartner {
+  id                        String                @id @default(uuid())
+  name                      String
+  primaryDomain             String                @unique
+  extraDomains              String[]              @default([])
+  status                    PlatformPartnerStatus @default(ACTIVE)
+  // The partner's agreed inbox for the takedown channel (WP33), encryptField.
+  channelEmailEncrypted     String?
+  createdFromApplicationId  String?               @unique
+  // Crawler monitoring of the partner's domains (WP33) starts only after an
+  // admin records the platform's written permission; the note says where it
+  // is filed. RecordedBy is the admin's session id.
+  crawlPermissionRecordedAt   DateTime?
+  crawlPermissionRecordedById String?
+  crawlPermissionNote         String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  keys PlatformPartnerKey[]
+  outcomes PartnerOutcome[]
+  channelSends PartnerChannelSend[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Only the sha256 of a partner key is stored (src/lib/partner-auth.ts); the
+// key itself is shown once at issue and never again. lastUsedAt is the last
+// successful partner-API request. Revoked keys stop working immediately.
+model PlatformPartnerKey {
+  id         String    @id @default(uuid())
+  partnerId  String
+  keyHash    String    @unique
+  label      String
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  partner PlatformPartner @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
+}
+
+// Partner programme part 2 (WP31): the survivor's agreement, given with one
+// tick on her case page, that Asmita may share her fingerprints with partner
+// platforms. One live (not withdrawn) row per case; withdrawn rows stay as
+// the record. No PDF and no signature: the tick is the agreement, and the
+// exact text she ticked against is pinned by templateId + templateDigest,
+// like every signed document. hashSubmissionIds records the fingerprints the
+// case page listed when she ticked; sharing itself follows the live
+// agreement and each fingerprint's own approval (Rule 2, partner-sharing
+// spec), so a fingerprint approved later is covered too and a rejected one
+// is never shared. A fingerprint is shared only while the case is an adult
+// case, the row is live and the fingerprint is approved.
+model PartnerShareConsent {
+  id                String    @id @default(uuid())
+  caseId            String
+  hashSubmissionIds String[]  @default([])
+  // The PARTNER_SHARING_CONSENT template ticked and a digest of its text.
+  templateId        String
+  templateDigest    String
+  agreedAt          DateTime  @default(now())
+  withdrawnAt       DateTime?
+
+  case Case @relation(fields: [caseId], references: [id])
+
+  @@index([caseId])
+}
+
+// Partner programme part 2 (WP32): the append-only feed of fingerprints the
+// partner API serves (GET /api/partner/v1/fingerprints). One row is written
+// when a fingerprint becomes shareable (ADD) or stops being shareable
+// (WITHDRAW) — consent given or withdrawn, hash approval or rejection, case
+// deletion, account erasure — so every partner that replays the feed in seq
+// order ends up holding exactly the currently shareable set and deletes what
+// Asmita withdraws (Rule 2).
+//
+// No partner id: every ACTIVE partner reads the same feed; the survivor's
+// agreement is with the programme as a whole, and the rows carry no URL, so
+// nothing is per-partner. No hash is stored here either: the feed reads the
+// fingerprint from HashSubmission at serve time and only while it is still
+// shareable, so a row can never leak a withdrawn fingerprint. No foreign
+// keys, like AuditLog.actorId and PlatformPartner.createdFromApplicationId:
+// a withdraw for a fingerprint or case that no longer exists is exactly the
+// row that must survive.
+model PartnerFeedEvent {
+  id            String               @id @default(uuid())
+  // Monotonic, from a Postgres sequence; the feed's cursor. Gaps are
+  // expected and harmless — pages are "seq > cursor".
+  seq           Int                  @unique @default(autoincrement())
+  fingerprintId String
+  type          PartnerFeedEventType
+  // "image" (PDQ) or "video" (vPDQ): the kind the API reports, from the
+  // fingerprint's algorithm.
+  kind          String
+  caseId        String?
+  caseRef       String?
+  createdAt     DateTime             @default(now())
+
+  @@index([fingerprintId])
+  @@index([createdAt])
+}
+
+// Partner programme part 2 (WP32): what a partner platform reported it did
+// with a fingerprint it received, or with a link on its own domains
+// (POST /api/partner/v1/outcomes). Shown on the admin case page; a "removed"
+// outcome on a reported SubmittedUrl updates that link's status exactly the
+// way an admin-recorded removal does.
+//
+// The URL is validated against the partner's own domains before the row is
+// written (a partner can never report about another platform's or another
+// partner's pages) and is encrypted at rest like every address Asmita holds;
+// urlHash is the same equality digest SubmittedUrl uses, so the match reuses
+// the submitted-link lookup. Ids are provenance, not integrity (no foreign
+// keys); partnerId is a real relation, like PlatformPartnerKey's.
+model PartnerOutcome {
+  id             String             @id @default(uuid())
+  partnerId      String
+  fingerprintId  String?
+  urlEncrypted   String?
+  urlHash        String?
+  submittedUrlId String?
+  caseId         String?
+  outcome        PartnerOutcomeType
+  note           String?
+  createdAt      DateTime           @default(now())
+
+  partner PlatformPartner @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
+  @@index([caseId])
+  @@index([fingerprintId])
+  @@index([urlHash])
+}
+
+// Partner programme part 2 (WP33): every email Asmita sent through a
+// platform partner's takedown channel — the copy of a dispatched notice
+// (WP33's "send it there in addition to the verified grievance contact")
+// and the alert when an analyst accepts a crawler finding on the partner's
+// domain. One row per successful send; dedupKey (the same sha256 key the
+// send carries to Resend) is unique, so a retry — including one on another
+// Worker isolate — sees the earlier send and never emails the channel
+// twice. urlId, findingId and caseId are provenance, not integrity (no
+// foreign keys), exactly like PartnerOutcome's; partnerId is a real
+// relation, like PartnerOutcome's. Nothing here holds an address or a
+// fingerprint value: the notice copy is the notice Asmita already sent, and
+// the alert email carries only the case reference, the page URL on the
+// partner's own domain and the fingerprint id.
+model PartnerChannelSend {
+  id        String                @id @default(uuid())
+  partnerId String
+  kind      PartnerChannelSendKind
+  // The SubmittedUrl the notice copy is about (NOTICE).
+  urlId     String?
+  // The CrawlFinding the alert is about (FINDING_ALERT).
+  findingId String?
+  caseId    String?
+  dedupKey  String                @unique
+  messageId String
+  sentAt    DateTime
+  createdAt DateTime              @default(now())
+
+  partner PlatformPartner @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
 }
 
 model DeletionJob {

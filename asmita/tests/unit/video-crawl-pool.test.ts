@@ -13,6 +13,7 @@ vi.mock("@/lib/db", () => ({ db: new Proxy({}, { get: () => { throw new Error("p
 import { buildCrawlPool, resolvePoolFingerprint } from "@/lib/crawl-pool";
 import { crawlMemory, eraseCrawlMemoryForCases, resetCrawlMemory, type MemoryFingerprint } from "@/lib/crawl-store";
 import { withdrawCrawlConsent } from "@/lib/crawl-consent";
+import * as store from "@/lib/store";
 import { encryptField } from "@/lib/encryption";
 
 const H1 = "a".repeat(64);
@@ -41,6 +42,13 @@ function seedVideo(overrides: Partial<MemoryFingerprint> = {}): void {
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", "");
   resetCrawlMemory();
+  // The pool keeps fingerprints only while the case is open or inside its
+  // re-upload window (watch-and-verify WP24), so the fixture needs an open
+  // case for the consent to cover anything.
+  store.cases.set("case-v", {
+    id: "case-v", referenceNumber: "ASMITA-2026-V0100", userId: "user-video",
+    createdAt: new Date().toISOString(), status: "OPEN", urls: [],
+  });
   crawlMemory().consents.push({
     id: "consent-1", caseId: "case-v", signedPdfEncrypted: "enc",
     hashSubmissionIds: ["hs-vid"], templateId: "t", templateDigest: "d",

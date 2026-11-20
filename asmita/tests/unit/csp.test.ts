@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildCsp, createCspNonce, withPageCsp } from "@/lib/csp";
+import {
+  buildCsp,
+  createCspNonce,
+  withPageCsp,
+  CSP_REPORT_ENDPOINT_NAME,
+  CSP_REPORT_PATH,
+  CSP_REPORTING_ENDPOINTS,
+  TRUSTED_TYPES_REPORT_ONLY,
+} from "@/lib/csp";
 
 function directive(policy: string, name: string) {
   return policy
@@ -11,7 +19,7 @@ function directive(policy: string, name: string) {
 describe("buildCsp", () => {
   it("allows only the nonce for inline scripts on production pages", () => {
     const policy = buildCsp({ nonce: "abc123", env: "production" });
-    expect(directive(policy, "script-src")).toBe("script-src 'self' 'nonce-abc123'");
+    expect(directive(policy, "script-src")).toBe("script-src 'self' 'nonce-abc123' 'report-sample'");
     expect(policy).not.toContain("'unsafe-eval'");
     expect(policy).not.toContain("'strict-dynamic'");
     expect(policy).toContain("upgrade-insecure-requests");
@@ -19,7 +27,7 @@ describe("buildCsp", () => {
 
   it("keeps the blob: worklet and Sarvam socket on /talk only", () => {
     const talk = buildCsp({ nonce: "abc123", voice: true, env: "production" });
-    expect(directive(talk, "script-src")).toBe("script-src 'self' 'nonce-abc123' blob:");
+    expect(directive(talk, "script-src")).toBe("script-src 'self' 'nonce-abc123' blob: 'report-sample'");
     expect(directive(talk, "connect-src")).toBe("connect-src 'self' wss://apps.sarvam.ai");
     const home = buildCsp({ nonce: "abc123", env: "production" });
     // blob: is allowed for MEDIA on every page (WP18: the fingerprint picker
@@ -29,9 +37,9 @@ describe("buildCsp", () => {
     expect(home).not.toContain("sarvam.ai");
   });
 
-  it("leaves the nonce-less policy (API routes, PDFs) as it was", () => {
+  it("leaves the nonce-less policy (API routes, PDFs) as it was, plus reporting", () => {
     const policy = buildCsp({ env: "production" });
-    expect(directive(policy, "script-src")).toBe("script-src 'self' 'unsafe-inline'");
+    expect(directive(policy, "script-src")).toBe("script-src 'self' 'unsafe-inline' 'report-sample'");
     expect(policy).not.toContain("'unsafe-eval'");
     expect(directive(buildCsp({ frameAncestors: "'self'", env: "production" }), "frame-ancestors")).toBe(
       "frame-ancestors 'self'",
@@ -40,9 +48,24 @@ describe("buildCsp", () => {
 
   it("keeps inline scripts and eval in development and ignores a nonce there", () => {
     const policy = buildCsp({ nonce: "abc123", env: "development" });
-    expect(directive(policy, "script-src")).toBe("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
+    expect(directive(policy, "script-src")).toBe("script-src 'self' 'unsafe-inline' 'unsafe-eval' 'report-sample'");
     expect(policy).not.toContain("nonce-");
     expect(policy).not.toContain("upgrade-insecure-requests");
+  });
+
+  it("allows the same-origin PDQ hashing worker, never a blob worker (WP42)", () => {
+    // The hashing worker is a real script file the bundler emits (dev,
+    // next build, vinext build), so 'self' covers it on every page; blob:
+    // would only be needed for an inline worker, which this is not.
+    for (const options of [
+      { nonce: "abc123", env: "production" },
+      { env: "production" },
+      { nonce: "abc123", voice: true, env: "production" },
+      { nonce: "abc123", env: "development" },
+    ]) {
+      const policy = buildCsp(options);
+      expect(directive(policy, "worker-src")).toBe("worker-src 'self'");
+    }
   });
 
   it("always locks down plugins, base URI, form targets and framing", () => {
@@ -53,6 +76,39 @@ describe("buildCsp", () => {
       expect(policy).toContain("form-action 'self'");
       expect(policy).toContain("frame-ancestors 'none'");
     }
+  });
+});
+
+describe("CSP violation reporting (WP46 S4/S5/S6)", () => {
+  it("adds 'report-sample' to script-src and style-src in every environment", () => {
+    for (const env of ["production", "development"]) {
+      const policy = buildCsp({ nonce: "abc123", env });
+      expect(directive(policy, "script-src")).toContain("'report-sample'");
+      expect(directive(policy, "style-src")).toBe("style-src 'self' 'unsafe-inline' 'report-sample'");
+    }
+  });
+
+  it("points both report-uri and report-to at the reporting endpoint", () => {
+    for (const env of ["production", "development"]) {
+      const policy = buildCsp({ nonce: "abc123", env });
+      expect(directive(policy, "report-uri")).toBe(`report-uri ${CSP_REPORT_PATH}`);
+      expect(directive(policy, "report-to")).toBe(`report-to ${CSP_REPORT_ENDPOINT_NAME}`);
+    }
+    // The name report-to uses is the one the Reporting-Endpoints header
+    // registers, on the same path the route serves.
+    expect(CSP_REPORTING_ENDPOINTS).toBe(`${CSP_REPORT_ENDPOINT_NAME}="${CSP_REPORT_PATH}"`);
+    expect(CSP_REPORT_PATH).toBe("/api/csp-report");
+  });
+
+  it("keeps Trusted Types in a separate report-only policy, never the enforced one", () => {
+    expect(TRUSTED_TYPES_REPORT_ONLY).toContain("require-trusted-types-for 'script'");
+    expect(TRUSTED_TYPES_REPORT_ONLY).toContain(`report-uri ${CSP_REPORT_PATH}`);
+    for (const env of ["production", "development"]) {
+      expect(buildCsp({ nonce: "abc123", env })).not.toContain("require-trusted-types-for");
+    }
+    // The enforced policy still has no 'strict-dynamic' (S4): the Sarvam
+    // voice worklet needs the current blob: source list.
+    expect(buildCsp({ nonce: "abc123", env: "production" })).not.toContain("'strict-dynamic'");
   });
 });
 
@@ -130,14 +186,19 @@ describe("withPageCsp", () => {
     // inline blob: worker in plain-http development, so worker-src allows
     // both, on this page only.
     const page = buildCsp({ nonce: "abc123", c2pa: true, env: "production" });
-    expect(directive(page, "script-src")).toBe("script-src 'self' 'nonce-abc123' 'wasm-unsafe-eval'");
+    // Merged behaviour: the WP46 'report-sample' source keyword is on every
+    // policy (S4), and the C2PA page additionally allows 'wasm-unsafe-eval'.
+    expect(directive(page, "script-src")).toBe("script-src 'self' 'nonce-abc123' 'report-sample' 'wasm-unsafe-eval'");
     expect(directive(page, "worker-src")).toBe("worker-src 'self' blob:");
 
     const dev = buildCsp({ c2pa: true, env: "development" });
     expect(directive(dev, "script-src")).toContain("'wasm-unsafe-eval'");
     expect(directive(dev, "worker-src")).toBe("worker-src 'self' blob:");
 
-    // Every other page keeps the untouched policy.
+    // Every other page keeps the untouched policy, except that WP42 (merged
+    // onto this branch) added worker-src 'self' on every page for the PDQ
+    // hashing Web Worker — still no wasm-unsafe-eval and no blob: worker
+    // outside the C2PA pages.
     for (const options of [
       { nonce: "abc123", env: "production" } as const,
       { env: "production" } as const,
@@ -145,7 +206,8 @@ describe("withPageCsp", () => {
     ]) {
       const policy = buildCsp(options);
       expect(policy).not.toContain("wasm-unsafe-eval");
-      expect(directive(policy, "worker-src")).toBeUndefined();
+      expect(directive(policy, "worker-src")).toBe("worker-src 'self'");
+      expect(directive(policy, "worker-src")).not.toContain("blob:");
     }
   });
 
@@ -158,7 +220,11 @@ describe("withPageCsp", () => {
     for (const pathname of ["/", "/talk", "/submit", "/case/abc"]) {
       const { policy } = withPageCsp(new Request(`https://meriasmita.org${pathname}`), pathname);
       expect(policy).not.toContain("wasm-unsafe-eval");
-      expect(directive(policy!, "worker-src")).toBeUndefined();
+      // WP42 (merged onto this branch): worker-src 'self' on every page for
+      // the PDQ hashing Web Worker; still no blob: worker outside the C2PA
+      // pages.
+      expect(directive(policy!, "worker-src")).toBe("worker-src 'self'");
+      expect(directive(policy!, "worker-src")).not.toContain("blob:");
     }
     // API routes still carry no page policy at all.
     expect(withPageCsp(new Request("https://meriasmita.org/api/csrf"), "/api/csrf").policy).toBeNull();

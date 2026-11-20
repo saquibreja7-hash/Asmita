@@ -19,6 +19,10 @@ const state = vi.hoisted(() => ({
   accessLog: [] as Array<Record<string, unknown>>,
   sent: [] as Array<{ to: string; subject: string; text: string; attachments?: { filename: string; content: Buffer }[]; key?: string }>,
   sendError: null as null | Error,
+  // WP33: the platform partners and the channel sends, for the partner
+  // channel copy of a dispatched representative notice.
+  partners: [] as Array<Record<string, unknown>>,
+  channelSends: [] as Array<Record<string, unknown>>,
 }));
 
 function matches(row: Row, where: Row | undefined): boolean {
@@ -100,6 +104,14 @@ const fakeDb = vi.hoisted(() => {
       },
     },
     adminAccessLog: { create: async ({ data }: { data: Row }) => { s().accessLog.push(data); return data; } },
+    // WP33: the partner lookup and the channel-send record.
+    platformPartner: {
+      findMany: async () => s().partners.map((partner) => ({ ...partner })),
+    },
+    partnerChannelSend: {
+      findFirst: async ({ where }: { where: Row }) => s().channelSends.find((row) => matches(row, where)) ?? null,
+      create: async ({ data }: { data: Row }) => { s().channelSends.push(data); return data; },
+    },
   };
   self.$transaction = async (fn: (tx: unknown) => unknown) => fn(self);
   return self;
@@ -146,6 +158,7 @@ function admin(sub = "admin-1") {
 function seed() {
   state.findings.clear(); state.urls.clear(); state.templates.clear(); state.hashes.clear(); state.platforms.clear(); state.cases.clear();
   state.consents.length = 0; state.accessLog.length = 0; state.sent.length = 0; state.sendError = null;
+  state.partners.length = 0; state.channelSends.length = 0;
   dispatchedNotices.clear();
   inMemoryAuditLog.length = 0;
 
@@ -469,6 +482,38 @@ describe("representative notice: dispatch", () => {
     expect(state.sent).toHaveLength(1);
   });
 
+  it("copies the dispatched notice to the platform partner's channel, once (WP33)", async () => {
+    // The page is on forum.example.com, so the partner that owns that
+    // domain gets a copy of the same notice at its channel address.
+    state.partners.push({
+      id: "pp-1", name: "Example Forum Partner", status: "ACTIVE", primaryDomain: "forum.example.com",
+      extraDomains: [], channelEmailEncrypted: encryptField("channel@forum.example.com"), crawlPermissionRecordedAt: null,
+    });
+    const digest = await previewDigest();
+    const result = await dispatchRepresentativeNotice({ ...base, contentDigest: digest });
+    expect(result).toMatchObject({ ok: true, dispatched: true, partnerChannel: { sent: true, partnerId: "pp-1" } });
+
+    // Two emails: the verified grievance contact, then the same notice at
+    // the channel address — same subject, same text, same attached PDF,
+    // its own idempotency key.
+    expect(state.sent).toHaveLength(2);
+    const [grievance, copy] = state.sent;
+    expect(grievance!.to).toBe("grievance@example.org");
+    expect(copy!.to).toBe("channel@forum.example.com");
+    expect(copy!.subject).toBe(grievance!.subject);
+    expect(copy!.text).toBe(grievance!.text);
+    expect(copy!.key).toMatch(/^partner-channel:[0-9a-f]{64}$/);
+    expect(copy!.key).not.toBe(grievance!.key);
+    expect(state.channelSends).toHaveLength(1);
+    expect(state.channelSends[0]).toMatchObject({ partnerId: "pp-1", kind: "NOTICE", urlId: "url-1", caseId: "case-1" });
+    expect(inMemoryAuditLog.find((entry) => entry.eventType === "PARTNER_CHANNEL_SENT")!.entityId).toBe("pp-1");
+
+    // A retry dispatches nothing new to either address.
+    const again = await dispatchRepresentativeNotice({ ...base, contentDigest: digest });
+    expect(again).toMatchObject({ ok: true, dispatched: false, partnerChannel: { sent: false, reason: "already_sent" } });
+    expect(state.sent).toHaveLength(2);
+  });
+
   it("a retry after an unrecorded send resends the stored bytes; Resend's refusal is email_already_sent and keeps the record", async () => {
     const digest = await previewDigest();
     await dispatchRepresentativeNotice({ ...base, contentDigest: digest });
@@ -654,5 +699,62 @@ describe("routes", () => {
     expect((await dispatchRoute(csrfPost("/x", { caseId: "case-1" }), ctx())).status).toBe(400);
     expect((await dispatchRoute(csrfPost("/x", { caseId: "case-1", contentDigest: "0".repeat(64), recipientEmail: "x@example.org" }), ctx())).status).toBe(400);
     expect(state.sent).toHaveLength(0);
+  });
+});
+
+describe("watch-only authorisations (WP22 \"Watch for my images\")", () => {
+  it("refuses preview and dispatch while the case's only live consent is watch-only", async () => {
+    state.consents[0].scope = "WATCH_ONLY";
+    await expectRefusal("watch_only_consent");
+    // Nothing was ever previewed, so nothing was revealed either.
+    expect(state.accessLog).toHaveLength(0);
+  });
+
+  it("between Take it down and the full authorisation tick, nothing can be sent", async () => {
+    // She converted the watch: the watch-only authorisation is withdrawn and
+    // no full one is signed yet.
+    state.consents[0] = { ...state.consents[0], scope: "WATCH_ONLY", withdrawnAt: new Date() };
+    await expectRefusal("consent_withdrawn");
+  });
+
+  it("after Take it down, the full authorisation covers the finding the watch recorded", async () => {
+    const auth = seedOf("CRAWL_AUTHORISATION");
+    state.consents[0] = {
+      ...state.consents[0], id: "consent-watch", scope: "WATCH_ONLY", withdrawnAt: new Date("2026-11-18T06:00:00Z"),
+    };
+    state.consents.push({
+      id: "consent-full", caseId: "case-1", hashSubmissionIds: ["h1", "h2"], templateId: "tpl-auth",
+      templateDigest: templateDigest(auth), signedAt: new Date("2026-11-18T07:00:00Z"), withdrawnAt: null,
+      scope: "SEARCH_AND_NOTICE", convertedFromId: "consent-watch",
+    });
+    state.findings.get("cf-1")!.crawlConsentId = "consent-watch";
+
+    const preview = await previewRepresentativeNotice(base);
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) throw new Error(preview.error);
+    // The notice relies on the full authorisation she signed on the spot.
+    expect(preview.notice.consentId).toBe("consent-full");
+    expect(preview.notice.pdfBody).toContain("consent-full");
+    expect(preview.notice.pdfBody).toContain("agreed to by the Complainant on 18 November 2026");
+
+    const sent = await dispatchRepresentativeNotice({ ...base, contentDigest: preview.notice.contentDigest });
+    expect(sent).toMatchObject({ ok: true, dispatched: true, transport: "email" });
+  });
+
+  it("a full authorisation that does not point back at the watch one does not cover its findings", async () => {
+    // A later authorisation signed without the conversion link (a stopped
+    // watch that never went through Take it down) never inherits the watch's
+    // findings: they were recorded under an authorisation that is gone.
+    const auth = seedOf("CRAWL_AUTHORISATION");
+    state.consents[0] = {
+      ...state.consents[0], id: "consent-watch", scope: "WATCH_ONLY", withdrawnAt: new Date("2026-11-18T06:00:00Z"),
+    };
+    state.consents.push({
+      id: "consent-full", caseId: "case-1", hashSubmissionIds: ["h1", "h2"], templateId: "tpl-auth",
+      templateDigest: templateDigest(auth), signedAt: new Date("2026-11-18T07:00:00Z"), withdrawnAt: null,
+      scope: "SEARCH_AND_NOTICE",
+    });
+    state.findings.get("cf-1")!.crawlConsentId = "consent-watch";
+    await expectRefusal("consent_withdrawn");
   });
 });

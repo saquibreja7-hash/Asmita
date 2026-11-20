@@ -14,10 +14,16 @@ const db = vi.hoisted(() => {
     $queryRaw: fn(),
     crawlFinding: { findUnique: fn() },
     findingEmbedding: { findUnique: fn(), create: fn() },
+    // On the merged tree the hash review runs inside the transaction (WP32:
+    // the partner feed follows the decision there), so the transaction
+    // client carries the hash submission too. No partner fixtures here:
+    // the feed sync's read returns nothing and no event is ever written.
+    hashSubmission: { findMany: fn(), update: fn() },
   };
   return {
     tx,
     crawlConsent: { findMany: fn() },
+    case: { findMany: fn() },
     hashSubmission: { findUnique: fn(), findFirst: fn(), update: fn() },
     crawlFinding: { findMany: fn() },
     findingEmbedding: { findMany: fn(), deleteMany: fn(), create: fn() },
@@ -58,11 +64,16 @@ beforeEach(() => {
   vi.stubEnv("ENABLE_CRAWLER", "true");
   vi.stubEnv("ENABLE_SSCD", "true");
   db.crawlConsent.findMany.mockResolvedValue([{ id: "consent-1", caseId: "case-1", hashSubmissionIds: ["hs-1"], signedAt: new Date("2026-11-01T00:00:00Z") }]);
+  // The pool keeps fingerprints only while the case is open or inside its
+  // re-upload window (watch-and-verify WP24), so the id resolves while the
+  // fixture's case is open.
+  db.case.findMany.mockResolvedValue([{ id: "case-1", status: "OPEN" }]);
   db.hashSubmission.findUnique.mockResolvedValue({ id: "hs-1", caseId: "case-1", crawlPoolId: "fp_1", hashEncrypted: "x", quality: 80, status: "APPROVED", algorithm: "PDQ" });
   db.tx.$queryRaw.mockResolvedValue([{ id: "consent-1" }]);
   db.tx.crawlFinding.findUnique.mockResolvedValue({ id: "cf-1", hashSubmissionId: "hs-1", reviewStatus: "APPROVED" });
   db.tx.findingEmbedding.findUnique.mockResolvedValue(null);
   db.tx.findingEmbedding.create.mockResolvedValue({});
+  db.tx.hashSubmission.findMany.mockResolvedValue([]);
   db.$transaction.mockImplementation(async (fn: (client: typeof db.tx) => unknown) => fn(db.tx));
 });
 
@@ -164,7 +175,7 @@ describe("a fingerprint's rejection deletes its embeddings, best-effort (Prisma 
   it("deletes them after the status change, and never fails the rejection when the cleanup errors", async () => {
     const submissionRow = { id: "hs-1", caseId: "case-1", algorithm: "PDQ", hashDigest: "d", quality: 80, status: "PENDING_REVIEW", flaggedForReview: false, flagReason: null, submittedAt: new Date("2026-11-01T00:00:00Z"), videoFrameCount: null, videoDurationSec: null };
     db.hashSubmission.findUnique.mockResolvedValue(submissionRow);
-    db.hashSubmission.update.mockResolvedValue({ ...submissionRow, status: "REJECTED" });
+    db.tx.hashSubmission.update.mockResolvedValue({ ...submissionRow, status: "REJECTED" });
     db.findingEmbedding.deleteMany.mockResolvedValue({ count: 2 });
 
     const submission = await reviewHashSubmission({ hashSubmissionId: "hs-1", decision: "reject", reviewerId: "admin-1" });
@@ -179,7 +190,7 @@ describe("a fingerprint's rejection deletes its embeddings, best-effort (Prisma 
     // An approval cleans nothing.
     db.findingEmbedding.deleteMany.mockClear();
     db.hashSubmission.findUnique.mockResolvedValue({ ...submissionRow, id: "hs-2", hashDigest: "d2" });
-    db.hashSubmission.update.mockResolvedValue({ ...submissionRow, id: "hs-2", status: "APPROVED" });
+    db.tx.hashSubmission.update.mockResolvedValue({ ...submissionRow, id: "hs-2", status: "APPROVED" });
     await reviewHashSubmission({ hashSubmissionId: "hs-2", decision: "approve", reviewerId: "admin-1" });
     expect(db.findingEmbedding.deleteMany).not.toHaveBeenCalled();
   });

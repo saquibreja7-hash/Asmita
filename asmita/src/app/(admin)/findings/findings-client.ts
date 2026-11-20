@@ -64,6 +64,7 @@ const COMMON: Record<string, string> = {
   finding_expired: "This finding passed the 30-day retention period and its addresses were deleted.",
   url_expired: "This link passed the 30-day retention period and its address was deleted.",
   consent_withdrawn: "The survivor withdrew her authorisation for the crawler, or this finding was recorded under an earlier one. Nothing can be sent for it.",
+  watch_only_consent: "Watch only: she has not asked for removal yet. Her watch becomes a case when she chooses \"Take it down\". Nothing was sent.",
 };
 
 export const REVEAL_ERRORS: Record<string, string> = {

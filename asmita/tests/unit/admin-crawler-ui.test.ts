@@ -196,7 +196,7 @@ describe("label controls (WP37)", () => {
 describe("notice step and error messages", () => {
   const state: NoticeGateInput = {
     reviewStatus: "APPROVED", representativeNoticeSentAt: null, noticeAttemptUnconfirmed: false,
-    crawlConsentWithdrawn: false, urlsPurged: false, linkStatus: "NOTICE_QUEUED", crawlerEnabled: true,
+    crawlConsentWithdrawn: false, watchOnly: false, urlsPurged: false, linkStatus: "NOTICE_QUEUED", crawlerEnabled: true,
     labels: { aiMade: { set: false, setAt: null }, sexual: { set: false, setAt: null }, possibleMinor: { set: false, setAt: null, clearedAt: null, clearReason: null } },
   };
   const render = (over: Partial<typeof state> = {}) =>
@@ -316,6 +316,7 @@ describe("safety note and list helpers", () => {
     representativeNoticeSentAt: null,
     noticeAttemptUnconfirmed: false,
     crawlConsentWithdrawn: false,
+    watchOnly: false,
     labels: { aiMade: { set: false, setAt: null }, sexual: { set: false, setAt: null }, possibleMinor: { set: false, setAt: null, clearedAt: null, clearReason: null } },
     currentAdminSetMinorLabel: false,
     ...over,
