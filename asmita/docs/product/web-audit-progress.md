@@ -467,6 +467,110 @@ A27 and S12.
   box, the platform fieldset, the declaration checkbox — matching the order
   of the existing status hints.
 
+## WP42 — image and video fingerprinting off the main thread — 2026-11-19
+
+Branch `perf/hash-worker`. Audit items P1, P2, P13 (performance): take image
+and video PDQ fingerprinting off the page's main thread.
+
+**What changed**
+
+- P1: a module Web Worker (`src/lib/pdq/hash.worker.ts`) now does the PDQ
+  hashing. The form hands the worker her chosen file; the worker decodes it
+  (`createImageBitmap`), draws it to an `OffscreenCanvas` at the image's own
+  size and reads the pixels — the same full-resolution path the main thread
+  used, so hashes stay bit-identical (the unit tests pin the worker's
+  message handler to the direct function on the Meta reference vectors).
+  Only `{ hash, quality }` comes back.
+- P2: the video sampler (`src/lib/pdq/vpdq.ts`) keeps its frame selection
+  exactly (same seeks, same seconds, same keep pipeline) and hands each drawn
+  frame to the same worker as a transferable `ImageBitmap`; the worker reads
+  its pixels on an `OffscreenCanvas` and posts back only the hash and the
+  quality. The page canvas, object URL and frame bitmaps are freed as before.
+- P13: `SubmitForm` has no static import from the pdq modules any more (only
+  type imports, which the compiler erases). It loads
+  `src/lib/pdq/hash-file.ts` — the hashing entry, which also carries the
+  worker client, PDQ and vPDQ — only when a file is chosen, and loads it
+  again at draft time only when fingerprints exist. Verified in the builds:
+  the submit page's chunk contains none of the hashing code; the worker is
+  a separate file in the `next` build (Turbopack), the vinext/Cloudflare
+  build (emitted as `dist/client/_next/static/workers/…`) and `next dev`.
+- Fallback: where `Worker`, `OffscreenCanvas` or `createImageBitmap` is
+  missing, or a worker fails to load (blocked or 404 — then it is not
+  retried for the page's lifetime), the exact previous main-thread path
+  runs: the image fallback in `hash-file.ts`, the frame fallback in the
+  video sampler. A worker that answered once and later crashed is rebuilt on
+  the next request. She never loses a fingerprint to a worker that cannot
+  run.
+- CSP: `worker-src 'self'` added to every policy (`src/lib/csp.ts`). No
+  `blob:` — both bundlers emit the worker as a real same-origin file, in dev
+  and in both production builds (verified by loading it in the e2e specs
+  with a 200).
+- One-line product fix found while verifying: the video entry now waits one
+  macrotask before its "ready" line replaces the reading line, because the
+  worker's async tail let React batch the final 100% progress tick (which
+  WP40 A8 deliberately always keeps) with the completion update — the
+  reading line never visibly reached 100% otherwise. Frame selection,
+  hashes and the request bodies are unchanged.
+- No user-facing string changed; nothing else in the UI moved.
+
+**What was not verified**
+
+- The full Playwright run is the separate verify step. The WP's own specs
+  and the neighbouring ones that exercise the same page ran here against a
+  throwaway local Postgres 17: `hash-flow.spec.ts` (5), `video-hash-flow.spec.ts`
+  (3), `filing.spec.ts` (3) — all passed on chromium.
+- No real phone and no real 12-megapixel photo were available; the offload is
+  structural (decode + hash happen on the worker thread), but the
+  milliseconds saved were not measured on real hardware.
+- Safari and Firefox were not driven; their fallback paths are the previous
+  main-thread code, covered by the unit tests and the source pins.
+- The `/check-image` page (`ImageChecker.tsx`) was not touched — WP43 owns it.
+
+**Sentences that need the owner's approval**
+
+- None. No user-facing sentence changed.
+
+**Decisions made on my own**
+
+- The worker decodes her file itself (the audit allowed "createImageBitmap on
+  the main thread (or in the worker from the File)"): decoding is the
+  heaviest step for a 12-megapixel photo, so it moved too.
+- The worker protocol has a third request kind, `pixels`, next to `file` and
+  `bitmap`: it is the pure inner step both other kinds reduce to, and it is
+  what lets the unit tests drive the real message handler with the Meta
+  reference vectors in Node, where no DOM APIs exist. The page never posts
+  it; the client posts only `file` and `bitmap`.
+- Replies are validated strictly (known id, 64-lowercase-hex hash, integer
+  quality 0..100, fixed error codes); a malformed reply or an unknown id
+  terminates the worker and fails that request with a fixed code, which the
+  callers treat as "hash on the main thread instead". No request hangs: the
+  worker answers every well-formed message, including its own handler
+  throwing, with a fixed refusal code.
+- `review-sign` still carries `vpdq.ts` in its chunk (it imports
+  `bestFrameQuality` statically, unchanged since WP18); P13 names the
+  submit form, and shrinking another page's chunk was not in this package.
+- Pre-existing e2e flake found and worked around in the specs, not the app:
+  after `fill()` the links textarea keeps focus; if anything is clicked
+  within the 600 ms debounce window (WP40 A7), the blur flushes the checks,
+  which renders the checks list and removes the platform question — a large
+  reflow that moves the page under the pointer mid-click, so the click
+  misses the declaration checkbox. It reproduces at HEAD (verified with the
+  WP42 changes stashed) and the worker makes it likelier by finishing
+  hashing inside the same window. The specs now wait for the app's own
+  `#url-checks` list before clicking (`hash-flow`, `video-hash-flow`,
+  `filing`), and pin `prefers-reduced-motion: reduce` like the accessibility
+  spec, which makes the site's smooth scrolling instant. No assertion was
+  weakened. The underlying product edge — a real survivor clicking within
+  600 ms of typing can have the page reflow under her pointer, and the
+  missed click can land on whatever moved there — is left for the owner to
+  schedule; it is WP40-era behaviour, not introduced here.
+- Also pre-existing on this host and left as found (verified failing at
+  HEAD, untouched by this WP): `forms-focus.spec.ts`'s alert assertion sees
+  Next's own route announcer as a second `role=alert` (strict-mode
+  violation), and its sign-form checkbox click has the same blur-reflow
+  race on the review-sign page.
+- `crawler/` needed nothing: it imports `pdq.ts` only, whose exports and
+  `computePdqHash` are untouched; its contract test pins exactly that.
 ## WP49 — the survivor can tick the boxes, and our alerts are found — 2026-11-20
 
 Branch `fix/forms-focus`. Fixes the Playwright failures of this branch's
@@ -574,6 +678,58 @@ memory-backed dev server, before any click).
   `node:22-bookworm` image (rollback: `docker tag e13726ca6041
   node:22-bookworm`). No crawler source, test or config changed; the same
   15 tests then passed in the re-run.
+
+## WP50 — WP49's fixes merged into the hash-worker branch — 2026-11-20
+
+Branch `perf/hash-worker`. This branch was cut from `fix/forms-focus`
+before WP49, so its full verify run
+(`logs/verify-hash-worker/e2e.log`: 11 failures) carried the same two
+causes WP49 fixed: nine "Clicking the checkbox did not change its state"
+(the blur-commit/reflow race on `/submit`) and two strict-mode violations
+where an unscoped `getByRole("alert")` also matched Next.js's own route
+announcer.
+
+**What changed**
+
+- `git merge origin/fix/forms-focus` (a merge; no rebase, no
+  force-push): the WP49 fixes now sit beside WP42's worker hashing. The
+  two WPs touch different regions of `SubmitForm.tsx` and compose with
+  no source conflict — the links box keeps its pause-only settling
+  checks and the platform question is asked from the links as they
+  stand, while the hashing module still loads lazily and PDQ/vPDQ still
+  run in the Web Worker. The only merge conflict was this progress file
+  itself (both branches had appended their section at the end); both
+  sections were kept, in WP order.
+- Nothing further needed fixing: after the merge, every failure in that
+  log is gone and no new one appeared. The checkbox race WP42's entry
+  had flagged as made likelier by the worker is closed by WP49's fix on
+  this branch too.
+
+**What was not verified**
+
+- The full Playwright run (its mobile project included) and the worker
+  smoke are the separate verify step; the chromium project of every
+  spec that failed in that log was run here and passed (23/23 across
+  `crawler-journey`, `database-hardening`, `escalation-ladder`,
+  `forms-focus`, `hash-flow`, `notice-integrity`, `reporting-audit`,
+  `reporting-journey-polish`), and both packages' full checks passed
+  (crawler 350 tests, asmita 1288, every pdq/vpdq suite among them,
+  golden hashes untouched and bit-identical).
+- Screen-reader behaviour is reasoned from the ARIA semantics, not
+  listened to with a running screen reader.
+
+**Sentences that need the owner's approval**
+
+- None: no user-facing string changed.
+
+**Decisions made on my own**
+
+- The merge's only conflict was this progress file: both WP entries
+  kept, WP42 before WP49, since the file is ordered by WP number.
+- The log's 11 failures are counted as nine checkbox ticks plus two
+  alert-locator violations; the extra checkbox failure beside the ten
+  recorded on `fix/forms-focus` is the second `escalation-ladder` test,
+  same cause, so it needed no separate fix.
 Owner-approved web best-practice audit (20 November 2026, Saquib). One section
 per work package, appended by the lane that delivered it. Line numbers refer to
 master 92d8e82 and may have moved.
