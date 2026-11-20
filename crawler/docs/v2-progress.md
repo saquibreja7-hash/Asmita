@@ -1015,3 +1015,20 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The full Playwright suite runs in the separate verify step.
 
 
+
+
+## Merge
+
+### WP61. Resolve the master merge on feat/legal-pages — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, on the merge commit `8a793bf`). This was a merge-conflict resolution, not feature work: master had moved on (PRs #77–#83: SSCD, crawler v3 lanes, partner pages, assistant safety, fonts, web audit), and a merge of `origin/master` into `feat/legal-pages` (the WP29 legal-pages branch) had been started and left with conflicts. No feature code was added, no test was changed, weakened or skipped, and `reviewedByLegal` was not set anywhere.
+
+**Conflicts.** Exactly one file was conflicted: `asmita/src/i18n/hi-review-status.json` (`excludedFromTranslation`). Resolution keeps both sides' intent: master's new entry `/for-platforms - written for platform Trust & Safety and grievance teams, English only` (from the platform-partners PR) and this branch's WP29 `/privacy` entry (s01–s16 translated 2026-06-16; the sections added or reworded on 19 November 2026 are English only, per the owner's instruction). Valid JSON, every entry from both sides, no duplicates (8 entries; the base file had 7).
+
+**Decision recorded** (both sides touched the same region, so the union had to choose one `/privacy` wording): master's `/privacy - legal document, English only` was the unchanged merge-base value — master only added `/for-platforms` above it — while this branch deliberately rewrote the `/privacy` line as part of WP29 to record the partial Hindi pass and the owner's English-only instruction for the WP29 sections. The branch's wording was kept because it is the more specific statement of the same exclusion (the privacy page stays English-only for the untranslated parts) and dropping it would have lost WP29's recorded intent; master's change (the `/for-platforms` entry) is kept in full. The `/privacy` line remains under `excludedFromTranslation`, so master's behaviour — the privacy page is not translated — is unchanged either way.
+
+**Everything else merged clean.** Only three other files were touched by both sides (`asmita/src/i18n/en.json`, `hi.json`, `crawler/docs/v2-progress.md`) and git merged them without conflict; the merged progress doc keeps both sides' entries (master's v3/SSCD/web-audit sections and this branch's Legal pages/WP29 section). Spot checks confirm both sides' content survived: `en.json` carries the branch's `privacy.*` WP29 sections and master's platform-partners/chat keys; the branch's `tests/unit/legal-pages.test.ts` and master's new suites both run.
+
+**Checks (run, not assumed).** Full `check.sh` (Node 22, both packages) on the resolved tree, which is exactly the tree committed as the merge: `crawler` — npm ci, lint, type-check, **58 test files / 628 tests passed**, build ok (`dist/main.js`, `browser-worker.js`, `decoder-worker.js`, `sscd-worker.js` all emitted). `asmita` — npm ci, `prisma generate`, lint 0 errors, type-check clean, `prisma validate` ok, **168 test files / 1517 tests passed**. Both sides' suites run and pass together in the merged tree: this branch's `legal-pages.test.ts` and master's new suites (SSCD, crawler v3, platform-partners, chat, web-audit) all green — nothing was dropped or weakened to make the merge compile.
+
+**Commits.** Merge commit `8a793bf` "Merge master into feat/legal-pages; resolve conflicts" (parents: `32cc3ed` WP29, `4a7df76` master #83), then this entry. Not pushed, per the work package. Not run: the Playwright e2e suite (check.sh does not include it and the work package defines done as check.sh passing); `npm run build` for asmita (not part of the checks).
