@@ -196,7 +196,7 @@ export function HomeChat({
           <div role="log" className="space-y-3">
             <p>
               <span className="sr-only">{copy["chat.assistant"]}: </span>
-              <span className="inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] bg-[var(--surface-muted)] px-4 py-2 text-sm leading-[1.55] text-[var(--ink)]">
+              <span className="chat-bubble inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] bg-[var(--surface-muted)] px-4 py-2 text-sm leading-[1.55] text-[var(--ink)]">
                 {copy["chat.greeting"]}
               </span>
             </p>
@@ -204,7 +204,7 @@ export function HomeChat({
               <p key={i} className={m.role === "user" ? "text-right" : ""}>
                 <span className="sr-only">{m.role === "user" ? copy["chat.you"] : copy["chat.assistant"]}: </span>
                 <span
-                  className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] px-4 py-2 text-left text-sm leading-[1.55] text-[var(--ink)] ${
+                  className={`chat-bubble inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] px-4 py-2 text-left text-sm leading-[1.55] text-[var(--ink)] ${
                     m.role === "user" ? "bg-[var(--brand-soft)]" : "bg-[var(--surface-muted)]"
                   }`}
                 >
