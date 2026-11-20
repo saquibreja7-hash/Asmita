@@ -57,8 +57,8 @@ describe("toCrawlError", () => {
   it("keeps only a code, never the message", () => {
     const raw = Object.assign(new Error("getaddrinfo ENOTFOUND secret-host.example"), { code: "ENOTFOUND" });
     const e = toCrawlError(raw);
-    expect(e.code).toBe("dns_failed");
-    expect(e.message).toBe("dns_failed");
+    expect(e.code).toBe("dns_not_found");
+    expect(e.message).toBe("dns_not_found");
     expect(JSON.stringify({ m: e.message, c: e.code })).not.toContain("secret-host");
     expect(toCrawlError(new Error("https://x.example/ failed")).code).toBe("internal");
     expect(toCrawlError({ cause: { code: "UND_ERR_HEADERS_TIMEOUT" } }).code).toBe("headers_timeout");

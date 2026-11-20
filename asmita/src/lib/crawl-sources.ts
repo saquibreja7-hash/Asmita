@@ -3,7 +3,7 @@ import { z } from "zod";
 import { writeAuditLog, writeAuditLogs } from "@/lib/audit";
 import { crawlMemory, type MemoryCrawlSource } from "@/lib/crawl-store";
 import { hostAndParents, isNeverCrawlHost, normalizeNeverCrawlHost } from "@/lib/crawl-never";
-import { defaultSourceDelayMs, reportedSourcePageBudget } from "@/lib/crawler-flags";
+import { defaultSourceDelayMs, reportedSourcePageBudget, sscdEnabled } from "@/lib/crawler-flags";
 import { checkLink } from "@/lib/link-check";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
@@ -122,11 +122,15 @@ function isDevNoDb() {
 /** What the crawler service gets: enabled sites only, no admin details. */
 export async function listEnabledCrawlSources() {
   type Row = { id: string; domain: string; pageBudget: number; delayMs: number; origin: string; hops: number; render: string };
-  const toContract = (row: Row) => ({
+  const toContract = (row: Row, matched: boolean | null) => ({
     id: row.id, kind: "site" as const, domain: row.domain, pageBudget: row.pageBudget, delayMs: row.delayMs,
     origin: row.origin.toLowerCase() as "admin" | "reported" | "discovered",
     hops: row.hops,
     render: row.render.toLowerCase() as "http" | "browser" | "auto",
+    // SSCD's scope gate (ADR 008, WP28): a source the app has flagged as
+    // having an accepted finding. Served only while the second layer is on,
+    // so the sources contract is unchanged while the switch is off.
+    ...(matched === null ? {} : { matched }),
   });
   let rows: Row[];
   if (isDevNoDb()) {
@@ -143,7 +147,34 @@ export async function listEnabledCrawlSources() {
       orderBy: { domain: "asc" },
     });
   }
-  return rows.map(toContract).sort((a, b) => a.domain.localeCompare(b.domain));
+  // Sorted here (the memory path is unsorted), so the ids array below and the
+  // answer carry the same order the contract always had.
+  rows.sort((a, b) => a.domain.localeCompare(b.domain));
+  // The matched-source flag: one lookup over the sources' APPROVED findings.
+  let matchedBySource: Map<string, boolean> | null = null;
+  if (sscdEnabled() && rows.length > 0) {
+    matchedBySource = new Map();
+    const ids = rows.map((row) => row.id);
+    let findingRows: Array<{ sourceId: string }>;
+    if (isDevNoDb()) {
+      findingRows = [...crawlMemory().findings.values()]
+        .filter((finding) => finding.reviewStatus === "APPROVED" && ids.includes(finding.sourceId))
+        .map((finding) => ({ sourceId: finding.sourceId }));
+    } else if (usesWorkerKysely()) {
+      findingRows = await getWorkerDb().selectFrom("CrawlFinding")
+        .select("sourceId").where("sourceId", "in", ids).where("reviewStatus", "=", "APPROVED")
+        .distinct().execute();
+    } else {
+      const { db } = await import("@/lib/db");
+      findingRows = await db.crawlFinding.findMany({
+        where: { sourceId: { in: ids }, reviewStatus: "APPROVED" },
+        select: { sourceId: true },
+        distinct: ["sourceId"],
+      });
+    }
+    for (const row of findingRows) matchedBySource.set(row.sourceId, true);
+  }
+  return rows.map((row) => toContract(row, matchedBySource ? (matchedBySource.get(row.id) ?? false) : null));
 }
 
 /** The host findings under this source must be on, while the source exists and is enabled; else null. */

@@ -44,21 +44,30 @@ describe("link flood", () => {
     // than FRONTIER_CLAIM_LIMIT.
     expect(s.batchPeak as number).toBeLessThanOrEqual(CLAIM_LIMIT);
     expect(s.batchPeak as number).toBeGreaterThan(0);
-    // Each page offered 40,000 links; at most 300 per page were even considered.
-    expect(s.linksDropped as number).toBeGreaterThanOrEqual(BUDGET * (40_000 - LINKS_PER_PAGE) - 40_000);
+    // Each page offered 40,000 links; at most 300 per page were even
+    // considered. WP9: the source's robots.txt names no sitemap, so three
+    // of the fifteen budget slots went to sitemap probes (two here, one on
+    // the parent domain) and twelve pages were crawled.
+    expect(s.linksDropped as number).toBeGreaterThanOrEqual((BUDGET - 3) * (40_000 - LINKS_PER_PAGE) - 40_000);
     // The app's side of the cap: every report held at most a batch of pages,
     // and the stored frontier grew by at most LINKS_PER_PAGE per fetched
     // page (plus the seed).
     expect(api.reports.length).toBeGreaterThan(0);
     for (const report of api.reports) expect(report.count).toBeLessThanOrEqual(CLAIM_LIMIT);
     expect(api.pages.size).toBeLessThanOrEqual(1 + BUDGET * LINKS_PER_PAGE);
-    // The daily budget stopped the source for the day.
+    // The daily budget stopped the source for the day on the crawler's side
+    // (probes included). The app cannot see the probes, so its own count of
+    // fetched pages is BUDGET - 3 short and it still has those slots.
     expect(api.claims.map((c) => c.limit).every((limit) => limit <= CLAIM_LIMIT)).toBe(true);
-    expect(api.claimFrontier("src-flood", CLAIM_LIMIT)).toEqual([]);
+    expect(api.claimFrontier("src-flood", CLAIM_LIMIT)).toHaveLength(3);
     // The real image on the flood site was still found and delivered.
     expect(api.posted.map((f) => f.fingerprintId)).toEqual(["fp-flood"]);
     expect(s.findingsUnsent).toBe(0);
     expect(result.exitCode).toBe(0);
-    expect(fx.site.requests.filter((r) => r.host === FLOOD && r.path !== "/robots.txt" && !r.path.startsWith("/img/")).length).toBe(BUDGET);
+    expect(
+      fx.site.requests.filter(
+        (r) => r.host === FLOOD && r.path !== "/robots.txt" && !r.path.startsWith("/img/") && r.path !== "/sitemap.xml" && r.path !== "/sitemap_index.xml",
+      ).length,
+    ).toBe(BUDGET - 3);
   }, 60_000);
 });
