@@ -50,10 +50,12 @@ export default async function VolunteerPage() {
             <div className="mt-10 grid gap-6 md:grid-cols-2">
               {ROLES.map((role) => (
                 <div key={role} className="card p-7">
-                  <span className="icon-tile" aria-hidden>
-                    <Icon name={ROLE_FIELDS[role].icon} />
-                  </span>
-                  <h3 className="mt-4 text-[20px] font-semibold text-[var(--ink)]">{t(locale, ROLE_FIELDS[role].title)}</h3>
+                  <div className="flex items-center gap-3">
+                    <span className="icon-tile" aria-hidden>
+                      <Icon name={ROLE_FIELDS[role].icon} />
+                    </span>
+                    <h3 className="text-[20px] font-semibold text-[var(--ink)]">{t(locale, ROLE_FIELDS[role].title)}</h3>
+                  </div>
                   <p className="mt-3 text-[16px] leading-[1.6] text-[var(--text)]">{t(locale, ROLE_FIELDS[role].body)}</p>
                   <p className="muted mt-4 text-sm leading-[1.6]">
                     <Icon name="clock" size={14} className="mr-1 inline align-[-2px]" /> {t(locale, ROLE_FIELDS[role].time)}

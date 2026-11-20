@@ -168,7 +168,7 @@ export function VolunteerForm({ locale }: { locale: Locale }) {
         </Field>
       </fieldset>
 
-      <fieldset className="space-y-4" aria-describedby="volunteer-languages-hint">
+      <fieldset className="space-y-4">
         <legend className="eyebrow">{t(locale, "org.volunteer.f.languages")}</legend>
         <div className="grid gap-3 sm:grid-cols-3" id="volunteer-languages" tabIndex={-1}>
           {languageOptions.map((language) => (

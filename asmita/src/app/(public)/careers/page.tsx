@@ -87,10 +87,10 @@ export default async function CareersPage() {
             <h2 id="why-heading" className="section-title">
               {t(locale, "org.careers.whyTitle")}
             </h2>
-            <p className="reading-col mt-5 max-w-2xl text-[17px] leading-[1.75] text-[var(--text)]">
+            <p className="mt-5 max-w-2xl text-[17px] leading-[1.75] text-[var(--text)]">
               {t(locale, "org.careers.whyIntro")}
             </p>
-            <div className="callout reading-col mt-8 max-w-2xl">
+            <div className="callout mt-8 max-w-xl">
               <div>
                 <p className="text-[15px] font-normal">{t(locale, "org.careers.equalOps")}</p>
               </div>
