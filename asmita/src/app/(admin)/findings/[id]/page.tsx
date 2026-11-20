@@ -3,11 +3,12 @@ import { getCrawlFindingSummary } from "@/lib/crawl-findings";
 import { crawlerEnabled } from "@/lib/crawler-auth";
 import { adminFor } from "../../page-permission";
 import { CrawlerOffBanner } from "../CrawlerOffBanner";
+import { LabelControls } from "../LabelControls";
 import { NoticeStep } from "../NoticeStep";
 import { RevealAddress } from "../RevealAddress";
 import { ReviewControls } from "../ReviewControls";
 import { SafetyNote } from "../SafetyNote";
-import { noticeLabel, platformLabel, reviewLabel, shortDate, matchLine, borderlineScoreLine } from "../finding-view";
+import { labelList, noticeLabel, platformLabel, reviewLabel, shortDate, matchLine, borderlineScoreLine } from "../finding-view";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,8 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
       </section>
     );
   }
+
+  const minorLabelSet = finding.labels.possibleMinor.set;
 
   return (
     <section>
@@ -80,7 +83,25 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
         </dd>
         <dt className="muted">Notice</dt>
         <dd>{noticeLabel(finding)}</dd>
+        <dt className="muted">Labels</dt>
+        <dd>{labelList(finding).length === 0 ? "None" : labelList(finding).join(" · ")}</dd>
       </dl>
+
+      <h2 className="mt-8">Labels</h2>
+      <p className="muted mt-2 max-w-2xl text-sm">
+        Analyst labels for the review record. &quot;Possible minor&quot; is a safety switch: setting it stops the adult flow
+        for this finding at once — it cannot be approved or dismissed, no representative notice can be sent, and it
+        leaves the review queue for the minors protocol. Only a second, different admin with a recorded reason can
+        clear it.
+      </p>
+      <div className="mt-4">
+        <LabelControls
+          crawlerEnabled={enabled}
+          currentAdminSetMinorLabel={finding.currentAdminSetMinorLabel}
+          findingId={finding.id}
+          labels={finding.labels}
+        />
+      </div>
 
       <h2 className="mt-8">Address</h2>
       <div className="mt-4">
@@ -96,11 +117,12 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
           distance={finding.distance}
           findingId={finding.id}
           needsSecondReview={finding.needsSecondReview}
+          possibleMinorLabel={minorLabelSet}
           reviewStatus={finding.reviewStatus}
         />
       </div>
 
-      {(finding.reviewStatus === "APPROVED" || finding.crawlConsentWithdrawn) && (
+      {(finding.reviewStatus === "APPROVED" || finding.reviewStatus === "MINOR_PROTOCOL" || finding.crawlConsentWithdrawn) && (
         <>
           <h2 className="mt-8">Notice</h2>
           <p className="muted mt-2 max-w-2xl text-sm">

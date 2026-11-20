@@ -230,6 +230,11 @@ describe("Not now and Stop watching", () => {
       urlDigest: "digest-1", distance: 8, quality: 90, sscdSimilarity: null, method: "PDQ", firstSeenAt: new Date(), lastSeenAt: new Date(),
       sourceId: "src-1", runId: "run-1", reviewStatus: "APPROVED", reviewedById: "admin-1", reviewedAt: new Date(),
       secondReviewedById: null, secondReviewedAt: null,
+      labelAiMade: false, labelAiMadeById: null, labelAiMadeAt: null,
+      labelSexual: false, labelSexualById: null, labelSexualAt: null,
+      labelPossibleMinor: false, labelPossibleMinorById: null, labelPossibleMinorAt: null,
+      labelPossibleMinorClearedById: null, labelPossibleMinorClearedAt: null, labelPossibleMinorClearReason: null,
+      minorProtocolBefore: null,
     });
     crawlMemory().findings.set("cf-2", {
       id: "cf-2", caseId: record.id, hashSubmissionId: "hs-1", crawlConsentId: "consent-watch",
@@ -237,6 +242,11 @@ describe("Not now and Stop watching", () => {
       urlDigest: "digest-2", distance: 8, quality: 90, sscdSimilarity: null, method: "PDQ", firstSeenAt: new Date(), lastSeenAt: new Date(),
       sourceId: "src-1", runId: "run-1", reviewStatus: "CANDIDATE", reviewedById: null, reviewedAt: null,
       secondReviewedById: null, secondReviewedAt: null,
+      labelAiMade: false, labelAiMadeById: null, labelAiMadeAt: null,
+      labelSexual: false, labelSexualById: null, labelSexualAt: null,
+      labelPossibleMinor: false, labelPossibleMinorById: null, labelPossibleMinorAt: null,
+      labelPossibleMinorClearedById: null, labelPossibleMinorClearedAt: null, labelPossibleMinorClearReason: null,
+      minorProtocolBefore: null,
     });
     store.cases.get(record.id)!.urls.push({
       id: "url-1", domain: "forum.example.com", platformName: "Example Forum", status: "NOTICE_QUEUED",
