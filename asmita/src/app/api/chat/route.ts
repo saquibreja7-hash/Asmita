@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { CHAT_SYSTEM_PROMPT, PROMPT_CANARY } from "@/lib/chat-knowledge";
+import { CHAT_SYSTEM_PROMPT } from "@/lib/chat-knowledge";
+import { classifyChatRisk, leaksInstructions, sanitizeModelReply, type ChatGuard } from "@/lib/chat-guards";
+import { t } from "@/lib/i18n";
 import { verifyCsrfRequest } from "@/lib/csrf";
-import { containsUrlLikeText } from "@/lib/url-like-text";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 import { logSecurityEvent } from "@/lib/security-log";
@@ -12,54 +13,24 @@ import { logSecurityEvent } from "@/lib/security-log";
  * each message; we add the instructions and knowledge (chat-knowledge.ts) and
  * ask Sarvam's model for a reply with SARVAM_CHAT_KEY, which never leaves the
  * Worker. Messages pass through here but are never stored or logged.
+ *
+ * Crisis, minors, misuse, personal data and links are answered by code, from
+ * chat-guards.ts, before the model is called. The fixed replies live in i18n
+ * (chat.reply.*) so every sentence is reviewable in one place.
  */
 
 const SARVAM_CHAT_API = "https://api.sarvam.ai/v1/chat/completions";
 const ROUTE = "/api/chat";
 
-// The chat never takes links. Answered here, without calling the model.
-const LINK_REPLY = {
-  en: "Please do not send links here. Links go only into the form at meriasmita.org/start, never into this chat. That keeps you safe. Would you like me to explain how the form works?",
-  hi: "कृपया यहाँ लिंक न भेजें। लिंक केवल meriasmita.org/start पर दिए गए फ़ॉर्म में ही जाएँ, इस चैट में नहीं। इससे आपकी सुरक्षा बनी रहती है। क्या मैं बताऊँ कि फ़ॉर्म कैसे काम करता है?",
+// The fixed reply each code-side guard chooses.
+const GUARD_REPLY_KEY: Record<ChatGuard, Parameters<typeof t>[1]> = {
+  crisis: "chat.reply.crisis",
+  "minor-self": "chat.reply.minor",
+  "minor-other": "chat.reply.minorOther",
+  misuse: "chat.reply.misuse",
+  "personal-data": "chat.reply.personalData",
+  link: "chat.reply.link",
 };
-
-// A person who says they are under 18 gets the minor pathway from here, not
-// from the model, and keeps getting it for the rest of the chat.
-const MINOR_REPLY = {
-  en: "Thank you for telling me. None of this is your fault. Because you are under 18, a special team helps with this: please call CHILDLINE 1098, free and open 24 hours, in many Indian languages. You can also use takeitdown.ncmec.org, which removes images without the image being sent to anyone. Is there one adult you trust, like a parent or a teacher, you could tell today?",
-  hi: "मुझे बताने के लिए धन्यवाद। इसमें आपकी कोई गलती नहीं है। 18 साल से कम उम्र होने की वजह से एक खास टीम इसमें मदद करती है: कृपया चाइल्डलाइन 1098 पर कॉल करें, यह मुफ़्त है, 24 घंटे खुली रहती है और कई भारतीय भाषाओं में बात करती है। आप takeitdown.ncmec.org का भी उपयोग कर सकते हैं, जो तस्वीर किसी को भेजे बिना उसे हटाने में मदद करता है। क्या कोई ऐसा बड़ा है जिस पर आप भरोसा करते हैं, जैसे माता-पिता या कोई टीचर, जिसे आप आज बता सकें?",
-};
-
-// A stated age under 18 ("I am 15", "16 years old", "मैं 15 साल", "main 16 saal").
-// Narrow on purpose: a missed case still reaches the model, whose instructions
-// carry the same pathway.
-const UNDER_18 = [
-  // "I am 17 so...", "I'm 15", "my age is 14": any number under 18 after these
-  // words, unless what follows shows it is not an age ("5 minutes", "9 months").
-  /\b(i am|i'm|im|my age is|aged?)\s*(1[0-7]|[5-9])(?!\d)(?![.,]\d)(?!\s*(minutes?|mins?|hours?|hrs?|days?|weeks?|months?|km|kms|kg|kgs|feet|ft|cm|rupees|rs|%|th|st|nd|rd|am|pm|o'clock)\b)/i,
-  /\b(1[0-7]|[5-9])\s*(years?|yrs?)\s*old\b/i,
-  /\b(just\s+)?turned\s*(1[0-7]|[5-9])\b/i,
-  // A school student: "I'm in class 10", "I study in 9th standard", "class 11 student".
-  /\b(i am|i'm|im|i study|i'm studying|studying)\s*(in\s*)?(class|std|standard|grade)\s*([5-9]|1[0-2])(th)?\b/i,
-  /\b(i am in|i'm in|im in|i study in|i'm studying in|studying in)\s*([5-9]|1[0-2])th\s*(class|std|standard|grade)\b/i,
-  /\b(class|std|standard|grade)\s*([5-9]|1[0-2])(th)?\s*(student|mein|me|main)\b/i,
-  /(मैं|मेरी उम्र|उम्र)\s*(1[0-7]|[5-9])\s*(साल|वर्ष)/,
-  /(कक्षा|क्लास)\s*([5-9]|1[0-2])\s*(में|की|का)/,
-  /\b(main|mai|meri umar|meri umr|umar|umr)\s*(1[0-7]|[5-9])\s*(saal|sal|varsh)\b/i,
-];
-function statesUnder18(text: string) {
-  return UNDER_18.some((pattern) => pattern.test(text));
-}
-
-// Sent instead of any reply that repeats the instructions.
-const PRIVATE_REPLY = {
-  en: "I cannot share how I am set up. I am here to help with images or videos shared without consent. What would you like to know?",
-  hi: "मैं यह नहीं बता सकती कि मुझे कैसे सेट किया गया है। मैं बिना सहमति के शेयर की गई तस्वीरों या वीडियो में मदद के लिए यहाँ हूँ। आप क्या जानना चाहेंगे?",
-};
-
-function leaksInstructions(reply: string) {
-  return reply.includes(PROMPT_CANARY) || /# (Who you are|Safety rules|How to write|Support directory)|Never break these/i.test(reply);
-}
 
 const schema = z.object({
   locale: z.enum(["en", "hi"]).default("en"),
@@ -82,6 +53,10 @@ function looksLikeMedia(text: string) {
 function envLimit(name: string, fallback: number) {
   const value = Number(process.env[name]);
   return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function replyWith(text: string) {
+  return NextResponse.json({ reply: text }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -134,14 +109,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
-  const userTurns = messages.filter((m) => m.role === "user");
-  if (userTurns.some((m) => statesUnder18(m.content))) {
-    return NextResponse.json({ reply: MINOR_REPLY[locale] }, { headers: { "cache-control": "no-store" } });
+  // Crisis words are answered for the message they appear in, so the chat
+  // stays usable afterwards; the model still sees the history. Every other
+  // guard looks at every turn she has sent, because the browser replays the
+  // history with each request and one turn must keep its protection for the
+  // rest of the chat.
+  const lastRisk = classifyChatRisk(last.content);
+  if (lastRisk === "crisis") {
+    return replyWith(t(locale, GUARD_REPLY_KEY.crisis));
   }
   // Every user turn, not only the last: the browser sends the history, so an
-  // earlier turn could carry a link the page never let through.
-  if (userTurns.some((m) => containsUrlLikeText(m.content))) {
-    return NextResponse.json({ reply: LINK_REPLY[locale] }, { headers: { "cache-control": "no-store" } });
+  // earlier turn must keep its protection for the rest of the chat. Assistant
+  // turns are never classified — the assistant is allowed to name the site's
+  // own pages in its replies.
+  for (const turn of messages) {
+    if (turn.role !== "user") continue;
+    const risk = classifyChatRisk(turn.content);
+    if (risk && risk !== "crisis") {
+      return replyWith(t(locale, GUARD_REPLY_KEY[risk]));
+    }
   }
 
   const apiKey = process.env.SARVAM_CHAT_KEY;
@@ -191,6 +177,13 @@ export async function POST(request: Request) {
     console.error("[chat] Sarvam returned no reply text");
     return NextResponse.json({ error: "chat_unavailable" }, { status: 502 });
   }
-  const safeReply = leaksInstructions(reply) ? PRIVATE_REPLY[locale] : reply.trim().slice(0, 1500);
-  return NextResponse.json({ reply: safeReply }, { headers: { "cache-control": "no-store" } });
+  // The output guard: instructions never repeat, and links and numbers that
+  // are not on the site's own pages are stripped in code before they reach her.
+  let safeReply: string;
+  if (leaksInstructions(reply)) {
+    safeReply = t(locale, "chat.reply.private");
+  } else {
+    safeReply = sanitizeModelReply(reply) || t(locale, "chat.reply.safe");
+  }
+  return replyWith(safeReply);
 }
