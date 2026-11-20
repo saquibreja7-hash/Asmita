@@ -281,3 +281,72 @@ function assertEmailSent(result: unknown): EmailSendResult {
   }
   return response.data ? { id: response.data.id, data: response.data } : (result as EmailSendResult);
 }
+
+// ─── Organization pages (docs/org/spec.md, WP56) ─────────────────────
+
+export function getOrgInboxEmail() {
+  return process.env.ORG_INBOX_EMAIL || "";
+}
+
+/**
+ * Notification to the organization inbox for a public-form submission.
+ * With ORG_INBOX_EMAIL unset (local development), the message is logged
+ * instead of sent — nothing is lost while no inbox exists.
+ */
+export async function sendOrgInboxNotification(subject: string, text: string) {
+  const inbox = getOrgInboxEmail();
+  if (!inbox) {
+    console.warn(JSON.stringify({ event: "org_inbox_notification", subject }));
+    return { id: "org-inbox-logged" };
+  }
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-org-inbox" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to: inbox,
+    subject,
+    text,
+  }));
+}
+
+/** A short acknowledgement to a person who submitted a public org form. */
+export async function sendOrgAcknowledgement(to: string, subject: string, lines: string[]) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-org-acknowledgement" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text: ["Hello,", "", ...lines.flatMap((line) => [line, ""]), "Meri Asmita"].join("\n"),
+    html: renderEmailHtml({ title: subject, paragraphs: lines, footerNotes: ["You are receiving this because you submitted a form on meriasmita.org."] }),
+  }));
+}
+
+/** The newsletter double-opt-in confirmation email. */
+export async function sendNewsletterConfirmEmail(to: string, confirmUrl: string) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-newsletter-confirm" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject: "Confirm your Meri Asmita newsletter",
+    text: [
+      "Hello,",
+      "",
+      "Please confirm that you want to receive the Meri Asmita newsletter.",
+      "Open this link to confirm:",
+      confirmUrl,
+      "",
+      "If you did not sign up, you can ignore this email. Nothing else is sent until you confirm.",
+    ].join("\n"),
+    html: renderEmailHtml({
+      title: "Confirm your subscription",
+      paragraphs: ["Please confirm that you want to receive the Meri Asmita newsletter."],
+      cta: { label: "Confirm subscription", url: confirmUrl },
+      footerNotes: ["If you did not sign up, you can ignore this email. Nothing else is sent until you confirm."],
+    }),
+  }));
+}

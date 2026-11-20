@@ -8,6 +8,7 @@ import type { PlatformDirectoryEntry } from "@/lib/platforms";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { pruneRateLimitBuckets } from "@/lib/rate-limit";
 import { countFailedDeletionJobs } from "@/lib/case-ops";
+import { runOrgRetention } from "@/lib/org-retention";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
     deliverability?: ReturnType<typeof summarizeDeliverability>;
     rateLimitBucketsPruned?: number;
     failedDeletions?: number;
+    /** Org pages (WP56): closed submissions and stale newsletter sign-ups. */
+    orgRetention?: { submissionsDeleted: number; unconfirmedSubscribersDeleted: number };
     error?: string;
   } = { startedAt: startedAt.toISOString() };
 
@@ -58,6 +61,10 @@ export async function GET(request: NextRequest) {
     }
 
     result.rateLimitBucketsPruned = await pruneRateLimitBuckets();
+
+    // Org pages retention (WP56): closed or declined submissions 12 months
+    // after closing, unconfirmed newsletter sign-ups after 7 days.
+    result.orgRetention = await runOrgRetention(startedAt);
 
     // Account deletions that failed are retried every hourly sweep; a person
     // needs to look if any are still failing.
