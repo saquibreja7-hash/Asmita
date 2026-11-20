@@ -1077,3 +1077,32 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The full Playwright suite runs in the separate verify step.
 
 
+## Merge lane
+
+### WP68. Merge master into feat/csp-reporting-headers; resolve conflicts — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP68 is defined outside this spec (owner instruction, 20 November 2026): not feature work but the merge of `origin/master` (1826dcc, lab-bench PR #94) into `feat/csp-reporting-headers` (39f07dc, WP46), whose PR could not merge because master had moved on — crawler v3 WP9-WP16 and its review fixes, SSCD WP28, C2PA WP38, platform partners, lab-bench, assistant safety, web audit WP41/WP53 and more.
+
+**What was done**
+
+- Exactly one file conflicted, `asmita/src/lib/csp.ts`, and the resolution keeps both sides' intent: the branch's WP46 CSP reporting (the `CSP_REPORT_*` constants, the separate report-only Trusted Types policy, the unconditional `'report-sample'` in script-src and style-src, and `report-uri`/`report-to` closing the enforced policy) plus master's WP38 `c2pa` option (`'wasm-unsafe-eval'` in script-src and `worker-src 'self' blob:`, scoped to `/check-image` and `/c2pa/*`). The enforced policy on a C2PA page is the union of both.
+- Everything else auto-merged. The three merged i18n files (`en.json`, `hi.json`, `hi-review-status.json`) were verified programmatically against both parents: valid JSON, no duplicate keys, every key from both sides present. `crawler/docs/v2-progress.md` itself merged clean and keeps both sides' entries; no entry was appended before the merge commit, per the work package's own ordering.
+- No feature work added; nothing touched beyond the one conflict and the one test assertion below.
+
+**Decisions, recorded per the standing rule**
+
+- One existing assertion changed on purpose (spec rule 6; the reason is also in the merge commit message): `asmita/tests/unit/csp.test.ts` pinned the exact script-src of the C2PA page from master's WP38 (`script-src 'self' 'nonce-abc123' 'wasm-unsafe-eval'`). The merged policy also carries the branch's unconditional `'report-sample'`, so the assertion now expects the union string `script-src 'self' 'nonce-abc123' 'report-sample' 'wasm-unsafe-eval'` — still an exact match on a strictly larger policy, not a loosened test.
+- In script-src, `'report-sample'` is placed before the conditional `'wasm-unsafe-eval'`, keeping the unconditional keywords first; every other exact-string assertion from either side passes unchanged.
+- The single-file editor diagnostic "Cannot find name 'process'" on `csp.ts` was judged a project-less-LSP false positive (the same `process.env.NODE_ENV` expression pre-dates the merge on both sides) and confirmed so by the clean project type-check.
+
+**Tests** (final `check.sh` run on the committed merge tree, Node 22)
+
+- `crawler`: lint, type-check, 58 test files / 628 tests, build — all passed.
+- `asmita`: lint, type-check, `prisma validate`, 173 test files / 1576 tests — all passed.
+
+**Not done or not verified**
+
+- The Playwright e2e suite (`npm run test:e2e`) was not part of this package's checks and was not run; the checks run are the spec's full checks above.
+- No rebase and no push, both forbidden by the work package; the merge commit `9d5cd2f` carries both parents (39f07dc, 1826dcc).
