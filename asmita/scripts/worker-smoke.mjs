@@ -157,10 +157,11 @@ try {
   await db.end();
   if (stored.rows[0].n !== 2) throw new Error(`Expected 2 stored delivery proofs, found ${stored.rows[0].n}`);
 
-  // ADR 002 is not accepted, so the route that sends images to OpenAI stays
-  // closed in production even with the flag set.
+  // The provenance check is live in production (owner decision of
+  // 19 November 2026, ADR 002 "Decision recorded"): the route exists and
+  // refuses a request without a CSRF token before reading any body.
   const provenance = await fetch(`http://127.0.0.1:${port}/api/check-image`, { method: "POST" });
-  if (provenance.status !== 404) throw new Error(`/api/check-image returned ${provenance.status}, expected 404`);
+  if (provenance.status !== 403) throw new Error(`/api/check-image returned ${provenance.status}, expected 403 (CSRF)`);
   // Links can be added before the email code once the eligibility questions
   // are answered; without them, /submit still sends people to /start.
   const eligible = await fetch(`http://127.0.0.1:${port}/submit`, { headers: { cookie: "asmita_eligible=1" }, redirect: "manual" });

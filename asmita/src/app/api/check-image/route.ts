@@ -8,25 +8,54 @@ import { provenanceCheckEnabled } from "@/lib/dev-flags";
 
 // Server-side content-provenance check.
 //
-// WARNING: this route sends survivor images to a third party (OpenAI). ADR 002
-// is still PROPOSED and blocked on legal sign-off. Never set
-// ENABLE_PROVENANCE_CHECK=true in staging or production, and never widen what
-// this route sends, until ADR 002 is accepted by counsel. Production builds
-// keep it off regardless (provenanceCheckEnabled in src/lib/dev-flags.ts).
+// This route sends the image she chose to a third party (OpenAI's
+// POST /v1/content_provenance_checks). The owner accepted exactly this one
+// route on 19 November 2026 (see the "Decision recorded" note in
+// docs/adr/002-consented-encrypted-media.md); the evidence-vault part of
+// ADR 002 stays blocked. It runs only when ENABLE_PROVENANCE_CHECK=true
+// (set in the production Worker vars), and every call requires the
+// adults-only gate and an explicit per-check consent tick, both enforced
+// here on the server. The result never gates whether a survivor receives help.
 //
-// This route forwards the image to OpenAI's content-provenance endpoint to read
-// C2PA credentials and the SynthID watermark. It is a documented exception to the
-// "no media on our server" rule (see docs/adr/002-consented-encrypted-media.md):
+// What may leave this server is exactly the image she consented to send:
 // the image is held only in memory for the duration of the request, forwarded
-// over TLS, and never written to disk, database, or logs. We keep no copy.
+// over TLS to OpenAI, and never written to disk, database, or logs — no
+// bytes, no filename, no hash of the image is stored or logged by us. The
+// only network call is the one to OpenAI; the OpenAI response is reduced to
+// the fields the page shows. OPENAI_API_KEY is a Worker secret, never in
+// code or vars; without it the route answers "not configured" (503).
 //
-// Guarded by: CSRF, IP rate limit, an adults-only confirmation, and an explicit
-// consent flag acknowledging the image is sent to OpenAI. The detection result
-// never gates whether a survivor receives help.
+// Guarded by: CSRF, a per-IP Postgres rate-limit bucket (shared, with the
+// in-memory fallback every route uses), the content-length pre-check below,
+// a strict image-type allowlist plus a magic-byte sniff of the first bytes,
+// and the 20 MB size cap.
 
 const OPENAI_URL = "https://api.openai.com/v1/content_provenance_checks";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 20 * 1024 * 1024; // 20 MB, well under OpenAI's 50 MiB limit.
+// Multipart overhead (boundaries, the two small fields): 64 KiB is ample.
+const MAX_BODY_BYTES = MAX_BYTES + 64 * 1024;
+
+/**
+ * Magic bytes of the three allowed image types. The declared MIME type is
+ * client-controlled, so the bytes are sniffed before anything is relayed.
+ */
+function looksLikeImage(bytes: Uint8Array, type: string): boolean {
+  if (type === "image/jpeg") {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (type === "image/png") {
+    return (
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+      bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+    );
+  }
+  // WebP: RIFF....WEBP
+  return (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  );
+}
 
 type OpenAiResult = {
   type?: string;
@@ -45,6 +74,12 @@ export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) {
     await logSecurityEvent({ event: "csrf_failed", route: "/api/check-image" });
     return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
+  }
+
+  // Reject an oversized declared body before it is read into memory.
+  const declaredLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
   }
 
   const ip = getClientIp(request);
@@ -81,6 +116,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_size" }, { status: 413 });
   }
 
+  // The declared type is client-controlled: sniff the first bytes in memory
+  // so this route can never be used to relay non-image data to OpenAI.
+  const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if (!looksLikeImage(head, file.type)) {
+    await logSecurityEvent({ event: "media_payload_rejected", route: "/api/check-image", reason: "magic_bytes" });
+    return NextResponse.json({ error: "not_an_image" }, { status: 415 });
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "provider_unconfigured" }, { status: 503 });
@@ -106,16 +149,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "provider_error" }, { status: 502 });
   }
 
-  const payload = (await openaiResponse.json()) as { results?: OpenAiResult[] };
+  const payload = (await openaiResponse.json().catch(() => null)) as { results?: OpenAiResult[] } | null;
+  if (!payload || typeof payload !== "object") {
+    return NextResponse.json({ error: "provider_error" }, { status: 502 });
+  }
   const results = payload.results ?? [];
 
+  // Reduced to exactly the fields the page shows; nothing else of the
+  // provider's response is passed through.
   const checks = results.map((r) => ({
-    type: r.type ?? "unknown",
+    type: typeof r.type === "string" ? r.type : "unknown",
     detected: r.outcome === "detected",
-    validationState: r.validation_state ?? null,
-    issuer: r.issuer ?? null,
-    model: r.model ?? null,
-    generatedAt: r.generated_at ?? null,
+    validationState: typeof r.validation_state === "string" ? r.validation_state : null,
+    model: typeof r.model === "string" ? r.model : null,
   }));
 
   // "Detected" here means a real signal (a credential or watermark), not a guess.
