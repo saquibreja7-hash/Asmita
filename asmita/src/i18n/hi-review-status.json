@@ -8,7 +8,7 @@
   "excludedFromTranslation": [
     "/faq - pending translation",
     "/for-platforms - written for platform Trust & Safety and grievance teams, English only",
-    "/privacy - legal document, English only",
+    "/privacy - sections s01-s16 were translated 2026-06-16 (commit 03eb3df); the sections added or reworded on 19 November 2026 (WP29: fingerprints, video, crawler, watch, partner-sharing, sscd, platform-partners, and the edited tldr/s01/s03/s04/s05/s07/s08/s09/s10/s13 keys) are English only, per the owner's instruction, until a Hindi pass is run on them",
     "/terms - legal document, English only",
     "/case/[caseId]/sign - declaration is legally consequential, English only",
     "/review-sign - as above",
