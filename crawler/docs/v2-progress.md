@@ -1048,4 +1048,29 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
 
+### WP60. Merge master into perf/hash-worker; resolve conflicts — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP60 is not feature work and not in `full-crawler-spec.md`: this branch had an open PR that could not merge because several PRs had landed on master (assistant safety review WP48, platform partners, the SSCD second layer WP28, crawler v3 lane merges WP9-WP16, the pdq-benchmark tool). A merge of `origin/master` into `perf/hash-worker` was started and left with conflicts; this WP finished it. No behaviour was added, dropped or weakened on either side.
+
+**What was resolved**
+
+- Two files conflicted, both the same shape: `asmita/src/i18n/en.json` and `asmita/src/i18n/hi.json`. Around the `talk.*` voice strings, the branch (WP40, web audit) had added a new key `talk.call.heading` (the sr-only h2 the call screen's focus management moves to, used by `TalkToUs.tsx`, `talk-copy.ts`, `hi-review-status.json` and listed by `tests/unit/forms-focus.test.ts`), while master (WP48, the Safety by Design review of the voice assistant) had rewritten the `talk.error.busy` message to point callers at the alternatives (`meriasmita.org/start`, the Get help page, the helpline) — the same rewrite it had already made to `talk.error.unavailable`, which merged cleanly beside it.
+- Resolution keeps both sides' intent: the branch's `talk.call.heading` key stays (both locales), and `talk.error.busy` carries master's WP48 text (both locales). The branch had not modified the busy text — the merge base, the branch and the base text were identical there — so master's rewrite is the only change on that line and no branch behaviour is lost; the sibling `talk.error.unavailable` already carried master's text after the clean auto-merge, so the pair stays consistent.
+- Verified programmatically: both files parse as strict JSON, no duplicate keys (object_pairs_hook check), 1014 keys each, and the merged key set of each is exactly the union of the two parents' key sets (1005 branch + 1006 master, heavily overlapping) — nothing from either side dropped; `en` and `hi` hold identical key sets.
+- Everything else the merge touched was already auto-staged (206 files: the SSCD layer, platform partners pages, crawler v3 files, docs, migrations); no other file carried conflict markers after resolution (checked across the tree). The auto-merged progress docs keep both sides' entries.
+
+**Checks** (run on the committed merge tree, Node 22 via the n22 helper)
+
+- `crawler`: lint, type-check, 58 test files / 628 tests, build ok.
+- `asmita`: lint, type-check, `prisma validate` ok, 166 test files / 1531 tests all passed.
+- `check.sh` printed ALL CHECKS PASSED.
+
+**Not done or not verified**
+
+- The merge commit and this entry were not pushed (per the WP; the PR merge is a separate step for the owner).
+- The full Playwright e2e suite is not part of `check.sh` and was not run here; `tests/unit/forms-focus.test.ts`, the one vitest suite that lists the resolved `talk.call.heading` key, passed with the rest.
+- No conflict decision beyond the recorded one was needed: `hi-review-status.json`, mentioned by the WP brief as a likely JSON conflict, had in fact merged cleanly before this session started.
+
 
