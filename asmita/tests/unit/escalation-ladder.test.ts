@@ -15,6 +15,9 @@ describe("buildLadder", () => {
   });
 
   it("waits for the platform until its deadline", () => {
+    // PLATFORM_DEADLINE_HOURS is 24 since WP26 (owner decision, 19 November
+    // 2026): the ladder shows the 24 hours Asmita's notices ask for, not the
+    // Rule 3(2)(b) two-hour period the notices state as law.
     const l = buildLadder({ startedAt: sent, status: "NOTICE_SENT", now: after(PLATFORM_DEADLINE_HOURS - 1) });
     expect(l!.complaintOpen).toBe(false);
     expect(states(l)).toEqual(["sent:current", "deadline:upcoming", "complaint:upcoming", "appeal:upcoming"]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { cloneElement, isValidElement, useState, type ReactElement } from "react";
 import { csrfFetch } from "@/lib/client-csrf";
 import type { Locale } from "@/lib/i18n";
 
@@ -55,7 +55,15 @@ export function FeedbackForm({ locale }: { locale: Locale }) {
   }
 
   return (
-    <div className="mt-10 space-y-8">
+    <form
+      className="mt-10 space-y-8"
+      onSubmit={(e) => {
+        // Enter submits like a click (WP40 A9); the request body is unchanged.
+        e.preventDefault();
+        if (submitting) return;
+        void submit();
+      }}
+    >
       <Row
         label={say("Case reference", "केस संदर्भ")}
         hint={say("Optional. Only if you want to tie the feedback to a specific case.", "वैकल्पिक। केवल यदि आप प्रतिक्रिया को किसी केस से जोड़ना चाहते हैं।")}
@@ -116,8 +124,7 @@ export function FeedbackForm({ locale }: { locale: Locale }) {
       <div className="pt-2 text-center">
         <button
           className="btn btn-primary"
-          onClick={submit}
-          type="button"
+          type="submit"
           disabled={submitting}
         >
           {submitting ? say("Sending…", "भेज रहे हैं…") : say("Submit feedback", "प्रतिक्रिया भेजें")}
@@ -126,7 +133,7 @@ export function FeedbackForm({ locale }: { locale: Locale }) {
           {say("This form does not ask for your name or email. Do not include links or intimate content.", "यह फ़ॉर्म आपका नाम या ईमेल नहीं माँगता। लिंक या निजी सामग्री न लिखें।")}
         </p>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -141,6 +148,12 @@ function Row({
   htmlFor: string;
   children: React.ReactNode;
 }) {
+  // The hint is part of the field's description, so it gets an id the field
+  // points at (WP40 A23).
+  const hintId = `${htmlFor}-hint`;
+  const field = isValidElement(children)
+    ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, { "aria-describedby": hintId })
+    : children;
   return (
     <div>
       <label
@@ -149,8 +162,8 @@ function Row({
       >
         {label}
       </label>
-      <p className="muted mt-1 text-sm leading-[1.6]">{hint}</p>
-      <div className="mt-3">{children}</div>
+      <p id={hintId} className="muted mt-1 text-sm leading-[1.6]">{hint}</p>
+      <div className="mt-3">{field}</div>
     </div>
   );
 }

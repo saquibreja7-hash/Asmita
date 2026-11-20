@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // WP17 on the Prisma (Node) path, against a mocked client in the style of
-// crawler-prisma-path.test.ts: a VPDQ fingerprint never enters the pool nor
-// resolves by pool id (spec rule 3), and account erasure clears the frame
+// crawler-prisma-path.test.ts: a VPDQ fingerprint enters the pool as its
+// video entry and resolves by pool id (video-fingerprints spec WP20, which
+// replaces the pre-WP20 exclusion), and account erasure clears the frame
 // list in the same update that removes the pool id. Placeholder hashes only.
 
 const m = vi.hoisted(() => ({
@@ -58,6 +59,8 @@ beforeEach(() => {
     escalation: { deleteMany: empty() },
     urlPortalToken: { deleteMany: empty() },
     crawlFinding: { findMany: vi.fn().mockResolvedValue([]), deleteMany: empty() },
+    // WP28 (ADR 008): the erasure deletes the case's SSCD embeddings too.
+    findingEmbedding: { deleteMany: empty() },
     crawlConsent: { deleteMany: empty() },
     hashSubmission: { updateMany: m.hashUpdateMany, deleteMany: m.hashDeleteMany, findMany: vi.fn().mockResolvedValue([]) },
     feedback: { deleteMany: empty() },
@@ -70,24 +73,31 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("crawler pool, Prisma path", () => {
-  it("never lists a VPDQ fingerprint and asks for the algorithm column", async () => {
+  it("lists a VPDQ fingerprint as its video entry and asks for the frame columns", async () => {
     m.hashFindMany.mockResolvedValue([
-      { id: "hs-img", caseId: "case-1", crawlPoolId: "fp_1", hashEncrypted: encryptField(PDQ_A), quality: 70, status: "APPROVED", algorithm: "PDQ" },
-      { id: "hs-vid", caseId: "case-1", crawlPoolId: "fp_2", hashEncrypted: encryptField(PDQ_B), quality: 90, status: "APPROVED", algorithm: "VPDQ" },
+      { id: "hs-img", caseId: "case-1", crawlPoolId: "fp_1", hashEncrypted: encryptField(PDQ_A), quality: 70, status: "APPROVED", algorithm: "PDQ", videoFramesEncrypted: null },
+      {
+        id: "hs-vid", caseId: "case-1", crawlPoolId: "fp_2", hashEncrypted: encryptField(PDQ_B), quality: 90, status: "APPROVED", algorithm: "VPDQ",
+        videoFramesEncrypted: encryptField(JSON.stringify([{ hash: PDQ_A, quality: 90, t: 0 }, { hash: PDQ_B, quality: 80, t: 1 }])),
+      },
     ]);
 
     const pool = await buildCrawlPool();
-    expect(pool.fingerprints).toEqual([{ id: "fp_1", pdq: PDQ_A, quality: 70 }]);
+    expect(pool.fingerprints).toEqual([
+      { id: "fp_1", pdq: PDQ_A, quality: 70 },
+      { id: "fp_2", kind: "video", frames: [PDQ_A, PDQ_B] },
+    ]);
     expect(m.hashFindMany).toHaveBeenCalledWith(expect.objectContaining({
-      select: expect.objectContaining({ algorithm: true }),
+      select: expect.objectContaining({ algorithm: true, videoFramesEncrypted: true }),
     }));
   });
 
-  it("never resolves a pool id that belongs to a VPDQ fingerprint", async () => {
+  it("resolves a pool id that belongs to a VPDQ fingerprint", async () => {
     m.hashFindUnique.mockResolvedValue({
       id: "hs-vid", caseId: "case-1", crawlPoolId: "fp_2", hashEncrypted: encryptField(PDQ_B), quality: 90, status: "APPROVED", algorithm: "VPDQ",
+      videoFramesEncrypted: null,
     });
-    expect(await resolvePoolFingerprint("fp_2")).toBeNull();
+    expect(await resolvePoolFingerprint("fp_2")).toMatchObject({ hashSubmissionId: "hs-vid", caseId: "case-1" });
   });
 });
 

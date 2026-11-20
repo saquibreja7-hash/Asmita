@@ -18,6 +18,12 @@ export type MemoryFingerprint = {
   crawlPoolId: string | null;
   /** PDQ image or VPDQ video fingerprint; absent reads as PDQ (rows seeded before video fingerprints existed). */
   algorithm?: "PDQ" | "VPDQ";
+  /**
+   * Video only (VPDQ, video-fingerprints spec WP20): the kept frame list as
+   * the same JSON the route stored ({ hash, quality, t }), encrypted. The
+   * pool serves its hashes; erasure clears it with the pool id.
+   */
+  videoFramesEncrypted?: string | null;
 };
 
 export type MemoryCrawlConsent = {
@@ -39,17 +45,44 @@ export type MemoryCrawlFinding = {
   pageUrlEncrypted: string;
   imageUrlEncrypted: string;
   urlDigest: string | null;
-  distance: number;
+  /** Null for an SSCD finding: the second layer has no PDQ distance (ADR 008). */
+  distance: number | null;
+  /**
+   * The SSCD similarity the crawler scored (ADR 008, WP28): set on an SSCD
+   * finding, or on a borderline PDQ match it scored against the fingerprint's
+   * embeddings. Information for the analyst, never an automatic decision.
+   */
+  sscdSimilarity: number | null;
   quality: number;
   firstSeenAt: Date;
   lastSeenAt: Date;
   sourceId: string;
   runId: string;
   reviewStatus: "CANDIDATE" | "APPROVED" | "DISMISSED";
+  /** Which layer matched (ADR 008): a hash distance (PDQ/VPDQ) or SSCD. */
+  method: "PDQ" | "VPDQ" | "SSCD";
   reviewedById: string | null;
   reviewedAt: Date | null;
   secondReviewedById: string | null;
   secondReviewedAt: Date | null;
+};
+
+/**
+ * An SSCD embedding of an ANALYST-CONFIRMED copy, the memory twin of the
+ * FindingEmbedding row (ADR 008, WP28). The vector is kept in plain memory
+ * (the dev store holds decrypted rows by design); it is never logged and
+ * leaves with the finding, the fingerprint's rejection, the consent's
+ * withdrawal or the case's erasure.
+ */
+export type MemoryFindingEmbedding = {
+  id: string;
+  findingId: string;
+  hashSubmissionId: string;
+  caseId: string;
+  model: string;
+  version: string;
+  vector: number[];
+  createdAt: Date;
 };
 
 export type MemoryCrawlSource = {
@@ -89,6 +122,8 @@ export type MemoryCrawlPage = {
   urlDigest: string;
   depth: number;
   kind: "PAGE" | "SITEMAP" | "FEED";
+  /** Crawl order (crawler v3 WP11): lower runs first; claim sorts by it, then nextDueAt. */
+  priority: number;
   etag: string | null;
   lastModified: string | null;
   status: "PENDING" | "FETCHED" | "NOT_MODIFIED" | "GONE" | "BLOCKED" | "ERROR" | "DEAD";
@@ -97,6 +132,11 @@ export type MemoryCrawlPage = {
   nextDueAt: Date;
   failCount: number;
   createdAt: Date;
+  /**
+   * First permanent fetch failure (crawler v3 review fix, WP13); cleared on a
+   * successful visit. Optional: rows created before the column lack it (null).
+   */
+  lastPermanentFailAt?: Date | null;
 };
 
 export type MemoryCrawlServiceKey = {
@@ -112,6 +152,9 @@ type CrawlMemory = {
   fingerprints: Map<string, MemoryFingerprint>;
   consents: MemoryCrawlConsent[];
   findings: Map<string, MemoryCrawlFinding>;
+  // SSCD embeddings of confirmed copies (ADR 008, WP28), keyed by row id;
+  // at most one per finding (findingEmbeddingByFinding finds it).
+  embeddings: Map<string, MemoryFindingEmbedding>;
   sources: Map<string, MemoryCrawlSource>;
   // Keyed by host (lookups are by host, isBlockedCrawlHost in crawl-sources.ts).
   blockedHosts: Map<string, MemoryCrawlBlockedHost>;
@@ -126,7 +169,7 @@ type CrawlMemory = {
 const globals = globalThis as typeof globalThis & { __asmitaCrawlStore?: CrawlMemory };
 
 function emptyMemory(): CrawlMemory {
-  return { fingerprints: new Map(), consents: [], findings: new Map(), sources: new Map(), blockedHosts: new Map(), pages: new Map(), keys: new Map(), sourceDays: new Map() };
+  return { fingerprints: new Map(), consents: [], findings: new Map(), embeddings: new Map(), sources: new Map(), blockedHosts: new Map(), pages: new Map(), keys: new Map(), sourceDays: new Map() };
 }
 
 export function crawlMemory(): CrawlMemory {
@@ -136,7 +179,17 @@ export function crawlMemory(): CrawlMemory {
   globals.__asmitaCrawlStore ??= emptyMemory();
   // A store created before the per-day counters existed (dev hot reload).
   globals.__asmitaCrawlStore.sourceDays ??= new Map();
+  // A store created before SSCD embeddings existed (dev hot reload).
+  globals.__asmitaCrawlStore.embeddings ??= new Map();
   return globals.__asmitaCrawlStore;
+}
+
+/** The SSCD embedding seeded from one finding, if any (ADR 008: one per finding). */
+export function findingEmbeddingByFinding(findingId: string): MemoryFindingEmbedding | null {
+  for (const embedding of crawlMemory().embeddings.values()) {
+    if (embedding.findingId === findingId) return embedding;
+  }
+  return null;
 }
 
 /** The memory key of one source's counter for the UTC day starting at `day`. */
@@ -155,9 +208,19 @@ export function eraseCrawlMemoryForCases(caseIds: string[]) {
   const ids = new Set(caseIds);
   memory.consents = memory.consents.filter((consent) => !ids.has(consent.caseId));
   for (const [id, finding] of memory.findings) if (ids.has(finding.caseId)) memory.findings.delete(id);
-  // Fingerprints are kept (as on the database path) but leave the pool.
+  // The SSCD embeddings of her confirmed copies go with the findings (ADR
+  // 008): the pool must stop serving them, exactly as on the database path.
+  for (const [id, embedding] of memory.embeddings ?? new Map<string, MemoryFindingEmbedding>()) {
+    if (ids.has(embedding.caseId)) memory.embeddings.delete(id);
+  }
+  // Fingerprints are kept (as on the database path) but leave the pool; the
+  // video frame list goes with the pool id, as the database erasure clears
+  // both in the same statement (WP17/WP20).
   for (const fingerprint of memory.fingerprints.values()) {
-    if (ids.has(fingerprint.caseId)) fingerprint.crawlPoolId = null;
+    if (ids.has(fingerprint.caseId)) {
+      fingerprint.crawlPoolId = null;
+      fingerprint.videoFramesEncrypted = null;
+    }
   }
   // Sources stay, including REPORTED ones her links created: they carry her
   // host only, never her link or case, so erasing her must not touch them.

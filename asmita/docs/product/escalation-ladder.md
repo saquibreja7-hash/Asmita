@@ -43,7 +43,7 @@ One ladder per link. Every step is shown to the survivor with its date.
 | Step | Starts | Who acts | What Asmita does |
 |---|---|---|---|
 | 1. Notice sent | Dispatch, or the survivor saying she filed the platform form | Asmita | Unchanged |
-| 2. Platform deadline | 2h after step 1 (`PLATFORM_DEADLINE_HOURS`) | Asmita | L1 follow-up to the grievance officer at 24h (email platforms only) |
+| 2. Platform deadline | 24h after step 1 (`PLATFORM_DEADLINE_HOURS`) | Asmita | L1 follow-up to the grievance officer at 24h (email platforms only) |
 | 3. Cybercrime complaint | The platform's deadline passed without removal, or it refused | Survivor | Dashboard links cybercrime.gov.in with a checklist (and prepared wording once legally reviewed). The 48h email tells her |
 | 4. GAC appeal | 7 days without removal (the grievance officer's resolution period), or a refusal | Survivor | Dashboard links gac.gov.in with a checklist and wording. The 7-day email tells her |
 
@@ -66,10 +66,12 @@ An acknowledgement or a refusal never stops the ladder; a refusal opens steps 3 
 
 ### Deadlines
 
-- Platform: 2 hours, under Rule 3(2)(b) as amended by G.S.R. 120(E) (in force
-  20 February 2026; PRD Section 4). The notice templates were redrafted to
-  demand 2 hours in November 2026 (`docs/legal/notice-redraft-2026-11.md`), so
-  the ladder matches what the survivor signs.
+- Platform: 24 hours, the period Asmita's notices ask the platform to act
+  within (owner decision, 19 November 2026, WP26). Rule 3(2)(b) as amended by
+  G.S.R. 120(E) (in force 20 February 2026; PRD Section 4) sets 2 hours; the
+  notices state that period as law and ask for 24 hours as Asmita's request
+  (`docs/legal/notice-redraft-2026-11.md`), so the ladder matches what the
+  survivor signs.
 - Grievance officer: 7 days to resolve (February 2026 amendment, PRD Section 4).
   After that, or after a refusal, the GAC appeal opens.
 - The GAC's own appeal window is not in PRD Section 4 or the SOP, so the site
@@ -105,4 +107,6 @@ corrected sub-rule numbers, and two new templates. `ESCALATION_L1` is the
 covering letter the 24h follow-up now sends ahead of the complaint's text; the
 follow-up is held until both are legally reviewed. `FIR_PACKAGE` is the
 survivor's own police complaint. Memo for counsel:
-`docs/legal/notice-redraft-2026-11.md`.
+`docs/legal/notice-redraft-2026-11.md`. Since 19 November 2026 (WP26) the
+demands ask for twenty-four hours as Asmita's request, while every statement
+of what the Rule requires keeps its two hours; see Deadlines above.

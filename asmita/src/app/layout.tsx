@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Noto_Sans } from "next/font/google";
+import devanagariRegularWoff2 from "@fontsource/noto-sans-devanagari/files/noto-sans-devanagari-devanagari-400-normal.woff2";
 import "@fontsource/noto-sans-devanagari/400.css";
 import "@fontsource/noto-sans-devanagari/500.css";
 import "@fontsource/noto-sans-devanagari/600.css";
@@ -80,6 +81,21 @@ export default async function RootLayout({
       className={`${sans.variable} h-full antialiased`}
     >
       <body className="min-h-full">
+        {/* Hindi pages: the Devanagari text is set in Noto Sans Devanagari,
+            whose @font-face only starts loading once the stylesheet has been
+            parsed — late enough for the glyphs to pop in on slow connections.
+            Preload the same regular-weight file the CSS requests (the bundler
+            hashes both references identically). crossOrigin is required for a
+            font preload to be reused by the CSS font fetch. */}
+        {lang === "hi" && (
+          <link
+            rel="preload"
+            href={devanagariRegularWoff2}
+            as="font"
+            type="font/woff2"
+            crossOrigin="anonymous"
+          />
+        )}
         {children}
       </body>
     </html>

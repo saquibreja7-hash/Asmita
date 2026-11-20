@@ -60,7 +60,11 @@ describe("deep coverage", () => {
     expect(s.feedsParsed).toBe(1);
     expect(s.feedEntriesTaken).toBe(3);
     expect(s.docsTruncated).toBe(0);
-    expect(s.robots).toEqual({ ok: 2 });
+    // The deep source's robots.txt names its sitemap (no WP9 probes); the
+    // trap source's does not, so it probed the two conventional paths and
+    // its registrable parent (fixture.test) — whose robots.txt this fixture
+    // server does not serve (absent: allowed).
+    expect(s.robots).toEqual({ ok: 2, absent: 1 });
   });
 
   it("fetches every listing page, feed entry and sitemap page exactly once, within its budget", () => {
@@ -70,7 +74,7 @@ describe("deep coverage", () => {
     for (let n = 1; n <= 3; n++) expect(fx.site.requested(DEEP_HOST, `/post/${n}`)).toBe(true);
     expect(fx.site.requests.filter((r) => r.host === DEEP_HOST && r.path === "/gallery-deep")).toHaveLength(1);
     const s = result.summary;
-    expect(s.pagesAttempted).toBe(57); // 47 deep + 10 trap, well inside both budgets
+    expect(s.pagesAttempted).toBe(60); // 47 deep + 10 trap + 3 WP9 probes on the trap source, well inside both budgets
     expect(s.pagesFetched).toBe(46); // HTML pages: 38 content pages + the 8 admitted trap variants
     expect(s.pagesNonHtml).toBe(0);
     expect(result.exitCode).toBe(0);
@@ -146,7 +150,7 @@ describe("deep coverage", () => {
     expect(logLines.length).toBeGreaterThan(3);
     assertCleanLog(logLines.join("\n"), {
       hostnames: [DEEP_HOST, TRAP_HOST],
-      hashes: [...fx.allHashes, ...fx.pool.fingerprints.map((f) => f.pdq)],
+      hashes: [...fx.allHashes, ...fx.pool.fingerprints.flatMap((f) => ("pdq" in f ? [f.pdq] : []))],
     });
     const summary = logLines.map((l) => JSON.parse(l) as { event: string }).find((l) => l.event === "run_summary");
     expect(summary).toBeDefined();

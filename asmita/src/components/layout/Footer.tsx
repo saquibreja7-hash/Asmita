@@ -109,7 +109,10 @@ export function Footer({ locale }: { locale: Locale }) {
               <ul className="site-footer-col-list">
                 {col.links.map((link) => (
                   <li key={link.href + link.label}>
-                    {link.href.startsWith("https://") ? (
+                    {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                    {link.href === "/check-image" ? (
+                      <a href={link.href}>{link.label}</a>
+                    ) : link.href.startsWith("https://") ? (
                       <a href={link.href}>{link.label}</a>
                     ) : (
                       <Link href={link.href}>{link.label}</Link>

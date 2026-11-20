@@ -7,6 +7,7 @@
 !crawler/scripts/build.mjs
 !crawler/src/**
 !asmita/src/lib/pdq/pdq.ts
+!asmita/src/lib/crawl-page-key.ts
 **/node_modules
 **/dist
 **/.env*

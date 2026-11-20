@@ -33,7 +33,13 @@ describe("page scope", () => {
     const hosts = new Set(fx.site.requests.map((r) => r.host));
     expect(hosts.has(BLOG)).toBe(true);
     expect(hosts.has(`a.${BLOG}`)).toBe(true);
-    expect(hosts.has(SOURCE_DOMAIN)).toBe(false); // parent domain
+    // The parent domain is never crawled. WP9 is the one deliberate
+    // exception: the blog source's robots.txt names no sitemap, so its
+    // registrable parent's /sitemap.xml was probed (robots.txt first) —
+    // and this fixture server has no sitemap there, so nothing else.
+    const parentPaths = fx.site.requests.filter((r) => r.host === SOURCE_DOMAIN).map((r) => r.path).sort();
+    expect(parentPaths).toEqual(["/robots.txt", "/sitemap.xml"]);
+    expect(fx.site.requested(SOURCE_DOMAIN, "/")).toBe(false); // no page of the parent
     expect(hosts.has(`shop.${SOURCE_DOMAIN}`)).toBe(false); // sibling, also via redirect
     expect(hosts.has(`www.${SOURCE_DOMAIN}`)).toBe(false);
     const ids = api.posted.map((f) => f.fingerprintId).sort();
