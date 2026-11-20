@@ -39,7 +39,7 @@ test.describe("AI Lab, E2", () => {
     await admin.goto("/admin/lab/chokepoints");
     await admin.getByLabel("Service").selectOption({ label: serviceName });
     await admin.getByLabel("Kind").selectOption("HOST");
-    await admin.getByLabel("Provider").fill("Example Hosting E2E");
+    await admin.getByLabel("Provider", { exact: true }).fill("Example Hosting E2E");
     await admin.getByLabel("Abuse contact (from the provider's own abuse page)").fill("abuse@example.test");
     await admin.getByLabel("Evidence notes").fill("Invented e2e evidence: front page offers an undress generator.");
     await admin.getByRole("button", { name: "Add chokepoint" }).click();
