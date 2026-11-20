@@ -1,5 +1,195 @@
+# Web audit progress
+
+Accessibility, forms, performance and security-header fixes from the web
+best-practice audit (owner-approved 20 November 2026, Saquib). One section per
+work package, appended when its checks pass. The work packages themselves are
+not in the crawler spec; they are defined in the audit brief. Paths are
+relative to `asmita/`.
+
+## WP39 — site chrome, navigation, target sizes and CSS accessibility (branch `fix/a11y-chrome-css`)
+
+**What changed**
+
+- A1: a "Skip to main content" link is now the first focusable element of the
+  page chrome (`src/components/layout/Header.tsx`, rendered first inside
+  `AppShell`), visually hidden until focused; `<main>` gained `id="main"` and
+  `tabIndex={-1}`. English and Hindi.
+- A14: the mobile menu button no longer overrides its name with
+  `aria-label="Menu"` while showing "×"; closed it reads "Menu", open it shows
+  the × glyph (aria-hidden) with a visually hidden "Close menu".
+- A15: closing the mobile menu with Escape or an outside tap returns focus to
+  the menu button; the nested `details/summary` submenus became
+  `button aria-expanded aria-controls` toggles.
+- A16: the footer language toggle buttons are at least 44px tall, wrapped in a
+  labelled `role="group"`, with `lang="hi"` on "हिंदी". Segmented look kept.
+- A18: pages that render the Quick Exit pill get bottom clearance
+  (`html:has(.quick-exit) body { padding-bottom }` and
+  `scroll-padding-bottom`), so nothing focusable sits under the fixed pill.
+- A19: the CopyDraft copy button is 44px tall and its live region moved
+  outside the button.
+- A20: the eligibility Back button is 44px tall; the question heading is
+  focused on every index change, including going back to question 1 (not on
+  first render).
+- A22: the FAQ chevron uses `content: "↓" / ""` so the glyph is not read aloud.
+- A24: hard-coded English accessible names in FlowProgress, MobileMenu, Header
+  and Footer moved to i18n keys (`nav.primary`, `nav.mobile`, `nav.home`,
+  `nav.language`, `flow.progress`), added to `en.json` and `hi.json` (listed as
+  machine translated in `hi-review-status.json`).
+- A26: `.field:focus-visible`/`.input:focus-visible` show a 2px brand focus
+  ring (the token is `var(--brand)`).
+- P6: `.field`/`.input` and `.filing-input` draw their full 1px border in
+  smoke (`var(--color-smoke)`, ~5.7:1 on parchment) instead of ash (~1.5:1) or
+  transparent.
+- P7: `html { font-size: 16px }` removed; every px font size in globals.css
+  (tokens and rules, clamp bounds included) converted to rem; the
+  `<meta name="text-scale" content="scale">` added through Next `metadata.other`.
+- P9: `text-wrap: pretty` on prose (`.reading-body p`, `.faq-answer`), scoped;
+  `overflow-wrap: anywhere` on `.reading-body` and chat bubbles.
+- P10: the hover lifts on `.link-card` and `.home-help-tile` moved inside
+  `@media (prefers-reduced-motion: no-preference)`.
+- P12: `color-scheme: light` on `:root`.
+- Home axe flake: `tests/e2e/accessibility.spec.ts` now emulates reduced
+  motion, awaits `document.fonts.ready`, scans /eligibility, /track,
+  /check-image, /start and /get-help, and gained tests for the skip link as
+  first Tab stop, the 44px language toggle (mobile project) and the wizard
+  heading focus. A global `prefers-reduced-motion: reduce` rule now turns off
+  all transitions and animations.
+
+**What was not verified**
+
+- The full Playwright suite runs in the separate verify step. The hardened
+  accessibility spec itself was run here against a throwaway local Postgres 17
+  with both Playwright projects: 29 passed, 1 skipped (the 44px toggle test is
+  mobile-project-only), 24 axe scans of the 12 routes, no flake.
+- Full checks (Node 22): crawler lint/type-check/tests/build and asmita
+  lint/type-check/prisma validate/tests all pass; asmita 145 test files,
+  1206 tests.
+- The optional second commit (Tailwind `text-[Npx]` classes in tsx to rem) was
+  not done; globals.css is fully rem, the tsx arbitrary classes still pin px by
+  design and can follow later.
+- Visual regression beyond code review: the output is pixel-identical at
+  default settings by construction (rem = px/16 at a 16px root, borders and
+  target sizes excepted as required by the audit items), but no screenshot
+  diff was run.
+
+**Needs the owner's approval**
+
+- None of the new strings are user-visible prose beyond navigation labels
+  ("Skip to main content", "Close menu", and the aria-labels "Primary",
+  "Mobile", "Asmita home", "Language", "Progress"); their Hindi translations
+  are machine translated and listed in `hi-review-status.json`.
+
+**Decisions made on my own**
+
+- The Quick Exit clearance is scoped with `html:has(.quick-exit)` in CSS
+  rather than editing every page: the pill renders both inside `main` (auth
+  pages) and outside the shell (victim layout), so a structural class per page
+  would not cover both.
+- The skip link lives in `Header.tsx` (the WP named both AppShell and Header):
+  Header is the first child of the page shell, sync, and unit-testable.
+- Under `prefers-reduced-motion: reduce` all transitions and animations are
+  disabled globally (`*`), which subsumes the previous per-selector list.
 # Web best-practice audit — progress
 
+Each work package from the web best-practice audit (accessibility, forms,
+performance, security headers) records here what changed, what was not
+verified, any user-facing sentence that needs the owner's approval, and any
+decision the implementer made on their own. The audit items were owner-approved
+on 20 November 2026 (Saquib).
+
+## WP46 — Security headers (branch feat/csp-reporting-headers)
+
+Items: S4 ('report-sample'), S5 (CSP violation reporting), S6 (QR SVG without
+dangerouslySetInnerHTML + report-only Trusted Types), S7 (Permissions-Policy
+extension), S8 (COOP/CORP).
+
+### What changed
+
+- S4 — `src/lib/csp.ts` now appends `'report-sample'` to `script-src` and
+  `style-src` in every environment. `'strict-dynamic'` is still absent (the
+  Sarvam voice worklet on /talk needs the current blob: source list); the test
+  suite pins both facts.
+- S5 — the CSP carries `report-uri /api/csp-report` and
+  `report-to csp-endpoint`; `next.config.ts` sends
+  `Reporting-Endpoints: csp-endpoint="/api/csp-report"` with it. New route
+  `src/app/api/csp-report/route.ts` (logic in `src/lib/csp-report.ts`)
+  accepts only `application/csp-report` and `application/reports+json`,
+  caps the body at 8 KB (declared content-length refused first, then the read
+  body measured — the same shape as the crawler routes' caps), throttles per
+  network with the existing shared Postgres rate-limit buckets (60 per 10
+  minutes), reduces every URL to an origin or a path (query and fragment
+  stripped), logs only `directive`, `blockedOrigin` and `documentPath`, and
+  answers 204. Anything that is not a CSP report gets 415 (wrong content
+  type) or 400 (wrong shape). Reports are console-logged only, never stored
+  in the database.
+- S6 — the admin MFA enrolment QR (`src/app/admin/setup-mfa/EnrolMfa.tsx`) is
+  now an `<img src="data:image/svg+xml,...">` (encodeURIComponent) instead of
+  dangerouslySetInnerHTML; this was the only usage in the repo. The existing
+  `img-src 'self' data:` already allows data: images on that page, so no CSP
+  change was needed. A separate `Content-Security-Policy-Report-Only` header
+  carries `require-trusted-types-for 'script'`; the enforced CSP never does,
+  so nothing is blocked yet.
+- S7 — Permissions-Policy denies `payment`, `usb`, `serial`, `bluetooth`,
+  `accelerometer`, `gyroscope`, `magnetometer`, `display-capture` and
+  `browsing-topics`. The camera/geolocation rules are unchanged and /talk
+  keeps `microphone=(self)` exactly, on both the catch-all and the /talk
+  override.
+- S8 — `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Resource-Policy: same-origin` are sent from the catch-all
+  header list, so pages, /api and static assets all carry them. No COEP. The
+  /talk voice flow was checked: it uses a WebSocket and a same-origin blob
+  worklet, never a cross-origin window (no window.open/opener anywhere in
+  src).
+- Production consistency: production pages get their CSP from the Worker
+  entry via the same `buildCsp`, so the Worker needed no separate edit; all
+  other headers come from `next.config.ts`, which also drives the vinext
+  Worker build.
+
+Tests: `tests/unit/csp.test.ts` extended (report-sample, report-uri/report-to,
+endpoint-name consistency, Trusted Types report-only separation, updated exact
+policy strings); new `tests/unit/csp-report-route.test.ts` (content types,
+8 KB cap, per-network rate limit, URL stripping and log hygiene);
+`scripts/worker-smoke.mjs` extended to assert the new headers on /, /talk and
+/api/health, and to POST both report formats (204) plus a non-report (415).
+
+### Not verified here
+
+- The Playwright suite and the Postgres e2e were not run on this machine (they
+  run in the separate verify step). No new Playwright spec was required for
+  this WP.
+- `scripts/worker-smoke.mjs` (workerd, Postgres) was not run on this machine;
+  its new assertions were written to match the behaviour verified locally
+  with `npm run dev` (all headers present on /, /talk and /api/health; the
+  report endpoint answered 204/415/400/405/413 as designed) and `npm run
+  build`.
+- Browser-side reporting itself (an actual violation arriving at the endpoint)
+  can only be confirmed in production, where the reports now start flowing.
+
+### User-facing text needing owner approval
+
+- New alt text on the admin MFA QR image: "Authenticator setup QR code"
+  (screen readers only; visible layout unchanged).
+
+### Decisions made on my own
+
+- Reports are logged with `console.info` only, not `logSecurityEvent`:
+  SecurityEventLog is for security-relevant admin-visible events, and CSP
+  reports are high-volume, untrusted telemetry.
+- The Report-Only Trusted Types policy also carries the reporting directives,
+  so its violations reach the same endpoint and can be measured before any
+  enforcement decision.
+- Rate limit 60 reports per 10 minutes per network: reports are best-effort;
+  dropping surplus ones costs nothing, and the bucket is shared per network as
+  the other public routes are.
+- The QR alt text is English-only, like the rest of the admin workspace (the
+  admin section does not use the i18n dictionary; no new en.json/hi.json
+  keys were added).
+- COOP and CORP are sent on the catch-all list, so static assets carry CORP
+  too (stops other sites embedding them; nothing on this site loads its own
+  resources cross-origin).
+- The body cap follows the repo's existing pattern (declared content-length
+  pre-check, then `request.text()` measured against the cap) rather than a
+  stream reader, which the repo's lint rules forbid (`request.body` access).
 Owner-approved work packages from the web best-practice audit of the site
 (accessibility, forms, performance, security headers), approved 20 November 2026
 by Saquib. One section per work package, appended when its lane branch lands.

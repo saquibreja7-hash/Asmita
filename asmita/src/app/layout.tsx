@@ -61,6 +61,11 @@ export const metadata: Metadata = {
       },
     ],
   },
+  // All font sizes are in rem, so the page follows the OS and browser text
+  // size; this meta tells mobile WebViews it is safe to scale the text.
+  other: {
+    "text-scale": "scale",
+  },
 };
 
 export default async function RootLayout({

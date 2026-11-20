@@ -63,6 +63,7 @@ Checked in this order, on both preview and dispatch, server-side at send time.
 | `finding_expired` | 410 | Finding past 30-day retention or its addresses purged |
 | `crawler_link_not_found` | 409 | No `CRAWLER` link for this finding on this case. This also covers approval that reused the survivor's own link: hers is never sent this way |
 | `consent_withdrawn` | 409 | The link was stopped by a withdrawal (permanent), no live authorisation exists, or the live one does not list the matched fingerprint |
+| `watch_only_consent` | 409 | The case's only live authorisation is watch-only (WP22 "Watch for my images"): she has not asked for removal yet. "Take it down" converts the watch into a case and asks for the full authorisation on the spot; only then can this finding's notice go out |
 | `url_expired` | 410 | The link is past retention |
 | `url_not_ready_for_dispatch` | 409 | The link status is not `NOTICE_QUEUED` (already sent, removed, or pending review) |
 | `crawler_link_not_survivor_signed` | 409 | Defence in depth: the link carries a survivor signature |
@@ -92,6 +93,21 @@ Dispatch only:
 ## Sending and retries
 
 Before sending, the encrypted PDF and digest are stored on the link as a claim. A retry resends the same stored bytes under the same Resend idempotency key, so a send that succeeded but was not recorded is never repeated. The claim is released only when a withdrawal is noticed right after this request made it, before anything was sent. The same `Notice` row, status transition and verified-recipient check are used as for survivor notices. URL retention blanks `representativeNoticePdf` at 30 days, as it does `signedNoticePdf`.
+
+## Watch-only authorisations (WP22)
+
+A case can be a watch ("Watch for my images"): she fingerprinted her images and
+ticked the watch-only authorisation (`CrawlConsent.scope = WATCH_ONLY`), which
+permits comparison and alerting and nothing else. While that is the case's only
+live authorisation, preview and dispatch both refuse with `watch_only_consent`,
+and the findings console shows "Watch only: she has not asked for removal yet"
+instead of a preview button. Findings are approved as on any case (the found
+link is added, she is alerted by email with her case reference only). When she
+chooses "Take it down", the watch becomes a case (`Case.mode = CASE`), the
+watch-only authorisation is withdrawn without stopping the found links, and the
+full authorisation she signs next records the one it replaced
+(`convertedFromId`), so findings recorded under the watch are covered by it and
+the gates above then behave exactly as for a case that was never a watch.
 
 ## Withdrawal
 

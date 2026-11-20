@@ -25,6 +25,10 @@ export async function purgeExpiredUrls(now = new Date()): Promise<number> {
       const ids = expired.map((row) => row.id);
       if (!ids.length) return 0;
       await tx.deleteFrom("UrlPortalToken").where("urlId", "in", ids).execute();
+      // Removal re-checks (watch-and-verify WP23) work from the link's
+      // address; once the retention removed it they can never run, so the
+      // still-pending ones go with it. Completed checks stay as history.
+      await tx.deleteFrom("LinkVerification").where("submittedUrlId", "in", ids).where("outcome", "=", "PENDING").execute();
       await tx.updateTable("SubmittedUrl").set({
         urlEncrypted: "", urlHash: "", signedNoticePdf: null, signedHashSubmissionIds: [],
         signedTemplateId: null, signedTemplateDigest: null,
@@ -44,6 +48,10 @@ export async function purgeExpiredUrls(now = new Date()): Promise<number> {
     const ids = expired.map((row) => row.id);
     if (!ids.length) return 0;
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: ids } } });
+    // Removal re-checks (watch-and-verify WP23) work from the link's
+    // address; once the retention removed it they can never run, so the
+    // still-pending ones go with it. Completed checks stay as history.
+    await tx.linkVerification.deleteMany({ where: { submittedUrlId: { in: ids }, outcome: "PENDING" } });
     const result = await tx.submittedUrl.updateMany({
       where: { id: { in: ids }, submittedAt: { lte: cutoff } },
       data: {

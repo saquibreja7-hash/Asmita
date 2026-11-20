@@ -415,6 +415,15 @@ export async function listHashesForCase(caseId: string): Promise<DisplayHashSubm
   return records.map(toDisplay);
 }
 
+/**
+ * Memory path only: forgets the case's dev hash-store records. Used by
+ * stop-watching (WP22), whose database paths delete the HashSubmission rows
+ * themselves (src/lib/watch-ops.ts).
+ */
+export function clearMemoryHashesForCase(caseId: string) {
+  if (isDevNoDb()) devHashStore().delete(caseId);
+}
+
 export type HashReviewQueueRow = DisplayHashSubmission & {
   caseId: string;
   referenceNumber: string;

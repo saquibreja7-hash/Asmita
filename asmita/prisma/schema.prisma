@@ -84,6 +84,7 @@ enum TemplateType {
   HASH_ADVISORY
   CRAWL_AUTHORISATION
   CRAWL_REPRESENTATIVE_NOTICE
+  WATCH_AUTHORISATION
 }
 
 // Where a SubmittedUrl came from: the survivor, or an analyst-approved
@@ -97,6 +98,23 @@ enum CrawlFindingStatus {
   CANDIDATE
   APPROVED
   DISMISSED
+}
+
+// What a case is (watch-and-verify WP22). CASE: a takedown complaint with
+// links. WATCH: "Watch for my images" — no links, only fingerprints watched
+// for copies; nothing is sent to any platform until she chooses "Take it down".
+enum CaseMode {
+  CASE
+  WATCH
+}
+
+// What a crawl authorisation covers (WP22). SEARCH_AND_NOTICE: comparison and
+// representative notices (the existing tick). WATCH_ONLY: comparison and
+// alerting her only; a representative notice is refused (watch_only_consent)
+// until she converts the watch into a case and ticks the full authorisation.
+enum CrawlConsentScope {
+  SEARCH_AND_NOTICE
+  WATCH_ONLY
 }
 
 enum CrawlSourceKind {
@@ -137,6 +155,15 @@ enum CrawlPageStatus {
   BLOCKED
   ERROR
   DEAD
+}
+
+// Watch-and-verify WP23: the outcome of one scheduled re-check that a link
+// reported removed really stayed down. PENDING until the check ran.
+enum LinkVerificationOutcome {
+  PENDING
+  GONE
+  STILL_ONLINE
+  UNKNOWN
 }
 
 // Phase 2 fingerprints: PDQ for images, VPDQ for videos (one PDQ hash per
@@ -218,6 +245,9 @@ enum AuditEventType {
   LAB_REPORT_SENT
   LAB_REPORT_OUTCOME_RECORDED
   LAB_LIVENESS_RUN
+  WATCH_CONVERTED
+  CONTENT_STILL_ONLINE
+  CRAWL_WATCH_STARTED
 }
 
 enum DeletionJobStatus {
@@ -297,6 +327,8 @@ model Case {
   userId                String
   registrationKeyHash   String?
   status                CaseStatus @default(OPEN)
+  // "Watch for my images" (WP22): a watch holds fingerprints and no links.
+  mode                  CaseMode   @default(CASE)
   state                 String?
   city                  String?
   ngoVerified           Boolean    @default(false)
@@ -486,6 +518,7 @@ model SubmittedUrl {
   crawlFinding CrawlFinding?    @relation(fields: [crawlFindingId], references: [id], onDelete: SetNull)
   notices      Notice[]
   portalTokens UrlPortalToken[]
+  verifications LinkVerification[]
 
   @@index([caseId])
   @@index([crawlSourceChecked])
@@ -506,6 +539,17 @@ model CrawlConsent {
   templateDigest     String
   signedAt           DateTime  @default(now())
   withdrawnAt        DateTime?
+  // What the authorisation covers (WP22). Defaults to the original scope.
+  scope              CrawlConsentScope @default(SEARCH_AND_NOTICE)
+  // Set on the full (SEARCH_AND_NOTICE) authorisation she signs when she
+  // turns a watch into a case ("Take it down"): the WATCH_ONLY authorisation
+  // it replaces. Findings recorded under that one stay covered by this one.
+  convertedFromId    String?
+  // Watch-and-verify WP24: when the case is resolved (or every link on it is
+  // verified removed), the live authorisation keeps her fingerprints in the
+  // crawler pool until this date (start + 12 months) instead of only while
+  // the case is open. Null while the case is open and no watch has started.
+  watchUntil         DateTime?
 
   case Case @relation(fields: [caseId], references: [id])
 
@@ -709,6 +753,36 @@ model CrawlPage {
   @@index([sourceId, nextDueAt])
   @@index([sourceId, lastFetchedAt])
   @@index([sourceId, priority, nextDueAt])
+}
+
+// Watch-and-verify WP23: one scheduled re-check that a link reported removed
+// really stayed down. When one of her links becomes REMOVED (she marks it, or
+// a platform's recorded reply says so), three checks are scheduled — one day,
+// three days and seven days later (attempt 1..3). The hourly retention cron
+// puts each due check into the crawler frontier as a priority row for its
+// host's source and later resolves the outcome from the crawler's report. No
+// URL is stored here: the check works from the SubmittedUrl it references,
+// which is why nothing in this table needs the retention blanking. Completed
+// rows are the admin case page's verification history; erased with the link.
+model LinkVerification {
+  id             String                 @id @default(uuid())
+  submittedUrlId String
+  dueAt          DateTime
+  // 1, 2 or 3: the +1/+3/+7 day check.
+  attempt        Int
+  outcome        LinkVerificationOutcome @default(PENDING)
+  checkedAt      DateTime?
+  // When the hourly sweep put the check into the crawler frontier; null until
+  // then. Findings are counted against this moment ("since the check was
+  // queued"), and a check that was never answered by a crawler visit gives
+  // up as UNKNOWN a bounded time after it.
+  enqueuedAt     DateTime?
+  createdAt      DateTime               @default(now())
+
+  submittedUrl SubmittedUrl @relation(fields: [submittedUrlId], references: [id])
+
+  @@index([outcome, dueAt])
+  @@index([submittedUrlId])
 }
 
 // Bearer keys for the crawler service. Only a sha256 of the key is stored
