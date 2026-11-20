@@ -16,7 +16,7 @@
     "security:audit": "npm audit --audit-level=high --omit=dev",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && node scripts/copy-c2pa-assets.mjs",
     "seed": "prisma db seed",
     "import:platforms": "tsx scripts/import-platforms-csv.ts",
     "dev:vinext": "vinext dev --port 3001",
@@ -27,6 +27,7 @@
     "deploy:production": "npm run build:vinext && node scripts/prepare-production-wrangler.mjs && wrangler deploy --config dist/server/wrangler.production.json"
   },
   "dependencies": {
+    "@contentauth/c2pa-web": "0.17.1",
     "@fontsource/noto-sans-devanagari": "^5.2.8",
     "@fontsource/noto-serif-devanagari": "^5.2.10",
     "@prisma/adapter-pg": "^7.9.1",

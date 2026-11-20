@@ -608,6 +608,104 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+## Owner changes
+
+### WP26. 24-hour platform deadline (owner decision, 19 November 2026) — 2026-11-19
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, final run on the committed tree).
+
+**What was built**
+
+- `PLATFORM_DEADLINE_HOURS` (`asmita/src/lib/escalation-ladder.ts`) is 24: the survivor's ladder, the admin case work and every test that derives from it now give the platform 24 hours. Its doc comment states both facts: Rule 3(2)(b) sets 2 hours (G.S.R. 120(E), in force 20.02.2026; PRD Section 4); 24 hours is the period our notices ask for.
+- `asmita/prisma/template-seeds.ts`: every sentence in which a notice asked the platform to act within 2 hours now asks for 24 hours, phrased as Asmita's request and never attributed to the Rule. Changed sentences: the IT_RULES_2021 subject line (twice: `subjectTemplate` and the body's `Subject:` line), demand (i) of IT_RULES_2021, demand (i) of IT_RULES_AND_DMCA, and item 4 of CRAWL_REPRESENTATIVE_NOTICE. Every sentence that states what the Rule requires (the legal-basis paragraphs, the SOP note, the hash advisory's 5.2, the L1 cover's item 2, the FIR package's item 4) keeps the two-hour period, and every `legalCitations` entry is unchanged — no law is misstated and no citation added. The changed sentences are listed before -> after in the commit message for the owner's approval; the seed logic that resets `reviewedByLegal` when text changes is untouched, and nothing sets `reviewedByLegal`.
+- Survivor-facing copy that tells her when the platform must act already said 24 hours everywhere (`home.blockA.*`, `hiw.tl1.body`, `faq.s2.a4` in en.json and their hi.json counterparts, the public home page, resources, chat knowledge, the L2 email), and the ladder's deadline step now computes 24 hours from the constant. No en.json or hi.json value needed a change, so `hi-review-status.json` is untouched and nothing new is machine translated.
+- `asmita/src/app/(public)/for-platforms/page.tsx` does not exist on this branch; there was nothing to leave alone.
+- `asmita/src/lib/escalation-engine.ts`: comment-only update — the L1 cover states the Rule's two-hour deadline, which the representative notice does not demand (it asks for twenty-four hours), so the exclusion rationale still holds and is now worded for the new text.
+- Docs: `asmita/docs/product/escalation-ladder.md` (step 2 is 24h; the Deadlines section states the ask and the Rule's period separately; a WP26 sentence in the Notice redraft section), `asmita/docs/product/crawler-notice-flow.md` (the two stale two-hour sentences), `asmita/docs/legal/notice-redraft-2026-11.md` (a dated **Update 2026-11-19** note: the changed sentences reset `reviewedByLegal` on the next seed and are listed before -> after in the commit for re-review), and the legal pack `asmita/docs/legal/Asmita-Legal-Notices-2026-11.docx` regenerated from the changed templates with `node scripts/generate-notice-pack.mjs` (Node 22 helper), as that memo requires after any template change.
+
+**Decisions, recorded per the standing rule**
+
+- The survivor's copyable appeal wording `ladder.draft.appeal` (en.json and hi.json) keeps "a platform must take all reasonable and practicable measures to remove it within two hours": it is a statement of what Rule 3(2)(b) requires, the legal reviewer confirmed that exact wording on 2026-11-17, and restating the Rule at 24 hours would misstate the law to her and to the Grievance Appellate Committee. The survivor-facing bullet is met by the deadline copy, which says 24 hours; the appeal states the law, like the for-platforms page the WP shields.
+- The IT_RULES_2021 subject line changed to "within twenty-four hours": the subject states the relief the complaint seeks, so it must match the demand; the Rule's own two-hour period is stated in the legal-basis section the subject sits over.
+- In the two demand items, "as Rule 3(2)(b) of the IT Rules requires" became "as Asmita requests (Rule 3(2)(b) of the IT Rules requires it within two hours)": keeping the attribution to the Rule would misstate it (it sets two hours, not twenty-four), and dropping the citation would weaken a legal demand; the parenthetical keeps the citation and both periods correctly attributed. The joint notice's forty-eight-hour parenthetical is unchanged (still true against both periods).
+- The L1 follow-up cover, the FIR package and the hash advisory are unchanged: all their two-hour sentences state what the Rule requires, and none of them asks the platform to act within two hours. The L1 still fires at 24 hours — now exactly when the asked period ends; the engine's own schedule (L1 24h, L2 48h, L3 7 days) was never computed from `PLATFORM_DEADLINE_HOURS` and is unchanged.
+- No crawler behaviour changed, so `crawler/README.md` and the runbook are untouched; root `CLAUDE.md` contains no deadline statement and was not edited.
+
+**Tests** (all run, all passing)
+
+- `tests/unit/notice-template-seeds.test.ts`: the "Indian templates demand removal within two hours" test now asserts the split — statements of the Rule keep "TWO (2) HOURS" in IT_RULES_2021, IT_RULES_AND_DMCA, HASH_ADVISORY and ESCALATION_L1; the two demands ask "within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests"; a negative regex proves the 24 hours are never attributed to the Rule; the CRAWL_REPRESENTATIVE_NOTICE assertions pin the new ask sentence and the Rule's two-hour statement. Each changed assertion carries a WP26 note saying why (owner decision; the law keeps its true period).
+- `tests/unit/escalation-ladder.test.ts` and `tests/unit/escalation-ladder-view.test.ts`: notes only — both assert through the constant, so they move with it; the view test's "two-hour deadline" comment now says 24-hour. `tests/unit/admin-cases.test.ts` needed no change (it derives from the constant).
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors (the 3 pre-existing warnings in an untouched script, no new ones), type-check clean, `prisma validate` ok, 152 test files / 1250 tests all passed.
+
+**Not done or not verified**
+
+- The PDF copy of the legal pack was not regenerated: no docx-to-pdf converter exists on this host, and the 2026-11-17 regeneration updated the docx only, so the PDF already lagged one review cycle. The docx is the artifact counsel reads, per the memo that requires regeneration.
+- `reviewedByLegal` is not set anywhere, so nothing can be sent from the changed templates until the legal reviewer records the review on each row in production. That is the owner's and counsel's step, deliberately outside this WP.
+- The regenerated docx was verified by extracting its text (all five changed sentences present) but not opened in a Word processor.
+
+## WP52 (Lab lane) — E1 benchmark harness, tools/lab-bench — 2026-11-20
+
+WP52 is not part of the crawler v2 spec: it is a Meri Asmita AI Lab work
+package (owner-approved 20 November 2026; charter committed as
+`asmita/docs/lab/charter.md`). This entry is the pointer the work package
+asked for; the full record — every decision, every verification — lives in
+`asmita/docs/lab/progress.md`.
+
+**What was built.** A standalone Node 22 + TypeScript package at
+`tools/lab-bench/` (own `package.json` + lockfile, vitest, `npm run check` =
+type-check plus tests), implementing experiment E1 of the Lab charter:
+
+- `build-set <portraits-dir> <out-dir>` makes the charter's variants per
+  portrait — untouched original, crop, resize, mirror, sticker overlay,
+  screenshot with borders, WhatsApp-style re-encode (long edge 1600, JPEG
+  quality about 70), an eye-aligned face-swap composite (colour-matched
+  patch through a feathered elliptical mask, CPU only) and that composite
+  through the WhatsApp re-encode (the stop-rule combination); a labelled
+  `real/` + `fake/` deepfake-dataset folder is imported as-is. Manifest:
+  ids, transforms, labels — nothing about a person.
+- `match <set-dir>` scores whole-image PDQ (`asmita/src/lib/pdq/pdq.ts`
+  imported, never copied; decode via a faithful copy of the crawler's
+  `prepare.ts` recipe; production quality floor 50), the pinned
+  `sscd_disc_mixup` ONNX (loading approach copied from
+  `origin/feat/crawler-sscd`'s `sscd-pool.ts`; that branch is NOT merged),
+  face-crop PDQ and background-masked PDQ — recall at a 1% false-match rate
+  per transform.
+- `detect <set-dir>` runs the charter's detector adapters — OpenAI vision,
+  Hive, Sightengine, and the Community Forensics ViT-S/16 384 (MIT, arXiv
+  2411.04125) as the local onnxruntime-node model — skipping any without a
+  key or weights; accuracy and AUC per transform.
+- `report <run-dir>` writes local HTML/Markdown. `data/`, `runs/` and
+  `models/` are gitignored; `npm run models:fetch` downloads the two pinned
+  ONNX weights with sha256 checks; tests use tiny synthetic images and
+  invented `example.test` fixtures only. `asmita/docs/lab/e1.md` carries
+  the method and an empty results table for the real run.
+
+**Checks (all run on Node 22, final run on the committed tree).**
+`tools/lab-bench`: tsc clean, 11 test files / 82 tests. Crawler: lint,
+type-check, 29 test files / 350 tests, build. Asmita: lint 0 errors,
+type-check clean, `prisma validate` ok, 152 test files / 1250 tests.
+`check.sh` printed ALL CHECKS PASSED. No crawler or asmita source changed.
+
+**Not done or not verified.** No real E1 run happened: there is no
+portraits folder of Indian faces on this machine, so `e1.md`'s tables stay
+empty for the owner's real run. The hosted detector adapters are written
+from the providers' public API docs and tested only against invented
+fixtures with an injected fetch (no keys; the first keyed run must
+spot-check the recorded raw responses). `crawler/README.md` and the runbook
+are untouched (no crawler behaviour change).
+
+**Deviations.** None from the crawler spec (this WP sits outside it, and
+nothing in `asmita/` or `crawler/` changed). The complaint workflow's
+no-fetch lint rule and `no-url-fetch` test were not edited: asmita's ESLint
+runs from `asmita/` and does not cover `tools/`, so no narrowing was
+needed for this work package — recorded as a decision in
+`asmita/docs/lab/progress.md`, where the charter's narrowing becomes live
+with the first lab WP that adds `src/lib/lab/**` or `src/app/**/lab/**`.
+## Thorn-inspired
+
+Owner decisions, 19 November 2026 (Saquib), from research into Thorn's published work. Copy no Thorn text or code except where a licence is stated; everything below is written in our own words. Thorn's research is cited by name and link only.
+
+### WP35. Wording on the "Is this image AI-made?" page (app) — 2026-11-19
 - New shared module `asmita/src/lib/crawl-page-key.ts` (dependency-free; the crawler imports it read-only like `asmita/src/lib/pdq/pdq.ts` and esbuild inlines it into `dist/main.js`): the page-URL identity both sides now share. `http`/`https`, one leading `www.` label, a trailing slash on a non-root path and a final `/index.html`, `/index.htm` or `/index.php` are one page; tracking parameters are dropped and the rest sorted; a non-default port stays distinct (another server); the root keeps its `/`. The crawler's `urlKey`/`queryKey` (`crawler/src/crawl/url.ts`) and the app's `crawlPageKey` (`asmita/src/lib/crawl-pages.ts`, the digest under every `CrawlPage` row) both delegate to it, so a page the two sides spell differently is stored and fetched once. Addresses keep their real form everywhere — the key is identity only, never an address that is fetched, reported or logged — and existing frontier rows keep the digest they were stored with (the digest is computed once, at insert; a same-page duplicate against an old-rule row is accepted until that row ages out).
 - "Fetch the canonical form": within one extraction (a page's link buckets, a sitemap or feed document) the first spelling seen is kept and an `https` spelling upgrades an `http` one; across pages the app's digest keeps whichever spelling was reported first. `extract`'s own dedup and the sitemap/feed `xmlLinks` path share the rule.
 - `<link rel="canonical">` on fetched HTML (static, the AUTO fallback and the rendered DOM): collected by `extract` as metadata — never links, collected on nofollow pages too, deduplicated by key, capped at `MAX_CANONICAL_PER_PAGE` (20, the report contract's limit) — and `crawler.ts` reports the targets that are in scope and not obvious non-content as the new optional `aliases` field of a reported page (max 20, deduplicated by key). A canonical address is never fetched just because it is canonical; a self-referencing canonical is no alias; an off-scope canonical is neither fetched nor reported as a discovery.
@@ -645,6 +743,78 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 
 **What was built**
 
+- `/check-image` now tells her, directly under the hero subtitle and above the tool: an image of her made or edited by AI "can be reported exactly like a real one, and you will be believed. Fake images of you are abuse." New key `check.hero.report` (en + hi), rendered with the page's existing text styles — no new cards, no coloured left-border stripes.
+- One research line follows it (new keys `check.research.line`, `check.research.read`): "One US survey — Thorn's 'Deepfake Nudes & Young People' (2025) — found that about 1 in 17 young people surveyed had deepfake nudes made of them." It is always labelled a US survey, and "Read the survey" links to https://www.thorn.org/research/library/deepfake-nudes-and-young-people/ . The URL lives once, in `asmita/src/lib/ai-image-research.ts`. No other statistic was added anywhere, and the line never presents the figure as Indian data.
+- Check results no longer verdict an image. `check.result.noneFound.body` dropped "this does not mean the image is genuine ... a real-looking image" and now states only what was not found ("This file does not carry any AI credential — that is all this result says ..."); `check.deep.result.none.body` dropped "this does not mean the image is genuine" the same way; `check.disclaimer` replaced "a clear result here is not legal proof ... a fake or AI-made image" with "what it finds is not legal proof ... an AI-made or edited image of you". All three were reworded in Hindi to match. The found-signal strings already described only what was found and are unchanged in both languages.
+- The deepfakes issue page (`/issue/deepfakes`, which carries the same message) received the same three parts: its definition now says "A fake image of you is abuse — you can report it exactly like a real one, and you will be believed" (replacing "The image is not real, but the harm is"), its "What you can do" card says a report works exactly as for any other image, and the one research line renders under the definition through a new optional `research` field on `IssueTopic` — only the deepfakes topic sets it (`issue-content.ts`, `issue-content-hi.ts`).
+- Victim-blame review: every `check.*` string and all deepfakes topic copy were scanned for "don't share nudes"-style advice; none existed, so no line had to be removed. The one "do not upload" line is the under-18 gate, which routes to `/minor-support` and stays (root CLAUDE.md: minors never reach the case flow).
+- Hindi: all new and reworded survivor strings are in `hi.json` and `issue-content-hi.ts` and are listed in `hi-review-status.json` — the six keys in `machineTranslated.keys`, the issue-page strings in `machineTranslated.inline`, and this batch's translator in `by`. Machine translated; no native review yet.
+
+**Decisions, recorded per the standing rule**
+
+- The one research line appears on both in-scope pages in identical wording. The WP's bullets govern "these pages"; the deepfakes page carries the same abuse-and-report message, and a statistic about deepfake nudes belongs on it. Each page still carries exactly one research line and that one statistic.
+- The statistic is linked, not pasted as a raw URL: the line keeps the full attribution ("Thorn's ... (2025)") and a "Read the survey" link carries the URL — the site's established external-link pattern (`target="_blank" rel="noopener noreferrer"`, as on /get-help). Thorn's published work is cited by name and link only; no text was copied from it.
+- "Near the top" is the hero on `/check-image` (above the age gate and the tool) and the definition paragraph on the deepfakes page — the first survivor-facing text each page shows.
+- The never-real-or-fake rule was applied to the checker's result strings (`check.result.*`, `check.deep.result.*`, `check.deep.limitation`), which the new test scans in both languages. The required "report it exactly like a real one" message keeps the word "real" (it compares how she can report; it does not verdict an image), and the deepfakes definition keeps "the harm done to you is real" — about the harm, not the image.
+- `issueContentHi` is now typed `Record<slug, Omit<IssueTopic, "slug">>` (it was an untyped `as const` object) so the template's optional `research` access type-checks; rendering is unchanged for the topics without research copy.
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/ai-image-copy.test.ts` — 11 tests: the report-believe-abuse line in both languages; the one research line (US-survey label, Thorn attribution, 1 in 17, the link constant, only those numbers in the line, never presented as India); every result string verdict-free in both languages; no blame-pattern advice in any `check.*` string or the deepfakes topic in either language; the under-18 line stays safe routing; the machine-translation listing; the deepfakes page carries the same message and research line with the same URL; only that topic has research copy; and no other statistic appears anywhere on the deepfakes page.
+- No existing test asserted the replaced copy — the suites were searched for the old phrases ("genuine", "real-looking", "clear result", the old definition) and none appear; the `/check-image` e2e journey (`hash-flow.spec.ts`) asserts only the age gate and the file picker, which are unchanged. The i18n key-parity test covers the new keys.
+- Package totals from the final `check.sh` run (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source touched; re-confirmed green). `asmita` — lint 0 errors (4 pre-existing warnings, all in untouched files), type-check clean, `prisma validate` ok, 153 test files / 1261 tests all passed. The asmita production build was also run and passed (not a `check.sh` gate; done to prove the two changed pages compile).
+
+**Not done or not verified**
+
+- The Hindi strings are machine translated and listed as such; no native speaker has read them. The pages were verified by the unit tests on the copy, by type-check and by the production build; no browser run (dev server, Playwright, e2e) was made in this WP — e2e is not part of `check.sh`, and the `/check-image` journey's assertions are untouched by the copy change.
+- Copy on other pages that also mentions AI-made images (home, /get-help triage, FAQ, who-we-help, chat) was deliberately left alone: the WP names the check-image page, its shared copy and the deepfakes page. What those pages already say ("A fake image is still abuse", "Asmita treats synthetic intimate images the same as real ones") agrees with the new wording, so the site does not contradict itself.
+- No crawler behaviour, config or migration changed, so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval).
+
+**Deviations from the spec, with reasons**
+
+- None beyond the decisions above: every change sits inside the WP's named pages (check-image, the copy it shares, the deepfakes issue page), and nothing outside that scope was touched.
+
+## Web best-practice audit
+
+Work packages WP39–WP43 come from a web best-practice audit of the site (accessibility, forms, performance, security headers), owner-approved on 20 November 2026 (Saquib). They are defined by the audit brief, not by this spec; this spec's "Rules that do not change" and "How to work" still apply, together with the audit's own rules. The per-WP audit log (what changed, what was not verified, what needs the owner's approval) lives in `asmita/docs/product/web-audit-progress.md`.
+
+### WP43. Accessibility of the "Is this image AI-made?" page (app) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, run on the finished code tree; the only edits after the run were these progress-log lines, which no check reads).
+
+**What was built**
+
+- A5 — the states of the on-device check on `/check-image` (`src/app/(public)/check-image/ImageChecker.tsx`) are announced. The "Reading credentials on your device..." line is a `role="status"` paragraph (polite), the result is announced by moving focus to its heading, and the error card is a `role="alert"`. For the result the WP offered a `role="status"` wrapper or a focused heading; the focused heading was chosen — the pattern `EligibilityWizard`, `HomeChat` and `CasePeek` already use — because it reads one line instead of politely replaying the whole result card. "What we found" therefore became a real `<h2>` (it was a `<span>` carrying the same classes): same classes, same look, but a focusable (`tabIndex={-1}`, `outline-none`) heading a screen reader can also jump to by heading navigation. Focus moves there on every completion, including a second image picked after a first result.
+- A4 — every error message on the page is a `role="alert"`: the "We could not read this file" card and the deeper check's "could not be completed right now" line.
+- A6 — the hidden file input is never a tab stop any more (`tabIndex={-1}` at all times; it was `{ageConfirmed ? 0 : -1}`, so after the age gate it sat in the tab order beside the visible button) and now carries an accessible name: `aria-label` from the existing `check.upload.label` ("Choose an image to check"), the same pattern as `SubmitForm`'s hidden picker. The visible "Choose image" button is the only tab stop. `aria-hidden={!ageConfirmed}` stays: the input is disabled while the gate is up.
+- The deeper check's states (WP38's addition) got the same treatment: its "Checking with OpenAI..." line is `role="status"`, its error line is `role="alert"`, and its result title receives focus when it arrives (its button unmounts on completion, so focus would otherwise fall back to the page).
+- WP35 and WP38 wording is untouched: no `en.json`/`hi.json` value changed, no new key was added, so `hi-review-status.json` is unchanged too.
+
+**Decisions, recorded per the standing rule**
+
+- The result is announced by focus, not a live-region wrapper: a `role="status"` region around the result would politely read out the whole card (C2PA details, metadata list, technical-details entries) on every check; the focused heading reads one line and leaves the rest to browse. The WP allowed either mechanism.
+- The input's accessible name reuses `check.upload.label`: it is exactly the right name for the picker, it already exists in both languages, and the audit's "every new user-facing string goes in en.json AND hi.json" rule then adds nothing.
+- `/check-image` was not added to the axe route list in `tests/e2e/accessibility.spec.ts`: that list change belongs to WP39's lane (its brief names those routes); duplicating it here would collide when the audit lanes merge.
+- The deeper check got the same announcements although the brief names the page's main states: it is part of "whatever WP38 added", and its result otherwise arrives unannounced.
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/check-image-a11y.test.ts` — 8 tests: the hidden input carries its accessible name, `tabindex="-1"` and `sr-only` and stays disabled behind the age gate while the visible button renders (and the old conditional `tabIndex` is gone from the source); the label exists in both languages; the two checking lines are `role="status"`, both error messages are `role="alert"`, the result heading is the focused `<h2>`, and both focus effects are wired. The conditional states are pinned on the component source because `renderToStaticMarkup` reaches only the idle state — the same pinning style `admin-crawler-ui.test.ts` uses.
+- New `tests/e2e/check-image-a11y.spec.ts` (run on the chromium and mobile projects, both passing): the hidden input has `tabindex="-1"` and the `aria-label`; after a synthetic image is picked, focus lands on the "What we found" heading; after focus is deliberately moved off it, a second pick announces again. Run before the commit through the Node 22 container against a throwaway Postgres 17 (2 tests, 20.8 s); the full Playwright suite remains the separate verify step.
+- The existing `/check-image` assertions in `hash-flow.spec.ts` (age-gated picker) are untouched and still hold: one file input, disabled until the age tick, enabled after.
+- Package totals from the final `check.sh` run (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source touched; re-confirmed green). `asmita` — lint 0 errors (the 4 pre-existing warnings, all in untouched files, no new ones), type-check clean, `prisma validate` ok, 157 test files / 1309 tests all passed.
+
+**Not done or not verified**
+
+- No real screen reader was run. The announcements use the standard mechanisms (`role="status"`, `role="alert"`, programmatic focus to a heading) and are asserted structurally (unit) and by focus (e2e).
+- The deeper check's announcements cannot be reached in e2e: the harness sets no OpenAI key, so the page shows "temporarily unavailable" and the deeper check's states never run there. They are pinned by the unit tests only.
+- The "We could not read this file" card is defensive: both on-device readers resolve instead of throwing (`readImageProvenance` catches internally, `readC2paCredentials` resolves to "unavailable"), so no real pick reaches it; its `role="alert"` is pinned by the unit test, not exercised by a live run.
+- The new e2e spec was run alone (both projects), not with the whole Playwright suite; that full run is the audit's separate verify step.
+- No crawler behaviour, config or migration changed, so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval).
+
+**Deviations from the spec, with reasons**
+
+- None beyond the decisions above: every change sits inside the WP's named page (check-image and what WP38 added to it), and nothing outside that scope was touched.
 - App: `CrawlPage.priority` (additive migration `20261119060000_crawl_page_priority`: `INTEGER NOT NULL DEFAULT 100`, plus the index `(sourceId, priority, nextDueAt)` the claim's new order reads; existing rows keep 100). Every claim now hands out the due rows of a source `ORDER BY priority, nextDueAt` — the memory path's sort, the Kysely (Worker) path's `orderBy` chain and the Prisma path's raw claim all changed in one shape, so two crawler instances still never share a URL and the 30-minute claim window is untouched. `linkPriority` (exported, tested) is the report-to-row rule: sitemap 10, feed 20, pagination 30, other pages 50 plus 10 per depth level, capped at the default 100; the seed row keeps 100 (the app's own, not from a report). The report's link entries gained two optional strict fields on both sides: `pagination` (a flag the crawler sets on `rel="next"` and its siblings) and `lastmod` (a sitemap `<lastmod>` as a strict ISO date) — a link's kind/flag/depth sets the priority of the row it stores, and a live row whose reported lastmod is newer than its last fetch is bumped to priority 5 and made due immediately (`FRONTIER_PRIORITY_LASTMOD`, one chunked digest read + one chunked update per report, status-guarded so a concurrent kill stays final). A row never fetched, a dead row and a row the very same report fetched are never jumped; a claimed row keeps its claim and becomes due when the window expires. Prisma, Kysely and memory paths aligned; Kysely table types regenerate from the schema on install as before.
 - Crawler: `parseSitemap` collects `<lastmod>` for urlset `<url>` entries and sitemap-index children, normalising to strict ISO UTC (`isoLastmod`: a full ISO date-time with offset or Z, or an ISO date; partial formats and junk are quietly dropped, never guessed — so what the parser produces always passes the report contract, tested). `xmlLinks` carries the lastmod on the links it reports (and keeps a previously reported one through the WP10 https upgrade); `collectLinks` flags pagination links with `pagination: true`; robots.txt `Sitemap:` stash links and feed entries carry no lastmod (the spec names sitemap links; a feed's pubDate/updated are publication dates, not modification times). The crawler stays priority-blind: it reports facts, the app owns the policy — the schemas accept no `priority` from the wire.
 - Test support: the mock API mirrors the app's WP11 rules on purpose (priorities on stored rows, claim order, the lastmod jump and its refusals) and its strict server schema accepts the new fields; new `buildPriorityFixture()` (synthetic pages only, no images, hosts disjoint from every other fixture) serves the robots-named sitemap with a newer-than-any-fetch and an old date-only lastmod, a pagination link, a feed and plain pages.
@@ -939,5 +1109,38 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The failure did not reproduce: eight further full-suite runs on the unchanged code (one traced, three warm, four with a cold `.next`, plus a standalone instrumented twin of the failing test — roughly 1600 token mints logged, every mint/POST pair matched) all passed. The fix addresses the two mechanisms that can physically produce the observed signature (a resolved non-OK POST with a clean server log); which of them fired in the original run cannot be proven after the fact.
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
+
+## Lane merges
+
+### WP65. Merge master into feat/deadline-docs (merge-conflict resolution) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, final run on the committed merge tree).
+
+**What was done**
+
+- The branch's open PR could not merge because master had moved on (crawler v3 WP9–WP16, video WP20/WP21, SSCD WP28, platform partners, the assistant safety review, the web audit, the LCP/font work and the docs/constraints-scope change). A merge of origin/master into `feat/deadline-docs` was started and left one conflicted file, `crawler/README.md` — the only file both sides had edited with overlapping intent.
+- The conflict: this branch (WP27) had documented the app's `CRAWLER_FRONTIER_MAX_PAGES_PER_SOURCE` (default 50,000) frontier cap in the Bounded-frontier row; master had meanwhile added crawler v3 WP9 (the probe link stash, conventional sitemap probing), WP10 (the canonical alias cap), WP14 (the soft-404 digest map) and video WP21 (video-sitemap previews) to the same two rows — and an earlier merge inside master had left the **Bounded frontier** and **Deep coverage** rows duplicated (two variants of each).
+- Resolution: one **Bounded frontier** row and one **Deep coverage** row, each carrying the union of every fact from both sides — master's WP4/WP9/WP10/WP14/WP5 structures plus the branch's frontier-cap sentence in the first, master's WP9 probing plus WP21 previews in the second. Every phrase was taken verbatim from the parent commits (nothing retyped); the diff against master is exactly the four duplicated rows becoming the two merged rows.
+- Everything else merged cleanly with no code change. The five files both sides had touched were each checked by hand: root `CLAUDE.md` (master's restructure keeps the branch's crawler-sources sentence), `asmita/prisma/template-seeds.ts` (master's WP28 authorisation sentence and the branch's 24-hour demands sit in different templates), `asmita/tests/unit/notice-template-seeds.test.ts` (master's two new WP28 tests beside the branch's WP26 test), `crawler/docs/v2-progress.md` (both sides' entries kept verbatim by the auto-merge) and `crawler/README.md` itself. `asmita/src/i18n/hi-review-status.json` is valid JSON and exactly the union of both parents' keys (the branch's nine plus master's `machineTranslatedWp48`).
+- No feature work, no code, no test and no behaviour was changed to make the merge pass; nothing was weakened.
+
+**Decisions, recorded per the standing rule**
+
+- Master's duplicated rows were combined rather than kept four-deep: the duplication was an accident of an earlier merge inside master, a safety table stating the same guarantee twice is a defect rather than intent, and the union keeps every documented behaviour from both variants. Within the combined row, WP14's "adds a third" was reworded to "adds one more bounded per-source structure" because the ordinal no longer holds once WP9's probe stash sits in the same row.
+- The pre-existing heading/content misalignment this file already has on master (the WP17 heading with no content under it, WP17's content under the WP9 heading, and so on — residue of earlier lane merges inside master) was left exactly as master has it: reordering another lane's 900 lines is outside this WP and risked losing content. Both sides' entries are present verbatim, which is what this merge had to guarantee.
+
+**Tests** (all run, all passing)
+
+- Final `check.sh` run on the committed merge tree (Node 22): `crawler` — lint, type-check, 58 test files / 628 tests all passed, build ok. `asmita` — lint 0 errors (4 pre-existing warnings, all in master's own untouched files: three in `scripts/translate-faq.mjs`, one in `src/components/QuickExit.tsx`), type-check clean, `prisma validate` ok, 167 test files / 1504 tests all passed.
+
+**Not done or not verified**
+
+- The heading/content misalignment in this file described above is still present (master's state, inherited by the merge).
+- The merge was verified by the full check suite and by reading the five both-sides files; the roughly 200 files that only master changed were taken as-is and are covered by master's own checks plus this run.
+- Nothing was pushed; the merge commit and this entry stay on the branch.
+
+**Deviations from the spec, with reasons**
+
+- None against the crawler spec — no crawler behaviour changed. WP65 itself is a lane instruction that sits outside the spec's work-package list; this entry follows the spec's Reporting section for it.
 
 

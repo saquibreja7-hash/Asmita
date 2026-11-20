@@ -188,26 +188,48 @@ export default async function GetHelpPage() {
                 )}
               </p>
               <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {scenarios.map((s, i) => (
-                  <Link
-                    key={s.title}
-                    href={s.href}
-                    className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
-                  >
-                    <h3 className="text-[17px] font-medium leading-snug text-[var(--ink)]">
-                      &ldquo;{locale === "hi" ? hindi.scenarios[i].title : s.title}&rdquo;
-                    </h3>
-                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
-                      {locale === "hi" ? hindi.scenarios[i].action : s.action}
-                    </p>
-                    <span className="mt-4 inline-block text-sm font-medium text-[var(--ink)]">
-                      {say("What to do", "क्या करें")}{" "}
-                      <span className="transition-transform group-hover:translate-x-0.5 inline-block" aria-hidden>
-                        →
+                {scenarios.map((s, i) =>
+                  // A full page load for /check-image: its own headers allow the C2PA WASM reader.
+                  s.href === "/check-image" ? (
+                    <a
+                      key={s.title}
+                      href={s.href}
+                      className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                    >
+                      <h3 className="text-[17px] font-medium leading-snug text-[var(--ink)]">
+                        &ldquo;{locale === "hi" ? hindi.scenarios[i].title : s.title}&rdquo;
+                      </h3>
+                      <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
+                        {locale === "hi" ? hindi.scenarios[i].action : s.action}
+                      </p>
+                      <span className="mt-4 inline-block text-sm font-medium text-[var(--ink)]">
+                        {say("What to do", "क्या करें")}{" "}
+                        <span className="transition-transform group-hover:translate-x-0.5 inline-block" aria-hidden>
+                          →
+                        </span>
                       </span>
-                    </span>
-                  </Link>
-                ))}
+                    </a>
+                  ) : (
+                    <Link
+                      key={s.title}
+                      href={s.href}
+                      className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
+                    >
+                      <h3 className="text-[17px] font-medium leading-snug text-[var(--ink)]">
+                        &ldquo;{locale === "hi" ? hindi.scenarios[i].title : s.title}&rdquo;
+                      </h3>
+                      <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
+                        {locale === "hi" ? hindi.scenarios[i].action : s.action}
+                      </p>
+                      <span className="mt-4 inline-block text-sm font-medium text-[var(--ink)]">
+                        {say("What to do", "क्या करें")}{" "}
+                        <span className="transition-transform group-hover:translate-x-0.5 inline-block" aria-hidden>
+                          →
+                        </span>
+                      </span>
+                    </Link>
+                  ),
+                )}
               </div>
             </div>
           </div>
@@ -275,9 +297,16 @@ export default async function GetHelpPage() {
                       {locale === "hi" ? hindi.tools[i].body : tool.body}
                     </p>
                     <div className="mt-6">
-                      <Link href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
-                        {locale === "hi" ? hindi.tools[i].cta : tool.cta}
-                      </Link>
+                      {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                      {tool.href === "/check-image" ? (
+                        <a href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                          {locale === "hi" ? hindi.tools[i].cta : tool.cta}
+                        </a>
+                      ) : (
+                        <Link href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                          {locale === "hi" ? hindi.tools[i].cta : tool.cta}
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}

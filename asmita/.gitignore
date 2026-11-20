@@ -50,3 +50,7 @@ next-env.d.ts
 
 # generated from prisma/schema.prisma on install
 /src/generated/
+
+# c2pa-web engine files copied from node_modules on install
+# (scripts/copy-c2pa-assets.mjs; the WASM must ship from our own origin)
+/public/c2pa/

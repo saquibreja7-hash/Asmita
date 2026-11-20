@@ -36,7 +36,7 @@ We will allow media storage and server-side media processing under all of the fo
 
 ## Documented exception: OpenAI content-provenance check
 
-The `/check-image` deeper check (`/api/check-image`) forwards the image to OpenAI's `content_provenance_checks` endpoint to read C2PA credentials and the SynthID watermark. This is a third-party processor, which conditions 5 and 6 above would otherwise forbid.
+The `/check-image` deeper check (`/api/check-image`) forwards the image to OpenAI's `content_provenance_checks` endpoint to read OpenAI's own signals (its Content Credentials and the SynthID watermark). This is a third-party processor, which conditions 5 and 6 above would otherwise forbid.
 
 It is allowed as a narrow, opt-in exception because:
 
@@ -51,7 +51,15 @@ Current shipping state: the route and its UI are behind `ENABLE_PROVENANCE_CHECK
 
 Go-live decision (2026-08-02): Saquib chose to enable the flag in production and preview (`ENABLE_PROVENANCE_CHECK=true` plus `OPENAI_API_KEY` set in Vercel) ahead of full legal sign-off, accepting the residual risks below. This means the feature is live before the ADR's blockers are formally cleared; that is a deliberate product decision, recorded here so the written record matches what is deployed.
 
-Open follow-up before this can be considered safe (still outstanding while live): the adults-only gate is client self-attestation, which a caller can bypass on a public endpoint by calling `/api/check-image` directly, so a minor's image could be relayed to OpenAI. This must be closed by binding the route to a started/authenticated case that already passed the adult age gate. The in-memory IP rate limit should also move to the Redis driver, since it does not hold across stateless serverless instances (both a cost and an abuse cap). Legal sign-off on ADR 002 remains required and is now happening in parallel with the feature being live rather than before it.
+Open follow-up before this can be considered safe (still outstanding while live): the adults-only gate is client self-attestation, which a caller can bypass on a public endpoint by calling `/api/check-image` directly, so a minor's image could be relayed to OpenAI. This must be closed by binding the route to a started/authenticated case that already passed the adult age gate. Legal sign-off on ADR 002 remains required and is now happening in parallel with the feature being live rather than before it.
+
+## Decision recorded (19 November 2026, Saquib)
+
+The owner has decided that **this one route** — `/api/check-image`, the OpenAI content-provenance check — is accepted to run in production when `ENABLE_PROVENANCE_CHECK=true` (set in the production Worker vars; `OPENAI_API_KEY` is set only as a Worker secret, never a var). The old production force-off in `provenanceCheckEnabled()` (`src/lib/dev-flags.ts`) is removed; the flag alone decides, and without the key the route answers 503 "not configured" and the page hides the button.
+
+What is accepted, per check: the image she explicitly consents to send leaves for OpenAI, over TLS, held in memory only on our side — never stored, never logged (no bytes, no filename, no hash), and the OpenAI response is reduced to the fields the page shows. The adults-only gate and the per-check consent tick stay mandatory and are enforced on the server; the result never gates help.
+
+What is **not** accepted: everything else ADR 002 proposes — the evidence vault, and any media storage or server-side media processing of any other kind. That part of this ADR stays **proposed and blocked on legal sign-off**, unchanged. The WP38 safety review of the route also closed the stale note above about the in-memory IP rate limit: the route now uses the same shared Postgres `RateLimitBucket` counters as every other route (with the standard in-memory fallback), and additionally rejects oversized bodies before reading them, sniffs magic bytes so only real JPEG/PNG/WebP images are ever relayed, and caps the size at 20 MB.
 
 ## Status and blockers
 
