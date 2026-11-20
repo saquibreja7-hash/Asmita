@@ -552,15 +552,23 @@ export async function reviewHashSubmission(input: {
   if (!record) throw new Error("hash_submission_not_found");
   if (record.status !== "PENDING_REVIEW") throw new Error("hash_submission_already_reviewed");
 
-  const updated = await db.hashSubmission.update({
-    where: { id: input.hashSubmissionId },
-    data: {
-      status: input.decision === "approve" ? "APPROVED" : "REJECTED",
-      flaggedForReview: false,
-      flagReason: input.reason ?? record.flagReason,
-      reviewedAt: new Date(),
-      reviewedById: input.reviewerId ?? null,
-    },
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.hashSubmission.update({
+      where: { id: input.hashSubmissionId },
+      data: {
+        status: input.decision === "approve" ? "APPROVED" : "REJECTED",
+        flaggedForReview: false,
+        flagReason: input.reason ?? record.flagReason,
+        reviewedAt: new Date(),
+        reviewedById: input.reviewerId ?? null,
+      },
+    });
+    // WP32: the partner feed follows the decision in the same transaction —
+    // an approval makes the fingerprint shareable (an ADD event, when her
+    // agreement is live), a rejection withdraws it (partner-feed.ts).
+    const { syncCaseFeedEventsPrisma } = await import("@/lib/partner-feed");
+    await syncCaseFeedEventsPrisma(tx, record.caseId);
+    return row;
   });
 
   if (input.decision === "reject") {

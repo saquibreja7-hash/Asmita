@@ -40,6 +40,7 @@ describe("notice template seeds", () => {
       "FIR_PACKAGE",
       "CRAWL_AUTHORISATION",
       "CRAWL_REPRESENTATIVE_NOTICE",
+      "PARTNER_SHARING_CONSENT",
       "WATCH_AUTHORISATION",
     ]);
   });
@@ -186,8 +187,9 @@ describe("notice template seeds", () => {
         const rendered = renderNoticeTemplate(template.bodyTemplate, sampleVariables);
         expect(() => assertNoticeBodySafe(rendered)).not.toThrow();
         expect(rendered).toContain(sampleVariables.caseReference);
-        // The crawl authorisations are addressed to Asmita, not to a platform.
-        if (template.templateType !== "CRAWL_AUTHORISATION" && template.templateType !== "WATCH_AUTHORISATION") {
+        // The crawl authorisations and the partner-sharing agreement are
+        // addressed to Asmita, not to a platform.
+        if (template.templateType !== "CRAWL_AUTHORISATION" && template.templateType !== "PARTNER_SHARING_CONSENT" && template.templateType !== "WATCH_AUTHORISATION") {
           expect(rendered).toContain(sampleVariables.platformName);
         }
         if (template.bodyTemplate.includes("{{url}}")) {
@@ -275,3 +277,31 @@ describe("crawler drafts agree with each other (R6)", () => {
     for (const text of [authorisation, notice]) expect(text).not.toMatch(/DRAFT/);
   });
 });
+
+describe("the partner-sharing agreement (WP31)", () => {
+  it("keeps the spec's three plain promises and adds no URL or platform addressee", () => {
+    const template = seed("PARTNER_SHARING_CONSENT");
+    const rendered = renderNoticeTemplate(template.bodyTemplate, sampleVariables);
+    // Only the fingerprints, never the images or her name.
+    expect(rendered).toContain("never my images or my name");
+    // Revocable at any time, and Asmita asks the platforms to delete them.
+    expect(rendered).toContain("withdraw this agreement at any time");
+    expect(rendered).toContain("Asmita will ask the platforms to delete them");
+    // Partners use the fingerprints to stop reuploads too.
+    expect(rendered).toContain("stop them being uploaded again");
+    // The agreement carries no URL and is not addressed to a platform.
+    expect(template.bodyTemplate).not.toContain("{{url}}");
+    expect(template.bodyTemplate).not.toContain("{{platformName}}");
+    expect(template.legalCitations.length).toBeGreaterThan(0);
+  });
+
+  it("renders a subject that passes subject safety, like every other template", () => {
+    const template = seed("PARTNER_SHARING_CONSENT");
+    const rendered = renderNoticeTemplate(template.subjectTemplate, sampleVariables);
+    expect(() => assertNoticeSubjectSafe(rendered)).not.toThrow();
+    expect(rendered.length).toBeGreaterThan(0);
+    expect(rendered.length).toBeLessThanOrEqual(998);
+    expect(rendered).toContain(sampleVariables.caseReference);
+  });
+});
+

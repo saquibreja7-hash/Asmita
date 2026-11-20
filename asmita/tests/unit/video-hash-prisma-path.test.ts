@@ -67,6 +67,13 @@ beforeEach(() => {
     // WP28 (ADR 008): the erasure deletes the case's SSCD embeddings too.
     findingEmbedding: { deleteMany: empty() },
     crawlConsent: { deleteMany: empty() },
+    // WP32: erasure also tells the partner feed to delete what it holds of
+    // hers (WITHDRAW events) and drops her outcome and agreement rows. The
+    // shared-fingerprint read returns nothing here, so no feed event is
+    // written; the delegates exist because the merged path calls them.
+    partnerOutcome: { deleteMany: empty() },
+    partnerShareConsent: { deleteMany: empty() },
+    partnerFeedEvent: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn().mockResolvedValue({ count: 0 }) },
     linkVerification: { deleteMany: empty() },
     hashSubmission: { updateMany: m.hashUpdateMany, deleteMany: m.hashDeleteMany, findMany: vi.fn().mockResolvedValue([]) },
     feedback: { deleteMany: empty() },

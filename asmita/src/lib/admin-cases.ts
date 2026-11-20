@@ -14,6 +14,7 @@ import { devFlagEnabled } from "@/lib/dev-flags";
 import { buildLadder } from "@/lib/escalation-ladder";
 import { listLinkVerifications } from "@/lib/link-verification";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED, platformDirectory } from "@/lib/platforms";
+import { listPartnerOutcomesForCase, type AdminPartnerOutcome } from "@/lib/partner-outcomes";
 import { isUrlExpired } from "@/lib/url-retention";
 import { getTier1ApiConfigFromEnv, routeTier1OrFallback } from "@/lib/tier1-api-client";
 import { checkSignedTemplate, loadSignedTemplate, type SignedTemplateRefusal } from "@/lib/signed-template";
@@ -782,6 +783,8 @@ export type AdminCaseDetail = {
   fingerprints: AdminCaseFingerprint[];
   /** Hash advisory dispatch would refuse because of its pinned template; sent: a platform already received it. */
   hashAdvisoryRefusal: null | { reason: SignedTemplateRefusal; sent: boolean };
+  /** WP32: what partner platforms reported they did (partner-outcomes.ts). */
+  partnerOutcomes: AdminPartnerOutcome[];
   timeline: Array<{ sequence: number; eventType: string; actorId: string; createdAt: string }>;
 };
 
@@ -1087,6 +1090,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
       videoDurationSec: hash.videoDurationSec ?? null,
     })),
     hashAdvisoryRefusal,
+    partnerOutcomes: await listPartnerOutcomesForCase(record.id),
     timeline: timeline.map((event) => ({
       sequence: event.sequence,
       eventType: event.eventType,
