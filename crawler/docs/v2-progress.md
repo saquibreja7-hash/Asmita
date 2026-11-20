@@ -1738,3 +1738,40 @@ This WP overrides the spec (assigned as a lane brief, not present in `full-crawl
 **Checks (run, not assumed).** Full `check.sh` (Node 22, both packages) on the resolved tree, which is exactly the tree committed as the merge: `crawler` — npm ci, lint, type-check, **58 test files / 628 tests passed**, build ok. `asmita` — npm ci, `prisma generate`, lint 0 errors (4 warnings, all pre-existing in files this branch never touched: three unused underscore vars in master's `scripts/translate-faq.mjs`, one react-hooks warning in master's WP41 `QuickExit.tsx`), type-check clean, `prisma validate` ok, **176 test files / 1620 tests passed**. Both sides' suites run and pass together in the merged tree — this branch's `site-chrome-a11y.test.ts` (24 tests) and master's `page-load-weight.test.ts` (6 tests) both green — nothing was dropped or weakened to make the merge compile.
 
 **Commits.** Merge commit `110ab9b` "Merge master into fix/a11y-chrome-css; resolve conflicts" (parents: `8938e94` WP55 progress entry, `117ef0f` master #87), then this entry. Not pushed, per the work package. Not run: the Playwright e2e suite (check.sh does not include it and the work package defines done as check.sh passing); `npm run build` for asmita (not part of the checks).
+## WP78. Dependency audit green again — 2026-11-20
+
+**Status: complete. All checks passed.** A lane work package outside `full-crawler-spec.md` (like WP70/WP72/WP69 before it); this entry follows the spec's Reporting section. No application code, no crawler code and no test was added, changed or deleted.
+
+**What the check is.** Read from `.github/workflows/ci.yml`: the "Dependency audit" job (`security-audit`) — the only audit gate in CI — installs `asmita/` with `npm ci` and runs `npm run security:audit`, which is `npm audit --audit-level=high --omit=dev`. Only `asmita/` is covered: `crawler-ci.yml` has no audit step, `tools/` has no workflow at all, and the only "audit" match in `ai-review.yml` is prose in the review prompt.
+
+**What was failing.** The exact command, run through the Node 22 helper, reported "8 vulnerabilities (5 moderate, 3 high)" — npm counts every package in a vulnerable chain — over two underlying advisories:
+
+- effect 3.20.0, [GHSA-7589-6fvf-x4pw](https://github.com/advisories/GHSA-7589-6fvf-x4pw) (high, ReDoS in `Schema.TemplateLiteral` compiled regex, vulnerable `<=3.22.0`), reached through `@prisma/config`, the prisma CLI's config loader. The old lockfile did not flag the package dev, so `--omit=dev` audited it anyway.
+- fflate 0.7.3 — satori's nested copy — [GHSA-px8p-9vwx-vf98](https://github.com/advisories/GHSA-px8p-9vwx-vf98) (moderate, `unzipSync` can enter an infinite loop parsing malformed ZIP64 archives, vulnerable `>=0.7.0 <0.7.5`), in the production chain `vinext` → `@vercel/og` → `satori` → `fflate` (OG image generation).
+
+**What was built.** Two npm `overrides` in `asmita/package.json`, lockfile regenerated with the Node 22 helper; the lockfile diff is exactly two version bumps, nothing else moved:
+
+- `"effect": "^3.22.5"` — effect 3.20.0 → 3.22.5 (first patched line is 3.22.1; 3.22.5 is its newest patch), now correctly flagged `devOptional` in the lockfile.
+- `"satori": { "fflate": "0.7.5" }` — satori's nested fflate 0.7.3 → 0.7.5 (the patched version). Scoped to satori so `@vitest/ui`'s dev-only fflate 0.8.3 (declared `^0.8.2`, not in the vulnerable range) keeps its own copy; `@shuding/opentype.js`'s nested copy was already the patched 0.7.5.
+
+New ops doc `asmita/docs/ops/dependency-audit.md` records the gate, the reasoning, the state after the fix and the remaining dev-tree advisories. The workflow, the audit command and its threshold are untouched; no `--force`, no `--legacy-peer-deps`, nothing silenced.
+
+**Decisions recorded**
+
+- Overrides rather than direct-dependency upgrades, because no upgrade path exists (checked against the registry, not assumed): prisma 7.10.0 and 7.10.1 — the newest stable — both pin effect `3.20.0` exactly; even the newest satori (0.63.2) still pins fflate `0.7.3`, and the newest vinext (1.4.6) still carries the same `@vercel/og` 1.0.3 chain. So the work package's first option ("upgrade the direct dependency") had no reachable fix; the override is its second option, and the smallest change.
+- The fflate override is scoped to satori only (npm's nested-override form) so no dev tool's declared range is violated.
+- picomatch [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf), named in the work package, needed nothing: the advisory was withdrawn upstream before this WP ran ("not a security issue"), npm's audit database no longer returns it for any version in the tree (verified against the bulk advisory endpoint, including the production copy picomatch 2.3.2 under `vinext` → `vite-plugin-commonjs` → `fast-glob` → `micromatch`), and the audit that failed listed only the two advisories above.
+- The dev-tree advisories that `--omit=dev` excludes were left alone on purpose: the CI gate audits production dependencies only, and fixing the dev ones (vitest / `@vitest/mocker` < 4.1.12, minimatch 10.2.6 under typescript-estree < 11.0.1, basic-ftp 5.3.1 under `@lhci/cli`'s get-uri, lodash-es 4.17.23 pinned by chevrotain under lighthouse — every one verified dev-only, not prod-reachable) means dev-dependency churn with no effect on the gate. They are listed in the ops doc for a future work package.
+
+**Checks (run, not assumed)** — all on Node 22 through the lane helpers:
+
+- The exact CI sequence in `asmita/`, `npm ci` then `npm run security:audit`: **found 0 vulnerabilities**, exit 0 (the pre-fix run of the same command had failed).
+- Full `check.sh`: `crawler` — npm ci, lint, type-check, **58 test files / 628 tests passed**, build ok; `asmita` — npm ci, `prisma generate`, lint, type-check, `prisma validate`, **208 test files / 2026 tests passed**. Printed ALL CHECKS PASSED.
+- `npm run build` in `asmita/` with CI's dummy env values, exit 0. The `prisma generate` inside the install had already exercised `@prisma/config` against effect 3.22.5, and the whole suite passed on top of the upgraded packages.
+
+**Not done or not verified**
+
+- The Playwright e2e suite was not run: nothing user-facing changed (two lockfile version pins only), `check.sh` does not include it, and the work package defines done as the full checks plus the audit plus the build.
+- No new tests were added: a version pin has no behaviour of its own to test; the existing suites (628 crawler, 2026 asmita tests) passing on the upgraded tree is the verification. The dev-tree advisories above are documented, not fixed.
+
+**Commits.** `df99a27` "WP78: make the CI dependency audit pass again (effect, fflate)" (`asmita/package.json`, `asmita/package-lock.json`, new `asmita/docs/ops/dependency-audit.md`), then this entry. Not pushed, per the work package.
