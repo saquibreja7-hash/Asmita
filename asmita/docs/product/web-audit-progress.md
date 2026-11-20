@@ -320,3 +320,55 @@ memory-backed dev server, before any click).
   `node:22-bookworm` image (rollback: `docker tag e13726ca6041
   node:22-bookworm`). No crawler source, test or config changed; the same
   15 tests then passed in the re-run.
+
+## WP50 — WP49's fixes merged into the hash-worker branch — 2026-11-20
+
+Branch `perf/hash-worker`. This branch was cut from `fix/forms-focus`
+before WP49, so its full verify run
+(`logs/verify-hash-worker/e2e.log`: 11 failures) carried the same two
+causes WP49 fixed: nine "Clicking the checkbox did not change its state"
+(the blur-commit/reflow race on `/submit`) and two strict-mode violations
+where an unscoped `getByRole("alert")` also matched Next.js's own route
+announcer.
+
+**What changed**
+
+- `git merge origin/fix/forms-focus` (a merge; no rebase, no
+  force-push): the WP49 fixes now sit beside WP42's worker hashing. The
+  two WPs touch different regions of `SubmitForm.tsx` and compose with
+  no source conflict — the links box keeps its pause-only settling
+  checks and the platform question is asked from the links as they
+  stand, while the hashing module still loads lazily and PDQ/vPDQ still
+  run in the Web Worker. The only merge conflict was this progress file
+  itself (both branches had appended their section at the end); both
+  sections were kept, in WP order.
+- Nothing further needed fixing: after the merge, every failure in that
+  log is gone and no new one appeared. The checkbox race WP42's entry
+  had flagged as made likelier by the worker is closed by WP49's fix on
+  this branch too.
+
+**What was not verified**
+
+- The full Playwright run (its mobile project included) and the worker
+  smoke are the separate verify step; the chromium project of every
+  spec that failed in that log was run here and passed (23/23 across
+  `crawler-journey`, `database-hardening`, `escalation-ladder`,
+  `forms-focus`, `hash-flow`, `notice-integrity`, `reporting-audit`,
+  `reporting-journey-polish`), and both packages' full checks passed
+  (crawler 350 tests, asmita 1288, every pdq/vpdq suite among them,
+  golden hashes untouched and bit-identical).
+- Screen-reader behaviour is reasoned from the ARIA semantics, not
+  listened to with a running screen reader.
+
+**Sentences that need the owner's approval**
+
+- None: no user-facing string changed.
+
+**Decisions made on my own**
+
+- The merge's only conflict was this progress file: both WP entries
+  kept, WP42 before WP49, since the file is ordered by WP number.
+- The log's 11 failures are counted as nine checkbox ticks plus two
+  alert-locator violations; the extra checkbox failure beside the ten
+  recorded on `fix/forms-focus` is the second `escalation-ladder` test,
+  same cause, so it needed no separate fix.

@@ -515,3 +515,29 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - Pre-existing e2e race found and worked around in the specs, not the app: after `fill()` the links textarea keeps focus; a click within the 600 ms debounce window (WP40 A7) blurs it, flushing the checks, which renders the checks list and removes the platform question — a reflow that moves the page under the pointer so the click misses the declaration checkbox (a missed click can land on whatever moved there). It reproduces at HEAD (verified with WP42 stashed), and the worker makes it likelier by finishing inside the same window. The specs now wait for the app's own `#url-checks` list and pin `prefers-reduced-motion: reduce` (like the accessibility spec, which also makes the site's smooth scrolling instant). No assertion was weakened; the product edge is recorded for the owner in `asmita/docs/product/web-audit-progress.md`.
 - Also pre-existing on this host and left as found (verified at HEAD, pages untouched by this WP): `forms-focus.spec.ts`'s alert assertion sees Next's own route announcer as a second `role=alert`, and its sign-form checkbox click has the same blur-reflow race on the review-sign page.
 - Local footnote: running `npm run build` leaves `.next/types` behind, which makes the repo's plain `tsc --noEmit` fail on generated validator types until `.next` is removed — a repo-wide footgun unrelated to this WP (check.sh never builds); worth a look in a housekeeping pass.
+
+
+## WP50. Web audit: WP49's fixes merged into the hash-worker branch — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22) and the eight specs that failed this branch's verify run pass on chromium through `e2e-some.sh`. An owner-approved web-audit work package, not a crawler-spec WP; no `crawler/` source changed.
+
+**What was built**
+
+- `git merge origin/fix/forms-focus` into `perf/hash-worker` (a merge; no rebase, no force-push). The branch was cut before WP49, so the 11 Playwright failures of its full verify run (`logs/verify-hash-worker/e2e.log`) were exactly the two causes WP49 fixed: nine "Clicking the checkbox did not change its state" (the blur-commit/reflow race on `/submit`) and two strict-mode violations where an unscoped `getByRole("alert")` also matched Next.js's own route announcer.
+- The merge needed no source resolution: WP49's `SubmitForm.tsx` fixes (no blur commit on the links box; the platform question asked from the links as they stand) and WP42's worker hashing (the hashing module loads lazily, PDQ/vPDQ run in a Web Worker) touch different regions of the file and compose. The only conflict was in `asmita/docs/product/web-audit-progress.md`, where both branches had appended their section; both were kept, in WP order.
+- After the merge nothing in that log remains: every one of the 11 failures is gone and no new one appeared. The checkbox race WP42's entry had flagged as made likelier by the worker is closed by WP49's fix on this branch too.
+
+**Tests** (all run, all passing)
+
+- `e2e-some.sh` (chromium, throwaway Postgres 17): every spec that had a failure in the log — `crawler-journey` (1), `database-hardening` (1), `escalation-ladder` (2), `forms-focus` (5), `hash-flow` (5), `notice-integrity` (4), `reporting-audit` (2), `reporting-journey-polish` (3) — 23/23 passed (2.5m).
+- Every pdq/vpdq unit test, green in the full check: `pdq.test.ts` (9), `pdq-reference-vectors.test.ts` (8), `vpdq.test.ts` (13), `hash-worker.test.ts` (20), the six `video-hash-*` suites (50 tests), and the crawler's `pdq-contract.test.ts` (3) pinning the exact export list and the golden hash. WP50 changed no hash code; the reference vectors and golden hashes are untouched and bit-identical.
+- Package totals from `check.sh` (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok. `asmita` — lint 0 errors, type-check clean, `prisma validate` ok, 154 test files / 1288 tests.
+
+**Not done or not verified**
+
+- The full Playwright run (mobile project included) and the worker smoke are the separate verify step; this WP ran the chromium project of the affected specs and both packages' unit checks.
+- Screen-reader behaviour is reasoned from the ARIA semantics, not listened to with a running screen reader.
+
+**Deviations and decisions, with reasons**
+
+- None against the spec; the WP's own instruction to merge (never rebase or force-push) was followed. The only judgement call was the progress-file conflict: both sections kept, ordered WP42 then WP49, matching the file's existing order.
