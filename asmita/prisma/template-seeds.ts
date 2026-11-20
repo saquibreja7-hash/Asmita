@@ -603,6 +603,10 @@ export const templateSeeds = [
     // (src/lib/crawl-consent.ts). Addressed to Asmita, not to a platform;
     // nothing is sent when she signs it. Unsignable in production until a
     // human legal reviewer records the review.
+    // Item 2's last sentence (WP28, ADR 008) authorises keeping a numerical
+    // description of an analyst-confirmed copy — never the image itself — so
+    // altered versions can be found too; it changed the legal text, so a
+    // re-seed resets reviewedByLegal until a reviewer records it again.
     templateType: TemplateType.CRAWL_AUTHORISATION,
     subjectTemplate:
       "Authorisation to search for copies of my images - {{caseReference}}",
@@ -614,7 +618,7 @@ export const templateSeeds = [
       "",
       "1.  I authorise Asmita (meriasmita.org) to compare the fingerprints set out at the end of this authorisation with images that Asmita's search service finds on public websites. Each fingerprint was made on my own device; Asmita has never received the images themselves.",
       "",
-      "2.  I understand how the search works. A separate Asmita service visits public pages on websites that a person at Asmita has approved. It works out the fingerprint of each image it sees, compares it with my fingerprints, and keeps nothing about an image that does not match. When an image is close to one of my fingerprints, it records only the address of the page and of the image, never the image.",
+      "2.  I understand how the search works. A separate Asmita service visits public pages on websites that a person at Asmita has approved. It works out the fingerprint of each image it sees, compares it with my fingerprints, and keeps nothing about an image that does not match. When an image is close to one of my fingerprints, it records only the address of the page and of the image, never the image. Where a person at Asmita has confirmed that a copy matches, Asmita may also keep a numerical description of that confirmed copy — never the image itself — so that altered versions of it can be found too.",
       "",
       "3.  I understand that a match is only a possible match. A person at Asmita reviews every possible match, and a less certain match is checked by a second person, before anything is done with it.",
       "",

@@ -43,12 +43,18 @@ import { fork, type ChildProcess } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CrawlError, ERROR_CODES, type ErrorCode } from "../errors.ts";
+import { MAX_SPRITE_TILES } from "./sprite.ts";
 
 export type DecodeResult = { pdq: string; quality: number };
 
 /** What the crawler needs from a decoder (tests may substitute their own). */
 export type ImageDecoder = {
   hash(bytes: Buffer): Promise<DecodeResult>;
+  /**
+   * A preview sprite sheet (video-fingerprints spec WP21): same decode and
+   * safety rules, answered with one hash per tile instead of one.
+   */
+  hashSprite(bytes: Buffer): Promise<DecodeResult[]>;
   close(): Promise<void>;
   readonly stats: DecoderStats;
 };
@@ -127,9 +133,12 @@ export function decoderExecArgv(workerPath: string, maxOldSpaceMb = 256): string
 
 type Task = {
   bytes: Uint8Array;
+  /** Split a preview sprite sheet into tiles (WP21); a normal task is false. */
+  sprite: boolean;
   /** True once this image has been re-run after its child died. */
   retried: boolean;
-  resolve: (r: DecodeResult) => void;
+  /** Deliver the validated ok-reply: one hash, or a sprite's tile list. */
+  settle: (r: DecodeResult | DecodeResult[]) => void;
   reject: (e: CrawlError) => void;
 };
 
@@ -162,7 +171,30 @@ export class DecoderPool implements ImageDecoder {
     return new Promise((resolve, reject) => {
       // Copy into a fresh, exactly-sized view: never send a slice of a larger
       // pooled buffer (it could carry unrelated bytes across the boundary).
-      this.queue.push({ bytes: new Uint8Array(bytes), retried: false, resolve, reject });
+      // The reply-kind cross-check in onMessage guarantees a single hash.
+      this.queue.push({
+        bytes: new Uint8Array(bytes),
+        sprite: false,
+        retried: false,
+        settle: (r) => resolve(r as DecodeResult),
+        reject,
+      });
+      this.pump();
+    });
+  }
+
+  hashSprite(bytes: Buffer): Promise<DecodeResult[]> {
+    if (this.closed) return Promise.reject(new CrawlError("aborted"));
+    return new Promise((resolve, reject) => {
+      // Same copy rule as hash(); a sprite reply is validated to carry
+      // 1..MAX_SPRITE_TILES well-formed tiles, nothing else.
+      this.queue.push({
+        bytes: new Uint8Array(bytes),
+        sprite: true,
+        retried: false,
+        settle: (r) => resolve(r as DecodeResult[]),
+        reject,
+      });
       this.pump();
     });
   }
@@ -203,20 +235,29 @@ export class DecoderPool implements ImageDecoder {
     }, this.opts.taskTimeoutMs);
     slot.task = { ...task, id, timer };
     const child = slot.child;
-    child.send({ id, bytes: task.bytes, minSide: this.opts.minSide }, (err) => {
-      // The child went away before taking the task: same as dying mid-task.
-      if (err && slot.child === child) {
-        child.kill("SIGKILL");
-        this.onExit(slot, child);
-      }
-    });
+    // A sprite request says so with exactly `sprite: true` (WP21); a normal
+    // request keeps the three-field shape the protocol has always had.
+    child.send(
+      task.sprite ? { id, bytes: task.bytes, minSide: this.opts.minSide, sprite: true } : { id, bytes: task.bytes, minSide: this.opts.minSide },
+      (err) => {
+        // The child went away before taking the task: same as dying mid-task.
+        if (err && slot.child === child) {
+          child.kill("SIGKILL");
+          this.onExit(slot, child);
+        }
+      },
+    );
   }
 
   private onMessage(slot: Slot, child: ChildProcess, m: unknown): void {
     const task = slot.task;
     if (slot.child !== child || !task) return;
     const r = parseReply(m, task.id);
-    if (!r) {
+    // The reply's kind must match the request's (WP21): a single-hash reply
+    // to a sprite task, or a tile list to a normal one, is a child that is
+    // not the protocol — same treatment as any other unexpected shape. An
+    // error reply answers either kind of task.
+    if (r === null || (r.ok !== false && ("sprite" in r) !== task.sprite)) {
       // A reply we did not ask for, or with the wrong shape: treat the child
       // as compromised and replace it.
       this.stats.protocolErrors++;
@@ -229,8 +270,9 @@ export class DecoderPool implements ImageDecoder {
     // The parent decides recycling, before this child is given another task,
     // so no image is ever handed to a child that is about to exit.
     if (slot.tasksDone >= this.maxTasks || r.rss > this.maxRss) this.retire(slot);
-    if (r.ok) task.resolve({ pdq: r.pdq, quality: r.quality });
-    else task.reject(new CrawlError(r.code));
+    if (r.ok === false) task.reject(new CrawlError(r.code));
+    else if ("sprite" in r) task.settle(r.tiles);
+    else task.settle({ pdq: r.pdq, quality: r.quality });
     this.pump();
   }
 
@@ -258,7 +300,7 @@ export class DecoderPool implements ImageDecoder {
         // could have died of something else). Run it once more on a fresh
         // child; a second death is final, so a poison image cannot loop.
         this.stats.retried++;
-        this.queue.unshift({ bytes: task.bytes, retried: true, resolve: task.resolve, reject: task.reject });
+        this.queue.unshift({ bytes: task.bytes, sprite: task.sprite, retried: true, settle: task.settle, reject: task.reject });
       } else {
         task.reject(new CrawlError("image_decoder_crashed"));
       }
@@ -300,7 +342,11 @@ export class DecoderPool implements ImageDecoder {
   }
 }
 
-type Reply = { ok: true; pdq: string; quality: number; rss: number } | { ok: false; code: ErrorCode; rss: number };
+type Reply =
+  | { ok: true; pdq: string; quality: number; rss: number }
+  /** A sprite task's tile list (WP21): every tile hash the child cut. */
+  | { ok: true; sprite: true; tiles: DecodeResult[]; rss: number }
+  | { ok: false; code: ErrorCode; rss: number };
 
 /** Strictly validate a child's reply; null for anything unexpected. */
 export function parseReply(m: unknown, expectedId: number): Reply | null {
@@ -311,6 +357,22 @@ export function parseReply(m: unknown, expectedId: number): Reply | null {
   // Resident set size in bytes, reported with every reply for recycling.
   if (typeof r.rss !== "number" || !Number.isSafeInteger(r.rss) || r.rss < 0) return null;
   if (r.ok === true) {
+    if (r.sprite === true) {
+      // A sprite reply (WP21): the tile list, strictly 1..MAX_SPRITE_TILES
+      // entries of exactly { pdq, quality } — never a URL or a name.
+      if (keys !== "id,ok,rss,sprite,tiles") return null;
+      if (!Array.isArray(r.tiles) || r.tiles.length < 1 || r.tiles.length > MAX_SPRITE_TILES) return null;
+      const tiles: DecodeResult[] = [];
+      for (const t of r.tiles) {
+        if (!t || typeof t !== "object" || Array.isArray(t)) return null;
+        const tile = t as Record<string, unknown>;
+        if (Object.keys(tile).sort().join(",") !== "pdq,quality") return null;
+        if (typeof tile.pdq !== "string" || !HEX64.test(tile.pdq)) return null;
+        if (typeof tile.quality !== "number" || !Number.isFinite(tile.quality) || tile.quality < 0 || tile.quality > 100) return null;
+        tiles.push({ pdq: tile.pdq, quality: tile.quality });
+      }
+      return { ok: true, sprite: true, tiles, rss: r.rss };
+    }
     if (keys !== "id,ok,pdq,quality,rss") return null;
     if (typeof r.pdq !== "string" || !HEX64.test(r.pdq)) return null;
     if (typeof r.quality !== "number" || !Number.isFinite(r.quality) || r.quality < 0 || r.quality > 100) return null;

@@ -1,10 +1,14 @@
-// Bundles the three entrypoints into dist/:
+// Bundles the four entrypoints into dist/:
 //   dist/main.js            the crawler (never loads sharp/libvips itself)
 //   dist/decoder-worker.js  the isolated decoder child process (sharp + PDQ)
+//   dist/sscd-worker.js     the isolated SSCD embedder child process (WP28:
+//                           sharp + onnxruntime-node; loaded only when the
+//                           second layer is switched on)
 //   dist/browser-worker.js  the isolated browser child process (Playwright
 //                           Chromium; loaded only when a source needs it)
 // The read-only asmita PDQ module is inlined. Runtime dependencies stay
-// external and are installed with `npm ci --omit=dev`; sharp is native.
+// external and are installed with `npm ci --omit=dev`; sharp and
+// onnxruntime-node are native.
 // Tests import this file (tests/global-setup.ts) so the workers exist.
 import { build } from "esbuild";
 import { readFile } from "node:fs/promises";
@@ -17,6 +21,7 @@ await build({
   entryPoints: {
     main: root("src/main.ts"),
     "decoder-worker": root("src/image/decoder-worker.ts"),
+    "sscd-worker": root("src/image/sscd-worker.ts"),
     "browser-worker": root("src/browser/browser-worker.ts"),
   },
   outdir: root("dist"),
