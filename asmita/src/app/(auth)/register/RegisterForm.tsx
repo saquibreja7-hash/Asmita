@@ -6,12 +6,15 @@ import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { forgetEligibility, hasDraft, isEligibleAdult, rememberEligibleAdult } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
+import { FormError } from "@/components/FormError";
 
 type Step = "age" | "email" | "otp";
 
 // mode "track" (Track your case) skips the age question: it only finds a case
-// this email already has, and never starts a new one.
-export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?: "file" | "track" }) {
+// this email already has, and never starts a new one. mode "watch" (Watch for
+// my images) is the same flow as "file" — age check with minor routing, email,
+// one-time code — and continues to the watch flow, which never asks for links.
+export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?: "file" | "track" | "watch" }) {
   const router = useRouter();
   const tracking = mode === "track";
   const [step, setStep] = useState<Step>(tracking ? "email" : "age");
@@ -19,12 +22,15 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
   const [ageConfirmed, setAgeConfirmed] = useState<"adult" | "minor" | "">("");
   const [ageThen, setAgeThen] = useState<"adult" | "minor" | "">("");
   const [email, setEmail] = useState("");
-  const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(""));
-  const otp = otpDigits.join("");
-  const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
+  // One single code box (WP40 A3): type, paste or autofill all land in it.
+  const [otp, setOtp] = useState("");
+  const otpRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  // Each step's heading; focus moves to it whenever the step changes (A11).
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const firstRender = useRef(true);
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -37,6 +43,16 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
     }, 0);
     return () => window.clearTimeout(id);
   }, [tracking]);
+
+  // Move focus to the new step's heading so screen readers announce it,
+  // like the eligibility wizard does (A11).
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    headingRef.current?.focus({ preventScroll: true });
+  }, [step, noCase]);
 
   function continueFromAge() {
     if (ageConfirmed === "minor" || ageThen === "minor") {
@@ -78,10 +94,13 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
       const response = await csrfFetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(tracking ? { email, otp, purpose: "track" } : { email, otp, ageOver18: ageConfirmed === "adult" }),
+        body: JSON.stringify(tracking ? { email, otp, purpose: "track" } : { email, otp, ageOver18: ageConfirmed === "adult", purpose: mode === "watch" ? "watch" : "file" }),
       });
       if (!response.ok) {
         setError(t(locale, "reg.error.codeNoMatch"));
+        // The step did not change, so focus the code box itself for a retry (A11).
+        otpRef.current?.focus();
+        otpRef.current?.select();
         return;
       }
       const result = (await response.json().catch(() => ({}))) as { redirectTo?: string; hasCases?: boolean; noCase?: boolean };
@@ -91,6 +110,11 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
           return;
         }
         router.push(result.redirectTo ?? "/my-cases");
+        return;
+      }
+      // The watch flow continues where it left off; no links are ever asked for.
+      if (mode === "watch") {
+        router.push(result.redirectTo ?? "/watch");
         return;
       }
       // Links added before the email code go straight to review and signing.
@@ -113,42 +137,33 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
           <p className="muted mt-2 text-sm leading-[1.75]">
             {t(locale, "reg.age.sub")}
           </p>
-          <div className="mt-6 space-y-3">
-            <label
-              className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-box)] border p-4 transition-colors ${
-                ageConfirmed === "adult"
-                  ? "border-[var(--brand)] bg-[var(--brand-soft)]"
-                  : "border-[var(--line)] bg-[var(--page)] hover:border-[var(--line)]"
-              }`}
-            >
-              <input
-                type="radio"
-                checked={ageConfirmed === "adult"}
-                onChange={() => setAgeConfirmed("adult")}
-                className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--brand)]"
-              />
-              <span className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
-                {t(locale, "auth.ageAdult")}
-              </span>
-            </label>
-            <label
-              className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-box)] border p-4 transition-colors ${
-                ageConfirmed === "minor"
-                  ? "border-[var(--brand)] bg-[var(--brand-soft)]"
-                  : "border-[var(--line)] bg-[var(--page)] hover:border-[var(--line)]"
-              }`}
-            >
-              <input
-                type="radio"
-                checked={ageConfirmed === "minor"}
-                onChange={() => setAgeConfirmed("minor")}
-                className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--brand)]"
-              />
-              <span className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
-                {t(locale, "auth.ageMinor")}
-              </span>
-            </label>
-          </div>
+          {/* The two answers are one question, so they are one radio group
+              with a legend and a shared name (WP40 A12). The legend is hidden
+              because the heading above already asks it on screen. */}
+          <fieldset className="mt-6 space-y-3">
+            <legend className="sr-only">{t(locale, "eligibility.ageNow.title")}</legend>
+            {(["adult", "minor"] as const).map((value) => (
+              <label
+                key={value}
+                className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-box)] border p-4 transition-colors ${
+                  ageConfirmed === value
+                    ? "border-[var(--brand)] bg-[var(--brand-soft)]"
+                    : "border-[var(--line)] bg-[var(--page)] hover:border-[var(--line)]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="ageNow"
+                  checked={ageConfirmed === value}
+                  onChange={() => setAgeConfirmed(value)}
+                  className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--brand)]"
+                />
+                <span className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
+                  {t(locale, value === "adult" ? "auth.ageAdult" : "auth.ageMinor")}
+                </span>
+              </label>
+            ))}
+          </fieldset>
           {ageConfirmed === "adult" && (
             <fieldset className="mt-8 space-y-3">
               <legend className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
@@ -166,6 +181,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
                 >
                   <input
                     type="radio"
+                    name="ageThen"
                     checked={ageThen === value}
                     onChange={() => setAgeThen(value)}
                     className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--brand)]"
@@ -190,14 +206,14 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
 
       {noCase && (
         <div className="mt-8" role="status">
-          <h2 className="section-title">{t(locale, "track.noCase.title")}</h2>
+          <h2 className="section-title outline-none" ref={headingRef} tabIndex={-1}>{t(locale, "track.noCase.title")}</h2>
           <p className="muted mt-2 text-sm leading-[1.75]">{t(locale, "track.noCase.sub")}</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link className="btn btn-primary" href="/start">{t(locale, "track.noCase.start")}</Link>
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => { setNoCase(false); setStep("email"); setOtpDigits(Array(6).fill("")); }}
+              onClick={() => { setNoCase(false); setStep("email"); setOtp(""); }}
             >
               {t(locale, "reg.otp.changeEmail")}
             </button>
@@ -207,7 +223,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
 
       {!noCase && step === "email" && (
         <div className="mt-8">
-          <h2 className="section-title">
+          <h2 className="section-title outline-none" ref={headingRef} tabIndex={-1}>
             {t(locale, tracking ? "track.email.title" : "reg.email.title")}
           </h2>
           <p className="muted mt-2 text-sm leading-[1.75]">
@@ -240,7 +256,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
                 placeholder="you@example.com"
               />
             </div>
-            {error && <FormError message={error} />}
+            <FormError message={error} />
             <button
               className="btn btn-primary"
               disabled={loading || !hydrated || !email}
@@ -254,7 +270,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
 
       {!noCase && step === "otp" && (
         <div className="mt-8">
-          <h2 className="section-title">
+          <h2 className="section-title outline-none" ref={headingRef} tabIndex={-1}>
             {t(locale, "reg.otp.title")}
           </h2>
           <p className="muted mt-2 text-sm leading-[1.75]">
@@ -266,45 +282,26 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
             onSubmit={(e) => { e.preventDefault(); verify(); }}
           >
             <div>
-              <label htmlFor="otp-0" className="block text-sm font-medium text-[var(--ink)]">
+              <label htmlFor="otp" className="block text-sm font-medium text-[var(--ink)]">
                 {t(locale, "reg.otp.label")}
               </label>
-              <div className="mt-2 flex gap-2" role="group" aria-label={locale === "hi" ? "सत्यापन कोड के अंक" : "Verification code digits"}>
-                {Array.from({ length: 6 }, (_, index) => (
-                  <input
-                    key={index}
-                    ref={(el) => { otpRefs.current[index] = el; }}
-                    id={`otp-${index}`}
-                    aria-label={index === 0 ? t(locale, "reg.otp.label") : (locale === "hi" ? `अंक ${index + 1}` : `Digit ${index + 1}`)}
-                    className="field min-w-0 flex-1 !px-1 text-center font-mono text-xl"
-                    type="text" inputMode="numeric" pattern="[0-9]*"
-                    autoComplete={index === 0 ? "one-time-code" : "off"}
-                    maxLength={index === 0 ? 6 : 1}
-                    value={otpDigits[index]}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, "");
-                      if (digits.length > 1) { setOtpDigits(Array.from({ length: 6 }, (_, i) => digits[i] ?? "")); otpRefs.current[Math.min(digits.length, 6) - 1]?.focus(); return; }
-                      const parts = [...otpDigits];
-                      parts[index] = digits;
-                      setOtpDigits(parts);
-                      if (digits && index < 5) otpRefs.current[index + 1]?.focus();
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-                      if (digits) { setOtpDigits(Array.from({ length: 6 }, (_, i) => digits[i] ?? "")); otpRefs.current[Math.min(digits.length, 6) - 1]?.focus(); }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Backspace" && !otpDigits[index] && index > 0) otpRefs.current[index - 1]?.focus();
-                      if (e.key === "ArrowLeft" && index > 0) { e.preventDefault(); otpRefs.current[index - 1]?.focus(); }
-                      if (e.key === "ArrowRight" && index < 5) { e.preventDefault(); otpRefs.current[index + 1]?.focus(); }
-                    }}
-                  />
-                ))}
-              </div>
+              {/* One box takes the whole code: typed, pasted or autofilled by
+                  the browser's one-time-code suggestion (WP40 A3). */}
+              <input
+                ref={otpRef}
+                className="field mt-2 font-mono text-center text-2xl tracking-[0.4em]"
+                id="otp"
+                name="otp"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                pattern="[0-9]{6}"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              />
             </div>
-            {error && <FormError message={error} />}
+            <FormError message={error} />
             <button
               className="btn btn-primary"
               disabled={loading || !hydrated || otp.length !== 6}
@@ -316,7 +313,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
               {t(locale, "reg.otp.wrongEmail")}{" "}
               <button
                 type="button"
-                onClick={() => { setStep("email"); setOtpDigits(Array(6).fill("")); setError(""); }}
+                onClick={() => { setStep("email"); setOtp(""); setError(""); }}
                 className="link-underline text-[var(--ink)]"
               >
                 {t(locale, "reg.otp.changeEmail")}
@@ -327,11 +324,5 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
         </div>
       )}
     </div>
-  );
-}
-
-function FormError({ message }: { message: string }) {
-  return (
-    <p role="alert" className="text-sm font-medium text-[var(--danger)]">{message}</p>
   );
 }

@@ -9,6 +9,7 @@ import { writeAuditLog } from "@/lib/audit";
 import * as store from "@/lib/store";
 import { crawlerFindingsVisibleToSurvivor, survivorActableLinkWhere, survivorMayActOnLink } from "@/lib/crawler-flags";
 import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
+import { scheduleLinkVerifications } from "@/lib/link-verification";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { logSecurityEvent } from "@/lib/security-log";
 import { randomUUID } from "node:crypto";
@@ -61,6 +62,8 @@ export type DisplayCase = {
   userId: string;
   createdAt: string;
   status: string;
+  /** "Watch for my images" (WP22): WATCH cases render the watch view. Absent means CASE. */
+  mode?: "CASE" | "WATCH";
   urls: DisplayUrl[];
 };
 
@@ -129,6 +132,7 @@ function toDisplayCase(dbCase: {
   userId: string;
   createdAt: Date;
   status: string;
+  mode?: "CASE" | "WATCH" | null;
   submittedUrls: Array<{
     id: string;
     domain: string;
@@ -150,6 +154,7 @@ function toDisplayCase(dbCase: {
     userId: dbCase.userId,
     createdAt: dbCase.createdAt.toISOString(),
     status: dbCase.status,
+    mode: dbCase.mode ?? "CASE",
     urls: dbCase.submittedUrls.filter((url) => includeFindings || urlSource(url.source) !== "CRAWLER").map(toDisplayUrl),
   };
 }
@@ -286,15 +291,15 @@ export async function getSessionUserStatus(userId: string): Promise<"active" | "
   return user.deactivatedAt ? "deactivated" : "active";
 }
 
-export async function createCase(userId: string): Promise<{ id: string; referenceNumber: string }> {
-  if (isDevNoDb()) return store.createCase(userId);
+export async function createCase(userId: string, mode: "CASE" | "WATCH" = "CASE"): Promise<{ id: string; referenceNumber: string }> {
+  if (isDevNoDb()) return store.createCase(userId, undefined, mode);
   const db = await getPrismaDb();
   let dbCase: { id: string; referenceNumber: string } | null = null;
   for (let attempt = 0; attempt < 5 && !dbCase; attempt += 1) {
     const referenceNumber = generateCaseReference();
     try {
       dbCase = await db.case.create({
-        data: { referenceNumber, userId, status: "OPEN" },
+        data: { referenceNumber, userId, status: "OPEN", mode },
         select: { id: true, referenceNumber: true },
       });
     } catch (error) {
@@ -515,7 +520,7 @@ function includesFindings(options?: CaseReadOptions) {
 
 function memoryDisplayCase(rec: store.CaseRecord, includeFindings: boolean): DisplayCase {
   const urls = includeFindings ? rec.urls : rec.urls.filter((url) => urlSource(url.source) !== "CRAWLER");
-  return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, urls: urls.map(memoryDisplayUrl) };
+  return { id: rec.id, referenceNumber: rec.referenceNumber, userId: rec.userId, createdAt: rec.createdAt, status: rec.status, mode: rec.mode ?? "CASE", urls: urls.map(memoryDisplayUrl) };
 }
 
 export async function getCaseForUser(caseId: string, userId: string, options?: CaseReadOptions): Promise<DisplayCase | null> {
@@ -784,8 +789,10 @@ export async function markUrlResolved(caseId: string, userId: string, urlId?: st
     const actable = record.urls.filter(survivorMayActOnLink);
     const url = urlId ? actable.find((item) => item.id === urlId) : actable[0];
     if (!url) throw new Error("url_not_found");
+    const wasRemoved = url.status === "REMOVED";
     url.status = "REMOVED";
     await writeAuditLog({ eventType: "CONTENT_REMOVED", entityType: "SubmittedUrl", entityId: url.id, actorId: userId });
+    if (!wasRemoved) await scheduleRemovalChecks(url.id);
     return;
   }
   const db = await getPrismaDb();
@@ -798,8 +805,29 @@ export async function markUrlResolved(caseId: string, userId: string, urlId?: st
 
   if (!url) throw new Error("url_not_found");
 
-  await db.submittedUrl.update({ where: { id: url.id }, data: { status: "REMOVED" } });
+  // The status guard is in the update itself, so two quick taps (or two
+  // devices) cannot both treat this as the transition and double-schedule
+  // the removal re-checks; the loser's update matches nothing.
+  const flipped = await db.submittedUrl.updateMany({
+    where: { id: url.id, status: { not: "REMOVED" } },
+    data: { status: "REMOVED" },
+  });
   await writeAuditLog({ eventType: "CONTENT_REMOVED", entityType: "SubmittedUrl", entityId: url.id });
+  if (flipped.count === 1) await scheduleRemovalChecks(url.id);
+}
+
+/**
+ * Watch-and-verify WP23: a link that just became REMOVED gets three
+ * scheduled re-checks (+1/+3/+7 days, link-verification.ts). Best-effort in
+ * both directions — a failure must never fail the removal she asked for, and
+ * it is logged with a fixed code only.
+ */
+async function scheduleRemovalChecks(urlId: string): Promise<void> {
+  try {
+    await scheduleLinkVerifications(urlId);
+  } catch {
+    console.error("link_verification_schedule_failed");
+  }
 }
 
 /** The survivor filed a form-only platform's own form: start that link's ladder. */
@@ -955,12 +983,13 @@ export type HardDeleteCounts = {
   otpCodes: number;
   crawlFindings: number;
   crawlConsents: number;
+  linkVerifications: number;
 };
 
 function emptyHardDeleteCounts(cases: number): HardDeleteCounts {
   return {
     cases, links: 0, notices: 0, escalations: 0, deliveryProofs: 0, feedback: 0, sessions: 0, otpCodes: 0,
-    crawlFindings: 0, crawlConsents: 0,
+    crawlFindings: 0, crawlConsents: 0, linkVerifications: 0,
   };
 }
 
@@ -1026,10 +1055,15 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
     }
     if (urlIds.length) {
       await tx.deleteFrom("UrlPortalToken").where("urlId", "in", urlIds).execute();
+      // Removal re-checks reference her links, so they are erased with them.
+      counts.linkVerifications = deleted(await tx.deleteFrom("LinkVerification").where("submittedUrlId", "in", urlIds).execute());
       counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
     }
     // Crawler matches and authorisations go; the kept fingerprints leave the
-    // pool, and a kept video fingerprint loses its frame list (WP17).
+    // pool, and a kept video fingerprint loses its frame list (WP17). The
+    // SSCD embeddings of her confirmed copies go with the findings (ADR 008,
+    // WP28) — before the CrawlFinding delete, in the same transaction.
+    await tx.deleteFrom("FindingEmbedding").where("caseId", "in", caseIds).execute();
     const findingIds = (await tx.selectFrom("CrawlFinding").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
     counts.crawlFindings = deleted(await tx.deleteFrom("CrawlFinding").where("caseId", "in", caseIds).execute());
     counts.crawlConsents = deleted(await tx.deleteFrom("CrawlConsent").where("caseId", "in", caseIds).execute());
@@ -1091,9 +1125,14 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     counts.escalations = (await tx.escalation.deleteMany({ where: { noticeId: { in: noticeIds } } })).count;
     counts.notices = (await tx.notice.deleteMany({ where: { id: { in: noticeIds } } })).count;
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: urlIds } } });
+    // Removal re-checks reference her links, so they are erased with them.
+    counts.linkVerifications = (await tx.linkVerification.deleteMany({ where: { submittedUrlId: { in: urlIds } } })).count;
     counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
     // Crawler matches and authorisations go; the kept fingerprints leave the
-    // pool, and a kept video fingerprint loses its frame list (WP17).
+    // pool, and a kept video fingerprint loses its frame list (WP17). The
+    // SSCD embeddings of her confirmed copies go with the findings (ADR 008,
+    // WP28) — before the CrawlFinding delete, in the same transaction.
+    await tx.findingEmbedding.deleteMany({ where: { caseId: { in: caseIds } } });
     const findingIds = (await tx.crawlFinding.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
     counts.crawlFindings = (await tx.crawlFinding.deleteMany({ where: { caseId: { in: caseIds } } })).count;
     counts.crawlConsents = (await tx.crawlConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
@@ -1211,6 +1250,7 @@ export async function listAllCases(): Promise<DisplayCase[]> {
         userId: record.userId,
         createdAt: record.createdAt,
         status: record.status,
+        mode: record.mode ?? "CASE" as const,
         urls: record.urls.map(memoryDisplayUrl),
       }));
   }

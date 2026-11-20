@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   hashUpdateMany: vi.fn(),
   urlUpdateMany: vi.fn(),
   findingDeleteMany: vi.fn(),
+  // WP28 (ADR 008): a withdrawal now deletes the case's SSCD embeddings too.
+  embeddingDeleteMany: vi.fn(),
   pdfInputs: [] as Array<Record<string, unknown>>,
 }));
 
@@ -25,7 +27,7 @@ vi.mock("@/lib/case-ops", () => ({
   getCaseForUser: async () => ({ id: "case-1", referenceNumber: "ASMITA-2026-00001", userId: "user-1", createdAt: "", status: "OPEN", urls: [] }),
 }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimitAsync: async () => ({ allowed: true }) }));
-vi.mock("@/lib/case-hash-annex", () => ({ buildHashAnnexForSigning: mocks.annex, hasSignableImageFingerprint: async () => true }));
+vi.mock("@/lib/case-hash-annex", () => ({ buildHashAnnexForSigning: mocks.annex, hasSearchableFingerprint: async () => true }));
 vi.mock("@/lib/encryption", () => ({ encryptField: (value: string) => `enc:${value.length}`, decryptField: (v: string) => v }));
 vi.mock("@/lib/audit", () => ({ writeAuditLog: vi.fn() }));
 vi.mock("@/lib/notice-pdf", async (importOriginal) => {
@@ -45,6 +47,7 @@ vi.mock("@/lib/db", () => {
     hashSubmission: { updateMany: mocks.hashUpdateMany },
     submittedUrl: { updateMany: mocks.urlUpdateMany },
     crawlFinding: { deleteMany: mocks.findingDeleteMany },
+    findingEmbedding: { deleteMany: mocks.embeddingDeleteMany },
     $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
   };
   return { db };
@@ -98,7 +101,9 @@ describe("crawl consent by tick", () => {
   it("creates the authorisation record with the template digest and fingerprint ids, and no name", async () => {
     const res = await POST(req("POST", { agreed: true, templateRef: ref() }), params);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, fingerprintCount: 2 });
+    // WP22: the response names the scope the tick recorded; a case (not a
+    // watch) signs the full authorisation.
+    expect(await res.json()).toEqual({ ok: true, fingerprintCount: 2, scope: "SEARCH_AND_NOTICE" });
 
     expect(mocks.consentCreate).toHaveBeenCalledTimes(1);
     const data = mocks.consentCreate.mock.calls[0][0].data;
@@ -107,6 +112,7 @@ describe("crawl consent by tick", () => {
       templateId: "crawl-template-1",
       templateDigest: templateDigest(template),
       hashSubmissionIds: ["hash-1", "hash-2"],
+      scope: "SEARCH_AND_NOTICE",
     });
     expect(data.signedPdfEncrypted).toMatch(/^enc:\d+$/);
     expect(data.signedAt).toBeInstanceOf(Date);

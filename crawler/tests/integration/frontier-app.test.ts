@@ -47,7 +47,11 @@ describe("conditional GET: a second run does not refetch unchanged pages", () =>
     expect(first.result.exitCode).toBe(0);
     expect(first.result.summary.pagesFetched).toBe(2);
     expect(first.result.summary.pagesNotModified).toBe(0);
-    expect(site().map((r) => r.path)).toEqual(["/", "/b", "/nonexistent"]);
+    // WP9: the etag source's robots.txt names no sitemap, so the run probes
+    // /sitemap.xml and /sitemap_index.xml (both absent here) and the parent
+    // domain's /sitemap.xml before its pages — quietly, and off this host's
+    // frontier accounting (see the pagesAttempted counts below).
+    expect(site().map((r) => r.path)).toEqual(["/sitemap.xml", "/sitemap_index.xml", "/", "/b", "/nonexistent"]);
     for (const r of site()) expect(r.headers["if-none-match"]).toBeUndefined();
 
     // A second run in the same window claims nothing at all: every page is
@@ -62,7 +66,7 @@ describe("conditional GET: a second run does not refetch unchanged pages", () =>
     clock += 25 * HOUR;
     const second = await runFixtureCrawl(fx.site, api);
     expect(second.result.exitCode).toBe(0);
-    expect(second.result.summary.pagesAttempted).toBe(2);
+    expect(second.result.summary.pagesAttempted).toBe(5); // 2 pages + 3 WP9 sitemap probes
     expect(second.result.summary.pagesNotModified).toBe(2);
     expect(second.result.summary.pagesFetched).toBe(0);
     const requests = site();
@@ -100,20 +104,32 @@ describe("two crawler processes, one frontier", () => {
     expect(b.result.exitCode).toBe(0);
 
     // No page was handed to both processes: every page path (robots and
-    // images aside) was requested at most once across the two runs.
+    // images aside) was requested at most once across the two runs. The
+    // WP9 sitemap probes are per-process speculative fetches, not frontier
+    // pages, so they are counted apart (each process probes the two
+    // conventional paths once — its robots.txt names no sitemap).
+    const probePaths = new Set(["/sitemap.xml", "/sitemap_index.xml"]);
     const crawlRequests = fx.site.requests.slice(before).filter(
-      (r) => (r.host === SOURCE_DOMAIN || r.host === `www.${SOURCE_DOMAIN}`) && r.path !== "/robots.txt" && !r.path.startsWith("/img/") && !r.path.startsWith("/assets/"),
+      (r) =>
+        (r.host === SOURCE_DOMAIN || r.host === `www.${SOURCE_DOMAIN}`) &&
+        r.path !== "/robots.txt" &&
+        !r.path.startsWith("/img/") &&
+        !r.path.startsWith("/assets/"),
     );
+    const probes = crawlRequests.filter((r) => probePaths.has(r.path)).length;
     const byPath = new Map<string, number>();
-    for (const r of crawlRequests) {
+    for (const r of crawlRequests.filter((r) => !probePaths.has(r.path))) {
       const key = `${r.host}${r.path}`;
       byPath.set(key, (byPath.get(key) ?? 0) + 1);
     }
     expect(byPath.size).toBeGreaterThanOrEqual(atDepth0.length + atDepth2.length);
     expect([...byPath.values()].every((n) => n === 1)).toBe(true);
     // Every frontier row (the pre-seeded pages plus the one the runs
-    // discovered: the www home page) was claimed by exactly one run.
-    expect((a.result.summary.pagesAttempted as number) + (b.result.summary.pagesAttempted as number)).toBe(api.pages.size);
+    // discovered: the www home page) was claimed by exactly one run; the
+    // probes the runs also made are not page attempts of the frontier.
+    expect((a.result.summary.pagesAttempted as number) + (b.result.summary.pagesAttempted as number) - probes).toBe(
+      api.pages.size,
+    );
     // Together they found every planted image exactly once.
     expect(api.created.size).toBe(fx.expected.length);
     expect(api.posted.length).toBe(fx.expected.length);
@@ -124,7 +140,11 @@ describe("two crawler processes, one frontier", () => {
 describe("a killed run", () => {
   it("loses at most its claimed batch, which becomes due again after 30 minutes", async () => {
     const api = await mock({ sources: [{ id: "src-kill", kind: "site", domain: SOURCE_DOMAIN, pageBudget: 50, delayMs: 150, origin: "admin", hops: 0, render: "http" }] });
-    const isPage = (path: string) => path !== "/robots.txt" && !path.startsWith("/img/") && !path.startsWith("/assets/");
+    // WP9: /sitemap.xml and /sitemap_index.xml are probed once per run
+    // (robots.txt names no sitemap); they are not frontier pages, so the
+    // stop-watch and the fetch counts below skip them.
+    const isPage = (path: string) =>
+      path !== "/robots.txt" && path !== "/sitemap.xml" && path !== "/sitemap_index.xml" && !path.startsWith("/img/") && !path.startsWith("/assets/");
     const baseline = fx.site.requests.length;
     const pageRequests = () => fx.site.requests.slice(baseline).filter((r) => r.host === SOURCE_DOMAIN && isPage(r.path)).length; 
 

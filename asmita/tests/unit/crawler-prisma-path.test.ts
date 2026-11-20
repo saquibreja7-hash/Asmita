@@ -11,7 +11,8 @@ const db = vi.hoisted(() => {
   };
   return {
     tx,
-    crawlConsent: { findMany: vi.fn() },
+    crawlConsent: { findMany: vi.fn(), findFirst: vi.fn() },
+    case: { findMany: vi.fn(), findUnique: vi.fn() },
     hashSubmission: { findMany: vi.fn(), findUnique: vi.fn() },
     crawlFinding: { findUnique: vi.fn() },
     crawlSource: { findUnique: vi.fn() },
@@ -33,6 +34,10 @@ beforeEach(() => {
   vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
   const live = { id: "consent-1", caseId: "c1", hashSubmissionIds: ["h1", "h2", "h3"], signedAt: new Date("2026-11-01T00:00:00Z") };
   db.crawlConsent.findMany.mockResolvedValue([live]);
+  // WP24: the pool keeps an open case's fingerprints, and the re-upload alert
+  // reads the live consent's window (none here).
+  db.case.findMany.mockResolvedValue([{ id: "c1", status: "OPEN" }]);
+  db.crawlConsent.findFirst.mockResolvedValue(live);
   // The case-row lock (case-link-lock.ts) finds the case; consent locks find `live`.
   db.tx.$queryRaw.mockImplementation(async (q: string[]) => (q.join("?").includes('FROM "Case"') ? [{ id: "c1" }] : [live]));
 });

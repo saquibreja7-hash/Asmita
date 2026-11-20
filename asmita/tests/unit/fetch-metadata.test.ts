@@ -60,6 +60,7 @@ describe("Fetch Metadata guard", () => {
       "/api/crawler/sources",
       "/api/crawler/discoveries",
       "/api/crawler/findings",
+      "/api/crawler/embeddings",
       "/api/crawler/frontier/claim",
       "/api/crawler/frontier/report",
     ]) {

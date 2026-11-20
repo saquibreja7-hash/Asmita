@@ -5,6 +5,7 @@ import { crawlMemory, sourceDayKey, type MemoryCrawlPage } from "@/lib/crawl-sto
 import { crawlerShapedUrl, pageOnSourceHost } from "@/lib/crawl-findings";
 import { isBlockedCrawlHost } from "@/lib/crawl-sources";
 import { maxFrontierPagesPerSource } from "@/lib/crawler-flags";
+import { legacyPageKeys, pageKey } from "@/lib/crawl-page-key";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
@@ -39,7 +40,23 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  * revisit in 24 h; after "not_modified" double the previous interval up to
  * 14 days; after "error" back off 1 h, 6 h, 24 h and mark the page dead
  * after 5 failures; "gone" is dead. "blocked" (robots or a 401/403 answer)
- * is rechecked after 24 h — the spec does not give it a schedule.
+ * is rechecked after 24 h — the spec does not give it a schedule. A
+ * permanent fetch failure (crawler v3 review fix, WP13: `error` carrying
+ * `failure: "permanent"`) backs off like any error on the first attempt and
+ * is remembered on the row (`lastPermanentFailAt`); the row dies only on a
+ * permanent failure at least 24 h after the first one, and a successful
+ * visit clears the marker.
+ *
+ * Crawl order (crawler v3 WP11): every row carries a priority, lower runs
+ * first, and the claim sorts by priority, then nextDueAt. A reported link
+ * sets the priority of the row it stores (sitemap 10, feed 20, pagination
+ * 30, other pages 50 plus 10 per depth level, capped at the default 100);
+ * a sitemap link whose lastmod is newer than the row's last fetch sets 5
+ * and makes the row due immediately. Rows stored before WP11 keep 100.
+ * Review fix (WP11): the seed row is stored at 50 (the depth-0 page value),
+ * a lastmod is clamped to now before it is compared, and a successful
+ * visit resets the row's priority to its kind/depth value, so a lastmod
+ * jump is one-shot.
  */
 
 /** How long a claimed row is withheld from other claims. */
@@ -54,15 +71,45 @@ export const FRONTIER_ERROR_BACKOFF_MS = [60 * 60 * 1000, 6 * 60 * 60 * 1000, 24
 export const FRONTIER_MAX_FAILURES = 5;
 /** Recheck interval after a blocked page (spec gives none; see header). */
 export const FRONTIER_BLOCKED_REVISIT_MS = 24 * 60 * 60 * 1000;
+/**
+ * The permanent-failure window (crawler v3 review fix, WP13): a row that
+ * failed permanently is marked dead only on the next permanent failure at
+ * least this long after the first one. One bad resolver answer or one bad
+ * hour never kills a page.
+ */
+export const FRONTIER_PERMANENT_FAIL_MS = 24 * 60 * 60 * 1000;
+/**
+ * The priority every row keeps until a report says otherwise (crawler v3
+ * WP11): lower runs first, so the default runs last.
+ */
+export const FRONTIER_PRIORITY_DEFAULT = 100;
+/** A sitemap entry whose lastmod is newer than the row's last fetch (WP11). */
+export const FRONTIER_PRIORITY_LASTMOD = 5;
+/**
+ * The seed row's priority (crawler v3 review fix, WP11): 50, exactly the
+ * `linkPriority` of a depth-0 page, so a backfilled seed and a new seed run
+ * in the same place instead of after every reported page.
+ */
+export const FRONTIER_PRIORITY_SEED = 50;
 
 /** Server-side caps, mirrored in the route schemas. */
 export const FRONTIER_CLAIM_LIMIT_MAX = 200;
 export const FRONTIER_LINKS_PER_PAGE_MAX = 500;
+/** Canonical aliases one reported page may carry (crawler v3 WP10). */
+export const FRONTIER_ALIASES_PER_PAGE_MAX = 20;
 /** A report carries at most one entry per claimed page, so the claim cap. */
 export const FRONTIER_REPORT_PAGES_MAX = FRONTIER_CLAIM_LIMIT_MAX;
 const MAX_PAGE_URL_LENGTH = 2048;
 /** Link inserts are chunked to stay well inside Postgres parameter limits. */
 const LINK_INSERT_CHUNK = 500;
+
+/**
+ * A memory-store frontier row with the columns added by the crawler v3
+ * review fixes. The memory store's own type (crawl-store.ts) predates them;
+ * the fields are optional so rows created elsewhere still fit, and absent
+ * means the column default (false / null).
+ */
+type FrontierMemoryPage = MemoryCrawlPage & { viaPagination?: boolean };
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -88,18 +135,46 @@ export const frontierReportPageSchema = z
     status: z.enum(["fetched", "not_modified", "gone", "blocked", "error"]),
     etag: z.string().min(1).max(512).optional(),
     lastModified: z.string().min(1).max(512).optional(),
+    // Crawler v3 review fix (WP13): an `error` whose fetch failed
+    // permanently (a DNS name that does not exist, a definite TLS
+    // certificate failure). The row is marked dead only on a permanent
+    // failure at least 24 h after the first one; until then it is an
+    // ordinary error backoff. Optional on both sides, only with status
+    // `error` — anything else skips the whole entry, like every malformed
+    // one.
+    failure: z.literal("permanent").optional(),
+    // Canonical aliases (crawler v3 WP10, review fix): the <link
+    // rel="canonical"> targets of the fetched page, in scope. A row for an
+    // alias that was never fetched and is not a seed is retired; a fetched
+    // row or a depth-0 seed is never touched, no placeholder row is ever
+    // inserted, and aliases from pages reached via pagination are ignored.
+    aliases: z
+      .array(z.string().min(10).max(MAX_PAGE_URL_LENGTH))
+      .max(FRONTIER_ALIASES_PER_PAGE_MAX)
+      .optional(),
     links: z
       .array(
         z
           .object({
             url: z.string().min(10).max(MAX_PAGE_URL_LENGTH),
             kind: z.enum(["page", "sitemap", "feed"]),
+            // Crawler v3 WP11: a pagination link runs before plain pages
+            // (priority 30), and a sitemap link may carry the entry's
+            // <lastmod> as a strict ISO date — an entry newer than the
+            // row's last fetch jumps the queue. Optional on both sides.
+            pagination: z.boolean().optional(),
+            lastmod: z.iso.datetime({ offset: true }).optional(),
           })
           .strict(),
       )
       .max(FRONTIER_LINKS_PER_PAGE_MAX),
   })
-  .strict();
+  .strict()
+  .superRefine((page, ctx) => {
+    if (page.failure !== undefined && page.status !== "error") {
+      ctx.addIssue({ code: "custom", path: ["failure"], message: "only with status error" });
+    }
+  });
 
 export const frontierReportSchema = z
   .object({
@@ -118,36 +193,66 @@ export type ReportedPage = z.infer<typeof frontierReportPageSchema>;
 // URL key and digest
 
 /**
- * Tracking-parameter stripping and sorting, the same rule the crawler uses
- * for its dedup key (crawler/src/crawl/url.ts): trivially different links to
- * one resource are one frontier row. The stored URL stays exactly as
- * reported; only the digest drops the noise parameters.
+ * The dedup key of a page URL: the shared WP10 normalisation
+ * (crawl-page-key.ts — https, one leading `www.` dropped, directory index and
+ * non-root trailing slash dropped, tracking parameters dropped and the rest
+ * sorted), the same identity the crawler computes, so a page the two sides
+ * spell differently is still stored once. The key is only ever a dedup
+ * identity: the stored URL stays exactly as reported, and rows stored before
+ * this rule keep their stored digest.
  */
-const TRACKING_PARAM = /^(utm_[a-z]+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|_ga|igshid)$/i;
-
 export function crawlPageKey(rawUrl: string): string | null {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    return null;
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-  url.hash = "";
-  if (url.pathname === "") url.pathname = "/";
-  if (url.search) {
-    const params = [...new URLSearchParams(url.search).entries()].filter(([k]) => !TRACKING_PARAM.test(k));
-    params.sort(([a, av], [b, bv]) => (a === b ? (av < bv ? -1 : av > bv ? 1 : 0) : a < b ? -1 : 1));
-    url.search = new URLSearchParams(params).toString();
-  }
-  return url.toString();
+  return pageKey(rawUrl);
 }
 
 /** The per-source dedup digest of a page URL (never reversible, never logged). */
 export function crawlPageDigest(sourceId: string, url: string): string | null {
   const key = crawlPageKey(url);
   if (key === null) return null;
+  return keyDigest(sourceId, key);
+}
+
+/** The per-source digest of an already computed key (new or legacy form). */
+function keyDigest(sourceId: string, key: string): string {
   return sha256(`crawl-page\u0000${sourceId}\u0000${key}`);
+}
+
+/**
+ * The legacy digests (rows stored before crawler v3 WP10) of every spelling
+ * that shares this URL's page key, the new digest itself excluded. Exported
+ * for the frontier tests; see crawl-page-key.ts `legacyPageKeys`.
+ */
+export function crawlPageLegacyDigests(sourceId: string, url: string): string[] {
+  const current = crawlPageDigest(sourceId, url);
+  return legacyPageKeys(url).map((key) => keyDigest(sourceId, key)).filter((d) => d !== current);
+}
+
+/**
+ * The priority a reported link stores its row with (crawler v3 WP11): the
+ * useful pages run first — sitemap 10, feed 20, pagination 30, other pages
+ * 50 plus 10 per depth level, capped at the default 100. Lower runs first.
+ */
+export function linkPriority(link: { kind: "page" | "sitemap" | "feed"; pagination?: boolean }, depth: number): number {
+  if (link.kind === "sitemap") return 10;
+  if (link.kind === "feed") return 20;
+  if (link.pagination === true) return 30;
+  return Math.min(50 + 10 * Math.max(depth, 0), FRONTIER_PRIORITY_DEFAULT);
+}
+
+/**
+ * The priority a row falls back to after a successful visit (crawler v3
+ * review fix, WP11): its own kind/depth value, so a lastmod jump (priority
+ * 5) is one-shot and a bumped row does not run first forever. The seed's
+ * value is the depth-0 page value, 50 (`FRONTIER_PRIORITY_SEED`).
+ */
+export function visitPriority(row: { kind: "PAGE" | "SITEMAP" | "FEED"; viaPagination?: boolean; depth: number }): number {
+  return linkPriority(
+    {
+      kind: row.kind === "SITEMAP" ? "sitemap" : row.kind === "FEED" ? "feed" : "page",
+      pagination: row.viaPagination === true,
+    },
+    row.depth,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +399,8 @@ async function claimDue(source: SourceRow, limit: number, now: Date): Promise<Cl
           p.status !== "GONE" &&
           (!p.claimedUntil || p.claimedUntil < now),
       )
-      .sort((a, b) => a.nextDueAt.getTime() - b.nextDueAt.getTime())
+      // Crawl order (WP11): lowest priority first, then the longest-due.
+      .sort((a, b) => a.priority - b.priority || a.nextDueAt.getTime() - b.nextDueAt.getTime())
       .slice(0, take);
     return due.map((row) => {
       row.claimedUntil = claimedUntil;
@@ -328,12 +434,14 @@ async function claimDue(source: SourceRow, limit: number, now: Date): Promise<Cl
       if (take <= 0) return [];
       // FOR UPDATE SKIP LOCKED: two crawler instances (or two Workers) never
       // get the same row; a concurrent claim simply takes the next ones.
+      // Crawl order (WP11): lowest priority first, then the longest-due.
       const rows = await trx.selectFrom("CrawlPage")
         .select(["id", "urlEncrypted", "depth", "etag", "lastModified"])
         .where("sourceId", "=", source.id)
         .where("nextDueAt", "<=", now)
         .where("status", "not in", ["DEAD", "GONE"])
         .where((eb) => eb.or([eb("claimedUntil", "is", null), eb("claimedUntil", "<", now)]))
+        .orderBy("priority", "asc")
         .orderBy("nextDueAt", "asc")
         .limit(take)
         .forUpdate()
@@ -365,7 +473,7 @@ async function claimDue(source: SourceRow, limit: number, now: Date): Promise<Cl
         AND "nextDueAt" <= ${now}
         AND "status" NOT IN ('DEAD', 'GONE')
         AND ("claimedUntil" IS NULL OR "claimedUntil" < ${now})
-      ORDER BY "nextDueAt" ASC LIMIT ${take}
+      ORDER BY "priority" ASC, "nextDueAt" ASC LIMIT ${take}
       FOR UPDATE SKIP LOCKED`;
     if (rows.length > 0) {
       await tx.crawlPage.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { claimedUntil } });
@@ -391,7 +499,7 @@ async function insertSeed(seed: SeedInsert): Promise<void> {
     if (!exists) {
       memory.pages.set(seed.id, {
         id: seed.id, sourceId: seed.sourceId, urlEncrypted: seed.urlEncrypted, urlDigest: seed.urlDigest,
-        depth: 0, kind: "PAGE", etag: null, lastModified: null, status: "PENDING",
+        depth: 0, kind: "PAGE", priority: FRONTIER_PRIORITY_SEED, etag: null, lastModified: null, status: "PENDING",
         claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: new Date(),
       });
     }
@@ -400,16 +508,73 @@ async function insertSeed(seed: SeedInsert): Promise<void> {
   if (usesWorkerKysely()) {
     await getWorkerDb().insertInto("CrawlPage").values({
       id: seed.id, sourceId: seed.sourceId, urlEncrypted: seed.urlEncrypted, urlDigest: seed.urlDigest,
-      depth: 0, kind: "PAGE", status: "PENDING", nextDueAt: new Date(0),
+      depth: 0, kind: "PAGE", priority: FRONTIER_PRIORITY_SEED, status: "PENDING", nextDueAt: new Date(0),
     }).onConflict((oc) => oc.columns(["sourceId", "urlDigest"]).doNothing()).execute();
     return;
   }
   const { db } = await import("@/lib/db");
   try {
-    await db.crawlPage.create({ data: { id: seed.id, sourceId: seed.sourceId, urlEncrypted: seed.urlEncrypted, urlDigest: seed.urlDigest, nextDueAt: new Date(0) } });
+    await db.crawlPage.create({ data: { id: seed.id, sourceId: seed.sourceId, urlEncrypted: seed.urlEncrypted, urlDigest: seed.urlDigest, priority: FRONTIER_PRIORITY_SEED, nextDueAt: new Date(0) } });
   } catch (err) {
     if ((err as { code?: string }).code !== "P2002") throw err; // a concurrent first claim won the insert
   }
+}
+
+// ---------------------------------------------------------------------------
+// Verification priority row (watch-and-verify WP23; see link-verification.ts)
+
+/**
+ * A removal re-check's page row: the link's page as a frontier row due
+ * immediately, ahead of every scheduled revisit (the queue is ordered by
+ * nextDueAt, so a row due now is fetched before any future-scheduled page).
+ * The URL must be a valid crawl page address (http(s), in scope of the
+ * source); callers validate it first.
+ *
+ * An existing row is reset to a fresh pre-visit state — a purposeful
+ * re-check by the app, not a late report (reports still never resurrect a
+ * DEAD or GONE row, and nothing here touches other rows): PENDING, failCount
+ * 0, no validators (the check is a full fetch, never a 304), lastFetchedAt
+ * cleared (so any report after this moment is the check's own evidence).
+ * A row currently out with a crawler keeps its claim. Called only by
+ * link-verification.ts, once per due check.
+ */
+export async function ensurePriorityCrawlPage(sourceId: string, url: string, now = new Date()): Promise<boolean> {
+  const digest = crawlPageDigest(sourceId, url);
+  if (digest === null) return false;
+  const urlEncrypted = encryptField(url);
+  const reset = { status: "PENDING" as const, etag: null, lastModified: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0 };
+
+  if (isDevNoDb()) {
+    const memory = crawlMemory();
+    const existing = [...memory.pages.values()].find((p) => p.sourceId === sourceId && p.urlDigest === digest);
+    if (existing) {
+      Object.assign(existing, reset);
+      return true;
+    }
+    const id = randomUUID();
+    memory.pages.set(id, {
+      id, sourceId, urlEncrypted, urlDigest: digest,
+      depth: 0, kind: "PAGE", priority: FRONTIER_PRIORITY_SEED, etag: null, lastModified: null, status: "PENDING",
+      claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: now,
+    });
+    return true;
+  }
+
+  if (usesWorkerKysely()) {
+    await getWorkerDb().insertInto("CrawlPage").values({
+      id: randomUUID(), sourceId, urlEncrypted, urlDigest: digest,
+      depth: 0, kind: "PAGE", priority: FRONTIER_PRIORITY_SEED, ...reset,
+    }).onConflict((oc) => oc.columns(["sourceId", "urlDigest"]).doUpdateSet(reset)).execute();
+    return true;
+  }
+
+  const { db } = await import("@/lib/db");
+  await db.crawlPage.upsert({
+    where: { sourceId_urlDigest: { sourceId, urlDigest: digest } },
+    create: { id: randomUUID(), sourceId, urlEncrypted, urlDigest: digest, depth: 0, priority: FRONTIER_PRIORITY_SEED, ...reset },
+    update: reset,
+  });
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -422,13 +587,27 @@ export type PageUpdatePlan = {
   failCount: number;
   etag: string | null;
   lastModified: string | null;
+  /**
+   * The row's priority after this report, when the report changes it
+   * (crawler v3 review fix, WP11): a successful visit resets it to the
+   * kind/depth value, so a lastmod jump (priority 5) is one-shot. Absent
+   * means the stored priority stays.
+   */
+  priority?: number;
+  /**
+   * The first permanent failure this row remembers (crawler v3 review fix,
+   * WP13), or null once it visits successfully again.
+   */
+  lastPermanentFailAt: Date | null;
 };
 
 /**
  * The next scheduling step for one reported page, from the row's current
  * state (spec: 24 h after fetched; doubling after not_modified, capped at
  * 14 days; 1 h / 6 h / 24 h after error, dead after 5 failures; gone is
- * dead; blocked rechecked after 24 h).
+ * dead; blocked rechecked after 24 h). A permanent failure (review fix,
+ * WP13) is an error like any other on the first attempt — the row remembers
+ * it — and dies only on a permanent failure at least 24 h after the first.
  */
 export type SchedulablePage = {
   nextDueAt: Date;
@@ -436,34 +615,57 @@ export type SchedulablePage = {
   failCount: number;
   etag: string | null;
   lastModified: string | null;
+  /** The row's first permanent failure, when it has had one (review fix, WP13). */
+  lastPermanentFailAt?: Date | null;
 };
 
-export function planNextVisit(row: SchedulablePage, report: { status: ReportedPage["status"]; etag?: string; lastModified?: string }, now: Date): PageUpdatePlan {
+export function planNextVisit(
+  row: SchedulablePage,
+  report: { status: ReportedPage["status"]; etag?: string; lastModified?: string; failure?: "permanent" },
+  now: Date,
+): PageUpdatePlan {
   // A missing validator keeps the stored one: an absent field means "no new
   // validator was seen", never "clear the old one".
   const etag = report.etag ?? row.etag;
   const lastModified = report.lastModified ?? row.lastModified;
+  const remembered = row.lastPermanentFailAt ?? null;
   switch (report.status) {
     case "fetched":
-      return { status: "FETCHED", nextDueAt: new Date(now.getTime() + FRONTIER_REVISIT_MS), lastFetchedAt: now, failCount: 0, etag, lastModified };
+      return { status: "FETCHED", nextDueAt: new Date(now.getTime() + FRONTIER_REVISIT_MS), lastFetchedAt: now, failCount: 0, etag, lastModified, lastPermanentFailAt: null };
     case "not_modified": {
       // The interval that was in effect for this visit (24 h after a fetch;
       // the seed's first visit cannot be not_modified, but stay bounded).
       const previous = row.lastFetchedAt ? Math.max(row.nextDueAt.getTime() - row.lastFetchedAt.getTime(), 0) : FRONTIER_REVISIT_MS;
       const interval = Math.min(Math.max(previous * 2, FRONTIER_REVISIT_MS), FRONTIER_MAX_INTERVAL_MS);
-      return { status: "NOT_MODIFIED", nextDueAt: new Date(now.getTime() + interval), lastFetchedAt: now, failCount: 0, etag, lastModified };
+      return { status: "NOT_MODIFIED", nextDueAt: new Date(now.getTime() + interval), lastFetchedAt: now, failCount: 0, etag, lastModified, lastPermanentFailAt: null };
     }
     case "gone":
-      return { status: "GONE", nextDueAt: now, lastFetchedAt: now, failCount: row.failCount, etag, lastModified };
+      return { status: "GONE", nextDueAt: now, lastFetchedAt: now, failCount: row.failCount, etag, lastModified, lastPermanentFailAt: remembered };
     case "blocked":
-      return { status: "BLOCKED", nextDueAt: new Date(now.getTime() + FRONTIER_BLOCKED_REVISIT_MS), lastFetchedAt: row.lastFetchedAt, failCount: row.failCount, etag, lastModified };
+      return { status: "BLOCKED", nextDueAt: new Date(now.getTime() + FRONTIER_BLOCKED_REVISIT_MS), lastFetchedAt: row.lastFetchedAt, failCount: row.failCount, etag, lastModified, lastPermanentFailAt: remembered };
     case "error": {
       const failCount = row.failCount + 1;
-      if (failCount >= FRONTIER_MAX_FAILURES) {
-        return { status: "DEAD", nextDueAt: row.nextDueAt, lastFetchedAt: row.lastFetchedAt, failCount, etag, lastModified };
+      // Review fix (WP13): the first permanent failure backs off like any
+      // error and is remembered; a permanent failure at least 24 h after
+      // the first kills the row without waiting for five retries.
+      const permanentAgain =
+        report.failure === "permanent" && remembered !== null && now.getTime() - remembered.getTime() >= FRONTIER_PERMANENT_FAIL_MS;
+      if (failCount >= FRONTIER_MAX_FAILURES || permanentAgain) {
+        return { status: "DEAD", nextDueAt: row.nextDueAt, lastFetchedAt: row.lastFetchedAt, failCount, etag, lastModified, lastPermanentFailAt: remembered };
       }
       const backoff = FRONTIER_ERROR_BACKOFF_MS[Math.min(failCount, FRONTIER_ERROR_BACKOFF_MS.length) - 1]!;
-      return { status: "ERROR", nextDueAt: new Date(now.getTime() + backoff), lastFetchedAt: row.lastFetchedAt, failCount, etag, lastModified };
+      return {
+        status: "ERROR",
+        nextDueAt: new Date(now.getTime() + backoff),
+        lastFetchedAt: row.lastFetchedAt,
+        failCount,
+        etag,
+        lastModified,
+        // The FIRST permanent failure is the one remembered: a second
+        // inside the window moves nothing, so the 24 h is measured from
+        // the first, never sliding.
+        lastPermanentFailAt: report.failure === "permanent" ? (remembered ?? now) : remembered,
+      };
     }
   }
 }
@@ -488,15 +690,34 @@ function acceptableLink(rawUrl: string, sourceDomain: string): string | null {
   return pageOnSourceHost(parsed.toString(), sourceDomain) ? parsed.toString() : null;
 }
 
-type NewLinkRow = { id: string; sourceId: string; urlEncrypted: string; urlDigest: string; depth: number; kind: "PAGE" | "SITEMAP" | "FEED" };
+type NewLinkRow = {
+  id: string;
+  sourceId: string;
+  urlEncrypted: string;
+  urlDigest: string;
+  depth: number;
+  kind: "PAGE" | "SITEMAP" | "FEED";
+  /** Crawl order (crawler v3 WP11). */
+  priority: number;
+  /** Stored from a pagination link (review fix: its canonical aliases are ignored). */
+  viaPagination: boolean;
+};
 
 /**
  * Applies one crawler report: updates each claimed page's schedule, stores
  * the new in-scope links it found (deduplicated per source on the keyed
  * digest, at the reporting page's depth + 1) and counts visited pages
- * against the source's progress counters. `accepted` counts the page rows
- * the report moved; skipped entries are unknown ids, rows of another source,
- * dead rows (a late duplicate cannot resurrect them) or malformed entries.
+ * against the source's progress counters. Canonical aliases (WP10, review
+ * fix): a row for an alias digest that has never been fetched and is not a
+ * depth-0 seed is retired (dead: its content is the reporting page's), and
+ * a link that arrives in the same report as its alias is not stored. An
+ * alias never kills a fetched row or a seed (paginated pages naming page 1,
+ * a site-wide canonical to the home page), never inserts a placeholder row,
+ * and aliases reported by a page that was reached via pagination, or that
+ * name a row this same report moved, are ignored. `accepted` counts the
+ * page rows the report moved; skipped entries
+ * are unknown ids, rows of another source, dead rows (a late duplicate
+ * cannot resurrect them) or malformed entries.
  */
 export async function reportCrawlPages(
   sourceId: string,
@@ -517,20 +738,52 @@ export async function reportCrawlPages(
   const current = await pageRows(sourceId, entries.map((page) => page.id));
   const updates: Array<{ id: string; plan: PageUpdatePlan }> = [];
   const links = new Map<string, NewLinkRow>(); // digest -> row (dedups the report itself)
+  /** Alias digests of this report: never-fetched, non-seed rows for them are retired. */
+  const aliasDigests = new Set<string>();
+  /** The accepted URL behind each alias and link digest (for the legacy-key lookup). */
+  const linkUrls = new Map<string, string>();
   let accepted = 0;
 
+  // Pass 1: the aliases. They win over links, so they are collected before
+  // any link row is built. A page reached via pagination names page 1 (or
+  // the listing) as canonical by convention: its aliases are ignored.
+  for (const page of entries) {
+    const row = current.get(page.id);
+    if (!row || row.status === "DEAD" || row.status === "GONE" || row.viaPagination) continue;
+    for (const raw of page.aliases ?? []) {
+      const url = acceptableLink(raw, source.domain);
+      if (url === null) continue;
+      const digest = crawlPageDigest(sourceId, url);
+      // Self-alias (a page naming itself canonical) changes nothing.
+      if (digest === null || digest === row.urlDigest) continue;
+      aliasDigests.add(digest);
+      linkUrls.set(digest, url);
+    }
+  }
+  // A row this report moves is a page the crawler just visited: never an alias victim.
+  for (const row of current.values()) aliasDigests.delete(row.urlDigest);
+
+  /** Reported sitemap lastmods by link digest (crawler v3 WP11). */
+  const lastmodByDigest = new Map<string, Date>();
+
+  // Pass 2: the page updates and the link rows (an alias digest never
+  // becomes a live row, whatever page reported it).
   for (const page of entries) {
     const row = current.get(page.id);
     // Dead rows are final; a report for another source's row is not ours.
     if (!row || row.status === "DEAD" || row.status === "GONE") continue;
     const plan = planNextVisit(row, page, now);
+    // Review fix (WP11): a successful visit consumes the lastmod jump —
+    // the row's priority falls back to its kind/depth value. A failed
+    // visit keeps it, so a bumped row retries before the rest.
+    if (page.status === "fetched" || page.status === "not_modified") plan.priority = visitPriority(row);
     updates.push({ id: page.id, plan });
     accepted++;
     for (const link of page.links ?? []) {
       const url = acceptableLink(link.url, source.domain);
       if (url === null) continue;
       const digest = crawlPageDigest(sourceId, url);
-      if (digest === null || links.has(digest)) continue;
+      if (digest === null || links.has(digest) || aliasDigests.has(digest)) continue;
       links.set(digest, {
         id: randomUUID(),
         sourceId,
@@ -538,11 +791,61 @@ export async function reportCrawlPages(
         urlDigest: digest,
         depth: row.depth + 1,
         kind: link.kind === "page" ? "PAGE" : link.kind === "sitemap" ? "SITEMAP" : "FEED",
+        priority: linkPriority(link, row.depth + 1),
+        viaPagination: link.pagination === true,
       });
+      linkUrls.set(digest, url);
+      // Review fix (WP11): a lastmod in the future is clamped to now — a
+      // site cannot outrank every honest page by writing next year — and
+      // the bump below only ever fires for a lastmod strictly newer than
+      // the row's last fetch.
+      if (link.lastmod !== undefined && !lastmodByDigest.has(digest)) {
+        lastmodByDigest.set(digest, new Date(Math.min(Date.parse(link.lastmod), now.getTime())));
+      }
     }
   }
 
-  await applyReport(sourceId, updates, [...links.values()], accepted, now);
+  // Crawler v3 WP11: a reported sitemap link whose lastmod is newer than
+  // the row's last fetch jumps the queue — priority 5, due now. A row this
+  // same report moved was just fetched, so it keeps its fresh schedule; a
+  // dead row is final; a row never fetched has no last fetch to compare
+  // and is due anyway, so it keeps the priority its link stored.
+  //
+  // Rows stored before WP10 (review fix) carry the digest of the LEGACY key
+  // (crawl-page-key.ts): a link spelled differently from such a row (https
+  // for http, bare for www., no trailing slash, no index document) has a new
+  // digest no row carries, so it would insert a duplicate live row. Every
+  // link is therefore also looked up by the legacy digests of all its
+  // spellings, in the same read as the lastmod check: a link whose page
+  // already has a legacy row is not inserted (and a lastmod bump reaches
+  // that row), and an alias reaches a legacy row too.
+  const legacyToNew = new Map<string, string>();
+  for (const [newDigest, url] of linkUrls) {
+    if (!links.has(newDigest) && !aliasDigests.has(newDigest)) continue;
+    for (const key of legacyPageKeys(url)) {
+      const legacy = keyDigest(sourceId, key);
+      if (legacy !== newDigest && !legacyToNew.has(legacy)) legacyToNew.set(legacy, newDigest);
+    }
+  }
+  const reportedIds = new Set(updates.map((u) => u.id));
+  const bumps: Array<{ id: string }> = [];
+  if (lastmodByDigest.size > 0 || legacyToNew.size > 0) {
+    const rows = await rowsByDigest(sourceId, [...new Set([...lastmodByDigest.keys(), ...legacyToNew.keys()])]);
+    for (const row of rows.values()) {
+      const newDigest = legacyToNew.get(row.urlDigest);
+      if (newDigest !== undefined) {
+        // The page already has a row under its legacy key: no second row.
+        links.delete(newDigest);
+        if (aliasDigests.has(newDigest) && !reportedIds.has(row.id)) aliasDigests.add(row.urlDigest);
+      }
+      if (reportedIds.has(row.id) || row.status === "DEAD" || row.status === "GONE") continue;
+      const lastmod = lastmodByDigest.get(row.urlDigest) ?? (newDigest !== undefined ? lastmodByDigest.get(newDigest) : undefined);
+      if (lastmod === undefined || row.lastFetchedAt === null) continue;
+      if (lastmod.getTime() > row.lastFetchedAt.getTime()) bumps.push({ id: row.id });
+    }
+  }
+
+  await applyReport(sourceId, updates, [...aliasDigests], [...links.values()], bumps, accepted, now);
   return { accepted };
 }
 
@@ -561,23 +864,72 @@ async function pageRows(sourceId: string, ids: string[]): Promise<Map<string, Cu
   }
   if (usesWorkerKysely()) {
     const rows = await getWorkerDb().selectFrom("CrawlPage")
-      .select(["id", "status", "nextDueAt", "lastFetchedAt", "failCount", "etag", "lastModified", "depth"])
+      .select(["id", "status", "nextDueAt", "lastFetchedAt", "failCount", "etag", "lastModified", "depth", "urlDigest", "kind", "viaPagination", "lastPermanentFailAt"])
       .where("sourceId", "=", sourceId).where("id", "in", wanted).execute();
     return new Map(rows.map((row) => [row.id, row as CurrentRow]));
   }
   const { db } = await import("@/lib/db");
   const rows = await db.crawlPage.findMany({
     where: { sourceId, id: { in: wanted } },
-    select: { id: true, status: true, nextDueAt: true, lastFetchedAt: true, failCount: true, etag: true, lastModified: true, depth: true },
+    select: { id: true, status: true, nextDueAt: true, lastFetchedAt: true, failCount: true, etag: true, lastModified: true, depth: true, urlDigest: true, kind: true, viaPagination: true, lastPermanentFailAt: true },
   });
   return new Map(rows.map((row) => [row.id, row as unknown as CurrentRow]));
 }
 
-/** What the scheduling needs from one current row, plus its depth. */
-type CurrentRow = SchedulablePage & { id: string; status: MemoryCrawlPage["status"]; depth: number };
+/** What the scheduling needs from one current row, plus its depth and digest. */
+type CurrentRow = SchedulablePage & { id: string; status: MemoryCrawlPage["status"]; depth: number; urlDigest: string; kind: "PAGE" | "SITEMAP" | "FEED"; viaPagination?: boolean };
 
-/** Writes the planned updates, the new link rows and the source counters. */
-async function applyReport(sourceId: string, updates: Array<{ id: string; plan: PageUpdatePlan }>, links: NewLinkRow[], accepted: number, now: Date): Promise<void> {
+/**
+ * The rows for the given link digests, keyed by digest — what the WP11
+ * lastmod check needs. One chunked read per path; rows that do not exist
+ * (the link is new) are simply absent.
+ */
+async function rowsByDigest(sourceId: string, digests: string[]): Promise<Map<string, CurrentRow>> {
+  const out = new Map<string, CurrentRow>();
+  for (let i = 0; i < digests.length; i += LINK_INSERT_CHUNK) {
+    const chunk = digests.slice(i, i + LINK_INSERT_CHUNK);
+    if (isDevNoDb()) {
+      const memory = crawlMemory();
+      const wanted = new Set(chunk);
+      for (const page of memory.pages.values()) {
+        if (page.sourceId === sourceId && wanted.has(page.urlDigest)) out.set(page.urlDigest, page);
+      }
+      continue;
+    }
+    if (usesWorkerKysely()) {
+      const rows = await getWorkerDb().selectFrom("CrawlPage")
+        .select(["id", "status", "nextDueAt", "lastFetchedAt", "failCount", "etag", "lastModified", "depth", "urlDigest", "viaPagination"])
+        .where("sourceId", "=", sourceId).where("urlDigest", "in", chunk).execute();
+      for (const row of rows) out.set(row.urlDigest, row as CurrentRow);
+      continue;
+    }
+    const { db } = await import("@/lib/db");
+    const rows = await db.crawlPage.findMany({
+      where: { sourceId, urlDigest: { in: chunk } },
+      select: { id: true, status: true, nextDueAt: true, lastFetchedAt: true, failCount: true, etag: true, lastModified: true, depth: true, urlDigest: true, viaPagination: true },
+    });
+    for (const row of rows) out.set(row.urlDigest, row as unknown as CurrentRow);
+  }
+  return out;
+}
+
+/**
+ * Writes the planned updates, the alias retirements, the new link rows, the
+ * WP11 lastmod bumps and the source counters. Alias digests (WP10, review
+ * fix) retire only rows that were never fetched and are not a depth-0 seed;
+ * a fetched row or a seed is never touched by an alias, and no placeholder
+ * row is inserted for an alias that has no row.
+ */
+async function applyReport(
+  sourceId: string,
+  updates: Array<{ id: string; plan: PageUpdatePlan }>,
+  aliasDigests: string[],
+  links: NewLinkRow[],
+  /** Rows whose reported lastmod jumps the queue: priority 5, due now (WP11). */
+  bumps: Array<{ id: string }>,
+  accepted: number,
+  now: Date,
+): Promise<void> {
   // Visited pages (fetched, not_modified, gone) move the progress counters;
   // blocked and error pages were not fetched, so they do not.
   const visited = updates.filter((u) => u.plan.lastFetchedAt !== null).length;
@@ -588,20 +940,43 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
     const memory = crawlMemory();
     for (const { id, plan } of updates) {
       const row = memory.pages.get(id)!;
-      Object.assign(row, { status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt, failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null });
-    }
-    let room = maxFrontierPagesPerSource() - [...memory.pages.values()].filter((p) => p.sourceId === sourceId).length;
-    for (const link of links) {
-      const exists = [...memory.pages.values()].some((p) => p.sourceId === sourceId && p.urlDigest === link.urlDigest);
-      if (exists) continue;
-      if (room <= 0) break; // the source's frontier is full
-      room -= 1;
-      memory.pages.set(link.id, {
-        id: link.id, sourceId: link.sourceId, urlEncrypted: link.urlEncrypted, urlDigest: link.urlDigest,
-        depth: link.depth, kind: link.kind, etag: null, lastModified: null, status: "PENDING",
-        claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: now,
+      Object.assign(row, {
+        status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt, failCount: plan.failCount,
+        etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null, lastPermanentFailAt: plan.lastPermanentFailAt,
+        ...(plan.priority !== undefined ? { priority: plan.priority } : {}),
       });
     }
+    // A newer-than-last-fetch lastmod jumps the queue (WP11): due now.
+    for (const bump of bumps) {
+      const row = memory.pages.get(bump.id);
+      if (!row || row.sourceId !== sourceId || row.status === "DEAD" || row.status === "GONE") continue;
+      row.priority = FRONTIER_PRIORITY_LASTMOD;
+      row.nextDueAt = now;
+    }
+    // Retire never-fetched, non-seed rows for the report's aliases (WP10).
+    for (const row of memory.pages.values()) {
+      if (row.sourceId !== sourceId || !aliasDigests.includes(row.urlDigest)) continue;
+      if (row.lastFetchedAt !== null || row.depth === 0) continue; // a fetched row or a seed is never an alias victim
+      if (row.status !== "DEAD" && row.status !== "GONE") {
+        row.status = "DEAD";
+        row.nextDueAt = now;
+        row.claimedUntil = null;
+      }
+    }
+    const rowsOfSource = [...memory.pages.values()].filter((p) => p.sourceId === sourceId);
+    let room = maxFrontierPagesPerSource() - rowsOfSource.length;
+    const insert = (row: NewLinkRow): void => {
+      if (rowsOfSource.some((p) => p.urlDigest === row.urlDigest)) return;
+      if (room <= 0) return; // the source's frontier is full
+      room -= 1;
+      const page: FrontierMemoryPage = {
+        id: row.id, sourceId: row.sourceId, urlEncrypted: row.urlEncrypted, urlDigest: row.urlDigest,
+        depth: row.depth, kind: row.kind, priority: row.priority, viaPagination: row.viaPagination, etag: null, lastModified: null, status: "PENDING",
+        claimedUntil: null, lastFetchedAt: null, nextDueAt: new Date(0), failCount: 0, createdAt: now,
+      };
+      memory.pages.set(row.id, page);
+    };
+    for (const link of links) insert(link);
     if (accepted > 0) {
       const source = memory.sources.get(sourceId);
       if (source) {
@@ -623,9 +998,31 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
         await trx.updateTable("CrawlPage").set({
           status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt,
           failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null,
+          lastPermanentFailAt: plan.lastPermanentFailAt,
+          ...(plan.priority !== undefined ? { priority: plan.priority } : {}),
         }).where("id", "=", id).where("sourceId", "=", sourceId).execute();
       }
-      let capped = links;
+      // A newer-than-last-fetch lastmod jumps the queue (WP11): due now.
+      // The bump reads already filtered dead rows and this same report's
+      // pages; the status guard only keeps a concurrent kill final.
+      for (let i = 0; i < bumps.length; i += LINK_INSERT_CHUNK) {
+        await trx.updateTable("CrawlPage").set({ priority: FRONTIER_PRIORITY_LASTMOD, nextDueAt: now })
+          .where("id", "in", bumps.slice(i, i + LINK_INSERT_CHUNK).map((b) => b.id))
+          .where("sourceId", "=", sourceId)
+          .where("status", "not in", ["DEAD", "GONE"])
+          .execute();
+      }
+      // Retire never-fetched, non-seed rows for the report's aliases (WP10,
+      // review fix), digest-chunked; a fetched row or a seed is never touched.
+      for (let i = 0; i < aliasDigests.length; i += LINK_INSERT_CHUNK) {
+        await trx.updateTable("CrawlPage").set({ status: "DEAD", nextDueAt: now, claimedUntil: null })
+          .where("sourceId", "=", sourceId).where("urlDigest", "in", aliasDigests.slice(i, i + LINK_INSERT_CHUNK))
+          .where("status", "not in", ["DEAD", "GONE"])
+          .where("lastFetchedAt", "is", null)
+          .where("depth", ">", 0)
+          .execute();
+      }
+      let cappedLinks = links;
       if (links.length > 0) {
         // Per-source frontier cap: the source row lock serialises concurrent
         // reports of one source, so the count stays true until commit.
@@ -633,14 +1030,15 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
         const held = await trx.selectFrom("CrawlPage")
           .select((eb) => eb.fn.countAll<string>().as("count"))
           .where("sourceId", "=", sourceId).executeTakeFirst();
-        capped = links.slice(0, Math.max(0, maxFrontierPagesPerSource() - Number(held?.count ?? 0)));
+        const room = Math.max(0, maxFrontierPagesPerSource() - Number(held?.count ?? 0));
+        cappedLinks = links.slice(0, room);
       }
-      for (let i = 0; i < capped.length; i += LINK_INSERT_CHUNK) {
-        const chunk = capped.slice(i, i + LINK_INSERT_CHUNK).map((link) => ({
-          id: link.id, sourceId: link.sourceId, urlEncrypted: link.urlEncrypted, urlDigest: link.urlDigest,
-          depth: link.depth, kind: link.kind, status: "PENDING" as const, nextDueAt: new Date(0),
+      for (let i = 0; i < cappedLinks.length; i += LINK_INSERT_CHUNK) {
+        const rows = cappedLinks.slice(i, i + LINK_INSERT_CHUNK).map((row) => ({
+          id: row.id, sourceId: row.sourceId, urlEncrypted: row.urlEncrypted, urlDigest: row.urlDigest,
+          depth: row.depth, kind: row.kind, priority: row.priority, viaPagination: row.viaPagination, status: "PENDING" as const, nextDueAt: new Date(0),
         }));
-        await trx.insertInto("CrawlPage").values(chunk)
+        await trx.insertInto("CrawlPage").values(rows)
           .onConflict((oc) => oc.columns(["sourceId", "urlDigest"]).doNothing()).execute();
       }
       if (accepted > 0) {
@@ -666,20 +1064,46 @@ async function applyReport(sourceId: string, updates: Array<{ id: string; plan: 
         data: {
           status: plan.status, nextDueAt: plan.nextDueAt, lastFetchedAt: plan.lastFetchedAt,
           failCount: plan.failCount, etag: plan.etag, lastModified: plan.lastModified, claimedUntil: null,
+          lastPermanentFailAt: plan.lastPermanentFailAt,
+          ...(plan.priority !== undefined ? { priority: plan.priority } : {}),
         },
       });
     }
-    let capped = links;
+    // A newer-than-last-fetch lastmod jumps the queue (WP11): due now. The
+    // status guard keeps a concurrent kill final (see the Kysely path).
+    for (let i = 0; i < bumps.length; i += LINK_INSERT_CHUNK) {
+      await tx.crawlPage.updateMany({
+        where: {
+          id: { in: bumps.slice(i, i + LINK_INSERT_CHUNK).map((b) => b.id) },
+          sourceId,
+          status: { notIn: ["DEAD", "GONE"] },
+        },
+        data: { priority: FRONTIER_PRIORITY_LASTMOD, nextDueAt: now },
+      });
+    }
+    // Retire never-fetched, non-seed rows for the report's aliases (WP10,
+    // review fix), digest-chunked; a fetched row or a seed is never touched.
+    for (let i = 0; i < aliasDigests.length; i += LINK_INSERT_CHUNK) {
+      await tx.crawlPage.updateMany({
+        where: {
+          sourceId, urlDigest: { in: aliasDigests.slice(i, i + LINK_INSERT_CHUNK) }, status: { notIn: ["DEAD", "GONE"] },
+          lastFetchedAt: null, depth: { gt: 0 },
+        },
+        data: { status: "DEAD", nextDueAt: now, claimedUntil: null },
+      });
+    }
+    let cappedLinks = links;
     if (links.length > 0) {
       // Per-source frontier cap, under the source row lock (see above).
       await tx.$executeRaw`SELECT "id" FROM "CrawlSource" WHERE "id" = ${sourceId} FOR UPDATE`;
       const held = await tx.crawlPage.count({ where: { sourceId } });
-      capped = links.slice(0, Math.max(0, maxFrontierPagesPerSource() - held));
+      const room = Math.max(0, maxFrontierPagesPerSource() - held);
+      cappedLinks = links.slice(0, room);
     }
-    for (let i = 0; i < capped.length; i += LINK_INSERT_CHUNK) {
-      const chunk = capped.slice(i, i + LINK_INSERT_CHUNK).map((link) => ({
-        id: link.id, sourceId: link.sourceId, urlEncrypted: link.urlEncrypted, urlDigest: link.urlDigest,
-        depth: link.depth, kind: link.kind, status: "PENDING" as const, nextDueAt: new Date(0),
+    for (let i = 0; i < cappedLinks.length; i += LINK_INSERT_CHUNK) {
+      const chunk = cappedLinks.slice(i, i + LINK_INSERT_CHUNK).map((row) => ({
+        id: row.id, sourceId: row.sourceId, urlEncrypted: row.urlEncrypted, urlDigest: row.urlDigest,
+        depth: row.depth, kind: row.kind, priority: row.priority, viaPagination: row.viaPagination, status: "PENDING" as const, nextDueAt: new Date(0),
       }));
       await tx.crawlPage.createMany({ data: chunk, skipDuplicates: true });
     }

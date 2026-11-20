@@ -8,13 +8,63 @@
 //   0x07 valid reply, then stop answering and exit shortly after (a child
 //        that dies with a task already handed to it)
 //   0x08 valid reply reporting a huge RSS
+//   0x0e sprite reply to a normal task (the wrong reply kind, WP21)
+// A request with sprite: true (video-fingerprints spec WP21) answers in
+// tile mode instead, with new first bytes:
+//   0x00 valid sprite reply (2 tiles)   0x03 tile with a bad hash
+//   0x0a single-hash reply to a sprite task (kind mismatch)
+//   0x0b sprite reply with 0 tiles      0x0c tile with an extra field
+//   0x0d tiles not an array             0x07 valid reply, then die
+//   0x06 shape check for sprite requests (bytes,id,minSide,sprite)
 const OK_HASH = "0123456789abcdef".repeat(4);
 const rss = () => process.memoryUsage.rss();
 let dying = false;
 
+const spriteReply = (id, tiles) => ({ id, ok: true, sprite: true, tiles: tiles.map((t) => ({ pdq: t.pdq, quality: t.quality })), rss: rss() });
+
 process.on("message", (m) => {
   if (dying) return;
   const b = m.bytes;
+  if (m.sprite === true) {
+    switch (b[0]) {
+      case 0x00:
+        return process.send(spriteReply(m.id, [{ pdq: OK_HASH, quality: 77 }, { pdq: "f".repeat(64), quality: 66 }]));
+      case 0x03:
+        return process.send(spriteReply(m.id, [{ pdq: "not-hex", quality: 77 }]));
+      case 0x06: {
+        // Same env/argv checks as the normal 0x06 case, with the sprite
+        // request shape: exactly bytes,id,minSide,sprite.
+        const allowed = new Set(["VIPS_DISC_THRESHOLD", "TMPDIR", "TMP", "TEMP"]);
+        const winRequired = /^(HOMEDRIVE|HOMEPATH|LOGONSERVER|PATH|SYSTEMDRIVE|SYSTEMROOT|USERDOMAIN|USERNAME|USERPROFILE|WINDIR)$/i;
+        const envOk =
+          Object.keys(process.env).every((k) => allowed.has(k) || (process.platform === "win32" && winRequired.test(k))) &&
+          !Object.keys(process.env).some((k) => /CRAWLER|ASMITA|KEY|SECRET|TOKEN|PASSWORD|API/i.test(k)) &&
+          !Object.values(process.env).some((v) => String(v).includes("parent-secret"));
+        const argvOk = ![...process.argv, ...process.execArgv].some((a) => a.includes("parent-secret"));
+        const shapeOk = Object.keys(m).sort().join(",") === "bytes,id,minSide,sprite" && b instanceof Uint8Array && m.sprite === true;
+        return process.send({
+          id: m.id,
+          ok: false,
+          code: !envOk ? "invalid_url" : !shapeOk ? "dns_failed" : !argvOk ? "blocked_port" : "image_format",
+          rss: rss(),
+        });
+      }
+      case 0x07:
+        process.send(spriteReply(m.id, [{ pdq: OK_HASH, quality: 77 }]));
+        dying = true;
+        setTimeout(() => process.exit(0), 150);
+        return;
+      case 0x0a:
+        return process.send({ id: m.id, ok: true, pdq: OK_HASH, quality: 77, rss: rss() });
+      case 0x0b:
+        return process.send(spriteReply(m.id, []));
+      case 0x0c:
+        return process.send({ id: m.id, ok: true, sprite: true, tiles: [{ pdq: OK_HASH, quality: 77, url: "https://leak.example/" }], rss: rss() });
+      case 0x0d:
+        return process.send({ id: m.id, ok: true, sprite: true, tiles: "not-an-array", rss: rss() });
+    }
+    return;
+  }
   switch (b[0]) {
     case 0x00:
       return process.send({ id: m.id, ok: true, pdq: OK_HASH, quality: 77, rss: rss() });
@@ -63,5 +113,8 @@ process.on("message", (m) => {
       return;
     case 0x08:
       return process.send({ id: m.id, ok: true, pdq: OK_HASH, quality: 77, rss: 2 ** 40 });
+    // 0x0e: a sprite reply to a normal task (the wrong reply kind, WP21).
+    case 0x0e:
+      return process.send(spriteReply(m.id, [{ pdq: OK_HASH, quality: 77 }]));
   }
 });

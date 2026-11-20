@@ -6,6 +6,8 @@ export function nextActionLabel(kind: NextActionKind, count: number) {
   switch (kind) {
     case "review_links":
       return `Review ${plural(count, "link")}`;
+    case "review_findings":
+      return `Review ${count} found ${count === 1 ? "copy" : "copies"}`;
     case "review_fingerprints":
       return `Review ${plural(count, "fingerprint")}`;
     case "send_notice":
@@ -27,6 +29,7 @@ export function nextActionLabel(kind: NextActionKind, count: number) {
 
 export const NEXT_ACTION_FILTER_LABELS: Record<NextActionKind, string> = {
   review_links: "Review links",
+  review_findings: "Review found copies",
   review_fingerprints: "Review fingerprints",
   send_notice: "Send notice",
   blocked_legal_review: "Blocked: legal review",

@@ -8,6 +8,7 @@ export type NavItem = {
   href: string;
   label: string;
   // /talk needs a full page load: its own headers allow the microphone.
+  // /check-image needs one too: its own headers allow the C2PA WASM reader.
   reload?: boolean;
 };
 export type NavGroup = { href: string; label: string; items: NavItem[] };
@@ -50,7 +51,7 @@ export function navGroups(locale: Locale): NavGroup[] {
         { href: "/start", label: say("File a complaint", "शिकायत दर्ज करें") },
         { href: "/start", label: say("Track your case", "अपना मामला देखें") },
         { href: "/talk", label: say("Talk to the assistant", "सहायक से बात करें"), reload: true },
-        { href: "/check-image", label: t(locale, "nav.checkImage") },
+        { href: "/check-image", label: t(locale, "nav.checkImage"), reload: true },
         { href: "/minor-support", label: say("Under 18", "18 से कम उम्र") },
       ],
     },

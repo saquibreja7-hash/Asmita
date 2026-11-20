@@ -17,10 +17,13 @@ export const FETCH_METADATA_EXEMPT_ROUTES = [
   // Resend delivery webhooks: verified by the svix signature.
   "/api/webhooks/resend",
   // The crawler service presents its service key (only its sha256 is stored).
+  // /api/crawler/embeddings arrived with the master merge (SSCD WP28) and
+  // carries the same bearer, so it joins its six siblings.
   "/api/crawler/pool",
   "/api/crawler/sources",
   "/api/crawler/discoveries",
   "/api/crawler/findings",
+  "/api/crawler/embeddings",
   "/api/crawler/frontier/claim",
   "/api/crawler/frontier/report",
   // NGO partners vouch with a bearer API key; the case id is a path segment.
