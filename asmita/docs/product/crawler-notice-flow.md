@@ -102,9 +102,9 @@ If she later signs a new authorisation, findings are deduplicated per authorisat
 ## Not covered yet
 
 - **Follow-ups and escalation.** Representative notices are excluded from the hourly sweep (24h follow-up, 48h and 7-day survivor emails) and from the ladder:
-  - The follow-up cover (`ESCALATION_L1`) restates the notice as a Rule 3(2)(b) complaint with a two-hour deadline, which the representative notice does not state.
+  - The follow-up cover (`ESCALATION_L1`) restates the notice as a Rule 3(2)(b) complaint with the Rule's two-hour deadline, which the representative notice does not demand (WP26: it asks for twenty-four hours, stating the Rule's period as law).
   - The survivor emails say a deadline passed.
-  - The survivor view gets `representativeNoticeSentAt` instead of `noticeSentAt`, so no two-hour ladder is drawn.
+  - The survivor view gets `representativeNoticeSentAt` instead of `noticeSentAt`, so no ladder is drawn.
 
   Bringing them in needs a reviewed representative follow-up template and a deadline counsel confirms.
 - The platform API transport.

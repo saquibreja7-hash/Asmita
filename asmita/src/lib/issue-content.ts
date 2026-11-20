@@ -5,6 +5,8 @@
  * These are education explainers, not legal advice.
  */
 
+import { THORN_DEEPFAKE_SURVEY_URL } from "./ai-image-research";
+
 export type IssueTopic = {
   slug: string;
   term: string; // short label for cards / nav
@@ -13,6 +15,7 @@ export type IssueTopic = {
   definition: string; // opening paragraph on the topic page
   looksLike: string[]; // concrete, India-specific examples
   whatToDo: string; // short guidance, links to Get Help
+  research?: { text: string; url: string }; // one attributed research line, never presented as Indian data
 };
 
 export const issueTopics: IssueTopic[] = [
@@ -38,14 +41,18 @@ export const issueTopics: IssueTopic[] = [
     title: "Deepfakes and AI-made images",
     short: "A fake image or video made by AI to look like you, including nudes you never took.",
     definition:
-      "A deepfake is an image or video made or altered by AI to look like you. That includes so-called nudify apps that turn an ordinary photo into a fake nude, and tools that swap your face onto explicit content. The image is not real, but the harm is, and it can be removed.",
+      "A deepfake is an image or video made or altered by AI to look like you. That includes so-called nudify apps that turn an ordinary photo into a fake nude, and tools that swap your face onto explicit content. A fake image of you is abuse — you can report it exactly like a real one, and you will be believed. The harm done to you is real, and the image can be removed.",
     looksLike: [
       "A nudify app turns a normal photo of you into a fake nude.",
       "Your face is swapped onto a pornographic video.",
       "A fake image spreads with a caption claiming it is really you.",
     ],
     whatToDo:
-      "A fake image is still image-based abuse. Use its post URL to prepare a report. The image checker can read provenance signals locally; a deeper check sends the image only with your consent.",
+      "Report it by its post URL, exactly as you would report any other image. The image checker can read provenance signals locally; a deeper check sends the image only with your consent.",
+    research: {
+      text: "One US survey — Thorn's 'Deepfake Nudes & Young People' (2025) — found that about 1 in 17 young people surveyed had deepfake nudes made of them.",
+      url: THORN_DEEPFAKE_SURVEY_URL,
+    },
   },
   {
     slug: "morphing",
