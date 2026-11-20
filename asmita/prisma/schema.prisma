@@ -225,6 +225,12 @@ enum AuditEventType {
   ORG_PARTNER_SAVED
   ORG_PARTNER_VISIBILITY_CHANGED
   ORG_PARTNER_REORDERED
+  // Organization pages (org-pages spec WP58): the platform scorecard
+  // snapshot lifecycle — computing aggregates, saving the methodology note,
+  // and publishing (all admin-only actions).
+  ORG_SCORECARD_COMPUTED
+  ORG_SCORECARD_NOTE_SAVED
+  ORG_SCORECARD_PUBLISHED
 }
 
 enum DeletionJobStatus {
@@ -1117,4 +1123,25 @@ model OrgPartner {
   updatedAt DateTime @updatedAt
 
   @@index([isPublic, sortOrder])
+}
+
+// One quarterly snapshot of the platform scorecard (docs/org/spec.md,
+// WP58): how platforms respond to the takedown notices Meri Asmita sends.
+// data holds aggregates only — never a case, notice or URL id
+// (src/lib/scorecard.ts). status: DRAFT | PUBLISHED; a published snapshot
+// for a period is the record and is never recomputed.
+model ScorecardSnapshot {
+  id          String    @id @default(uuid())
+  period      String    @unique
+  computedAt  DateTime  @default(now())
+  data        Json
+  status      String    @default("DRAFT")
+  publishedAt DateTime?
+  publishedBy String?
+  notesEn     String?
+  notesHi     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, publishedAt])
 }

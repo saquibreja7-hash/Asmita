@@ -22,6 +22,7 @@ const PAGE_FILES: Record<string, string> = {
   "/admin/org/events": "org/events/page.tsx",
   "/admin/org/partners": "org/partners/page.tsx",
   "/admin/org/newsletter": "org/newsletter/page.tsx",
+  "/admin/org/scorecard": "org/scorecard/page.tsx",
   "/admin/metrics": "response-rates/page.tsx",
   "/admin/analytics": "analytics/page.tsx",
   "/admin/milestones": "milestones/page.tsx",

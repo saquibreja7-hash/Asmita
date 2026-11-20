@@ -26,12 +26,17 @@ export function PostDetail({
   related,
   url,
   tocLabel,
+  listHref = "/news",
+  listLabel,
 }: {
   post: OrgPost;
   locale: Locale;
   related: OrgPost[];
   url: string;
   tocLabel: string;
+  /** Where "read more" at the end returns to: /news by default, /policy for policy posts. */
+  listHref?: string;
+  listLabel?: string;
 }) {
   const inHindi = locale === "hi";
   const hasHindi = Boolean(post.titleHi && post.summaryHi && post.bodyHi);
@@ -122,8 +127,8 @@ export function PostDetail({
               ))}
             </div>
             <p className="mt-10 text-center">
-              <Link className="btn btn-secondary btn-arrow !m-0" href="/news">
-                {t(locale, "org.post.notFoundCta")}
+              <Link className="btn btn-secondary btn-arrow !m-0" href={listHref}>
+                {listLabel ?? t(locale, "org.post.notFoundCta")}
               </Link>
             </p>
           </div>

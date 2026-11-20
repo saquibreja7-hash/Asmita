@@ -4,10 +4,12 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { PostDetail } from "@/components/org/PostDetail";
-import { getPublishedOrgPostBySlug, relatedOrgPosts } from "@/lib/org-posts";
+import { getPublishedOrgPostBySlug, orgPostHref, relatedOrgPosts } from "@/lib/org-posts";
 
 // One published post. Drafts and archived posts are never reachable from
-// here. OpenGraph meta carries the cover image when there is one.
+// here. OpenGraph meta carries the cover image when there is one. Policy
+// and campaign posts also live at /policy/[slug] (WP58), which is their
+// canonical URL; this page still renders them for every link already shared.
 
 const siteUrl = () => (process.env.NEXT_PUBLIC_APP_URL || "https://meriasmita.org").replace(/\/+$/, "");
 
@@ -22,12 +24,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title,
     description,
-    alternates: { canonical: `/news/${post.slug}` },
+    // Policy and campaign posts canonicalise to /policy/[slug] (WP58).
+    alternates: { canonical: orgPostHref(post) },
     openGraph: {
       title,
       description,
       type: "article",
-      url: `${siteUrl()}/news/${post.slug}`,
+      url: `${siteUrl()}${orgPostHref(post)}`,
       images: [{ url: image }],
     },
     twitter: {

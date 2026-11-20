@@ -35,6 +35,11 @@ const INDEX_LINKS: IndexLink[] = [
     line: "The subscriber list and its CSV export. Newsletters are sent from an external tool for now; this page only manages the list.",
     outreach: true,
   },
+  {
+    href: "/admin/org/scorecard",
+    label: "Scorecard",
+    line: "The quarterly platform scorecard: review the draft snapshot, add the methodology note, publish.",
+  },
 ];
 
 export default async function OrgIndexPage() {

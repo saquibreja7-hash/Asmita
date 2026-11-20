@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { OrgPost, OrgPostKind } from "@/lib/org-posts";
+import { orgPostHref } from "@/lib/org-posts";
 
 // A card for one org post on /news, the related strip, and the Stories
 // strip on /get-involved. Parchment card, kind pill, title, summary, date.
@@ -27,11 +28,23 @@ const when = (iso: string, locale: Locale) =>
     timeZone: "Asia/Kolkata",
   }).format(new Date(iso));
 
-export function PostCard({ post, locale, heading }: { post: OrgPost; locale: Locale; heading?: "h2" | "h3" }) {
+export function PostCard({
+  post,
+  locale,
+  heading,
+  showAttachment,
+}: {
+  post: OrgPost;
+  locale: Locale;
+  heading?: "h2" | "h3";
+  /** Policy papers link their attachment right from the list (WP58). */
+  showAttachment?: boolean;
+}) {
   const Tag = heading ?? "h3";
   const title = locale === "hi" && post.titleHi ? post.titleHi : post.titleEn;
   const summary = locale === "hi" && post.summaryHi ? post.summaryHi : post.summaryEn;
   const published = post.publishedAt ?? post.createdAt;
+  const href = orgPostHref(post);
   return (
     <article className="card p-7">
       <div className="flex flex-wrap items-center gap-2">
@@ -41,12 +54,22 @@ export function PostCard({ post, locale, heading }: { post: OrgPost; locale: Loc
         </time>
       </div>
       <Tag className="mt-4 text-[20px] font-semibold">
-        <Link href={`/news/${post.slug}`} className="hover:text-[var(--brand-strong)]">
+        <Link href={href} className="hover:text-[var(--brand-strong)]">
           {title}
         </Link>
       </Tag>
       <p className="mt-3 text-[16px] leading-[1.6] text-[var(--text)]">{summary}</p>
-      <Link className="arrow-link mt-5" href={`/news/${post.slug}`}>
+      {showAttachment && post.attachmentUrl && (
+        <a
+          className="arrow-link mt-3 block"
+          href={post.attachmentUrl}
+          rel="noopener noreferrer"
+          download
+        >
+          {post.attachmentLabel ?? t(locale, "org.post.attachment")}
+        </a>
+      )}
+      <Link className="arrow-link mt-5" href={href}>
         {t(locale, "reading.more")}
       </Link>
     </article>

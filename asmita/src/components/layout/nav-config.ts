@@ -13,7 +13,10 @@ export type NavItem = {
 export type NavGroup = { href: string; label: string; items: NavItem[] };
 
 // Every public page, grouped for the header dropdowns and the phone menu.
-export function navGroups(locale: Locale): NavGroup[] {
+// The scorecard link (WP58) is passed in by AppShell: it appears only once a
+// scorecard snapshot has been published, so the nav never links to an empty
+// promise.
+export function navGroups(locale: Locale, options: { scorecard?: boolean } = {}): NavGroup[] {
   const hi = locale === "hi";
   const say = (en: string, hindi: string) => (hi ? hindi : en);
   const overview = say("Overview", "अवलोकन");
@@ -65,6 +68,7 @@ export function navGroups(locale: Locale): NavGroup[] {
         { href: "/faq", label: t(locale, "nav.faq") },
         { href: "/news", label: t(locale, "nav.news") },
         { href: "/policy", label: t(locale, "nav.policy") },
+        ...(options.scorecard ? [{ href: "/research/platform-scorecard", label: t(locale, "nav.scorecard") }] : []),
       ],
     },
     {

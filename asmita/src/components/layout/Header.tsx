@@ -4,7 +4,7 @@ import { NavLinks } from "@/components/layout/NavLinks";
 import { navGroups } from "@/components/layout/nav-config";
 import type { Locale } from "@/lib/i18n";
 
-export function Header({ locale }: { locale: Locale }) {
+export function Header({ locale, scorecard = false }: { locale: Locale; scorecard?: boolean }) {
   const isHi = locale === "hi";
   return (
     <>
@@ -34,7 +34,7 @@ export function Header({ locale }: { locale: Locale }) {
           </Link>
 
           <nav className="hidden items-center lg:flex" aria-label="Primary">
-            <NavLinks groups={navGroups(locale)} />
+            <NavLinks groups={navGroups(locale, { scorecard })} />
             <div className="ml-4 flex items-center gap-3">
               <Link href="/start" className="btn btn-primary btn-arrow !min-h-[44px] !px-6">
                 {isHi ? "शिकायत दर्ज करें" : "File a complaint"}
@@ -43,7 +43,7 @@ export function Header({ locale }: { locale: Locale }) {
           </nav>
 
           <div className="flex items-center gap-2.5 lg:hidden">
-            <MobileMenu locale={locale} groups={navGroups(locale)} />
+            <MobileMenu locale={locale} groups={navGroups(locale, { scorecard })} />
           </div>
         </div>
       </header>

@@ -46,6 +46,7 @@ export const siteMap: SiteGroup[] = [
       { href: "/faq", label: "FAQ" },
       { href: "/news", label: "News", note: "Updates, stories, research and campaigns" },
       { href: "/policy", label: "Policy and advocacy" },
+      { href: "/press", label: "Press", note: "Releases, coverage and the media kit" },
     ],
   },
   {

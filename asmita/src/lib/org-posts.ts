@@ -436,3 +436,13 @@ export async function listPublishedCaseStudies(limit = 3): Promise<OrgPost[]> {
   const page = await listPublishedOrgPosts({ kind: "CASE_STUDY", page: 1, perPage: limit });
   return page.posts;
 }
+
+/**
+ * The one public URL for a post: policy and campaign posts live under
+ * /policy/[slug] (WP58), every other kind under /news/[slug]. Cards, lists
+ * and detail pages all agree through this, so a post never has two URLs.
+ */
+export function orgPostHref(post: Pick<OrgPost, "slug" | "kind">): string {
+  const section = post.kind === "POLICY" || post.kind === "CAMPAIGN" ? "/policy" : "/news";
+  return `${section}/${post.slug}`;
+}
