@@ -608,6 +608,65 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+
+## WP52 (Lab lane) — E1 benchmark harness, tools/lab-bench — 2026-11-20
+
+WP52 is not part of the crawler v2 spec: it is a Meri Asmita AI Lab work
+package (owner-approved 20 November 2026; charter committed as
+`asmita/docs/lab/charter.md`). This entry is the pointer the work package
+asked for; the full record — every decision, every verification — lives in
+`asmita/docs/lab/progress.md`.
+
+**What was built.** A standalone Node 22 + TypeScript package at
+`tools/lab-bench/` (own `package.json` + lockfile, vitest, `npm run check` =
+type-check plus tests), implementing experiment E1 of the Lab charter:
+
+- `build-set <portraits-dir> <out-dir>` makes the charter's variants per
+  portrait — untouched original, crop, resize, mirror, sticker overlay,
+  screenshot with borders, WhatsApp-style re-encode (long edge 1600, JPEG
+  quality about 70), an eye-aligned face-swap composite (colour-matched
+  patch through a feathered elliptical mask, CPU only) and that composite
+  through the WhatsApp re-encode (the stop-rule combination); a labelled
+  `real/` + `fake/` deepfake-dataset folder is imported as-is. Manifest:
+  ids, transforms, labels — nothing about a person.
+- `match <set-dir>` scores whole-image PDQ (`asmita/src/lib/pdq/pdq.ts`
+  imported, never copied; decode via a faithful copy of the crawler's
+  `prepare.ts` recipe; production quality floor 50), the pinned
+  `sscd_disc_mixup` ONNX (loading approach copied from
+  `origin/feat/crawler-sscd`'s `sscd-pool.ts`; that branch is NOT merged),
+  face-crop PDQ and background-masked PDQ — recall at a 1% false-match rate
+  per transform.
+- `detect <set-dir>` runs the charter's detector adapters — OpenAI vision,
+  Hive, Sightengine, and the Community Forensics ViT-S/16 384 (MIT, arXiv
+  2411.04125) as the local onnxruntime-node model — skipping any without a
+  key or weights; accuracy and AUC per transform.
+- `report <run-dir>` writes local HTML/Markdown. `data/`, `runs/` and
+  `models/` are gitignored; `npm run models:fetch` downloads the two pinned
+  ONNX weights with sha256 checks; tests use tiny synthetic images and
+  invented `example.test` fixtures only. `asmita/docs/lab/e1.md` carries
+  the method and an empty results table for the real run.
+
+**Checks (all run on Node 22, final run on the committed tree).**
+`tools/lab-bench`: tsc clean, 11 test files / 82 tests. Crawler: lint,
+type-check, 29 test files / 350 tests, build. Asmita: lint 0 errors,
+type-check clean, `prisma validate` ok, 152 test files / 1250 tests.
+`check.sh` printed ALL CHECKS PASSED. No crawler or asmita source changed.
+
+**Not done or not verified.** No real E1 run happened: there is no
+portraits folder of Indian faces on this machine, so `e1.md`'s tables stay
+empty for the owner's real run. The hosted detector adapters are written
+from the providers' public API docs and tested only against invented
+fixtures with an injected fetch (no keys; the first keyed run must
+spot-check the recorded raw responses). `crawler/README.md` and the runbook
+are untouched (no crawler behaviour change).
+
+**Deviations.** None from the crawler spec (this WP sits outside it, and
+nothing in `asmita/` or `crawler/` changed). The complaint workflow's
+no-fetch lint rule and `no-url-fetch` test were not edited: asmita's ESLint
+runs from `asmita/` and does not cover `tools/`, so no narrowing was
+needed for this work package — recorded as a decision in
+`asmita/docs/lab/progress.md`, where the charter's narrowing becomes live
+with the first lab WP that adds `src/lib/lab/**` or `src/app/**/lab/**`.
 ## Thorn-inspired
 
 Owner decisions, 19 November 2026 (Saquib), from research into Thorn's published work. Copy no Thorn text or code except where a licence is stated; everything below is written in our own words. Thorn's research is cited by name and link only.
