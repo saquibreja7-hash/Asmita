@@ -1115,4 +1115,77 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
 
+## WP66 (Merge lane). Resolve the master merge on feat/review-labels — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP66 is a merge-conflict-resolution package, defined outside this spec like
+WP52 and WP53. The branch `feat/review-labels` (this lane: WP37, review
+labels on crawler findings) could not merge because master had moved on
+several PRs (video fingerprints #73 was the merge base; master's tip is the
+#94 lab-bench merge, bringing the SSCD second layer WP28/ADR 008, the
+platform-partner pages, the lab-bench and pdq-robustness tools, the chat
+safety review WP48 and the web-audit WPs among others). The merge of
+origin/master into the branch was started and left with conflicts; WP66
+resolved them keeping both sides' intent and made the full checks pass
+again. No feature work was added.
+
+**What was resolved**
+
+- Five textual conflicts, each a place where both sides added to the same
+  line or block: the `finding-view` import of both findings pages (ours'
+  `labelList` / `LABEL_TEXT`, master's `matchLine` / `borderlineScoreLine`
+  / `sscdMatchLine` — the merged bodies use both), the `planReview` doc
+  comment in `crawl-findings.ts` (both paragraphs kept: the WP37
+  possible-minor block and the ADR 008 null-distance two-step rule), the
+  memory-store `Finding` type in `crawl-store.ts` (our four-value
+  `reviewStatus` with `MINOR_PROTOCOL` plus master's `method` field), and
+  the imports of `admin-crawler-ui.test.ts` (both sides' helpers). Every
+  side's behaviour and tests survive; the merged `planReview` applies the
+  possible-minor block before the distance rules, and `toListRow` carries
+  both the label fields and `method`/`sscdSimilarity`.
+- One semantic conflict beyond the markers: the textual merge had dropped
+  master's SSCD review-controls test ("explains that an SSCD match always
+  needs the second reviewer…") inside the WP37 label-controls describe
+  block, whose `render` helper builds `LabelControls` props — a type error
+  against the wrong fixture. Moved the test back into the review-controls
+  describe block it lives in on master, unchanged; both sides' tests pass.
+- The JSON files the task called out were auto-merged and verified, not
+  just trusted: `hi-review-status.json`, `en.json` and `hi.json` parse,
+  have no duplicate keys, and `en`/`hi` key parity holds (1027 keys each);
+  master's 30 new keys are all present (this branch added none), and the
+  merged files are a superset of both sides.
+- `crawler/docs/v2-progress.md` itself auto-merged; verified mechanically
+  that every `##`/`### WP` heading from both sides and every non-empty line
+  of this branch's version is present in the merged file.
+
+**Tests** (final `check.sh` run on the committed tree, Node 22)
+
+- `crawler`: lint, type-check, 58 test files / 628 tests, build — all pass.
+- `asmita`: lint 0 errors, type-check clean, `prisma validate` ok, 176 test
+  files / 1613 tests — all pass.
+
+**Not done or not verified**
+
+- The full Playwright e2e suite is not part of `check.sh`; it runs in the
+  separate verify step (this WP changed no e2e-covered behaviour beyond
+  what both sides already shipped).
+- No crawler README, runbook or root `CLAUDE.md` update was needed: no
+  crawler behaviour changed in the merge (the crawler tree is master's,
+  already documented by its own WPs), and WP37 is app-side only.
+
+**Deviations and decisions** (recorded per the work-package instruction)
+
+- The merge commit was amended once, before anything was pushed: the
+  misplaced-test fix above was made after the conflicted files were staged,
+  and would otherwise have sat unstaged beside the merge commit. The amend
+  folded it in so the merge commit is exactly the tree that passed the full
+  checks (no rebase, no force push, both parents intact).
+- `hi-review-status.json` resolved to master's version wholesale because
+  this branch had not touched it; verified as a superset of both sides
+  rather than hand-merged.
+- This entry is the only documentation change, committed separately after
+  the merge commit as instructed; the merge commit itself touches no
+  progress-log content.
+
 
