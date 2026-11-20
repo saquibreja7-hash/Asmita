@@ -34,6 +34,7 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/privacy", label: "गोपनीयता" },
             { href: "/legal", label: "कानूनी" },
             { href: "/contact", label: "संपर्क" },
+            { href: "/lab", label: "AI लैब" },
             { href: "/sitemap", label: "साइटमैप" },
             // English until a native speaker supplies the Hindi label.
             { href: STATUS_URL, label: "Status" },
@@ -67,6 +68,7 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/what-we-do", label: "What we do" },
             { href: "/privacy", label: "Privacy" },
             { href: "/contact", label: "Contact" },
+            { href: "/lab", label: "AI Lab" },
             { href: "/sitemap", label: "Sitemap" },
             { href: STATUS_URL, label: "Status" },
           ],

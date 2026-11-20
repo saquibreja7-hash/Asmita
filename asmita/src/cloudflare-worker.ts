@@ -22,6 +22,9 @@ const cronRoutes: Record<string, string> = {
   "0 * * * *": "/api/cron/purge-expired-urls",
   "15 * * * *": "/api/cron/sweep-due-jobs",
   "30 22 * * *": "/api/cron/maintenance",
+  // Lab E2 (docs/lab/charter.md): daily liveness check of every tracked
+  // service URL. Runs only while ENABLE_LAB is on (the route skips itself).
+  "45 2 * * *": "/api/lab/cron/liveness",
 };
 
 function configureDatabase(env: WorkerEnv) {

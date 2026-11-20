@@ -4,21 +4,25 @@ import { join } from "node:path";
 import { ADMIN_NAV } from "@/app/(admin)/admin-nav";
 import { hasAdminPermission, type AdminRole } from "@/lib/auth/admin-permissions";
 
-// Where each nav link's page lives under src/app/(admin).
+// Where each nav link's page lives under src/app. Console pages live in the
+// (admin) group with a same-path re-export under src/app/admin; the Lab
+// pages are the exception (a (admin)/lab page would collide with the public
+// /lab route), so they live directly under src/app/admin/lab.
 const PAGE_FILES: Record<string, string> = {
-  "/admin/cases": "cases/page.tsx",
-  "/admin/new-links": "new-links/page.tsx",
-  "/admin/queue": "flagged/page.tsx",
-  "/admin/hashes": "hashes/page.tsx",
-  "/admin/findings": "findings/page.tsx",
-  "/admin/crawler": "crawler/page.tsx",
-  "/admin/crawl-sources": "crawl-sources/page.tsx",
-  "/admin/platforms": "platforms/page.tsx",
-  "/admin/templates": "templates/page.tsx",
-  "/admin/metrics": "response-rates/page.tsx",
-  "/admin/analytics": "analytics/page.tsx",
-  "/admin/milestones": "milestones/page.tsx",
-  "/admin/audit": "audit/page.tsx",
+  "/admin/cases": "(admin)/cases/page.tsx",
+  "/admin/new-links": "(admin)/new-links/page.tsx",
+  "/admin/queue": "(admin)/flagged/page.tsx",
+  "/admin/hashes": "(admin)/hashes/page.tsx",
+  "/admin/findings": "(admin)/findings/page.tsx",
+  "/admin/crawler": "(admin)/crawler/page.tsx",
+  "/admin/crawl-sources": "(admin)/crawl-sources/page.tsx",
+  "/admin/platforms": "(admin)/platforms/page.tsx",
+  "/admin/templates": "(admin)/templates/page.tsx",
+  "/admin/metrics": "(admin)/response-rates/page.tsx",
+  "/admin/analytics": "(admin)/analytics/page.tsx",
+  "/admin/milestones": "(admin)/milestones/page.tsx",
+  "/admin/audit": "(admin)/audit/page.tsx",
+  "/admin/lab": "admin/lab/page.tsx",
 };
 
 const items = ADMIN_NAV.flatMap((group) => group.items);
@@ -30,7 +34,7 @@ function visibleFor(role: AdminRole) {
 describe("admin nav and page permissions", () => {
   it("hides a link exactly when its page refuses the role", () => {
     for (const item of items.filter((entry) => entry.permission)) {
-      const source = readFileSync(join(process.cwd(), "src/app/(admin)", PAGE_FILES[item.href]), "utf8");
+      const source = readFileSync(join(process.cwd(), "src/app", PAGE_FILES[item.href]), "utf8");
       const required = source.match(/(?:deniedFor|adminFor|requireAdminPermission)\("([a-z:]+)"\)/)?.[1];
       expect(required, item.href).toBe(item.permission);
     }

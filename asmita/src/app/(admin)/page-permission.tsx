@@ -13,6 +13,7 @@ const NEEDS: Record<AdminPermission, string> = {
   "audit:read": "read the audit log",
   "findings:review": "review crawler findings",
   "crawler:manage": "manage crawler sites",
+  "lab:manage": "manage the AI Lab",
 };
 
 /**

@@ -23,6 +23,8 @@ export default defineConfig({
       // crawler-journey.spec.ts: the crawler routes answer only while this is
       // on. The app never fetches; no crawler process runs in E2E.
       ENABLE_CRAWLER: "true",
+      // lab.spec.ts: the Lab console and public page answer while this is on.
+      ENABLE_LAB: "true",
       ENABLE_PLATFORM_API: "false",
       // Quick Exit tests: the idle sign-out is short enough to exercise
       // without slowing the suite down.
