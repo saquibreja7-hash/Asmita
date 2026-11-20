@@ -15,7 +15,11 @@ export function rememberEligibleAdult() {
     // Private mode: the age questions are asked again on the email step.
   }
   const secure = location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `${ELIGIBLE_COOKIE}=1; Path=/; Max-Age=86400; SameSite=Lax${secure}`;
+  // A session cookie with no Max-Age (web audit WP41, S10): the 24-hour
+  // window let a shared phone reopen /submit a day later without answering
+  // the age questions again. It still lasts the whole browser session,
+  // which is all the flow needs; everything else about it is unchanged.
+  document.cookie = `${ELIGIBLE_COOKIE}=1; Path=/; SameSite=Lax${secure}`;
 }
 
 // Someone who answers as a minor, even after answering as an adult on this

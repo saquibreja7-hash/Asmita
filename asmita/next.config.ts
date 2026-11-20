@@ -26,6 +26,22 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },
+      // Authenticated HTML pages (web audit WP41, S2) never go into any
+      // cache — not the browser's HTTP cache, not a proxy's, and with
+      // no-store not the back/forward cache either: a shared phone must not
+      // get the previous person's page back after sign-out or Quick Exit.
+      // These rules sit after the catch-all so they win the Cache-Control
+      // key; vinext applies them on the Worker too (worker-smoke asserts
+      // it on /submit). Victim pages also reload on a bfcache restore
+      // (QuickExit's pageshow listener).
+      ...[
+        { source: "/case/:path*" },
+        { source: "/my-cases" },
+        { source: "/review-sign" },
+        { source: "/submit" },
+        { source: "/track" },
+        { source: "/admin/:path*" },
+      ].map((source) => ({ ...source, headers: [{ key: "Cache-Control", value: "no-store" }] })),
       // In production the Worker entry replaces this on pages with a nonce
       // policy (src/lib/csp.ts).
       // Browser voice calls with the helpline: the microphone and Sarvam's
