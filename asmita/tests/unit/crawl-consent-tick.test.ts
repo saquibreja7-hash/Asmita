@@ -25,7 +25,7 @@ vi.mock("@/lib/case-ops", () => ({
   getCaseForUser: async () => ({ id: "case-1", referenceNumber: "ASMITA-2026-00001", userId: "user-1", createdAt: "", status: "OPEN", urls: [] }),
 }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimitAsync: async () => ({ allowed: true }) }));
-vi.mock("@/lib/case-hash-annex", () => ({ buildHashAnnexForSigning: mocks.annex }));
+vi.mock("@/lib/case-hash-annex", () => ({ buildHashAnnexForSigning: mocks.annex, hasSignableImageFingerprint: async () => true }));
 vi.mock("@/lib/encryption", () => ({ encryptField: (value: string) => `enc:${value.length}`, decryptField: (v: string) => v }));
 vi.mock("@/lib/audit", () => ({ writeAuditLog: vi.fn() }));
 vi.mock("@/lib/notice-pdf", async (importOriginal) => {

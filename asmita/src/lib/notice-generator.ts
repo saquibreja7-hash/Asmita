@@ -127,22 +127,55 @@ export function verifyNoticePayload(body: string, expectedHash: string) {
   return sha256(body) === expectedHash;
 }
 
+/**
+ * A video fingerprint in the annex (video-fingerprints spec WP19): one entry
+ * "Video fingerprint (vPDQ, N frames)" followed by its frame hashes.
+ */
+export type HashAnnexVideo = {
+  /** Kept frame count of the whole video, as the submission row stores it. */
+  frameCount: number;
+  /** Frame hashes (64-hex) in sampling order; the annex lists at most MAX_ANNEX_VIDEO_FRAMES of them. */
+  frames: string[];
+};
+
 export type HashAnnexInput = {
   algorithm: "PDQ";
   hashes: Array<{ value: string; quality: number }>;
+  /** Video fingerprints: one annex entry each, after the image hashes. */
+  videos?: HashAnnexVideo[];
   clientVersion?: string | null;
 };
 
+/** Frame hashes listed per video; a longer list is evenly spaced down to this (spec WP19: "at most 200"). */
+export const MAX_ANNEX_VIDEO_FRAMES = 200;
+
 const HASH_HEX_PATTERN = /^[0-9a-f]{64}$/i;
+
+function frameWord(count: number) {
+  return `${count} frame${count === 1 ? "" : "s"}`;
+}
+
+/** At most `max` items, evenly spaced across the list, first and last kept. */
+function evenlySpaced<T>(items: T[], max: number): T[] {
+  if (items.length <= max) return items;
+  return Array.from({ length: max }, (_, i) => items[Math.round((i * (items.length - 1)) / (max - 1))]);
+}
 
 /**
  * Renders the perceptual-hash annex appended to hash advisories and to URL
  * notices on cases with approved hashes. Contains only hashes and matching
  * guidance - never victim PII, never media. Callers must only pass
  * APPROVED hash submissions.
+ *
+ * A video fingerprint (vPDQ) is one entry - "Video fingerprint (vPDQ, N
+ * frames)" - followed by at most MAX_ANNEX_VIDEO_FRAMES evenly spaced frame
+ * hashes and one plain sentence on how vPDQ is matched (spec WP19). The
+ * wording is platform-facing legal text for counsel to read; it is written
+ * plainly and never marked reviewed here.
  */
 export function buildHashAnnex(input: HashAnnexInput) {
-  if (input.hashes.length === 0) {
+  const videos = input.videos ?? [];
+  if (input.hashes.length === 0 && videos.length === 0) {
     throw new Error("hash_annex_empty");
   }
   const lines = input.hashes.map((entry, index) => {
@@ -151,19 +184,57 @@ export function buildHashAnnex(input: HashAnnexInput) {
     }
     return `  ${index + 1}. ${entry.value.toLowerCase()} (quality: ${entry.quality}/100)`;
   });
+  // Every frame hash gets the same validation as an image hash: the annex
+  // carries 64-hex values and nothing else.
+  const videoEntries = videos.map((video) => {
+    const listed = evenlySpaced(
+      video.frames.map((frame) => {
+        if (!HASH_HEX_PATTERN.test(frame)) {
+          throw new Error("hash_annex_invalid_hash");
+        }
+        return frame.toLowerCase();
+      }),
+      MAX_ANNEX_VIDEO_FRAMES,
+    );
+    const entry = [`Video fingerprint (vPDQ, ${frameWord(video.frameCount)})`];
+    if (listed.length > 0) {
+      entry.push(
+        listed.length < video.frames.length
+          ? `     Frame hashes (PDQ, one frame per second; ${listed.length} of ${video.frames.length} listed, evenly spaced):`
+          : listed.length < video.frameCount
+            ? `     Frame hashes (PDQ, one frame per second; ${listed.length} of ${video.frameCount} listed):`
+            : `     Frame hashes (PDQ, one frame per second):`,
+      );
+      for (const frame of listed) entry.push(`       ${frame}`);
+    }
+    return entry;
+  });
+  const videoSection = videos.length === 0 ? [] : [
+    "Video fingerprints (vPDQ): each video below was fingerprinted by taking",
+    "the PDQ hash of one frame per second of playback; a copy of the video",
+    "matches when its frames are within a small Hamming distance of the",
+    "frame hashes listed for it.",
+    "",
+    ...videoEntries.flatMap((entry, i) => [`  ${input.hashes.length + i + 1}. ${entry[0]}`, ...entry.slice(1), ""]),
+  ];
+  const algorithmLine =
+    videos.length === 0
+      ? `Algorithm: ${input.algorithm} (Meta ThreatExchange open-source perceptual hash)`
+      : input.hashes.length === 0
+        ? "Algorithm: vPDQ (Meta ThreatExchange open-source perceptual hash for video)"
+        : "Algorithm: PDQ for images and vPDQ for videos (Meta ThreatExchange open-source perceptual hashes)";
   const annex = [
     "--- PERCEPTUAL HASH ANNEX ---",
     "",
-    `Algorithm: ${input.algorithm} (Meta ThreatExchange open-source perceptual hash)`,
+    algorithmLine,
     input.clientVersion ? `Generator version: ${input.clientVersion}` : null,
     "",
     "The following perceptual hashes identify the reported non-consensual",
     "intimate content. The hashes were generated on the complainant's own",
     "device; the underlying media was never transmitted to or stored by us.",
     "",
-    `Hash values (${input.algorithm}, 256-bit hex):`,
-    ...lines,
-    "",
+    ...(input.hashes.length > 0 ? [`Hash values (${input.algorithm}, 256-bit hex):`, ...lines, ""] : []),
+    ...videoSection,
     "Matching guidance: compare against uploaded media using PDQ with a",
     "Hamming distance threshold of 31 or lower for a recommended match.",
     "We request that matching content be blocked from upload and removed",

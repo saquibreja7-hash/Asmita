@@ -940,7 +940,7 @@ export async function deactivateUser(userId: string): Promise<{ deactivatedAt: s
 export const HARD_DELETE_RETAINED = {
   user: "id, role, verification flags, declared age and created date; no email or email hash",
   case: "id, reference number, status CLOSED, NGO-verified flag and created/updated dates",
-  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool and withdrawn from the partner feed",
+  fingerprints: "stored encrypted, kept so platforms can keep blocking matching images; with their dispatch records (platform and date, no link to a deleted notice); removed from the crawler pool and withdrawn from the partner feed; a video fingerprint's frame list is removed with the erasure, its row keeps the best frame's hash",
   deletionJob: "id, case id, dates and status",
   adminAccessLog: "which admin opened which case or link, and when; the reason text is cleared",
   auditLog: "earlier entries are append-only and unchanged",
@@ -1039,7 +1039,8 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
       await tx.deleteFrom("UrlPortalToken").where("urlId", "in", urlIds).execute();
       counts.links = deleted(await tx.deleteFrom("SubmittedUrl").where("id", "in", urlIds).execute());
     }
-    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    // Crawler matches and authorisations go; the kept fingerprints leave the
+    // pool, and a kept video fingerprint loses its frame list (WP17).
     const findingIds = (await tx.selectFrom("CrawlFinding").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
     counts.crawlFindings = deleted(await tx.deleteFrom("CrawlFinding").where("caseId", "in", caseIds).execute());
     counts.crawlConsents = deleted(await tx.deleteFrom("CrawlConsent").where("caseId", "in", caseIds).execute());
@@ -1054,7 +1055,7 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
     // Partner-sharing agreements go too, so nothing of hers stays shareable
     // (the kept fingerprints stop being shared the moment the row is gone).
     counts.partnerShareConsents = deleted(await tx.deleteFrom("PartnerShareConsent").where("caseId", "in", caseIds).execute());
-    await tx.updateTable("HashSubmission").set({ crawlPoolId: null }).where("caseId", "in", caseIds).execute();
+    await tx.updateTable("HashSubmission").set({ crawlPoolId: null, videoFramesEncrypted: null }).where("caseId", "in", caseIds).execute();
     counts.feedback = deleted(await tx.deleteFrom("Feedback").where((eb) => eb.or([
       eb("caseId", "in", caseIds),
       eb("caseReference", "in", caseRows.map((row) => row.referenceNumber)),
@@ -1113,7 +1114,8 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     counts.notices = (await tx.notice.deleteMany({ where: { id: { in: noticeIds } } })).count;
     await tx.urlPortalToken.deleteMany({ where: { urlId: { in: urlIds } } });
     counts.links = (await tx.submittedUrl.deleteMany({ where: { id: { in: urlIds } } })).count;
-    // Crawler matches and authorisations go; the kept fingerprints leave the pool.
+    // Crawler matches and authorisations go; the kept fingerprints leave the
+    // pool, and a kept video fingerprint loses its frame list (WP17).
     const findingIds = (await tx.crawlFinding.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
     counts.crawlFindings = (await tx.crawlFinding.deleteMany({ where: { caseId: { in: caseIds } } })).count;
     counts.crawlConsents = (await tx.crawlConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
@@ -1128,7 +1130,7 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
     // Partner-sharing agreements go too, so nothing of hers stays shareable
     // (the kept fingerprints stop being shared the moment the row is gone).
     counts.partnerShareConsents = (await tx.partnerShareConsent.deleteMany({ where: { caseId: { in: caseIds } } })).count;
-    await tx.hashSubmission.updateMany({ where: { caseId: { in: caseIds } }, data: { crawlPoolId: null } });
+    await tx.hashSubmission.updateMany({ where: { caseId: { in: caseIds } }, data: { crawlPoolId: null, videoFramesEncrypted: null } });
     counts.feedback = (await tx.feedback.deleteMany({
       where: { OR: [{ caseId: { in: caseIds } }, { caseReference: { in: caseRows.map((row) => row.referenceNumber) } }] },
     })).count;

@@ -16,6 +16,8 @@ export type MemoryFingerprint = {
   quality: number;
   status: "PENDING_REVIEW" | "APPROVED" | "DISPATCHED" | "REJECTED";
   crawlPoolId: string | null;
+  /** PDQ image or VPDQ video fingerprint; absent reads as PDQ (rows seeded before video fingerprints existed). */
+  algorithm?: "PDQ" | "VPDQ";
 };
 
 export type MemoryCrawlConsent = {

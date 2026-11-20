@@ -8,7 +8,7 @@ import { recordAdminAccess } from "@/lib/admin-access-log";
 import { ReviewActions } from "../../flagged/ReviewActions";
 import HashReviewActions from "../../hashes/HashReviewActions";
 import HashDispatchForm from "../../hashes/HashDispatchForm";
-import { listDispatchableHashCases, listVerifiedDispatchPlatforms } from "@/lib/hash-submission";
+import { listDispatchableHashCases, listVerifiedDispatchPlatforms, videoFingerprintLabel } from "@/lib/hash-submission";
 import { AdminPageHeader } from "../page";
 import {
   LADDER_BLOCK_LABELS,
@@ -136,7 +136,17 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
             <tbody>
               {detail.fingerprints.map((hash) => (
                 <tr className="border-t border-[var(--line)]" key={hash.id}>
-                  <td className="px-4 py-3 font-mono text-xs">{hash.digestPrefix}…</td>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    {hash.algorithm === "VPDQ" ? (
+                      <>
+                        {/* A video never shows a single-hash digest as its identity: it is named by its frames. */}
+                        <span className="text-[var(--ink)]">{videoFingerprintLabel(hash.videoFrameCount, hash.videoDurationSec)}</span>
+                        <span className="muted block">{hash.digestPrefix}…</span>
+                      </>
+                    ) : (
+                      <>{hash.digestPrefix}…</>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     {hash.status.replace("_", " ").toLowerCase()}
                     {hash.flagReason && <span className="muted block text-xs">{hash.flagReason}</span>}

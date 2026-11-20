@@ -52,6 +52,7 @@ export function idleTimeoutMs() {
 
 export function QuickExit({ locale, enableIdle = true }: { locale: Locale; enableIdle?: boolean }) {
   const actionsRef = useRef<{ exit: () => void } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -116,10 +117,13 @@ export function QuickExit({ locale, enableIdle = true }: { locale: Locale; enabl
     }
 
     actionsRef.current = { exit: () => void quickExit() };
+    // Marks the moment the Escape shortcut is live (tests wait for it).
+    buttonRef.current?.setAttribute("data-armed", "true");
 
     return () => {
       disposed = true;
       actionsRef.current = null;
+      buttonRef.current?.removeAttribute("data-armed");
       document.removeEventListener("keydown", onKeyDown);
       activityTypes.forEach((type) => document.removeEventListener(type, resetIdle));
       clearTimeout(idleTimer);
@@ -128,6 +132,7 @@ export function QuickExit({ locale, enableIdle = true }: { locale: Locale; enabl
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       className="btn quick-exit"
       onClick={() => actionsRef.current?.exit()}

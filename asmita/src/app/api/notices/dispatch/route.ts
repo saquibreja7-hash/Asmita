@@ -233,8 +233,11 @@ export async function POST(request: Request) {
     }
     let fingerprints: PlatformApiFingerprint[] = [];
     if (fingerprintIds.length > 0) {
+      // Photo (PDQ) fingerprints only: the platform API has no video (vPDQ)
+      // format yet, and a video's best frame alone is not the video. Videos
+      // still reach the platform in the annex of the notice body.
       const rows = await db.hashSubmission.findMany({
-        where: { id: { in: fingerprintIds } },
+        where: { id: { in: fingerprintIds }, algorithm: "PDQ" },
         select: { hashEncrypted: true, quality: true },
       });
       fingerprints = rows.map((row) => ({
