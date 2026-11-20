@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { DRAFT_KEY } from "@/lib/eligibility";
 import { t, type Locale } from "@/lib/i18n";
 import { isPdfSafeText } from "@/lib/pdf-text";
+import { FormError } from "@/components/FormError";
 import { FormHandoff } from "@/components/FormHandoff";
 import { platformDirectory } from "@/lib/platforms";
 import { checkLink, matchPlatform } from "@/lib/link-check";
@@ -84,6 +85,9 @@ function signErrorMessage(locale: Locale, error: string | undefined) {
   return t(locale, "review.sign.error.timeout");
 }
 
+// The contact address the platform may reply to; the same shape the routes check.
+const CONTACT_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function CheckItem({ heading, detail }: { heading: string; detail: string }) {
   return (
     <div className="flex items-start gap-3">
@@ -138,6 +142,15 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [signedCount, setSignedCount] = useState(0);
+  // Field-level messages, shown beside their field and cleared on input (A10).
+  const [nameError, setNameError] = useState("");
+  const [contactError, setContactError] = useState("");
+  const [agreeError, setAgreeError] = useState("");
+  const nameRef = useRef<HTMLInputElement>(null);
+  const contactRef = useRef<HTMLInputElement>(null);
+  const agreeRef = useRef<HTMLInputElement>(null);
+  // The sign step's heading; focus moves to it when the step appears (A11).
+  const signHeadingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -158,6 +171,12 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
     }, 0);
     return () => window.clearTimeout(id);
   }, [router]);
+
+  // Moving from the summary to the sign screen is a step change: focus its
+  // heading so screen readers announce the new screen (A11).
+  useEffect(() => {
+    if (step === "sign" || step === "hash-sign") signHeadingRef.current?.focus({ preventScroll: true });
+  }, [step]);
 
   async function acknowledgeSubmission(id: string) {
     try {
@@ -362,13 +381,33 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
 
   // The notice PDF shows Latin letters only; say so before signing.
   const nameUnsupported = !isPdfSafeText(name.trim().normalize("NFC"));
-  const canSign =
-    name.trim().length > 0 &&
-    !nameUnsupported &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim()) &&
-    agreed &&
-    step !== "signing" &&
-    step !== "hash-signing";
+  const signingInProgress = step === "signing" || step === "hash-signing";
+
+  // The sign button is never disabled to block validation (A9): submitting
+  // shows the first problem beside its field and moves focus to it (A10).
+  function focusFirstSignError(): boolean {
+    if (!name.trim()) {
+      setNameError(t(locale, "review.sign.error.nameRequired"));
+      nameRef.current?.focus();
+      return true;
+    }
+    if (nameUnsupported) {
+      // The script message is already on screen under the name field.
+      nameRef.current?.focus();
+      return true;
+    }
+    if (!CONTACT_PATTERN.test(contact.trim())) {
+      setContactError(t(locale, "review.sign.error.contact"));
+      contactRef.current?.focus();
+      return true;
+    }
+    if (!agreed) {
+      setAgreeError(t(locale, "review.sign.error.agree"));
+      agreeRef.current?.focus();
+      return true;
+    }
+    return false;
+  }
 
   if (step === "loading") return null;
 
@@ -538,10 +577,18 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
   // Shared sign form used for both URL notice and hash advisory
   const isHashSign = step === "hash-sign" || step === "hash-signing";
   const onSign = isHashSign ? signHashAdvisory : signNotice;
-  const signingInProgress = step === "signing" || step === "hash-signing";
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16">
+    <form
+      className="mx-auto flex max-w-5xl flex-col gap-12 md:flex-row md:items-start md:gap-16"
+      onSubmit={(e) => {
+        // Enter submits like a click (A9); the signed text and the request
+        // body are untouched — only the entry point changed.
+        e.preventDefault();
+        if (focusFirstSignError()) return;
+        onSign();
+      }}
+    >
       <aside className="order-2 md:order-1 md:w-64 md:shrink-0">
         <div className="md:sticky md:top-28">
           <span className="eyebrow">{isHashSign ? t(locale, "review.sign.hashPill") : t(locale, "review.sign.pill")}</span>
@@ -558,7 +605,7 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
 
       <div className="order-1 min-w-0 flex-1 md:order-2 space-y-8">
         <div>
-          <h1 className="page-title-sm">
+          <h1 className="page-title-sm outline-none" ref={signHeadingRef} tabIndex={-1}>
             {isHashSign ? t(locale, "review.sign.hashTitle") : t(locale, "review.sign.title")}
           </h1>
           <p className="muted mt-2 text-sm leading-[1.75]">
@@ -625,19 +672,21 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
             <p id="rs-name-signature" className="muted mt-1 text-sm">{t(locale, "sign.name.signature")}</p>
             <input
               id="rs-name"
-              aria-describedby="rs-name-help rs-name-signature"
+              ref={nameRef}
+              aria-describedby={`rs-name-help rs-name-signature${nameError ? " rs-name-error" : ""}`}
               type="text"
               className="field mt-2"
               placeholder={t(locale, "review.sign.name.placeholder")}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); setNameError(""); }}
               maxLength={100}
               autoComplete="name"
-              aria-invalid={nameUnsupported || undefined}
+              aria-invalid={nameUnsupported || nameError ? true : undefined}
             />
             {nameUnsupported && (
               <p role="alert" className="mt-2 text-sm font-medium text-[var(--danger)]">{t(locale, "review.sign.error.nameScript")}</p>
             )}
+            <FormError id="rs-name-error" message={nameError} className="mt-2" />
           </div>
 
           <div>
@@ -647,16 +696,28 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
             <p id="rs-contact-help" className="muted mt-1 text-sm">{t(locale, "review.sign.contact.sub")}</p>
             <input
               id="rs-contact"
-              aria-describedby="rs-contact-help"
+              ref={contactRef}
+              aria-describedby={`rs-contact-help${contactError ? " rs-contact-error" : ""}`}
               type="email"
               inputMode="email"
               className="field mt-2"
               placeholder={t(locale, "review.sign.contact.placeholder")}
               value={contact}
-              onChange={(e) => setContact(e.target.value)}
+              onChange={(e) => { setContact(e.target.value); setContactError(""); }}
+              onBlur={() => {
+                // Checked when she leaves the field, not while she types (A10).
+                if (contact.trim() && !CONTACT_PATTERN.test(contact.trim())) {
+                  setContactError(t(locale, "review.sign.error.contact"));
+                }
+              }}
               maxLength={200}
               autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              aria-invalid={contactError ? true : undefined}
             />
+            <FormError id="rs-contact-error" message={contactError} className="mt-2" />
           </div>
           </div>
         </section>
@@ -664,25 +725,24 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
         <label className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--brand-soft)] p-5 transition-colors hover:border-[var(--brand)] sm:p-6">
           <input
             type="checkbox"
+            ref={agreeRef}
             className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand)]"
             checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
+            onChange={(e) => { setAgreed(e.target.checked); setAgreeError(""); }}
           />
           <span className="text-sm leading-[1.65] text-[var(--ink)]">
             {isHashSign ? t(locale, "review.sign.agree.hash") : t(locale, "review.sign.agree.notice")}
           </span>
         </label>
+        <FormError id="rs-agree-error" message={agreeError} />
 
-        {error && (
-          <p className="text-sm font-medium text-[var(--danger)]">{error}</p>
-        )}
+        <FormError message={error} />
 
         <div className="flex flex-wrap items-center gap-3 sm:flex-row-reverse sm:justify-between">
           <button
-            type="button"
+            type="submit"
             className="btn btn-primary"
-            disabled={!canSign}
-            onClick={onSign}
+            disabled={signingInProgress}
           >
             {signingInProgress ? t(locale, "review.sign.cta.signing") : t(locale, "review.sign.cta.sign")}
           </button>
@@ -691,6 +751,6 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
           </a>
         </div>
       </div>
-    </div>
+    </form>
   );
 }

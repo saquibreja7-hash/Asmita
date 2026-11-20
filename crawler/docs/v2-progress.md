@@ -608,6 +608,50 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 - No `crawler/` source or doc changed (no crawler behaviour change), so `crawler/README.md` and the runbook are untouched. Root `CLAUDE.md` was not updated (protected agent-instruction file; as for WP1–WP3 and WP8 the write waits for approval). Intended addition (apply on approval): in the feature-state table's hash-upload row, note that video fingerprints (vPDQ) are fingerprinted client-side in her browser (WP18, `src/lib/pdq/vpdq.ts`; one frame per second, only frame hashes, qualities and timestamps are ever sent) with server storage (WP17) and notices (WP19) on the other lanes.
 - The Hindi video strings are machine translated (listed in `hi-review-status.json`) and have not been read by a native speaker; the survivor-facing UI wording has not been reviewed by a human, only exercised by the Playwright run.
 
+
+## WP40. Web audit: forms, errors and focus in the survivor flow — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22). This is an owner-approved best-practice audit work package (A3, A4, A7–A13, A23, A27, S12), not a crawler-spec WP; no `crawler/` source changed, and the crawler re-ran green only to confirm nothing broke.
+
+**What was built**
+
+- A3: the registration code entry is one single box (`RegisterForm.tsx`): `type=text`, `inputmode=numeric`, `autocomplete=one-time-code`, `maxlength=6`, `pattern=[0-9]{6}`, letter-spacing, visible label. The six per-digit boxes and their hard-coded "Verification code digits" group name are gone; typed, pasted and autofilled codes all land in it. The admin sign-in already used a single box and does not share the component.
+- A4: one shared `asmita/src/components/FormError.tsx` (`role="alert"`) now carries the failure messages of `SubmitForm`, `ReviewSignForm` (sign step), `SignNoticeForm`, `DeleteAccountForm` and `CaseDashboardActions` (success lines stay polite `role="status"`). RegisterForm's local copy is the component that was promoted. ImageChecker is WP43's, untouched.
+- A7: the per-line link checks left the `aria-live` list; they recompute after a 600 ms pause or on blur (the draft is always parsed fresh at submit, so a quick submit sends what was typed), and one summary sentence ("Links ready to file: N. Lines that will be left out: M.") is announced in a `role="status"`.
+- A8: video hashing shows a native `<progress>` element; React progress updates are throttled to about four a second (first and final ticks always land). The file list is no longer a live region; the start ("Your video is not uploaded.") and finish ("Video fingerprint created on this device.") sentences are polite statuses.
+- A9: `SubmitForm`, `ReviewSignForm` (sign step), `SignNoticeForm` and `FeedbackForm` wrap their fields in a real `<form>` with a `type="submit"` button, so Enter submits. The buttons are disabled only while submitting; validation runs on submit and focuses the first problem. Request bodies, signed text and the fingerprint annex logic are untouched.
+- A10: the sign forms' contact email is checked on blur, sets `aria-invalid`, links its error and existing hint via `aria-describedby`, clears on input, and gets `autocapitalize=none autocorrect=off spellcheck=false`.
+- A11: focus moves to each new step's heading (`tabIndex=-1`) — registration age → email → code (and the track-mode "no case" screen), review → sign, and the helpline call start; after a wrong code, focus returns to the code box.
+- A12: the registration age radios are a `fieldset` with a visually hidden legend (the existing "How old are you now?" string) and share the `ageNow` name; the second question's radios share `ageThen`.
+- A13: the submit form's platform checkboxes are a `fieldset` with the existing question as `legend`; the fieldset takes the focus when a hash-only submit has no platform chosen.
+- A23: every `FeedbackForm` field is described by its hint (`aria-describedby`).
+- A27: after the account deletion request, the done screen's message is a `role="status"` and focus moves to its heading.
+- S12: the submit form's links textarea gets `autocomplete=off autocorrect=off autocapitalize=off`.
+- New strings in `en.json` + `hi.json`, listed as machine translated in `hi-review-status.json`: the link summary, six sign-form field errors (name / contact / confirmation, in both the review-sign and case-sign wordings), and the hidden helpline-call heading.
+- Docs: `asmita/docs/product/web-audit-progress.md` created with the WP40 entry (what changed, what was not verified, sentences needing the owner's approval, decisions made alone).
+
+**Tests** (all run, all passing)
+
+- New `tests/unit/forms-focus.test.ts` — 15 tests: the shared FormError markup, the age fieldset/legend/shared name, the single code box (source-pinned: `one-time-code`, `maxlength=6`, `pattern=[0-9]{6}`, no per-digit ids), the sign form's form/hint linkage/autocorrect-off, the feedback form's described hints, the submit form's never-disabled button, no `aria-live` anywhere in it, the `<progress>` element and the 250 ms throttle, and the eight new keys present in both languages and listed as machine translated.
+- New `tests/e2e/forms-focus.spec.ts` — 4 tests: a failed code request shows `getByRole("alert")`; Enter submits the feedback form; the helpline call start focuses the new screen's heading; and the database journey (chromium only, the reviewer marks the template reviewed as in notice-integrity.spec.ts) — Enter on the sign screen announces and focuses each missing field, then signs from the Enter key and lands on the confirmation page.
+- `tests/e2e/reporting-journey-polish.spec.ts`: the six-digit-boxes test rewritten for the single box (typed, paste-equivalent insertion, autofill-style fill, registration completes) plus a new wrong-code test (alert + focus back on the box) — the old markup it asserted is gone by design.
+- `tests/e2e/filing.spec.ts`, `hash-flow.spec.ts`, `video-hash-flow.spec.ts`: the three `toBeDisabled()` assertions on "Continue to review" became click-then-assert (status hint + focus on the first problem), because A9 removes validation-blocking disabled states on purpose; `video-hash-flow.spec.ts` also gains the visible `progress` element assertion.
+- Package totals, from the final `check.sh` run (Node 22) — `crawler`: lint, type-check, 29 test files / 350 tests all passed, build ok (no `crawler/` source touched). `asmita`: lint 0 errors (4 pre-existing warnings in untouched files), type-check clean, `prisma validate` ok, 153 test files / 1265 tests all passed.
+
+**Not done or not verified**
+
+- The full Playwright run is the separate verify step and was not run here (this host has no throwaway Postgres 17 on the E2E port); the new and changed specs are written and type-checked with the rest of the app.
+- The Hindi sentences were drafted by machine, not read by a native speaker (flagged in `hi-review-status.json`).
+- Screen-reader behaviour was reasoned from ARIA semantics, not listened to with a running screen reader.
+
+**Deviations and decisions, with reasons**
+
+- The line checks lag 600 ms behind typing (the audit asked for "blur or a short pause"); the submit path always parses the current text, so nothing typed is lost by submitting quickly.
+- The video progress keeps its visible "Reading your video on this device: N%" text beside the new `<progress>` bar: the audit's complaint was the per-tick announcement, which the removed live region and the throttle fix; the committed e2e's recorded progress (two distinct values, ending at 100) still holds because the first and final ticks always render.
+- The registration and code-entry buttons keep their existing gating (loading, 6 digits): A9 names only the submit, review-sign, sign and feedback forms, so their rule was not extended beyond the list.
+- The age radios' legend reuses the existing "How old are you now?" string, visually hidden — no new sentence was added for it.
+- The wrong-code e2e uses "000000" against a random code; the 1-in-a-million collision is accepted (all codes in every test are synthetic).
+- "Forced submit failure shows an alert" is covered by intercepting `POST /api/auth/request-otp` with a 500 on the email step (no database needed), which exercises the shared FormError on a real failure path.
 ## Owner changes
 
 ### WP26. 24-hour platform deadline (owner decision, 19 November 2026) — 2026-11-19
@@ -1183,6 +1227,22 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
 
+## WP59. Merge master into fix/forms-focus: resolve the conflicts — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP59 is defined outside this spec (a lane work package): master had moved on (assistant-safety WP48 / PR #89, platform partner applications, the pdq-robustness tool, the sign-out clear-site-data lane) and the branch's open PR could not merge, so `origin/master` was merged into `fix/forms-focus` and the two conflicted files resolved by hand. No feature work was added and no test was weakened; the merge is a plain merge commit, no rebase, not pushed.
+
+**What was resolved**
+
+- Both conflicts (`asmita/src/i18n/en.json`, `asmita/src/i18n/hi.json`) were the same hunk around the `talk.*` keys. `talk.call.heading` is kept from this branch: WP40's focus heading, rendered by `TalkToUs.tsx` and required by `tests/unit/forms-focus.test.ts` and `hi-review-status.json`. `talk.error.busy` takes master's WP48 copy in both locales: the branch had not changed that value since the merge base, while master's WP48 review rewrote it, documented it in `asmita/docs/product/assistant-safety-review.md` and listed it in `hi-review-status.json` under `machineTranslatedWp48`; keeping the branch's wording would have silently reverted master's copy change in both locales.
+- Verified on the resolved tree: both JSONs parse with no duplicate keys; every key from either side is present (branch 1005 + master 1006 = 1014 keys per file, none dropped, none added beyond the union) and en/hi key parity holds. The four files both sides had touched and git auto-merged were checked by hand: `crawler/docs/v2-progress.md` and `asmita/docs/product/web-audit-progress.md` keep both sides' entries (WP40/WP49 plus WP41/WP53), `DeleteAccountForm.tsx` keeps the WP40 focus-on-done heading and master's WP53 `csrfFetch` error path, and `hi-review-status.json` keeps both the human-reviewed key list and the `machineTranslatedWp48` section.
+
+**Tests** — final `check.sh` run on the resolved tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source changed by the merge). `asmita` — lint 0 errors (4 pre-existing warnings: three in `scripts/translate-faq.mjs`, the `buttonRef` cleanup warning in `QuickExit.tsx`), type-check clean, `prisma validate` ok, 160 test files / 1397 tests all passed.
+
+**Not done or not verified**
+
+- The Playwright e2e suite is not part of `check.sh`; it runs in the separate verify step. No crawler behaviour changed, so `crawler/README.md` and the runbook needed no update. The merge was not pushed.
 ## Lane merges
 
 ### WP65. Merge master into feat/deadline-docs (merge-conflict resolution) — 2026-11-20

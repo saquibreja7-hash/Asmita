@@ -16,7 +16,7 @@
     "Platform-specific reporting notes in /resources - references English-language UIs"
   ],
   "machineTranslated": {
-    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request; the WP35 batch (check.hero.report, check.research.line, check.research.read and the reworded check.result.noneFound.body, check.deep.result.none.body, check.disclaimer, plus the deepfakes issue-page strings) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP38 batch (the new check.c2pa.*, check.meta.title, check.google.line, check.deep.unavailable and the reworded check.deep.body, check.deep.consent) machine translated by Hermes (GLM 5.3), 2026-11-19",
+    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request; WP40 strings (2026-11-20) drafted by Hermes (GLM 5.3), pending native review; the WP35 batch (check.hero.report, check.research.line, check.research.read and the reworded check.result.noneFound.body, check.deep.result.none.body, check.disclaimer, plus the deepfakes issue-page strings) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP38 batch (the new check.c2pa.*, check.meta.title, check.google.line, check.deep.unavailable and the reworded check.deep.body, check.deep.consent) machine translated by Hermes (GLM 5.3), 2026-11-19",
     "keys": [
       "talk.*",
       "privacy.s08.i5.*",
@@ -88,6 +88,14 @@
       "submit.hash.fileHint",
       "review.fingerprints.videoItem",
       "review.fingerprints.video",
+      "review.sign.error.nameRequired",
+      "review.sign.error.contact",
+      "review.sign.error.agree",
+      "sign.error.nameRequired",
+      "sign.error.contact",
+      "sign.error.agree",
+      "submit.link.summary",
+      "talk.call.heading",
       "review.sign.openNotice",
       "check.hero.report",
       "check.research.line",
