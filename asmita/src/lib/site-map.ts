@@ -53,6 +53,7 @@ export const siteMap: SiteGroup[] = [
       { href: "/what-we-do", label: "What we do" },
       { href: "/how-it-works", label: "How it works" },
       { href: "/research", label: "Research" },
+      { href: "/for-platforms", label: "For platforms" },
       { href: "/contact", label: "Contact" },
       { href: "/feedback", label: "Feedback" },
     ],

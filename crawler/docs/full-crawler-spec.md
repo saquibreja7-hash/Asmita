@@ -120,6 +120,64 @@ A "Crawler" overview page: sites by origin and state, pages crawled today, queue
 
 Done when: page renders from a new address-free `GET /api/admin/crawler/stats`; tests as for the other admin pages.
 
+## Crawler v3: coverage and efficiency (owner decision, 19 November 2026)
+
+Ideas from a read-only study of Firecrawl (AGPL-3.0), rewritten for Asmita. **Do not fetch, read or copy Firecrawl code**: Asmita is Apache-2.0, so implement from the descriptions below only. Everything in "Rules that do not change" still holds: no search-engine discovery, no stealth or random User-Agents, no proxies, no `ignoreHTTPSErrors`, no cookie-banner clicking, no stored page content.
+
+How v3 runs: three parallel lanes, each on its own branch cut from `feat/crawler-v3`, each doing its WPs in order. A lane touches only the files its WPs need; where two lanes must touch the same file (`crawler/src/crawler.ts`, `crawler/src/crawl/extract.ts`), keep the change small and self-contained so the later merge is easy. Each WP adds fixture pages to the crawler test fixtures (`crawler/tests/support/`) for the behaviour it adds, with synthetic images only. For v3 the branch rule in "How to work" is replaced by the lane branch.
+
+- Lane A (`feat/crawler-v3-a`): WP9, WP10, WP11
+- Lane B (`feat/crawler-v3-b`): WP12, WP13, WP14
+- Lane C (`feat/crawler-v3-c`): WP15, WP16
+
+### WP9. Find sitemaps robots.txt does not list (crawler)
+
+When a source's robots.txt names no `Sitemap:`, probe `/sitemap.xml` and then `/sitemap_index.xml` on the source host (through safe-fetch, robots-checked, counted against the page budget, at most these two probes per source per run). For a source on a subdomain, also probe the registrable parent domain's `/sitemap.xml` (tldts, private suffixes honoured) but keep only `<loc>` entries in the source's scope. A 404 or non-XML answer is quietly ignored. Reuse `xml-docs.ts` parsing and caps.
+
+Done when: fixtures for (a) robots.txt without Sitemap lines but `/sitemap.xml` present, (b) only `/sitemap_index.xml`, (c) a subdomain source whose parent sitemap lists in-scope and out-of-scope pages; tests prove pages are reported, out-of-scope entries are dropped, and at most two probes (plus one parent probe) are made.
+
+### WP10. Count the same page once (crawler + app)
+
+Treat these as one page for dedup: `http`/`https`, `www.`/bare host (only when both are in scope), a trailing slash on non-root paths, and a final `/index.html`, `/index.htm` or `/index.php`. Fetch the canonical form (prefer https, keep the host form seen first). Also read `<link rel="canonical">` on fetched HTML: if it is in scope, report it as an alias so the app does not fetch it again (never fetch it just because it is canonical). Apply the same normalisation in `crawler/src/crawl/url.ts` and in the app's `crawlPageDigest` (`asmita/src/lib/crawl-pages.ts`) so both sides agree; existing frontier rows keep their stored digest. If the report contract needs an `aliases` field, add it as optional on both sides with strict Zod, max 20 per page.
+
+Done when: unit tests for every equivalence pair on both sides, a contract test that crawler and app produce the same key, and a fixture site that links the same page in four forms shows one fetch.
+
+### WP11. Crawl the useful pages first (app + crawler)
+
+Add a `priority` integer to `CrawlPage` (additive migration, default 100; lower runs first) and claim `ORDER BY priority, nextDueAt`. Set it from the report: sitemap 10, feed 20, pagination links 30, other pages 50 plus 10 per depth level (cap 100). Optional `lastmod` on reported sitemap links (strict, ISO date): an entry whose lastmod is newer than the row's last fetch gets priority 5 and is due now. Prisma, Kysely and memory paths all.
+
+Done when: claim-order tests on all three backends, a test that a newer lastmod jumps the queue, migration validates, and the contract tests cover the new optional field.
+
+### WP12. Follow redirects that live in the page (crawler)
+
+On the static path, follow `<meta http-equiv="refresh" content="N; url=...">` (N up to 10 seconds) as one more redirect hop: scope-checked, robots-checked, counted in the existing hop limit, never off-scope. In `auto` render mode, also send a page to the browser when its HTML is a tiny script-only stub (under 2 KB of visible text, at least one `<script>`, no image candidates and no links), because those are usually JavaScript redirects or app shells.
+
+Done when: fixtures for a meta-refresh page, an off-scope meta refresh (not followed), and a `location.replace` stub page (rendered in auto mode, its target's images hashed).
+
+### WP13. Do not retry what cannot work (crawler + app)
+
+Classify fetch failures: DNS name not found and TLS certificate failures are permanent; timeouts, connection resets and 5xx are temporary; 429/503 keep today's backoff. Permanent failures are reported as `gone` straight away so the app marks the row dead without five retries; if a source's home page fails permanently, count it once in the run summary (no hostname in logs). Temporary failures keep the existing 1 h / 6 h / 24 h backoff.
+
+Done when: unit tests for each class, a test that a DNS failure is reported `gone` on the first attempt, and the run summary shows counts by class.
+
+### WP14. Skip fake "not found" pages (crawler)
+
+Within one run and one source, keep in memory a digest of each fetched HTML body (normalised: whitespace collapsed, digits stripped). When the same digest appears for 5 or more distinct URLs, treat further pages with that digest as soft-404s: extract no images or links from them and report them `gone`. Digests never leave memory and are never logged.
+
+Done when: a fixture site that answers every unknown path with the same "not found" page proves the cut-off, and a site of genuinely similar gallery pages (different images) is not affected.
+
+### WP15. A lighter browser (crawler)
+
+In the browser worker, abort before routing: font requests, audio and video media, and a small built-in list of advertising/analytics hosts (written in the code; it must not include any image or video CDN). Replace the fixed wait after scrolling with "network quiet": wait until no request has been in flight for 500 ms, bounded by the page deadline, with the existing scroll wait as the upper limit.
+
+Done when: tests that blocked kinds are never requested, that image requests still are, that the request cap leaves room for more images on a fixture page full of fonts and trackers, and that a slow lazy-loader is waited for.
+
+### WP16. Galleries in frames and components (crawler)
+
+Static path: collect in-scope `<iframe src>` and `<frame src>` as page links (kind page). Browser path: gather image candidates from every frame (`page.frames()`) and from open shadow roots, not only the main document; out-of-scope frames are not rendered (scope and robots checks as today).
+
+Done when: fixtures for an in-scope iframe gallery, an off-scope iframe (not followed), and a gallery inside a web component's open shadow root, all with synthetic images that must be hashed.
+
 ## Reporting
 
-After each WP, append to `crawler/docs/v2-progress.md`: the WP, what was built, test counts from both packages, anything not done or not verified, and any deviation from this spec with the reason. Do not claim a check passed unless it was run.
+After each WP, append to `crawler/docs/v2-progress.md` (v3 WPs too, under a `## Crawler v3` heading): the WP, what was built, test counts from both packages, anything not done or not verified, and any deviation from this spec with the reason. Do not claim a check passed unless it was run.

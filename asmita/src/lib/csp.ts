@@ -8,6 +8,21 @@ export type CspOptions = {
   frameAncestors?: "'none'" | "'self'";
   /** /talk only: the Sarvam SDK loads its audio worklet from a blob: URL and opens a WebSocket to Sarvam. */
   voice?: boolean;
+  /**
+   * /check-image and the /c2pa/* engine assets only (WP38): the on-device
+   * Content Credentials reader. The CAI's c2pa-web engine compiles a
+   * first-party WebAssembly module (fetched from our own /c2pa/c2pa.wasm)
+   * with WebAssembly.compileStreaming on the page's main thread, which CSP
+   * gates behind 'wasm-unsafe-eval' — a keyword that allows WebAssembly
+   * compilation only, never JS eval. In production (https) the engine's
+   * worker is our own same-origin /c2pa/c2pa_worker.js; over plain http
+   * (local development) the library builds the same worker from an inline
+   * blob: URL (its workerSrc validation refuses non-https), so blob: workers
+   * are allowed on this page only. Navigation to /check-image is a full
+   * page load (nav-config `reload`, plain anchors), so this policy is always
+   * the one in force when the reader runs.
+   */
+  c2pa?: boolean;
   /** Pages in production. Ignored outside production. */
   nonce?: string;
   env?: string | undefined;
@@ -31,7 +46,7 @@ export const TRUSTED_TYPES_REPORT_ONLY = [
   `report-to ${CSP_REPORT_ENDPOINT_NAME}`,
 ].join("; ");
 
-export function buildCsp({ frameAncestors = "'none'", voice = false, nonce, env = process.env.NODE_ENV }: CspOptions = {}) {
+export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = false, nonce, env = process.env.NODE_ENV }: CspOptions = {}) {
   const isProd = env === "production";
   const isDev = env === "development";
   // Production pages allow only same-origin files and inline scripts carrying
@@ -46,6 +61,10 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, nonce, env 
     ...(isDev ? ["'unsafe-eval'"] : []),
     ...(voice ? ["blob:"] : []),
     "'report-sample'",
+    // WP38: WebAssembly compilation of the first-party C2PA engine. This
+    // keyword permits WebAssembly (compile/instantiate) only — it never
+    // allows eval of JavaScript strings.
+    ...(c2pa ? ["'wasm-unsafe-eval'"] : []),
   ];
   return [
     "default-src 'self'",
@@ -62,6 +81,10 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, nonce, env 
     // data the page already holds — it grants no cross-origin media — and
     // script-src stays closed to blob: everywhere except /talk's worklet.
     "media-src 'self' blob:",
+    // WP38: the C2PA engine's worker — same-origin in production (https),
+    // an inline blob: URL in local development. Scoped to the one page; on
+    // every other page workers stay governed by script-src 'self'.
+    ...(c2pa ? ["worker-src 'self' blob:"] : []),
     "font-src 'self' data:",
     "object-src 'none'",
     `frame-ancestors ${frameAncestors}`,
@@ -95,7 +118,13 @@ export function withPageCsp(request: Request, pathname: string) {
   headers.delete("content-security-policy-report-only");
   const policy = pathname.startsWith("/api/")
     ? null
-    : buildCsp({ nonce: createCspNonce(), voice: pathname === "/talk" });
+    : buildCsp({
+        nonce: createCspNonce(),
+        voice: pathname === "/talk",
+        // WP38: the on-device C2PA reader runs on /check-image; the /c2pa/*
+        // engine assets carry the policy the engine's worker inherits.
+        c2pa: pathname === "/check-image" || pathname.startsWith("/c2pa/"),
+      });
   if (policy) headers.set("content-security-policy", policy);
   return { request: new Request(request, { headers }), policy };
 }
