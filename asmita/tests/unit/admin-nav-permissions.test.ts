@@ -17,6 +17,7 @@ const PAGE_FILES: Record<string, string> = {
   "/admin/crawler": "(admin)/crawler/page.tsx",
   "/admin/crawl-sources": "(admin)/crawl-sources/page.tsx",
   "/admin/platforms": "(admin)/platforms/page.tsx",
+  "/admin/partners": "(admin)/partners/page.tsx",
   "/admin/templates": "(admin)/templates/page.tsx",
   "/admin/metrics": "(admin)/response-rates/page.tsx",
   "/admin/analytics": "(admin)/analytics/page.tsx",
@@ -42,7 +43,7 @@ describe("admin nav and page permissions", () => {
 
   it("shows each role only its own work", () => {
     expect(visibleFor("SUPER_ADMIN")).toHaveLength(items.length);
-    expect(visibleFor("GO_EDITOR")).toEqual(["Needs action", "Platforms", "Response rates", "Analytics", "Milestones", "Audit"]);
+    expect(visibleFor("GO_EDITOR")).toEqual(["Needs action", "Platforms", "Platform partners", "Response rates", "Analytics", "Milestones", "Audit"]);
     expect(visibleFor("SUPPORT_AGENT")).toEqual(["Needs action", "Cases", "New links", "Flagged links", "Fingerprints"]);
     expect(visibleFor("LEGAL_ADVISOR")).toEqual(["Needs action", "Cases", "New links", "Flagged links", "Fingerprints", "Templates", "Audit"]);
   });

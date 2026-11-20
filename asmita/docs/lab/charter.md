@@ -3,11 +3,9 @@
 Owner-approved 20 November 2026 (Saquib).
 
 ## Purpose
-
-The Lab runs experiments across the whole problem of AI-generated and morphed intimate images: stopping them being made, tracking where they spread, and getting them taken down. It is separate from the survivor complaint filing workflow. The complaint workflow's rules in root CLAUDE.md do not apply here (see its 'Scope' section).
+The Lab runs experiments across the whole problem of AI-generated and morphed intimate images: stopping them being made, tracking where they spread, and getting them taken down. It is separate from the survivor complaint filing workflow. The complaint workflow's rules in root CLAUDE.md do not apply here (see its "Scope" section).
 
 ## Where it lives
-
 - Same site, same repo. Public pages under `/lab` (English and Hindi). Admin pages under `/admin/lab` (English, like the rest of admin), behind a new `lab:manage` permission.
 - Code: `src/app/(public)/lab/`, `src/app/admin/lab/`, `src/app/api/lab/`, `src/lib/lab/`. Offline tools in `tools/lab-*/` at the repo root.
 - Database tables start with `Lab`.
@@ -16,19 +14,15 @@ The Lab runs experiments across the whole problem of AI-generated and morphed in
 - The no-URL-fetch lint rule and `tests/integration/no-url-fetch.test.ts` guard the complaint workflow. Narrow them so they do not apply to lab paths (`src/lib/lab/**`, `src/app/**/lab/**`, `tools/lab-*/**`). They must keep covering complaint code exactly as before.
 
 ## Data
-
 - The repo is public. Research data lives in the database or local disk and is never committed. This covers real service names and URLs, campaign data, per-detector failure examples and test images.
 - Fixtures in tests are invented (`example.test` domains, made-up names).
 - Test images are synthetic faces or photos of consenting adults, clothed and non-intimate. The Lab never generates sexual content.
 
 ## How an experiment runs
-
 Each experiment has a card: question, method, data, metric, stop rule, result. Results go in `asmita/docs/lab/<id>.md`: methodology and aggregate numbers only.
 
 ## E1: detector benchmark and morph-robust matching (`tools/lab-bench`)
-
-Question: which 'AI-made / manipulated' detectors, and which matching methods, hold up on Indian faces and WhatsApp-compressed morphs?
-
+Question: which "AI-made / manipulated" detectors, and which matching methods, hold up on Indian faces and WhatsApp-compressed morphs?
 - Test-set builder: from a local folder of portraits, make variants:
   - a face-swap composite (landmark-aligned face paste with seamless blending, CPU only)
   - crop, resize, mirror, text or sticker overlay, screenshot with borders
@@ -50,9 +44,7 @@ Question: which 'AI-made / manipulated' detectors, and which matching methods, h
 - Stop rule: if no method beats plain PDQ by 20 recall points on face-swap plus WhatsApp, E3 uses PDQ plus SSCD only.
 
 ## E2: nudify-service map and chokepoint reporting (`/admin/lab/services`)
-
-Question: do services that make 'undress' or face-swap images go down faster when we report them to the companies they depend on?
-
+Question: do services that make "undress" or face-swap images go down faster when we report them to the companies they depend on?
 - Tables:
   - `LabService`: name; kind (app, website, Telegram or chat bot, channel, social account); URLs; status (active, down, unknown); first seen; last checked; notes.
   - `LabChokepoint`: service; kind (host, CDN, registrar, payment processor, app store, ad network, platform account); provider; abuse contact entered by an analyst from the provider's own abuse page; evidence notes.
@@ -64,9 +56,7 @@ Question: do services that make 'undress' or face-swap images go down faster whe
 - Metric: share of services down within 30 days of the first report.
 
 ## E3: morph-to-source tracing (after E1 and the SSCD branch merge)
-
 Question: can we show automatically that a morph was made from her photo?
-
 - `/lab/trace`: upload the suspect image and one or more originals.
 - The method E1 picks scores whole-image, face-region and background-region similarity, aligns the images and highlights the matching regions.
 - Output: an evidence PDF with the images side by side, the scores and a plain method statement, usable by survivors, NGOs and police. It can be attached to a complaint later but is not part of filing.

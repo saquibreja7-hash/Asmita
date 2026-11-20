@@ -51,7 +51,10 @@ function addFinding(id: string, runId: string, status: MemoryCrawlFinding["revie
     id, caseId: "case-1", hashSubmissionId: "hs-1", crawlConsentId: null,
     // Address-like on purpose: the aggregates must never carry them out.
     pageUrlEncrypted: "https://secret-page.example.org/item", imageUrlEncrypted: "https://secret-image.example.org/item.jpg",
-    urlDigest: `digest-${id}`, distance: 5, quality: 80, firstSeenAt, lastSeenAt,
+    urlDigest: `digest-${id}`, distance: 5,
+    // WP28 (ADR 008): the memory finding now carries how it matched.
+    sscdSimilarity: null, method: "PDQ",
+    quality: 80, firstSeenAt, lastSeenAt,
     sourceId: srcA, runId, reviewStatus: status, reviewedById: null, reviewedAt: null,
     secondReviewedById: null, secondReviewedAt: null,
   });

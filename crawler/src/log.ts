@@ -30,6 +30,12 @@ export const LOG_FIELDS = [
   "exitCode",
   "poolVersionChanged",
   "poolSize",
+  // Video fingerprints in the pool (video-fingerprints spec WP20): counts
+  // only, like poolSize.
+  "poolVideos",
+  "poolFrames",
+  // SSCD embeddings of confirmed copies in the pool (WP28): a count only.
+  "poolEmbeddings",
   "dropped",
   "pages",
   "images",
@@ -52,6 +58,8 @@ export const LOG_FIELDS = [
   "newUrls",
   "hostsReported",
   "imagesHashed",
+  // Matches against video fingerprints' frames (WP20): a count only.
+  "videoMatches",
 ] as const;
 
 export type LogField = (typeof LOG_FIELDS)[number];

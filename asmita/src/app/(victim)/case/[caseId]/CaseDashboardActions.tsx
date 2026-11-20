@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import { t, type Locale } from "@/lib/i18n";
+import { FormError } from "@/components/FormError";
 
 export function CaseDashboardActions({ caseId, locale }: { caseId: string; locale: Locale }) {
   const router = useRouter();
@@ -54,11 +55,12 @@ export function CaseDashboardActions({ caseId, locale }: { caseId: string; local
       <button className="btn btn-primary mt-4" disabled={loading || !urlText.trim()} onClick={addUrl} type="button">
         {loading ? t(locale, "case.actions.working") : t(locale, "case.actions.cta")}
       </button>
-      {message && (
-        <p aria-live="polite" className={`mt-3 text-sm font-medium ${messageOk ? "text-[var(--brand)]" : "text-[var(--danger)]"}`}>
+      {message && messageOk && (
+        <p role="status" className="mt-3 text-sm font-medium text-[var(--brand)]">
           {message}
         </p>
       )}
+      {message && !messageOk && <FormError message={message} className="mt-3" />}
     </div>
   );
 }

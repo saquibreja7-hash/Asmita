@@ -182,7 +182,9 @@ describe("account erasure, Kysely path", () => {
     const deleted = await hardDeleteDueUsers(new Date());
     expect(deleted).toEqual(["user-1"]);
     expect(callsOn("CrawlSource")).toHaveLength(0);
+    // WP28 (ADR 008): the erasure also deletes the case's SSCD embeddings,
+    // before the findings they belong to.
     expect(kysely.state.calls.filter((call) => call.op === "delete").map((call) => call.table).sort())
-      .toEqual(["CrawlConsent", "CrawlFinding", "Feedback", "OtpToken", "SessionToken"]);
+      .toEqual(["CrawlConsent", "CrawlFinding", "Feedback", "FindingEmbedding", "OtpToken", "SessionToken"]);
   });
 });

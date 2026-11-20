@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   assertNoticeBodySafe,
   assertNoticeSubjectSafe,
@@ -51,7 +53,16 @@ describe("notice template seeds", () => {
       expect(others).not.toMatch(/\bRule \d|\bsection \d|\bAct, \d{4}/i);
       expect(template.legalCitations).toEqual(["IT Rules 2021, Rule 3(2)(b) - complaint by any person on her behalf; removal within 2 hours"]);
     }
-    expect(seed("CRAWL_REPRESENTATIVE_NOTICE").bodyTemplate).toMatch(/within two \(2\) hours/);
+    expect(seed("CRAWL_REPRESENTATIVE_NOTICE").bodyTemplate).toContain(
+      // WP26 (owner decision, 19 November 2026): the notice asks the platform
+      // to act within twenty-four hours, phrased as Asmita's request, and
+      // still states the Rule's two-hour period as law, so nothing the notice
+      // says misstates Rule 3(2)(b).
+      "within twenty-four (24) hours of receipt of this notice, as Asmita requests",
+    );
+    expect(seed("CRAWL_REPRESENTATIVE_NOTICE").bodyTemplate).toContain(
+      "requires removal within two (2) hours",
+    );
     expect(seed("CRAWL_AUTHORISATION").bodyTemplate).not.toContain("{{url}}");
   });
 
@@ -60,6 +71,28 @@ describe("notice template seeds", () => {
     expect(body).toMatch(/compare the fingerprints/);
     expect(body).toMatch(/on my behalf and as my authorised representative/);
     expect(body).toMatch(/withdraw this authorisation at any time/);
+  });
+
+  it("the crawl authorisation covers the numerical description of a confirmed copy (WP28, ADR 008)", () => {
+    const body = seed("CRAWL_AUTHORISATION").bodyTemplate;
+    // The exact sentence, as its own sentence at the end of item 2.
+    expect(body).toContain(
+      "Where a person at Asmita has confirmed that a copy matches, Asmita may also keep a numerical description of that confirmed copy — never the image itself — so that altered versions of it can be found too.",
+    );
+    expect(body).toMatch(/records only the address of the page and of the image, never the image\. Where a person at Asmita has confirmed that a copy matches/);
+    // Nothing else in the template changed: item 2 still opens as before.
+    expect(body).toMatch(/2\.  I understand how the search works\./);
+  });
+
+  it("the changed authorisation text seeds unreviewed: seed.ts resets reviewedByLegal on a text change and never sets it true", () => {
+    const seedSource = readFileSync(join(process.cwd(), "prisma", "seed.ts"), "utf8");
+    // The change detector: a differing subject, body or citations resets the
+    // human reviewer's decision to unreviewed on the update path...
+    expect(seedSource).toMatch(/textChanged \? \{ \.\.\.data, reviewedByLegal: false \} : data/);
+    // ...a fresh template is created unreviewed...
+    expect(seedSource).toMatch(/create\(\{[\s\S]{0,200}reviewedByLegal: false/);
+    // ...and nothing anywhere sets it true (only a human reviewer records it).
+    expect(seedSource).not.toMatch(/reviewedByLegal:\s*true/);
   });
 
   it("the crawler templates render into a signable PDF", async () => {
@@ -80,12 +113,24 @@ describe("notice template seeds", () => {
     }
   });
 
-  it("Indian templates demand removal within two hours under Rule 3(2)(b), as amended in 2026", () => {
+  // WP26 (owner decision, 19 November 2026): every sentence that asks the
+  // platform to act now asks for twenty-four hours, phrased as Asmita's
+  // request and never attributed to the Rule. Every sentence that states what
+  // Rule 3(2)(b) requires keeps the amended two-hour period, so the notices
+  // never misstate the law.
+  it("Indian templates state the Rule's two hours and ask for twenty-four (WP26)", () => {
     for (const type of ["IT_RULES_2021", "IT_RULES_AND_DMCA", "HASH_ADVISORY", "ESCALATION_L1"]) {
       const body = seed(type).bodyTemplate;
+      // What the amended Rule 3(2)(b) requires: kept at two hours.
       expect(body).toContain("TWO (2) HOURS");
       expect(body).toContain("Rule 3(2)(b)");
-      expect(body).not.toContain("TWENTY-FOUR (24) HOURS of receipt of this Notice");
+    }
+    for (const type of ["IT_RULES_2021", "IT_RULES_AND_DMCA"]) {
+      const body = seed(type).bodyTemplate;
+      // The demand asks for 24 hours as Asmita's request.
+      expect(body).toContain("within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests");
+      // The 24 hours are never attributed to the Rule.
+      expect(body).not.toMatch(/TWENTY-FOUR \(24\) HOURS[^;.]*as Rule 3\(2\)\(b\)/);
     }
   });
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { type Locale } from "@/lib/i18n";
 import { HELPLINE } from "@/lib/helpline";
+import { LanguageToggle } from "@/components/layout/LanguageToggle";
 
 // Public uptime page (Better Stack), outside the app so it stays up when the site is down.
 export const STATUS_URL = "https://status.meriasmita.org";
@@ -33,6 +34,7 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/about", label: "हमारे बारे में" },
             { href: "/privacy", label: "गोपनीयता" },
             { href: "/legal", label: "कानूनी" },
+            { href: "/for-platforms", label: "प्लेटफ़ॉर्म के लिए" },
             { href: "/contact", label: "संपर्क" },
             { href: "/lab", label: "AI लैब" },
             { href: "/sitemap", label: "साइटमैप" },
@@ -66,6 +68,7 @@ export function Footer({ locale }: { locale: Locale }) {
           links: [
             { href: "/about", label: "Who we are" },
             { href: "/what-we-do", label: "What we do" },
+            { href: "/for-platforms", label: "For platforms" },
             { href: "/privacy", label: "Privacy" },
             { href: "/contact", label: "Contact" },
             { href: "/lab", label: "AI Lab" },
@@ -96,6 +99,10 @@ export function Footer({ locale }: { locale: Locale }) {
                 Not affiliated with any government body.
               </p>
             )}
+            <div className="site-footer-lang">
+              <span className="site-footer-col-title !mb-0">{isHi ? "भाषा" : "Language"}</span>
+              <LanguageToggle initialLocale={locale} />
+            </div>
           </div>
 
           {columns.map((col) => (
@@ -104,7 +111,10 @@ export function Footer({ locale }: { locale: Locale }) {
               <ul className="site-footer-col-list">
                 {col.links.map((link) => (
                   <li key={link.href + link.label}>
-                    {link.href.startsWith("https://") ? (
+                    {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                    {link.href === "/check-image" ? (
+                      <a href={link.href}>{link.label}</a>
+                    ) : link.href.startsWith("https://") ? (
                       <a href={link.href}>{link.label}</a>
                     ) : (
                       <Link href={link.href}>{link.label}</Link>

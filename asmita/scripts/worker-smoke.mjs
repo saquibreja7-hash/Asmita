@@ -157,14 +157,20 @@ try {
   await db.end();
   if (stored.rows[0].n !== 2) throw new Error(`Expected 2 stored delivery proofs, found ${stored.rows[0].n}`);
 
-  // ADR 002 is not accepted, so the route that sends images to OpenAI stays
-  // closed in production even with the flag set.
+  // The provenance check is live in production (owner decision of
+  // 19 November 2026, ADR 002 "Decision recorded"): the route exists and
+  // refuses a request without a CSRF token before reading any body.
   const provenance = await fetch(`http://127.0.0.1:${port}/api/check-image`, { method: "POST" });
-  if (provenance.status !== 404) throw new Error(`/api/check-image returned ${provenance.status}, expected 404`);
+  if (provenance.status !== 403) throw new Error(`/api/check-image returned ${provenance.status}, expected 403 (CSRF)`);
   // Links can be added before the email code once the eligibility questions
   // are answered; without them, /submit still sends people to /start.
   const eligible = await fetch(`http://127.0.0.1:${port}/submit`, { headers: { cookie: "asmita_eligible=1" }, redirect: "manual" });
   if (eligible.status !== 200) throw new Error(`/submit after eligibility returned ${eligible.status}, expected 200`);
+  // WP41 S2: authenticated HTML pages must never be cached — this proves
+  // vinext honours next.config.ts's Cache-Control override on the Worker.
+  if (!/\bno-store\b/.test(eligible.headers.get("cache-control") ?? "")) {
+    throw new Error(`/submit was served with Cache-Control "${eligible.headers.get("cache-control")}", expected no-store`);
+  }
   const unanswered = await fetch(`http://127.0.0.1:${port}/submit`, { redirect: "manual" });
   if (!(unanswered.status >= 300 && unanswered.status < 400 && unanswered.headers.get("location")?.endsWith("/start"))) {
     throw new Error(`/submit without eligibility returned ${unanswered.status} ${unanswered.headers.get("location")}, expected a redirect to /start`);
@@ -209,6 +215,23 @@ ${output.slice(-3000)}`);
   const counted = await buckets.query(`SELECT count(*)::int AS n FROM "RateLimitBucket" WHERE "key" = $1`, [globalKey]);
   await buckets.end();
   if (counted.rows[0].n !== 1) throw new Error("The voice daily cap was not counted in Postgres");
+
+  // WP41 S1: sign-out must clear the browser's traces of the session, not
+  // just the cookies — the same CSRF pair works for both logout routes.
+  for (const path of ["/api/auth/logout", "/api/admin/auth/logout"]) {
+    const logout = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method: "POST",
+      headers: { cookie, "x-csrf-token": token },
+    });
+    if (logout.status !== 200) throw new Error(`${path} returned ${logout.status}, expected 200`);
+    const clear = logout.headers.get("clear-site-data") ?? "";
+    if (!clear.includes(`"cache"`) || !clear.includes(`"storage"`)) {
+      throw new Error(`${path} sent Clear-Site-Data "${clear}", expected "cache" and "storage"`);
+    }
+    if (!(logout.headers.get("set-cookie") ?? "").includes("Max-Age=0")) {
+      throw new Error(`${path} did not expire its session cookie`);
+    }
+  }
 
   if (smokeCrawler) await crawlerSmoke();
 

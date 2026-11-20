@@ -122,4 +122,45 @@ describe("withPageCsp", () => {
     // The nonce-less policy (API routes, PDFs, next.config headers) is the same.
     expect(directive(buildCsp({ env: "production" }), "media-src")).toBe("media-src 'self' blob:");
   });
+
+  it("allows the first-party C2PA engine on /check-image only (WP38)", () => {
+    // The on-device Content Credentials reader compiles our own /c2pa/c2pa.wasm
+    // on the page's main thread, which needs 'wasm-unsafe-eval' — WebAssembly
+    // only, never JS eval. Its worker is same-origin in production and an
+    // inline blob: worker in plain-http development, so worker-src allows
+    // both, on this page only.
+    const page = buildCsp({ nonce: "abc123", c2pa: true, env: "production" });
+    expect(directive(page, "script-src")).toBe("script-src 'self' 'nonce-abc123' 'wasm-unsafe-eval'");
+    expect(directive(page, "worker-src")).toBe("worker-src 'self' blob:");
+
+    const dev = buildCsp({ c2pa: true, env: "development" });
+    expect(directive(dev, "script-src")).toContain("'wasm-unsafe-eval'");
+    expect(directive(dev, "worker-src")).toBe("worker-src 'self' blob:");
+
+    // Every other page keeps the untouched policy.
+    for (const options of [
+      { nonce: "abc123", env: "production" } as const,
+      { env: "production" } as const,
+      { env: "development" } as const,
+    ]) {
+      const policy = buildCsp(options);
+      expect(policy).not.toContain("wasm-unsafe-eval");
+      expect(directive(policy, "worker-src")).toBeUndefined();
+    }
+  });
+
+  it("withPageCsp gives /check-image and the /c2pa engine assets the reader policy, other pages not", () => {
+    for (const pathname of ["/check-image", "/c2pa/c2pa_worker.js", "/c2pa/c2pa.wasm"]) {
+      const { policy } = withPageCsp(new Request(`https://meriasmita.org${pathname}`), pathname);
+      expect(policy).toContain("'wasm-unsafe-eval'");
+      expect(directive(policy!, "worker-src")).toBe("worker-src 'self' blob:");
+    }
+    for (const pathname of ["/", "/talk", "/submit", "/case/abc"]) {
+      const { policy } = withPageCsp(new Request(`https://meriasmita.org${pathname}`), pathname);
+      expect(policy).not.toContain("wasm-unsafe-eval");
+      expect(directive(policy!, "worker-src")).toBeUndefined();
+    }
+    // API routes still carry no page policy at all.
+    expect(withPageCsp(new Request("https://meriasmita.org/api/csrf"), "/api/csrf").policy).toBeNull();
+  });
 });
