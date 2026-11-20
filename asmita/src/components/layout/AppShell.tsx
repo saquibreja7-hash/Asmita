@@ -9,7 +9,9 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="page-shell">
       <Header locale={locale} />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1" id="main" tabIndex={-1}>
+        {children}
+      </main>
       <Footer locale={locale} />
     </div>
   );
