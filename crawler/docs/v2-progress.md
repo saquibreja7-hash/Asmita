@@ -533,4 +533,19 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
 - The full Playwright suite runs in the separate verify step.
 
+## WP59. Merge master into fix/forms-focus: resolve the conflicts — 2026-11-20
 
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP59 is defined outside this spec (a lane work package): master had moved on (assistant-safety WP48 / PR #89, platform partner applications, the pdq-robustness tool, the sign-out clear-site-data lane) and the branch's open PR could not merge, so `origin/master` was merged into `fix/forms-focus` and the two conflicted files resolved by hand. No feature work was added and no test was weakened; the merge is a plain merge commit, no rebase, not pushed.
+
+**What was resolved**
+
+- Both conflicts (`asmita/src/i18n/en.json`, `asmita/src/i18n/hi.json`) were the same hunk around the `talk.*` keys. `talk.call.heading` is kept from this branch: WP40's focus heading, rendered by `TalkToUs.tsx` and required by `tests/unit/forms-focus.test.ts` and `hi-review-status.json`. `talk.error.busy` takes master's WP48 copy in both locales: the branch had not changed that value since the merge base, while master's WP48 review rewrote it, documented it in `asmita/docs/product/assistant-safety-review.md` and listed it in `hi-review-status.json` under `machineTranslatedWp48`; keeping the branch's wording would have silently reverted master's copy change in both locales.
+- Verified on the resolved tree: both JSONs parse with no duplicate keys; every key from either side is present (branch 1005 + master 1006 = 1014 keys per file, none dropped, none added beyond the union) and en/hi key parity holds. The four files both sides had touched and git auto-merged were checked by hand: `crawler/docs/v2-progress.md` and `asmita/docs/product/web-audit-progress.md` keep both sides' entries (WP40/WP49 plus WP41/WP53), `DeleteAccountForm.tsx` keeps the WP40 focus-on-done heading and master's WP53 `csrfFetch` error path, and `hi-review-status.json` keeps both the human-reviewed key list and the `machineTranslatedWp48` section.
+
+**Tests** — final `check.sh` run on the resolved tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (no `crawler/` source changed by the merge). `asmita` — lint 0 errors (4 pre-existing warnings: three in `scripts/translate-faq.mjs`, the `buttonRef` cleanup warning in `QuickExit.tsx`), type-check clean, `prisma validate` ok, 160 test files / 1397 tests all passed.
+
+**Not done or not verified**
+
+- The Playwright e2e suite is not part of `check.sh`; it runs in the separate verify step. No crawler behaviour changed, so `crawler/README.md` and the runbook needed no update. The merge was not pushed.
