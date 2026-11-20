@@ -469,4 +469,24 @@ WP41 is one of the owner-approved web best-practice audit packages (20 November 
 - The local TCP forwarder and throwaway Postgres used for the e2e and worker-smoke runs are host tooling, outside the repository (as for the video lane); they were deleted before the commit.
 - Root `CLAUDE.md` was not updated (no crawler behaviour changed; protected agent-instruction file).
 
+### WP53. Fix the branch's one Playwright failure: the deletion request's CSRF token (app) — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP53 is a repair package for this branch's verify run, defined outside this spec like the other web-audit WPs: the full Playwright run failed one test, `tests/e2e/smoke.spec.ts:80` ("adult dashboard supports add URL, manual resolve, and deletion request, with no broken tools") — after "Schedule deletion" the POST to `/api/account/delete` came back not-ok, the form showed its error line, and no server-side error appears anywhere in the run log. The audit-facing record (what changed, what was not verified, decisions) is `asmita/docs/product/web-audit-progress.md` (WP53 section). No `crawler/` source changed.
+
+**What was built** — `asmita/src/lib/client-csrf.ts` (`csrfFetch`, used by every mutating client call) no longer trusts every `/api/csrf` answer: a non-OK response, or a 200 body without a token, used to leave `token` undefined and send the POST with the literal header `x-csrf-token: undefined` — a silent server-side 403 `csrf_failed`, exactly the failing run's signature. A bad mint is retried once and otherwise rejects without sending anything. Mints are also serialized per tab: two overlapping `csrfFetch`es used to race, and the second mint's `Set-Cookie` could land before the first POST left, invalidating its token — the same silent 403; the queue holds the turn until the POST's `fetch()` has started (when the browser attaches the cookie). `DeleteAccountForm.tsx` now shows its existing error line when the mint fails instead of hanging on "Scheduling…".
+
+**Tests** (all run, all passing)
+
+- New `asmita/tests/unit/client-csrf.test.ts` (6 tests): the fresh token is sent; a non-OK mint is retried once and no garbage token ever leaves; a tokenless 200 body is treated as a failed mint with nothing sent; nothing is sent after two failed mints; concurrent mints are serialized so the second mint waits for the first POST to leave; the queue stays usable after a failed mint. All six fail against the old code (verified by running them against it before applying the fix) and pass against the new code.
+- E2E on this machine against a throwaway Postgres 17: `smoke.spec.ts` + `quick-exit.spec.ts` — 14 passed, including the previously failing dashboard test and every test WP41 added.
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — lint, type-check, 29 test files / 350 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors, type-check clean, `prisma validate` ok, 154 test files / 1260 tests all passed.
+
+**Not done or not verified**
+
+- The failure did not reproduce: eight further full-suite runs on the unchanged code (one traced, three warm, four with a cold `.next`, plus a standalone instrumented twin of the failing test — roughly 1600 token mints logged, every mint/POST pair matched) all passed. The fix addresses the two mechanisms that can physically produce the observed signature (a resolved non-OK POST with a clean server log); which of them fired in the original run cannot be proven after the fact.
+- The task's premise that WP41's changes broke the test could not be confirmed: none of WP41's changes can reach this request in the e2e environment. `next dev` already serves `Cache-Control: no-store` on every path (checked with curl against the running dev server), the failing test never logs out, restores a bfcache page or clears storage (so Clear-Site-Data, the client storage clears and the pageshow reload never fire), and the `asmita_eligible` cookie only gates `/submit`, which the test passes signed in. Every WP41 protection is untouched and its tests pass.
+- The full Playwright suite runs in the separate verify step.
+
 
