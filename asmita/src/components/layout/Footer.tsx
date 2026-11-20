@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { HELPLINE } from "@/lib/helpline";
 import { LanguageToggle } from "@/components/layout/LanguageToggle";
+import { NewsletterInlineForm } from "@/components/org/NewsletterInlineForm";
 
 // Public uptime page (Better Stack), outside the app so it stays up when the site is down.
 export const STATUS_URL = "https://status.meriasmita.org";
@@ -26,6 +27,17 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/minor-support", label: "18 से कम?" },
             { href: "/resources", label: "संसाधन" },
             { href: "/faq", label: "सामान्य प्रश्न" },
+          ],
+        },
+        {
+          title: "जुड़िए",
+          links: [
+            { href: "/get-involved", label: "जुड़िए" },
+            { href: "/partners", label: "साझेदारी कीजिए" },
+            { href: "/careers", label: "करियर" },
+            { href: "/news", label: "समाचार" },
+            { href: "/policy", label: "नीति और पैरवी" },
+            { href: "/research", label: "शोध" },
           ],
         },
         {
@@ -60,6 +72,17 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/minor-support", label: "Under 18" },
             { href: "/resources", label: "Resources" },
             { href: "/faq", label: "FAQ" },
+          ],
+        },
+        {
+          title: "Get Involved",
+          links: [
+            { href: "/get-involved", label: "Get involved" },
+            { href: "/partners", label: "Partner with us" },
+            { href: "/careers", label: "Careers" },
+            { href: "/news", label: "News" },
+            { href: "/policy", label: "Policy and advocacy" },
+            { href: "/research", label: "Research" },
           ],
         },
         {
@@ -100,6 +123,10 @@ export function Footer({ locale }: { locale: Locale }) {
             <div className="site-footer-lang">
               <span className="site-footer-col-title !mb-0">{isHi ? "भाषा" : "Language"}</span>
               <LanguageToggle initialLocale={locale} />
+            </div>
+            <div className="site-footer-newsletter">
+              <p className="site-footer-col-title !mb-0">{t(locale, "org.newsletter.footerLabel")}</p>
+              <NewsletterInlineForm locale={locale} source="footer" variant="footer" />
             </div>
           </div>
 

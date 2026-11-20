@@ -63,6 +63,20 @@ export function navGroups(locale: Locale): NavGroup[] {
         { href: "/resources/legal", label: say("Legal information", "कानूनी जानकारी") },
         { href: "/resources/directory", label: say("Support directory", "सहायता निर्देशिका") },
         { href: "/faq", label: t(locale, "nav.faq") },
+        { href: "/news", label: t(locale, "nav.news") },
+        { href: "/policy", label: t(locale, "nav.policy") },
+      ],
+    },
+    {
+      href: "/get-involved",
+      label: t(locale, "nav.getInvolved"),
+      items: [
+        { href: "/get-involved", label: t(locale, "nav.getInvolvedOverview") },
+        { href: "/partners", label: t(locale, "nav.partner") },
+        { href: "/volunteer", label: t(locale, "nav.volunteer") },
+        { href: "/careers", label: t(locale, "nav.careers") },
+        { href: "/training", label: t(locale, "nav.training") },
+        { href: "/newsletter", label: t(locale, "nav.newsletter") },
       ],
     },
     {

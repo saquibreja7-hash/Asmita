@@ -44,6 +44,19 @@ export const siteMap: SiteGroup[] = [
       { href: "/resources/directory", label: "Support directory", note: "Public helplines and services; check current availability" },
       { href: "/resources/legal", label: "Your legal rights" },
       { href: "/faq", label: "FAQ" },
+      { href: "/news", label: "News", note: "Updates, stories, research and campaigns" },
+      { href: "/policy", label: "Policy and advocacy" },
+    ],
+  },
+  {
+    title: "Get involved",
+    links: [
+      { href: "/get-involved", label: "Get involved", note: "Every way to help, in one place" },
+      { href: "/partners", label: "Partner with us", note: "NGOs, legal, police, universities, platforms" },
+      { href: "/volunteer", label: "Volunteer" },
+      { href: "/careers", label: "Careers" },
+      { href: "/training", label: "Training and workshops" },
+      { href: "/newsletter", label: "Newsletter" },
     ],
   },
   {

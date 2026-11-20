@@ -50,7 +50,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_payload", field: "kind" }, { status: 400 });
   }
   const kind = kindParsed.data.kind;
-  const parsed = ORG_FORMS[kind].schema.safeParse(body);
+  // The per-kind schemas are strict; the routing key itself is not a form field.
+  const { kind: _routingKind, ...formBody } = body as Record<string, unknown>;
+  void _routingKind;
+  const parsed = ORG_FORMS[kind].schema.safeParse(formBody);
   if (!parsed.success) {
     const field = parsed.error.issues[0]?.path[0];
     return NextResponse.json(

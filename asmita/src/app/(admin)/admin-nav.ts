@@ -28,6 +28,16 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     ],
   },
   {
+    heading: "Organization",
+    items: [
+      { href: "/admin/org/posts", label: "Org posts", permission: "content:manage" },
+      { href: "/admin/org/submissions", label: "Outreach inbox", permission: "outreach:manage" },
+      { href: "/admin/org/jobs", label: "Org jobs", permission: "content:manage" },
+      { href: "/admin/org/events", label: "Org events", permission: "content:manage" },
+      { href: "/admin/org/newsletter", label: "Newsletter", permission: "outreach:manage" },
+    ],
+  },
+  {
     heading: "Insight",
     items: [
       { href: "/admin/metrics", label: "Response rates", permission: "metrics:read" },

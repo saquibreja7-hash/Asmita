@@ -91,13 +91,15 @@ export async function subscribeToNewsletter(input: z.infer<typeof newsletterSign
   ok: true;
   /** The confirm token, when a confirmation email is needed. */
   confirmToken: string | null;
+  /** The per-subscriber unsubscribe token (goes into newsletter emails). */
+  unsubscribeToken: string | null;
   email: string;
 }> {
   const email = input.email;
   const emailHash = hashEmail(email);
   const existing = await findByEmailHash(emailHash);
   if (existing?.status === "CONFIRMED") {
-    return { ok: true, confirmToken: null, email };
+    return { ok: true, confirmToken: null, unsubscribeToken: null, email };
   }
   const confirmToken = randomBytes(24).toString("hex");
   const confirmTokenHash = sha256(confirmToken);
@@ -119,7 +121,7 @@ export async function subscribeToNewsletter(input: z.infer<typeof newsletterSign
         data: { status: "PENDING", locale: input.locale, confirmTokenHash, unsubscribedAt: null },
       });
     }
-    return { ok: true, confirmToken, email };
+    return { ok: true, confirmToken, unsubscribeToken: null, email };
   }
   const unsubscribeToken = randomBytes(24).toString("hex");
   const record: MemorySubscriber = {
@@ -152,7 +154,7 @@ export async function subscribeToNewsletter(input: z.infer<typeof newsletterSign
       },
     });
   }
-  return { ok: true, confirmToken, email };
+  return { ok: true, confirmToken, unsubscribeToken, email };
 }
 
 async function findByEmailHash(emailHash: string): Promise<NewsletterSubscriber | null> {

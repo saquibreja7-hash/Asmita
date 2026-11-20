@@ -16,7 +16,7 @@
     "Platform-specific reporting notes in /resources - references English-language UIs"
   ],
   "machineTranslated": {
-    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request",
+    "by": "Machine translated by Hermes (GLM 5.3), 2026-11-20, for the organization pages (docs/org/spec.md, WP56); previously: Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request",
     "keys": [
       "talk.*",
       "privacy.s08.i5.*",
@@ -87,7 +87,17 @@
       "submit.hash.fileLabel",
       "submit.hash.fileHint",
       "review.fingerprints.videoItem",
-      "review.fingerprints.video"
+      "review.fingerprints.video",
+      "org.*",
+      "nav.getInvolved",
+      "nav.getInvolvedOverview",
+      "nav.partner",
+      "nav.volunteer",
+      "nav.careers",
+      "nav.training",
+      "nav.newsletter",
+      "nav.news",
+      "nav.policy"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",

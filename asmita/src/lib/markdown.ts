@@ -126,11 +126,33 @@ function listItems(lines: string[]): string[] {
   return lines.map((line) => line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").trim());
 }
 
+/** Slug from heading text: lowercase, hyphen-separated. */
+function headingId(text: string, used: Set<string>): string {
+  const base =
+    text
+      .toLowerCase()
+      .replace(/<[^>]+>/g, "")
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/[\s_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "section";
+  let id = base;
+  let counter = 2;
+  while (used.has(id)) {
+    id = `${base}-${counter}`;
+    counter += 1;
+  }
+  used.add(id);
+  return id;
+}
+
 /** Escape the whole document once, then group escaped lines into blocks. */
 export function renderMarkdown(markdown: string): string {
   const escaped = escapeHtml(markdown.replace(/\r\n/g, "\n"));
   const lines = escaped.split("\n");
   const out: string[] = [];
+  const headingIds = new Set<string>();
   let index = 0;
 
   while (index < lines.length) {
@@ -159,7 +181,11 @@ export function renderMarkdown(markdown: string): string {
     const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
     if (heading) {
       const level = heading[1].length;
-      out.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+      const inline = renderInline(heading[2]);
+      // h2-h4 get an id so the reading layout's contents rail can link to them.
+      // The id comes from the escaped text, matching extractMarkdownHeadings.
+      const id = level >= 2 && level <= 4 ? headingId(heading[2], headingIds) : null;
+      out.push(id ? `<h${level} id="${escapeAttribute(id)}">${inline}</h${level}>` : `<h${level}>${inline}</h${level}>`);
       index += 1;
       continue;
     }
@@ -238,4 +264,23 @@ export function renderMarkdown(markdown: string): string {
   }
 
   return out.join("\n");
+}
+
+export type MarkdownHeading = { level: 2 | 3; id: string; title: string };
+
+/**
+ * The h2/h3 headings of a markdown document, with the same ids the renderer
+ * assigns, for the reading layout's contents rail.
+ */
+export function extractMarkdownHeadings(markdown: string): MarkdownHeading[] {
+  const used = new Set<string>();
+  const headings: MarkdownHeading[] = [];
+  for (const line of markdown.replace(/\r\n/g, "\n").split("\n")) {
+    const match = /^(#{2,3})\s+(.+)$/.exec(line.trim());
+    if (!match) continue;
+    const title = match[2].trim();
+    const id = headingId(escapeHtml(title), used);
+    headings.push({ level: match[1].length as 2 | 3, id, title });
+  }
+  return headings;
 }

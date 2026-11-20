@@ -390,7 +390,10 @@ export async function listPublishedOrgPosts(options: { kind?: OrgPostKind; page?
   const perPage = Math.max(1, options.perPage ?? NEWS_PAGE_SIZE);
   const page = Math.max(1, options.page ?? 1);
   const published = (await allPublishedOrgPosts(options.kind)).sort(
-    (a, b) => (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt),
+    (a, b) =>
+      (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt) ||
+      b.createdAt.localeCompare(a.createdAt) ||
+      b.id.localeCompare(a.id),
   );
   const start = (page - 1) * perPage;
   return { posts: published.slice(start, start + perPage), total: published.length, page, perPage };
