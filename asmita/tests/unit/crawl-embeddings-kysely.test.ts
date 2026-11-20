@@ -107,6 +107,10 @@ function world(overrides: Record<string, Array<Record<string, unknown>>> = {}) {
   kysely.state.rows = {
     HashSubmission: [{ id: "hs-1", caseId: "case-1", crawlPoolId: "fp_1", hashEncrypted: "x", quality: 80, status: "APPROVED", algorithm: "PDQ", videoFramesEncrypted: null }],
     CrawlConsent: [{ id: "consent-1", caseId: "case-1", hashSubmissionIds: ["hs-1"], withdrawnAt: null }],
+    // The pool keeps fingerprints only while the case is open or inside its
+    // re-upload window (watch-and-verify WP24), so the id resolves while the
+    // fixture's case is open.
+    Case: [{ id: "case-1", status: "OPEN" }],
     CrawlFinding: [{ id: "cf-1", caseId: "case-1", hashSubmissionId: "hs-1", reviewStatus: "APPROVED", urlDigest: DIGEST, distance: 8, method: "PDQ", sscdSimilarity: null }],
     FindingEmbedding: [],
     ...overrides,

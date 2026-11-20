@@ -6,12 +6,14 @@ import { crawlMemory, type MemoryCrawlFinding } from "@/lib/crawl-store";
 import { consentCoversFinding, findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
 import { enabledCrawlSourceDomain, ensureCrawlSourceForReportedHost } from "@/lib/crawl-sources";
 import { promoteDiscoveredSource } from "@/lib/crawl-discoveries";
+import { notifyReuploadFinding } from "@/lib/crawl-watch";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { isUrlExpired } from "@/lib/url-retention";
+import { notifyWatchCopyFound } from "@/lib/watch-ops";
 import * as store from "@/lib/store";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
@@ -465,6 +467,12 @@ export type CrawlFindingListRow = {
   noticeAttemptUnconfirmed: boolean;
   /** She withdrew the authorisation this finding was matched under, so no notice can go out for it. */
   crawlConsentWithdrawn: boolean;
+  /**
+   * The finding's case is a watch (WP22): she has not asked for removal yet,
+   * so a representative notice is refused (watch_only_consent) until she
+   * chooses "Take it down".
+   */
+  watchOnly: boolean;
 };
 
 type FindingRow = Omit<MemoryCrawlFinding, "reviewStatus"> & { reviewStatus: string };
@@ -476,6 +484,7 @@ type ListExtras = {
   platform: FindingPlatformView | null;
   link: { status: string; sentAt: Date | string | null; claimPending: boolean; stopped: boolean } | null;
   consentWithdrawn: boolean;
+  watchOnly: boolean;
 };
 
 function toListRow(row: FindingRow, extras: ListExtras, viewerId?: string): CrawlFindingListRow {
@@ -508,6 +517,7 @@ function toListRow(row: FindingRow, extras: ListExtras, viewerId?: string): Craw
     noticeAttemptUnconfirmed: Boolean(extras.link?.claimPending) && !sentAt,
     // A sent notice is never undone by a withdrawal.
     crawlConsentWithdrawn: !sentAt && (Boolean(extras.link?.stopped) || extras.consentWithdrawn),
+    watchOnly: extras.watchOnly,
   };
 }
 
@@ -523,9 +533,14 @@ function platformView(
 /** Whether the authorisation a finding was matched under is no longer live. */
 function consentGone(
   finding: { caseId: string; crawlConsentId: string | null },
-  consents: Array<{ id: string; caseId: string; withdrawnAt: Date | null }>,
+  consents: Array<{ id: string; caseId: string; withdrawnAt: Date | null; convertedFromId?: string | null }>,
 ) {
-  if (finding.crawlConsentId) return !consents.some((c) => c.id === finding.crawlConsentId && !c.withdrawnAt);
+  if (finding.crawlConsentId) {
+    // The recorded authorisation is gone only while no live one replaced it
+    // at "Take it down" (convertedFromId; WP22).
+    const converted = consents.some((c) => !c.withdrawnAt && c.convertedFromId === finding.crawlConsentId);
+    return !converted && !consents.some((c) => c.id === finding.crawlConsentId && !c.withdrawnAt);
+  }
   return !consents.some((c) => c.caseId === finding.caseId && !c.withdrawnAt);
 }
 
@@ -567,6 +582,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
           // Nothing is ever sent from the memory store.
           link: link ? { status: link.status, sentAt: null, claimPending: false, stopped: Boolean(link.crawlConsentWithdrawnAt) } : null,
           consentWithdrawn: consentGone(f, memory.consents),
+          watchOnly: record?.mode === "WATCH",
         }, viewerId);
       });
   }
@@ -580,7 +596,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
       ...(filter.id ? { id: filter.id } : {}),
     },
     include: {
-      case: { select: { referenceNumber: true } },
+      case: { select: { referenceNumber: true, mode: true } },
       source: { select: { domain: true } },
       hashSubmission: { select: { hashDigest: true } },
       submittedUrl: {
@@ -600,7 +616,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
   });
   const caseIds = [...new Set(rows.map((row) => row.caseId))];
   const consents = caseIds.length
-    ? await db.crawlConsent.findMany({ where: { caseId: { in: caseIds } }, select: { id: true, caseId: true, withdrawnAt: true } })
+    ? await db.crawlConsent.findMany({ where: { caseId: { in: caseIds } }, select: { id: true, caseId: true, withdrawnAt: true, convertedFromId: true } })
     : [];
   // Before approval there is no link: show the platform the source site belongs to.
   const domains = [...new Set(rows.filter((row) => !row.submittedUrl).map((row) => row.source.domain))];
@@ -628,6 +644,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
           }
         : null,
       consentWithdrawn: consentGone(row, consents),
+      watchOnly: row.case.mode === "WATCH",
     }, viewerId);
   });
 }
@@ -709,6 +726,19 @@ async function ensureSourceForApprovedFinding(host: string) {
   }
 }
 
+/**
+ * Watch-and-verify WP24: when this approval is a re-upload found while her
+ * case is closed and inside its watch window, she gets the reference-only
+ * email. Never allowed to fail the approval, which is already committed.
+ */
+async function notifyReuploadIfWatching(caseId: string, findingId: string, now: Date) {
+  try {
+    await notifyReuploadFinding(caseId, findingId, now);
+  } catch {
+    console.error("reupload_email_failed"); // fixed code only, never an address
+  }
+}
+
 export async function reviewCrawlFinding(input: { findingId: string; decision: ReviewDecision; reviewerId: string; now?: Date }): Promise<ReviewOutcome> {
   const now = input.now ?? new Date();
   if (isDevNoDb()) return reviewInMemory(input.findingId, input.decision, input.reviewerId, now);
@@ -757,7 +787,7 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
     // Checked again under a lock in this transaction: a withdrawal either
     // committed first (refused here) or waits for this approval and then
     // stops the link it creates.
-    const live = await tx.$queryRaw<Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date }>>`SELECT "id", "hashSubmissionIds", "signedAt" FROM "CrawlConsent" WHERE "caseId" = ${finding.caseId} AND "withdrawnAt" IS NULL FOR SHARE`;
+    const live = await tx.$queryRaw<Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date; convertedFromId: string | null }>>`SELECT "id", "hashSubmissionIds", "signedAt", "convertedFromId" FROM "CrawlConsent" WHERE "caseId" = ${finding.caseId} AND "withdrawnAt" IS NULL FOR SHARE`;
     if (!live.some((consent) => consentCoversFinding({ ...consent, signedAt: new Date(consent.signedAt) }, finding))) return "consent_withdrawn" as const;
     const claimed = await tx.crawlFinding.updateMany({ where: unchanged, data: { reviewStatus: "APPROVED", ...reviewerFields } });
     if (claimed.count === 0) return null;
@@ -789,6 +819,12 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
   if (!outcome) return { ok: false, error: "already_reviewed" };
   await auditReview("CRAWL_FINDING_APPROVED", finding, input.reviewerId, { stage: "final", second: plan.second, submittedUrlId: outcome.submittedUrlId, createdUrl: outcome.createdUrl });
   await ensureSourceForApprovedFinding(parsed.domain);
+  // A watch (WP22): her copy-found alert, reference only, best-effort.
+  await notifyWatchCopyFound(finding.caseId, finding.id);
+  // A re-upload found on her closed, still-watching case (WP24): the same
+  // reference-only alert. The two conditions are disjoint (an open watch vs a
+  // closed case inside its re-upload window).
+  await notifyReuploadIfWatching(finding.caseId, finding.id, now);
   return { ok: true, status: "APPROVED", ...outcome };
 }
 
@@ -830,6 +866,7 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
       platformName: parsed.platform?.name || "Unknown - will be reviewed",
       status: crawlerUrlStatus(parsed),
       urlHash: parsed.urlHash,
+      urlEncrypted: encryptField(parsed.normalizedUrl),
       platformId: null,
       flaggedForReview: false,
       source: "CRAWLER",
@@ -838,6 +875,10 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
   }
   await auditReview("CRAWL_FINDING_APPROVED", finding, reviewerId, { stage: "final", second: plan.second, submittedUrlId, createdUrl: !existing });
   await ensureSourceForApprovedFinding(parsed.domain);
+  // A watch (WP22): her copy-found alert, reference only, best-effort.
+  await notifyWatchCopyFound(finding.caseId, finding.id);
+  // A re-upload found on her closed, still-watching case (WP24), same rules.
+  await notifyReuploadIfWatching(finding.caseId, finding.id, now);
   return { ok: true, status: "APPROVED", submittedUrlId: submittedUrlId!, createdUrl: !existing };
 }
 

@@ -14,10 +14,13 @@ export function FoundByAsmita({
   urls,
   locale,
   badge,
+  note,
 }: {
   urls: Array<Pick<DisplayUrl, "id" | "domain" | "platformName" | "status" | "crawlConsentWithdrawn" | "representativeNoticeSentAt">>;
   locale: Locale;
   badge: (status: string) => ReactNode;
+  /** The removal re-check note (watch-and-verify WP23), if the link has one. */
+  note?: (urlId: string, status: string) => ReactNode;
 }) {
   if (urls.length === 0) return null;
   return (
@@ -38,6 +41,7 @@ export function FoundByAsmita({
                     {new Date(view.sentAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" })}
                   </p>
                 )}
+                {note?.(url.id, view.kind === "withdrawn" ? "" : url.status)}
               </div>
               {view.kind === "withdrawn" ? (
                 <span className="inline-flex items-center whitespace-nowrap rounded-full bg-[var(--page)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--text-muted)]">
