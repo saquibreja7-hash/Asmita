@@ -137,6 +137,10 @@ body {
   font-family: var(--font-sans);
   font-weight: 400;
   font-size: 16px;
+  /* Hindi text first renders in the system Devanagari fallback; this keeps
+     its size matched to Noto Sans Devanagari when the webfont lands, so the
+     layout stops shifting. Ignored where unsupported. */
+  font-size-adjust: from-font;
   line-height: 1.5;
   overflow-x: hidden;
 }
@@ -1469,9 +1473,9 @@ html[lang="hi"] .eyebrow { letter-spacing: 0; text-transform: none; }
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(246, 243, 241, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  /* Solid parchment: the blur forced a full-page reraster on every scroll
+     frame, which janks slow phones. Same colour, without the translucency. */
+  background: var(--color-parchment);
   border-bottom: 1px solid transparent;
   transition: border-color 0.2s ease;
 }
@@ -1614,13 +1618,15 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   background: var(--color-parchment);
 }
 
-/* Heavy film grain over the whole footer, as in the reference */
+/* Heavy film grain over the whole footer, as in the reference. The tile is a
+   procedural feTurbulence SVG (grain.svg) tuned to the statistics of the
+   480 KB JPEG it replaced — a few hundred bytes, same soft-light grain. */
 .site-footer::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: url("/images/textures/grain-big.jpg") center / 700px auto repeat;
+  background: url("/images/textures/grain.svg") center / 700px auto repeat;
   opacity: 0.5;
   mix-blend-mode: soft-light;
 }

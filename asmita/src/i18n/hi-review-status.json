@@ -8,7 +8,7 @@
   "excludedFromTranslation": [
     "/faq - pending translation",
     "/for-platforms - written for platform Trust & Safety and grievance teams, English only",
-    "/privacy - legal document, English only",
+    "/privacy - sections s01-s16 were translated 2026-06-16 (commit 03eb3df); the sections added or reworded on 19 November 2026 (WP29: fingerprints, video, crawler, watch, partner-sharing, sscd, platform-partners, and the edited tldr/s01/s03/s04/s05/s07/s08/s09/s10/s13 keys) are English only, per the owner's instruction, until a Hindi pass is run on them",
     "/terms - legal document, English only",
     "/case/[caseId]/sign - declaration is legally consequential, English only",
     "/review-sign - as above",
@@ -16,7 +16,7 @@
     "Platform-specific reporting notes in /resources - references English-language UIs"
   ],
   "machineTranslated": {
-    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request; WP40 strings (2026-11-20) drafted by Hermes (GLM 5.3), pending native review",
+    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request; WP40 strings (2026-11-20) drafted by Hermes (GLM 5.3), pending native review; the WP35 batch (check.hero.report, check.research.line, check.research.read and the reworded check.result.noneFound.body, check.deep.result.none.body, check.disclaimer, plus the deepfakes issue-page strings) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP38 batch (the new check.c2pa.*, check.meta.title, check.google.line, check.deep.unavailable and the reworded check.deep.body, check.deep.consent) machine translated by Hermes (GLM 5.3), 2026-11-19",
     "keys": [
       "talk.*",
       "privacy.s08.i5.*",
@@ -95,12 +95,40 @@
       "sign.error.contact",
       "sign.error.agree",
       "submit.link.summary",
-      "talk.call.heading"
+      "talk.call.heading",
+      "review.sign.openNotice",
+      "check.hero.report",
+      "check.research.line",
+      "check.research.read",
+      "check.result.noneFound.body",
+      "check.deep.result.none.body",
+      "check.disclaimer",
+      "check.deep.body",
+      "check.deep.consent",
+      "check.deep.unavailable",
+      "check.c2pa.title",
+      "check.c2pa.loading",
+      "check.c2pa.result.found.title",
+      "check.c2pa.result.found.body",
+      "check.c2pa.result.none.title",
+      "check.c2pa.result.none.body",
+      "check.c2pa.result.unavailable",
+      "check.c2pa.ai",
+      "check.c2pa.tool",
+      "check.c2pa.signer",
+      "check.c2pa.source",
+      "check.c2pa.validation",
+      "check.c2pa.validation.valid",
+      "check.c2pa.validation.invalid",
+      "check.c2pa.validation.untrusted",
+      "check.meta.title",
+      "check.google.line"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
       "about page Sarvam line",
-      "footer helpline label"
+      "footer helpline label",
+      "deepfakes issue page definition, what-you-can-do and research line (issue-content-hi.ts, WP35)"
     ]
   },
   "machineTranslatedWp48": {

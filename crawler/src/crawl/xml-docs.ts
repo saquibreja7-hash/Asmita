@@ -17,6 +17,7 @@
  * Content-Type, so a sitemap served as text/plain parses and a soft-404
  * HTML page served from /sitemap.xml does not.
  */
+import { z } from "zod";
 import { normalizeUrl } from "./url.ts";
 
 export type XmlDocumentKind = "urlset" | "sitemapindex" | "rss" | "atom";
@@ -213,18 +214,42 @@ const appendText = (buf: string, tok: XmlToken): string => (tok.t === "text" ? (
 // Sitemaps (urlset, sitemapindex) and image sitemap entries
 // ---------------------------------------------------------------------------
 
-export type SitemapPage = { loc: URL; images: URL[] };
+/**
+ * A <url> page with its image-sitemap candidates, its video-sitemap preview
+ * thumbnails (video-fingerprints spec WP21: <video:thumbnail_loc>, tagged
+ * "video preview" by the caller) and its <lastmod>.
+ */
+export type SitemapPage = { loc: URL; images: URL[]; videoThumbnails: URL[]; lastmod: string | null };
+
+/** A <sitemap> child of an index, with its own <lastmod>. */
+export type SitemapChild = { loc: URL; lastmod: string | null };
 
 export type SitemapParse = {
   /** <url><loc> pages of a urlset, with their <image:loc> candidates. */
   pages: SitemapPage[];
   /** <sitemap><loc> children of a sitemap index. */
-  children: URL[];
+  children: SitemapChild[];
   /** True when the URL cap stopped the parse (summary counter, not an error). */
   truncated: boolean;
 };
 
 const lower = (name: string): string => name.toLowerCase();
+
+/**
+ * A sitemap <lastmod> as a strict ISO date-time in UTC (crawler v3 WP11), or
+ * null. The value must be a full ISO date-time (with offset or Z) or an ISO
+ * date; the partial formats the sitemap spec also allows are quietly dropped
+ * rather than guessed, exactly like a bogus value. Normalised to what the
+ * report contract accepts (the app's strict ISO rule), so what the parser
+ * produces always validates.
+ */
+export function isoLastmod(raw: string): string | null {
+  const text = raw.trim();
+  if (text === "") return null;
+  if (!z.iso.datetime({ offset: true }).safeParse(text).success && !z.iso.date().safeParse(text).success) return null;
+  const ms = new Date(text).getTime();
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
 
 /**
  * Parse a urlset or a sitemap index. Every taken address (page loc, child
@@ -239,10 +264,17 @@ export function parseSitemap(body: Buffer, base: URL, kind: "urlset" | "sitemapi
   let inSitemap = false;
   let inLoc = false;
   let inImageLoc = false;
+  let inVideoThumbnail = false;
+  let inLastmod = false;
   let locText = "";
   let imageText = "";
+  let videoThumbText = "";
+  let lastmodText = "";
   let entryLoc: URL | null = null;
   let entryImages: URL[] = [];
+  let entryVideoThumbs: URL[] = [];
+  let entryLastmod: string | null = null;
+  let childLastmod: string | null = null;
 
   const take = (): boolean => {
     if (taken < maxUrls) {
@@ -260,6 +292,8 @@ export function parseSitemap(body: Buffer, base: URL, kind: "urlset" | "sitemapi
       if (tok.t === "text") {
         if (inLoc) locText = appendText(locText, tok);
         else if (inImageLoc) imageText = appendText(imageText, tok);
+        else if (inVideoThumbnail) videoThumbText = appendText(videoThumbText, tok);
+        else if (inLastmod) lastmodText = appendText(lastmodText, tok);
         return true;
       }
       const name = lower(tok.name);
@@ -270,6 +304,8 @@ export function parseSitemap(body: Buffer, base: URL, kind: "urlset" | "sitemapi
               inUrl = true;
               entryLoc = null;
               entryImages = [];
+              entryVideoThumbs = [];
+              entryLastmod = null;
               locText = "";
             }
             break;
@@ -277,6 +313,7 @@ export function parseSitemap(body: Buffer, base: URL, kind: "urlset" | "sitemapi
             if (kind === "sitemapindex") {
               inSitemap = true;
               locText = "";
+              childLastmod = null;
             }
             break;
           case "loc":
@@ -285,10 +322,26 @@ export function parseSitemap(body: Buffer, base: URL, kind: "urlset" | "sitemapi
               locText = "";
             }
             break;
+          case "lastmod":
+            if (inUrl || inSitemap) {
+              inLastmod = true;
+              lastmodText = "";
+            }
+            break;
           case "image:loc":
             if (inUrl) {
               inImageLoc = true;
               imageText = "";
+            }
+            break;
+          // Google video sitemap preview thumbnail (video-fingerprints spec
+          // WP21): hashed for its <loc> page like an image-sitemap entry,
+          // and it costs one maxUrls slot like every taken address. The
+          // element name is matched literally, exactly as image:loc is.
+          case "video:thumbnail_loc":
+            if (inUrl) {
+              inVideoThumbnail = true;
+              videoThumbText = "";
             }
             break;
           default:
@@ -300,6 +353,13 @@ export function parseSitemap(body: Buffer, base: URL, kind: "urlset" | "sitemapi
         case "loc":
           inLoc = false;
           break;
+        case "lastmod":
+          if (inLastmod) {
+            inLastmod = false;
+            if (inUrl) entryLastmod = isoLastmod(lastmodText);
+            else if (inSitemap) childLastmod = isoLastmod(lastmodText);
+          }
+          break;
         case "image:loc": {
           if (!inImageLoc) break;
           inImageLoc = false;
@@ -307,6 +367,16 @@ export function parseSitemap(body: Buffer, base: URL, kind: "urlset" | "sitemapi
           if (rawImage !== "" && take()) {
             const image = normalizeUrl(rawImage, base);
             if (image !== null) entryImages.push(image);
+          }
+          break;
+        }
+        case "video:thumbnail_loc": {
+          if (!inVideoThumbnail) break;
+          inVideoThumbnail = false;
+          const rawThumb = videoThumbText.trim();
+          if (rawThumb !== "" && take()) {
+            const thumb = normalizeUrl(rawThumb, base);
+            if (thumb !== null) entryVideoThumbs.push(thumb);
           }
           break;
         }
@@ -318,9 +388,11 @@ export function parseSitemap(body: Buffer, base: URL, kind: "urlset" | "sitemapi
             const loc = normalizeUrl(rawLoc, base);
             if (loc !== null) entryLoc = loc;
           }
-          if (entryLoc !== null) out.pages.push({ loc: entryLoc, images: entryImages });
+          if (entryLoc !== null) out.pages.push({ loc: entryLoc, images: entryImages, videoThumbnails: entryVideoThumbs, lastmod: entryLastmod });
           entryLoc = null;
           entryImages = [];
+          entryVideoThumbs = [];
+          entryLastmod = null;
           break;
         }
         case "sitemap": {
@@ -329,8 +401,9 @@ export function parseSitemap(body: Buffer, base: URL, kind: "urlset" | "sitemapi
           const rawChild = locText.trim();
           if (rawChild !== "" && take()) {
             const child = normalizeUrl(rawChild, base);
-            if (child !== null) out.children.push(child);
+            if (child !== null) out.children.push({ loc: child, lastmod: childLastmod });
           }
+          childLastmod = null;
           break;
         }
         default:

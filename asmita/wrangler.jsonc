@@ -65,7 +65,7 @@
         "NOTICE_DISPATCH_PERSISTENCE": "database",
         "ENABLE_HASH_UPLOAD": "true",
         "ENABLE_PLATFORM_API": "false",
-        "ENABLE_PROVENANCE_CHECK": "false",
+        "ENABLE_PROVENANCE_CHECK": "true",
         "ESCALATION_DRAFTS_REVIEWED": "true",
         "ENABLE_CRAWLER": "true"
       }

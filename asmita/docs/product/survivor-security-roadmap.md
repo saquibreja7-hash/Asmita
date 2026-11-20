@@ -23,7 +23,7 @@ The current codebase covers a meaningful slice of Phase 1 already:
 - POCSO / minor routing (`/minor-support`), keeping minors out of the adult case flow.
 - Admin dispatch with human contact verification and legal review gates.
 - English and Hindi throughout, OTP login, audit log, rate limiting, CSRF.
-- Client-side content-credential reader (`/check-image`, `ai-provenance.ts`), the first step of the authenticity feature.
+- Client-side content-credential reader (`/check-image`, `ai-provenance.ts`), the first step of the authenticity feature — now reading signed C2PA Content Credentials on-device too (`src/lib/c2pa-credentials.ts`, the CAI's c2pa-web engine served first-party), with the optional consented OpenAI deeper check behind it.
 - The guided triage front door: `/get-help` (situation hub with off-ramps, do-not-pay guidance, minor routing) and `/eligibility` (progressive eligibility wizard).
 - The escalation engine (L1 GO follow-up, L2 survivor notification, L3 FIR package) running from the daily sweep.
 - The rebuilt admin console: server-paginated case list, case page with dispatch, needs-action queues, saved views.

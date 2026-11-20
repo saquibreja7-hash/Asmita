@@ -13,6 +13,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "bench:matcher": "tsx scripts/bench-matcher.ts",
+    "bench:video": "tsx scripts/bench-video-index.ts",
     "bench:decode": "node scripts/build.mjs && tsx scripts/bench-decode.ts",
     "mock": "node scripts/build.mjs && tsx tests/support/fixture-entry.ts",
     "mock:api": "tsx scripts/mock-api.ts",
@@ -20,6 +21,7 @@
   },
   "dependencies": {
     "cheerio": "^1.2.0",
+    "onnxruntime-node": "^1.22.0",
     "playwright-core": "1.60.0",
     "robots-parser": "^3.0.1",
     "sharp": "^0.35.5",
