@@ -101,5 +101,6 @@ Use the semantic tokens in `src/app/foundation-styles.css`. Never hard-code colo
 - No Quick Exit button on public pages. **(owner)**
 - No CSS cascade layers (`@layer`). **(owner)**
 - Keep the `/start` page's original design. **(owner)**
+- Nothing about donations yet: no donate buttons, donation asks, fundraising copy or "support us" money language anywhere on the site, until the owner decides otherwise. **(owner)**
 - No coloured left-border accent stripes. **(owner)**
 - Footer: brand plus three link columns. **(owner)**
