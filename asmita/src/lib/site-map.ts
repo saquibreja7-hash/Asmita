@@ -47,6 +47,22 @@ export const siteMap: SiteGroup[] = [
     ],
   },
   {
+    // WP96 (docs/lab/beta-spec.md): every Lab route sits in the sitemap —
+    // the hub and each beta tool — and none of them in the header nav
+    // (nav-config.ts): the Lab is reached from the hub and the footer only.
+    title: "AI Lab",
+    links: [
+      { href: "/lab", label: "AI Lab", note: "Research experiments and beta tools; separate from filing a complaint" },
+      { href: "/lab/trace", label: "Trace a morph" },
+      { href: "/lab/detectors", label: "Detector panel" },
+      { href: "/lab/protect", label: "Photo protection" },
+      { href: "/lab/tracker", label: "Service tracker" },
+      { href: "/lab/message-check", label: "Check a message" },
+      { href: "/lab/stamp", label: "Content Credentials stamp" },
+      { href: "/lab/spot-the-fake", label: "Spot the fake" },
+    ],
+  },
+  {
     title: "About Asmita",
     links: [
       { href: "/about", label: "About" },

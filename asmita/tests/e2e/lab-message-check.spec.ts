@@ -64,7 +64,10 @@ test.describe("message check (/lab/message-check)", () => {
     await page.getByLabel("The message you received").fill("I am 15 and he is threatening me with my photos");
     await page.getByRole("button", { name: "Check the message" }).click();
 
-    await expect(page.getByText("This needs the under-18 support path")).toBeVisible();
+    // The minor title renders twice by design: a screen-reader-only
+    // role="status" announcement and the visible, focused heading
+    // (MessageCheckForm's A5 pattern) — so the assertion names the heading.
+    await expect(page.getByRole("heading", { name: "This needs the under-18 support path" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Go to under-18 support" })).toHaveAttribute("href", "/minor-support");
     // The analysis never ran.
     await expect(page.getByRole("heading", { name: "What we noticed" })).toBeHidden();
