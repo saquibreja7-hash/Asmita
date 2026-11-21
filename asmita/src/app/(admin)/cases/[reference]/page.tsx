@@ -35,6 +35,14 @@ const SIGNED_TEMPLATE_REFUSALS: Record<string, string> = {
     "The template the survivor signed is inactive or no longer legally reviewed. Sending is refused. Nothing was sent.",
 };
 
+// WP32: what a partner's outcome report means, in the console's words.
+const PARTNER_OUTCOME_LABELS: Record<string, string> = {
+  removed: "Removed",
+  blocked_reupload: "Blocked re-upload",
+  not_found: "Not found",
+  not_our_content: "Not their content",
+};
+
 export default async function AdminCasePage({ params }: { params: Promise<{ reference: string }> }) {
   const auth = await requireAdminPermission("cases:read");
   if (!auth.ok) {
@@ -188,6 +196,33 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
             <VoidSignatureButton caseId={detail.caseId} label="Void advisory signature" />
           )}
         </div>
+      )}
+
+      <h2 className="mt-8">Partner-reported outcomes</h2>
+      {detail.partnerOutcomes.length === 0 ? (
+        <p className="muted mt-3 text-sm">No partner has reported an outcome on this case.</p>
+      ) : (
+        <ul className="mt-4 grid gap-3 text-sm">
+          {detail.partnerOutcomes.map((report) => (
+            <li className="a-card p-4" key={report.id}>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p>
+                  <span className="font-medium">{PARTNER_OUTCOME_LABELS[report.outcome] ?? report.outcome}</span>
+                  {" "}· <span className="font-mono">{report.partnerDomain}</span> ({report.partnerName})
+                </p>
+                <p className="muted">{formatIst(report.createdAt)}</p>
+              </div>
+              <p className="mt-2 text-xs">
+                {report.fingerprintId
+                  ? `About fingerprint ${detail.fingerprints.find((hash) => hash.id === report.fingerprintId)?.digestPrefix ?? "no longer on this case"}…`
+                  : "About a page on their own domain"}
+                {report.matchedLinkId &&
+                  ` · matched reported link ${detail.links.findIndex((link) => link.id === report.matchedLinkId) + 1 || "no longer on this case"}`}
+              </p>
+              {report.note && <p className="muted mt-2 text-xs">{report.note}</p>}
+            </li>
+          ))}
+        </ul>
       )}
 
       {advisoryCase.length > 0 && (

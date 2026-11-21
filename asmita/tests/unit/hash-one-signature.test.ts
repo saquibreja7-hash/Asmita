@@ -21,11 +21,15 @@ const m = vi.hoisted(() => ({
   dispatchCreateMany: vi.fn(),
   sendNoticeDraft: vi.fn(),
   getCaseForUser: vi.fn(),
+  caseFindMany: vi.fn(),
+  consentFindMany: vi.fn(),
+  feedEventFindMany: vi.fn(),
+  feedEventCreateMany: vi.fn(),
 }));
 
-vi.mock("@/lib/db", () => ({
-  db: {
-    case: { findUnique: m.caseFindUnique, updateMany: m.caseUpdateMany },
+vi.mock("@/lib/db", () => {
+  const db = {
+    case: { findUnique: m.caseFindUnique, updateMany: m.caseUpdateMany, findMany: m.caseFindMany },
     platform: { count: m.platformCount, findMany: m.platformFindMany, findUnique: m.platformFindUnique },
     noticeTemplate: { findFirst: m.templateFindFirst },
     hashSubmission: {
@@ -37,8 +41,13 @@ vi.mock("@/lib/db", () => ({
       findUnique: m.hashSubmissionFindUnique,
     },
     hashDispatch: { findUnique: m.dispatchFindUnique, count: m.dispatchCount, createMany: m.dispatchCreateMany },
-  },
-}));
+    // WP32: reviewing a hash syncs the partner feed in the same transaction.
+    partnerShareConsent: { findMany: m.consentFindMany },
+    partnerFeedEvent: { findMany: m.feedEventFindMany, createMany: m.feedEventCreateMany },
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
+  };
+  return { db };
+});
 vi.mock("@/lib/csrf", () => ({ verifyCsrfRequest: () => true }));
 vi.mock("@/lib/auth/middleware", () => ({ requireSession: async () => ({ ok: true, session: { sub: "user-1", emailHash: "h" } }) }));
 vi.mock("@/lib/auth/require-admin", () => ({ requireAdminPermission: async () => ({ ok: true, session: { sub: "admin-1" } }) }));
@@ -114,6 +123,11 @@ beforeEach(() => {
   }));
   m.hashUpdate.mockReset().mockResolvedValue(approvedRow);
   m.hashSubmissionFindUnique.mockReset().mockResolvedValue({ caseId: "case-1", id: "hash-1", status: "PENDING_REVIEW", flagReason: null });
+  // WP32: the approval's feed sync finds nothing to share by default.
+  m.caseFindMany.mockReset().mockResolvedValue([]);
+  m.consentFindMany.mockReset().mockResolvedValue([]);
+  m.feedEventFindMany.mockReset().mockResolvedValue([]);
+  m.feedEventCreateMany.mockReset().mockResolvedValue({ count: 0 });
   m.dispatchFindUnique.mockReset().mockResolvedValue(null);
   m.dispatchCount.mockReset().mockResolvedValue(0);
   m.dispatchCreateMany.mockReset().mockResolvedValue({ count: 1 });

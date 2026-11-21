@@ -31,69 +31,84 @@ vi.mock("@/lib/db", () => {
   const project = (row: Record<string, unknown>, select?: Record<string, boolean>) =>
     select ? Object.fromEntries(Object.keys(select).map((key) => [key, row[key]])) : { ...row };
   const rows = () => state.rows as Array<Record<string, unknown> & { id: string; caseId: string; status: string; submittedAt: Date }>;
-  return {
-    db: {
-      hashSubmission: {
-        findMany: vi.fn(async ({ where = {}, select }: { where?: FindWhere; select?: Record<string, boolean> }) =>
-          rows()
-            .filter(
-              (row) =>
-                (where.caseId === undefined || row.caseId === where.caseId) &&
-                (where.status?.not !== undefined ? row.status !== where.status.not : true) &&
-                (where.id?.in ? where.id.in.includes(row.id) : true),
-            )
-            .sort((a, b) => +a.submittedAt - +b.submittedAt)
-            .map((row) => project(row, select)),
-        ),
-        findUnique: vi.fn(async ({ where, select }: { where: { id: string }; select?: Record<string, boolean> }) => {
-          const row = rows().find((r) => r.id === where.id);
-          return row ? project(row, select) : null;
-        }),
-        update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-          const row = rows().find((r) => r.id === where.id);
-          if (row) Object.assign(row, data);
-          return row ? { ...row } : null;
-        }),
-        updateMany: vi.fn(async ({ where, data }: { where: { id?: { in?: string[] }; status?: string }; data: Record<string, unknown> }) => {
-          const matching = rows().filter(
-            (row) => (where.id?.in ? where.id.in.includes(row.id) : true) && (where.status ? row.status === where.status : true),
-          );
-          for (const row of matching) Object.assign(row, data);
-          return { count: matching.length };
-        }),
-      },
-      case: {
-        findUnique: vi.fn(async ({ where, select }: { where: { id: string }; select?: Record<string, boolean> }) => {
-          if (where.id !== state.caseRow.id) return null;
-          return select ? Object.fromEntries(Object.keys(select).map((key) => [key, state.caseRow[key]])) : { ...state.caseRow };
-        }),
-        updateMany: vi.fn(async ({ where, data }: { where: { id: string; signedHashAdvisoryPdf?: string | null }; data: Record<string, unknown> }) => {
-          const applies =
-            where.id === state.caseRow.id &&
-            (where.signedHashAdvisoryPdf === undefined ||
-              (where.signedHashAdvisoryPdf === null ? state.caseRow.signedHashAdvisoryPdf === null : true));
-          if (applies) Object.assign(state.caseRow, data);
-          return { count: applies ? 1 : 0 };
-        }),
-      },
-      noticeTemplate: {
-        findFirst: vi.fn(async ({ where }: { where: { templateType: string } }) => state.templates[where.templateType] ?? null),
-        findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
-          Object.values(state.templates).find((template) => template.id === where.id) ?? null,
-        ),
-      },
-      platform: {
-        findUnique: vi.fn(async ({ where }: { where: { id: string } }) => state.platforms[where.id] ?? null),
-      },
-      hashDispatch: {
-        findUnique: vi.fn(async () => null),
-        createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
-          state.dispatchRows.push(...data);
-          return { count: data.length };
-        }),
-      },
+  const db = {
+    hashSubmission: {
+      findMany: vi.fn(async ({ where = {}, select }: { where?: FindWhere; select?: Record<string, boolean> }) =>
+        rows()
+          .filter(
+            (row) =>
+              (where.caseId === undefined || row.caseId === where.caseId) &&
+              (where.status?.not !== undefined ? row.status !== where.status.not : true) &&
+              (where.id?.in ? where.id.in.includes(row.id) : true),
+          )
+          .sort((a, b) => +a.submittedAt - +b.submittedAt)
+          .map((row) => project(row, select)),
+      ),
+      findUnique: vi.fn(async ({ where, select }: { where: { id: string }; select?: Record<string, boolean> }) => {
+        const row = rows().find((r) => r.id === where.id);
+        return row ? project(row, select) : null;
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        const row = rows().find((r) => r.id === where.id);
+        if (row) Object.assign(row, data);
+        return row ? { ...row } : null;
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: { id?: { in?: string[] }; status?: string }; data: Record<string, unknown> }) => {
+        const matching = rows().filter(
+          (row) => (where.id?.in ? where.id.in.includes(row.id) : true) && (where.status ? row.status === where.status : true),
+        );
+        for (const row of matching) Object.assign(row, data);
+        return { count: matching.length };
+      }),
     },
+    case: {
+      findUnique: vi.fn(async ({ where, select }: { where: { id: string }; select?: Record<string, boolean> }) => {
+        if (where.id !== state.caseRow.id) return null;
+        return select ? Object.fromEntries(Object.keys(select).map((key) => [key, state.caseRow[key]])) : { ...state.caseRow };
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: { id: string; signedHashAdvisoryPdf?: string | null }; data: Record<string, unknown> }) => {
+        const applies =
+          where.id === state.caseRow.id &&
+          (where.signedHashAdvisoryPdf === undefined ||
+            (where.signedHashAdvisoryPdf === null ? state.caseRow.signedHashAdvisoryPdf === null : true));
+        if (applies) Object.assign(state.caseRow, data);
+        return { count: applies ? 1 : 0 };
+      }),
+      // WP32: reviewing a hash syncs the partner feed, which reads the case
+      // list for the adult check and the case references.
+      findMany: vi.fn(async ({ where, select }: { where?: { id?: { in?: string[] } }; select?: Record<string, boolean> }) =>
+        (where?.id?.in ?? []).includes(state.caseRow.id as string)
+          ? [project(state.caseRow, select)]
+          : [],
+      ),
+    },
+    noticeTemplate: {
+      findFirst: vi.fn(async ({ where }: { where: { templateType: string } }) => state.templates[where.templateType] ?? null),
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
+        Object.values(state.templates).find((template) => template.id === where.id) ?? null,
+      ),
+    },
+    platform: {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => state.platforms[where.id] ?? null),
+    },
+    hashDispatch: {
+      findUnique: vi.fn(async () => null),
+      createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
+        state.dispatchRows.push(...data);
+        return { count: data.length };
+      }),
+    },
+    // WP32: reviewing a hash syncs the partner feed in the same transaction.
+    // This suite signs no partner-sharing agreement, so the feed reads stay
+    // empty and no event is ever appended.
+    partnerShareConsent: { findMany: vi.fn(async () => []) },
+    partnerFeedEvent: {
+      findMany: vi.fn(async () => []),
+      createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => ({ count: data.length })),
+    },
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
   };
+  return { db };
 });
 
 vi.mock("@/lib/csrf", () => ({ verifyCsrfRequest: () => true }));

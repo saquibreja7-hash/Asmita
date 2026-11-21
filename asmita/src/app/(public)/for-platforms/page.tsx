@@ -104,6 +104,10 @@ const faqs = [
     a: "PDQ for images. It is the open-source perceptual hash published by Meta, which many platforms already run, for example through Hasher-Matcher-Actioner. Fingerprints for video (vPDQ) are being added.",
   },
   {
+    q: "Do you have an API we can integrate with?",
+    a: "Yes. Fingerprints arrive through an authenticated JSON feed you poll with a cursor, and you report outcomes back to the same API. The integration guide is docs/product/partner-api.md in Asmita's public repository, and it comes with a ready-made exchange adapter for platforms that run Hasher-Matcher-Actioner (docs/product/partner-hma-adapter/). Ask us for a partner key when you are onboarded.",
+  },
+  {
     q: "What if a fingerprint matches something that is not abuse?",
     a: "Perceptual hashes find images that look alike, so a person should review a match before acting on it. Tell us about any false match and we will review the fingerprint and withdraw it if needed.",
   },

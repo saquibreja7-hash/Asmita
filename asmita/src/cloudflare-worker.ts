@@ -1,5 +1,6 @@
 import app from "vinext/server/fetch-handler";
 import { withPageCsp } from "./lib/csp";
+import { crossSiteApiRequestRefusal } from "./lib/fetch-metadata";
 import { requestScope } from "./lib/request-scope";
 
 type WorkerEnv = {
@@ -44,6 +45,11 @@ const worker = {
       url.hostname = "meriasmita.org";
       return Response.redirect(url.toString(), 308);
     }
+    // Fetch Metadata guard (web audit S13): src/proxy.ts applies the same
+    // check inside the app pipeline; the Worker repeats it so production
+    // never depends on that running first.
+    const refusal = crossSiteApiRequestRefusal(request);
+    if (refusal) return refusal;
     const { request: appRequest, policy } = withPageCsp(request, url.pathname);
     // One scope per request: connection-backed clients must not be shared.
     return requestScope.run(new Map(), async () => {
