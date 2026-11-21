@@ -27,6 +27,7 @@
     "deploy:production": "npm run build:vinext && node scripts/prepare-production-wrangler.mjs && wrangler deploy --config dist/server/wrangler.production.json"
   },
   "dependencies": {
+    "@contentauth/c2pa-wasm": "0.15.1",
     "@contentauth/c2pa-web": "0.17.1",
     "@fontsource/noto-sans-devanagari": "^5.2.8",
     "@fontsource/noto-serif-devanagari": "^5.2.10",
