@@ -396,12 +396,22 @@ export async function latestPublishedScorecard(): Promise<ScorecardSnapshot | nu
 }
 
 /** Whether the public scorecard exists at all — gates the nav link and the
- *  sitemap entry, which stay absent until the first publish. */
+ * sitemap entry, which stay absent until the first publish. */
 export async function hasPublishedScorecard(): Promise<boolean> {
   if (devNoDb()) {
     return scorecardSnapshots.some((entry) => entry.status === "PUBLISHED");
   }
-  const { db } = await import("@/lib/db");
-  const row = await db.scorecardSnapshot.findFirst({ where: { status: "PUBLISHED" }, select: { id: true } });
-  return row != null;
+  try {
+    const { db } = await import("@/lib/db");
+    const row = await db.scorecardSnapshot.findFirst({ where: { status: "PUBLISHED" }, select: { id: true } });
+    return row != null;
+  } catch {
+    // This check runs in AppShell on every public page render, so it must be
+    // total: an unreachable or not-yet-provisioned database (the e2e harness
+    // starts the dev server before global-setup provisions it) must not take
+    // pages down. No database, no proof of a publish — the nav link and the
+    // sitemap entry stay hidden, exactly like before the first publish. Same
+    // rule as SupporterLogos' partner lookup.
+    return false;
+  }
 }

@@ -944,11 +944,11 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 
 ### WP77. Fix the organization pages' full verify (app) — 2026-11-21
 
-**Status: complete. All checks passed** (`check.sh`, both packages, Node 22), and this machine also ran the full chromium Playwright suite and the worker smoke green.
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22), and this machine also ran the full chromium Playwright suite and the worker smoke green — twice over: once on the WP56–57 tree the failed verify had cloned, and again on the tree after WP58 landed on the branch mid-verify and the two WP77 commits were rebased onto it.
 
-WP77 is a repair package for this branch, defined outside this spec like the other web-audit WPs: the organization pages (`asmita/docs/org/spec.md`, WP56–57, built on a machine without Playwright) failed the full verify with `DONE E2E_RC=1 SMOKE_RC=1` and no test ever running. The full record — each cause, the reproduction, the fix, and every decision — is the WP77 section of `asmita/docs/org/progress.md`. No `crawler/` source changed.
+WP77 is a repair package for this branch, defined outside this spec like the other web-audit WPs: the organization pages (`asmita/docs/org/spec.md`, WP56–58, built on a machine without Playwright) failed the full verify with `DONE E2E_RC=1 SMOKE_RC=1` and no Playwright test ever running. The verify cloned the branch before WP58 landed — night-org.sh's wait condition only grepped the branch's progress.md for the string "WP58", which the WP56/57 notes already mentioned, and `logs/verify-org1/head.txt` still names the WP57 tip — so the first repair round could only see WP56–57. WP58 reached `origin/feat/org-pages` around 22:25 UTC; the first round's push was rejected by it and the driver opened a second round, which rebased both WP77 commits onto WP58 and re-verified everything below on the integrated tree. The full record — each cause, the reproduction, the fix, and every decision — is the WP77 section of `asmita/docs/org/progress.md`. No `crawler/` source changed.
 
-**What was built** — seven fixes, each in the code or in the new specs where the defect was:
+**What was built** — eight fixes, each in the code or in the new specs where the defect was:
 
 1. The verify's one-cause-wide failure: WP57's Supporters strip queried `OrgPartner` on every render of `/`, and Playwright's webServer polls `/` before global-setup provisions the throwaway database, so the run aborted at its 120 s timeout before global-setup ran — leaving the database empty for the worker smoke too. `SupporterLogos` now falls back to the static Cloudflare/Sarvam strip when the partner query fails.
 2. `LanguageToggle` wrote `asmita_lang` from a mount effect (StrictMode's double run defeats the old mounted guard), stamping each page's server locale over the cookie mid-navigation — the `/partners/[type]` pages alternated en/hi under a hi cookie. The write is now an effect keyed on an explicit choice state that stays null until a click.
@@ -957,16 +957,25 @@ WP77 is a repair package for this branch, defined outside this spec like the oth
 5. The footer newsletter form put an email input on `/minor-support`, breaking the minor path's collects-nothing guarantee; AppShell/Footer take `withoutNewsletter` and the minor page sets it.
 6. The five WP56 org tables had no row-level security (the gap WP57's notes flagged; `database-hardening.spec` enforces it for every table): additive migration `20261122060000_org_tables_rls`, the house `asmita_app_all` policy.
 7. The two new specs' own defects: ambiguous locators (volunteer email `{ exact: true }`; the `/newsletter` signup scoped to `<main>`) and a missing teardown that left a partner public and would have flipped the Supporters strip for `smoke.spec`/`chat.spec` later in the same run.
+8. Second round, WP58's own instance of cause 1: WP58's `AppShell` gates the scorecard nav link behind `hasPublishedScorecard()`, run on every public page render, and its version went straight to Prisma with no failure path whenever `DATABASE_URL` was set — the same unprovisioned-database 500s in the Playwright webServer's startup polls of `/`, reborn one WP later, and it would have failed the worker smoke the same way on an empty database. `hasPublishedScorecard` is now a total check: an unreachable or not-yet-provisioned database answers "not published" and the nav link and sitemap entry stay hidden (`src/lib/scorecard-snapshots.ts`), the same rule as `SupporterLogos`' fallback. WP58's own `ScorecardSnapshot` migration already carried the house RLS policy — checked against `database-hardening.spec`'s every-table sweep, no change needed.
 
-**Tests** (all run on this machine, Node 22 in containers, all passing)
+**Tests** (all run on this machine, Node 22 in containers, all passing; first round on the WP56–57 tree, second round with WP58 integrated)
 
-- e2e-some.sh, the two org specs: 9/9. e2e-some.sh, the full chromium suite: 71 tests — 67 passed, 4 skipped (mobile-project skips), 0 failed, two consecutive green runs after the last fix; the runs before them isolated the causes (26 tests on the email-name collision, then the RLS/minor-page trio).
-- Worker smoke through the Node 22 helper: `npm run build:vinext` + `node scripts/prepare-production-wrangler.mjs` + `SMOKE_CRAWLER=1 node scripts/worker-smoke.mjs` against a local Postgres 17 with all migrations and the seed — passed.
-- Package totals from the final `check.sh` run on the committed tree: `crawler` — lint, type-check, 58 test files / 628 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors, type-check clean, `prisma validate` ok, 172 test files / 1574 tests all passed.
+- First round: the two org specs 9/9; full chromium suite 71 tests — 67 passed, 4 skipped (mobile-project skips), 0 failed, two consecutive green runs; the runs before them isolated the causes (26 tests on the email-name collision, then the RLS/minor-page trio).
+- Second round: the three org specs 14/14 (`org-advocacy.spec.ts` had never been run anywhere — WP58's machine has no Playwright); full chromium suite 76 tests — 72 passed, 4 skipped, 0 failed, on the first run after the last fix.
+- Worker smoke through the Node 22 helper, both rounds: `npm run build:vinext` + `node scripts/prepare-production-wrangler.mjs` + `SMOKE_CRAWLER=1 node scripts/worker-smoke.mjs` against a local Postgres 17 with all migrations and the seed — passed (second round: 49 migrations, both new ones applied, seed executed).
+- Package totals from the final `check.sh` run on the committed tree: `crawler` — lint, type-check, 58 test files / 628 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors, type-check clean, `prisma validate` ok, 174 test files / 1596 tests all passed (WP58's two scorecard suites included).
 
 **Not done or not verified**
 
 - One transient ECONNRESET (`org-outreach`'s job test, `GET /api/csrf` under the loaded dev server) appeared in exactly one run and in no other; not changed, the helper has no retry.
+- One second-round transient of the same family: the `/policy` test's `getByRole("heading")` poll stalled until the test timeout while the heading sat visible in the accessibility tree — the cold dev server compiling WP58's routes for the first time under 14 parallel workers on a slow container filesystem ("Slow filesystem detected" in its log). It passed in an isolated rerun (5/5) and inside the full-suite run; no code change.
 - One full run was killed mid-flight by another lane's e2e-some.sh on this host (the harness's throwaway `pg-some` container is shared between lanes and its start/remove sit outside the harness lock); re-run, infrastructure only.
 - The n22 worker-smoke run needed a Postgres 17 inside the same Node 22 container (PGDG; n22 has no host network and the migrations require 17 for MAINTAIN). The e2e suites ran through e2e-some.sh unchanged.
 - Root `CLAUDE.md` was not updated (no crawler behaviour changed; protected agent-instruction file).
+
+**Decisions (second round)**
+
+- Rebased the two WP77 commits onto WP58 rather than merging, keeping the lane linear like every other lane; both commits were still unpushed, so nothing outside this branch was rewritten.
+- Updated this existing WP77 entry in place instead of appending a new one: the work package both forbids appending to this file and requires the WP77 entry to reflect the completed state.
+- `org-advocacy.spec`'s published snapshot is deliberately left in place at the end of its file (no teardown): the file's last test depends on the publish, and no other spec in the suite asserts the nav or sitemap state a published snapshot changes — verified by search and by the full-suite run on the shared throwaway database.

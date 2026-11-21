@@ -196,9 +196,12 @@ Branch: `feat/org-pages`. Built 21 November 2026. Builds on WP56's content syste
 12. **The e2e seeds a DRAFT directly in SQL** (like the cron leaves) and publishes through the real admin API, so the "admin publishes a seeded draft snapshot" journey exercises the real publish path without needing real complaint data in the throwaway database.
 13. **Hindi translations** for the 91 new keys are machine translations by me, under the existing `org.*` review entry (which now names WP58).
 14. **Design audit:** `impeccable detect` ran on all six surfaces — 0 errors, advisory font-size notes that fire identically on committed WP56/57 pages (verified house pattern, kept; /policy priority cards raised to the documented 20px/600 card title). Programmatic checks over the rendered pages: no heading skips, no stripes/shadows, one primary button per screen (fixing a pre-existing double-primary on /research), and the scorecard table stacks on phones instead of forcing a 900px width.
+
+---
+
 ## WP77 — full-verify fixes for the organization pages (branch feat/org-pages)
 
-Built 20–21 November 2026. WP77 is a repair package defined outside docs/org/spec.md (like the web-audit ones): the organization pages (WP56–57; WP58 is not on this branch) failed the full verify on the verify machine — `DONE E2E_RC=1 SMOKE_RC=1` — with no Playwright test ever running. Each cause below was reproduced on this machine, found in the code or the new specs, and fixed there. No existing assertion was weakened, skipped or deleted; the core specs' files are untouched.
+Built 20–21 November 2026. WP77 is a repair package defined outside docs/org/spec.md (like the web-audit ones): the organization pages (WP56–57 in the first round; WP58 landed on the branch mid-verify and was integrated in the second round below) failed the full verify on the verify machine — `DONE E2E_RC=1 SMOKE_RC=1` — with no Playwright test ever running. Each cause below was reproduced on this machine, found in the code or the new specs, and fixed there. No existing assertion was weakened, skipped or deleted; the core specs' files are untouched.
 
 ### What was failing, and the fix
 
@@ -239,3 +242,31 @@ None new (WP56/57's list is unchanged).
 3. **The cookie write lives in an effect keyed on an explicit choice state** rather than in the click handler: the react-compiler lint rule forbids mutating outer values (document.cookie) in handlers, and an effect keyed on the locale alone reintroduces the mount-time write under StrictMode.
 4. **org-partners' teardown uses the existing visibility API** (no partner delete exists, by WP57's design); the test still asserts the full public-partner journey before undoing it.
 5. **The worker smoke ran against a Postgres 17 installed inside the same Node 22 container** (PGDG repo; n22 has no host network and the migrations require 17 for MAINTAIN). The e2e suites ran through e2e-some.sh unchanged.
+
+### Second round — WP58 lands on the branch mid-verify (21 November 2026)
+
+verify-org1 cloned the branch before WP58 landed: night-org.sh's wait condition greps the branch's progress.md on origin for the string "WP58", which the WP56/57 notes already mentioned, so it did not wait for WP58 itself. The verify's head.txt still names 8ffc90e (the WP57 tip); WP58 was still being built on win-desktop and reached `origin/feat/org-pages` around 22:25 UTC. The push was rejected and the driver opened a second round. The two WP77 commits were rebased onto WP58: one content conflict, in this file's own WP58/WP77 sections, plus clean auto-merges in AppShell.tsx and the two i18n dictionaries. The integrated tree was then re-verified from scratch.
+
+What the second round found and fixed:
+
+8. **WP58's AppShell check had the same class of bug as the Supporters strip (fix 1 above).** WP58 gates the scorecard nav link behind `hasPublishedScorecard()`, run in AppShell on every public page render — and with `DATABASE_URL` set it went straight to Prisma with no failure path. The Playwright webServer polls `/` before global-setup provisions the e2e database, so every poll would have 500'd until the 120 s timeout killed the run before any test, exactly the WP57 failure again one WP later — and an unprovisioned database would have failed the worker smoke the same way. Fix: `hasPublishedScorecard` is now a total check (`src/lib/scorecard-snapshots.ts`) — an unreachable or not-yet-provisioned database answers "not published", the nav link and the sitemap entry stay hidden, exactly like before the first publish, the same rule as `SupporterLogos`' fallback. `latestPublishedScorecard` keeps strict behaviour: it backs the scorecard page's own content, like every other DB-backed content page.
+9. **WP58's `ScorecardSnapshot` migration already carried the house RLS policy** (`20261122060000_scorecard_snapshots` ends with the same ENABLE/POLICY pair as every other table) — verified against database-hardening.spec's every-table sweep; no change needed.
+
+What the second round verified on this machine (Node 22 in containers, throwaway Postgres 17)
+
+- Unit checks on the integrated tree: lint 0 errors, type-check clean, `prisma validate` ok, 174 test files / 1596 tests (WP58's `org-scorecard.test.ts` and `org-scorecard-readonly.test.ts` included) — all passed.
+- The three org specs via e2e-some.sh (`org-advocacy.spec.ts` had never been run anywhere — WP58's machine has no Playwright): all 14 pass, including inside the full-suite run below.
+- The full chromium Playwright suite via e2e-some.sh: 76 tests — 72 passed, 4 skipped (mobile-project skips), 0 failed.
+- Worker smoke through the Node 22 helper (`npm run build:vinext` + `node scripts/prepare-production-wrangler.mjs` + `SMOKE_CRAWLER=1 node scripts/worker-smoke.mjs`) against a Postgres 17 inside the same container, all 49 migrations and the seed — passed.
+- Full checks (`check.sh`, both packages): ALL CHECKS PASSED.
+
+Not done or not verified (second round)
+
+- One transient in the first second-round org run: the /policy test's `getByRole("heading", { name: "Our priorities" })` poll stalled until the test timeout while the heading sat visible in the accessibility tree — the cold dev server was compiling WP58's routes for the first time under 14 parallel workers on a slow container filesystem ("Slow filesystem detected" in the server log). It passed in an isolated rerun (5/5) and inside the full-suite run; no code changed, same family as the first round's ECONNRESET.
+
+Decisions made on my own (second round)
+
+1. **Rebased the two WP77 commits onto WP58** rather than merging — the lane stays linear like every other lane, and both commits were unpushed, so nothing outside this branch was rewritten.
+2. **Updated the existing WP77 entry in crawler/docs/v2-progress.md in place** — the work package both forbids appending to that file and requires the WP77 entry to reflect the completed state.
+3. **org-advocacy.spec keeps its published snapshot at the end of its file** (no teardown): the file's last test depends on the publish, and no other spec in the suite asserts the nav or sitemap state a published snapshot changes (searched; also confirmed by the full-suite run on the shared throwaway database).
+4. **The static XML sitemap keeps its WP58 shape** (no scorecard URL): that decision is WP58's own (see its item 10 above) and re-verified — nothing in the verify exercises it.
