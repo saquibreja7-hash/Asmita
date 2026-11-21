@@ -1430,3 +1430,38 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 @media (prefers-reduced-motion: reduce) {
   .notice-flow-steps li, .notice-flow-num { transition: none; }
 }
+
+/* Tech take on the takedown scene: a dark teal stage with projected HUD labels. */
+.notice-flow-stage.tech.is-animated {
+  position: relative;
+  height: clamp(300px, 40vw, 480px);
+  border: 0;
+  background: #07302d;
+}
+.flow-hud { position: absolute; inset: 0; pointer-events: none; }
+.flow-hud > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 4px 10px;
+  border: 1px solid rgb(159 227 216 / 0.45);
+  border-radius: var(--radius-box);
+  background: rgb(7 48 45 / 0.78);
+  color: #d9f4ef;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.flow-hud > span.is-on { opacity: 1; }
+.flow-hud > span.is-gold { border-color: rgb(242 210 122 / 0.6); color: #f6e3a6; }
+.flow-hud > span.is-coral { border-color: rgb(255 148 115 / 0.7); color: #ffcdbb; }
+.flow-hud > span.is-mint { border-color: rgb(159 227 216 / 0.8); color: #c7f1ea; }
+@media (max-width: 640px) { .flow-hud > span { font-size: 0.6875rem; padding: 3px 8px; } }
+/* On phones keep only the labels that carry the story. */
+@media (max-width: 640px) {
+  .flow-hud > span[data-anchor="hub"],
+  .flow-hud > span[data-anchor="platforms"] { display: none; }
+}

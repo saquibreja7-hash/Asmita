@@ -8,7 +8,7 @@ import { t } from "@/lib/i18n";
 import { PostCard } from "@/components/org/PostCard";
 import { listPublishedOrgPosts } from "@/lib/org-posts";
 import { HomeHelpBand, HomeIssueSection, HomePlatformsBand } from "./home-sections";
-import { NoticeFlow } from "./NoticeFlow";
+import { NoticeFlowTech } from "./NoticeFlowTech";
 
 /*
  * Home: the organization's front page. Who Meri Asmita is, help within the
@@ -230,7 +230,15 @@ export default async function HomePage() {
                 {say("How a takedown works", "हटवाने की प्रक्रिया कैसे चलती है")}
               </h2>
             </div>
-            <NoticeFlow
+            <NoticeFlowTech
+              labels={{
+                device: say("PDQ fingerprint · on your device", "PDQ फ़िंगरप्रिंट · आपके डिवाइस पर"),
+                hub: say("Asmita drafts the notice", "अस्मिता सूचना तैयार करती है"),
+                platforms: say("Platforms", "प्लेटफ़ॉर्म"),
+                scanning: say("Crawler scanning", "क्रॉलर जाँच रहा है"),
+                match: say("Match · distance ≤ 31", "मेल · दूरी ≤ 31"),
+                removed: say("Taken down", "हटाया गया"),
+              }}
               label={say(
                 "Animation: a link becomes a signed notice, the platform removes the content, then our crawler finds a re-upload by its fingerprint and it is removed again.",
                 "एनिमेशन: एक लिंक हस्ताक्षरित सूचना बनता है, प्लेटफ़ॉर्म सामग्री हटाता है, फिर हमारा क्रॉलर फ़िंगरप्रिंट से दोबारा अपलोड पकड़ता है और उसे फिर हटाया जाता है।",
