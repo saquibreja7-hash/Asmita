@@ -21,6 +21,7 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/issue": { label: "तस्वीरों के ज़रिए दुर्व्यवहार" },
   "/glossary": { label: "शब्दावली" },
   "/who-we-help": { label: "हम किसकी मदद करते हैं" },
+  "/help": { label: "मदद और शिकायत", note: "मदद के सभी रास्ते, और शिकायत कैसे होती है" },
   "/resources": { label: "संसाधन" },
   "/resources/guides": { label: "व्यावहारिक मार्गदर्शिकाएँ" },
   "/resources/directory": { label: "सहायता सूची", note: "सार्वजनिक सेवाएँ; मौजूदा उपलब्धता जाँचें" },

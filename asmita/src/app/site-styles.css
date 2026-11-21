@@ -1364,3 +1364,8 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 .start-minor-arrow { margin-left: auto; flex: none; color: var(--text-muted); transition: transform 0.2s ease; }
 .start-minor:hover { border-color: var(--brand); }
 .start-minor:hover .start-minor-arrow { transform: translateX(4px); color: var(--brand); }
+
+/* Four steps beside a heading column: two by two, never three plus one. */
+@media (min-width: 640px) {
+  .org-steps-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

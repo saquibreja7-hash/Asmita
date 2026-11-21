@@ -14,6 +14,7 @@ export const siteMap: SiteGroup[] = [
   {
     title: "Get help",
     links: [
+      { href: "/help", label: "Help and filing", note: "Every way to get help, and how a complaint works" },
       { href: "/get-help", label: "Get help", note: "Situations, steps, and tools" },
       { href: "/start", label: "Start a case", note: "Begin a confidential report" },
       { href: "/eligibility", label: "Check eligibility" },
