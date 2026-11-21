@@ -1049,3 +1049,269 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   outline: 2px solid var(--color-brand-teal);
   outline-offset: 2px;
 }
+
+/* ── Organization pages ────────────────────────────────────────────
+   One structure for get-involved, volunteer, careers, partners and news:
+   a split hero, then sections separated by a hairline rather than big
+   empty bands. Headings sit on the left with their lede; lists are divided
+   rows, not grids of equal cards; steps are an ordered row. */
+
+.org-hero {
+  padding-top: clamp(40px, 6vw, 88px);
+  padding-bottom: clamp(40px, 5vw, 72px);
+}
+
+.org-hero .page-title { text-wrap: balance; }
+
+.org-hero-lede {
+  margin-top: 20px;
+  max-width: 34rem;
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.org-section {
+  padding-top: clamp(40px, 5vw, 72px);
+  padding-bottom: clamp(40px, 5vw, 72px);
+  border-top: 1px solid var(--line);
+}
+
+/* The first section under the hero carries no rule of its own. */
+.org-section-first { border-top: 0; padding-top: 0; }
+
+.org-head {
+  max-width: 40rem;
+  margin-bottom: clamp(24px, 3vw, 40px);
+}
+
+.org-head h2 { text-wrap: balance; }
+
+.org-head p {
+  margin-top: 12px;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+/* Side-by-side heading and content on wide screens (forms, FAQ, short text). */
+.org-aside {
+  display: grid;
+  gap: clamp(24px, 3vw, 40px);
+}
+
+@media (min-width: 1024px) {
+  .org-aside { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 64px; }
+  .org-aside > .org-head { margin-bottom: 0; }
+  .org-aside-sticky { position: sticky; top: 112px; align-self: start; }
+}
+
+/* Divided rows: icon, title, one line of body, an arrow when it is a link. */
+.org-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+@media (min-width: 900px) {
+  .org-rows-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 48px; }
+}
+
+.org-rows > li { border-bottom: 1px solid var(--line); }
+.org-rows-span { grid-column: 1 / -1; }
+
+.org-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  column-gap: 20px;
+  row-gap: 6px;
+  align-items: start;
+  padding: 24px 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.org-row-icon {
+  grid-row: 1 / span 3;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-box);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.org-row-title {
+  font-size: 1.1875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+  transition: color 0.15s ease;
+}
+
+.org-row-body {
+  grid-column: 2;
+  max-width: 60ch;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.org-row-meta {
+  grid-column: 2;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.org-row-arrow {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+  color: var(--text-muted);
+  transition: transform 0.2s ease, color 0.15s ease;
+}
+
+a.org-row:hover .org-row-title,
+a.org-row:focus-visible .org-row-title { color: var(--brand-strong); }
+a.org-row:hover .org-row-arrow,
+a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: translateX(4px); }
+
+.org-row-links { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 6px; }
+
+/* Ordered steps in one row; the number carries the sequence. */
+.org-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 32px 32px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  counter-reset: org-step;
+}
+
+.org-steps > li {
+  counter-increment: org-step;
+  padding-top: 20px;
+  border-top: 2px solid var(--brand);
+}
+
+.org-steps > li::before {
+  content: counter(org-step);
+  display: block;
+  margin-bottom: 12px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-strong);
+}
+
+.org-steps h3 { font-size: 1.0625rem; font-weight: 600; line-height: 1.35; color: var(--ink); }
+.org-steps p { margin-top: 6px; font-size: 0.9375rem; line-height: 1.6; color: var(--text); }
+
+/* Two plain columns of checked lists (offer / ask). */
+.org-columns {
+  display: grid;
+  gap: 40px 64px;
+}
+
+@media (min-width: 900px) { .org-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.org-columns h2,
+.org-columns h3 { font-size: 1.25rem; font-weight: 600; line-height: 1.3; color: var(--ink); }
+
+.org-check {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.org-check > li {
+  display: flex;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.org-check > li > svg { flex: none; margin-top: 4px; color: var(--brand); }
+
+/* A quiet note in the flow: a tinted box with a leading icon, never a side bar. */
+.org-note {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-top: clamp(28px, 3vw, 40px);
+  padding: 18px 20px;
+  max-width: 48rem;
+  border-radius: var(--radius-box);
+  background: var(--brand-soft);
+  color: var(--ink);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.org-note > svg { flex: none; margin-top: 2px; color: var(--brand-strong); }
+.org-note strong { display: block; font-weight: 600; }
+
+/* Empty state: one compact bordered panel, left-aligned, one next action. */
+.org-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 32px;
+  padding: 24px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--surface-muted);
+}
+
+.org-empty h2,
+.org-empty h3 { font-size: 1.25rem; font-weight: 600; line-height: 1.3; color: var(--ink); }
+.org-empty p { margin-top: 4px; max-width: 52ch; font-size: 1rem; line-height: 1.6; color: var(--text); }
+
+/* Closing band: heading and lede on the left, actions on the right. */
+.org-cta {
+  background: var(--brand-soft);
+}
+
+.org-cta-inner {
+  display: grid;
+  gap: 24px 48px;
+  align-items: center;
+  padding-top: clamp(48px, 6vw, 80px);
+  padding-bottom: clamp(48px, 6vw, 80px);
+}
+
+@media (min-width: 900px) { .org-cta-inner { grid-template-columns: minmax(0, 1fr) auto; } }
+
+.org-cta h2 { text-wrap: balance; }
+.org-cta p { margin-top: 12px; max-width: 46ch; font-size: 1.0625rem; line-height: 1.65; color: var(--ink); }
+.org-cta-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+@media (max-width: 540px) {
+  .org-cta-actions > .btn { width: 100%; justify-content: center; }
+  .org-row { grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 16px; padding: 20px 0; }
+  .org-row-icon { width: 40px; height: 40px; }
+}
+
+.org-form > form,
+.org-form > [role="status"] { margin-top: 0; }
+
+/* In the side layout the form reads left to right: its submit row and
+   the note under it align with the fields, not the page centre. */
+.org-form form .text-center { text-align: left; }
+.org-form form .text-center .mx-auto { margin-left: 0; }
+
+/* On phones the footer's last column reads left like the others. */
+@media (max-width: 540px) {
+  .site-footer-cols > .site-footer-col:last-child { text-align: left; }
+  .site-footer-cols > .site-footer-col:last-child .site-footer-col-list { align-items: flex-start; }
+}
