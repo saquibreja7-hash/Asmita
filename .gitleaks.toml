@@ -18,6 +18,18 @@ stopwords = [
   "synthetic-csrf-secret",
   "synthetic-jwt-secret",
 ]
+# The crawler's WP25 sandbox unit test pins one synthetic service-key fixture
+# ("cwk_" + 0123456789abcdef, three times over,
+# crawler/tests/unit/browser-sandbox.test.ts) and asserts it never reaches the
+# browser worker's environment or argv. It is published test data that cannot
+# be a production credential, but the generic-api-key entropy rule flags it —
+# including in the WP25 commit (7507c5f) already pushed on this branch, which
+# CI scans from branch history, so editing the test today cannot clear the
+# check. Only the exact literal is allowed: any other cwk_... value stays a
+# finding.
+regexes = [
+  '''cwk_0123456789abcdef0123456789abcdef0123456789abcdef''',
+]
 
 [[rules]]
 id = "asmita-no-real-urls"
