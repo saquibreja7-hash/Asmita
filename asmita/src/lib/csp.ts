@@ -5,6 +5,13 @@
 // routes but never sets headers, so the CSP is still set only in these
 // two places.
 
+// scripts/worker-smoke.mjs runs this file with plain Node (type stripping),
+// where every relative import needs its explicit .ts extension — the same
+// rule the smoke script itself follows for the specifier it imports us with.
+// An extensionless specifier here failed CI's worker-smoke step with
+// ERR_MODULE_NOT_FOUND (PR #108).
+import { labTraceConnectOrigins } from "./lab-models.ts";
+
 export type CspOptions = {
   frameAncestors?: "'none'" | "'self'";
   /** /talk only: the Sarvam SDK loads its audio worklet from a blob: URL and opens a WebSocket to Sarvam. */
@@ -24,6 +31,17 @@ export type CspOptions = {
    * the one in force when the reader runs.
    */
   c2pa?: boolean;
+  /**
+   * /lab/trace only (E3, WP76): the morph-to-source trace runs in the
+   * browser — onnxruntime-web compiles its WASM engine on the main thread
+   * (same-origin /ort/ assets, single-threaded, no proxy worker, so
+   * 'wasm-unsafe-eval' is the only addition to script-src, exactly like the
+   * C2PA engine's keyword), and the page fetches two models from
+   * operator-configured locations (LAB_SSCD_MODEL_URL, the landmark model
+   * base): cross-origin ones join connect-src. Unconfigured (the default)
+   * the tool runs hashing-only and needs no connect-src addition.
+   */
+  labTrace?: boolean;
   /** Pages in production. Ignored outside production. */
   nonce?: string;
   env?: string | undefined;
@@ -47,9 +65,12 @@ export const TRUSTED_TYPES_REPORT_ONLY = [
   `report-to ${CSP_REPORT_ENDPOINT_NAME}`,
 ].join("; ");
 
-export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = false, nonce, env = process.env.NODE_ENV }: CspOptions = {}) {
+export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = false, labTrace = false, nonce, env = process.env.NODE_ENV }: CspOptions = {}) {
   const isProd = env === "production";
   const isDev = env === "development";
+  // The Lab trace page's model origins (cross-origin only; empty by default
+  // when the owner has not configured a model URL).
+  const labTraceOrigins = labTrace ? labTraceConnectOrigins() : [];
   // Production pages allow only same-origin files and inline scripts carrying
   // the nonce. Without a nonce (API routes, PDFs, and development, where Vite
   // and React's dev tooling also need eval) 'unsafe-inline' stays as before.
@@ -66,6 +87,9 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = fals
     // keyword permits WebAssembly (compile/instantiate) only — it never
     // allows eval of JavaScript strings.
     ...(c2pa ? ["'wasm-unsafe-eval'"] : []),
+    // WP76: the Lab trace page's onnxruntime-web engine, same keyword, same
+    // reason — WebAssembly compilation only, never JS eval.
+    ...(labTrace ? ["'wasm-unsafe-eval'"] : []),
   ];
   return [
     "default-src 'self'",
@@ -85,7 +109,10 @@ export function buildCsp({ frameAncestors = "'none'", voice = false, c2pa = fals
     "img-src 'self' data:",
     // The browser opens the signed voice WebSocket straight to Sarvam; the
     // session route refuses any signed URL on another host.
-    `connect-src 'self'${voice ? " wss://apps.sarvam.ai" : ""}`,
+    // WP76: the Lab trace page fetches its models (SSCD, face landmarks)
+    // from operator-configured locations; cross-origin ones are listed here,
+    // same-origin hosting needs nothing.
+    `connect-src 'self'${voice ? " wss://apps.sarvam.ai" : ""}${labTrace ? labTraceOrigins.map((o) => ` ${o}`).join("") : ""}`,
     // vPDQ (WP18) reads her chosen video into a hidden <video> from a
     // same-origin blob: object URL, on whatever document the filing flow is
     // running under (soft navigations keep the source document's policy, so
@@ -132,6 +159,9 @@ export function withPageCsp(request: Request, pathname: string) {
         // WP38: the on-device C2PA reader runs on /check-image; the /c2pa/*
         // engine assets carry the policy the engine's worker inherits.
         c2pa: pathname === "/check-image" || pathname.startsWith("/c2pa/"),
+        // WP76: the Lab trace tool runs its WASM model engine and fetches
+        // its models in the browser, on /lab/trace only.
+        labTrace: pathname === "/lab/trace",
       });
   if (policy) headers.set("content-security-policy", policy);
   return { request: new Request(request, { headers }), policy };

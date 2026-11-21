@@ -23,6 +23,7 @@ npm run models:fetch        # once: the two pinned ONNX weights (see below)
 npm run build-set -- <portraits-dir> <out-dir>
 npm run match -- <set-dir>
 npm run detect -- <set-dir>
+npm run trace -- <set-dir>
 npm run report -- <run-dir>
 npm test                    # vitest
 npm run check               # type-check + tests
@@ -54,6 +55,16 @@ npm run check               # type-check + tests
   untouched originals; a pool with one class gets accuracy only). With no
   adapter available at all (no keys, no fetched weights) the command stops
   with a message listing what was skipped — it never invents scores.
+- **trace** runs the site's trace scoring core (the exact code the
+  survivor-facing tool runs, imported from `asmita/src/lib/lab/trace/`)
+  over every probe x original pair of a built set and reports the charter
+  E3 metric: the share of probes whose right source ranks first, and the
+  share of probe-vs-non-source pairs the tool calls a strong match.
+  Against the charter targets (right source 95% of the time, at most 1%
+  wrong-source) the run's `trace.md` and stdout report the measured
+  numbers. A missing SSCD model or an unavailable face locator degrades
+  honestly — the pairs are scored without that signal and the results note
+  it.
 - **report** writes `report.md` and `report.html` into the run directory
   (aggregate tables only — no image bytes).
 
@@ -105,9 +116,10 @@ should spot-check the recorded raw responses in the run directory
 - `build-set` writes `images/` plus a `set.json` manifest: ids, transforms,
   labels (a transform of a real photo is `real`; a composite or a dataset
   fake is `fake`), dimensions. Nothing about a person is recorded.
-- `match`/`detect` write `runs/<timestamp>-<kind>/` with `results.json`,
+- `match`/`detect`/`trace` write `runs/<timestamp>-<kind>/` with `results.json`,
   per-pair (`pairs.jsonl`) / per-item (`detections.jsonl`) scores, and the
-  report after `report`. All gitignored.
+  report after `report` (`trace` writes its `trace.md` directly). All
+  gitignored.
 - Portraits folders are research data on local disk: clothed, non-intimate
   photos of consenting adults only. The Lab never generates sexual content.
 - The Pdq hashing is the site's own code (`asmita/src/lib/pdq/pdq.ts`),

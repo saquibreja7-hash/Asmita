@@ -97,6 +97,14 @@ const nextConfig: NextConfig = {
         source: "/c2pa/:path*",
         headers: [{ key: "Content-Security-Policy", value: buildCsp({ c2pa: true }) }],
       },
+      // The Lab trace tool (E3, WP76) runs its analysis in the browser:
+      // onnxruntime-web compiles a WASM engine (same-origin /ort/ assets)
+      // and the page fetches its models from operator-configured locations.
+      // Unconfigured, no connect-src addition is emitted.
+      {
+        source: "/lab/trace",
+        headers: [{ key: "Content-Security-Policy", value: buildCsp({ labTrace: true }) }],
+      },
       // PDF previews are served into iframes on the sign pages — relax framing
       // headers for these routes only. All other security headers still apply.
       {
