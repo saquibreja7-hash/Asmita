@@ -483,10 +483,13 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 }
 
 /* The wordmark is a teal PNG; on the teal footer it is drawn in white. */
-/* Footer: white-on-teal logo, its background matches the footer teal. */
+/* Footer: white-on-teal logo. The PNG has a 24px transparent margin on
+   the left (48px of 400px), so pull it back to line the letters up with
+   the text below. */
 .brand-logo-footer {
   height: auto;
   width: 200px;
+  margin-left: -24px;
 }
 
 .site-footer-tagline {
