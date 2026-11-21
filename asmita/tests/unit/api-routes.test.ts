@@ -183,6 +183,26 @@ describe("POST /api/auth/verify-otp", () => {
     expect(res.headers.get("set-cookie")).toContain("asmita_session=");
   });
 
+  it("signs her in with the __Host- session cookie in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CSRF_SECRET", "synthetic-csrf-secret-0123456789abcdef");
+    vi.stubEnv("JWT_SECRET", "synthetic-jwt-secret-0123456789abcdef");
+    try {
+      // csrfPost sends the pre-__Host- csrf cookie name, which the
+      // one-release fallback still accepts.
+      const res = await verifyOtpRoute(
+        csrfPost("/api/auth/verify-otp", { email: "v@example.com", otp: "123456", ageOver18: true }),
+      );
+      expect(res.status).toBe(200);
+      const setCookie = res.headers.getSetCookie().join("\n");
+      expect(setCookie).toContain("__Host-asmita_session=");
+      expect(setCookie).toContain("Secure");
+      expect(setCookie).toContain("Path=/");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("filing tells the form whether this email already has a case", async () => {
     let res = await verifyOtpRoute(csrfPost("/api/auth/verify-otp", { email: "v@example.com", otp: "123456", ageOver18: true }));
     expect(await res.json()).toMatchObject({ redirectTo: "/submit", hasCases: false });
