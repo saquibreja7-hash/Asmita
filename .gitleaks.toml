@@ -7,6 +7,17 @@ paths = [
   '''\.env\.example''',
   '''\.github/workflows/''',
 ]
+# Unit tests stub CSRF_SECRET / JWT_SECRET with fixtures named
+# "synthetic-*-secret": the production-cookie tests (WP47, PR #85) need a
+# full-length key because jose refuses short HS256 secrets and the CSRF HMAC
+# needs a real key. These are test-only values that cannot be production
+# credentials, but the generic-api-key rule cannot tell. A finding whose
+# secret contains one of these fixture prefixes is a known false positive;
+# a real secret never contains "synthetic-", so nothing real is excused.
+stopwords = [
+  "synthetic-csrf-secret",
+  "synthetic-jwt-secret",
+]
 
 [[rules]]
 id = "asmita-no-real-urls"
