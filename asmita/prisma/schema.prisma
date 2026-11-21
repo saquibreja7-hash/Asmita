@@ -95,10 +95,14 @@ enum UrlSource {
   CRAWLER
 }
 
+// MINOR_PROTOCOL (review labels WP37): the possible-minor label moved the
+// finding out of the adult review flow. It cannot be approved or noticed
+// there; a second admin clears the label to return it.
 enum CrawlFindingStatus {
   CANDIDATE
   APPROVED
   DISMISSED
+  MINOR_PROTOCOL
 }
 
 // What a case is (watch-and-verify WP22). CASE: a takedown complaint with
@@ -268,6 +272,8 @@ enum AuditEventType {
   CRAWL_SOURCE_PROMOTED
   CRAWL_SOURCE_PAUSED
   CRAWL_SOURCE_RESUMED
+  CRAWL_FINDING_LABEL_SET
+  CRAWL_FINDING_LABEL_CLEARED
   PARTNER_SHARE_CONSENT_GIVEN
   PARTNER_SHARE_CONSENT_WITHDRAWN
   PARTNER_OUTCOME_REPORTED
@@ -578,6 +584,28 @@ model CrawlFinding {
   // A second, different analyst confirms an approval before anything acts on it.
   secondReviewedById String?
   secondReviewedAt   DateTime?
+  // Analyst review labels (review labels WP37): our own simple fields, each
+  // with who set it and when. Audited like every other finding action
+  // (CRAWL_FINDING_LABEL_SET / CRAWL_FINDING_LABEL_CLEARED).
+  labelAiMade       Boolean   @default(false)
+  labelAiMadeById   String?
+  labelAiMadeAt     DateTime?
+  labelSexual       Boolean   @default(false)
+  labelSexualById   String?
+  labelSexualAt     DateTime?
+  // The possible-minor label is a safety switch: while set, the adult flow
+  // for this finding is stopped (no approval, no representative notice, out
+  // of the review queue; reviewStatus MINOR_PROTOCOL). Clearing it needs a
+  // different admin than the setter and a recorded reason.
+  labelPossibleMinor             Boolean   @default(false)
+  labelPossibleMinorById         String?
+  labelPossibleMinorAt           DateTime?
+  labelPossibleMinorClearedById  String?
+  labelPossibleMinorClearedAt   DateTime?
+  labelPossibleMinorClearReason  String?
+  // The reviewStatus the finding returns to when the possible-minor label is
+  // cleared (CANDIDATE or APPROVED); null while it never moved.
+  minorProtocolBefore           String?
 
   case           Case           @relation(fields: [caseId], references: [id])
   hashSubmission HashSubmission @relation(fields: [hashSubmissionId], references: [id])

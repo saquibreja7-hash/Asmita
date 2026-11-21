@@ -176,6 +176,7 @@ describe("the admin side of watches", () => {
     const gate = noticeGate({
       reviewStatus: "APPROVED", representativeNoticeSentAt: null, noticeAttemptUnconfirmed: false,
       crawlConsentWithdrawn: false, watchOnly: true, urlsPurged: false, linkStatus: "NOTICE_QUEUED", crawlerEnabled: true,
+      labels: { aiMade: { set: false, setAt: null }, sexual: { set: false, setAt: null }, possibleMinor: { set: false, setAt: null, clearedAt: null, clearReason: null } },
     });
     expect(gate).toMatchObject({ kind: "blocked", code: "watch_only_consent" });
     expect((gate as { message: string }).message).toContain("Watch only: she has not asked for removal yet");

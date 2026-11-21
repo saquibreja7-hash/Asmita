@@ -729,6 +729,11 @@ Progress notes for the video-fingerprint work packages (spec: `asmita/docs/produ
 
 ## WP54. Merge master into feat/partner-sharing — 2026-11-20
 
+## Thorn-inspired
+
+Owner decisions, 19 November 2026 (Saquib): work packages written from research into Thorn's published work, in our own words — nothing is copied from Thorn except where a licence is stated. WP35 (AI-image copy) lives on `feat/ai-image-copy`, WP36 (PDQ robustness) on `feat/pdq-benchmark`, WP37 (review labels) here.
+
+### WP37. Review labels on crawler findings (analyst console) — 2026-11-19
 **Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
 
 This WP overrides the spec (assigned as a lane brief, not present in `full-crawler-spec.md`): a merge-conflict resolution, not feature work. master had just merged PR #75 (`feat/platform-partners`) and the video-fingerprint lane (WP17–19); this branch carries the partner-sharing lane (WP31–33). No feature code was added, no test was deleted, skipped or loosened.
@@ -942,6 +947,35 @@ Web-audit work package (accessibility/forms/performance/security audit, owner-ap
 
 **What was built**
 
+- Three analyst labels on a crawler finding — "Looks AI-made", "Sexual content", "Possible minor" — our own simple fields on `CrawlFinding` (`labelAiMade`, `labelSexual`, `labelPossibleMinor`), each with who set it and when (`label*ById`, `label*At`); the possible-minor label also records who cleared it, when and why (`labelPossibleMinorClearedById/At`, `labelPossibleMinorClearReason`) and the review state it came out of (`minorProtocolBefore`). Additive migration `asmita/prisma/migrations/20261119010000_finding_review_labels/` (three enum values — `MINOR_PROTOCOL`, `CRAWL_FINDING_LABEL_SET`, `CRAWL_FINDING_LABEL_CLEARED` — plus the columns); no new table, no policy statement, RLS untouched. Kysely types regenerate from the schema on every install (`prisma-kysely` generator), never hand-written.
+- `POST /api/admin/findings/[id]/labels` (`findings:review`, CSRF, strict Zod body `{action, label, reason?}`, rate-limited 200/hour/admin like the review route): one planner (`applyFindingLabel` in `src/lib/crawl-findings.ts`) drives the memory, Kysely and Prisma paths, every write conditional on the state it read — a racing review or label action is `label_conflict`, never a half-applied label. Every change is audited `CRAWL_FINDING_LABEL_SET` / `CRAWL_FINDING_LABEL_CLEARED` like every other finding action; a no-op (already in the wanted state) changes and audits nothing. While `ENABLE_CRAWLER` is off the route refuses 503 `crawler_disabled`, like every finding change.
+- **"Possible minor" is a safety switch.** Setting it: the finding leaves the adult queue at once (`reviewStatus` → `MINOR_PROTOCOL`, its earlier state kept in `minorProtocolBefore`), cannot be approved or dismissed (`planReview` refuses `minor_protocol_active`, mapped 409 in the review route), and no representative notice can be prepared or sent (409 `possible_minor_label_set` from `prepareRepresentativeNotice`, whatever the review status; preview and dispatch share the gate, and the page's notice gate shows the block). Clearing it: an admin other than the setter (`second_admin_required`) with a written reason (`reason_required`), stored on the finding and in the audit entry; only then does the finding return to the state it came from. A DISMISSED finding keeps its dismissal (it is out of the adult flow already): the label is recorded on it, and clearing restores nothing.
+- UI: `LabelControls` on the finding page (each label's state and when; the possible-minor set and clear both confirm, the clear asks for the required reason; the setter sees the clear disabled with "another admin must clear it"; a cleared label shows when and the reason). The finding page shows the labels on the row; the findings list gains a Labels column, a label filter (`?label=ai-made|sexual|possible-minor` on the page and `GET /api/admin/findings`), and the Minor protocol status chip. `ReviewControls` offers no adult action while the label is set. The interim SafetyNote now says to mark the finding "Possible minor". The list never carries which admin set a label — only whether the viewer is that admin (`currentAdminSetMinorLabel`); the list rows carry no new identity.
+- Crawler overview: counts findings carrying each label and how many sit in the minors protocol (memory, Kysely, Prisma), the same address-free aggregate as before.
+- Docs: runbook section "Review labels" (what each label is, the safety switch, the second-admin clear); `possible_minor_label_set` in `asmita/docs/product/crawler-notice-flow.md`; a dated note in ADR 006 "Decisions recorded since acceptance".
+
+**Decisions, recorded per the standing rule**
+
+- No minors handling for crawler findings exists yet (the written POCSO procedure is ADR 006 go-live gate 3, still open; root CLAUDE.md's "Minors never reach the case flow" stands). So the `MINOR_PROTOCOL` review state **is** the clearly separate state that marks such a finding for the minors protocol: out of the adult queue, not approvable (so no `SubmittedUrl` reaches her case and nothing downstream of approval can happen), no notice, and the interim rule — tell the SUPER_ADMIN straight away — still applies, on the page and in the runbook. Nothing but a second admin's clear with a reason puts it back into the adult flow. When the written procedure exists it gets its own work package.
+- Labels are our own three fields in our own words; no INHOPE or Thorn taxonomy is copied.
+- The setter stays recorded on the row (`labelPossibleMinorById`) as the clear's counterpart; the console tells only the setter that they cannot clear it, never another admin's identity.
+- WP28 (SSCD lane) is adding a match-method field to findings: the two changes share no column, helper or query key (`?label=` here), so the branches merge cleanly; both touch `findings/page.tsx` additively (a Labels column and filter here, a match-method display there).
+- The label filter uses its own query values (`ai-made|sexual|possible-minor`), not the label enum names, so the URL stays stable even if the internal names change.
+
+**Tests** (all run, all passing)
+
+- New: `tests/unit/finding-labels.test.ts` (19: the memory path and the route — set and clear each label with who and when, no-op audits nothing, the list label filter, and every possible-minor block: the queue move, approval and dismissal refused, an approved finding moved too, a dismissed one labelled without moving, the setter's clear refused, a reason required, a second admin's clear restoring the earlier state and review resuming, a re-set starting the clear record over, and the viewer-only identity flag; the route: 503 crawler-off, CSRF, permission, payload, error codes, 404), `finding-labels-kysely.test.ts` (8: one read and one conditional update per action, the status guard in the write, one hash-chained audit insert, conflict audits nothing, no address column in anything written), `finding-labels-prisma.test.ts` (6, including the review and representative-notice blocks on this path), `finding-labels-migration.test.ts` (8: the schema and migration shape, additive-only statements, no RLS/policy/table).
+- Changed only where the contract changed on purpose: `crawl-stats*.test.ts` (label counts on all three backends, the dismissed finding that keeps its dismissal), `admin-crawler-ui.test.ts` (LabelControls rendering and error sentences, the label list and notice gate, the overview counts), `crawler-notice.test.ts` (the `possible_minor_label_set` gate), `crawl-discoveries.test.ts` (its memory fixture gained the new columns). Nothing deleted, skipped or loosened.
+- Package totals from the final `check.sh` run on the committed tree (Node 22): `crawler` — untouched by this WP, re-confirmed: lint, type-check, 29 test files / 350 tests, build ok. `asmita` — lint 0 errors (4 pre-existing warnings: 3 in an untouched script, 1 in QuickExit), type-check clean, `prisma validate` ok, 156 test files / 1300 tests all passed.
+
+**Not done or not verified**
+
+- Migrations are exercised against the schema text, mocks and the memory store only, not applied to a real Postgres (pre-existing runbook open item, unchanged). `ALTER TYPE … ADD VALUE` inside one migration file is fine on PostgreSQL 12+ (Supabase runs 15) and the new enum value is never used within that same migration.
+- No e2e journey exercises the label UI (check.sh does not run e2e; the crawler journey's review path is unchanged for unlabelled findings).
+- Root `CLAUDE.md` was not updated: a protected agent-instruction file, the write waits for the owner's approval (same decision as WP1–WP3, WP8 and WP19). The runbook, ADR 006 and `crawler-notice-flow.md` carry the change instead.
+- `crawler/` itself is untouched — no crawler behaviour changed, so `crawler/README.md` is unchanged; the crawler package was only re-confirmed green.
+
+**Parallel-session note (2026-11-19).** Two sessions shared this lane, as happened on WP8. The WP37 code, tests and docs above are one body of work; the other session made the commit (`d64ee52`) while this session's final `check.sh` was running. This session audited the committed tree file by file against the WP37 definition (it is this session's work, unchanged), verified the working tree is byte-identical to the commit (`git status` clean, empty diff to HEAD) — so the whole final check run tested exactly the committed content, with the asmita test phase starting after the commit landed — and confirmed the branch is one local commit ahead of `origin` and **not pushed**. The full checks this session ran from scratch printed ALL CHECKS PASSED (`crawler`: lint, type-check, 29 test files / 350 tests, build ok; `asmita`: lint 0 errors, type-check clean, `prisma validate` ok, 156 test files / 1300 tests). This note is the only change since.
 - `PLATFORM_DEADLINE_HOURS` (`asmita/src/lib/escalation-ladder.ts`) is 24: the survivor's ladder, the admin case work and every test that derives from it now give the platform 24 hours. Its doc comment states both facts: Rule 3(2)(b) sets 2 hours (G.S.R. 120(E), in force 20.02.2026; PRD Section 4); 24 hours is the period our notices ask for.
 - `asmita/prisma/template-seeds.ts`: every sentence in which a notice asked the platform to act within 2 hours now asks for 24 hours, phrased as Asmita's request and never attributed to the Rule. Changed sentences: the IT_RULES_2021 subject line (twice: `subjectTemplate` and the body's `Subject:` line), demand (i) of IT_RULES_2021, demand (i) of IT_RULES_AND_DMCA, and item 4 of CRAWL_REPRESENTATIVE_NOTICE. Every sentence that states what the Rule requires (the legal-basis paragraphs, the SOP note, the hash advisory's 5.2, the L1 cover's item 2, the FIR package's item 4) keeps the two-hour period, and every `legalCitations` entry is unchanged — no law is misstated and no citation added. The changed sentences are listed before -> after in the commit message for the owner's approval; the seed logic that resets `reviewedByLegal` when text changes is untouched, and nothing sets `reviewedByLegal`.
 - Survivor-facing copy that tells her when the platform must act already said 24 hours everywhere (`home.blockA.*`, `hiw.tl1.body`, `faq.s2.a4` in en.json and their hi.json counterparts, the public home page, resources, chat knowledge, the L2 email), and the ladder's deadline step now computes 24 hours from the constant. No en.json or hi.json value needed a change, so `hi-review-status.json` is untouched and nothing new is machine translated.
@@ -1535,6 +1569,79 @@ WP62 is a merge-conflict resolution lane, defined outside this spec like the oth
 
 - The merge-commit message follows the lane instruction ("Merge master into fix/host-cookies-fetch-metadata; resolve conflicts" plus the Co-Authored-By line) rather than a spec-style WP message; the second commit carries this entry.
 - Where the two logout sides overlapped, master's hardcoded base-name `response.cookies.set(...)` calls were dropped in favour of the branch's cookie-name helpers, because `withLegacyFallback` expires the same base name (plus the `__Host-` name) with the attributes both sides wanted — keeping both spellings would have emitted the same Set-Cookie twice. No route is left clearing only one name.
+## WP66 (Merge lane). Resolve the master merge on feat/review-labels — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
+
+WP66 is a merge-conflict-resolution package, defined outside this spec like
+WP52 and WP53. The branch `feat/review-labels` (this lane: WP37, review
+labels on crawler findings) could not merge because master had moved on
+several PRs (video fingerprints #73 was the merge base; master's tip is the
+#94 lab-bench merge, bringing the SSCD second layer WP28/ADR 008, the
+platform-partner pages, the lab-bench and pdq-robustness tools, the chat
+safety review WP48 and the web-audit WPs among others). The merge of
+origin/master into the branch was started and left with conflicts; WP66
+resolved them keeping both sides' intent and made the full checks pass
+again. No feature work was added.
+
+**What was resolved**
+
+- Five textual conflicts, each a place where both sides added to the same
+  line or block: the `finding-view` import of both findings pages (ours'
+  `labelList` / `LABEL_TEXT`, master's `matchLine` / `borderlineScoreLine`
+  / `sscdMatchLine` — the merged bodies use both), the `planReview` doc
+  comment in `crawl-findings.ts` (both paragraphs kept: the WP37
+  possible-minor block and the ADR 008 null-distance two-step rule), the
+  memory-store `Finding` type in `crawl-store.ts` (our four-value
+  `reviewStatus` with `MINOR_PROTOCOL` plus master's `method` field), and
+  the imports of `admin-crawler-ui.test.ts` (both sides' helpers). Every
+  side's behaviour and tests survive; the merged `planReview` applies the
+  possible-minor block before the distance rules, and `toListRow` carries
+  both the label fields and `method`/`sscdSimilarity`.
+- One semantic conflict beyond the markers: the textual merge had dropped
+  master's SSCD review-controls test ("explains that an SSCD match always
+  needs the second reviewer…") inside the WP37 label-controls describe
+  block, whose `render` helper builds `LabelControls` props — a type error
+  against the wrong fixture. Moved the test back into the review-controls
+  describe block it lives in on master, unchanged; both sides' tests pass.
+- The JSON files the task called out were auto-merged and verified, not
+  just trusted: `hi-review-status.json`, `en.json` and `hi.json` parse,
+  have no duplicate keys, and `en`/`hi` key parity holds (1027 keys each);
+  master's 30 new keys are all present (this branch added none), and the
+  merged files are a superset of both sides.
+- `crawler/docs/v2-progress.md` itself auto-merged; verified mechanically
+  that every `##`/`### WP` heading from both sides and every non-empty line
+  of this branch's version is present in the merged file.
+
+**Tests** (final `check.sh` run on the committed tree, Node 22)
+
+- `crawler`: lint, type-check, 58 test files / 628 tests, build — all pass.
+- `asmita`: lint 0 errors, type-check clean, `prisma validate` ok, 176 test
+  files / 1613 tests — all pass.
+
+**Not done or not verified**
+
+- The full Playwright e2e suite is not part of `check.sh`; it runs in the
+  separate verify step (this WP changed no e2e-covered behaviour beyond
+  what both sides already shipped).
+- No crawler README, runbook or root `CLAUDE.md` update was needed: no
+  crawler behaviour changed in the merge (the crawler tree is master's,
+  already documented by its own WPs), and WP37 is app-side only.
+
+**Deviations and decisions** (recorded per the work-package instruction)
+
+- The merge commit was amended once, before anything was pushed: the
+  misplaced-test fix above was made after the conflicted files were staged,
+  and would otherwise have sat unstaged beside the merge commit. The amend
+  folded it in so the merge commit is exactly the tree that passed the full
+  checks (no rebase, no force push, both parents intact).
+- `hi-review-status.json` resolved to master's version wholesale because
+  this branch had not touched it; verified as a superset of both sides
+  rather than hand-merged.
+- This entry is the only documentation change, committed separately after
+  the merge commit as instructed; the merge commit itself touches no
+  progress-log content.
+
 ### WP60. Merge master into perf/hash-worker; resolve conflicts — 2026-11-20
 
 **Status: complete. All checks passed** (`check.sh`, both packages, Node 22).
@@ -1783,6 +1890,36 @@ This WP overrides the spec (assigned as a lane brief, not present in `full-crawl
 - The Playwright e2e suite, `scripts/worker-smoke.mjs` and `npm run build` for asmita are not part of `check.sh` and were not run.
 
 **Decision recorded** (the only judgement call the merge forced beyond the textual union): adding master's new bearer route to the Fetch Metadata exemption list rather than leaving it guarded. Both options pass every test (the guard only fires on `Sec-Fetch-Site: cross-site` browser requests, which the crawler never sends), but the branch's own list states it covers *every* signature/bearer/secret route, so the union of the two intents is the seventh crawler route exempted like its six siblings; leaving it out would have made the branch's stated invariant false of the merged tree.
+
+## WP73 (Merge lane). Resolve the master merge on feat/review-labels — 2026-11-20
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22, on the resolved tree committed as the merge; the one failed verification run after the commit flaked a crawler link-flood test on host load and was re-verified green with no code change — see the re-verification paragraph below). A merge-lane work package, not in `full-crawler-spec.md`: master had moved on again since this branch's WP66 merge (`c141266`) — PRs #78 feat/deadline-docs, #79 feat/legal-pages, #84 fix/notice-preview-link, #86 feat/csp-reporting-headers, #87 fix/forms-focus, #88 perf/hash-worker (WP42), #90 feat/partner-sharing (WP33 etc.), #91 fix/a11y-chrome-css (WP39/WP55), #93 feat/watch-mode (WP22–WP24) — and this branch's PR could not merge. A merge of `origin/master` (`d18cb10`) into `feat/review-labels` had been started and was left with conflicts in 5 files; this WP resolved all of them, keeping **both** sides' intent, behaviour and tests, and committed the merge (`6394651`, a true merge commit with parents `61e3350` branch tip and `d18cb10` master, no rebase). No feature code was added, no test was deleted, skipped or loosened, and `reviewedByLegal` was not set anywhere.
+
+**Conflicts (5 files, 8 blocks).** Each block is a both-sides-added-their-feature collision; every resolution keeps both sides whole:
+
+- `asmita/prisma/schema.prisma` (1 block): `AuditEventType` keeps this branch's `CRAWL_FINDING_LABEL_SET` / `CRAWL_FINDING_LABEL_CLEARED` and master's `PARTNER_SHARE_CONSENT_GIVEN` / `PARTNER_SHARE_CONSENT_WITHDRAWN` / `PARTNER_OUTCOME_REPORTED` / `PARTNER_CHANNEL_SENT` / `PARTNER_CHANNEL_FAILED` / `WATCH_CONVERTED` / `CONTENT_STILL_ONLINE` / `CRAWL_WATCH_STARTED`. This branch's `MINOR_PROTOCOL` value on `CrawlFindingStatus` and master's `CaseMode` / `CrawlConsentScope` enums auto-merged beside it.
+- `asmita/src/lib/crawl-findings.ts` (3 blocks): the module doc keeps master's WP33 partner-alert / crawl-permission text and this branch's WP37 labels paragraph; `CrawlFindingListRow` and `toListRow` carry both this branch's `labels` / `currentAdminSetMinorLabel` and master's `watchOnly`. The label-filter `where` clause (this branch) and master's `case: { select: { … mode: true } }` merged clean in the same function.
+- `asmita/src/app/(admin)/findings/finding-view.ts` (1 block): `NoticeGateInput` picks both `watchOnly` and `labels`; the auto-merged `noticeGate` already had both gates — `possible_minor_label_set` before `consent_withdrawn` and `watch_only_consent` after it — so the Pick had to name both fields.
+- `asmita/tests/unit/admin-crawler-ui.test.ts` (2 blocks): the shared `NoticeGateInput` state and the list-row builder fixture carry both sides' fields (`watchOnly` from master, `labels` + `currentAdminSetMinorLabel` from this branch), so both sides' `describe` blocks run unedited.
+- `asmita/docs/ops/crawler-runbook.md` (1 block): this branch's "Review labels (WP37)" section and master's "Watch findings (WP22)" section are both kept.
+
+**Decision recorded** (both sides rewrote the runbook's crawler-overview paragraph): this branch's version is kept — it is master's text word for word plus one added sentence ("Since WP37 it also counts findings carrying each analyst label…"), so it is the union; master's copy of the paragraph would have silently deleted WP37's sentence, and keeping both paragraphs would have duplicated the whole WP8 section.
+
+**Everything else merged clean.** Seven more files were touched by both sides and auto-merged; each was audited against both parents, not assumed: `crawl-notice.ts` has this branch's `possible_minor_label_set` refusal and master's `watch_only_consent` refusal; `planReview` in `crawl-findings.ts` keeps the minor-protocol gate beside master's WP33 channel-alert and WP24 reupload hooks; `crawl-store.ts`'s `MemoryCrawlFinding` carries the twelve label fields and the watch/partner consent fields; `findings-client.ts` has this branch's label-route helpers and error copy beside master's watch error copy; `crawler-notice.test.ts` carries both suites (the WP37 possible-minor gate test and master's WP22 watch-only and WP33 partner-channel tests); ADR 006 and `crawler-notice-flow.md` keep both sides' sections and refusal-code rows. The i18n JSONs were union-checked against both parents: `en.json` / `hi.json` have 1228 keys each (this branch added none over the merge base, master added 201, none lost, no duplicates, full en/hi parity) and `hi-review-status.json` keeps its 10 keys from both sides, valid JSON, no duplicates. `crawler/docs/v2-progress.md` and `CLAUDE.md` keep every entry each side added.
+
+**Tests changed because the merged shape changed on purpose** (rule 6, also in the merge commit message; none deleted, skipped or loosened — the breakage was type-check real, and the fix completes fixtures, never an assertion): master's new watch and link-verification tests construct `MemoryCrawlFinding` rows directly, and the merged memory finding requires this branch's thirteen label/minor-protocol fields, so four fixture sites now carry them with neutral values (labels unset), exactly like this branch's own fixtures — `crawl-watch.test.ts` `seedFinding`, `link-verification.test.ts` `seedFinding`, `watch-flow.test.ts`'s two inline findings — and `watch-ui.test.ts`'s `noticeGate` state gains the same neutral `labels` object the `NoticeGateInput` union requires. Making the fields optional instead would have changed the WP37 feature's type contract to accommodate tests, so the fixtures were completed instead. Both sides' suites pass unedited in their assertions.
+
+**Checks (run, not assumed).** Full `check.sh` (Node 22, both packages) on the resolved tree, which is exactly the tree committed as the merge: `crawler` — npm ci, lint, type-check, **58 test files / 628 tests passed**, build ok (`dist/main.js`, `browser-worker.js`, `decoder-worker.js`, `sscd-worker.js` all emitted). `asmita` — npm ci, `prisma generate`, lint 0 errors (4 warnings, all pre-existing in files this branch never touched: three unused underscore vars in master's `scripts/translate-faq.mjs`, one react-hooks warning in master's WP41 `QuickExit.tsx`), type-check clean, `prisma validate` ok, **212 test files / 2076 tests passed**. Both sides' suites run and pass together in the merged tree — this branch's `finding-labels*.test.ts` / `admin-crawler-ui.test.ts` label suites and master's `crawl-watch*` / `watch-flow` / `link-verification` / `partner-*` suites all green. A first full run caught the five type errors fixed above; the fix was verified by a targeted run (type-check + the 15 affected test files, 274 tests) and then by this full run, which printed ALL CHECKS PASSED.
+
+**Re-verification (attempt 2): the one failed verification run was a host-load flake — re-run green, nothing changed.** The post-commit verification run (`logs/lane-wp73-check-1.log`, 22:40) failed exactly one test: `tests/integration/frontier.test.ts` link flood, `linksDropped` 357,300 against the ≥ 436,400 assertion. The diagnosis came from evidence, not assumption: the merge commit changes no crawler code or test (in `crawler/` it touches only `README.md` and this file), so the crawler tree is byte-identical to the one that passed WP66's, WP70's, WP71's and WP72's full checks, where this same test runs in 12.8–15.3 s; in the failed run it took 31.7 s on the 2-vCPU box shared by three concurrent check lanes (host load 4.5–6), and 357,300 is exactly 9 × 39,700 — only nine of the twelve crawled flood pages got as far as extracting links, their ~1.6 MB bodies starved against the 15 s `BODY_TIMEOUT_MS` deadline on the loaded host. Re-run alone on the same committed tree the test passes in 13.5 s, and a full `check.sh` re-run on it printed ALL CHECKS PASSED: `crawler` 58 files / 628 tests (the flood test back at 13.9 s) plus build, `asmita` 212 files / 2076 tests with lint, type-check and `prisma validate` clean. Decision recorded: no timeout, retry limit, fixture or assertion was touched — there was no breakage to fix, the failure never reproduced outside that one loaded window, and loosening the assertion would have hidden a real cap regression had one existed.
+
+**Not done or not verified**
+
+- The Playwright e2e suite and the worker smoke were not run (check.sh does not include them and the work package defines done as check.sh passing).
+- The roughly 140 files only master changed were taken as-is; they are covered by master's own checks plus this full run.
+- `npm run build` for asmita was not run (not part of check.sh).
+
+**Commits.** Merge commit `6394651` "Merge master into feat/review-labels; resolve conflicts" (parents: `61e3350` WP66 progress entry, `d18cb10` master #90), then the progress-log entry `d6b2371`; attempt 2 added the re-verification paragraph to this entry as a third commit. Not pushed, per the work package.
 
 ### WP81. Fix the gitleaks secret-scan failure on fix/host-cookies-fetch-metadata (PR #85) — 2026-11-20
 
