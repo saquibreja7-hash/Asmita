@@ -64,10 +64,11 @@
   color: var(--ink);
 }
 
-/* Tinted band: the closing "get help" sections. */
+/* Tinted band: the closing "get help" sections. Teal mist warming into the
+   logo orange, the same band as the organization pages' closing section. */
 .zone-sunset {
   position: relative;
-  background: var(--brand-soft);
+  background: linear-gradient(110deg, var(--brand-soft) 0%, var(--brand-soft) 35%, var(--coral-soft) 100%);
   color: var(--ink);
 }
 

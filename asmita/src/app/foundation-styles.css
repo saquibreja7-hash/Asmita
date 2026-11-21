@@ -437,12 +437,13 @@ html[lang="hi"] .data-table thead th { letter-spacing: 0; text-transform: none; 
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  background: var(--brand);
-  color: #fff;
+  /* Numbered steps carry the warm orange, site-wide (owner, 2026-11-21). */
+  background: var(--coral-soft);
+  color: var(--coral-ink);
   font-size: 0.875rem;
   font-weight: 600;
 }
-.step-list li::after { content: ""; position: absolute; top: 32px; bottom: 4px; left: 13.5px; width: 1px; background: var(--line); }
+.step-list li::after { content: ""; position: absolute; top: 32px; bottom: 4px; left: 13.5px; width: 1px; background: var(--coral); opacity: 0.45; }
 .step-list li:last-child { padding-bottom: 0; }
 .step-list li:last-child::after { display: none; }
 
