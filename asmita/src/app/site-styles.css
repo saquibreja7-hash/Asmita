@@ -580,8 +580,11 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 
 /* Newsletter sign-up on the teal footer: white field, white button. */
 /* Footer sign-up: name, email and button share one width. */
-.site-footer-newsletter form { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 360px; }
-.site-footer-newsletter form > div { width: 100%; max-width: none; gap: 10px; }
+.site-footer-newsletter { max-width: 440px; }
+.site-footer-newsletter form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 440px; }
+.site-footer-newsletter form > div:not([aria-hidden]) { display: contents; }
+.site-footer-newsletter form button.btn { grid-column: 1 / -1; }
+.site-footer-newsletter form > [role="alert"] { grid-column: 1 / -1; }
 .site-footer-newsletter .field,
 .site-footer-newsletter input,
 .site-footer-newsletter button.btn { width: 100%; }
