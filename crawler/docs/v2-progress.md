@@ -2133,3 +2133,20 @@ New ops doc `asmita/docs/ops/dependency-audit.md` records the gate, the reasonin
 - `npm run build` (the separate "Production build" CI job) was not run locally: it passed on this PR's own CI run, and this WP changes a config comment that job does not read.
 
 **Commits.** `1cb5582` "WP84: keep wrangler.jsonc strict JSON for the production prepare script" (`asmita/wrangler.jsonc`, `asmita/tests/unit/wrangler-jsonc.test.ts`), then this entry. Not pushed.
+
+## AI Lab beta tools (WP89–WP96, asmita/docs/lab/beta-spec.md)
+
+The beta-tools work packages, recorded here per the lane instructions; the
+working entries live in `asmita/docs/lab/beta-progress.md`.
+
+### WP90. Detector panel at /lab/detectors (feat/lab-beta-dev) — 2026-11-21
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22), plus the WP's Playwright spec through `e2e-some.sh`. A beta-tools WP (`asmita/docs/lab/beta-spec.md`), not in `full-crawler-spec.md`: no crawler behaviour changed, the crawler spec is untouched, no test was weakened, skipped or deleted, and `reviewedByLegal` was not set anywhere.
+
+**What was built.** One image in, every configured "AI-made or manipulated" detector answers side by side. `asmita/src/lib/lab/detectors/adapters.ts` reuses the E1 detector adapter interface from `tools/lab-bench/src/detectors` (ported, not imported — lab-bench is an offline package outside the Worker build): OpenAI vision (`OPENAI_API_KEY`), Hive (`HIVE_API_KEY`), Sightengine (`SIGHTENGINE_USER`/`SIGHTENGINE_SECRET`), a keyless adapter shown as "not configured", provider-prefixed option names so no two adapters can share a credential field, and the same defensive response parsing. `panel.ts` maps each 0..1 score to the panel's 0..100 with a verdict band (likely AI ≥ 70, likely camera < 30, unclear between), an error row per failing or hung detector (45 s cap) that never sinks the others, and a "detectors disagree" note when at least two scored rows fall in different bands. `POST /api/lab/detectors`: `ENABLE_LAB` gate (503 `lab_disabled`), CSRF, declared-length pre-check, per-IP 10/hour shared bucket, strict Zod consent field, JPEG/PNG/WebP magic-byte sniff, 10 MB cap, in-memory-only image (never stored or logged; sent only to the configured providers the WP names), and the site-wide `LAB_DETECTOR_DAILY_LIMIT` (default 200, 24 h window) spent only by requests that passed every earlier check. The page 404s while the Lab is off and carries the Beta badge, the limits sentence, the `/minor-support` pointer, `role="status"` result announcement, and en+hi strings (Hindi machine-translated, flagged in `hi-review-status.json`).
+
+**Decisions recorded** (details in `asmita/docs/lab/beta-progress.md`): no sharp in the app, so no downscale — the image goes to the providers exactly as uploaded; no local ONNX detector in the panel (the WP names the three hosted ones); the tool asks no age, so the under-18 rule is met with the pointer, and the required consent tick names where the image goes; `LAB_DETECTOR_DAILY_LIMIT` is not added to `.env.example` or `wrangler.jsonc` — WP96 collects the new env vars.
+
+**Checks (run, not assumed).** `check.sh` (Node 22): crawler — npm ci, lint, type-check, 60 test files passed, build ok; asmita — npm ci, prisma generate, lint (0 errors, 4 pre-existing warnings in untouched files), type-check clean, prisma validate ok, 225 test files / 2192 tests passed or skipped as before (36 new: `lab-detectors.test.ts` 25, `lab-detectors-route.test.ts` 11, every adapter mocked, no network). `e2e-some.sh tests/e2e/lab-detectors.spec.ts`: 2 passed (en journey with a generated gradient PNG and three honest "not configured" rows; hi journey at 320 px). `check.sh` printed **ALL CHECKS PASSED**.
+
+**Commits.** `c03bba8` "WP90: AI Lab detector panel at /lab/detectors" (the tool, tests, i18n, and `asmita/docs/lab/beta-progress.md`), then this entry. Not pushed.
