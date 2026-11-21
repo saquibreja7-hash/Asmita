@@ -52,13 +52,13 @@ Use the semantic tokens in `src/app/foundation-styles.css`. Never hard-code colo
 
 ## 5. Shape and surfaces
 
-- One corner radius, `--radius-box` (12px), for every box, card, panel, input and menu. Buttons, chips and step numbers are fully round.
+- One corner radius, `--radius-box` (12px), for every button, box, card, panel, input and menu, on every page including admin. Square-cornered design, no pill buttons. **(owner)** Only small chips, badges and step numbers stay round.
 - Three surfaces: the page (parchment), cards (white with a hairline border), and tinted bands (`--brand-soft`: `.zone-sunset`, `.home-help-band`, `.filing-intro`).
 - **No coloured left-border accent stripes** on cards or panels. **(owner)**
 
 ## 6. Components
 
-- **Buttons:** two only. `.btn-primary` (teal fill, one per screen) and `.btn-secondary` (outline, teal tint on hover). `.btn-arrow` adds an arrow. Use the shared buttons for actions and plain links for navigation in running text.
+- **Buttons:** two only. `.btn-primary` (teal fill, 12px corners, one per screen) and `.btn-secondary` (outline, teal tint on hover). `.btn-arrow` adds an arrow. Use the shared buttons for actions and plain links for navigation in running text.
 - **Navigation:** groups with dropdowns, defined once in `src/components/layout/nav-config.ts` for both the desktop dropdowns and the phone menu. The group holding the open page is highlighted. The header switches to the compact Menu until the whole desktop menu and its actions fit, and keeps "File a complaint" visible beside Menu at middle widths.
 - **Footer:** the brand column (logo, one-line description, language switch, newsletter) plus **three link columns**: Get help, The issue, Organization. Privacy, Sitemap and Status sit as small links in the bottom bar with the helplines and copyright. Don't add a fourth link column. **(owner)**
 - **Forms:** clear label above each input, minimum 48px height. Errors sit next to the field they belong to, use text (never colour alone), and keep the next action visible.
