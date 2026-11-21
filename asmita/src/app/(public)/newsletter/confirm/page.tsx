@@ -45,7 +45,7 @@ export default async function NewsletterConfirmPage({
                   </div>
                 )}
                 <p className="mt-8">
-                  <Link className="arrow-link" href="/newsletter">
+                  <Link className="arrow-link" href="/">
                     {t(locale, "org.newsletter.tokenInvalidCta")}
                   </Link>
                 </p>

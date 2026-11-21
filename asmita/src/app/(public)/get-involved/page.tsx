@@ -23,7 +23,6 @@ const CARDS: { href: string; icon: Parameters<typeof Icon>[0]["name"]; titleKey:
   { href: "/volunteer", icon: "users", titleKey: "org.getInvolved.cardVolunteerTitle", bodyKey: "org.getInvolved.cardVolunteerBody" },
   { href: "/careers", icon: "briefcase", titleKey: "org.getInvolved.cardCareersTitle", bodyKey: "org.getInvolved.cardCareersBody" },
   { href: "/training", icon: "presentation", titleKey: "org.getInvolved.cardTrainingTitle", bodyKey: "org.getInvolved.cardTrainingBody" },
-  { href: "/newsletter", icon: "mail", titleKey: "org.getInvolved.cardNewsletterTitle", bodyKey: "org.getInvolved.cardNewsletterBody" },
   { href: "/news", icon: "newspaper", titleKey: "org.getInvolved.cardNewsTitle", bodyKey: "org.getInvolved.cardNewsBody" },
 ];
 

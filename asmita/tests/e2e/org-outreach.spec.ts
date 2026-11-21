@@ -96,12 +96,11 @@ test("an admin opens a job and it appears on /careers", async ({ browser, page }
   );
 });
 
-test("a newsletter signup shows the check-your-email state", async ({ page }) => {
-  await page.goto("/newsletter");
-  // The footer carries the same inline sign-up with the same label, so the
-  // journey targets the page's own form inside <main>.
-  const main = page.getByRole("main");
-  await main.getByLabel("Email address").fill("reader@example.invalid");
-  await main.getByRole("button", { name: "Sign up" }).click();
-  await expect(page.getByText("Check your email")).toBeVisible({ timeout: 20_000 });
+test("a newsletter signup from the footer shows the check-your-email state", async ({ page }) => {
+  await page.goto("/get-involved");
+  const footer = page.getByRole("contentinfo");
+  await footer.getByLabel("First name").fill("Asha");
+  await footer.getByLabel("Email for the newsletter").fill("reader@example.invalid");
+  await footer.getByRole("button", { name: "Sign up" }).click();
+  await expect(footer.getByText("Check your email to confirm.")).toBeVisible({ timeout: 20_000 });
 });

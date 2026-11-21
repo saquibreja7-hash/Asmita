@@ -68,8 +68,6 @@ export function navGroups(locale: Locale, options: { scorecard?: boolean } = {})
         { href: "/resources/directory", label: say("Support directory", "सहायता निर्देशिका") },
         { href: "/faq", label: t(locale, "nav.faq") },
         { href: "/news", label: t(locale, "nav.news") },
-        { href: "/policy", label: t(locale, "nav.policy") },
-        ...(options.scorecard ? [{ href: "/research/platform-scorecard", label: t(locale, "nav.scorecard") }] : []),
       ],
     },
     {
@@ -81,7 +79,6 @@ export function navGroups(locale: Locale, options: { scorecard?: boolean } = {})
         { href: "/volunteer", label: t(locale, "nav.volunteer") },
         { href: "/careers", label: t(locale, "nav.careers") },
         { href: "/training", label: t(locale, "nav.training") },
-        { href: "/newsletter", label: t(locale, "nav.newsletter") },
       ],
     },
     {
@@ -91,7 +88,6 @@ export function navGroups(locale: Locale, options: { scorecard?: boolean } = {})
         { href: "/about", label: say("Who we are", "हम कौन हैं") },
         { href: "/what-we-do", label: say("What we do", "हम क्या करते हैं") },
         { href: "/how-it-works", label: say("How it works", "यह कैसे काम करता है") },
-        { href: "/research", label: say("Research", "शोध") },
         { href: "/for-platforms", label: say("For platforms", "प्लेटफ़ॉर्म के लिए") },
         { href: "/contact", label: say("Contact", "संपर्क") },
         { href: "/privacy", label: t(locale, "nav.privacy") },

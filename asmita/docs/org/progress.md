@@ -270,3 +270,7 @@ Decisions made on my own (second round)
 2. **Updated the existing WP77 entry in crawler/docs/v2-progress.md in place** — the work package both forbids appending to that file and requires the WP77 entry to reflect the completed state.
 3. **org-advocacy.spec keeps its published snapshot at the end of its file** (no teardown): the file's last test depends on the publish, and no other spec in the suite asserts the nav or sitemap state a published snapshot changes (searched; also confirmed by the full-suite run on the shared throwaway database).
 4. **The static XML sitemap keeps its WP58 shape** (no scorecard URL): that decision is WP58's own (see its item 10 above) and re-verified — nothing in the verify exercises it.
+
+## 2026-11-21: public pages removed
+
+Owner decision: /press, /research (including /research/platform-scorecard and its CSV), /policy (including /policy/[slug]) and the /newsletter landing page were taken out because they were mostly empty or repeated other pages. The newsletter sign-up lives in the footer; /newsletter/confirm and /newsletter/unsubscribe stay because the confirmation emails link to them. Footer, header nav, sitemap, get-involved cards and tests were updated. Every post kind now lives under /news/[slug]. The admin screens (posts, scorecard, newsletter) and the scorecard library are unchanged; restore the public pages from git history when they are needed again.
