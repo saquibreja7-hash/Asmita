@@ -212,14 +212,16 @@ export function VolunteerForm({ locale }: { locale: Locale }) {
 
       <fieldset className="space-y-6">
         <legend className="eyebrow">{t(locale, "org.volunteer.f.sectionAvailability")}</legend>
-        <select className="field max-w-sm" id="volunteer-hours" value={fields.hours} onChange={(e) => set("hours")(e.target.value)} aria-invalid={invalid("hours")}>
-          <option value="">{t(locale, "org.volunteer.f.select")}</option>
-          {(Object.entries(VOLUNTEER_HOURS) as [VolunteerHours, string][]).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <Field id="hours" label={t(locale, "org.volunteer.f.hours")} locale={locale}>
+          <select className="field max-w-sm" id="volunteer-hours" value={fields.hours} onChange={(e) => set("hours")(e.target.value)} aria-invalid={invalid("hours")}>
+            <option value="">{t(locale, "org.volunteer.f.select")}</option>
+            {(Object.entries(VOLUNTEER_HOURS) as [VolunteerHours, string][]).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field id="experience" label={t(locale, "org.volunteer.f.experience")} hint={t(locale, "org.volunteer.f.experienceHint")} locale={locale}>
           <textarea
             className="field min-h-32 leading-[1.65]"

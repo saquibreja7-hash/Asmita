@@ -80,4 +80,11 @@ test("an admin marks a partner public and it appears on /partners", async ({ bro
   await page.goto("/partners");
   await expect(page.getByRole("heading", { name: "Sahyog Trust (e2e)" })).toBeVisible();
   await expect(page.getByText("A helpline for survivors in Maharashtra.")).toBeVisible();
+
+  // Undo the global side effect: a public partner replaces the static
+  // supporters strip on every page, and smoke.spec/chat.spec assert the
+  // Cloudflare and Sarvam marks on / later in this run. The strip must
+  // not be left showing this test's partner.
+  const hidden = await send(request, "put", `/api/admin/org/partners/${partner.id}`, { isPublic: false });
+  expect(hidden.ok()).toBe(true);
 });

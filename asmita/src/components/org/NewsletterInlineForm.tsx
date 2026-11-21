@@ -74,7 +74,11 @@ export function NewsletterInlineForm({
         <input id={`${source}-newsletter-fax`} tabIndex={-1} autoComplete="off" value={fax} onChange={(e) => setFax(e.target.value)} />
       </div>
       <label htmlFor={`${source}-newsletter-email`} className={compact ? "sr-only" : "block text-[15px] font-medium text-[var(--ink)]"}>
-        {t(locale, "org.newsletter.f.emailLabel")}
+        {/* The footer variant names the field for what it is: every victim
+            page also carries the registration form's "Email address", and a
+            screen reader (and Playwright's label lookup) must not see two
+            fields with the same name on one page. */}
+        {compact ? t(locale, "org.newsletter.footerEmailLabel") : t(locale, "org.newsletter.f.emailLabel")}
       </label>
       <div className={compact ? "flex max-w-xs gap-2" : "mt-2 flex flex-col gap-3 sm:flex-row"}>
         <input

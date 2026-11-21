@@ -7,7 +7,7 @@ import { NewsletterInlineForm } from "@/components/org/NewsletterInlineForm";
 // Public uptime page (Better Stack), outside the app so it stays up when the site is down.
 export const STATUS_URL = "https://status.meriasmita.org";
 
-export function Footer({ locale }: { locale: Locale }) {
+export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; withoutNewsletter?: boolean }) {
   const isHi = locale === "hi";
 
   const columns = isHi
@@ -124,10 +124,14 @@ export function Footer({ locale }: { locale: Locale }) {
               <span className="site-footer-col-title !mb-0">{isHi ? "भाषा" : "Language"}</span>
               <LanguageToggle initialLocale={locale} />
             </div>
-            <div className="site-footer-newsletter">
-              <p className="site-footer-col-title !mb-0">{t(locale, "org.newsletter.footerLabel")}</p>
-              <NewsletterInlineForm locale={locale} source="footer" variant="footer" />
-            </div>
+            {/* The minor-support path collects nothing, not even a newsletter
+                email, so its AppShell hides this block entirely. */}
+            {!withoutNewsletter && (
+              <div className="site-footer-newsletter">
+                <p className="site-footer-col-title !mb-0">{t(locale, "org.newsletter.footerLabel")}</p>
+                <NewsletterInlineForm locale={locale} source="footer" variant="footer" />
+              </div>
+            )}
           </div>
 
           {columns.map((col) => (

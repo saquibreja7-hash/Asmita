@@ -1263,6 +1263,7 @@
   "org.newsletter.unsubInvalidTitle": "यह लिंक मान्य नहीं है",
   "org.newsletter.unsubInvalidBody": "हम इसे किसी सदस्यता से नहीं जोड़ सके। कुछ नहीं बदला।",
   "org.newsletter.footerLabel": "हमारा न्यूज़लेटर पाइए",
+  "org.newsletter.footerEmailLabel": "न्यूज़लेटर के लिए ईमेल",
   "org.newsletter.footerSuccess": "पुष्टि के लिए अपना ईमेल देखिए।",
   "org.newsletter.footerError": "अभी साइन अप नहीं हो सका। कृपया फिर कोशिश कीजिए।",
   "org.form.hiddenFax": "Fax",

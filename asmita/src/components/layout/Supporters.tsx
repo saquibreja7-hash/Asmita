@@ -39,7 +39,16 @@ export function resolveSupporterStrip(partners: OrgPartner[]): SupporterEntry[] 
 }
 
 export async function SupporterLogos({ className = "", eager = false }: { className?: string; eager?: boolean }) {
-  const partners = await listPublicOrgPartners();
+  let partners: OrgPartner[] = [];
+  try {
+    partners = await listPublicOrgPartners();
+  } catch {
+    // The strip is a decorative credit line rendered on public pages; the page
+    // must not go down with it. A database that is unreachable or not yet
+    // provisioned (the e2e harness starts the dev server before global-setup
+    // provisions it) falls back to the static supporters — the strip's own
+    // behaviour when there are no public partners.
+  }
   const entries = resolveSupporterStrip(partners);
   return (
     <ul className={`flex flex-wrap items-center gap-x-12 gap-y-6 ${className}`}>

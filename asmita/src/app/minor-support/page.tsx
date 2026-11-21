@@ -74,7 +74,7 @@ export default async function MinorSupportPage() {
   ];
 
   return (
-    <AppShell>
+    <AppShell withoutNewsletter>
       <div className="page-canvas">
         {/* HERO */}
         <section className="container page-hero text-center page-hero-split">

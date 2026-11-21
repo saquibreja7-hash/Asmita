@@ -32,7 +32,7 @@ test("get-involved renders in English and Hindi", async ({ page }) => {
 test("a visitor submits the volunteer form and sees the success state", async ({ page }) => {
   await page.goto("/volunteer");
   await page.getByLabel("Your name").fill("Eli Test");
-  await page.getByLabel("Email").fill("eli@example.invalid");
+  await page.getByLabel("Email", { exact: true }).fill("eli@example.invalid");
   await page.getByLabel("City").fill("Pune");
   await page.getByLabel("State or union territory").selectOption("Maharashtra");
   await page.getByText("Hindi", { exact: true }).click();
@@ -97,7 +97,10 @@ test("an admin opens a job and it appears on /careers", async ({ browser, page }
 
 test("a newsletter signup shows the check-your-email state", async ({ page }) => {
   await page.goto("/newsletter");
-  await page.getByLabel("Email address").fill("reader@example.invalid");
-  await page.getByRole("button", { name: "Sign up" }).click();
+  // The footer carries the same inline sign-up with the same label, so the
+  // journey targets the page's own form inside <main>.
+  const main = page.getByRole("main");
+  await main.getByLabel("Email address").fill("reader@example.invalid");
+  await main.getByRole("button", { name: "Sign up" }).click();
   await expect(page.getByText("Check your email")).toBeVisible({ timeout: 20_000 });
 });

@@ -1263,6 +1263,7 @@
   "org.newsletter.unsubInvalidTitle": "This link is not valid",
   "org.newsletter.unsubInvalidBody": "We could not match it to a subscription. Nothing was changed.",
   "org.newsletter.footerLabel": "Get our newsletter",
+  "org.newsletter.footerEmailLabel": "Email for the newsletter",
   "org.newsletter.footerSuccess": "Check your email to confirm.",
   "org.newsletter.footerError": "We could not sign you up just now. Please try again.",
   "org.form.hiddenFax": "Fax",

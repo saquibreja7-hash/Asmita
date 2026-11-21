@@ -196,3 +196,46 @@ Branch: `feat/org-pages`. Built 21 November 2026. Builds on WP56's content syste
 12. **The e2e seeds a DRAFT directly in SQL** (like the cron leaves) and publishes through the real admin API, so the "admin publishes a seeded draft snapshot" journey exercises the real publish path without needing real complaint data in the throwaway database.
 13. **Hindi translations** for the 91 new keys are machine translations by me, under the existing `org.*` review entry (which now names WP58).
 14. **Design audit:** `impeccable detect` ran on all six surfaces — 0 errors, advisory font-size notes that fire identically on committed WP56/57 pages (verified house pattern, kept; /policy priority cards raised to the documented 20px/600 card title). Programmatic checks over the rendered pages: no heading skips, no stripes/shadows, one primary button per screen (fixing a pre-existing double-primary on /research), and the scorecard table stacks on phones instead of forcing a 900px width.
+## WP77 — full-verify fixes for the organization pages (branch feat/org-pages)
+
+Built 20–21 November 2026. WP77 is a repair package defined outside docs/org/spec.md (like the web-audit ones): the organization pages (WP56–57; WP58 is not on this branch) failed the full verify on the verify machine — `DONE E2E_RC=1 SMOKE_RC=1` — with no Playwright test ever running. Each cause below was reproduced on this machine, found in the code or the new specs, and fixed there. No existing assertion was weakened, skipped or deleted; the core specs' files are untouched.
+
+### What was failing, and the fix
+
+1. **The e2e web server never came up — the reported E2E_RC=1 SMOKE_RC=1 was one cause wide.** The Playwright webServer starts before global-setup provisions the throwaway database and polls `/` meanwhile; WP57's Supporters strip made that render query `OrgPartner`, the polls failed with P1000 (no role, no tables yet), and every poll 500'd until the 120 s timeout aborted the run before global-setup ran at all — so the database stayed empty and the worker smoke's webhook writes failed too (collateral, not a second bug). Fix: `SupporterLogos` falls back to the static Cloudflare/Sarvam strip when the partner query fails — a decorative credit line must not take public pages down with an unreachable database (`src/components/layout/Supporters.tsx`).
+2. **The language toggle stamped its page's own locale over the cookie on every load.** LanguageToggle wrote `asmita_lang` from an effect keyed on the locale; React StrictMode runs effects twice in dev, defeating the old `mounted` guard, so every page load re-wrote the cookie with the server's locale while the next navigation was already under way. Reproduced with a plain Playwright script: under a Hindi cookie the four `/partners/[type]` pages alternated Hindi/English (the previous page's late hydration overwrote the cookie between requests). Fix: the cookie is written from an effect keyed on a `choice` state that stays null until a click — never on mount; the `<html lang>` sync keeps its own effect (`src/components/layout/LanguageToggle.tsx`).
+3. **The volunteer form's hours select had no label.** "Time you can give" existed in i18n but was never rendered — the spec's `getByLabel("Time you can give")` timed out, and an unlabeled select fails WCAG 1.3.1 the same way. Fix: the select is wrapped in the form's Field label (`src/components/org/VolunteerForm.tsx`).
+4. **The footer newsletter field carried the same accessible name as the registration form's email field, on every page.** WP56's footer inline sign-up labelled its input "Email address"; the survivor registration form uses the same label, so `registerAdult` in filing, hash-flow, notice-integrity, quick-exit, smoke, escalation-ladder, unknown-platform, video-hash-flow, reporting-journey-polish, database-hardening and crawler-journey — 26 tests — died on strict-mode violations. A screen reader hears two identically-named fields too. Fix: the footer variant labels its input "Email for the newsletter" (new key `org.newsletter.footerEmailLabel`, en+hi, under the existing `org.*` machine-translation entry) — wording that does not contain "email address", because Playwright's getByLabel matches by substring (`src/components/org/NewsletterInlineForm.tsx`).
+5. **The footer newsletter form broke the minor path's collects-nothing guarantee.** smoke.spec asserts `/minor-support` renders no email input at all; the footer form put one there. Fix: AppShell/Footer take `withoutNewsletter` and the minor-support page sets it (also covering `/start/minor`, which re-exports the page) — the minor path collects nothing, not even a newsletter email (`src/components/layout/AppShell.tsx`, `Footer.tsx`, `src/app/minor-support/page.tsx`).
+6. **The five WP56 org tables had no row-level security** — the gap WP57's notes had flagged. database-hardening.spec enforces the rule every other table follows (deny by default, only `asmita_app` gets rows). Fix: additive migration `20261122060000_org_tables_rls` enabling RLS with the `asmita_app_all` policy on OrgPost, OrgSubmission, OrgJob, OrgEvent and NewsletterSubscriber, exactly the OrgPartner pattern — a new migration, never an edit of WP56's applied one.
+7. **Two defects in the new specs themselves:** ambiguous locators (org-outreach's volunteer email now `{ exact: true }`, as org-partners already did; the `/newsletter` signup scoped to `<main>`, because the footer carries the same form) and a missing teardown (org-partners left its partner public, which would have flipped the Supporters strip for smoke.spec and chat.spec — both assert the Cloudflare and Sarvam marks on `/` later in the same run; the spec now toggles the partner back after asserting).
+
+### What was verified on this machine (Node 22 in containers, throwaway Postgres 17)
+
+- The two org specs via e2e-some.sh: 9/9.
+- The full chromium Playwright suite via e2e-some.sh: 71 tests — 67 passed, 4 skipped (mobile-project skips), 0 failed; two consecutive green runs after the last fix. The runs before them isolated the causes above (26 tests on the email-name collision, then the RLS/minor-page trio).
+- Worker smoke through the Node 22 helper: `npm run build:vinext` + `node scripts/prepare-production-wrangler.mjs` + `SMOKE_CRAWLER=1 node scripts/worker-smoke.mjs` against a local Postgres 17 with all migrations and the seed — passed ("Prisma runs in workerd, each request gets its own connection, the provenance check is off, and voice headers, session limits and the chat route work.").
+- Full checks (`check.sh`, both packages): ALL CHECKS PASSED.
+
+### Not done or not verified
+
+- One transient ECONNRESET (org-outreach's job test, `GET /api/csrf` under the loaded dev server) appeared in exactly one run and in no other — the same test passed in four runs including both green full runs. Nothing was logged server-side; the APIRequestContext helper has no retry. Not changed.
+- One full run was killed mid-flight by another lane's e2e-some.sh on this host: the harness's throwaway `pg-some` container name and port are shared between lanes, and its start/remove happen outside the harness lock. Host-infrastructure collision, not a code failure; re-run.
+- The unit-test paths still exercise the memory stores; the Prisma paths are covered by the e2e database and the worker smoke.
+
+### `<TO_FILL>` placeholders for the owner
+
+None new (WP56/57's list is unchanged).
+
+### User-facing sentences the owner should approve
+
+- "Email for the newsletter" — the footer sign-up's screen-reader label (hi: "न्यूज़लेटर के लिए ईमेल"), replacing the generic "Email address" that made two fields on one page answer to the same name.
+- The absence of the newsletter sign-up on /minor-support (and /start/minor): the page deliberately collects nothing.
+
+### Decisions made on my own
+
+1. **Fixed pages, not locators, wherever the page was wrong** (unlabeled select, footer field name, minor-page email input, toggle cookie write, missing RLS): those are accessibility or security bugs for real users, not test inconveniences — and they keep the shared suite identical for every other lane that runs it.
+2. **Renamed the footer field's label rather than the registration label:** the registration label is long-standing content asserted across the suite; the footer form is the newcomer that created the collision. The label also had to avoid the words "email address" entirely, since getByLabel matches by substring.
+3. **The cookie write lives in an effect keyed on an explicit choice state** rather than in the click handler: the react-compiler lint rule forbids mutating outer values (document.cookie) in handlers, and an effect keyed on the locale alone reintroduces the mount-time write under StrictMode.
+4. **org-partners' teardown uses the existing visibility API** (no partner delete exists, by WP57's design); the test still asserts the full public-partner journey before undoing it.
+5. **The worker smoke ran against a Postgres 17 installed inside the same Node 22 container** (PGDG repo; n22 has no host network and the migrations require 17 for MAINTAIN). The e2e suites ran through e2e-some.sh unchanged.
