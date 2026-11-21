@@ -8,6 +8,7 @@ import { t } from "@/lib/i18n";
 import { PostCard } from "@/components/org/PostCard";
 import { listPublishedOrgPosts } from "@/lib/org-posts";
 import { HomeHelpBand, HomeIssueSection, HomePlatformsBand } from "./home-sections";
+import { NoticeFlow } from "./NoticeFlow";
 
 /*
  * Home: the organization's front page. Who Meri Asmita is, help within the
@@ -35,46 +36,97 @@ const steps = [
   },
 ] as const;
 
-const work = [
+const offers = [
   {
-    href: "/help",
-    icon: "heart" as const,
-    title: ["Survivor support", "प्रभावित लोगों की मदद"],
+    href: "/start",
+    icon: "notice" as const,
+    tone: "tone-teal",
+    title: ["Takedown notices", "हटाने की सूचना"],
     body: [
-      "Free, confidential help to report and remove intimate images shared without consent.",
-      "बिना सहमति साझा की गई निजी तस्वीरों की रिपोर्ट करने और उन्हें हटवाने के लिए मुफ़्त, गोपनीय मदद।",
+      "A legally grounded removal notice you read and sign. We send it to the platform and follow up.",
+      "कानूनी आधार वाली हटाने की सूचना, जिसे आप पढ़कर हस्ताक्षर करते हैं। हम इसे प्लेटफ़ॉर्म को भेजते हैं और आगे की कार्रवाई पर नज़र रखते हैं।",
     ],
   },
   {
     href: "/what-we-do",
-    icon: "shieldCheck" as const,
-    title: ["Takedown technology", "हटवाने की तकनीक"],
+    icon: "fingerprint" as const,
+    tone: "tone-coral",
+    title: ["Private fingerprints", "निजी फ़िंगरप्रिंट"],
     body: [
-      "Legally grounded notices, private fingerprints made on your device, and follow-up with platforms.",
-      "कानूनी आधार वाली सूचनाएँ, आपके डिवाइस पर बनने वाले निजी फ़िंगरप्रिंट, और प्लेटफ़ॉर्म से लगातार संपर्क।",
+      "Made on your device, so platforms can block re-uploads without ever seeing your image.",
+      "आपके डिवाइस पर बनता है, ताकि प्लेटफ़ॉर्म आपकी तस्वीर देखे बिना उसे दोबारा अपलोड होने से रोक सकें।",
     ],
   },
   {
-    href: "/lab",
-    icon: "target" as const,
-    title: ["Research and the AI Lab", "शोध और AI लैब"],
+    href: "/what-we-do",
+    icon: "radar" as const,
+    tone: "tone-gold",
+    title: ["Crawler watch", "क्रॉलर निगरानी"],
     body: [
-      "Experiments against AI-made and morphed images: detecting them, tracing them and getting them taken down.",
-      "AI से बनी और बदली गई तस्वीरों के ख़िलाफ़ प्रयोग: उनकी पहचान, उनका स्रोत खोजना और उन्हें हटवाना।",
+      "With your permission, our crawler watches for the same image coming back and we report it again.",
+      "आपकी अनुमति से हमारा क्रॉलर नज़र रखता है कि वही तस्वीर दोबारा तो नहीं आई, और हम फिर से उसकी रिपोर्ट करते हैं।",
     ],
   },
   {
-    href: "/partners",
-    icon: "handshake" as const,
-    title: ["Partnerships and policy", "साझेदारी और नीति"],
+    href: "/help",
+    icon: "chat" as const,
+    tone: "tone-sky",
+    title: ["Helpline and AI assistant", "हेल्पलाइन और AI सहायक"],
     body: [
-      "Working with NGOs, lawyers, police, universities and platforms so survivors find help faster.",
-      "NGO, वकीलों, पुलिस, विश्वविद्यालयों और प्लेटफ़ॉर्म के साथ काम, ताकि प्रभावित लोगों को जल्दी मदद मिले।",
+      "Talk or type in any Indian language, at any hour, before you decide what to do.",
+      "कुछ भी तय करने से पहले किसी भी भारतीय भाषा में, किसी भी समय बात करें या लिखें।",
+    ],
+  },
+  {
+    href: "/check-image",
+    icon: "scan" as const,
+    tone: "tone-coral",
+    title: ["AI image check", "AI तस्वीर जाँच"],
+    body: [
+      "A private check for signs that an image was made or edited by AI. A fake image is still abuse.",
+      "निजी जाँच कि तस्वीर AI से बनाई या बदली गई है या नहीं। नकली तस्वीर भी उत्पीड़न है।",
+    ],
+  },
+  {
+    href: "/for-platforms",
+    icon: "layers" as const,
+    tone: "tone-teal",
+    title: ["Platform partner channel", "प्लेटफ़ॉर्म पार्टनर चैनल"],
+    body: [
+      "One channel for platforms: survivors' notices, fingerprints they can match, and outcomes back to us.",
+      "प्लेटफ़ॉर्म के लिए एक ही चैनल: प्रभावित लोगों की सूचनाएँ, मिलान योग्य फ़िंगरप्रिंट, और नतीजों की जानकारी।",
     ],
   },
 ] as const;
 
 const experiments = ["e1", "e2", "e3"] as const;
+
+const flow = [
+  {
+    title: ["You share the links", "आप लिंक साझा करते हैं"],
+    body: ["Links go in as text. Your photo stays on your phone.", "लिंक पाठ के रूप में जाते हैं। आपकी तस्वीर आपके फ़ोन पर ही रहती है।"],
+  },
+  {
+    title: ["We draft the notice, you sign it", "हम सूचना तैयार करते हैं, आप हस्ताक्षर करते हैं"],
+    body: ["A legal removal notice, ready for you to read and sign.", "हटाने की कानूनी सूचना, जिसे आप पढ़कर हस्ताक्षर करते हैं।"],
+  },
+  {
+    title: ["The platform takes it down", "प्लेटफ़ॉर्म उसे हटाता है"],
+    body: ["We send the signed notice and follow up until it is answered.", "हम हस्ताक्षरित सूचना भेजते हैं और जवाब आने तक नज़र रखते हैं।"],
+  },
+  {
+    title: ["Our crawler keeps watching", "हमारा क्रॉलर नज़र रखता है"],
+    body: ["With your permission, it looks for the same image coming back.", "आपकी अनुमति से यह देखता है कि वही तस्वीर दोबारा तो नहीं आई।"],
+  },
+  {
+    title: ["A re-upload matches", "दोबारा अपलोड पकड़ में आता है"],
+    body: ["Its fingerprint matches yours, without anyone viewing the image.", "उसका फ़िंगरप्रिंट आपके फ़िंगरप्रिंट से मिलता है, बिना किसी के तस्वीर देखे।"],
+  },
+  {
+    title: ["It comes down again", "वह फिर से हटाई जाती है"],
+    body: ["We report the new copy and the platform removes it.", "हम नई प्रति की रिपोर्ट करते हैं और प्लेटफ़ॉर्म उसे हटाता है।"],
+  },
+] as const;
 
 export default async function HomePage() {
   const locale = await getLocale();
@@ -115,8 +167,23 @@ export default async function HomePage() {
         {/* HELP: the helpline, the assistant and the under-18 line, right under the hero. */}
         <HomeHelpBand locale={locale} />
 
+        {/* SUPPORTERS: right under the help strip. */}
+        <section className="supporters-strip mt-12 md:mt-16" aria-labelledby="supporters-heading">
+          <div className="container flex flex-col items-center gap-6 py-10 md:flex-row md:justify-center md:gap-12">
+            <div className="text-center md:text-left">
+              <p id="supporters-heading" className="eyebrow">
+                {say("Supported by", "के द्वारा समर्थित")}
+              </p>
+              <p className="mt-1 text-[14px] text-[var(--text)]">
+                {say("Technology partners who back this work", "इस काम में साथ देने वाले तकनीकी साझेदार")}
+              </p>
+            </div>
+            <span className="hidden h-12 w-px bg-[var(--line)] md:block" aria-hidden />
+            <SupporterLogos className="supporters-strip-logos justify-center" />
+          </div>
+        </section>
         {/* FILE A COMPLAINT: the workflow in four steps; the full help page is the original homepage. */}
-        <section className="zone-white mt-12 md:mt-16" aria-labelledby="file-heading">
+        <section className="zone-white pt-12 md:pt-16" aria-labelledby="file-heading">
           <div className="container org-section org-section-first">
             <div className="grid gap-10 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:gap-16">
               <div>
@@ -155,27 +222,55 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* WHAT WE DO: the four parts of the work. */}
-        <section className="transform-section" aria-labelledby="work-heading">
+        {/* HOW A TAKEDOWN WORKS: the looping scene, with the steps as text. */}
+        <section className="zone-white" aria-labelledby="flow-heading">
           <div className="container org-section">
             <div className="org-head">
-              <h2 id="work-heading" className="section-title">
-                {say("What we do", "हम क्या करते हैं")}
+              <h2 id="flow-heading" className="section-title">
+                {say("How a takedown works", "हटवाने की प्रक्रिया कैसे चलती है")}
               </h2>
             </div>
-            <ul className="org-rows org-rows-2">
-              {work.map((item) => (
-                <li key={item.href}>
-                  <Link href={item.href} className="org-row">
-                    <span className="org-row-icon" aria-hidden>
+            <NoticeFlow
+              label={say(
+                "Animation: a link becomes a signed notice, the platform removes the content, then our crawler finds a re-upload by its fingerprint and it is removed again.",
+                "एनिमेशन: एक लिंक हस्ताक्षरित सूचना बनता है, प्लेटफ़ॉर्म सामग्री हटाता है, फिर हमारा क्रॉलर फ़िंगरप्रिंट से दोबारा अपलोड पकड़ता है और उसे फिर हटाया जाता है।",
+              )}
+              steps={flow.map((step) => ({ title: pick(step.title), body: pick(step.body) }))}
+            />
+          </div>
+        </section>
+
+        {/* WHAT WE OFFER: the services and tools, each with its own colour. */}
+        <section className="transform-section" aria-labelledby="offer-heading">
+          <div className="container org-section">
+            <div className="org-head">
+              <h2 id="offer-heading" className="section-title">
+                {say("What we offer", "हम क्या देते हैं")}
+              </h2>
+            </div>
+            <ul className="org-rows org-rows-2 org-rows-3">
+              {offers.map((item) => {
+                const inner = (
+                  <>
+                    <span className={`org-row-icon ${item.tone}`} aria-hidden>
                       <Icon name={item.icon} />
                     </span>
                     <h3 className="org-row-title">{pick(item.title)}</h3>
                     <p className="org-row-body">{pick(item.body)}</p>
                     <Icon name="arrowRight" className="org-row-arrow" />
-                  </Link>
-                </li>
-              ))}
+                  </>
+                );
+                return (
+                  <li key={item.title[0]}>
+                    {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                    {item.href === "/check-image" ? (
+                      <a href={item.href} className="org-row">{inner}</a>
+                    ) : (
+                      <Link href={item.href} className="org-row">{inner}</Link>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </section>
@@ -194,7 +289,8 @@ export default async function HomePage() {
                 {say("Visit the AI Lab", "AI लैब देखें")}
               </Link>
             </div>
-            <ol className="org-steps mt-10">
+            <div className="mt-10">
+            <ol className="org-steps">
               {experiments.map((id) => (
                 <li key={id}>
                   <h3>{t(locale, `lab.exp.${id}.title` as Parameters<typeof t>[1])}</h3>
@@ -202,6 +298,7 @@ export default async function HomePage() {
                 </li>
               ))}
             </ol>
+            </div>
           </div>
         </section>
 
@@ -210,21 +307,7 @@ export default async function HomePage() {
           <HomeIssueSection locale={locale} />
         </div>
 
-        {/* WHO WE WORK WITH: supporters and the platform partner programme. */}
-        <section className="supporters-strip" aria-labelledby="supporters-heading">
-          <div className="container flex flex-col items-center gap-6 py-10 md:flex-row md:justify-center md:gap-12">
-            <div className="text-center md:text-left">
-              <p id="supporters-heading" className="eyebrow">
-                {say("Supported by", "के द्वारा समर्थित")}
-              </p>
-              <p className="mt-1 text-[14px] text-[var(--text)]">
-                {say("Technology partners who back this work", "इस काम में साथ देने वाले तकनीकी साझेदार")}
-              </p>
-            </div>
-            <span className="hidden h-12 w-px bg-[var(--line)] md:block" aria-hidden />
-            <SupporterLogos className="supporters-strip-logos justify-center" />
-          </div>
-        </section>
+        {/* WHO WE WORK WITH: the platform partner programme. */}
         <div className="pt-12 md:pt-16">
           <HomePlatformsBand locale={locale} />
         </div>

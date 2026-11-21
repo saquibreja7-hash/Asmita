@@ -1369,3 +1369,64 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 @media (min-width: 640px) {
   .org-steps-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Coloured icon tiles: the palette's teal, orange, gold and sky, each with a
+   darker ink that keeps the icon at 3:1 or better on its tint. */
+.org-row-icon.tone-teal { background: var(--brand-soft); color: var(--brand-strong); }
+.org-row-icon.tone-coral { background: var(--coral-soft); color: var(--coral-ink); }
+.org-row-icon.tone-gold { background: #fbf1cf; color: #7a5600; }
+.org-row-icon.tone-sky { background: #e3f1ef; color: #1d5f6b; }
+
+@media (min-width: 1100px) {
+  .org-rows-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 40px; }
+}
+
+/* Homepage: the looping notice-and-crawler scene with its numbered steps. */
+.notice-flow { margin: 0; }
+.notice-flow-stage { display: none; }
+.notice-flow-stage.is-animated {
+  display: block;
+  height: clamp(260px, 34vw, 400px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfaf9 100%);
+  overflow: hidden;
+}
+.notice-flow-steps {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px 32px;
+}
+@media (min-width: 640px) { .notice-flow-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .notice-flow-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.notice-flow-steps li {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 0;
+  border-top: 2px solid var(--line);
+  transition: border-color 0.3s ease;
+}
+.notice-flow-steps li.is-active { border-top-color: var(--coral); }
+.notice-flow-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: var(--coral-soft);
+  color: var(--coral-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+.notice-flow-steps li.is-active .notice-flow-num { background: var(--coral); color: #ffffff; }
+.notice-flow-steps strong { display: block; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.notice-flow-body { display: block; margin-top: 4px; font-size: 0.9375rem; line-height: 1.55; color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .notice-flow-steps li, .notice-flow-num { transition: none; }
+}
