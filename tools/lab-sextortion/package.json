@@ -1,0 +1,23 @@
+{
+  "name": "lab-sextortion",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "generate": "tsx src/cli.ts generate",
+    "validate": "tsx src/cli.ts validate",
+    "snapshot": "tsx src/cli.ts snapshot",
+    "stats": "tsx src/cli.ts stats",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "check": "npm run type-check && npm run test && npm run validate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.0"
+  }
+}
