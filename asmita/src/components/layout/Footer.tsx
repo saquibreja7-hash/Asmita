@@ -2,6 +2,7 @@ import Link from "next/link";
 import { t, type Locale } from "@/lib/i18n";
 import { HELPLINE } from "@/lib/helpline";
 import { LanguageDrawer } from "@/components/layout/LanguageDrawer";
+import { NewsletterInlineForm } from "@/components/org/NewsletterInlineForm";
 
 // Public uptime page (Better Stack), outside the app so it stays up when the site is down.
 export const STATUS_URL = "https://status.meriasmita.org";
@@ -130,9 +131,10 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
             </p>
             {/* The minor-support path collects nothing, so it hides the newsletter. */}
             {!withoutNewsletter && (
-              <Link href="/newsletter" className="site-footer-newsletter-btn">
-                {isHi ? "न्यूज़लेटर पाइए" : "Get our newsletter"}
-              </Link>
+              <div className="site-footer-newsletter">
+                <p className="site-footer-newsletter-label">{t(locale, "org.newsletter.footerLabel")}</p>
+                <NewsletterInlineForm locale={locale} source="footer" variant="footer" />
+              </div>
             )}
           </div>
 

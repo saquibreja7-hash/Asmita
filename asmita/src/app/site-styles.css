@@ -569,21 +569,14 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 
 .site-footer-helpline { max-width: 340px; font-size: 0.875rem; line-height: 1.6; color: rgb(255 255 255 / 0.8); }
 
-/* Newsletter button: white pill on the teal footer. */
-.site-footer-newsletter-btn {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  min-height: 44px;
-  padding: 10px 22px;
-  border-radius: var(--radius-pills);
-  background: #ffffff;
-  color: var(--brand);
-  font-weight: 600;
-  transition: background 0.15s ease;
-}
-
-.site-footer-newsletter-btn:hover { background: var(--brand-soft); }
+/* Newsletter sign-up on the teal footer: white field, white button. */
+.site-footer-newsletter { display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
+.site-footer-newsletter-label { font-weight: 600; color: #ffffff; }
+.site-footer-newsletter .field { background: #ffffff; border-color: #ffffff; }
+.site-footer .site-footer-newsletter button.btn-primary { background: #ffffff; border-color: #ffffff; color: var(--brand); }
+.site-footer .site-footer-newsletter button.btn-primary:hover { background: var(--brand-soft); border-color: var(--brand-soft); }
+.site-footer-newsletter [role="alert"] { color: #ffd9d4; }
+.site-footer-newsletter [role="status"] { color: #ffffff; }
 
 .site-footer-bottom-right { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px; }
 
