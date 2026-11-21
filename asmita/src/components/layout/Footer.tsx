@@ -121,14 +121,6 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
                 </p>
               )}
             </div>
-            <p className="site-footer-helpline">
-              {isHi ? "अस्मिता हेल्पलाइन (24/7)" : "Asmita helpline (24/7)"}{" "}
-              <a href={`tel:${HELPLINE.tel}`}>{HELPLINE.display}</a>
-              <span aria-hidden="true"> · </span>
-              {isHi ? "महिला हेल्पलाइन" : "Women's helpline"} <a href="tel:181">181</a>
-              <span aria-hidden="true"> · </span>
-              {isHi ? "आपातकाल" : "Emergency"} <a href="tel:112">112</a>
-            </p>
             {/* The minor-support path collects nothing, so it hides the newsletter. */}
             {!withoutNewsletter && (
               <div className="site-footer-newsletter">
@@ -160,8 +152,10 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
         </div>
 
         <div className="site-footer-bottom-bar">
-          <p className={`site-footer-copy ${isHi ? "hi" : "en"}`}>
-            {isHi ? "© 2026 अस्मिता · JAMSAQ Studio" : "© 2026 Asmita · Built by JAMSAQ Studio"}
+          <p className={`site-footer-helpline ${isHi ? "hi" : "en"}`}>
+            {isHi ? "अस्मिता हेल्पलाइन (24/7)" : "Asmita helpline (24/7)"} · <a href={`tel:${HELPLINE.tel}`}>{HELPLINE.display}</a>
+            {" · "}{isHi ? "महिला हेल्पलाइन" : "Women's helpline"} · <a href="tel:181">181</a>
+            {" · "}{isHi ? "आपातकाल" : "Emergency"} · <a href="tel:112">112</a>
           </p>
           <div className="site-footer-bottom-right">
           <ul className="site-footer-utility">
