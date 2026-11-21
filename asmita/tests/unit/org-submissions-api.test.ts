@@ -14,7 +14,6 @@ const volunteer = {
   email: "volunteer@example.invalid",
   city: "Pune",
   state: "Maharashtra",
-  languages: ["Hindi", "English"],
   roles: ["TRANSLATION", "OUTREACH"],
   hours: "FROM_3_TO_5",
   experience: "I helped run a campus legal-aid desk for two years.",

@@ -58,7 +58,6 @@ export const siteMap: SiteGroup[] = [
       { href: "/partners/academic", label: "Universities and researchers" },
       { href: "/volunteer", label: "Volunteer" },
       { href: "/careers", label: "Careers" },
-      { href: "/training", label: "Training and workshops" },
     ],
   },
   {

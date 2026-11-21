@@ -36,7 +36,6 @@ test("a visitor submits the volunteer form and sees the success state", async ({
   await page.getByLabel("Email", { exact: true }).fill("eli@example.invalid");
   await page.getByLabel("City").fill("Pune");
   await page.getByLabel("State or union territory").selectOption("Maharashtra");
-  await page.getByText("Hindi", { exact: true }).click();
   await page.getByText("Translation and language review").click();
   await page.getByLabel("Time you can give").selectOption({ label: "3 to 5 hours a week" });
   await page

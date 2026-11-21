@@ -94,11 +94,14 @@ export const messageSchema = z.string().trim().max(1500).optional();
 // Volunteer roles (56.4), shared by the form, the page and the admin view.
 export const VOLUNTEER_ROLES = {
   LEGAL: "Legal (lawyers and law students)",
+  POLICY: "Policy and advocacy",
+  RESEARCH: "Research and data",
+  TECHNOLOGY: "Technology and engineering",
+  DESIGN: "Design and creative",
   TRANSLATION: "Translation and language review",
-  RESEARCH: "Research (data and policy)",
-  DESIGN_TECH: "Design and technology",
-  OUTREACH: "Outreach and campus ambassador",
-  FACILITATION: "Workshop facilitation (after training)",
+  OUTREACH: "Outreach and communications",
+  CONTENT: "Writing and content",
+  OTHER: "Something else",
 } as const;
 export type VolunteerRole = keyof typeof VOLUNTEER_ROLES;
 

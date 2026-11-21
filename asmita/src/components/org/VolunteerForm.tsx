@@ -7,7 +7,6 @@ import {
   INDIAN_STATE_OPTIONS,
   VOLUNTEER_HOURS,
   VOLUNTEER_ROLES,
-  languageOptions,
   type VolunteerHours,
   type VolunteerRole,
 } from "@/lib/org-forms";
@@ -22,7 +21,6 @@ type Fields = {
   phone: string;
   city: string;
   state: string;
-  languagesOther: string;
   hours: string;
   experience: string;
   heardFrom: string;
@@ -34,7 +32,6 @@ const EMPTY: Fields = {
   phone: "",
   city: "",
   state: "",
-  languagesOther: "",
   hours: "",
   experience: "",
   heardFrom: "",
@@ -45,7 +42,6 @@ const PHONE = /^\+?[0-9 ()-]{7,20}$/;
 
 export function VolunteerForm({ locale }: { locale: Locale }) {
   const [fields, setFields] = useState<Fields>(EMPTY);
-  const [languages, setLanguages] = useState<string[]>([]);
   const [roles, setRoles] = useState<VolunteerRole[]>([]);
   const [adult, setAdult] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -63,7 +59,6 @@ export function VolunteerForm({ locale }: { locale: Locale }) {
     if (fields.phone.trim() && !PHONE.test(fields.phone.trim())) return "phone";
     if (fields.city.trim().length < 2) return "city";
     if (!fields.state) return "state";
-    if (languages.length === 0) return "languages";
     if (roles.length === 0 || roles.length > 3) return "roles";
     if (!fields.hours) return "hours";
     if (fields.experience.trim().length < 20) return "experience";
@@ -94,8 +89,6 @@ export function VolunteerForm({ locale }: { locale: Locale }) {
         phone: fields.phone.trim() || undefined,
         city: fields.city.trim(),
         state: fields.state,
-        languages: languages.includes("Other") && fields.languagesOther.trim() ? [...languages] : languages,
-        languagesOther: fields.languagesOther.trim() || undefined,
         roles,
         hours: fields.hours,
         experience: fields.experience.trim(),
@@ -166,28 +159,6 @@ export function VolunteerForm({ locale }: { locale: Locale }) {
             ))}
           </select>
         </Field>
-      </fieldset>
-
-      <fieldset className="space-y-4">
-        <legend className="eyebrow">{t(locale, "org.volunteer.f.languages")}</legend>
-        <div className="grid gap-3 sm:grid-cols-3" id="volunteer-languages" tabIndex={-1}>
-          {languageOptions.map((language) => (
-            <label key={language} className="partner-choice">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand)]"
-                checked={languages.includes(language)}
-                onChange={(e) => setLanguages((current) => (e.target.checked ? [...new Set([...current, language])] : current.filter((entry) => entry !== language)))}
-              />
-              <span className="text-[15px] leading-[1.5] text-[var(--ink)]">{language}</span>
-            </label>
-          ))}
-        </div>
-        {languages.includes("Other") && (
-          <Field id="languagesOther" label={t(locale, "org.volunteer.f.languagesOther")} locale={locale}>
-            <input className="field" id="volunteer-languagesOther" value={fields.languagesOther} onChange={(e) => set("languagesOther")(e.target.value)} aria-invalid={invalid("languagesOther")} maxLength={40} />
-          </Field>
-        )}
       </fieldset>
 
       <fieldset className="space-y-4" aria-describedby="volunteer-roles-hint">
@@ -277,7 +248,6 @@ function errorMessageKey(field: string): Parameters<typeof t>[1] {
     phone: "org.volunteer.f.err.phone",
     city: "org.volunteer.f.err.city",
     state: "org.volunteer.f.err.state",
-    languages: "org.volunteer.f.err.languages",
     roles: "org.volunteer.f.err.roles",
     hours: "org.volunteer.f.err.hours",
     experience: "org.volunteer.f.err.experience",

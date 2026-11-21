@@ -7,7 +7,6 @@ import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { PostCard } from "@/components/org/PostCard";
 import { listPublishedCaseStudies } from "@/lib/org-posts";
-import { listPublicOrgEvents } from "@/lib/org-events";
 
 // The get-involved hub (docs/org/spec.md, 56.3): one card per way to join,
 // the Stories strip from published case studies (56.8), and the small
@@ -22,20 +21,12 @@ const CARDS: { href: string; icon: Parameters<typeof Icon>[0]["name"]; titleKey:
   { href: "/partners", icon: "handshake", titleKey: "org.getInvolved.cardPartnerTitle", bodyKey: "org.getInvolved.cardPartnerBody" },
   { href: "/volunteer", icon: "users", titleKey: "org.getInvolved.cardVolunteerTitle", bodyKey: "org.getInvolved.cardVolunteerBody" },
   { href: "/careers", icon: "briefcase", titleKey: "org.getInvolved.cardCareersTitle", bodyKey: "org.getInvolved.cardCareersBody" },
-  { href: "/training", icon: "presentation", titleKey: "org.getInvolved.cardTrainingTitle", bodyKey: "org.getInvolved.cardTrainingBody" },
   { href: "/news", icon: "newspaper", titleKey: "org.getInvolved.cardNewsTitle", bodyKey: "org.getInvolved.cardNewsBody" },
 ];
 
 export default async function GetInvolvedPage() {
   const locale = await getLocale();
   const stories = await listPublishedCaseStudies(3);
-  const { upcoming } = await listPublicOrgEvents();
-  const when = (iso: string) =>
-    new Intl.DateTimeFormat(locale === "hi" ? "hi-IN" : "en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "Asia/Kolkata",
-    }).format(new Date(iso));
 
   return (
     <AppShell>
@@ -87,40 +78,6 @@ export default async function GetInvolvedPage() {
             )}
           </div>
         </section>
-
-        {/* Upcoming sessions (56.6): published events also surface on the hub. */}
-        {upcoming.length > 0 && (
-          <section className="zone-white section-pad" aria-labelledby="hub-events-heading">
-            <div className="container">
-              <h2 id="hub-events-heading" className="section-title">
-                {t(locale, "org.training.upcomingTitle")}
-              </h2>
-              <ul className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {upcoming.slice(0, 3).map((event) => (
-                  <li key={event.id} className="card p-7">
-                    <p className="text-[17px] font-semibold text-[var(--ink)]">
-                      {locale === "hi" && event.titleHi ? event.titleHi : event.titleEn}
-                    </p>
-                    <p className="muted mt-2 text-sm">
-                      <time dateTime={event.startsAt}>{when(event.startsAt)}</time>
-                      {event.city ? ` · ${event.city}` : ""}
-                    </p>
-                    {event.registrationUrl && (
-                      <a className="arrow-link mt-4" href={event.registrationUrl} rel="noopener noreferrer">
-                        {t(locale, "org.training.event.register")}
-                      </a>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-8">
-                <Link className="arrow-link" href="/training">
-                  {t(locale, "org.training.eyebrow")}
-                </Link>
-              </p>
-            </div>
-          </section>
-        )}
 
         <section className="transform-section" aria-labelledby="other-ways-heading">
           <div className="transform-content container section-pad">

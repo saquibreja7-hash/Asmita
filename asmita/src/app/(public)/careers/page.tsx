@@ -4,7 +4,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Illustration } from "@/components/Illustration";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
-import { NewsletterInlineForm } from "@/components/org/NewsletterInlineForm";
 import { listOpenOrgJobs } from "@/lib/org-jobs";
 import type { OrgJobType } from "@/lib/org-jobs";
 
@@ -53,10 +52,6 @@ export default async function CareersPage() {
                   <Link className="btn btn-primary btn-arrow !m-0" href="/volunteer">
                     {t(locale, "org.careers.emptyCta")}
                   </Link>
-                </div>
-                <div className="mx-auto mt-8 max-w-md">
-                  <p className="eyebrow mb-3 block">{t(locale, "org.newsletter.eyebrow")}</p>
-                  <NewsletterInlineForm locale={locale} source="careers" />
                 </div>
               </div>
             ) : (

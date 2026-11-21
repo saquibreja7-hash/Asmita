@@ -274,3 +274,7 @@ Decisions made on my own (second round)
 ## 2026-11-21: public pages removed
 
 Owner decision: /press, /research (including /research/platform-scorecard and its CSV), /policy (including /policy/[slug]) and the /newsletter landing page were taken out because they were mostly empty or repeated other pages. The newsletter sign-up lives in the footer; /newsletter/confirm and /newsletter/unsubscribe stay because the confirmation emails link to them. Footer, header nav, sitemap, get-involved cards and tests were updated. Every post kind now lives under /news/[slug]. The admin screens (posts, scorecard, newsletter) and the scorecard library are unchanged; restore the public pages from git history when they are needed again.
+
+## 2026-11-21: volunteer form, careers and training
+
+Owner decisions: the volunteer form no longer asks which languages the person knows; "Roles you are interested in" became "Areas you want to volunteer in" (legal, policy and advocacy, research and data, technology and engineering, design and creative, translation, outreach and communications, writing and content, something else; one to three). The newsletter form was taken off /careers (the footer has it; we are not hiring right now). The /training page, its request form and the upcoming-sessions block on /get-involved were removed. The training-request API kind and the admin events screens stay in the backend, unused by the public site; restore the page from git history if programmes start.
