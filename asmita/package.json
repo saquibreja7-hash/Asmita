@@ -95,7 +95,11 @@
     "qs": "^6.16.0",
     "puppeteer-core": "^25.10.0",
     "@puppeteer/browsers": "^3.2.2",
-    "speaker": "npm:empty-npm-package@1.0.0"
+    "speaker": "npm:empty-npm-package@1.0.0",
+    "effect": "^3.22.5",
+    "satori": {
+      "fflate": "0.7.5"
+    }
   },
   "type": "module"
 }
