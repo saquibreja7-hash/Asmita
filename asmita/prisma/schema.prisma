@@ -289,6 +289,9 @@ enum AuditEventType {
   LAB_PROVIDER_CREATED
   LAB_PROVIDER_UPDATED
   LAB_FINDING_PROMOTED
+  // WP115 (research-tools-spec.md): an analyst confirming or dismissing a
+  // cluster candidate link. Ids only.
+  LAB_SERVICE_LINK_REVIEWED
   CRAWL_FINDING_LABEL_SET
   CRAWL_FINDING_LABEL_CLEARED
   PARTNER_SHARE_CONSENT_GIVEN
@@ -349,6 +352,14 @@ enum LabReportOutcome {
   ACTIONED
   REFUSED
   NO_REPLY
+}
+
+// WP115 (research-tools-spec.md): review state for cluster candidates —
+// a scan creates CANDIDATE rows, an analyst confirms or dismisses them.
+enum LabServiceLinkStatus {
+  CANDIDATE
+  CONFIRMED
+  DISMISSED
 }
 
 // WP114 (research-tools-spec.md): one category of infrastructure evidence
@@ -1427,7 +1438,9 @@ model LabChokepoint {
 // web form; the outcome is recorded when the provider replies (or does not).
 model LabReport {
   id                String            @id @default(uuid())
-  chokepointId      String
+  // Null only on a WP115 bulk report, which covers several services that
+  // depend on one provider instead of one service's chokepoint.
+  chokepointId      String?
   // The chokepoint kind the draft was rendered from (report-templates.ts).
   templateKind      LabChokepointKind
   channel           LabReportChannel?
@@ -1440,10 +1453,16 @@ model LabReport {
   providerReference String?
   outcome           LabReportOutcome?
   outcomeAt         DateTime?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  // WP115 bulk reports: the provider directory row's name and the contact
+  // the draft was rendered for, copied at draft time (the sent text is the
+  // record either way), plus every listed service's id.
+  bulkProviderName    String?
+  bulkAbuseContact    String?
+  bulkServiceIds      String[]         @default([])
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
-  chokepoint LabChokepoint @relation(fields: [chokepointId], references: [id])
+  chokepoint LabChokepoint? @relation(fields: [chokepointId], references: [id])
 
   @@index([chokepointId])
   @@index([status])
@@ -1509,6 +1528,10 @@ model LabInfraFinding {
   firstSeenAt DateTime                @default(now())
   lastSeenAt  DateTime                @default(now())
   active      Boolean                 @default(true)
+  // WP115: set once when an analyst promotes this finding into a
+  // LabChokepoint; a promoted finding cannot be promoted again.
+  promotedAt          DateTime?
+  promotedChokepointId String?
 
   service LabService @relation(fields: [serviceId], references: [id])
 
@@ -1529,8 +1552,13 @@ model LabServiceLink {
   reason     LabServiceLinkReason
   value      String
   createdAt  DateTime             @default(now())
+  // WP115: scans create CANDIDATE rows; analysts confirm or dismiss.
+  status         LabServiceLinkStatus @default(CANDIDATE)
+  reviewedById   String?
+  reviewedAt     DateTime?
 
   @@unique([serviceAId, serviceBId, reason, value])
   @@index([serviceAId])
   @@index([serviceBId])
+  @@index([status])
 }

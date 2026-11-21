@@ -72,6 +72,10 @@
   --coral: var(--color-coral);
   --coral-deep: var(--color-crimson);
   --coral-soft: #ffe6dd;
+  /* WP115 (research-tools-spec.md names this token): the legible dark
+     orange for marker text on white, parchment and --coral-soft alike
+     (6.5:1 on white, 5.5:1 on coral-soft). */
+  --coral-ink: #9a4508;
   --midnight: var(--color-off-black);
   --midnight-deep: var(--color-ink);
   --heading: var(--ink);

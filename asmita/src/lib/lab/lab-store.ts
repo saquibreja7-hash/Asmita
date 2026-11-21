@@ -69,6 +69,11 @@ export const LAB_SERVICE_LINK_REASONS = [
 ] as const;
 export type LabServiceLinkReason = (typeof LAB_SERVICE_LINK_REASONS)[number];
 
+// WP115 (research-tools-spec.md): review state for a cluster candidate —
+// scans create CANDIDATE rows, an analyst confirms or dismisses them.
+export const LAB_SERVICE_LINK_STATUSES = ["CANDIDATE", "CONFIRMED", "DISMISSED"] as const;
+export type LabServiceLinkStatus = (typeof LAB_SERVICE_LINK_STATUSES)[number];
+
 /** The latest liveness result for one service URL (JSON in the database). */
 export type LabUrlStatus = { url: string; up: boolean; checkedAt: string };
 
@@ -100,7 +105,8 @@ export type MemoryLabChokepoint = {
 
 export type MemoryLabReport = {
   id: string;
-  chokepointId: string;
+  /** Null on a WP115 bulk report, which lists several services instead. */
+  chokepointId: string | null;
   templateKind: LabChokepointKind;
   channel: LabReportChannel | null;
   subject: string;
@@ -112,6 +118,10 @@ export type MemoryLabReport = {
   providerReference: string | null;
   outcome: LabReportOutcome | null;
   outcomeAt: Date | null;
+  /** WP115 bulk reports: the provider's name and contact copied at draft time, and the listed services. */
+  bulkProviderName: string | null;
+  bulkAbuseContact: string | null;
+  bulkServiceIds: string[];
   createdAt: Date;
   updatedAt: Date;
 };
@@ -157,6 +167,9 @@ export type MemoryLabInfraFinding = {
   firstSeenAt: Date;
   lastSeenAt: Date;
   active: boolean;
+  /** WP115: set when an analyst promotes the finding into a chokepoint. */
+  promotedAt: Date | null;
+  promotedChokepointId: string | null;
 };
 
 export type MemoryLabServiceLink = {
@@ -166,6 +179,9 @@ export type MemoryLabServiceLink = {
   reason: LabServiceLinkReason;
   value: string;
   createdAt: Date;
+  status: LabServiceLinkStatus;
+  reviewedById: string | null;
+  reviewedAt: Date | null;
 };
 
 type LabMemory = {

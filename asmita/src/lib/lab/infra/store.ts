@@ -11,10 +11,12 @@ import {
   LAB_INFRA_CATEGORIES,
   LAB_INFRA_CONFIDENCES,
   LAB_SERVICE_LINK_REASONS,
+  LAB_SERVICE_LINK_STATUSES,
   type LabChokepointKind,
   type LabInfraCategory,
   type LabInfraConfidence,
   type LabServiceLinkReason,
+  type LabServiceLinkStatus,
   type MemoryLabInfraFinding,
   type MemoryLabInfraScan,
   type MemoryLabProvider,
@@ -32,9 +34,9 @@ import {
  */
 
 const SCAN_COLUMNS = ["id", "serviceId", "url", "finalUrl", "httpStatus", "scannedAt", "signatureVersion", "error"] as const;
-const FINDING_COLUMNS = ["id", "scanId", "serviceId", "category", "providerId", "value", "evidence", "confidence", "firstSeenAt", "lastSeenAt", "active"] as const;
+const FINDING_COLUMNS = ["id", "scanId", "serviceId", "category", "providerId", "value", "evidence", "confidence", "firstSeenAt", "lastSeenAt", "active", "promotedAt", "promotedChokepointId"] as const;
 const PROVIDER_COLUMNS = ["id", "name", "kind", "website", "abusePageUrl", "abuseEmail", "policyUrl", "notes", "verifiedById", "verifiedAt", "createdAt", "updatedAt"] as const;
-const LINK_COLUMNS = ["id", "serviceAId", "serviceBId", "reason", "value", "createdAt"] as const;
+const LINK_COLUMNS = ["id", "serviceAId", "serviceBId", "reason", "value", "createdAt", "status", "reviewedById", "reviewedAt"] as const;
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
@@ -79,6 +81,9 @@ export type LabInfraFindingView = {
   firstSeenAt: string;
   lastSeenAt: string;
   active: boolean;
+  /** WP115: set when an analyst promoted the finding into a chokepoint. */
+  promotedAt: string | null;
+  promotedChokepointId: string | null;
 };
 
 export type LabServiceLinkView = {
@@ -88,6 +93,10 @@ export type LabServiceLinkView = {
   reason: LabServiceLinkReason;
   value: string;
   createdAt: string;
+  /** WP115: CANDIDATE until an analyst confirms or dismisses. */
+  status: LabServiceLinkStatus;
+  reviewedById: string | null;
+  reviewedAt: string | null;
 };
 
 type ProviderRow = Omit<MemoryLabProvider, "verifiedAt" | "createdAt" | "updatedAt"> & {
@@ -147,6 +156,8 @@ function toFindingView(row: FindingRow): LabInfraFindingView {
     firstSeenAt: isoDate(row.firstSeenAt) ?? new Date().toISOString(),
     lastSeenAt: isoDate(row.lastSeenAt) ?? new Date().toISOString(),
     active: row.active,
+    promotedAt: isoDate(row.promotedAt),
+    promotedChokepointId: row.promotedChokepointId ?? null,
   };
 }
 
@@ -158,6 +169,9 @@ function toLinkView(row: LinkRow): LabServiceLinkView {
     reason: row.reason,
     value: row.value,
     createdAt: isoDate(row.createdAt) ?? new Date().toISOString(),
+    status: row.status,
+    reviewedById: row.reviewedById ?? null,
+    reviewedAt: isoDate(row.reviewedAt),
   };
 }
 
@@ -426,6 +440,87 @@ export async function findActiveFindingsByValue(value: string, category: LabInfr
   return rows.map(toFindingView);
 }
 
+/** One finding by id, whatever service it belongs to (WP115 promote flow). */
+export async function getLabInfraFinding(id: string): Promise<LabInfraFindingView | null> {
+  let rows: FindingRow[];
+  if (isDevNoDb()) {
+    rows = [...labMemory().infraFindings.values()].filter((row) => row.id === id);
+  } else if (usesWorkerKysely()) {
+    rows = await getWorkerDb().selectFrom("LabInfraFinding").select([...FINDING_COLUMNS]).where("id", "=", id).execute();
+  } else {
+    const { db } = await import("@/lib/db");
+    rows = await db.labInfraFinding.findMany({ where: { id } });
+  }
+  return rows.length > 0 ? toFindingView(rows[0]!) : null;
+}
+
+/** Every active finding, across all services — the registry table's evidence base. */
+export async function listActiveInfraFindings(): Promise<LabInfraFindingView[]> {
+  let rows: FindingRow[];
+  if (isDevNoDb()) {
+    rows = [...labMemory().infraFindings.values()].filter((row) => row.active);
+  } else if (usesWorkerKysely()) {
+    rows = await getWorkerDb().selectFrom("LabInfraFinding").select([...FINDING_COLUMNS]).where("active", "=", true).execute();
+  } else {
+    const { db } = await import("@/lib/db");
+    rows = await db.labInfraFinding.findMany({ where: { active: true } });
+  }
+  return rows.map(toFindingView);
+}
+
+/**
+ * WP115 (research-tools-spec.md): marks a finding promoted, pointing at the
+ * chokepoint it became. A promoted finding never promotes again.
+ */
+export async function setFindingPromoted(id: string, chokepointId: string, now: Date): Promise<void> {
+  const values = { promotedAt: now, promotedChokepointId: chokepointId };
+  if (isDevNoDb()) {
+    const row = labMemory().infraFindings.get(id);
+    if (row) Object.assign(row, values);
+    return;
+  }
+  if (usesWorkerKysely()) {
+    await getWorkerDb().updateTable("LabInfraFinding").set(values).where("id", "=", id).execute();
+    return;
+  }
+  const { db } = await import("@/lib/db");
+  await db.labInfraFinding.update({ where: { id }, data: values });
+}
+
+/**
+ * The most recent scan of each service, as the registry table's "last scan"
+ * column. One aggregate query per backend; the map omits never-scanned services.
+ */
+export async function latestInfraScanAtByService(): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (isDevNoDb()) {
+    for (const scan of labMemory().infraScans.values()) {
+      const current = result.get(scan.serviceId);
+      if (!current || current < scan.scannedAt.toISOString()) {
+        result.set(scan.serviceId, scan.scannedAt.toISOString());
+      }
+    }
+    return result;
+  }
+  if (usesWorkerKysely()) {
+    const rows = await getWorkerDb().selectFrom("LabInfraScan")
+      .select((eb) => ["serviceId", eb.fn.max("scannedAt").as("maxScannedAt")])
+      .groupBy("serviceId")
+      .execute();
+    for (const row of rows) {
+      const at = (row as { maxScannedAt: Date | string }).maxScannedAt;
+      if (at) result.set(row.serviceId, isoDate(at) ?? new Date().toISOString());
+    }
+    return result;
+  }
+  const { db } = await import("@/lib/db");
+  const rows = await db.labInfraScan.groupBy({ by: ["serviceId"], _max: { scannedAt: true } });
+  for (const row of rows) {
+    if (row._max.scannedAt) result.set(row.serviceId, isoDate(row._max.scannedAt)!);
+  }
+  return result;
+}
+
 /**
  * Writes one scan's findings with change tracking: findings in categories
  * this run checked that the scan no longer sees become active=false (never
@@ -475,7 +570,10 @@ export async function recordScanFindings(
         const row = memory.infraFindings.get(previous.id);
         if (row) Object.assign(row, values);
       } else {
-        const row: MemoryLabInfraFinding = { id: randomUUID(), firstSeenAt: now, ...values };
+        const row: MemoryLabInfraFinding = {
+          id: randomUUID(), firstSeenAt: now, ...values,
+          promotedAt: null, promotedChokepointId: null,
+        };
         memory.infraFindings.set(row.id, row);
       }
     } else if (usesWorkerKysely()) {
@@ -544,7 +642,10 @@ export async function createServiceLink(
       (link) => link.serviceAId === a && link.serviceBId === b && link.reason === reason && link.value === value,
     );
     if (duplicate) return false;
-    const row: MemoryLabServiceLink = { id: randomUUID(), serviceAId: a, serviceBId: b, reason, value, createdAt: now };
+    const row: MemoryLabServiceLink = {
+      id: randomUUID(), serviceAId: a, serviceBId: b, reason, value, createdAt: now,
+      status: "CANDIDATE", reviewedById: null, reviewedAt: null,
+    };
     memory.serviceLinks.set(row.id, row);
     return true;
   }
@@ -562,6 +663,53 @@ export async function createServiceLink(
     skipDuplicates: true,
   });
   return created.count > 0;
+}
+
+/**
+ * WP115 (research-tools-spec.md): an analyst confirms or dismisses a cluster
+ * candidate. Confirmed links are what the registry's cluster badge counts;
+ * dismissed ones stay on record (nothing in the Lab is deleted) but never
+ * surface as a badge again. Audited with ids only.
+ */
+export async function reviewServiceLink(
+  id: string,
+  status: "CONFIRMED" | "DISMISSED",
+  actorId: string,
+): Promise<{ ok: true; link: LabServiceLinkView } | { ok: false; error: "link_not_found" }> {
+  const now = new Date();
+  const values = { status, reviewedById: actorId, reviewedAt: now };
+  let row: LinkRow | null = null;
+  if (isDevNoDb()) {
+    const memory = labMemory();
+    const existing = memory.serviceLinks.get(id) ?? null;
+    if (existing) {
+      Object.assign(existing, values);
+      row = existing;
+    }
+  } else if (usesWorkerKysely()) {
+    row = (await getWorkerDb().updateTable("LabServiceLink")
+      .set(values)
+      .where("id", "=", id)
+      .returning([...LINK_COLUMNS])
+      .executeTakeFirst()) ?? null;
+  } else {
+    const { db } = await import("@/lib/db");
+    try {
+      row = await db.labServiceLink.update({ where: { id }, data: values });
+    } catch (err) {
+      if ((err as { code?: string }).code === "P2025") return { ok: false, error: "link_not_found" };
+      throw err;
+    }
+  }
+  if (!row) return { ok: false, error: "link_not_found" };
+  await writeAuditLog({
+    eventType: "LAB_SERVICE_LINK_REVIEWED",
+    entityType: "LabServiceLink",
+    entityId: id,
+    actorId,
+    data: { status, reason: row.reason },
+  });
+  return { ok: true, link: toLinkView(row) };
 }
 
 export async function listServiceLinks(): Promise<LabServiceLinkView[]> {
@@ -585,3 +733,4 @@ export async function listServiceLinksForService(serviceId: string): Promise<Lab
 export const labInfraCategoryEnum = z.enum(LAB_INFRA_CATEGORIES);
 export const labInfraConfidenceEnum = z.enum(LAB_INFRA_CONFIDENCES);
 export const labServiceLinkReasonEnum = z.enum(LAB_SERVICE_LINK_REASONS);
+export const labServiceLinkStatusEnum = z.enum(LAB_SERVICE_LINK_STATUSES);

@@ -14,7 +14,9 @@ import {
   type MemoryLabReport,
 } from "@/lib/lab/lab-store";
 import { getLabChokepoint } from "@/lib/lab/lab-chokepoints";
-import { fillLabReportTemplate } from "@/lib/lab/report-templates";
+import { listLabServices, type LabServiceView } from "@/lib/lab/lab-services";
+import { getLabProvider } from "@/lib/lab/infra/store";
+import { fillLabBulkReportTemplate, fillLabReportTemplate } from "@/lib/lab/report-templates";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
 /*
@@ -30,16 +32,20 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 const REPORT_COLUMNS = [
   "id", "chokepointId", "templateKind", "channel", "subject", "body", "status",
   "toAddress", "sentAt", "sentById", "providerReference", "outcome", "outcomeAt", "createdAt",
+  "bulkProviderName", "bulkAbuseContact", "bulkServiceIds",
 ] as const;
 
 export type LabReportView = {
   id: string;
-  chokepointId: string;
+  /** Null on a bulk report, which lists several services instead. */
+  chokepointId: string | null;
   /** The chokepoint, joined in for the console list. */
   chokepointKind: LabChokepointKind;
   provider: string;
   abuseContact: string;
-  serviceId: string;
+  /** Null on a bulk report; each listed service is in bulkServiceIds. */
+  serviceId: string | null;
+  /** "N services" on a bulk report. */
   serviceName: string;
   templateKind: LabChokepointKind;
   channel: LabReportChannel | null;
@@ -53,6 +59,10 @@ export type LabReportView = {
   outcome: LabReportOutcome | null;
   outcomeAt: string | null;
   createdAt: string;
+  /** WP115 bulk reports: the provider's name and the draft's contact, copied at draft time. */
+  bulkProviderName: string | null;
+  bulkAbuseContact: string | null;
+  bulkServiceIds: string[];
 };
 
 function isDevNoDb() {
@@ -88,7 +98,7 @@ export const labReportOutcomeSchema = z
 
 type ReportRow = {
   id: string;
-  chokepointId: string;
+  chokepointId: string | null;
   templateKind: LabChokepointKind;
   channel: LabReportChannel | null;
   subject: string;
@@ -101,14 +111,17 @@ type ReportRow = {
   outcome: LabReportOutcome | null;
   outcomeAt: Date | string | null;
   createdAt: Date | string;
+  bulkProviderName: string | null;
+  bulkAbuseContact: string | null;
+  bulkServiceIds: string[] | null;
 };
 
 type ReportContext = {
-  chokepointId: string;
+  chokepointId: string | null;
   chokepointKind: LabChokepointKind;
   provider: string;
   abuseContact: string;
-  serviceId: string;
+  serviceId: string | null;
   serviceName: string;
   serviceKind: LabServiceKind;
   serviceUrls: string[];
@@ -132,11 +145,11 @@ async function contextFor(chokepointId: string): Promise<ReportContext | null> {
 }
 
 const MISSING_CONTEXT: ReportContext = {
-  chokepointId: "—",
+  chokepointId: null,
   chokepointKind: "HOST",
   provider: "—",
   abuseContact: "—",
-  serviceId: "—",
+  serviceId: null,
   serviceName: "—",
   serviceKind: "WEBSITE",
   serviceUrls: [],
@@ -152,6 +165,22 @@ function missingContextFor(report: LabReportView): ReportContext {
     abuseContact: report.abuseContact,
     serviceId: report.serviceId,
     serviceName: report.serviceName,
+  };
+}
+
+/**
+ * A bulk report's context comes from the report row itself: the provider
+ * name and contact copied at draft time, and how many services it lists.
+ */
+function bulkContextFor(row: ReportRow): ReportContext {
+  const ids = row.bulkServiceIds ?? [];
+  return {
+    ...MISSING_CONTEXT,
+    chokepointKind: row.templateKind,
+    provider: row.bulkProviderName ?? "—",
+    abuseContact: row.bulkAbuseContact ?? "—",
+    serviceId: null,
+    serviceName: ids.length === 1 ? "1 service" : `${ids.length} services`,
   };
 }
 
@@ -176,6 +205,9 @@ function toView(row: ReportRow, context: ReportContext): LabReportView {
     outcome: row.outcome,
     outcomeAt: isoDate(row.outcomeAt),
     createdAt: isoDate(row.createdAt) ?? new Date().toISOString(),
+    bulkProviderName: row.bulkProviderName ?? null,
+    bulkAbuseContact: row.bulkAbuseContact ?? null,
+    bulkServiceIds: row.bulkServiceIds ?? [],
   };
 }
 
@@ -191,17 +223,16 @@ export async function listLabReports(): Promise<LabReportView[]> {
   }
   const contexts = new Map<string, ReportContext>();
   for (const row of rows) {
-    if (!contexts.has(row.chokepointId)) {
-      const context = await contextFor(row.chokepointId);
-      if (context) contexts.set(row.chokepointId, context);
-    }
+    if (!row.chokepointId || contexts.has(row.chokepointId)) continue;
+    const context = await contextFor(row.chokepointId);
+    if (context) contexts.set(row.chokepointId, context);
   }
   return rows
     .map((row) => {
+      if (!row.chokepointId) return toView(row, bulkContextFor(row));
       const context = contexts.get(row.chokepointId);
       if (context) return toView(row, context);
-      const fallback = { ...MISSING_CONTEXT, chokepointKind: row.templateKind };
-      return toView(row, fallback);
+      return toView(row, { ...MISSING_CONTEXT, chokepointKind: row.templateKind });
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
@@ -249,6 +280,9 @@ export async function draftLabReport(
       providerReference: null,
       outcome: null,
       outcomeAt: null,
+      bulkProviderName: null,
+      bulkAbuseContact: null,
+      bulkServiceIds: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -298,6 +332,130 @@ export async function draftLabReport(
   return { ok: true, report: view };
 }
 
+export const labBulkReportDraftSchema = z
+  .object({
+    providerId: z.string().trim().min(1).max(64),
+    /** The services the report lists; two at least, or it is a single report. */
+    serviceIds: z.array(z.string().trim().min(1).max(64)).min(2).max(50),
+    /** Required unless the verified provider row carries an abuse email. */
+    abuseContact: z.string().trim().min(1).max(500).optional(),
+  })
+  .strict();
+
+/**
+ * WP115 (research-tools-spec.md): drafts ONE report to one provider that
+ * lists every selected service depending on it — the multi-service variant
+ * of draftLabReport. Same verified-contact rule as promoting a finding: the
+ * directory's email is used only when the provider row is verified, and an
+ * unverified row never fills anything by itself. The draft is reviewed,
+ * edited, sent and immutably recorded exactly like a single report.
+ */
+export async function draftBulkLabReport(
+  input: z.infer<typeof labBulkReportDraftSchema>,
+  actorId: string,
+): Promise<
+  | { ok: true; report: LabReportView }
+  | { ok: false; error: "invalid_payload" | "provider_not_found" | "service_not_found" | "abuse_contact_required" }
+> {
+  const parsed = labBulkReportDraftSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid_payload" };
+  const provider = await getLabProvider(parsed.data.providerId);
+  if (!provider) return { ok: false, error: "provider_not_found" };
+
+  const services = await listLabServices();
+  const listed: LabServiceView[] = [];
+  for (const id of parsed.data.serviceIds) {
+    const service = services.find((entry) => entry.id === id);
+    if (!service) return { ok: false, error: "service_not_found" };
+    if (!listed.some((entry) => entry.id === service.id)) listed.push(service);
+  }
+  if (listed.length < 2) return { ok: false, error: "invalid_payload" };
+
+  const directoryContact = provider.verifiedAt !== null && provider.abuseEmail ? provider.abuseEmail : null;
+  const abuseContact = parsed.data.abuseContact ?? directoryContact;
+  if (!abuseContact) return { ok: false, error: "abuse_contact_required" };
+
+  const filled = fillLabBulkReportTemplate(provider.kind, {
+    provider: provider.name,
+    services: listed.map((service) => ({ name: service.name, kind: service.kind, urls: service.urls })),
+    reportDate: new Date().toISOString().slice(0, 10),
+  });
+  const bulkServiceIds = listed.map((service) => service.id);
+  const now = new Date();
+  let view: LabReportView;
+  if (isDevNoDb()) {
+    const row: MemoryLabReport = {
+      id: randomUUID(),
+      chokepointId: null,
+      templateKind: provider.kind,
+      channel: null,
+      subject: filled.subject,
+      body: filled.body,
+      status: "DRAFT",
+      toAddress: null,
+      sentAt: null,
+      sentById: null,
+      providerReference: null,
+      outcome: null,
+      outcomeAt: null,
+      bulkProviderName: provider.name,
+      bulkAbuseContact: abuseContact,
+      bulkServiceIds,
+      createdAt: now,
+      updatedAt: now,
+    };
+    labMemory().reports.set(row.id, row);
+    view = toView(row, bulkContextFor(row));
+  } else if (usesWorkerKysely()) {
+    const inserted = await getWorkerDb().insertInto("LabReport")
+      .values({
+        id: randomUUID(),
+        chokepointId: null,
+        templateKind: provider.kind,
+        channel: null,
+        subject: filled.subject,
+        body: filled.body,
+        status: "DRAFT",
+        toAddress: null,
+        sentAt: null,
+        sentById: null,
+        providerReference: null,
+        outcome: null,
+        outcomeAt: null,
+        bulkProviderName: provider.name,
+        bulkAbuseContact: abuseContact,
+        bulkServiceIds,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning([...REPORT_COLUMNS])
+      .executeTakeFirstOrThrow();
+    view = toView(inserted, bulkContextFor(inserted));
+  } else {
+    const { db } = await import("@/lib/db");
+    const created = await db.labReport.create({
+      data: {
+        chokepointId: null,
+        templateKind: provider.kind,
+        subject: filled.subject,
+        body: filled.body,
+        bulkProviderName: provider.name,
+        bulkAbuseContact: abuseContact,
+        bulkServiceIds,
+      },
+    });
+    view = toView(created, bulkContextFor(created));
+  }
+  await writeAuditLog({
+    eventType: "LAB_REPORT_DRAFTED",
+    entityType: "LabReport",
+    entityId: view.id,
+    actorId,
+    data: { bulk: true, providerId: provider.id, serviceCount: bulkServiceIds.length, templateKind: provider.kind },
+  });
+  return { ok: true, report: view };
+}
+
 type ReportUpdateValues = {
   subject?: string;
   body?: string;
@@ -311,6 +469,12 @@ type ReportUpdateValues = {
   outcomeAt?: Date | null;
   updatedAt: Date;
 };
+
+/** The live context of an updated row: its chokepoint's, its own bulk fields, or the fallback. */
+async function refreshedContext(updated: ReportRow, current: LabReportView): Promise<ReportContext> {
+  if (!updated.chokepointId) return bulkContextFor(updated);
+  return (await contextFor(updated.chokepointId)) ?? missingContextFor(current);
+}
 
 async function updateReportRow(id: string, values: ReportUpdateValues): Promise<ReportRow> {
   if (isDevNoDb()) {
@@ -358,7 +522,7 @@ export async function editLabReportDraft(
     actorId,
     data: { chokepointId: current.chokepointId },
   });
-  return { ok: true, report: toView(updated, (await contextFor(current.chokepointId)) ?? missingContextFor(current)) };
+  return { ok: true, report: toView(updated, await refreshedContext(updated, current)) };
 }
 
 /**
@@ -407,7 +571,7 @@ export async function sendLabReport(
     actorId,
     data: { channel: parsed.data.channel, chokepointId: current.chokepointId },
   });
-  return { ok: true, report: toView(updated, (await contextFor(current.chokepointId)) ?? missingContextFor(current)), messageId };
+  return { ok: true, report: toView(updated, await refreshedContext(updated, current)), messageId };
 }
 
 /** Records the provider's reply (or silence) on a sent report. */
@@ -437,5 +601,5 @@ export async function recordLabReportOutcome(
     actorId,
     data: { outcome: parsed.data.outcome, chokepointId: current.chokepointId },
   });
-  return { ok: true, report: toView(updated, (await contextFor(current.chokepointId)) ?? missingContextFor(current)) };
+  return { ok: true, report: toView(updated, await refreshedContext(updated, current)) };
 }
