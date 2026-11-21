@@ -18,7 +18,7 @@ import {
   type OriginalComparison,
 } from "@/lib/lab/trace/browser";
 import { buildEvidencePdf, type EvidenceScoreRow } from "@/lib/lab/trace/pdf";
-import { TRACE_TOOL_VERSION } from "@/lib/lab/trace/score";
+import { TRACE_TOOL_VERSION, type TraceNote } from "@/lib/lab/trace/score";
 
 type Props = {
   locale: "en" | "hi";
@@ -141,6 +141,15 @@ const NOTE_KEYS = {
   sscd_inference_failed: "lab.trace.note.sscd_inference_failed",
   landmarks_unavailable: "lab.trace.landmarks.off",
 } as const;
+
+/*
+ * Notes that describe the run, not the pair: no SSCD model URL was
+ * configured, or the landmark model could not load. The "What this run
+ * used" card above the comparisons already states each of them exactly
+ * once for the whole run, so the per-comparison list must not repeat
+ * them — every honest sentence appears once, and nothing is hidden.
+ */
+const RUN_WIDE_NOTES: ReadonlySet<TraceNote> = new Set(["sscd_model_not_configured", "landmarks_unavailable"]);
 
 const VERDICT_STYLES = {
   strong: "bg-[var(--success-soft)] text-[var(--success)]",
@@ -336,11 +345,13 @@ export function TraceClient({ locale, sscdModelUrl, humanModelBase }: Props) {
               </p>
 
               <ul className="space-y-1.5">
-                {comparison.signals.notes.map((note) => (
-                  <li key={note} className="text-sm leading-[1.6] text-[var(--text)]">
-                    {t(locale, NOTE_KEYS[note] as never)}
-                  </li>
-                ))}
+                {comparison.signals.notes
+                  .filter((note: TraceNote) => !RUN_WIDE_NOTES.has(note))
+                  .map((note) => (
+                    <li key={note} className="text-sm leading-[1.6] text-[var(--text)]">
+                      {t(locale, NOTE_KEYS[note] as never)}
+                    </li>
+                  ))}
               </ul>
 
               <div className="grid gap-6 md:grid-cols-2">

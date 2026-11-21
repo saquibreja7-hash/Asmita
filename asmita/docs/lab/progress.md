@@ -373,3 +373,68 @@ hi-review-status.json):
    the browser, results are never persisted), so there is nothing to
    administer and no `Lab*` table.
 
+---
+
+## WP88 — CI fix: the trace page stated each run-wide honest note twice (branch feat/lab-trace, 21 November 2026)
+
+PR #108's Playwright job failed exactly one test,
+`tests/e2e/lab-trace.spec.ts` › "an identical pair shows the
+strong-evidence band". Nothing about the analysis was wrong — the strong
+band had already rendered, and the spec's other two journeys and the
+rest of the CI suite passed. The failure was a strict-mode violation on
+the honest hashing-only sentence.
+
+### What was wrong and what changed
+
+- The page rendered the run-wide facts twice: the "What this run used"
+  card states them once for the whole run (no SSCD model address
+  configured; the face-landmark model could not load), and the
+  per-comparison notes list then repeated the same sentences, because
+  `NOTE_KEYS` mapped `sscd_model_not_configured` and
+  `landmarks_unavailable` to the very i18n keys that card renders
+  (`lab.trace.sscd.off`, `lab.trace.landmarks.off`).
+- The fix is in `TraceClient.tsx` only: the per-comparison notes list
+  filters out those two run-wide notes, which the card above the
+  comparisons already states exactly once. Pair-specific notes (identical
+  pixels, low image quality, no face in the pair, SSCD inference
+  failure) still render under each comparison, and with more than one
+  original photo each comparison still gets its own notes.
+- The scoring core, the browser pipeline, both dictionaries and both
+  e2e specs are untouched: no note was reworded, weakened or hidden,
+  and no test was changed, skipped or loosened.
+
+### Verified on this machine (Node 22 container)
+
+- The failing CI job's own log (fetched with `gh run view --log-failed`)
+  names the cause: `getByText('Model-based comparison is off: …')`
+  resolved to 2 elements — the capabilities card's `<li>` and the notes
+  list's `<li>`.
+- `e2e-some.sh` (Node 22, Chromium, throwaway Postgres 17) on
+  `tests/e2e/lab-trace.spec.ts` + `tests/e2e/lab.spec.ts`:
+  **4 passed** (39 s), including the previously failing journey.
+- Full `check.sh` (both packages): crawler — lint, type-check,
+  **60 test files / 650 tests**, build ok; asmita — lint 0 errors
+  (4 pre-existing warnings, none in the touched file), type-check clean,
+  `prisma validate` ok, **226 test files / 2194 tests**.
+  `ALL CHECKS PASSED`.
+
+### For the owner to approve
+
+- "The trace tool's honesty notes now each appear once: the run-wide
+  notes (no model configured, landmark model unavailable) sit in the
+  'What this run used' card, and each comparison lists only what is
+  true of that pair."
+
+### Decisions made on my own
+
+- The page was fixed, not the spec: the strict-mode failure was the
+  symptom of a real duplication on the page (the same honest sentence
+  shown twice), so the fix renders each fact once instead of loosening
+  the assertion. The spec keeps asserting the sentence is shown — after
+  the fix, exactly once, which is what a strict locator demands and
+  what a reader wants.
+- The `landmarks_unavailable` note is filtered together with the SSCD
+  one: the same bug class (a run-wide fact rendered once per
+  comparison beside its card entry), even though no current assertion
+  catches it.
+- Not pushed; the PR's CI re-run is the owner's step.
