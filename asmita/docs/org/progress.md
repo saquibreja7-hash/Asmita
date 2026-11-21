@@ -35,7 +35,7 @@ Branch: `feat/org-pages`. Built 20 November 2026.
 
 | Page / file | Placeholder | What the owner needs to supply |
 |---|---|---|
-| /get-involved ("Other ways to help") | (removed for now) | The "Follow us" card was taken out until the organization's social media URLs are supplied; restore it from git history (card keyed `org.getInvolved.otherFollow`). |
+| /get-involved ("Other ways to help") | plain LinkedIn icon, no link yet | The organization's social media URLs. The icon in the "Follow us" card is not a link; wrap it in `<a>` and add the other networks when the URLs are supplied. |
 | /careers ("Why work with us") — key `org.careers.whyIntro` | `<TO_FILL: benefits — for example salary bands, leave policy, remote-work policy>` | The real benefits summary, in both languages (the key exists in `en.json` and `hi.json`). |
 | /training (each of the 6 programmes) | `<TO_FILL: session length>` | How long a session of that programme runs. |
 | /training (each of the 6 programmes) | `<TO_FILL: cost, or 'free for <TO_FILL>' >` | Cost, or who gets it free (e.g. "free for government schools"). |
