@@ -121,7 +121,7 @@ export default async function PressPage() {
                     [
                       ["/asmita-logo-square.png", "org.press.kitLogoSquare"],
                       ["/asmita-logo.png", "org.press.kitLogoFull"],
-                      ["/asmita-wordmark-v2.png", "org.press.kitWordmark"],
+                      ["/asmita-logo-teal.png", "org.press.kitWordmark"],
                     ] as const
                   ).map(([file, labelKey]) => (
                     <li key={file}>

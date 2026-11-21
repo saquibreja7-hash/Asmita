@@ -37,7 +37,7 @@ export function Header({ locale, scorecard = false }: { locale: Locale; scorecar
           <Link href="/" className="fade flex min-w-0 items-center" aria-label={t(locale, "nav.home")}>
             {/* The logo: teal wordmark with the gold flame. A small static PNG; next/image adds nothing here. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/asmita-wordmark-v2.png" alt="Asmita" width={317} height={94} className="brand-logo" />
+            <img src="/asmita-logo-teal.png" alt="Asmita" width={400} height={200} className="brand-logo" />
           </Link>
 
           <nav className="hidden items-center xl:flex" aria-label={t(locale, "nav.primary")}>

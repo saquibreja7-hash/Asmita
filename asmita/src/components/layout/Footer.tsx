@@ -106,9 +106,9 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
           <div className="site-footer-brand">
             <div>
               <Link href="/" className="site-footer-logo-link" aria-label={t(locale, "nav.home")}>
-                {/* The wordmark PNG, shown in white on the teal footer. */}
+                {/* Transparent teal logo on a white panel, so it shows on the teal footer. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/asmita-wordmark-v2.png" alt="Asmita" width={317} height={94} className="brand-logo brand-logo-footer" />
+                <img src="/asmita-logo-teal.png" alt="Asmita" width={400} height={200} className="brand-logo brand-logo-footer" />
               </Link>
               {isHi ? (
                 <p className="site-footer-tagline hi">

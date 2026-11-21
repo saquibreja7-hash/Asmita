@@ -289,12 +289,8 @@
 
 .brand-logo {
   display: block;
-  width: min(115px, 100%);
+  width: min(150px, 100%);
   height: auto;
-}
-
-.brand-logo-footer {
-  height: 40px;
 }
 
 /* ── Phone refinements ────────────────────────────────────────── */
@@ -487,10 +483,14 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 }
 
 /* The wordmark is a teal PNG; on the teal footer it is drawn in white. */
+/* Footer: the transparent teal logo sits on a white panel with the same
+   12px corner as the boxes, so it reads on the teal footer. */
 .brand-logo-footer {
-  height: 40px;
-  width: auto;
-  filter: brightness(0) invert(1);
+  height: auto;
+  width: 200px;
+  padding: 12px 16px;
+  border-radius: var(--radius-box);
+  background: #ffffff;
 }
 
 .site-footer-tagline {
