@@ -137,7 +137,8 @@
       "start.watch.*",
       "watch.*",
       "case.watch.*",
-      "partnerShare.*"
+      "partnerShare.*",
+      "lab.detectors.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
