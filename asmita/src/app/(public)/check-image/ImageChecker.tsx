@@ -159,7 +159,7 @@ export function ImageChecker({
           disabled={!ageConfirmed}
           aria-label={t(locale, "check.upload.label")}
           className="sr-only"
-          aria-hidden={!ageConfirmed}
+          aria-hidden="true"
           tabIndex={-1}
         />
         <div className="rounded-[var(--radius-box)] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
@@ -183,9 +183,15 @@ export function ImageChecker({
         </div>
       </div>
 
+      <p className="sr-only" role="status">
+        {status === "checking" ? t(locale, "check.checking") : status === "done" && result
+          ? t(locale, result.ai ? "check.result.aiFound.title" : "check.result.noneFound.title")
+          : ""}
+      </p>
+
       {/* CHECKING */}
       {status === "checking" && (
-        <p role="status" className="muted mt-6 text-center text-sm">{t(locale, "check.checking")}</p>
+        <p className="muted mt-6 text-center text-sm" aria-hidden="true">{t(locale, "check.checking")}</p>
       )}
 
       {/* ERROR */}

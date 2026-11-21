@@ -44,17 +44,16 @@ export default async function ResourcesPage() {
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label={say("Resources", "संसाधन")}>
-          <div className="hero-content container section-pad page-hero-split">
+          <div className="hero-content container py-8 md:py-14 page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("Resources", "संसाधन")}</span>
-              <h1 className="page-title mt-5">
+              <h1 className="page-title">
                 {say("Practical help, in one place", "व्यावहारिक मदद, एक जगह")}
               </h1>
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say("Guides you can follow, people you can call, and a plain account of what the law gives you. Take what you need.", "काम की मार्गदर्शिकाएँ, सहायता के लिए संपर्क और अपने कानूनी अधिकारों की सरल जानकारी। जो आपके काम आए, उसे चुनें।")}
               </p>
             </div>
-            <Illustration name="page-resources" eager className="page-hero-art" />
+            <Illustration name="page-resources" eager className="page-hero-art hidden lg:block" />
           </div>
         </section>
 

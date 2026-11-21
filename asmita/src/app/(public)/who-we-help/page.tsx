@@ -29,8 +29,7 @@ export default async function WhoWeHelpPage() {
         <section className="hero" aria-label={say("Who we help", "हम किसकी मदद करते हैं")}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("Who we help", "हम किसकी मदद करते हैं")}</span>
-              <h1 className="page-title mt-5">
+              <h1 className="page-title">
                 {say("Wherever you are coming from", "आपकी स्थिति जो भी हो")}
               </h1>
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">

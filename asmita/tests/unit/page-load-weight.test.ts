@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const asmitaDir = fileURLToPath(new URL("../..", import.meta.url));
-const css = readFileSync(join(asmitaDir, "src/app/globals.css"), "utf8");
+const css = ["foundation", "platform", "site"]
+  .map((name) => readFileSync(join(asmitaDir, `src/app/${name}-styles.css`), "utf8"))
+  .join("\n");
 const blockOf = (selector: string) => {
   const match = css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`));
   expect(match, `globals.css should have a ${selector} rule`).toBeTruthy();

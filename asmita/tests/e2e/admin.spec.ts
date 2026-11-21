@@ -16,7 +16,7 @@ async function signCookie(payload: Record<string, unknown>, sub: string) {
 
 test("admin routes reject anonymous and victim sessions", async ({ page, context }) => {
   await page.goto("/admin/cases");
-  await expect(page.getByText("Restricted workspace")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in to admin." })).toBeVisible();
 
   const victimToken = await signCookie(
     { role: "VICTIM", ageOver18: true, emailHash: "victim-hash", namespace: "victim" },
@@ -33,7 +33,7 @@ test("admin routes reject anonymous and victim sessions", async ({ page, context
     },
   ]);
   await page.goto("/admin/cases");
-  await expect(page.getByText("Restricted workspace")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in to admin." })).toBeVisible();
 });
 
 test("admin session can open operational admin routes", async ({ page, context }) => {

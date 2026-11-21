@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { linkify } from "@/components/linkify";
 import { containsUrlLikeText } from "@/lib/url-like-text";
@@ -60,6 +60,7 @@ export function HomeChat({
   const [waiting, setWaiting] = useState(false);
   const csrfToken = useRef<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -75,20 +76,18 @@ export function HomeChat({
     if (log) log.scrollTop = log.scrollHeight;
   }, [messages, waiting, phase]);
 
+  const isOpen = mounted && phase !== "closed";
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!isOpen || !dialog) return;
+    dialog.showModal();
+    return () => dialog.close();
+  }, [isOpen]);
+
   useEffect(() => {
     if (phase === "notice") titleRef.current?.focus();
     if (phase === "open") inputRef.current?.focus();
-  }, [phase]);
-
-  const onEscape = useEffectEvent(() => close());
-  useEffect(() => {
-    if (phase === "closed") return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onEscape();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [phase]);
+  }, [phase, isOpen]);
 
   function close() {
     session.current += 1;
@@ -98,6 +97,7 @@ export function HomeChat({
     setPending("");
     setWarning("");
     setWaiting(false);
+    dialogRef.current?.close();
     setPhase("closed");
     triggerRef.current?.focus();
   }
@@ -160,7 +160,15 @@ export function HomeChat({
   const inlineLink = "link-underline font-medium";
 
   const panel = (
-    <section role="dialog" aria-modal="false" aria-labelledby="home-chat-title" className="home-chat-panel">
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="home-chat-title"
+      className="home-chat-panel"
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+    >
       <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-3">
         <h2 id="home-chat-title" ref={titleRef} tabIndex={-1} className="subsection-title leading-tight outline-none">
           {copy["chat.title"]}
@@ -190,35 +198,31 @@ export function HomeChat({
         )}
 
         {(phase === "open" || phase === "error") && (
-          // role="log" is a live region (polite by default); a list role here
-          // would only strip the list semantics, so the children are plain
-          // paragraphs and no aria-live is repeated on the container.
-          <div role="log" className="space-y-3">
-            <p>
-              <span className="sr-only">{copy["chat.assistant"]}: </span>
-              <span className="chat-bubble inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] bg-[var(--surface-muted)] px-4 py-2 text-sm leading-[1.55] text-[var(--ink)]">
-                {copy["chat.greeting"]}
-              </span>
-            </p>
-            {messages.map((m, i) => (
-              <p key={i} className={m.role === "user" ? "text-right" : ""}>
-                <span className="sr-only">{m.role === "user" ? copy["chat.you"] : copy["chat.assistant"]}: </span>
-                <span
-                  className={`chat-bubble inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] px-4 py-2 text-left text-sm leading-[1.55] text-[var(--ink)] ${
-                    m.role === "user" ? "bg-[var(--brand-soft)]" : "bg-[var(--surface-muted)]"
-                  }`}
-                >
-                  {m.content}
+          <div role="log" aria-label={copy["chat.title"]}>
+            <ol role="list" className="space-y-3">
+              <li>
+                <span className="sr-only">{copy["chat.assistant"]}: </span>
+                <span className="chat-bubble inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] bg-[var(--surface-muted)] px-4 py-2 text-sm leading-[1.55] text-[var(--ink)]">
+                  {copy["chat.greeting"]}
                 </span>
-              </p>
-            ))}
-            {waiting && (
-              <p className="text-sm text-[var(--text)]" role="status">
-                {copy["chat.typing"]}
-              </p>
-            )}
+              </li>
+              {messages.map((m, i) => (
+                <li key={i} className={m.role === "user" ? "text-right" : ""}>
+                  <span className="sr-only">{m.role === "user" ? copy["chat.you"] : copy["chat.assistant"]}: </span>
+                  <span
+                    className={`chat-bubble inline-block max-w-[85%] whitespace-pre-wrap rounded-[var(--radius-box)] px-4 py-2 text-left text-sm leading-[1.55] text-[var(--ink)] ${
+                      m.role === "user" ? "bg-[var(--brand-soft)]" : "bg-[var(--surface-muted)]"
+                    }`}
+                  >
+                    {m.content}
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
+
+        {waiting && <p className="mt-3 text-sm text-[var(--text)]" role="status">{copy["chat.typing"]}</p>}
 
         {phase === "error" && (
           <div className="mt-4">
@@ -278,7 +282,7 @@ export function HomeChat({
       <p className="muted border-t border-[var(--line)] px-5 py-3 text-xs leading-[1.6]">
         {linkify(copy["chat.phone"], HELPLINE.display, `tel:${HELPLINE.tel}`, "link-underline font-medium text-[var(--ink)]")}
       </p>
-    </section>
+    </dialog>
   );
 
   return (
@@ -291,11 +295,12 @@ export function HomeChat({
           setMessages([]);
           setPhase("notice");
         }}
-        aria-expanded={phase !== "closed"}
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
       >
         {children}
       </button>
-      {mounted && phase !== "closed" && createPortal(panel, document.body)}
+      {isOpen && createPortal(panel, document.body)}
     </>
   );
 }

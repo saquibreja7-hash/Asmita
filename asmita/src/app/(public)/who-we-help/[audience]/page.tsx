@@ -63,7 +63,6 @@ export default async function AudiencePage({
                   {say("Who we help", "हम किसकी मदद करते हैं")}
                 </Link>
               </p>
-              <span className="eyebrow mt-4 inline-block">{data.term}</span>
               <h1 className="page-title mt-3">
                 {data.title}
               </h1>

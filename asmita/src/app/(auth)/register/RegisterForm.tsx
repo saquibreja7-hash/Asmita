@@ -17,6 +17,7 @@ type Step = "age" | "email" | "otp";
 export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?: "file" | "track" | "watch" }) {
   const router = useRouter();
   const tracking = mode === "track";
+  const Heading = tracking ? "h2" : "h1";
   const [step, setStep] = useState<Step>(tracking ? "email" : "age");
   const [noCase, setNoCase] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState<"adult" | "minor" | "">("");
@@ -131,9 +132,9 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
     <div>
       {step === "age" && (
         <div className="mt-8">
-          <h2 className="section-title">
+          <Heading className="section-title outline-none" ref={headingRef} tabIndex={-1}>
             {t(locale, "reg.age.title")}
-          </h2>
+          </Heading>
           <p className="muted mt-2 text-sm leading-[1.75]">
             {t(locale, "reg.age.sub")}
           </p>
@@ -206,7 +207,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
 
       {noCase && (
         <div className="mt-8" role="status">
-          <h2 className="section-title outline-none" ref={headingRef} tabIndex={-1}>{t(locale, "track.noCase.title")}</h2>
+          <Heading className="section-title outline-none" ref={headingRef} tabIndex={-1}>{t(locale, "track.noCase.title")}</Heading>
           <p className="muted mt-2 text-sm leading-[1.75]">{t(locale, "track.noCase.sub")}</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link className="btn btn-primary" href="/start">{t(locale, "track.noCase.start")}</Link>
@@ -223,9 +224,9 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
 
       {!noCase && step === "email" && (
         <div className="mt-8">
-          <h2 className="section-title outline-none" ref={headingRef} tabIndex={-1}>
+          <Heading className="section-title outline-none" ref={headingRef} tabIndex={-1}>
             {t(locale, tracking ? "track.email.title" : "reg.email.title")}
-          </h2>
+          </Heading>
           <p className="muted mt-2 text-sm leading-[1.75]">
             {t(locale, tracking ? "track.email.sub" : "reg.email.sub")}
           </p>
@@ -270,9 +271,9 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
 
       {!noCase && step === "otp" && (
         <div className="mt-8">
-          <h2 className="section-title outline-none" ref={headingRef} tabIndex={-1}>
+          <Heading className="section-title outline-none" ref={headingRef} tabIndex={-1}>
             {t(locale, "reg.otp.title")}
-          </h2>
+          </Heading>
           <p className="muted mt-2 text-sm leading-[1.75]">
             {t(locale, "reg.otp.sub")}{" "}
             <span className="text-[var(--ink)]">{email}</span>.

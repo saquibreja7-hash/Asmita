@@ -39,8 +39,7 @@ export default function ContactPage() {
         {/* HERO */}
         <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">Contact</span>
-            <h1 className="page-title mt-8">
+            <h1 className="page-title">
               Reach the{" "}
               <em className="not-italic text-gradient">Asmita</em> team.
             </h1>

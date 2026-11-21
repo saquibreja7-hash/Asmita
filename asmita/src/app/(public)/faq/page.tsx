@@ -61,17 +61,16 @@ export default async function FaqPage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container page-hero text-center page-hero-split">
+        <section className="container page-hero py-8 text-center page-hero-split md:py-14">
           <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">{t(locale, "faq.hero.pill")}</span>
-            <h1 className="page-title mt-8">
+            <h1 className="page-title">
               {t(locale, "faq.hero.title")}
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               {t(locale, "faq.hero.sub")}
             </p>
           </div>
-          <Illustration name="page-faq" eager className="page-hero-art" />
+          <Illustration name="page-faq" eager className="page-hero-art hidden lg:block" />
         </section>
 
         <div className="container">
@@ -80,9 +79,8 @@ export default async function FaqPage() {
 
         {/* FAQ SECTIONS */}
         {sections.map((section, si) => (
-          <section key={section.eyebrow} className="container py-14 md:py-20">
+          <section key={section.eyebrow} className="container py-7 md:py-14">
             <div className="mx-auto max-w-3xl">
-              <span className="eyebrow mb-3 block">{section.eyebrow}</span>
               <h2 className="section-title">
                 {section.title}
               </h2>

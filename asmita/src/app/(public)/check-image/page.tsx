@@ -1,4 +1,3 @@
-import { Illustration } from "@/components/Illustration";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
@@ -19,10 +18,9 @@ export default async function CheckImagePage() {
     <AppShell>
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container page-hero text-center page-hero-split">
+        <section className="container py-8 text-center md:py-14">
           <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">{t(locale, "check.pill")}</span>
-            <h1 className="page-title mt-8">
+            <h1 className="page-title">
               {t(locale, "check.hero.title.1")}{" "}<em className="not-italic text-gradient">{t(locale, "check.hero.title.2")}</em>
             </h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
@@ -38,7 +36,6 @@ export default async function CheckImagePage() {
               </a>
             </p>
           </div>
-          <Illustration name="page-check-image" eager className="page-hero-art" />
         </section>
 
         <div className="container">
@@ -46,7 +43,7 @@ export default async function CheckImagePage() {
         </div>
 
         {/* CHECKER */}
-        <section className="container section-pad" aria-label="Image check">
+        <section className="container py-6 md:py-10" aria-label={t(locale, "check.pill")}>
           <ImageChecker locale={locale} deepCheckEnabled={deepCheckEnabled} deepCheckConfigured={deepCheckConfigured} />
           {/* A pointer to Google's own verifier. Asmita sends nothing to
               Google; she checks the watermark herself, in Google's app. */}
@@ -64,7 +61,7 @@ export default async function CheckImagePage() {
 
         {/* DISCLAIMER + NEXT STEPS */}
         <section className="container py-14 text-center md:py-20">
-          <div className="mx-auto max-w-2xl">
+          <div className="mx-auto max-w-[50ch]">
             <p className="muted text-sm leading-[1.8]">{t(locale, "check.disclaimer")}</p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Link className="btn btn-primary" href="/start">
