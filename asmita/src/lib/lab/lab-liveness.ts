@@ -35,8 +35,10 @@ export type LivenessDeps = {
 };
 
 /** Literal-address and localhost guard: the liveness check only ever fetches public hosts. */
-function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
+export function isPrivateHost(hostname: string): boolean {
+  // new URL(...).hostname keeps the brackets on IPv6 literals; strip them so
+  // the literal checks below see the bare address.
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
   const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (ipv4) {

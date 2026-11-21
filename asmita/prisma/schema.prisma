@@ -283,6 +283,12 @@ enum AuditEventType {
   LAB_REPORT_SENT
   LAB_REPORT_OUTCOME_RECORDED
   LAB_LIVENESS_RUN
+  // WP114 (research-tools-spec.md): the infrastructure registry and scanner.
+  // Same rule: ids and counts only, never a service name or address.
+  LAB_INFRA_SCAN_RUN
+  LAB_PROVIDER_CREATED
+  LAB_PROVIDER_UPDATED
+  LAB_FINDING_PROMOTED
   CRAWL_FINDING_LABEL_SET
   CRAWL_FINDING_LABEL_CLEARED
   PARTNER_SHARE_CONSENT_GIVEN
@@ -345,61 +351,103 @@ enum LabReportOutcome {
   NO_REPLY
 }
 
+// WP114 (research-tools-spec.md): one category of infrastructure evidence
+// the scanner normalises. HOSTING_ASN values are resolved IPs (evidence
+// carries the ASN and network name); ANALYTICS_ID values are tag IDs.
+enum LabInfraFindingCategory {
+  HOSTING_ASN
+  CDN
+  REGISTRAR
+  NAMESERVER
+  MAIL
+  TLS_ISSUER
+  PAYMENT
+  CRYPTO_ADDRESS
+  AUTH_SSO
+  ANALYTICS_ID
+  ADS
+  APP_STORE_LINK
+  TELEGRAM_LINK
+  SOCIAL_LINK
+  REFERRAL_LINK
+  MODEL_REPO_LINK
+}
+
+// WP114: how sure the scanner is. Signature host matches are HIGH (a
+// documented SDK host appears); header matches are MEDIUM (headers can be
+// set by the origin); RDAP/CT evidence is MEDIUM (registry and log data).
+enum LabInfraConfidence {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+// WP114: why two services may be one operation, computed after each scan
+// and confirmed or dismissed by an analyst in the console (WP115).
+enum LabServiceLinkReason {
+  SHARED_ANALYTICS_ID
+  SHARED_IP
+  SHARED_NAMESERVER_SET
+  SHARED_CRYPTO_ADDRESS
+  SHARED_TLS_SAN
+  ANALYST
+}
+
 model User {
-  id                 String     @id @default(uuid())
-  emailHash          String     @unique
+  id                 String    @id @default(uuid())
+  emailHash          String    @unique
   emailEncrypted     String
-  emailVerified      Boolean    @default(false)
-  aadhaarVerified    Boolean    @default(false)
-  digilockerVerified Boolean    @default(false)
-  role               UserRole   @default(VICTIM)
+  emailVerified      Boolean   @default(false)
+  aadhaarVerified    Boolean   @default(false)
+  digilockerVerified Boolean   @default(false)
+  role               UserRole  @default(VICTIM)
   ageOver18          Boolean
   preferredLocale    String?
-  createdAt          DateTime   @default(now())
+  createdAt          DateTime  @default(now())
   lastActiveAt       DateTime?
   deactivatedAt      DateTime?
 
-  cases         Case[]     @relation("VictimCases")
-  verifiedCases Case[]     @relation("NgoVerifiedCases")
+  cases         Case[]         @relation("VictimCases")
+  verifiedCases Case[]         @relation("NgoVerifiedCases")
   adminProfile  AdminProfile?
   sessionTokens SessionToken[]
   ngoApiKeys    NgoApiKey[]
 }
 
 model Case {
-  id                    String     @id @default(uuid())
-  referenceNumber       String     @unique
-  userId                String
-  registrationKeyHash   String?
-  status                CaseStatus @default(OPEN)
+  id                               String     @id @default(uuid())
+  referenceNumber                  String     @unique
+  userId                           String
+  registrationKeyHash              String?
+  status                           CaseStatus @default(OPEN)
   // "Watch for my images" (WP22): a watch holds fingerprints and no links.
-  mode                  CaseMode   @default(CASE)
-  state                 String?
-  city                  String?
-  ngoVerified           Boolean    @default(false)
-  ngoVerifierId         String?
-  declarationSignedAt   DateTime?
-  declarationIpHash     String?
-  firPackageGeneratedAt   DateTime?
-  signedHashAdvisoryPdf   String?
-  hashAdvisoryPlatformIds String[]  @default([])
+  mode                             CaseMode   @default(CASE)
+  state                            String?
+  city                             String?
+  ngoVerified                      Boolean    @default(false)
+  ngoVerifierId                    String?
+  declarationSignedAt              DateTime?
+  declarationIpHash                String?
+  firPackageGeneratedAt            DateTime?
+  signedHashAdvisoryPdf            String?
+  hashAdvisoryPlatformIds          String[]   @default([])
   // Fingerprints listed in the signed hash advisory; dispatch sends exactly these.
-  hashAdvisorySignedHashIds String[] @default([])
+  hashAdvisorySignedHashIds        String[]   @default([])
   // The HASH_ADVISORY template the advisory was signed against, and a digest
   // of its text. Dispatch emails exactly this template (src/lib/signed-template.ts).
   hashAdvisorySignedTemplateId     String?
   hashAdvisorySignedTemplateDigest String?
-  createdAt               DateTime   @default(now())
-  updatedAt               DateTime   @updatedAt
+  createdAt                        DateTime   @default(now())
+  updatedAt                        DateTime   @updatedAt
 
-  user            User             @relation("VictimCases", fields: [userId], references: [id])
-  ngoVerifier     User?            @relation("NgoVerifiedCases", fields: [ngoVerifierId], references: [id])
-  submittedUrls   SubmittedUrl[]
-  feedback        Feedback[]
-  deletionJobs    DeletionJob[]
-  hashSubmissions HashSubmission[]
-  crawlConsents   CrawlConsent[]
-  crawlFindings   CrawlFinding[]
+  user                 User                  @relation("VictimCases", fields: [userId], references: [id])
+  ngoVerifier          User?                 @relation("NgoVerifiedCases", fields: [ngoVerifierId], references: [id])
+  submittedUrls        SubmittedUrl[]
+  feedback             Feedback[]
+  deletionJobs         DeletionJob[]
+  hashSubmissions      HashSubmission[]
+  crawlConsents        CrawlConsent[]
+  crawlFindings        CrawlFinding[]
   partnerShareConsents PartnerShareConsent[]
 
   @@unique([userId, registrationKeyHash])
@@ -417,28 +465,28 @@ model Case {
 // highest-quality frame's hash and hashDigest the sha256 of the sorted unique
 // frame hashes, so the existing unique index dedups re-uploads.
 model HashSubmission {
-  id                  String               @id @default(uuid())
-  caseId              String
-  algorithm           HashAlgorithm        @default(PDQ)
-  hashEncrypted       String
-  hashDigest          String
-  quality             Int
+  id                   String               @id @default(uuid())
+  caseId               String
+  algorithm            HashAlgorithm        @default(PDQ)
+  hashEncrypted        String
+  hashDigest           String
+  quality              Int
   videoFramesEncrypted String?
-  videoFrameCount     Int?
-  videoDurationSec    Int?
-  clientVersion       String?
-  status              HashSubmissionStatus @default(PENDING_REVIEW)
-  flaggedForReview    Boolean              @default(false)
-  flagReason          String?
-  submittedAt         DateTime             @default(now())
-  reviewedAt          DateTime?
-  reviewedById        String?
-  requestedPlatformId String?
+  videoFrameCount      Int?
+  videoDurationSec     Int?
+  clientVersion        String?
+  status               HashSubmissionStatus @default(PENDING_REVIEW)
+  flaggedForReview     Boolean              @default(false)
+  flagReason           String?
+  submittedAt          DateTime             @default(now())
+  reviewedAt           DateTime?
+  reviewedById         String?
+  requestedPlatformId  String?
   // Opaque id the crawler pool lists this fingerprint under. Random, set
   // when a crawl authorisation covering it is signed and cleared when it is
   // withdrawn, so it says nothing about the case and a withdrawn id never
   // matches again (src/lib/crawl-pool.ts).
-  crawlPoolId         String?              @unique
+  crawlPoolId          String?              @unique
 
   case              Case           @relation(fields: [caseId], references: [id])
   requestedPlatform Platform?      @relation("HashSubmissionPlatform", fields: [requestedPlatformId], references: [id])
@@ -487,11 +535,11 @@ model Platform {
   createdAt                  DateTime     @default(now())
   updatedAt                  DateTime     @updatedAt
 
-  submittedUrls     SubmittedUrl[]
-  noticeTemplates   NoticeTemplate[]
-  goHistory         PlatformGoHistory[]
-  hashDispatches    HashDispatch[]
-  hashSubmissions   HashSubmission[]    @relation("HashSubmissionPlatform")
+  submittedUrls   SubmittedUrl[]
+  noticeTemplates NoticeTemplate[]
+  goHistory       PlatformGoHistory[]
+  hashDispatches  HashDispatch[]
+  hashSubmissions HashSubmission[]    @relation("HashSubmissionPlatform")
 }
 
 model PlatformGoHistory {
@@ -512,29 +560,29 @@ model PlatformGoHistory {
 }
 
 model SubmittedUrl {
-  id               String    @id @default(uuid())
-  caseId           String
-  urlEncrypted     String
-  urlHash          String
-  domain           String
-  platformId       String?
-  status           UrlStatus @default(PENDING_REVIEW)
-  submittedAt      DateTime  @default(now())
-  flaggedForReview Boolean   @default(false)
-  flagReason       String?
-  signedNoticePdf  String?
+  id                           String    @id @default(uuid())
+  caseId                       String
+  urlEncrypted                 String
+  urlHash                      String
+  domain                       String
+  platformId                   String?
+  status                       UrlStatus @default(PENDING_REVIEW)
+  submittedAt                  DateTime  @default(now())
+  flaggedForReview             Boolean   @default(false)
+  flagReason                   String?
+  signedNoticePdf              String?
   // Fingerprints listed in the signed notice; dispatch sends exactly these.
-  signedHashSubmissionIds String[] @default([])
+  signedHashSubmissionIds      String[]  @default([])
   // The template the notice was signed against, and a digest of its text.
   // Dispatch emails exactly this template (src/lib/signed-template.ts).
-  signedTemplateId     String?
-  signedTemplateDigest String?
+  signedTemplateId             String?
+  signedTemplateDigest         String?
   // When the survivor said she filed a form-only platform's own form. Starts
   // the escalation ladder for links Asmita cannot email (docs/product/escalation-ladder.md).
-  platformFiledAt  DateTime?
-  source           UrlSource @default(SURVIVOR)
+  platformFiledAt              DateTime?
+  source                       UrlSource @default(SURVIVOR)
   // Set when the link came from an approved crawler finding.
-  crawlFindingId   String?   @unique
+  crawlFindingId               String?   @unique
   // Crawler links only (src/lib/crawl-notice.ts). The notice Asmita sends as
   // the survivor's authorised representative, never signed by her: the
   // encrypted PDF of record, a digest of what the analyst previewed, the
@@ -559,11 +607,11 @@ model SubmittedUrl {
   // the column were checked by the old inline path, so they read true.
   crawlSourceChecked           Boolean   @default(false)
 
-  case         Case             @relation(fields: [caseId], references: [id])
-  platform     Platform?        @relation(fields: [platformId], references: [id])
-  crawlFinding CrawlFinding?    @relation(fields: [crawlFindingId], references: [id], onDelete: SetNull)
-  notices      Notice[]
-  portalTokens UrlPortalToken[]
+  case          Case               @relation(fields: [caseId], references: [id])
+  platform      Platform?          @relation(fields: [platformId], references: [id])
+  crawlFinding  CrawlFinding?      @relation(fields: [crawlFindingId], references: [id], onDelete: SetNull)
+  notices       Notice[]
+  portalTokens  UrlPortalToken[]
   verifications LinkVerification[]
 
   @@index([caseId])
@@ -575,15 +623,15 @@ model SubmittedUrl {
 // case; withdrawn rows stay as the record. The signed PDF is encrypted at
 // rest, like every signed document.
 model CrawlConsent {
-  id                 String    @id @default(uuid())
+  id                 String            @id @default(uuid())
   caseId             String
   signedPdfEncrypted String
   // Fingerprints listed in the signed authorisation; only these are searched.
-  hashSubmissionIds  String[]  @default([])
+  hashSubmissionIds  String[]          @default([])
   // The CRAWL_AUTHORISATION template signed and a digest of its text.
   templateId         String
   templateDigest     String
-  signedAt           DateTime  @default(now())
+  signedAt           DateTime          @default(now())
   withdrawnAt        DateTime?
   // What the authorisation covers (WP22). Defaults to the original scope.
   scope              CrawlConsentScope @default(SEARCH_AND_NOTICE)
@@ -606,64 +654,64 @@ model CrawlConsent {
 // SubmittedUrl, blanked 30 days after firstSeenAt. urlDigest is only for
 // dedup within the case and is cleared (NULL) with the URLs.
 model CrawlFinding {
-  id                String             @id @default(uuid())
-  caseId            String
-  hashSubmissionId  String
+  id                            String             @id @default(uuid())
+  caseId                        String
+  hashSubmissionId              String
   // The live authorisation (CrawlConsent) the crawler matched under. Part of
   // the dedup digest, so a copy re-reported after she withdrew and signed
   // again becomes a new finding instead of merging into the old one, which
   // stays as the record. Null only for rows written before this column.
-  crawlConsentId    String?
-  pageUrlEncrypted  String
-  imageUrlEncrypted String
-  urlDigest         String?
+  crawlConsentId                String?
+  pageUrlEncrypted              String
+  imageUrlEncrypted             String
+  urlDigest                     String?
   // Null for an SSCD finding (ADR 008, WP28): the second layer has no PDQ
   // distance. A widening — old rows and old code always wrote one.
-  distance          Int?
+  distance                      Int?
   // The SSCD similarity when the second layer matched or scored a borderline
   // PDQ match; information for the analyst, never an automatic accept or
   // reject. Null on pure PDQ/VPDQ findings.
-  sscdSimilarity    Float?
-  quality           Int
-  firstSeenAt       DateTime           @default(now())
-  lastSeenAt        DateTime           @default(now())
-  sourceId          String
-  runId             String
-  reviewStatus      CrawlFindingStatus @default(CANDIDATE)
+  sscdSimilarity                Float?
+  quality                       Int
+  firstSeenAt                   DateTime           @default(now())
+  lastSeenAt                    DateTime           @default(now())
+  sourceId                      String
+  runId                         String
+  reviewStatus                  CrawlFindingStatus @default(CANDIDATE)
   // Which layer matched (ADR 008, WP28). Default PDQ; a video finding is
   // derived from its VPDQ submission, an SSCD finding carries sscdSimilarity.
-  method            CrawlFindingMethod @default(PDQ)
-  reviewedById      String?
-  reviewedAt        DateTime?
+  method                        CrawlFindingMethod @default(PDQ)
+  reviewedById                  String?
+  reviewedAt                    DateTime?
   // A second, different analyst confirms an approval before anything acts on it.
-  secondReviewedById String?
-  secondReviewedAt   DateTime?
+  secondReviewedById            String?
+  secondReviewedAt              DateTime?
   // Analyst review labels (review labels WP37): our own simple fields, each
   // with who set it and when. Audited like every other finding action
   // (CRAWL_FINDING_LABEL_SET / CRAWL_FINDING_LABEL_CLEARED).
-  labelAiMade       Boolean   @default(false)
-  labelAiMadeById   String?
-  labelAiMadeAt     DateTime?
-  labelSexual       Boolean   @default(false)
-  labelSexualById   String?
-  labelSexualAt     DateTime?
+  labelAiMade                   Boolean            @default(false)
+  labelAiMadeById               String?
+  labelAiMadeAt                 DateTime?
+  labelSexual                   Boolean            @default(false)
+  labelSexualById               String?
+  labelSexualAt                 DateTime?
   // The possible-minor label is a safety switch: while set, the adult flow
   // for this finding is stopped (no approval, no representative notice, out
   // of the review queue; reviewStatus MINOR_PROTOCOL). Clearing it needs a
   // different admin than the setter and a recorded reason.
-  labelPossibleMinor             Boolean   @default(false)
-  labelPossibleMinorById         String?
-  labelPossibleMinorAt           DateTime?
-  labelPossibleMinorClearedById  String?
+  labelPossibleMinor            Boolean            @default(false)
+  labelPossibleMinorById        String?
+  labelPossibleMinorAt          DateTime?
+  labelPossibleMinorClearedById String?
   labelPossibleMinorClearedAt   DateTime?
-  labelPossibleMinorClearReason  String?
+  labelPossibleMinorClearReason String?
   // The reviewStatus the finding returns to when the possible-minor label is
   // cleared (CANDIDATE or APPROVED); null while it never moved.
   minorProtocolBefore           String?
 
-  case           Case           @relation(fields: [caseId], references: [id])
-  hashSubmission HashSubmission @relation(fields: [hashSubmissionId], references: [id])
-  source         CrawlSource    @relation(fields: [sourceId], references: [id])
+  case           Case               @relation(fields: [caseId], references: [id])
+  hashSubmission HashSubmission     @relation(fields: [hashSubmissionId], references: [id])
+  source         CrawlSource        @relation(fields: [sourceId], references: [id])
   submittedUrl   SubmittedUrl?
   embeddings     FindingEmbedding[]
 
@@ -710,30 +758,30 @@ model FindingEmbedding {
 // submitted link or an approved crawler finding names their host — the host
 // only, never the link or the case (full-crawler spec WP1).
 model CrawlSource {
-  id         String          @id @default(uuid())
-  kind       CrawlSourceKind @default(SITE)
-  domain     String          @unique
-  pageBudget Int
-  delayMs    Int
-  enabled    Boolean         @default(false)
-  approvedBy String?
-  origin     CrawlSourceOrigin @default(ADMIN)
-  hops       Int             @default(0)
+  id               String            @id @default(uuid())
+  kind             CrawlSourceKind   @default(SITE)
+  domain           String            @unique
+  pageBudget       Int
+  delayMs          Int
+  enabled          Boolean           @default(false)
+  approvedBy       String?
+  origin           CrawlSourceOrigin @default(ADMIN)
+  hops             Int               @default(0)
   // The source a DISCOVERED row was found through (WP5); REPORTED rows set nothing.
   discoveredFromId String?
-  render     CrawlRenderMode @default(HTTP)
-  lastCrawledAt DateTime?
-  pagesCrawled  Int          @default(0)
+  render           CrawlRenderMode   @default(HTTP)
+  lastCrawledAt    DateTime?
+  pagesCrawled     Int               @default(0)
   // Crawler v2 WP5: automatic lifecycle of a discovered site. Paused = the
   // hourly sweep switched it off for 30 days after its page budget was spent
   // three days running with no match; pauseReason is a fixed code for the
   // admin page. disabledReason records why a discovered site was stored
   // disabled at birth ("max_hops" beyond the hop limit, "daily_cap" beyond
   // the new-sites-per-day cap); both clear when an admin switches it on.
-  pausedUntil    DateTime?
-  pauseReason    String?
-  disabledReason String?
-  createdAt  DateTime        @default(now())
+  pausedUntil      DateTime?
+  pauseReason      String?
+  disabledReason   String?
+  createdAt        DateTime          @default(now())
 
   findings CrawlFinding[]
   pages    CrawlPage[]
@@ -779,41 +827,41 @@ model CrawlBlockedHost {
 // audit data; purged like findings after 30 days (url-retention.ts) except
 // rows that are still due for crawling.
 model CrawlPage {
-  id            String          @id @default(uuid())
-  sourceId      String
-  urlEncrypted  String
-  urlDigest     String
+  id                  String          @id @default(uuid())
+  sourceId            String
+  urlEncrypted        String
+  urlDigest           String
   // BFS depth from the source seed; the crawler reports no links from a page
   // at its MAX_DEPTH, so depths stay bounded by the crawler's own config.
-  depth         Int             @default(0)
-  kind          CrawlPageKind   @default(PAGE)
+  depth               Int             @default(0)
+  kind                CrawlPageKind   @default(PAGE)
   // Crawl order (crawler v3 WP11): lower runs first; the claim orders by
   // priority, then nextDueAt. 100 is the default every row stored before
   // WP11 keeps; a reported link sets it — sitemap 10, feed 20, pagination
   // 30, other pages 50 plus 10 per depth level (capped at 100) — and a
   // sitemap entry whose lastmod is newer than the row's last fetch jumps
   // the queue at 5, due immediately.
-  priority      Int             @default(100)
+  priority            Int             @default(100)
   // Stored from a pagination link (crawler v3 review fix): the canonical
   // aliases such a page reports (page 2 naming page 1) are ignored.
-  viaPagination Boolean         @default(false)
+  viaPagination       Boolean         @default(false)
   // Validators the crawler sent as If-None-Match / If-Modified-Since.
-  etag          String?
-  lastModified  String?
-  status        CrawlPageStatus @default(PENDING)
+  etag                String?
+  lastModified        String?
+  status              CrawlPageStatus @default(PENDING)
   // Claimed rows are not handed out again for 30 minutes, so two crawler
   // processes never fetch the same URL; a killed run's batch becomes due
   // again when the claim expires.
-  claimedUntil  DateTime?
-  lastFetchedAt DateTime?
+  claimedUntil        DateTime?
+  lastFetchedAt       DateTime?
   // Crawler v3 review fix (WP13): the first permanent fetch failure (a DNS
   // name that does not exist, a definite TLS certificate failure) — the row
   // dies only on a permanent failure at least 24 h after this one; a
   // successful visit clears it. Null before the first permanent failure.
   lastPermanentFailAt DateTime?
-  nextDueAt     DateTime        @default(now())
-  failCount     Int             @default(0)
-  createdAt     DateTime        @default(now())
+  nextDueAt           DateTime        @default(now())
+  failCount           Int             @default(0)
+  createdAt           DateTime        @default(now())
 
   source CrawlSource @relation(fields: [sourceId], references: [id])
 
@@ -833,7 +881,7 @@ model CrawlPage {
 // which is why nothing in this table needs the retention blanking. Completed
 // rows are the admin case page's verification history; erased with the link.
 model LinkVerification {
-  id             String                 @id @default(uuid())
+  id             String                  @id @default(uuid())
   submittedUrlId String
   dueAt          DateTime
   // 1, 2 or 3: the +1/+3/+7 day check.
@@ -845,7 +893,7 @@ model LinkVerification {
   // queued"), and a check that was never answered by a crawler visit gives
   // up as UNKNOWN a bounded time after it.
   enqueuedAt     DateTime?
-  createdAt      DateTime               @default(now())
+  createdAt      DateTime                @default(now())
 
   submittedUrl SubmittedUrl @relation(fields: [submittedUrlId], references: [id])
 
@@ -935,10 +983,10 @@ model EmailDeliveryProof {
   rawEventHash String
   receivedAt   DateTime @default(now())
 
+  @@unique([provider, messageId, eventType, rawEventHash])
   @@index([messageId])
   @@index([platformId])
   @@index([receivedAt])
-  @@unique([provider, messageId, eventType, rawEventHash])
 }
 
 model Escalation {
@@ -985,14 +1033,14 @@ model OtpToken {
 }
 
 model SessionToken {
-  id           String   @id @default(uuid())
-  userId       String
-  tokenHash    String   @unique
-  namespace    String
-  expiresAt    DateTime
-  lastSeenAt   DateTime @default(now())
-  revokedAt    DateTime?
-  createdAt    DateTime @default(now())
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique
+  namespace  String
+  expiresAt  DateTime
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -1100,25 +1148,25 @@ model PlatformPartnerApplication {
 // fields. No foreign key to the application on purpose, like AuditLog's
 // actorId: the reference is provenance, the row outlives the link.
 model PlatformPartner {
-  id                        String                @id @default(uuid())
-  name                      String
-  primaryDomain             String                @unique
-  extraDomains              String[]              @default([])
-  status                    PlatformPartnerStatus @default(ACTIVE)
+  id                          String                @id @default(uuid())
+  name                        String
+  primaryDomain               String                @unique
+  extraDomains                String[]              @default([])
+  status                      PlatformPartnerStatus @default(ACTIVE)
   // The partner's agreed inbox for the takedown channel (WP33), encryptField.
-  channelEmailEncrypted     String?
-  createdFromApplicationId  String?               @unique
+  channelEmailEncrypted       String?
+  createdFromApplicationId    String?               @unique
   // Crawler monitoring of the partner's domains (WP33) starts only after an
   // admin records the platform's written permission; the note says where it
   // is filed. RecordedBy is the admin's session id.
   crawlPermissionRecordedAt   DateTime?
   crawlPermissionRecordedById String?
   crawlPermissionNote         String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
 
-  keys PlatformPartnerKey[]
-  outcomes PartnerOutcome[]
+  keys         PlatformPartnerKey[]
+  outcomes     PartnerOutcome[]
   channelSends PartnerChannelSend[]
 
   @@index([status])
@@ -1248,7 +1296,7 @@ model PartnerOutcome {
 // the alert email carries only the case reference, the page URL on the
 // partner's own domain and the fingerprint id.
 model PartnerChannelSend {
-  id        String                @id @default(uuid())
+  id        String                 @id @default(uuid())
   partnerId String
   kind      PartnerChannelSendKind
   // The SubmittedUrl the notice copy is about (NOTICE).
@@ -1256,10 +1304,10 @@ model PartnerChannelSend {
   // The CrawlFinding the alert is about (FINDING_ALERT).
   findingId String?
   caseId    String?
-  dedupKey  String                @unique
+  dedupKey  String                 @unique
   messageId String
   sentAt    DateTime
-  createdAt DateTime              @default(now())
+  createdAt DateTime               @default(now())
 
   partner PlatformPartner @relation(fields: [partnerId], references: [id])
 
@@ -1349,7 +1397,9 @@ model LabService {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  chokepoints LabChokepoint[]
+  chokepoints   LabChokepoint[]
+  infraScans    LabInfraScan[]
+  infraFindings LabInfraFinding[]
 
   @@index([status])
 }
@@ -1366,7 +1416,7 @@ model LabChokepoint {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  service LabService   @relation(fields: [serviceId], references: [id])
+  service LabService  @relation(fields: [serviceId], references: [id])
   reports LabReport[]
 
   @@index([serviceId])
@@ -1376,25 +1426,111 @@ model LabChokepoint {
 // template, reviewed by the analyst, then sent by email or copied into a
 // web form; the outcome is recorded when the provider replies (or does not).
 model LabReport {
-  id               String            @id @default(uuid())
-  chokepointId     String
+  id                String            @id @default(uuid())
+  chokepointId      String
   // The chokepoint kind the draft was rendered from (report-templates.ts).
-  templateKind     LabChokepointKind
-  channel          LabReportChannel?
-  subject          String
-  body             String
-  status           LabReportStatus   @default(DRAFT)
-  toAddress        String?
-  sentAt           DateTime?
-  sentById         String?
+  templateKind      LabChokepointKind
+  channel           LabReportChannel?
+  subject           String
+  body              String
+  status            LabReportStatus   @default(DRAFT)
+  toAddress         String?
+  sentAt            DateTime?
+  sentById          String?
   providerReference String?
-  outcome          LabReportOutcome?
-  outcomeAt        DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  outcome           LabReportOutcome?
+  outcomeAt         DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   chokepoint LabChokepoint @relation(fields: [chokepointId], references: [id])
 
   @@index([chokepointId])
   @@index([status])
+}
+
+// WP114: the curated directory of companies an abuse report can go to —
+// hosts, CDNs, registrars, payment processors, app stores, ad networks and
+// the platform an account runs on. Public company names and their own
+// public policy/abuse pages only (prisma/lab-provider-seeds.ts); abuse
+// emails are left empty for an analyst to verify and fill, and a row is
+// unverified (verifiedAt null) until an analyst confirms it.
+model LabProvider {
+  id           String            @id @default(uuid())
+  name         String
+  kind         LabChokepointKind
+  website      String
+  abusePageUrl String?
+  abuseEmail   String?
+  policyUrl    String?
+  notes        String?
+  verifiedById String?
+  verifiedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([name, kind])
+  @@index([kind])
+}
+
+// WP114: one scan of one service URL by the infrastructure scanner. The
+// HTML is never stored; only normalised findings (LabInfraFinding) survive.
+model LabInfraScan {
+  id               String   @id @default(uuid())
+  serviceId        String
+  url              String
+  finalUrl         String?
+  httpStatus       Int?
+  scannedAt        DateTime @default(now())
+  // The signatures.json version the scan ran with.
+  signatureVersion String
+  error            String?
+
+  service LabService @relation(fields: [serviceId], references: [id])
+
+  @@index([serviceId])
+  @@index([scannedAt])
+}
+
+// WP114: one piece of normalised evidence about a service — a script host,
+// a header, a resolved IP, a crypto address… Findings are never deleted:
+// when a later scan no longer sees one it becomes active=false, which is
+// how "switched from X to Y" is shown. One row per (service, category,
+// value); scanId is the scan that last saw it.
+model LabInfraFinding {
+  id          String                  @id @default(uuid())
+  scanId      String
+  serviceId   String
+  category    LabInfraFindingCategory
+  providerId  String?
+  value       String
+  evidence    String
+  confidence  LabInfraConfidence      @default(MEDIUM)
+  firstSeenAt DateTime                @default(now())
+  lastSeenAt  DateTime                @default(now())
+  active      Boolean                 @default(true)
+
+  service LabService @relation(fields: [serviceId], references: [id])
+
+  @@unique([serviceId, category, value])
+  @@index([serviceId, category])
+  @@index([value])
+  @@index([active])
+}
+
+// WP114: a clustering candidate between two services (shared analytics ID,
+// IP, nameserver set, crypto address or TLS SAN), computed after each scan
+// and confirmed or dismissed by an analyst (WP115). serviceAId < serviceBId
+// by canonical ordering.
+model LabServiceLink {
+  id         String               @id @default(uuid())
+  serviceAId String
+  serviceBId String
+  reason     LabServiceLinkReason
+  value      String
+  createdAt  DateTime             @default(now())
+
+  @@unique([serviceAId, serviceBId, reason, value])
+  @@index([serviceAId])
+  @@index([serviceBId])
 }
