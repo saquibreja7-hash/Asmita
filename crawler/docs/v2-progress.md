@@ -2002,3 +2002,32 @@ This WP overrides the spec (assigned as a lane brief, not present in `full-crawl
 
 **Commits.** `8ea64ad` "WP81: fix the gitleaks secret-scan failure on the synthetic test secrets" (`.gitleaks.toml` only), then the attempt-1 progress entry `0344249`. Attempt 2 added the merge `7d3701c` "WP81: merge the remote branch tip (master #80) under the gitleaks fix" and this entry update. Not pushed.
 
+### WP82. Fix the gitleaks secret-scan failure on feat/crawler-sandbox (PR #92) — 2026-11-21
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22) plus the two verifications this WP is actually about: gitleaks 8.24.3 run locally with the exact CI invocation, and the branch's admin/crawler Playwright specs via `e2e-some.sh`. A CI-fix work package, not in `full-crawler-spec.md` (the spec's "Rules that do not change" were followed; the crawler spec itself is untouched — no crawler behaviour changed). No application or crawler source changed, no test was changed, weakened, skipped or deleted, and `reviewedByLegal` was not set anywhere.
+
+**The real cause.** The required "Secret scanning (gitleaks)" check fails on PR #92 with exactly one finding: commit `7507c5f` (WP25, the browser sandbox), `crawler/tests/unit/browser-sandbox.test.ts` line 83 — the synthetic service-key fixture that test pins ("cwk_" + `0123456789abcdef` three times over) to assert the key never reaches the browser worker's environment or argv. It is published test data that cannot be a production credential, but the `generic-api-key` entropy rule (4.17 against its 3.5 threshold) cannot tell. Reproduced locally with gitleaks 8.24.3 — the version the failing job pins — before touching anything: the exact CI command from the job log (`detect --redact --exit-code=2 --log-opts=--no-merges --first-parent 7507c5f^..e9b3f54`) reported the same one finding, exit 2. The structural reason only the config can fix it: gitleaks-action scans branch history (`--no-merges --first-parent base^..head`, config read from HEAD), so the already-pushed WP25 commit keeps failing whatever the file says today — editing the test now would not clear the check, and a history rewrite is out (this WP does not push, and the branch carries master merge commits a rewrite would redo).
+
+**The branch moved under the lane mid-WP — fast-forwarded, no rewrite.** While the lane ran, the driver merged master (PR #85, WP81's identical gitleaks fix, and PR #80's review labels) into `feat/crawler-sandbox` (`e9b3f54` → `7ecc688`) and CI re-ran: gitleaks failed on the new tip too (job 136666236295) — WP81's stopwords cover only the `synthetic-*-secret` fixtures, not this branch's `cwk_` one. The lane had no unique commits at that point, so it fast-forwarded to `7ecc688` (no merge commit, no history edit) and the fix was built and verified on that tip: the scan over `7507c5f^..7ecc688` reported the same one finding, exit 2, before the fix.
+
+**The fix.** One file: `.gitleaks.toml`. The repo allowlist gains one regex on the exact fixture literal, beside the WP81 `synthetic-*-secret` stopwords that arrived with the master merge. Narrower than a path entry or a stopword on purpose: only that one byte-exact published string is excused, and any other `cwk_...` value stays a finding. **Verified, not assumed**, all with gitleaks 8.24.3: with the fix, the failing range `7507c5f^..7ecc688` reports **no leaks, exit 0** (one leak, exit 2, before); a negative control — a planted high-entropy `api_secret` staged beside the ignored fixture — is still caught, exactly one finding, exit 2; and after the fix commit `e9404d2`, the range the next CI run will scan (`7507c5f^..HEAD`, 3 commits — the fix commit's own diff, which names the literal in the toml, included) reports **no leaks, exit 0**.
+
+**Decisions recorded:**
+
+- An allowlist entry, not a test edit: no behaviour changed on purpose, so no test is out of date (rule 6 does not bite); the fixture is the honest way to give the worker-scrubbing assertions a realistic key, and dodging the scanner with split strings would hide it from every reader without fixing the pushed commit either.
+- Not a history rewrite and not a push: the offending commit is already on `origin`; the WP forbids pushing, and the branch carries merge commits a rewrite would redo.
+- The allowlist names the whole literal, never the file path, so a real leak in that test file tomorrow is still caught.
+
+**Playwright.** No Playwright spec is failing on this branch — the only failing checks on PR #92 are gitleaks (this WP) and the separately-handled Dependency audit; CI's own e2e job passes on both the old and the moved branch head. To honour the work package's instruction anyway, the specs covering the branch's admin/crawler surface were run locally via `e2e-some.sh` (Node 22, Chromium, Postgres 17): `crawler-journey`, `admin`, `admin-access`, `security-hygiene`, `smoke` — **17 tests passed** (1.6 m, `E2E_SOME_RC=0`).
+
+**Checks (run, not assumed).** Full `check.sh` (Node 22, both packages) on the fixed tree: `crawler` — npm ci, lint, type-check, **60 test files / 650 tests passed**, build ok (`dist/main.js`, `browser-worker.js`, `decoder-worker.js`, `sscd-worker.js`, `sandbox-check.js` all emitted). `asmita` — npm ci, `prisma generate`, lint 0 errors (4 warnings, all pre-existing in files this branch never touched: three unused underscore vars in `scripts/translate-faq.mjs`, one react-hooks warning in `QuickExit.tsx`), type-check clean, `prisma validate` ok, **215 test files / 2117 tests passed**. `check.sh` printed **ALL CHECKS PASSED**.
+
+**Not done or not verified**
+
+- Not pushed (per the work package; the PR's CI re-run is the owner's step — the green result is proven locally with the pinned 8.24.3 binary, and by PR #85's identical fix passing the same check in CI).
+- The Dependency audit check also fails on this PR and is explicitly out of this WP's scope (handled separately, per the work package).
+- `npm run build` for asmita and `scripts/worker-smoke.mjs` are not part of `check.sh` and were not run (CI's "Production build" and e2e jobs pass on this branch head).
+- GitHub's native secret scanning / push protection is still off (an owner open item in `asmita/docs/security/open-items-2026-11.md`); this WP fixes the gitleaks-action check only.
+
+**Commits.** `e9404d2` "WP82: allowlist the sandbox test's synthetic service-key fixture for gitleaks" (`.gitleaks.toml` only), then this entry. Not pushed.
+
