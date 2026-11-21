@@ -139,7 +139,7 @@ test("language toggle persists Hindi preference", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("lang", "hi");
   await expect(page.getByRole("heading", { name: "आप अकेली नहीं हैं। आइए इसे हटवाएँ।" })).toBeVisible();
   await page.goto("/get-help");
-  await expect(page.getByRole("heading", { name: "कुछ हुआ है। अब आप ये कदम उठा सकते हैं।" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "तस्वीरों के ज़रिए हुए उत्पीड़न में मदद लें" })).toBeVisible();
   await page.goto("/what-we-do");
   await expect(page.getByRole("heading", { name: "सामग्री पर कार्रवाई के साधन" })).toBeVisible();
   await page.goto("/about");

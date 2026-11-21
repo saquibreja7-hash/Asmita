@@ -11,6 +11,7 @@ import { signAdminSession } from "@/lib/auth/jwt";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { writeAuditLog } from "@/lib/audit";
 import { logSecurityEvent } from "@/lib/security-log";
+import { adminSessionCookieName } from "@/lib/cookie-names";
 
 const schema = z.object({
   email: z.email(),
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
     success: true,
     redirectTo: enrolled ? "/admin/cases" : "/admin/setup-mfa",
   });
-  response.cookies.set("asmita_admin_session", session, {
+  response.cookies.set(adminSessionCookieName(), session, {
     httpOnly: true,
     sameSite: "strict",
     secure: process.env.NODE_ENV === "production",

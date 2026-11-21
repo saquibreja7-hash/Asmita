@@ -28,7 +28,7 @@ export default async function LegalRightsPage() {
         <section className="hero" aria-label={say("Your legal rights", "आपके कानूनी अधिकार")}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl">
-              <Link href="/resources" className="eyebrow">
+              <Link href="/resources" className="text-link text-sm font-medium">
                 {say("Resources", "संसाधन")}
               </Link>
               <h1 className="page-title mt-4">

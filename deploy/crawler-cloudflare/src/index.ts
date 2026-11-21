@@ -6,6 +6,15 @@
 // crawler/Dockerfile, unchanged. The service key is a Worker secret, passed in
 // the container's environment at start (the crawler deletes it from its own
 // environment on startup) and never baked into the image.
+//
+// Containers offer no file mounts for secrets, so unlike the Cloud Run
+// deployment the key must travel as an env var here. The WP25 image still
+// keeps it from the browser worker: the worker runs as the separate
+// browser-worker uid (setuid drop helper) with a scrubbed environment, so it
+// can neither see CRAWLER_SERVICE_KEY in its own environment nor read the
+// crawler's /proc/<pid>/environ (that file belongs to the crawler's user).
+// The /proc caveat for a same-uid decoder exploit remains, as documented in
+// crawler/README.md's decoder section.
 import { DurableObject } from "cloudflare:workers";
 
 // The container keeps running after this Durable Object goes idle, for up to

@@ -21,6 +21,7 @@ import {
 import { buildSignedHashAnnex, voidSignaturesWithRejectedFingerprints } from "@/lib/case-hash-annex";
 import { isUrlExpired } from "@/lib/url-retention";
 import { loadSignedTemplate, voidUrlSignatureForChangedTemplate } from "@/lib/signed-template";
+import { copyNoticeToPartnerChannel, type PartnerChannelOutcome } from "@/lib/partner-channel";
 
 const schema = z.object({
   caseId: z.string().min(1),
@@ -32,6 +33,32 @@ function templateTypeForNoticeBasis(noticeBasis: string) {
   if (noticeBasis === "DMCA") return "DMCA";
   if (noticeBasis === "IT_RULES_AND_DMCA") return "IT_RULES_AND_DMCA";
   return null;
+}
+
+// WP33: when the notice's URL is on a domain an ACTIVE platform partner
+// with a channel email owns, that channel gets a copy of the dispatched
+// notice — in addition to the verified grievance contact, never instead of
+// it, with the same signed content, and never twice (the channel's own
+// idempotency key). A channel problem never fails the dispatch: the notice
+// has already gone to the verified contact. Null when the platform is not
+// in the partner programme, so the response stays unchanged for it.
+async function copyDispatchedNoticeToChannel(input: {
+  caseId: string;
+  urlId: string;
+  domain: string;
+  subject: string;
+  body: string;
+  signedNoticePdf: Buffer | null;
+  fingerprintIds: string[];
+  actorId: string;
+}): Promise<PartnerChannelOutcome | null> {
+  try {
+    const outcome = await copyNoticeToPartnerChannel(input);
+    return outcome.sent || outcome.reason !== "no_partner" ? outcome : null;
+  } catch {
+    // Audited inside; the dispatch itself already succeeded.
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -244,18 +271,40 @@ export async function POST(request: Request) {
       actorId: auth.session.sub,
     });
     if (result.dispatched) {
+      const partnerChannel = await copyDispatchedNoticeToChannel({
+        caseId: parsed.data.caseId,
+        urlId: parsed.data.urlId,
+        domain: submittedUrl.domain,
+        subject,
+        body,
+        signedNoticePdf,
+        fingerprintIds,
+        actorId: auth.session.sub,
+      });
       return NextResponse.json({
         dispatched: true,
         transport: "platform_api",
         notice: result.notice,
         referenceId: result.referenceId ?? null,
+        ...(partnerChannel ? { partnerChannel } : {}),
       });
     }
     if (result.reason === "already_dispatched") {
+      const partnerChannel = await copyDispatchedNoticeToChannel({
+        caseId: parsed.data.caseId,
+        urlId: parsed.data.urlId,
+        domain: submittedUrl.domain,
+        subject,
+        body,
+        signedNoticePdf,
+        fingerprintIds,
+        actorId: auth.session.sub,
+      });
       return NextResponse.json({
         dispatched: false,
         transport: "platform_api",
         reason: "already_dispatched",
+        ...(partnerChannel ? { partnerChannel } : {}),
       });
     }
     // api_send_failed: a 4xx is a definite rejection — the platform received
@@ -288,10 +337,24 @@ export async function POST(request: Request) {
       fingerprintIds,
       templateId: template.id,
     });
+    // Also the channel copy when the platform is a partner with one —
+    // attempted on a deduplicated dispatch too, in case the partner was
+    // onboarded after the notice first went out.
+    const partnerChannel = await copyDispatchedNoticeToChannel({
+      caseId: parsed.data.caseId,
+      urlId: parsed.data.urlId,
+      domain: submittedUrl.domain,
+      subject,
+      body,
+      signedNoticePdf,
+      fingerprintIds,
+      actorId: auth.session.sub,
+    });
     return NextResponse.json({
       ...result,
       transport: "email",
       ...(fellBackFromApi !== null ? { fellBackFromPlatformApi: fellBackFromApi } : {}),
+      ...(partnerChannel ? { partnerChannel } : {}),
     });
   } catch (err) {
     // An earlier attempt in the last 24 hours reached Resend but was not

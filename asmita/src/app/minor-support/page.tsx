@@ -1,8 +1,8 @@
+import { QuickExit } from "@/components/QuickExit";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
-import { Illustration } from "@/components/Illustration";
 
 export default async function MinorSupportPage() {
   const locale = await getLocale();
@@ -75,15 +75,15 @@ export default async function MinorSupportPage() {
 
   return (
     <AppShell>
+      <QuickExit locale={locale} enableIdle={false} />
       <div className="page-canvas">
         {/* HERO */}
-        <section className="container page-hero text-center page-hero-split">
+        <section className="container py-8 md:py-14">
           <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">{t(locale, "minor.pill")}</span>
             <p className="muted mt-3 text-xs tracking-wide">
               {t(locale, "minor.langNote")} <span lang="hi">हिंदी</span>
             </p>
-            <h1 className="page-title-sm mt-8">
+            <h1 className="page-title-sm mt-3">
               {t(locale, "minor.hero.title.1")}
               <br />
               <em className="not-italic text-gradient">{t(locale, "minor.hero.title.2")}</em>
@@ -91,8 +91,11 @@ export default async function MinorSupportPage() {
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               {t(locale, "minor.hero.sub")}
             </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <a href="tel:1098" className="btn btn-primary">{locale === "hi" ? "चाइल्डलाइन 1098 पर कॉल करें" : "Call Childline 1098"}</a>
+              <a href="tel:112" className="btn btn-secondary">{locale === "hi" ? "आपात स्थिति में 112" : "Emergency 112"}</a>
+            </div>
           </div>
-          <Illustration name="audience-young" eager className="page-hero-art" />
         </section>
 
         <div className="container">
@@ -102,7 +105,7 @@ export default async function MinorSupportPage() {
         {/* VALIDATION */}
         <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
-            <p className="font-display text-[20px] leading-[1.55] tracking-tight text-[var(--ink)] md:text-[24px] md:leading-[1.5]">
+            <p className="text-xl leading-[1.55] font-semibold text-[var(--ink)] md:text-2xl md:leading-[1.5]">
               {t(locale, "minor.validation")}
             </p>
           </div>
@@ -117,8 +120,7 @@ export default async function MinorSupportPage() {
           <div key={group.eyebrow}>
             <section className="container section-pad">
               <div className="mx-auto max-w-3xl">
-                <span className="eyebrow mb-3 block">{group.eyebrow}</span>
-                <h2 className="section-title">
+                <h2 className="section-title leading-[1.35]">
                   {group.title}
                 </h2>
                 <p className="muted mt-2 text-sm leading-[1.7]">{group.subtitle}</p>
@@ -163,8 +165,7 @@ export default async function MinorSupportPage() {
         {/* WHY NOT ASMITA */}
         <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
-            <span className="eyebrow mb-4 block">{t(locale, "minor.whyNot.eyebrow")}</span>
-            <h2 className="section-title">
+            <h2 className="section-title leading-[1.35]">
               {t(locale, "minor.whyNot.title")}
             </h2>
             <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
@@ -180,7 +181,7 @@ export default async function MinorSupportPage() {
         {/* CLOSING */}
         <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <h2 className="section-title">
+            <h2 className="section-title leading-[1.35]">
               {t(locale, "minor.closing.title")}
             </h2>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">

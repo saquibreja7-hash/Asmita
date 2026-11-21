@@ -1,8 +1,8 @@
+import { QuickExit } from "@/components/QuickExit";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
-import { Illustration } from "@/components/Illustration";
 import { crawlerEnabled } from "@/lib/crawler-auth";
 
 export default async function StartPage() {
@@ -13,67 +13,34 @@ export default async function StartPage() {
 
   return (
     <AppShell>
+      <QuickExit locale={locale} enableIdle={false} />
       <div className="page-canvas">
-        {/* HERO */}
-        <section className="container page-hero text-center page-hero-split">
-          <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">{t(locale, "start.pill")}</span>
-            <h1 className="page-title mt-8">
-              {t(locale, "start.hero.title.1")}{" "}
-              <em className="not-italic text-gradient">{t(locale, "start.hero.title.em")}</em> {t(locale, "start.hero.title.2")}
-            </h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "start.hero.sub")}
-            </p>
-          </div>
-          <Illustration name="start-journey" eager className="page-hero-art" />
-        </section>
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* PATH CARDS */}
-        <section className="container section-pad">
-          <div className="mx-auto grid max-w-3xl gap-5 sm:grid-cols-2">
-
-            <div className="card flex flex-col">
-              <span className="eyebrow">{t(locale, "start.adult.eyebrow")}</span>
-              <h2 className="mt-4">{t(locale, "start.adult.title")}</h2>
-              <p className="mt-4">{t(locale, "start.adult.body")}</p>
-              <Link className="btn btn-primary btn-arrow mt-8 w-full justify-center" href="/eligibility">
+        <section className="container py-9 md:py-16">
+          <div className="mx-auto max-w-xl">
+            <h1 className="page-title">{t(locale, "start.title")}</h1>
+            <p className="muted mt-4 max-w-prose text-base leading-relaxed">{t(locale, "start.hero.sub")}</p>
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <Link className="btn btn-primary btn-arrow" href="/eligibility">
                 {t(locale, "start.adult.cta")}
               </Link>
+              <Link href="/start/minor" className="link-underline">
+                {t(locale, "start.minor.link")}
+              </Link>
+              <Link href="/track" className="link-underline">
+                {t(locale, "start.track.link")}
+              </Link>
             </div>
-
             {watchAvailable && (
-              <div className="card flex flex-col">
-                <span className="eyebrow">{t(locale, "watch.pill")}</span>
-                <h2 className="mt-4">{t(locale, "start.watch.title")}</h2>
-                <p className="muted mt-4 text-sm leading-[1.7]">{t(locale, "start.watch.body")}</p>
-                <Link className="btn btn-secondary mt-8 w-full justify-center" href="/watch">
+              <div className="mt-9 border-t border-[var(--line)] pt-7">
+                <h2 className="subsection-title">{t(locale, "start.watch.title")}</h2>
+                <p className="muted mt-3 text-sm leading-[1.7]">{t(locale, "start.watch.body")}</p>
+                <Link className="btn btn-secondary mt-5" href="/watch">
                   {t(locale, "start.watch.cta")}
                 </Link>
               </div>
             )}
-
           </div>
-
-          <p className="mx-auto mt-5 max-w-lg text-center text-sm text-[var(--text-muted)]">
-            <Link href="/start/minor" className="link-underline text-[var(--text-muted)] hover:text-[var(--ink)]">
-              {t(locale, "start.minor.link")}
-            </Link>
-          </p>
-          <p className="mx-auto mt-2 max-w-lg text-center text-sm text-[var(--text-muted)]">
-            <Link href="/track" className="link-underline text-[var(--text-muted)] hover:text-[var(--ink)]">
-              {t(locale, "start.track.link")}
-            </Link>
-          </p>
         </section>
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
 
         {/* SAFETY + CLOSING */}
         <section className="container py-12 text-center md:py-16">

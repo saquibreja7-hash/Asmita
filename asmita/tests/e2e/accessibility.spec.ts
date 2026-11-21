@@ -72,7 +72,7 @@ test("language toggle buttons are at least 44px tall", async ({ page, isMobile }
 // heading so screen readers announce the new question.
 test("eligibility wizard focuses the question heading on every step change", async ({ page }) => {
   await page.goto("/eligibility");
-  const heading = page.locator("h2");
+  const heading = page.getByRole("heading", { level: 1 });
   await expect(heading).toHaveText("How old are you now?");
 
   await page.getByRole("button", { name: "18 or over" }).click();
@@ -82,4 +82,22 @@ test("eligibility wizard focuses the question heading on every step change", asy
   await page.getByRole("button", { name: "Back" }).click();
   await expect(heading).toBeFocused();
   await expect(heading).toHaveText("How old are you now?");
+});
+
+test("the footer language control persists the selected language across viewport changes", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const english = page.getByRole("button", { name: "EN", exact: true });
+  const hindi = page.getByRole("button", { name: "हिंदी", exact: true });
+  const root = page.locator("html");
+
+  await hindi.click();
+  await expect(root).toHaveAttribute("lang", "hi");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(hindi).toHaveAttribute("aria-pressed", "true");
+
+  await english.click();
+  await expect(root).toHaveAttribute("lang", "en");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(english).toHaveAttribute("aria-pressed", "true");
 });

@@ -29,8 +29,7 @@ export default async function IssuePage() {
         <section className="hero" aria-label={say("The issue", "समस्या को समझें")}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("The issue", "समस्या को समझें")}</span>
-              <h1 className="page-title mt-5">
+              <h1 className="page-title">
                 {say("Understand what is happening", "समझें कि क्या हो रहा है")}
               </h1>
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">

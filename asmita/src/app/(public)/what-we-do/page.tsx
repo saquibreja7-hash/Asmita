@@ -64,8 +64,7 @@ export default async function WhatWeDoPage() {
         <section className="hero" aria-label={say("What we do", "हम क्या करते हैं")}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("What we do", "हम क्या करते हैं")}</span>
-              <h1 className="page-title mt-5">
+              <h1 className="page-title">
                 {say("Tools for taking action on content", "सामग्री पर कार्रवाई के साधन")}
               </h1>
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
@@ -112,7 +111,6 @@ export default async function WhatWeDoPage() {
         <section className="transform-section" aria-labelledby="flow-heading">
           <div className="transform-content container section-pad">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("How it fits together", "ये चरण कैसे जुड़ते हैं")}</span>
               <h2 id="flow-heading" className="section-title mt-4">
                 {say("From a link to a takedown", "लिंक से हटाने की कार्रवाई तक")}
               </h2>

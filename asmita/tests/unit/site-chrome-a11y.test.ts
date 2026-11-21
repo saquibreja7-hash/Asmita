@@ -147,7 +147,7 @@ describe("CopyDraft (A19)", () => {
 describe("eligibility wizard (A20)", () => {
   it("makes the question heading a focus target", () => {
     const html = render(createElement(EligibilityWizard, { locale: "en" }));
-    expect(html).toContain('<h2 tabindex="-1"');
+    expect(html).toContain('<h1 tabindex="-1"');
   });
 
   it("gives the back button a 44px target and focuses the heading on every change", () => {
@@ -159,7 +159,9 @@ describe("eligibility wizard (A20)", () => {
 });
 
 describe("globals.css and layout metadata (P6, P7, P9, P10, P12, A18, A22, A26)", () => {
-  const css = src("src/app/globals.css");
+  const css = ["foundation", "platform", "site"]
+    .map((name) => src(`src/app/${name}-styles.css`))
+    .join("\n");
 
   it("leaves no px font sizes: everything scales with the root", () => {
     expect(css).not.toMatch(/font-size:\s*[^;}]*px/);

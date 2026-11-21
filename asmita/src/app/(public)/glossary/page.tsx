@@ -40,8 +40,7 @@ export default async function GlossaryPage() {
         <section className="hero" aria-label={say("Glossary", "शब्दावली")}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("Glossary", "शब्दावली")}</span>
-              <h1 className="page-title mt-5">
+              <h1 className="page-title">
                 {say("Words, in plain language", "शब्दों का सरल अर्थ")}
               </h1>
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
@@ -61,7 +60,7 @@ export default async function GlossaryPage() {
                   <dt className="font-display text-[1.15rem] font-medium text-[var(--ink)]">
                     {say(entry.term, hindiGlossary[index].term)}
                   </dt>
-                  <dd className="mt-2 text-[16px] leading-[1.65] text-[var(--text)]">
+                  <dd className="mt-2 max-w-[60ch] text-[16px] leading-[1.65] text-[var(--text)]">
                     {say(entry.definition, hindiGlossary[index].definition)}
                   </dd>
                 </div>

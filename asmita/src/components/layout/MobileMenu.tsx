@@ -30,7 +30,7 @@ export function MobileMenu({ locale, groups }: { locale: Locale; groups: NavGrou
       }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !document.querySelector("dialog:modal")) {
         setOpen(false);
         buttonRef.current?.focus();
       }

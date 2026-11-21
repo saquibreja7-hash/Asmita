@@ -112,6 +112,11 @@ function seedFinding(id: string, caseId: string, seenAt: Date, pageUrl = normali
     firstSeenAt: seenAt, lastSeenAt: seenAt,
     sourceId: sourceId(), runId: "run-1", reviewStatus: "CANDIDATE",
     reviewedById: null, reviewedAt: null, secondReviewedById: null, secondReviewedAt: null,
+    labelAiMade: false, labelAiMadeById: null, labelAiMadeAt: null,
+    labelSexual: false, labelSexualById: null, labelSexualAt: null,
+    labelPossibleMinor: false, labelPossibleMinorById: null, labelPossibleMinorAt: null,
+    labelPossibleMinorClearedById: null, labelPossibleMinorClearedAt: null, labelPossibleMinorClearReason: null,
+    minorProtocolBefore: null,
   });
 }
 

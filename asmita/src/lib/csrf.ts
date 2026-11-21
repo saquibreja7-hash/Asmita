@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { sha256 } from "@/lib/hash";
-
-const CSRF_COOKIE = "asmita_csrf";
+import { csrfCookieName, withLegacyFallback } from "@/lib/cookie-names";
+import { safeEqual } from "@/lib/safe-equal";
 
 function secret() {
   const configured = process.env.CSRF_SECRET || process.env.JWT_SECRET;
@@ -38,13 +38,16 @@ export function readCookie(header: string | null, name: string) {
 }
 
 export function verifyCsrfRequest(request: Request) {
-  const nonce = readCookie(request.headers.get("cookie"), CSRF_COOKIE);
+  const header = request.headers.get("cookie");
+  const nonce = withLegacyFallback(csrfCookieName())
+    .map((name) => readCookie(header, name))
+    .find((value): value is string => value !== null);
   const submitted = request.headers.get("x-csrf-token");
-  return Boolean(nonce && submitted && submitted === createCsrfToken(nonce));
+  return Boolean(nonce && submitted && safeEqual(submitted, createCsrfToken(nonce)));
 }
 
 export function attachCsrfCookie(response: NextResponse, nonce: string) {
-  response.cookies.set(CSRF_COOKIE, nonce, {
+  response.cookies.set(csrfCookieName(), nonce, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

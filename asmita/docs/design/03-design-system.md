@@ -14,7 +14,7 @@ platform, not a charity. This is document 3 of 4. Values are concrete so documen
 
 ## 0. The system as built (November 2026)
 
-All values live in `src/app/globals.css`. Use these, not raw values.
+`src/app/globals.css` imports tokens and shared styles from `foundation-styles.css`, partner page styles from `platform-styles.css`, and site and interaction styles from `site-styles.css`. Use the semantic tokens for shared surfaces.
 
 **Colour roles.** `--ink` (headings, main text), `--text` (body), `--text-muted`
 (hints), `--brand` (#0a5e5a: links, accents, primary buttons), `--brand-strong`
@@ -30,14 +30,12 @@ anywhere. Headings are weight 600. Scale: `.hero-title` (home only),
 `.subsection-title`; card titles are plain `h3` at 20px. The system monospace is
 for codes, hashes, reference numbers and raw links only.
 
-**Labels.** One style, `.eyebrow`: 13px, 600, uppercase, 0.08em tracking, brand
-teal. Used above titles, for section labels and table heads.
+**Labels.** Use short labels for information people need, such as process progress or source and verification details. Use a standard link for a breadcrumb. Let a title introduce its own subject and keep longer text in normal case.
 
 **Shape.** One corner radius, `--radius-box` (12px), for every box, card, panel,
 input and menu. Buttons, chips and step numbers stay fully round.
 
-**Layout.** Content max width 1280px; side margin `--gutter` grows from 20px to
-96px. Page headers use `.page-hero` spacing; sections use `.section-pad`.
+**Layout.** Content max width 1280px. The side margin `--gutter` grows from 20px to 96px. Editorial pages use `.page-hero` and `.section-pad`. Urgent and operational routes use a compact introduction so the first useful action appears early on mobile.
 
 **Buttons.** Two only: `.btn-primary` (teal fill, one per screen) and
 `.btn-secondary` (outline, teal tint on hover). `.btn-arrow` adds an arrow.

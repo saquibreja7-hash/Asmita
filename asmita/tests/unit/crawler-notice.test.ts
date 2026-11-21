@@ -19,6 +19,10 @@ const state = vi.hoisted(() => ({
   accessLog: [] as Array<Record<string, unknown>>,
   sent: [] as Array<{ to: string; subject: string; text: string; attachments?: { filename: string; content: Buffer }[]; key?: string }>,
   sendError: null as null | Error,
+  // WP33: the platform partners and the channel sends, for the partner
+  // channel copy of a dispatched representative notice.
+  partners: [] as Array<Record<string, unknown>>,
+  channelSends: [] as Array<Record<string, unknown>>,
 }));
 
 function matches(row: Row, where: Row | undefined): boolean {
@@ -100,6 +104,14 @@ const fakeDb = vi.hoisted(() => {
       },
     },
     adminAccessLog: { create: async ({ data }: { data: Row }) => { s().accessLog.push(data); return data; } },
+    // WP33: the partner lookup and the channel-send record.
+    platformPartner: {
+      findMany: async () => s().partners.map((partner) => ({ ...partner })),
+    },
+    partnerChannelSend: {
+      findFirst: async ({ where }: { where: Row }) => s().channelSends.find((row) => matches(row, where)) ?? null,
+      create: async ({ data }: { data: Row }) => { s().channelSends.push(data); return data; },
+    },
   };
   self.$transaction = async (fn: (tx: unknown) => unknown) => fn(self);
   return self;
@@ -146,6 +158,7 @@ function admin(sub = "admin-1") {
 function seed() {
   state.findings.clear(); state.urls.clear(); state.templates.clear(); state.hashes.clear(); state.platforms.clear(); state.cases.clear();
   state.consents.length = 0; state.accessLog.length = 0; state.sent.length = 0; state.sendError = null;
+  state.partners.length = 0; state.channelSends.length = 0;
   dispatchedNotices.clear();
   inMemoryAuditLog.length = 0;
 
@@ -280,6 +293,12 @@ describe("representative notice: gates (each with its own code)", () => {
   it("finding not approved: finding_not_approved", async () => {
     state.findings.get("cf-1")!.reviewStatus = "CANDIDATE";
     await expectRefusal("finding_not_approved");
+  });
+
+  it("possible-minor label set (WP37): possible_minor_label_set, whatever the review status", async () => {
+    // The finding stays APPROVED — the label alone stops the notice.
+    state.findings.get("cf-1")!.labelPossibleMinor = true;
+    await expectRefusal("possible_minor_label_set");
   });
 
   it("a distant match without its second review: second_review_required", async () => {
@@ -461,6 +480,38 @@ describe("representative notice: dispatch", () => {
     state.urls.get("url-1")!.status = "NOTICE_SENT";
     expect(await dispatchRepresentativeNotice({ ...base, contentDigest: digest })).toMatchObject({ ok: false, error: "url_not_ready_for_dispatch" });
     expect(state.sent).toHaveLength(1);
+  });
+
+  it("copies the dispatched notice to the platform partner's channel, once (WP33)", async () => {
+    // The page is on forum.example.com, so the partner that owns that
+    // domain gets a copy of the same notice at its channel address.
+    state.partners.push({
+      id: "pp-1", name: "Example Forum Partner", status: "ACTIVE", primaryDomain: "forum.example.com",
+      extraDomains: [], channelEmailEncrypted: encryptField("channel@forum.example.com"), crawlPermissionRecordedAt: null,
+    });
+    const digest = await previewDigest();
+    const result = await dispatchRepresentativeNotice({ ...base, contentDigest: digest });
+    expect(result).toMatchObject({ ok: true, dispatched: true, partnerChannel: { sent: true, partnerId: "pp-1" } });
+
+    // Two emails: the verified grievance contact, then the same notice at
+    // the channel address — same subject, same text, same attached PDF,
+    // its own idempotency key.
+    expect(state.sent).toHaveLength(2);
+    const [grievance, copy] = state.sent;
+    expect(grievance!.to).toBe("grievance@example.org");
+    expect(copy!.to).toBe("channel@forum.example.com");
+    expect(copy!.subject).toBe(grievance!.subject);
+    expect(copy!.text).toBe(grievance!.text);
+    expect(copy!.key).toMatch(/^partner-channel:[0-9a-f]{64}$/);
+    expect(copy!.key).not.toBe(grievance!.key);
+    expect(state.channelSends).toHaveLength(1);
+    expect(state.channelSends[0]).toMatchObject({ partnerId: "pp-1", kind: "NOTICE", urlId: "url-1", caseId: "case-1" });
+    expect(inMemoryAuditLog.find((entry) => entry.eventType === "PARTNER_CHANNEL_SENT")!.entityId).toBe("pp-1");
+
+    // A retry dispatches nothing new to either address.
+    const again = await dispatchRepresentativeNotice({ ...base, contentDigest: digest });
+    expect(again).toMatchObject({ ok: true, dispatched: false, partnerChannel: { sent: false, reason: "already_sent" } });
+    expect(state.sent).toHaveLength(2);
   });
 
   it("a retry after an unrecorded send resends the stored bytes; Resend's refusal is email_already_sent and keeps the record", async () => {

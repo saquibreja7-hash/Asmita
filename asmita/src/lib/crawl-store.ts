@@ -64,13 +64,27 @@ export type MemoryCrawlFinding = {
   lastSeenAt: Date;
   sourceId: string;
   runId: string;
-  reviewStatus: "CANDIDATE" | "APPROVED" | "DISMISSED";
+  reviewStatus: "CANDIDATE" | "APPROVED" | "DISMISSED" | "MINOR_PROTOCOL";
   /** Which layer matched (ADR 008): a hash distance (PDQ/VPDQ) or SSCD. */
   method: "PDQ" | "VPDQ" | "SSCD";
   reviewedById: string | null;
   reviewedAt: Date | null;
   secondReviewedById: string | null;
   secondReviewedAt: Date | null;
+  // Review labels (review labels WP37), stored exactly as the database does.
+  labelAiMade: boolean;
+  labelAiMadeById: string | null;
+  labelAiMadeAt: Date | null;
+  labelSexual: boolean;
+  labelSexualById: string | null;
+  labelSexualAt: Date | null;
+  labelPossibleMinor: boolean;
+  labelPossibleMinorById: string | null;
+  labelPossibleMinorAt: Date | null;
+  labelPossibleMinorClearedById: string | null;
+  labelPossibleMinorClearedAt: Date | null;
+  labelPossibleMinorClearReason: string | null;
+  minorProtocolBefore: string | null;
 };
 
 /**
@@ -99,7 +113,7 @@ export type MemoryCrawlSource = {
   delayMs: number;
   enabled: boolean;
   approvedBy: string | null;
-  origin: "ADMIN" | "REPORTED" | "DISCOVERED";
+  origin: "ADMIN" | "REPORTED" | "DISCOVERED" | "PARTNER";
   hops: number;
   discoveredFromId: string | null;
   render: "HTTP" | "BROWSER" | "AUTO";

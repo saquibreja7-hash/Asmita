@@ -19,7 +19,7 @@ export default async function DirectoryPage() {
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label={say("Support directory", "सहायता सूची")}>
-          <div className="hero-content container section-pad page-hero-split">
+          <div className="hero-content container py-8 md:py-14 page-hero-split">
             <div className="mx-auto max-w-3xl">
               <p className="text-sm">
                 <Link href="/resources" className="text-link font-medium">
@@ -36,7 +36,7 @@ export default async function DirectoryPage() {
                 {say("Last complete directory verification", "पूरी सूची की पिछली जाँच")}: {directoryLastVerified}.
               </p>
             </div>
-            <Illustration name="page-directory" eager className="page-hero-art" />
+            <Illustration name="page-directory" eager className="page-hero-art hidden lg:block" />
           </div>
         </section>
 
