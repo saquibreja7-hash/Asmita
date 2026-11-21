@@ -22,7 +22,8 @@
     "NOTICE_DISPATCH_PERSISTENCE": "database",
     "ENABLE_HASH_UPLOAD": "true",
     "ENABLE_PLATFORM_API": "false",
-    "ENABLE_PROVENANCE_CHECK": "false"
+    "ENABLE_PROVENANCE_CHECK": "false",
+    "ENABLE_LAB": "false"
   },
   "env": {
     "production": {
@@ -52,7 +53,8 @@
         "crons": [
           "0 * * * *",
           "15 * * * *",
-          "30 22 * * *"
+          "30 22 * * *",
+          "45 2 * * *"
         ]
       },
       "vars": {
@@ -67,7 +69,8 @@
         "ENABLE_PLATFORM_API": "false",
         "ENABLE_PROVENANCE_CHECK": "true",
         "ESCALATION_DRAFTS_REVIEWED": "true",
-        "ENABLE_CRAWLER": "true"
+        "ENABLE_CRAWLER": "true",
+        "ENABLE_LAB": "false"
       }
     }
   }

@@ -36,6 +36,7 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/legal", label: "कानूनी" },
             { href: "/for-platforms", label: "प्लेटफ़ॉर्म के लिए" },
             { href: "/contact", label: "संपर्क" },
+            { href: "/lab", label: "AI लैब" },
             { href: "/sitemap", label: "साइटमैप" },
             // English until a native speaker supplies the Hindi label.
             { href: STATUS_URL, label: "Status" },
@@ -70,6 +71,7 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/for-platforms", label: "For platforms" },
             { href: "/privacy", label: "Privacy" },
             { href: "/contact", label: "Contact" },
+            { href: "/lab", label: "AI Lab" },
             { href: "/sitemap", label: "Sitemap" },
             { href: STATUS_URL, label: "Status" },
           ],

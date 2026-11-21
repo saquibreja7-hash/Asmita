@@ -272,6 +272,17 @@ enum AuditEventType {
   CRAWL_SOURCE_PROMOTED
   CRAWL_SOURCE_PAUSED
   CRAWL_SOURCE_RESUMED
+  // AI Lab (docs/lab/charter.md): every lab mutation audits with its own
+  // event name. Data carries ids and counts only, never a service name or URL.
+  LAB_SERVICE_CREATED
+  LAB_SERVICE_UPDATED
+  LAB_CHOKEPOINT_CREATED
+  LAB_CHOKEPOINT_UPDATED
+  LAB_REPORT_DRAFTED
+  LAB_REPORT_UPDATED
+  LAB_REPORT_SENT
+  LAB_REPORT_OUTCOME_RECORDED
+  LAB_LIVENESS_RUN
   CRAWL_FINDING_LABEL_SET
   CRAWL_FINDING_LABEL_CLEARED
   PARTNER_SHARE_CONSENT_GIVEN
@@ -289,6 +300,49 @@ enum DeletionJobStatus {
   COMPLETED
   CANCELLED
   FAILED
+}
+
+// AI Lab (docs/lab/charter.md). E2: nudify-service map and chokepoint
+// reporting. Lab data is research data: real names and URLs live only in
+// these tables, never in code, fixtures or docs.
+enum LabServiceKind {
+  APP
+  WEBSITE
+  CHAT_BOT
+  CHANNEL
+  SOCIAL_ACCOUNT
+}
+
+enum LabServiceStatus {
+  ACTIVE
+  DOWN
+  UNKNOWN
+}
+
+enum LabChokepointKind {
+  HOST
+  CDN
+  REGISTRAR
+  PAYMENT_PROCESSOR
+  APP_STORE
+  AD_NETWORK
+  PLATFORM_ACCOUNT
+}
+
+enum LabReportChannel {
+  EMAIL
+  WEB_FORM
+}
+
+enum LabReportStatus {
+  DRAFT
+  SENT
+}
+
+enum LabReportOutcome {
+  ACTIONED
+  REFUSED
+  NO_REPLY
 }
 
 model User {
@@ -1271,4 +1325,76 @@ model AdminSavedView {
 
   @@unique([ownerEmailHash, name])
   @@index([ownerEmailHash])
+}
+
+// E2 (Lab charter): a service that makes 'undress' or face-swap images.
+// Real names and URLs live only here and in LabChokepoint, never in code.
+model LabService {
+  id            String           @id @default(uuid())
+  name          String
+  kind          LabServiceKind
+  // The service's public addresses, entered by an analyst. The daily
+  // liveness check fetches exactly these.
+  urls          String[]         @default([])
+  status        LabServiceStatus @default(UNKNOWN)
+  // Latest liveness result per URL, set by the daily check only:
+  // [{ url, up, checkedAt }] (zod-parsed in src/lib/lab/lab-services.ts).
+  urlStatuses   Json?
+  // First time the daily check saw every URL down; cleared when one answers
+  // again. Basis of the "first report to down" metric.
+  downSince     DateTime?
+  firstSeenAt   DateTime         @default(now())
+  lastCheckedAt DateTime?
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  chokepoints LabChokepoint[]
+
+  @@index([status])
+}
+
+// E2: one company a service depends on, with the abuse contact an analyst
+// copied from that provider's own abuse page.
+model LabChokepoint {
+  id            String            @id @default(uuid())
+  serviceId     String
+  kind          LabChokepointKind
+  provider      String
+  abuseContact  String
+  evidenceNotes String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  service LabService   @relation(fields: [serviceId], references: [id])
+  reports LabReport[]
+
+  @@index([serviceId])
+}
+
+// E2: one abuse report to one chokepoint. Drafted from the per-kind
+// template, reviewed by the analyst, then sent by email or copied into a
+// web form; the outcome is recorded when the provider replies (or does not).
+model LabReport {
+  id               String            @id @default(uuid())
+  chokepointId     String
+  // The chokepoint kind the draft was rendered from (report-templates.ts).
+  templateKind     LabChokepointKind
+  channel          LabReportChannel?
+  subject          String
+  body             String
+  status           LabReportStatus   @default(DRAFT)
+  toAddress        String?
+  sentAt           DateTime?
+  sentById         String?
+  providerReference String?
+  outcome          LabReportOutcome?
+  outcomeAt        DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  chokepoint LabChokepoint @relation(fields: [chokepointId], references: [id])
+
+  @@index([chokepointId])
+  @@index([status])
 }

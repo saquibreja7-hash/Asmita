@@ -65,6 +65,25 @@ export async function sendNoticeDraft(
   }, idempotencyKey ? { idempotencyKey } : undefined));
 }
 
+// The AI Lab's own sender address (docs/lab/charter.md, E2): chokepoint
+// reports go out under it, not under the survivor notice sender, so a
+// provider always sees which Asmita arm wrote to it.
+export function getLabEmailFrom() {
+  return process.env.LAB_EMAIL_FROM || process.env.EMAIL_FROM || "Asmita Lab <Lab@meriasmita.org>";
+}
+
+export async function sendLabReportEmail(to: string, subject: string, text: string, idempotencyKey?: string) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-lab-report" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getLabEmailFrom(),
+    to,
+    subject,
+    text,
+  }, idempotencyKey ? { idempotencyKey } : undefined));
+}
+
 export function createVictimConfirmationEmail(referenceNumber: string, dashboardUrl: string) {
   const subject = `Asmita case ${referenceNumber}`;
   const text = [
