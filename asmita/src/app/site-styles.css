@@ -595,6 +595,25 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 
 .site-footer-col-list a:hover { opacity: 0.5; }
 
+.site-footer-utility {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+
+.site-footer-utility a {
+  color: var(--color-graphite);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: -0.033em;
+  padding: 4px 0;
+}
+
+.site-footer-utility a:hover { color: var(--color-off-black); }
+
 .site-footer-bottom {
   color: var(--color-graphite);
   font-size: 0.75rem;

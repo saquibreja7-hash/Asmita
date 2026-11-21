@@ -10,16 +10,10 @@ export const STATUS_URL = "https://status.meriasmita.org";
 export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; withoutNewsletter?: boolean }) {
   const isHi = locale === "hi";
 
+  // Brand plus three link columns, matching the grid in site-styles.css.
+  // Privacy, sitemap and status sit in the bottom bar.
   const columns = isHi
     ? [
-        {
-          title: "समस्या",
-          links: [
-            { href: "/issue", label: "छवि-आधारित दुर्व्यवहार" },
-            { href: "/check-image", label: "AI से बनी तस्वीर की रिपोर्ट" },
-            { href: "/how-it-works", label: "यह कैसे काम करता है" },
-          ],
-        },
         {
           title: "मदद",
           links: [
@@ -30,41 +24,30 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
           ],
         },
         {
-          title: "जुड़िए",
+          title: "समस्या",
           links: [
-            { href: "/get-involved", label: "जुड़िए" },
-            { href: "/partners", label: "साझेदारी कीजिए" },
-            { href: "/careers", label: "करियर" },
-            { href: "/news", label: "समाचार" },
+            { href: "/issue", label: "छवि-आधारित दुर्व्यवहार" },
+            { href: "/check-image", label: "AI से बनी तस्वीर की रिपोर्ट" },
+            { href: "/how-it-works", label: "यह कैसे काम करता है" },
             { href: "/policy", label: "नीति और पैरवी" },
             { href: "/research", label: "शोध" },
+            { href: "/lab", label: "AI लैब" },
           ],
         },
         {
           title: "संगठन",
           links: [
             { href: "/about", label: "हमारे बारे में" },
-            { href: "/privacy", label: "गोपनीयता" },
-            { href: "/legal", label: "कानूनी" },
+            { href: "/get-involved", label: "जुड़िए" },
+            { href: "/partners", label: "साझेदारी कीजिए" },
             { href: "/for-platforms", label: "प्लेटफ़ॉर्म के लिए" },
+            { href: "/careers", label: "करियर" },
+            { href: "/news", label: "समाचार" },
             { href: "/contact", label: "संपर्क" },
-            { href: "/lab", label: "AI लैब" },
-            { href: "/sitemap", label: "साइटमैप" },
-            // English until a native speaker supplies the Hindi label.
-            { href: STATUS_URL, label: "Status" },
           ],
         },
       ]
     : [
-        {
-          title: "The Issue",
-          links: [
-            { href: "/issue", label: "Image-based abuse" },
-            { href: "/issue/deepfakes", label: "Deepfakes and AI" },
-            { href: "/who-we-help", label: "Who we help" },
-            { href: "/glossary", label: "Glossary" },
-          ],
-        },
         {
           title: "Get Help",
           links: [
@@ -76,29 +59,44 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
           ],
         },
         {
-          title: "Get Involved",
+          title: "The Issue",
           links: [
-            { href: "/get-involved", label: "Get involved" },
-            { href: "/partners", label: "Partner with us" },
-            { href: "/careers", label: "Careers" },
-            { href: "/news", label: "News" },
+            { href: "/issue", label: "Image-based abuse" },
+            { href: "/issue/deepfakes", label: "Deepfakes and AI" },
+            { href: "/who-we-help", label: "Who we help" },
+            { href: "/glossary", label: "Glossary" },
             { href: "/policy", label: "Policy and advocacy" },
             { href: "/research", label: "Research" },
+            { href: "/lab", label: "AI Lab" },
           ],
         },
         {
-          title: "About",
+          title: "Organization",
           links: [
             { href: "/about", label: "Who we are" },
             { href: "/what-we-do", label: "What we do" },
+            { href: "/get-involved", label: "Get involved" },
+            { href: "/partners", label: "Partner with us" },
             { href: "/for-platforms", label: "For platforms" },
-            { href: "/privacy", label: "Privacy" },
+            { href: "/careers", label: "Careers" },
+            { href: "/news", label: "News" },
             { href: "/contact", label: "Contact" },
-            { href: "/lab", label: "AI Lab" },
-            { href: "/sitemap", label: "Sitemap" },
-            { href: STATUS_URL, label: "Status" },
           ],
         },
+      ];
+
+  const utilityLinks = isHi
+    ? [
+        { href: "/privacy", label: "गोपनीयता" },
+        { href: "/legal", label: "कानूनी" },
+        { href: "/sitemap", label: "साइटमैप" },
+        // English until a native speaker supplies the Hindi label.
+        { href: STATUS_URL, label: "Status" },
+      ]
+    : [
+        { href: "/privacy", label: "Privacy" },
+        { href: "/sitemap", label: "Sitemap" },
+        { href: STATUS_URL, label: "Status" },
       ];
 
   return (
@@ -176,15 +174,28 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
               </a>
             </p>
           </div>
-          {isHi ? (
-            <p className="site-footer-bottom site-footer-bottom-hi hi !text-left sm:!text-right">
-              © 2026 Asmita · JAMSAQ Studio
-            </p>
-          ) : (
-            <p className="site-footer-bottom en !text-left sm:!text-right">
-              © 2026 Asmita · Built by JAMSAQ Studio
-            </p>
-          )}
+          <div className="flex flex-col gap-2 sm:items-end">
+            <ul className="site-footer-utility">
+              {utilityLinks.map((link) => (
+                <li key={link.href}>
+                  {link.href.startsWith("https://") ? (
+                    <a href={link.href}>{link.label}</a>
+                  ) : (
+                    <Link href={link.href}>{link.label}</Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {isHi ? (
+              <p className="site-footer-bottom site-footer-bottom-hi hi !text-left sm:!text-right">
+                © 2026 Asmita · JAMSAQ Studio
+              </p>
+            ) : (
+              <p className="site-footer-bottom en !text-left sm:!text-right">
+                © 2026 Asmita · Built by JAMSAQ Studio
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </footer>
