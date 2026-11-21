@@ -524,6 +524,15 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   gap: 12px;
   margin-top: 28px;
 }
+
+/* Compact newsletter sign-up in the footer (org pages, WP56). */
+.site-footer-newsletter {
+  margin-top: 28px;
+}
+.site-footer-newsletter .site-footer-col-title {
+  margin-bottom: 10px;
+}
+
 .site-footer-desc {
   max-width: 320px;
   color: var(--color-graphite);

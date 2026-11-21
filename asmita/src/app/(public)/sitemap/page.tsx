@@ -5,6 +5,7 @@ import { siteMap } from "@/lib/site-map";
 import { issueContentHi } from "@/lib/issue-content-hi";
 import { audiencesHi } from "@/lib/audience-content-hi";
 import { getLocale } from "@/lib/get-locale";
+import { hasPublishedScorecard } from "@/lib/scorecard-snapshots";
 
 export const metadata: Metadata = {
   title: "Sitemap",
@@ -31,6 +32,8 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/how-it-works": { label: "प्रक्रिया कैसे काम करती है" },
   "/research": { label: "शोध" },
   "/for-platforms": { label: "प्लेटफ़ॉर्म के लिए", note: "अंग्रेज़ी में" },
+  "/press": { label: "प्रेस", note: "विज्ञप्तियाँ, कवरेज और मीडिया किट" },
+  "/research/platform-scorecard": { label: "प्लेटफ़ॉर्म स्कोरकार्ड" },
   "/contact": { label: "संपर्क" },
   "/feedback": { label: "प्रतिक्रिया" },
   "/privacy": { label: "निजता" },
@@ -47,6 +50,20 @@ export default async function SitemapPage() {
     if (href.startsWith("/who-we-help/")) return { label: audiencesHi[href.slice(13)]?.term };
     return linksHi[href];
   };
+  // The scorecard page joins the list only once a snapshot is published
+  // (WP58) — the same rule as the header nav.
+  const scorecardPublished = await hasPublishedScorecard();
+  const groups = siteMap.map((group) =>
+    group.title === "Resources" && scorecardPublished
+      ? {
+          ...group,
+          links: [
+            ...group.links,
+            { href: "/research/platform-scorecard", label: "Platform scorecard", note: "How platforms respond to our notices" },
+          ],
+        }
+      : group,
+  );
   return (
     <AppShell>
       <div className="page-canvas">
@@ -70,7 +87,7 @@ export default async function SitemapPage() {
         <section className="section-pad" aria-label={say("All pages", "सभी पेज")}>
           <div className="container">
             <div className="mx-auto grid max-w-5xl gap-12 sm:grid-cols-2 lg:grid-cols-3">
-              {siteMap.map((group, index) => (
+              {groups.map((group, index) => (
                 <div key={group.title}>
                   <h2 className="subsection-title">{say(group.title, groupTitlesHi[index])}</h2>
                   <ul className="mt-5 space-y-3 border-t border-[var(--line)] pt-5">
