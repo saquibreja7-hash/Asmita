@@ -2133,3 +2133,29 @@ New ops doc `asmita/docs/ops/dependency-audit.md` records the gate, the reasonin
 - `npm run build` (the separate "Production build" CI job) was not run locally: it passed on this PR's own CI run, and this WP changes a config comment that job does not read.
 
 **Commits.** `1cb5582` "WP84: keep wrangler.jsonc strict JSON for the production prepare script" (`asmita/wrangler.jsonc`, `asmita/tests/unit/wrangler-jsonc.test.ts`), then this entry. Not pushed.
+
+### WP88. Fix the Playwright lab-trace failure on feat/lab-trace (PR #108) — 2026-11-21
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22) — plus the verification this WP is actually about: the two named Playwright specs through `e2e-some.sh`. A CI-fix work package, not in `full-crawler-spec.md`; the "Rules that do not change" were followed, the crawler spec is untouched (no crawler behaviour changed), no test was changed, weakened, skipped or deleted, and `reviewedByLegal` was not set anywhere.
+
+**The real cause.** The "Playwright e2e (with Postgres)" job fails exactly one test: `tests/e2e/lab-trace.spec.ts` › "an identical pair shows the strong-evidence band, honestly explained" (the job's own log, fetched with `gh run view --log-failed` on run 44877028739, names it precisely; the rest of the job passes — 82 passed, 1 failed, 5 skipped). The trace analysis itself is fine: the strong band renders, and the spec's other two journeys pass. The failing assertion is `getByText("Model-based comparison is off: no model address is configured, so the scores use image hashing (PDQ) only.")`, and it fails with a Playwright **strict-mode violation: resolved to 2 elements** — the capabilities card's `<li>` and the per-comparison notes list's `<li>`. The page really renders that sentence twice: the "What this run used" card states the run-wide facts once for the whole run, and `NOTE_KEYS` in `TraceClient.tsx` maps `sscd_model_not_configured` (and `landmarks_unavailable`) to the very same i18n keys the card renders (`lab.trace.sscd.off`, `lab.trace.landmarks.off`), so every comparison article repeated them.
+
+**The fix.** One file: `asmita/src/app/(public)/lab/trace/TraceClient.tsx`. The per-comparison notes list filters out the two run-wide notes (`RUN_WIDE_NOTES`), because the card above the comparisons already states each exactly once. Pair-specific notes (identical pixels, low image quality, no face in the pair, SSCD inference failure) render under each comparison unchanged, so with several originals each still gets its own notes. No sentence is reworded, hidden or weakened; the scoring core (`score.ts`), the browser pipeline (`browser.ts`), both dictionaries and the spec are untouched. A note recording the fix was added to `asmita/docs/lab/progress.md` (the WP's instruction) beside this entry.
+
+**Decisions recorded:**
+
+- The page was fixed, not the spec: the strict-mode failure is the symptom of a real duplication on the page (the same honest sentence shown twice), so the fix renders each fact once rather than loosening the assertion (`.first()` would have hidden the bug). The spec still asserts the sentence is shown — now exactly once.
+- `landmarks_unavailable` is filtered together with `sscd_model_not_configured`: the same bug class (a run-wide fact repeated per comparison beside its card entry), even though no current assertion catches it; the card keeps stating it.
+- No unit test added: the repo has no React-rendering test harness, the pure modules' behaviour is unchanged (their tests pass untouched), and the e2e spec itself is the pinning test — a future re-duplication fails it again through strict mode.
+
+**Playwright.** `e2e-some.sh` (Node 22, Chromium, throwaway Postgres 17 on 5437) on the WP's two specs, `tests/e2e/lab-trace.spec.ts` + `tests/e2e/lab.spec.ts`: **4 passed** (39 s, `E2E_SOME_RC=0`), including the previously failing identical-pair journey.
+
+**Checks (run, not assumed).** Full `check.sh` (Node 22, both packages) on the fixed tree: `crawler` — npm ci, lint, type-check, **60 test files / 650 tests passed**, build ok (`dist/main.js`, `browser-worker.js`, `decoder-worker.js`, `sscd-worker.js`, `sandbox-check.js` all emitted). `asmita` — npm ci, `prisma generate`, lint 0 errors (4 warnings, all pre-existing in files this WP never touched: three unused underscore vars in `scripts/translate-faq.mjs`, one react-hooks warning in `QuickExit.tsx`), type-check clean, `prisma validate` ok, **226 test files / 2194 tests passed**. `check.sh` printed **ALL CHECKS PASSED**.
+
+**Not done or not verified**
+
+- Not pushed (per the work package; PR #108's CI re-run is the owner's step — the fix is proven locally on the exact failing assertion).
+- The full 26-spec Playwright suite was not run locally; CI's own run on this branch head shows every other spec passing, and the WP names the two specs to run. `npm run build` for asmita and `scripts/worker-smoke.mjs` are not part of `check.sh` and were not run.
+- No visual-design change: the fix removes a duplicated list item; no styling touched, no accent stripes added.
+
+**Commits.** `d861ef1` "WP88: show each trace run-wide honest note once" (`TraceClient.tsx`, `asmita/docs/lab/progress.md`), then this entry. Not pushed.
