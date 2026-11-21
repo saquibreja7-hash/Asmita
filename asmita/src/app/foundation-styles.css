@@ -3,7 +3,7 @@
 :root {
   color-scheme: light;
   /* Palette */
-  --color-parchment: #f6f3f1;
+  --color-parchment: #ffffff; /* the page: plain white (owner, 2026-11-21) */
   --color-brand-teal: #0a5e5a; /* the logo teal */
   --color-teal-mist: #d4e9e6;
   --color-teal-sky: #9fcac4;
@@ -15,7 +15,7 @@
   --color-ink: #000000;
   --color-graphite: #4e4d4d;
   --color-smoke: #625f5e;
-  --color-ash: #cecac8;
+  --color-ash: #e3e1df;
 
   /* Type scale */
   --text-caption: 0.75rem;
@@ -71,7 +71,8 @@
 
   --coral: var(--color-coral);
   --coral-deep: var(--color-crimson);
-  --coral-soft: #ffe6dd;
+  --coral-soft: #ffeee8;
+  --coral-ink: #b4461f; /* orange for text and icons: 5:1 on white */
   --midnight: var(--color-off-black);
   --midnight-deep: var(--color-ink);
   --heading: var(--ink);
@@ -84,7 +85,7 @@
 
   --background: var(--color-parchment);
   --surface: var(--color-parchment);
-  --surface-muted: #efebe8;
+  --surface-muted: #f6f6f5;
   --foreground: var(--color-off-black);
   --body: var(--text);
   --muted: var(--color-smoke);

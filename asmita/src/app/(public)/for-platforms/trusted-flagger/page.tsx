@@ -194,11 +194,11 @@ export default function TrustedFlaggerPage() {
             </div>
             <div>
               <dl className="org-columns">
-                <div className="border-t-2 border-[var(--brand)] pt-5">
+                <div className="border-t-2 border-[var(--coral)] pt-5">
                   <dt className="text-[length:var(--text-heading-sm)] font-semibold leading-none tabular-nums text-[var(--ink)]">{PLATFORM_DEADLINE_HOURS} hours</dt>
                   <dd className="mt-3 text-[length:var(--text-body)] leading-[1.6] text-[var(--text)]">{PLATFORM_DEADLINE_TEXT}</dd>
                 </div>
-                <div className="border-t-2 border-[var(--brand)] pt-5">
+                <div className="border-t-2 border-[var(--coral)] pt-5">
                   <dt className="text-[length:var(--text-heading-sm)] font-semibold leading-none tabular-nums text-[var(--ink)]">{ESCALATION_HOURS[1]} hours</dt>
                   <dd className="mt-3 text-[length:var(--text-body)] leading-[1.6] text-[var(--text)]">{PLATFORM_FOLLOW_UP_TEXT}</dd>
                 </div>

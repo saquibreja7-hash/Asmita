@@ -1196,7 +1196,7 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 .org-steps > li {
   counter-increment: org-step;
   padding-top: 20px;
-  border-top: 2px solid var(--brand);
+  border-top: 2px solid var(--coral);
 }
 
 .org-steps > li::before {
@@ -1206,7 +1206,7 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
   font-size: 0.9375rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--brand-strong);
+  color: var(--coral-ink);
 }
 
 .org-steps h3 { font-size: 1.0625rem; font-weight: 600; line-height: 1.35; color: var(--ink); }
@@ -1279,7 +1279,8 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 
 /* Closing band: heading and lede on the left, actions on the right. */
 .org-cta {
-  background: var(--brand-soft);
+  /* Teal mist into the logo's warm orange: the one gradient on these pages. */
+  background: linear-gradient(110deg, var(--brand-soft) 0%, var(--brand-soft) 35%, var(--coral-soft) 100%);
 }
 
 .org-cta-inner {
