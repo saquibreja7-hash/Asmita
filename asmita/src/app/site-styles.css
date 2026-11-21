@@ -567,7 +567,7 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   color: rgb(255 255 255 / 0.75);
 }
 
-.site-footer-helpline { max-width: 340px; font-size: 0.875rem; line-height: 1.6; color: rgb(255 255 255 / 0.8); }
+.site-footer-helpline { font-size: 0.875rem; line-height: 1.6; color: rgb(255 255 255 / 0.8); }
 
 /* Newsletter sign-up on the teal footer: white field, white button. */
 .site-footer-newsletter { display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
