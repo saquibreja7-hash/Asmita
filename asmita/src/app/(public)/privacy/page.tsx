@@ -50,8 +50,7 @@ export default async function PrivacyPage() {
         {/* HERO */}
         <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">{t(locale, "privacy.hero.pill")}</span>
-            <h1 className="page-title mt-8">
+            <h1 className="page-title">
               {t(locale, "privacy.hero.title1")}{" "}
               <em className="not-italic text-gradient">{t(locale, "privacy.hero.gradient")}</em>.
             </h1>
@@ -72,7 +71,6 @@ export default async function PrivacyPage() {
         {/* TL;DR - three promise cards */}
         <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
-            <span className="eyebrow mb-4 block">{t(locale, "privacy.tldr.eyebrow")}</span>
             <h2 className="section-title">
               {t(locale, "privacy.tldr.title")}
             </h2>

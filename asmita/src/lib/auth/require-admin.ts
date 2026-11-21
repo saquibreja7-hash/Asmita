@@ -6,6 +6,7 @@ import { resolveAdminRoleByHash } from "@/lib/auth/admin-allowlist";
 import { getAdminMfaEnrolment } from "@/lib/auth/admin-mfa-store";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { logSecurityEvent } from "@/lib/security-log";
+import { adminSessionCookieName, readCookieWithFallback } from "@/lib/cookie-names";
 
 export function isAdminRole(role: SessionClaims["role"]) {
   return role === "ADMIN";
@@ -19,7 +20,9 @@ export function isAdminRole(role: SessionClaims["role"]) {
  */
 export async function requireAdminSetup() {
   const cookieStore = await cookies();
-  const session = await verifyAdminSession(cookieStore.get("asmita_admin_session")?.value);
+  const session = await verifyAdminSession(
+    readCookieWithFallback((name) => cookieStore.get(name), adminSessionCookieName()),
+  );
   if (!session) {
     return { ok: false as const, status: 403, error: "admin_required" };
   }

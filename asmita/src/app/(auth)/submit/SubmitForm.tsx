@@ -456,11 +456,11 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
       {/* Hash section: optional, folded until opened or a photo is chosen */}
       {enableHashUpload && (
         <details
-          className="group mt-5 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]"
+          className="group mt-5 border-t border-[var(--line)]"
           open={hashOpen}
           onToggle={(e) => setHashOpen(e.currentTarget.open)}
         >
-          <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center gap-3 py-4 [&::-webkit-details-marker]:hidden">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)]" aria-hidden>
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                 <path d="M10 13V4M10 4l-3 3M10 4l3 3" stroke="var(--brand)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -477,7 +477,7 @@ export function SubmitForm({ signedIn, knownPlatforms, enableHashUpload = false,
             <span className="text-[22px] leading-none text-[var(--text-muted)] transition-transform group-open:rotate-45" aria-hidden>+</span>
           </summary>
 
-          <div className="space-y-5 border-t border-[var(--line)] px-5 pb-5 pt-4">
+          <div className="space-y-5 pb-5 pt-2">
           <div>
             <p className="muted text-sm leading-[1.6]">
               {t(locale, "submit.hash.sub")}

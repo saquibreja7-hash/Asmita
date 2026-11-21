@@ -92,6 +92,11 @@ function seedFinding(id: string, seenAt: Date, pageUrl = LINK_URL, distance = 4)
     firstSeenAt: seenAt, lastSeenAt: seenAt,
     sourceId, runId: "run-1", reviewStatus: "CANDIDATE",
     reviewedById: null, reviewedAt: null, secondReviewedById: null, secondReviewedAt: null,
+    labelAiMade: false, labelAiMadeById: null, labelAiMadeAt: null,
+    labelSexual: false, labelSexualById: null, labelSexualAt: null,
+    labelPossibleMinor: false, labelPossibleMinorById: null, labelPossibleMinorAt: null,
+    labelPossibleMinorClearedById: null, labelPossibleMinorClearedAt: null, labelPossibleMinorClearReason: null,
+    minorProtocolBefore: null,
   });
 }
 

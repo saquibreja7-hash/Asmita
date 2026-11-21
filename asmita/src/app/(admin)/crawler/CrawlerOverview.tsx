@@ -104,7 +104,22 @@ export function CrawlerOverview({ stats, crawlerEnabled = true }: { stats: Crawl
         <Stat detail="since 00:00 UTC" label="Pages crawled today" value={stats.pagesCrawledToday} />
         <Stat detail={`${queue.due} due · ${queue.claimed} claimed`} label="Queue" value={queue.live} />
         <Stat detail="since 00:00 UTC" label="Discovered today" value={stats.discoveredSitesToday} />
-        <Stat detail={`${findings.approved} approved · ${findings.dismissed} dismissed`} label="Matches awaiting review" value={findings.awaitingReview} />
+        <Stat
+          detail={`${findings.approved} approved · ${findings.dismissed} dismissed · ${findings.minorProtocol} in the minors protocol`}
+          label="Matches awaiting review"
+          value={findings.awaitingReview}
+        />
+      </div>
+
+      <div className="mt-4 a-card p-4">
+        <p className="eyebrow">Analyst labels on findings</p>
+        <p className="mt-2 text-sm">
+          {`${findings.labels.aiMade} look AI-made · ${findings.labels.sexual} sexual content · ${findings.labels.possibleMinor} possible minor`}
+        </p>
+        <p className="muted mt-1 text-sm">
+          Counts of findings carrying each label, whatever their review state. A possible-minor finding sits in the
+          minors protocol and out of the adult flow until a second admin clears the label with a reason.
+        </p>
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">

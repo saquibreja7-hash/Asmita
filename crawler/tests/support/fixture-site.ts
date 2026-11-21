@@ -2074,6 +2074,14 @@ export function fixtureEnv(apiUrl: string, key: string, extra: Record<string, st
     API_ATTEMPTS: "2",
     SHUTDOWN_GRACE_MS: "500",
     GLOBAL_CONCURRENCY: "4",
+    // WP25: the check container runs the suite as root, where Chromium's
+    // own sandbox can never start (Chromium refuses root without
+    // --no-sandbox), and the browser integration tests below exercise
+    // rendering behaviour, not the sandbox decision. The dedicated
+    // browser-sandbox tests set "false" for the fail-closed paths and the
+    // docker verification script (scripts/docker-sandbox-check.sh) pins
+    // both branches against real containers.
+    CRAWLER_ALLOW_UNSANDBOXED_BROWSER: "true",
     ...extra,
   };
 }

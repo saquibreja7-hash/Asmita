@@ -61,6 +61,13 @@ export const ERROR_CODES = [
   "pool_stale",
   // browser rendering (WP7)
   "browser_launch_failed",
+  /**
+   * WP25: the sandboxed Chromium launch failed — the runtime does not allow
+   * unprivileged user namespaces (or Chromium refused to run as root). The
+   * parent disables rendering for the run unless the
+   * CRAWLER_ALLOW_UNSANDBOXED_BROWSER override is set.
+   */
+  "browser_sandbox_unavailable",
   "browser_failed",
   "browser_aborted",
   "browser_timeout",

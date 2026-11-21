@@ -64,7 +64,8 @@ describe("check-image hidden file input (A6)", () => {
 
 describe("check-image announcements (A5, A4)", () => {
   it("announces the checking state politely", () => {
-    expect(source).toMatch(/<p role="status"[^>]*>\{t\(locale, "check\.checking"\)\}<\/p>/);
+    expect(idle).toContain('<p class="sr-only" role="status">');
+    expect(source).toMatch(/role="status">\s*\{status === "checking" \? t\(locale, "check\.checking"\)/);
     expect(source).toMatch(/<p role="status"[^>]*>\{t\(locale, "check\.deep\.checking"\)\}<\/p>/);
   });
 

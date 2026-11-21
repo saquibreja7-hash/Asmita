@@ -58,7 +58,7 @@ export default async function IssueTopicPage({
         <section className="hero" aria-label={content.term}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-5xl">
-              <Link href="/issue" className="eyebrow">
+              <Link href="/issue" className="text-link text-sm font-medium">
                 {say("The issue", "समस्या को समझें")}
               </Link>
               <h1 className="page-title mt-4 max-w-3xl">
