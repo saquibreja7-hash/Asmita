@@ -1,0 +1,14 @@
+{
+  "name": "lab-spot-the-fake",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "generate": "node generate.cjs"
+  },
+  "dependencies": {
+    "sharp": "^0.35.4"
+  }
+}

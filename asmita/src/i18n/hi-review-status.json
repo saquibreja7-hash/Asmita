@@ -17,7 +17,7 @@
     "/privacy - sections s01-s16 were translated 2026-06-16 (commit 03eb3df); the sections added or reworded on 19 November 2026 (WP29: fingerprints, video, crawler, watch, partner-sharing, sscd, platform-partners, and the edited tldr/s01/s03/s04/s05/s07/s08/s09/s10/s13 keys) are English only, per the owner's instruction, until a Hindi pass is run on them"
   ],
   "machineTranslated": {
-    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request. Site-chrome keys added by the web audit (WP39) machine-translated by Hermes (GLM 5.3) on 2026-11-19, same formal register, pending native review.; WP40 strings (2026-11-20) drafted by Hermes (GLM 5.3), pending native review; the WP35 batch (check.hero.report, check.research.line, check.research.read and the reworded check.result.noneFound.body, check.deep.result.none.body, check.disclaimer, plus the deepfakes issue-page strings) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP38 batch (the new check.c2pa.*, check.meta.title, check.google.line, check.deep.unavailable and the reworded check.deep.body, check.deep.consent) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP93 lab.message-check.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review; the WP94 lab.stamp.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review",
+    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request. Site-chrome keys added by the web audit (WP39) machine-translated by Hermes (GLM 5.3) on 2026-11-19, same formal register, pending native review.; WP40 strings (2026-11-20) drafted by Hermes (GLM 5.3), pending native review; the WP35 batch (check.hero.report, check.research.line, check.research.read and the reworded check.result.noneFound.body, check.deep.result.none.body, check.disclaimer, plus the deepfakes issue-page strings) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP38 batch (the new check.c2pa.*, check.meta.title, check.google.line, check.deep.unavailable and the reworded check.deep.body, check.deep.consent) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP93 lab.message-check.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review; the WP94 lab.stamp.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review; the WP95 lab.spot-the-fake.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review, plus the Hindi tell and scene sentences inside public/lab/spot-the-fake/quiz.json (the quiz manifest), same formal register",
     "keys": [
       "talk.*",
       "privacy.s08.i5.*",
@@ -139,7 +139,8 @@
       "case.watch.*",
       "partnerShare.*",
       "lab.message-check.*",
-      "lab.stamp.*"
+      "lab.stamp.*",
+      "lab.spot-the-fake.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
