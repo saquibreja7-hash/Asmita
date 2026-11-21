@@ -581,9 +581,9 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 /* Newsletter sign-up on the teal footer: white field, white button. */
 /* Footer sign-up: name, email and button share one width. */
 .site-footer-newsletter { max-width: 440px; }
-.site-footer-newsletter form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 440px; }
+.site-footer-newsletter form { display: grid; grid-template-columns: 2fr 3fr; gap: 10px; width: 100%; max-width: 440px; }
 .site-footer-newsletter form > div:not([aria-hidden]) { display: contents; }
-.site-footer-newsletter form button.btn { grid-column: 1 / -1; }
+.site-footer-newsletter form button.btn { grid-column: 1 / -1; justify-self: start; width: auto; }
 .site-footer-newsletter form > [role="alert"] { grid-column: 1 / -1; }
 .site-footer-newsletter .field,
 .site-footer-newsletter input,
@@ -592,8 +592,9 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 .site-footer-newsletter { display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
 .site-footer-newsletter-label { font-weight: 600; color: #ffffff; }
 .site-footer-newsletter .field { background: #ffffff; border-color: #ffffff; }
-.site-footer .site-footer-newsletter button.btn-primary { background: #ffffff; border-color: #ffffff; color: var(--brand); }
-.site-footer .site-footer-newsletter button.btn-primary:hover { background: var(--brand-soft); border-color: var(--brand-soft); }
+/* Sign up is a plain text action with an arrow, no box. */
+.site-footer .site-footer-newsletter button.btn-primary { background: none; border: 0; padding: 4px 0; min-height: 44px; color: #ffffff; font-weight: 600; }
+.site-footer .site-footer-newsletter button.btn-primary:hover { background: none; text-decoration: underline; text-underline-offset: 3px; }
 .site-footer-newsletter [role="alert"] { color: #ffd9d4; }
 .site-footer-newsletter [role="status"] { color: #ffffff; }
 
