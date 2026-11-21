@@ -569,6 +569,22 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 
 .site-footer-helpline { max-width: 340px; font-size: 0.875rem; line-height: 1.6; color: rgb(255 255 255 / 0.8); }
 
+/* Newsletter button: white pill on the teal footer. */
+.site-footer-newsletter-btn {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 10px 22px;
+  border-radius: var(--radius-pills);
+  background: #ffffff;
+  color: var(--brand);
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+
+.site-footer-newsletter-btn:hover { background: var(--brand-soft); }
+
 .site-footer-bottom-right { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px; }
 
 .site-footer-helpline a {

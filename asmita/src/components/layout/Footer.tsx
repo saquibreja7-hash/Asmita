@@ -42,7 +42,6 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
             { href: "/for-platforms", label: "प्लेटफ़ॉर्म के लिए" },
             { href: "/careers", label: "करियर" },
             { href: "/news", label: "समाचार" },
-            { href: "/newsletter", label: "न्यूज़लेटर" },
             { href: "/contact", label: "संपर्क" },
           ],
         },
@@ -80,7 +79,6 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
             { href: "/for-platforms", label: "For platforms" },
             { href: "/careers", label: "Careers" },
             { href: "/news", label: "News" },
-            { href: "/newsletter", label: "Newsletter" },
             { href: "/contact", label: "Contact" },
           ],
         },
@@ -99,11 +97,6 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
         { href: "/sitemap", label: "Sitemap" },
         { href: STATUS_URL, label: "Status" },
       ];
-
-  // The minor-support path collects nothing, so it doesn't point to the newsletter either.
-  const shown = withoutNewsletter
-    ? columns.map((col) => ({ ...col, links: col.links.filter((l) => l.href !== "/newsletter") }))
-    : columns;
 
   return (
     <footer className="site-footer" role="contentinfo">
@@ -135,10 +128,16 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
               <span aria-hidden="true"> · </span>
               {isHi ? "आपातकाल" : "Emergency"} <a href="tel:112">112</a>
             </p>
+            {/* The minor-support path collects nothing, so it hides the newsletter. */}
+            {!withoutNewsletter && (
+              <Link href="/newsletter" className="site-footer-newsletter-btn">
+                {isHi ? "न्यूज़लेटर पाइए" : "Get our newsletter"}
+              </Link>
+            )}
           </div>
 
           <nav className="site-footer-cols" aria-label={isHi ? "फ़ुटर" : "Footer"}>
-            {shown.map((col) => (
+            {columns.map((col) => (
               <div key={col.title} className="site-footer-col">
                 <p className="site-footer-col-title">{col.title}</p>
                 <ul className="site-footer-col-list">
