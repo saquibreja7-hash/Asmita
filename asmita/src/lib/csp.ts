@@ -5,7 +5,12 @@
 // routes but never sets headers, so the CSP is still set only in these
 // two places.
 
-import { labTraceConnectOrigins } from "./lab-models";
+// scripts/worker-smoke.mjs runs this file with plain Node (type stripping),
+// where every relative import needs its explicit .ts extension — the same
+// rule the smoke script itself follows for the specifier it imports us with.
+// An extensionless specifier here failed CI's worker-smoke step with
+// ERR_MODULE_NOT_FOUND (PR #108).
+import { labTraceConnectOrigins } from "./lab-models.ts";
 
 export type CspOptions = {
   frameAncestors?: "'none'" | "'self'";
