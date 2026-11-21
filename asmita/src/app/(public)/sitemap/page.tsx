@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: "Every public page on Asmita, in one place.",
 };
 
-const groupTitlesHi = ["मदद लें", "समस्या को समझें", "हम किसकी मदद करते हैं", "संसाधन", "अस्मिता के बारे में", "नीतियाँ"] as const;
+const groupTitlesHi = ["मदद लें", "समस्या को समझें", "हम किसकी मदद करते हैं", "संसाधन", "AI लैब", "अस्मिता के बारे में", "नीतियाँ"] as const;
 const linksHi: Record<string, { label: string; note?: string }> = {
   "/get-help": { label: "मदद लें", note: "स्थितियाँ, कदम और साधन" },
   "/start": { label: "केस शुरू करें", note: "गोपनीय रिपोर्ट शुरू करें" },
@@ -37,6 +37,14 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/terms": { label: "उपयोग की शर्तें" },
   "/legal": { label: "कानूनी जानकारी" },
   "/sitemap": { label: "साइटमैप" },
+  "/lab": { label: "AI लैब", note: "शोध प्रयोग और बीटा टूल; शिकायत दर्ज कराने से अलग" },
+  "/lab/trace": { label: "मॉर्फ़ का स्रोत जाँचें" },
+  "/lab/detectors": { label: "डिटेक्टर पैनल" },
+  "/lab/protect": { label: "फ़ोटो सुरक्षा" },
+  "/lab/tracker": { label: "सेवा ट्रैकर" },
+  "/lab/message-check": { label: "संदेश की जाँच" },
+  "/lab/stamp": { label: "कंटेंट क्रेडेंशियल स्टैम्प" },
+  "/lab/spot-the-fake": { label: "झूठी तस्वीर पहचानिए" },
 };
 
 export default async function SitemapPage() {

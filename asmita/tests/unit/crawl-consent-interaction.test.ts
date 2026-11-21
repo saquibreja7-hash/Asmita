@@ -26,8 +26,16 @@ const draft = { subject: "Authorisation for case X", body: "Body of the authoris
 const off: ConsentState = { status: "none", available: true, draft, watchUntil: null };
 const signed: ConsentState = { status: "signed", available: true, draft: null, watchUntil: null };
 
+// A faithful Response double for csrfFetch: since WP101 it consumes the body
+// (response.text()) inside the exchange, so the double carries the body as
+// text too, like every real Response. json() stays for the component's reads.
 const res = (status: number, body: unknown) =>
-  ({ ok: status >= 200 && status < 300, status, json: async () => body }) as unknown as Response;
+  ({
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(body),
+    json: async () => body,
+  }) as unknown as Response;
 
 let root: Root | null = null;
 let container: HTMLElement | null = null;
