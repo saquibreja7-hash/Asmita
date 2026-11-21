@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
@@ -50,6 +51,11 @@ export default async function LabPage() {
                 <div key={experiment.title} className="card">
                   <h3 className="font-semibold">{t(locale, experiment.title)}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-[var(--text)]">{t(locale, experiment.body)}</p>
+                  {enabled && experiment.title === "lab.exp.e3.title" && (
+                    <p className="mt-4">
+                      <Link className="text-link" href="/lab/trace">{t(locale, "lab.exp.e3.cta")} <span aria-hidden>→</span></Link>
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

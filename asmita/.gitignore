@@ -54,3 +54,9 @@ next-env.d.ts
 # c2pa-web engine files copied from node_modules on install
 # (scripts/copy-c2pa-assets.mjs; the WASM must ship from our own origin)
 /public/c2pa/
+
+# onnxruntime-web's WASM engine and the face-landmark library's browser
+# build copied from node_modules on install (scripts/copy-lab-assets.mjs;
+# the Lab trace tool loads both same-origin)
+/public/ort/
+/public/human/
