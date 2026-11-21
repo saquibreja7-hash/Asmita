@@ -44,6 +44,16 @@ add it to the `env` object in `src/index.ts`.
   `ENABLE_CRAWLER` off on the app; the crawler then exits at its first API call.
 - Logs: Workers Observability for `asmita-crawler` (container stdout is the
   crawler's JSON log lines: counts and codes only, no addresses).
-- Browser rendering (sources set to BROWSER/AUTO) stays off for real sites
-  until the Chromium worker is sandboxed (runbook go-live item). Containers
-  give no `--shm-size` option, so do not enable it here without testing.
+- Browser rendering (sources set to BROWSER/AUTO): since WP25 the crawler
+  self-tests Chromium's own sandbox at the first browser launch, records
+  the verdict in the `run_summary` (`browser.sandboxTested` /
+  `browser.sandboxOn` / `browser.workerUid`) and fails closed when the
+  runtime refuses it (BROWSER pages report `error` under
+  `browser_sandbox_unavailable`, AUTO pages fall back to their static
+  result). Whether this platform's container sandbox allows the user
+  namespaces Chromium needs is not verified; read the verdict from a run
+  with a browser source, or run the probe from the image
+  (`node dist/sandbox-check.js`) in a Containers instance before enabling
+  any. Containers give no `--shm-size` option, so do not enable it here
+  without testing. Never set `CRAWLER_ALLOW_UNSANDBOXED_BROWSER` here: the
+  override is for local development only.

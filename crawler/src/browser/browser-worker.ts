@@ -33,6 +33,13 @@
  *     before any routing work — never fetched, never asked about, never
  *     counted against the per-page request cap, which therefore keeps its
  *     room for the page's images (blocked-requests.ts);
+ *   - WP25: Chromium launches exactly as the parent's launch message says
+ *     — sandboxed (chromiumSandbox: true, no --no-sandbox) or, only after
+ *     the parent decided so on the dev override, unsandboxed. A sandboxed
+ *     launch the runtime refuses is reported as browser_sandbox_unavailable
+ *     and never retried by this process: the parent fails closed or
+ *     respawns with sandboxed: false; the launch plus one about:blank
+ *     probe is the sandbox self-test, bounded by SELFTEST_TIMEOUT_MS;
  *   - after scrolling, the render waits for network quiet instead of a
  *     fixed wait: no request in flight for 500 ms, so a slow or chained
  *     lazy-loader is waited for, bounded by the page's deadline and
@@ -63,7 +70,7 @@ import { chromium, type Browser, type BrowserContext as Context, type Page, type
 import { IMAGE_EXT, LAZY_SRC_ATTRS, LAZY_SRCSET_ATTRS, largestFromSrcset, styleBackgroundImages } from "../crawl/extract.ts";
 import { inScope } from "../crawl/url.ts";
 import { blockedRequestHost, blockedResourceType } from "./blocked-requests.ts";
-import { CHROMIUM_ARGS } from "./chromium-args.ts";
+import { chromiumArgs } from "./chromium-args.ts";
 import {
   AbortMessageSchema,
   LaunchMessageSchema,
@@ -121,6 +128,8 @@ let browser: Browser | null = null;
 let proxyPort = 0;
 let userAgentSuffix = "";
 let defaultUserAgent = "";
+/** WP25: the sandbox mode the parent told us to launch under (launch msg). */
+let launchSandboxed = true;
 
 /**
  * One render's state. Nothing about a render is global: an aborted render
@@ -215,14 +224,28 @@ function askVerdict(task: Task, url: string, resourceType: string): Promise<bool
   });
 }
 
+/**
+ * WP25: bound on the sandbox self-test — the launch plus one about:blank
+ * probe. Chromium refuses a runtime without user namespaces immediately, so
+ * the bound exists only to turn a hung launch into a failure before the
+ * parent's own launch timeout.
+ */
+const SELFTEST_TIMEOUT_MS = 20_000;
+
 async function ensureBrowser(): Promise<Browser> {
   if (browser && browser.isConnected()) return browser;
   browser = null;
   // Headless Chromium, no persistent profile, disk cache disabled, WebRTC
-  // confined to the proxy. No stealth plugins. Why --no-sandbox, and what
-  // has to change before real sites are rendered: chromium-args.ts.
-  browser = await chromium.launch({ headless: true, args: [...CHROMIUM_ARGS] });
+  // confined to the proxy. No stealth plugins. WP25: Chromium's own sandbox
+  // is on whenever the parent's launch said so — `chromiumSandbox: true` is
+  // what withholds Playwright's implicit --no-sandbox, and Chromium's user
+  // namespace sandbox does the rest; the launch fails hard when the runtime
+  // does not allow it (never a silent fallback), which handleLaunch reports
+  // as browser_sandbox_unavailable (sandboxed) or browser_failed.
+  browser = await chromium.launch({ headless: true, chromiumSandbox: launchSandboxed, args: chromiumArgs(launchSandboxed) });
   // Chromium's own User-Agent, read once from a blank page (no network).
+  // Opening that page is also the second half of the sandbox self-test: a
+  // renderer that cannot start (sandbox refused) fails here.
   const probe = await browser.newContext();
   try {
     const page = await probe.newPage();
@@ -236,11 +259,22 @@ async function ensureBrowser(): Promise<Browser> {
 async function handleLaunch(m: LaunchMessage): Promise<void> {
   proxyPort = m.proxyPort;
   userAgentSuffix = m.userAgentSuffix;
+  launchSandboxed = m.sandboxed;
   try {
-    await ensureBrowser();
-    send({ kind: "ready" });
+    await Promise.race([
+      ensureBrowser(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("selftest_timeout")), SELFTEST_TIMEOUT_MS).unref?.();
+      }),
+    ]);
+    send({ kind: "ready", sandboxed: launchSandboxed, uid: process.getuid?.() ?? 0 });
   } catch {
-    send({ kind: "failed", id: 0, code: "browser_failed" });
+    // The worker never falls back by itself: an unsandboxed retry is the
+    // parent's decision (CRAWLER_ALLOW_UNSANDBOXED_BROWSER), made by
+    // respawning this process with sandboxed: false.
+    void browser?.close().catch(() => undefined);
+    browser = null;
+    send({ kind: "failed", id: 0, code: launchSandboxed ? "browser_sandbox_unavailable" : "browser_failed" });
   }
 }
 

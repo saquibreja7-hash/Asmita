@@ -5,7 +5,9 @@
 !crawler/package-lock.json
 !crawler/tsconfig.json
 !crawler/scripts/build.mjs
+!crawler/scripts/sandbox-check.ts
 !crawler/src/**
+!crawler/docker/**
 !asmita/src/lib/pdq/pdq.ts
 !asmita/src/lib/crawl-page-key.ts
 **/node_modules

@@ -165,6 +165,12 @@ export type CrawlDeps = {
   /** Where Playwright's Chromium is installed (WP7); default is ~/.cache/ms-playwright. */
   browsersPath?: string;
   /**
+   * WP25: path of the setuid drop helper from the container image. When set,
+   * the browser worker is spawned through it and runs as the separate
+   * browser-worker uid, which cannot read the key file. Absent elsewhere.
+   */
+  browserWorkerHelper?: string;
+  /**
    * Query-variant guards shared by consecutive passes (`run --loop`); a
    * single run without it gets a fresh store.
    */
@@ -546,6 +552,7 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     ? new BrowserRenderer({
         policy: crawlPolicy,
         browsersPath: deps.browsersPath,
+        workerHelper: deps.browserWorkerHelper,
         log,
         metrics,
         config: {
@@ -560,6 +567,9 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
           maxImageBytes: config.MAX_IMAGE_BYTES,
           maxHtmlBytes: config.MAX_HTML_BYTES,
           connectTimeoutMs: config.CONNECT_TIMEOUT_MS,
+          // WP25: the only escape from the sandbox fail-closed rule, and it
+          // is for local development.
+          allowUnsandboxed: config.CRAWLER_ALLOW_UNSANDBOXED_BROWSER,
         },
         // The parent owns robots.txt; every request the page wants to make
         // waits for this verdict before it may leave the browser. A URL the
@@ -1083,6 +1093,10 @@ export async function runCrawl(deps: CrawlDeps): Promise<RunResult> {
     ctx: SourceCtx,
   ): Promise<"dropped" | { ok: true; html: string; url: URL; imagesSkipped: number; findings: Finding[] } | { ok: false; code: ErrorCode }> => {
     if (!browser) return { ok: false, code: "browser_launch_failed" };
+    // WP25 fail closed: the runtime refused the sandboxed launch and no
+    // override is set, so rendering is disabled for the run. Answer the
+    // clear code without waiting out the source's politeness delay.
+    if (browser.renderingRefused()) return { ok: false, code: "browser_sandbox_unavailable" };
     // Politeness for the browser's own document request: the host slot the
     // HTTP pre-fetch used has moved on, so this waits out the source delay
     // (robots is already cached for this origin). Subresource bursts are
