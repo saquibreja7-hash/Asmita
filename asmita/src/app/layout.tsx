@@ -14,7 +14,7 @@ const siteDescription =
   "Free, confidential support for Indian women reporting non-consensual intimate content.";
 
 /*
- * One plain sans for everything (see docs/design/03-design-system.md).
+ * One plain sans for everything (see DESIGN.md).
  * Noto Sans pairs with Noto Sans Devanagari, so English and Hindi match.
  */
 const sans = Noto_Sans({
