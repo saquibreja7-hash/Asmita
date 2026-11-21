@@ -432,50 +432,24 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   padding: 6px 14px;
 }
 
-/* Segmented language toggle */
-.seg {
-  display: inline-flex;
-  border: 1px solid var(--color-ash);
-  border-radius: var(--radius-pills);
-  padding: 3px;
-  background: var(--color-parchment);
-}
-
-.seg button {
-  border-radius: var(--radius-pills);
-  /* 44px so the language choices are a thumb-sized target. */
-  min-height: 44px;
-  padding: 6px 16px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: -0.033em;
-  color: var(--color-graphite);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.seg button[aria-pressed="true"] {
-  background: var(--color-off-black);
-  color: var(--color-parchment);
-}
-
 /* ── Footer ───────────────────────────────────────────────────── */
+/* Solid brand teal with white text: brand block left (wordmark, tagline,
+   language, copyright), three link columns right, helplines and small
+   links in the bottom bar. */
 
 .site-footer {
   margin-top: auto;
   position: relative;
   z-index: 1;
   overflow: hidden;
-  color: var(--color-off-black);
-  padding: 64px 0 40px;
-  font-size: 0.875rem;
-  border-top: 1px solid var(--color-ash);
-  background: var(--color-parchment);
+  color: #ffffff;
+  padding: 72px 0 32px;
+  font-size: 0.9375rem;
+  background: var(--brand);
 }
 
-/* Heavy film grain over the whole footer, as in the reference. The tile is a
-   procedural feTurbulence SVG (grain.svg) tuned to the statistics of the
-   480 KB JPEG it replaced — a few hundred bytes, same soft-light grain. */
+/* Soft film grain over the footer. The tile is a procedural feTurbulence
+   SVG (grain.svg), a few hundred bytes. */
 .site-footer::after {
   content: "";
   position: absolute;
@@ -488,7 +462,6 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 
 .site-footer > * { position: relative; z-index: 1; }
 
-
 .site-footer-wrap {
   width: min(var(--page-max-width), calc(100% - 2 * var(--gutter)));
   margin: 0 auto;
@@ -496,85 +469,64 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 
 .site-footer-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 1.4fr) repeat(3, minmax(140px, 1fr));
-  gap: 40px 48px;
-  padding-bottom: 48px;
-  margin-bottom: 32px;
-  border-bottom: 1px solid var(--color-ash);
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 1.4fr);
+  gap: 48px 64px;
+  padding-bottom: 56px;
 }
 
-.site-footer-brand { text-align: left; }
+.site-footer-brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 24px;
+}
 
 .site-footer-logo-link {
   display: inline-flex;
-  align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
-.site-footer-logo {
-  display: block;
-  width: 120px;
-  height: auto;
-  filter: grayscale(1) contrast(1.1);
+/* The wordmark is a teal PNG; on the teal footer it is drawn in white. */
+.brand-logo-footer {
+  height: 40px;
+  width: auto;
+  filter: brightness(0) invert(1);
 }
 
-.site-footer-lang {
+.site-footer-tagline {
+  max-width: 340px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: rgb(255 255 255 / 0.8);
+}
+
+.site-footer-tagline.hi { font-family: var(--font-deva), var(--font-sans); line-height: 1.6; }
+
+.site-footer-brand-foot {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 28px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
 }
 
-/* Compact newsletter sign-up in the footer (org pages, WP56). */
-.site-footer-newsletter {
-  margin-top: 28px;
-}
-.site-footer-newsletter .site-footer-col-title {
-  margin-bottom: 10px;
+.site-footer-copy {
+  font-size: 0.8125rem;
+  color: rgb(255 255 255 / 0.75);
 }
 
-.site-footer-desc {
-  max-width: 320px;
-  color: var(--color-graphite);
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
+.site-footer-copy.hi { font-family: var(--font-deva), var(--font-sans); }
 
-.site-footer-desc-hi { font-family: var(--font-deva), var(--font-sans); }
-
-.site-footer-helpline { margin-top: 24px; }
-
-.site-footer-cl-label {
-  margin: 0;
-  color: var(--color-graphite);
-  font-size: 0.75rem;
-  font-weight: 400;
-  letter-spacing: -0.033em;
-  text-transform: uppercase;
-}
-
-.site-footer-cl-num {
-  color: var(--color-off-black);
-  font-family: var(--font-display);
-  font-size: 2.5rem;
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1;
-}
-
-.site-footer-cl-sub {
-  margin-top: 6px;
-  color: var(--color-graphite);
-  font-size: 0.75rem;
+.site-footer-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 40px 32px;
 }
 
 .site-footer-col-title {
   margin-bottom: 16px;
-  color: var(--color-graphite);
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: -0.033em;
-  text-transform: uppercase;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #ffffff;
 }
 
 .site-footer-col-list {
@@ -583,17 +535,46 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.site-footer-col-list a {
-  color: var(--color-off-black);
-  font-size: 0.875rem;
+.site-footer-col-list a,
+.site-footer-utility a {
+  color: rgb(255 255 255 / 0.78);
   padding: 4px 0;
-  transition: opacity 0.15s ease;
+  transition: color 0.15s ease;
 }
 
-.site-footer-col-list a:hover { opacity: 0.5; }
+.site-footer-col-list a:hover,
+.site-footer-utility a:hover { color: #ffffff; text-decoration: underline; text-underline-offset: 3px; }
+
+.site-footer a:focus-visible,
+.site-footer button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.site-footer-bottom-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgb(255 255 255 / 0.2);
+  font-size: 0.8125rem;
+  color: rgb(255 255 255 / 0.75);
+}
+
+.site-footer-helpline { max-width: 340px; font-size: 0.875rem; line-height: 1.6; color: rgb(255 255 255 / 0.8); }
+
+.site-footer-bottom-right { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px; }
+
+.site-footer-helpline a {
+  color: #ffffff;
+  font-weight: 600;
+}
 
 .site-footer-utility {
   list-style: none;
@@ -601,41 +582,116 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 20px;
+  gap: 4px 24px;
 }
 
-.site-footer-utility a {
-  color: var(--color-graphite);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: -0.033em;
-  padding: 4px 0;
+/* Language button in the footer: plain text with a chevron, like a link. */
+.lang-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: #ffffff;
+  font-weight: 500;
 }
 
-.site-footer-utility a:hover { color: var(--color-off-black); }
+.lang-button:hover { text-decoration: underline; text-underline-offset: 3px; }
 
-.site-footer-bottom {
-  color: var(--color-graphite);
-  font-size: 0.75rem;
-  line-height: 1.6;
-  text-transform: uppercase;
-  letter-spacing: -0.033em;
+/* Language drawer: a sheet from the bottom of the screen. */
+.lang-drawer {
+  margin: auto auto 0;
+  width: min(480px, 100%);
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
 }
 
-.site-footer-bottom strong { color: var(--color-off-black); }
-.site-footer-bottom-hi { font-family: var(--font-deva), var(--font-sans); text-transform: none; }
+.lang-drawer::backdrop { background: rgb(17 24 39 / 0.45); }
+
+.lang-drawer-panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--radius-box) var(--radius-box) 0 0;
+  padding: 20px 20px calc(24px + env(safe-area-inset-bottom));
+}
+
+.lang-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.lang-drawer-title { font-size: 1.125rem; font-weight: 600; }
+
+.lang-drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pills);
+  color: var(--text);
+}
+
+.lang-drawer-close:hover { background: var(--brand-soft); }
+
+.lang-drawer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lang-drawer-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--card);
+  font-size: 1rem;
+  font-weight: 500;
+  text-align: left;
+  color: var(--ink);
+}
+
+.lang-drawer-option:hover { border-color: var(--brand); }
+
+.lang-drawer-option[aria-current="true"] {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.lang-drawer-sub { color: var(--text-muted); font-size: 0.875rem; }
+
+.lang-drawer-check { margin-left: auto; color: var(--brand); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .lang-drawer[open] .lang-drawer-panel { animation: lang-drawer-in 0.2s ease-out; }
+}
+
+@keyframes lang-drawer-in {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
 
 @media (max-width: 900px) {
-  .site-footer-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 36px 28px;
-  }
-  .site-footer-brand { grid-column: 1 / -1; }
+  .site-footer-grid { grid-template-columns: 1fr; gap: 48px; }
+  .site-footer-brand { gap: 24px; }
 }
 
 @media (max-width: 540px) {
-  .site-footer-grid { grid-template-columns: 1fr; gap: 28px; }
-  .site-footer-cl-num { font-size: 2rem; }
+  .site-footer { padding-top: 56px; }
+  .site-footer-cols { grid-template-columns: 1fr 1fr; }
   .btn { padding: 12px 24px; }
 }
 

@@ -19,7 +19,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { LanguageToggle } from "@/components/layout/LanguageToggle";
+import { LanguageDrawer } from "@/components/layout/LanguageDrawer";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { navGroups } from "@/components/layout/nav-config";
 import { FlowProgress } from "@/components/FlowProgress";
@@ -66,14 +66,13 @@ describe("accessible names come from i18n, not hard-coded English (A24)", () => 
     expect(hiHtml).toContain('aria-label="अस्मिता होम पेज"');
   });
 
-  it("labels the footer logo link and language group in both locales", () => {
+  it("labels the footer logo link and language button in both locales", () => {
     const enHtml = render(createElement(Footer, { locale: "en" }));
     expect(enHtml).toContain('aria-label="Asmita home"');
-    expect(enHtml).toContain('role="group"');
-    expect(enHtml).toContain('aria-label="Language"');
+    expect(enHtml).toContain('<span class="sr-only">Language: </span>');
     const hiHtml = render(createElement(Footer, { locale: "hi" }));
     expect(hiHtml).toContain('aria-label="अस्मिता होम पेज"');
-    expect(hiHtml).toContain('aria-label="भाषा"');
+    expect(hiHtml).toContain('<span class="sr-only">भाषा: </span>');
   });
 
   it("labels the flow progress list in both locales", () => {
@@ -118,15 +117,16 @@ describe("mobile menu button (A14, A15)", () => {
   });
 });
 
-describe("language toggle (A16)", () => {
-  it("is a labelled group with a thumb-sized target and lang on the Hindi button", () => {
-    const html = render(createElement(LanguageToggle, { initialLocale: "en", label: "Language" }));
-    expect(html).toContain('role="group"');
-    expect(html).toContain('aria-label="Language"');
-    expect((html.match(/<button /g) || []).length).toBe(2);
+describe("language drawer (A16)", () => {
+  it("is one thumb-sized button that opens a labelled dialog listing both languages", () => {
+    const html = render(createElement(LanguageDrawer, { initialLocale: "en", label: "Language" }));
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain("<dialog");
+    expect(html).toContain('aria-labelledby="lang-drawer-title"');
+    expect(html).toContain("Choose language");
     expect(html).toContain('lang="hi"');
     expect(html).toContain("हिंदी");
-    expect(html.match(/lang="/g)?.length).toBe(1);
+    expect(html).toContain('aria-current="true"');
   });
 });
 

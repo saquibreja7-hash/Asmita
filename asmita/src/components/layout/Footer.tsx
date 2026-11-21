@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { t, type Locale } from "@/lib/i18n";
 import { HELPLINE } from "@/lib/helpline";
-import { LanguageToggle } from "@/components/layout/LanguageToggle";
-import { NewsletterInlineForm } from "@/components/org/NewsletterInlineForm";
+import { LanguageDrawer } from "@/components/layout/LanguageDrawer";
 
 // Public uptime page (Better Stack), outside the app so it stays up when the site is down.
 export const STATUS_URL = "https://status.meriasmita.org";
@@ -43,6 +42,7 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
             { href: "/for-platforms", label: "प्लेटफ़ॉर्म के लिए" },
             { href: "/careers", label: "करियर" },
             { href: "/news", label: "समाचार" },
+            { href: "/newsletter", label: "न्यूज़लेटर" },
             { href: "/contact", label: "संपर्क" },
           ],
         },
@@ -80,6 +80,7 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
             { href: "/for-platforms", label: "For platforms" },
             { href: "/careers", label: "Careers" },
             { href: "/news", label: "News" },
+            { href: "/newsletter", label: "Newsletter" },
             { href: "/contact", label: "Contact" },
           ],
         },
@@ -99,102 +100,81 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
         { href: STATUS_URL, label: "Status" },
       ];
 
+  // The minor-support path collects nothing, so it doesn't point to the newsletter either.
+  const shown = withoutNewsletter
+    ? columns.map((col) => ({ ...col, links: col.links.filter((l) => l.href !== "/newsletter") }))
+    : columns;
+
   return (
     <footer className="site-footer" role="contentinfo">
       <div className="site-footer-wrap">
-        {/* Thorn-style: logo left, multi-col nav, helpline rightish */}
         <div className="site-footer-grid">
           <div className="site-footer-brand">
-            <Link href="/" className="site-footer-logo-link" aria-label={t(locale, "nav.home")}>
-              {/* The logo: teal wordmark with the gold flame. A small static PNG; next/image adds nothing here. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/asmita-wordmark-v2.png" alt="Asmita" width={317} height={94} className="brand-logo brand-logo-footer" />
-            </Link>
-            {isHi ? (
-              <p className="site-footer-desc site-footer-desc-hi hi">
-                छवि-आधारित दुर्व्यवहार के विरुद्ध एक स्वतंत्र तकनीकी मंच। किसी सरकारी संस्था से संबद्ध नहीं।
-              </p>
-            ) : (
-              <p className="site-footer-desc en">
-                An independent technology platform against image-based abuse in India.
-                Not affiliated with any government body.
-              </p>
-            )}
-            <div className="site-footer-lang">
-              <span className="site-footer-col-title !mb-0">{t(locale, "nav.language")}</span>
-              <LanguageToggle initialLocale={locale} label={t(locale, "nav.language")} />
+            <div>
+              <Link href="/" className="site-footer-logo-link" aria-label={t(locale, "nav.home")}>
+                {/* The wordmark PNG, shown in white on the teal footer. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/asmita-wordmark-v2.png" alt="Asmita" width={317} height={94} className="brand-logo brand-logo-footer" />
+              </Link>
+              {isHi ? (
+                <p className="site-footer-tagline hi">
+                  छवि-आधारित दुर्व्यवहार के विरुद्ध एक स्वतंत्र तकनीकी मंच। किसी सरकारी संस्था से संबद्ध नहीं।
+                </p>
+              ) : (
+                <p className="site-footer-tagline en">
+                  An independent technology platform against image-based abuse in India. Not affiliated with any
+                  government body.
+                </p>
+              )}
             </div>
-            {/* The minor-support path collects nothing, not even a newsletter
-                email, so its AppShell hides this block entirely. */}
-            {!withoutNewsletter && (
-              <div className="site-footer-newsletter">
-                <p className="site-footer-col-title !mb-0">{t(locale, "org.newsletter.footerLabel")}</p>
-                <NewsletterInlineForm locale={locale} source="footer" variant="footer" />
-              </div>
-            )}
-          </div>
-
-          {columns.map((col) => (
-            <div key={col.title} className="site-footer-col">
-              <p className="site-footer-col-title">{col.title}</p>
-              <ul className="site-footer-col-list">
-                {col.links.map((link) => (
-                  <li key={link.href + link.label}>
-                    {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
-                    {link.href === "/check-image" ? (
-                      <a href={link.href}>{link.label}</a>
-                    ) : link.href.startsWith("https://") ? (
-                      <a href={link.href}>{link.label}</a>
-                    ) : (
-                      <Link href={link.href}>{link.label}</Link>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-
-        <div className="site-footer-bottom-bar flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="site-footer-helpline !mt-0">
-            <p className="site-footer-cl-label">
-              {isHi ? "अस्मिता हेल्पलाइन (24/7)" : "Asmita helpline (24/7)"} ·{" "}
-              <a href={`tel:${HELPLINE.tel}`} className="font-medium text-[var(--ink)]">
-                {HELPLINE.display}
-              </a>
-              {" · "}
-              {isHi ? "महिला हेल्पलाइन" : "Women's helpline"} ·{" "}
-              <a href="tel:181" className="font-medium text-[var(--ink)]">
-                181
-              </a>
-              {" · "}
-              {isHi ? "आपातकाल" : "Emergency"}{" "}
-              <a href="tel:112" className="font-medium text-[var(--ink)]">
-                112
-              </a>
+            <p className="site-footer-helpline">
+              {isHi ? "अस्मिता हेल्पलाइन (24/7)" : "Asmita helpline (24/7)"}{" "}
+              <a href={`tel:${HELPLINE.tel}`}>{HELPLINE.display}</a>
+              <span aria-hidden="true"> · </span>
+              {isHi ? "महिला हेल्पलाइन" : "Women's helpline"} <a href="tel:181">181</a>
+              <span aria-hidden="true"> · </span>
+              {isHi ? "आपातकाल" : "Emergency"} <a href="tel:112">112</a>
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:items-end">
-            <ul className="site-footer-utility">
-              {utilityLinks.map((link) => (
-                <li key={link.href}>
-                  {link.href.startsWith("https://") ? (
-                    <a href={link.href}>{link.label}</a>
-                  ) : (
-                    <Link href={link.href}>{link.label}</Link>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {isHi ? (
-              <p className="site-footer-bottom site-footer-bottom-hi hi !text-left sm:!text-right">
-                © 2026 Asmita · JAMSAQ Studio
-              </p>
-            ) : (
-              <p className="site-footer-bottom en !text-left sm:!text-right">
-                © 2026 Asmita · Built by JAMSAQ Studio
-              </p>
-            )}
+
+          <nav className="site-footer-cols" aria-label={isHi ? "फ़ुटर" : "Footer"}>
+            {shown.map((col) => (
+              <div key={col.title} className="site-footer-col">
+                <p className="site-footer-col-title">{col.title}</p>
+                <ul className="site-footer-col-list">
+                  {col.links.map((link) => (
+                    <li key={link.href + link.label}>
+                      {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                      {link.href === "/check-image" ? (
+                        <a href={link.href}>{link.label}</a>
+                      ) : (
+                        <Link href={link.href}>{link.label}</Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </nav>
+        </div>
+
+        <div className="site-footer-bottom-bar">
+          <p className={`site-footer-copy ${isHi ? "hi" : "en"}`}>
+            {isHi ? "© 2026 अस्मिता · JAMSAQ Studio" : "© 2026 Asmita · Built by JAMSAQ Studio"}
+          </p>
+          <div className="site-footer-bottom-right">
+          <ul className="site-footer-utility">
+            {utilityLinks.map((link) => (
+              <li key={link.href}>
+                {link.href.startsWith("https://") ? (
+                  <a href={link.href}>{link.label}</a>
+                ) : (
+                  <Link href={link.href}>{link.label}</Link>
+                )}
+              </li>
+            ))}
+          </ul>
+          <LanguageDrawer initialLocale={locale} label={t(locale, "nav.language")} />
           </div>
         </div>
       </div>
