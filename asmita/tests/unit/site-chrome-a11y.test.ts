@@ -184,7 +184,7 @@ describe("globals.css and layout metadata (P6, P7, P9, P10, P12, A18, A22, A26)"
   });
 
   it("clears the fixed Quick Exit pill (A18)", () => {
-    expect(css).toMatch(/html:has\(\.quick-exit\) body\s*\{\s*padding-bottom/);
+    expect(css).toMatch(/html:has\(\.quick-exit\) \.site-footer\s*\{\s*padding-bottom/);
     expect(css).toMatch(/html:has\(\.quick-exit\)\s*\{\s*scroll-padding-bottom/);
   });
 

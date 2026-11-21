@@ -546,7 +546,13 @@ html:has(.quick-exit) {
 }
 
 html:has(.quick-exit) body {
-  padding-bottom: 4.5rem;
+  /* The clearance lives inside the teal footer (see .site-footer below), not
+     as a white strip under it; pages without a footer still get the space. */
+  padding-bottom: 0;
+}
+
+html:has(.quick-exit) .site-footer {
+  padding-bottom: calc(32px + 4.5rem);
 }
 
 @media (max-width: 640px) {
@@ -554,8 +560,8 @@ html:has(.quick-exit) body {
     scroll-padding-bottom: 4rem;
   }
 
-  html:has(.quick-exit) body {
-    padding-bottom: 4rem;
+  html:has(.quick-exit) .site-footer {
+    padding-bottom: calc(32px + 4rem);
   }
 }
 
