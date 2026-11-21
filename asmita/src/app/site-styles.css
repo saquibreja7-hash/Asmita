@@ -1315,3 +1315,30 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
   .site-footer-cols > .site-footer-col:last-child { text-align: left; }
   .site-footer-cols > .site-footer-col:last-child .site-footer-col-list { align-items: flex-start; }
 }
+
+/* Footer: the logo PNG has transparent padding above and below the letters;
+   trim it so the tagline sits close under the wordmark. */
+.brand-logo-footer { margin-top: -18px; margin-bottom: -26px; }
+
+.site-footer-helpline-item { white-space: nowrap; }
+
+@media (max-width: 540px) {
+  /* Organization spans both columns and lists its links in two columns,
+     lined up with Get help and The issue above it. */
+  .site-footer-cols > .site-footer-col:last-child { grid-column: 1 / -1; }
+  .site-footer-cols > .site-footer-col:last-child .site-footer-col-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 32px;
+  }
+
+  /* Helplines one per line, then the small links and language on their own row. */
+  .site-footer-helpline { display: flex; flex-direction: column; gap: 4px; }
+  .site-footer-helpline-sep { display: none; }
+  .site-footer-bottom-bar { flex-direction: column; align-items: flex-start; gap: 20px; }
+  .site-footer-bottom-right { width: 100%; justify-content: space-between; }
+}
+
+@media (max-width: 400px) {
+  .site-footer-newsletter form { grid-template-columns: 1fr; }
+}

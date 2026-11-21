@@ -149,9 +149,18 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
 
         <div className="site-footer-bottom-bar">
           <p className={`site-footer-helpline ${isHi ? "hi" : "en"}`}>
-            {isHi ? "अस्मिता हेल्पलाइन (24/7)" : "Asmita helpline (24/7)"} · <a href={`tel:${HELPLINE.tel}`}>{HELPLINE.display}</a>
-            {" · "}{isHi ? "महिला हेल्पलाइन" : "Women's helpline"} · <a href="tel:181">181</a>
-            {" · "}{isHi ? "आपातकाल" : "Emergency"} · <a href="tel:112">112</a>
+            {/* Each helpline keeps its name and number together; the dots drop on phones. */}
+            <span className="site-footer-helpline-item">
+              {isHi ? "अस्मिता हेल्पलाइन (24/7)" : "Asmita helpline (24/7)"} · <a href={`tel:${HELPLINE.tel}`}>{HELPLINE.display}</a>
+            </span>
+            <span className="site-footer-helpline-sep" aria-hidden="true"> · </span>
+            <span className="site-footer-helpline-item">
+              {isHi ? "महिला हेल्पलाइन" : "Women's helpline"} · <a href="tel:181">181</a>
+            </span>
+            <span className="site-footer-helpline-sep" aria-hidden="true"> · </span>
+            <span className="site-footer-helpline-item">
+              {isHi ? "आपातकाल" : "Emergency"} · <a href="tel:112">112</a>
+            </span>
           </p>
           <div className="site-footer-bottom-right">
           <ul className="site-footer-utility">
