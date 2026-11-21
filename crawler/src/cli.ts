@@ -132,6 +132,11 @@ export async function runMain(opts: MainOptions): Promise<number> {
         // by PLAYWRIGHT_BROWSERS_PATH when set.
         policy: opts.policy ?? productionPolicy(),
         browsersPath: opts.env.PLAYWRIGHT_BROWSERS_PATH,
+        // WP25: the container image sets this to the setuid drop helper that
+        // runs the browser worker as its own uid (CRAWLER_BROWSER_WORKER_HELPER
+        // is deployment plumbing, not crawler tuning, so it rides the same
+        // path as PLAYWRIGHT_BROWSERS_PATH rather than the Zod config).
+        browserWorkerHelper: opts.env.CRAWLER_BROWSER_WORKER_HELPER,
       });
     if (!loop) {
       const result = await crawl();
