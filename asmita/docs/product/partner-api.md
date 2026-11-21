@@ -285,16 +285,18 @@ above; the outcome feeds the same per-partner metrics.
 
 Platforms that run Meta's open-source Hasher-Matcher-Actioner (HMA, now
 community-supported through ROOST) can consume this feed with a small exchange
-adapter instead of writing a poller: see
-`asmita/docs/product/partner-hma-adapter/` in Asmita's public repository. The
-adapter is a `SignalExchangeAPI` implementation that pages through
+package instead of writing a poller:
+`integrations/hma/tx-extension-asmita/` in Asmita's public repository. The
+package is a `SignalExchangeAPI` implementation that pages through
 `/api/partner/v1/signals` (the HMA-shaped feed above: opaque checkpoint,
 explicit deletion records, vPDQ signal strings), forwarding your partner key,
 and maps every `deleted: true` record to a deletion, so withdrawals propagate
-automatically. Its README covers registration for
-current HMA (Open Media Match) and the python-threatexchange CLI. The adapter
-is an example, not part of the Asmita application, and carries the
-ThreatExchange BSD licence notice.
+automatically. Its README covers building the wheel, registering the exchange
+on current HMA (Open Media Match) and the python-threatexchange CLI, and
+reporting outcomes back. It is not part of the Asmita application, and it
+carries the ThreatExchange BSD licence notice (BSD-3-Clause, with Meta's
+ThreatExchange credited in its NOTICE). The admin console's partner page
+shows the same three steps under "Connect with HMA".
 
 ## What we ask of every partner
 
