@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // WP17 on the Kysely (Worker) path, against a recording fake in the style of
-// crawl-reported-sources-kysely.test.ts: a VPDQ fingerprint never enters the
-// crawler pool nor resolves by pool id (spec rule 3), and account erasure
+// crawl-reported-sources-kysely.test.ts: a VPDQ fingerprint enters the
+// crawler pool as its video entry and resolves by pool id (video-fingerprints
+// spec WP20, which replaces the pre-WP20 exclusion), and account erasure
 // clears the frame list in the same statement that removes the pool id.
 // Placeholder hashes only.
 
@@ -76,32 +77,47 @@ function callsOn(table: string) {
 }
 
 describe("crawler pool, Kysely path", () => {
-  it("never lists a VPDQ fingerprint and selects the algorithm column", async () => {
+  it("lists a VPDQ fingerprint as its video entry and selects the frame column", async () => {
     kysely.state.rows.HashSubmission = [
-      { id: "hs-vid", caseId: "case-1", crawlPoolId: "fp_2", hashEncrypted: encryptField(PDQ_B), quality: 90, status: "APPROVED", algorithm: "VPDQ" },
+      {
+        id: "hs-vid", caseId: "case-1", crawlPoolId: "fp_2", hashEncrypted: encryptField(PDQ_B), quality: 90, status: "APPROVED", algorithm: "VPDQ",
+        videoFramesEncrypted: encryptField(JSON.stringify([{ hash: PDQ_A, quality: 90, t: 0 }, { hash: PDQ_B, quality: 80, t: 1 }])),
+      },
       { id: "hs-img", caseId: "case-1", crawlPoolId: "fp_1", hashEncrypted: encryptField(PDQ_A), quality: 70, status: "APPROVED", algorithm: "PDQ" },
     ];
     kysely.state.rows.CrawlConsent = [
       { id: "consent-1", caseId: "case-1", hashSubmissionIds: ["hs-img", "hs-vid"] },
     ];
+    // The pool keeps fingerprints only while the case is open or inside its
+    // re-upload window (watch-and-verify WP24), so the case read sees it open.
+    kysely.state.rows.Case = [{ id: "case-1", status: "OPEN" }];
 
     const pool = await buildCrawlPool();
-    expect(pool.fingerprints).toEqual([{ id: "fp_1", pdq: PDQ_A, quality: 70 }]);
-    // The candidate read asks for the algorithm, so the exclusion cannot be
-    // skipped by a stale select.
+    expect(pool.fingerprints).toEqual([
+      { id: "fp_1", pdq: PDQ_A, quality: 70 },
+      { id: "fp_2", kind: "video", frames: [PDQ_A, PDQ_B] },
+    ]);
+    // The candidate read asks for the algorithm and the frame list, so the
+    // video entry cannot be skipped or served empty by a stale select.
     const selects = callsOn("HashSubmission").filter((call) => call.op === "select");
     expect(selects.length).toBeGreaterThan(0);
-    for (const select of selects) expect(select.detail.select).toContain("algorithm");
+    for (const select of selects) {
+      expect(select.detail.select).toContain("algorithm");
+      expect(select.detail.select).toContain("videoFramesEncrypted");
+    }
   });
 
-  it("never resolves a pool id that belongs to a VPDQ fingerprint", async () => {
+  it("resolves a pool id that belongs to a VPDQ fingerprint", async () => {
     kysely.state.rows.HashSubmission = [
-      { id: "hs-vid", caseId: "case-1", crawlPoolId: "fp_2", hashEncrypted: encryptField(PDQ_B), quality: 90, status: "APPROVED", algorithm: "VPDQ" },
+      { id: "hs-vid", caseId: "case-1", crawlPoolId: "fp_2", hashEncrypted: encryptField(PDQ_B), quality: 90, status: "APPROVED", algorithm: "VPDQ", videoFramesEncrypted: null },
     ];
     kysely.state.rows.CrawlConsent = [
       { id: "consent-1", caseId: "case-1", hashSubmissionIds: ["hs-vid"] },
     ];
-    expect(await resolvePoolFingerprint("fp_2")).toBeNull();
+    // The pool keeps fingerprints only while the case is open or inside its
+    // re-upload window (watch-and-verify WP24).
+    kysely.state.rows.Case = [{ id: "case-1", status: "OPEN" }];
+    expect(await resolvePoolFingerprint("fp_2")).toMatchObject({ hashSubmissionId: "hs-vid", caseId: "case-1" });
   });
 });
 

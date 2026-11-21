@@ -3,9 +3,13 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
+import { crawlerEnabled } from "@/lib/crawler-auth";
 
 export default async function StartPage() {
   const locale = await getLocale();
+  // The watch entry point is offered only while the features it needs are on:
+  // no dead links. /watch itself says the same if it is reached directly.
+  const watchAvailable = process.env.ENABLE_HASH_UPLOAD === "true" && crawlerEnabled();
 
   return (
     <AppShell>
@@ -26,6 +30,15 @@ export default async function StartPage() {
                 {t(locale, "start.track.link")}
               </Link>
             </div>
+            {watchAvailable && (
+              <div className="mt-9 border-t border-[var(--line)] pt-7">
+                <h2 className="subsection-title">{t(locale, "start.watch.title")}</h2>
+                <p className="muted mt-3 text-sm leading-[1.7]">{t(locale, "start.watch.body")}</p>
+                <Link className="btn btn-secondary mt-5" href="/watch">
+                  {t(locale, "start.watch.cta")}
+                </Link>
+              </div>
+            )}
           </div>
         </section>
 

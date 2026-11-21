@@ -37,6 +37,7 @@ export default async function NeedsActionPage() {
     const blocked = (["blocked_legal_review", "blocked_contact", "blocked_escalation"] as const).map(queue);
     tiles.push(
       caseTile("Links to review", queue("review_links"), "review_links", now),
+      caseTile("Found copies to review", queue("review_findings"), "review_findings", now),
       caseTile("Fingerprints to review", queue("review_fingerprints"), "review_fingerprints", now),
       caseTile("Ready to send", queue("send_notice"), "send_notice", now),
       {
@@ -89,7 +90,7 @@ export default async function NeedsActionPage() {
       {tiles.length === 0 && <p className="muted mt-6">Your admin role has no queues.</p>}
 
       {caseTiles.length > 0 && (
-        <ul aria-label="Case queues" className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <ul aria-label="Case queues" className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           {caseTiles.map((tile) => (
             <li className="last:odd:col-span-2 md:last:odd:col-span-1" key={tile.title}>
               <Link className="a-stat" data-urgent={tile.urgent} href={tile.href}>

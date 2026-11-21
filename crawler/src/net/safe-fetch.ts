@@ -11,7 +11,9 @@
  *   there is no window for DNS rebinding between check and connect.
  *
  * Every redirect hop is re-parsed and re-checked (scheme, port, credentials,
- * literal address) and its connection goes through the same connector.
+ * literal address) and its connection goes through the same connector. A
+ * qualifying in-page `<meta http-equiv="refresh">` (crawler v3 WP12) is
+ * followed as one more hop of the same loop when the caller opts in.
  * Requests carry no cookies or authorisation (undici has no cookie jar and we
  * set no such header). Bodies are capped while streaming and again after
  * decompression. This fetcher never sees the Asmita service key: the Asmita
@@ -22,6 +24,7 @@ import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { Agent, buildConnector } from "undici";
 import { CrawlError, toCrawlError } from "../errors.ts";
+import { htmlMetaRefreshTarget } from "../crawl/page-redirects.ts";
 import { parseRetryAfter } from "../retry.ts";
 import { bareHost, checkUrl, resolveAllowed, type NetPolicy } from "./policy.ts";
 
@@ -71,6 +74,15 @@ export type FetchOptions = {
    * after beforeHop, so a politeness wait does not hold a slot.
    */
   gate?: <T>(fn: () => Promise<T>) => Promise<T>;
+  /**
+   * Follow redirects that live in the page body (crawler v3 WP12): a
+   * qualifying `<meta http-equiv="refresh">` in an HTML answer becomes one
+   * more hop of this same loop, so its target is policy-checked by checkUrl,
+   * offered to beforeHop (scope, robots, delay) and counted against
+   * maxRedirects exactly like a Location header. Only HTML fetches whose
+   * caller opts in (page fetches on the static path); unset never follows.
+   */
+  followMetaRefresh?: boolean;
 };
 
 export type FetchResult = {
@@ -128,9 +140,15 @@ export class SafeFetcher {
 
   async fetch(input: string | URL, opts: FetchOptions): Promise<FetchResult> {
     let url = checkUrl(input, this.policy);
+    /** Every address this fetch has requested (fragment-less), for the meta-refresh loop check. */
+    const visited = new Set<string>();
+    /** beforeHop already ran for `url` (a meta-refresh target, checked before it was taken). */
+    let admitted = false;
     for (let hop = 0; ; hop++) {
       if (hop > this.config.maxRedirects) throw new CrawlError("too_many_redirects");
-      if (opts.beforeHop) await opts.beforeHop(url, hop);
+      if (opts.beforeHop && !admitted) await opts.beforeHop(url, hop);
+      admitted = false;
+      visited.add(withoutHash(url));
       const hopUrl = url;
       const result = opts.gate ? await opts.gate(() => this.fetchHop(hopUrl, opts)) : await this.fetchHop(hopUrl, opts);
       if (result.kind === "redirect") {
@@ -142,6 +160,40 @@ export class SafeFetcher {
         }
         url = checkUrl(next, this.policy);
         continue;
+      }
+      // A redirect that lives in the page body (WP12): same loop, same
+      // checks, same budget. Unlike a Location header, the page that carries
+      // a refresh is valid content in its own right, so a refresh that may
+      // not be followed leaves this page as the answer instead of failing it
+      // (review fix): a target that does not parse, that the address policy
+      // refuses, that is off scope or robots-disallowed (beforeHop refuses
+      // it, before any request), or that this fetch already requested (a
+      // self-refresh or a refresh loop).
+      if (opts.followMetaRefresh && opts.kind === "html") {
+        const target = htmlMetaRefreshTarget(result.value.contentType, result.value.body);
+        if (target !== null) {
+          let next: URL;
+          try {
+            next = checkUrl(new URL(target, url), this.policy);
+          } catch {
+            return result.value;
+          }
+          if (visited.has(withoutHash(next))) return result.value;
+          // The shared budget still bounds a chain of distinct targets.
+          if (hop + 1 > this.config.maxRedirects) throw new CrawlError("too_many_redirects");
+          if (opts.beforeHop) {
+            try {
+              await opts.beforeHop(next, hop + 1);
+            } catch (raw) {
+              const err = toCrawlError(raw);
+              if (err.code === "aborted" || opts.signal?.aborted) throw err;
+              return result.value;
+            }
+            admitted = true;
+          }
+          url = next;
+          continue;
+        }
       }
       return result.value;
     }
@@ -230,6 +282,13 @@ export class SafeFetcher {
   async close(): Promise<void> {
     await this.agent.close().catch(() => undefined);
   }
+}
+
+/** A URL's address without its fragment (fragments never reach the server). */
+function withoutHash(u: URL): string {
+  const copy = new URL(u.href);
+  copy.hash = "";
+  return copy.href;
 }
 
 function header(v: string | string[] | undefined): string | undefined {

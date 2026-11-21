@@ -89,9 +89,16 @@ export default async function WhatWeDoPage() {
                     <h2 className="subsection-title mt-4">{locale === "hi" ? hindi.capabilities[i].title : c.title}</h2>
                     <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--text)]">{locale === "hi" ? hindi.capabilities[i].body : c.body}</p>
                     <div className="mt-6">
-                      <Link href={c.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
-                        {locale === "hi" ? hindi.capabilities[i].cta : c.cta}
-                      </Link>
+                      {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                      {c.href === "/check-image" ? (
+                        <a href={c.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                          {locale === "hi" ? hindi.capabilities[i].cta : c.cta}
+                        </a>
+                      ) : (
+                        <Link href={c.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                          {locale === "hi" ? hindi.capabilities[i].cta : c.cta}
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}

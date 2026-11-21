@@ -56,10 +56,14 @@ beforeEach(() => {
     { reviewStatus: "CANDIDATE", _count: { _all: 2 } },
     { reviewStatus: "APPROVED", _count: { _all: 1 } },
     { reviewStatus: "DISMISSED", _count: { _all: 1 } },
+    { reviewStatus: "MINOR_PROTOCOL", _count: { _all: 1 } },
   ]);
   db.crawlFinding.findFirst.mockResolvedValue({ runId: "run-x" });
   db.crawlFinding.aggregate.mockResolvedValue({ _count: { _all: 3 }, _min: { firstSeenAt: RUN_FIRST_SEEN }, _max: { lastSeenAt: RUN_LAST_SEEN } });
-  db.crawlFinding.count.mockResolvedValue(0);
+  db.crawlFinding.count.mockReset();
+  db.crawlFinding.count.mockResolvedValueOnce(2) // labelAiMade
+    .mockResolvedValueOnce(1) // labelSexual
+    .mockResolvedValueOnce(1); // labelPossibleMinor
 });
 
 afterEach(() => {
@@ -84,7 +88,7 @@ describe("getCrawlerStats, Prisma path", () => {
     expect(stats.pagesCrawledToday).toBe(4);
     expect(stats.queue).toEqual({ live: 8, pending: 3, due: 1, claimed: 2, scheduled: 5, dead: 2 });
     expect(stats.pagesByStatus).toEqual({ pending: 3, fetched: 2, notModified: 1, gone: 1, blocked: 1, error: 1, dead: 1 });
-    expect(stats.findings).toEqual({ awaitingReview: 2, approved: 1, dismissed: 1 });
+    expect(stats.findings).toEqual({ awaitingReview: 2, approved: 1, dismissed: 1, minorProtocol: 1, labels: { aiMade: 2, sexual: 1, possibleMinor: 1 } });
     expect(stats.lastRun).toEqual({
       activityAt: RUN_LAST_SEEN.toISOString(),
       findingRun: { runId: "run-x", firstSeenAt: RUN_FIRST_SEEN.toISOString(), lastSeenAt: RUN_LAST_SEEN.toISOString(), findings: 3 },
@@ -121,6 +125,10 @@ describe("getCrawlerStats, Prisma path", () => {
       where: { status: { notIn: ["DEAD", "GONE"] }, nextDueAt: { lte: NOW }, OR: [{ claimedUntil: null }, { claimedUntil: { lt: NOW } }] },
     });
     expect(db.crawlPage.count).toHaveBeenNthCalledWith(3, { where: { status: { notIn: ["DEAD", "GONE"] }, claimedUntil: { gt: NOW } } });
+    // The label counts (WP37) are database counts on the label flags.
+    expect(db.crawlFinding.count).toHaveBeenNthCalledWith(1, { where: { labelAiMade: true } });
+    expect(db.crawlFinding.count).toHaveBeenNthCalledWith(2, { where: { labelSexual: true } });
+    expect(db.crawlFinding.count).toHaveBeenNthCalledWith(3, { where: { labelPossibleMinor: true } });
   });
 
   it("skips the run aggregation when no finding has ever been reported", async () => {

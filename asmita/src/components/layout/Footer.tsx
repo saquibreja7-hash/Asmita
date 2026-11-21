@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { HELPLINE } from "@/lib/helpline";
 import { LanguageToggle } from "@/components/layout/LanguageToggle";
 
@@ -36,6 +36,7 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/legal", label: "कानूनी" },
             { href: "/for-platforms", label: "प्लेटफ़ॉर्म के लिए" },
             { href: "/contact", label: "संपर्क" },
+            { href: "/lab", label: "AI लैब" },
             { href: "/sitemap", label: "साइटमैप" },
             // English until a native speaker supplies the Hindi label.
             { href: STATUS_URL, label: "Status" },
@@ -70,6 +71,7 @@ export function Footer({ locale }: { locale: Locale }) {
             { href: "/for-platforms", label: "For platforms" },
             { href: "/privacy", label: "Privacy" },
             { href: "/contact", label: "Contact" },
+            { href: "/lab", label: "AI Lab" },
             { href: "/sitemap", label: "Sitemap" },
             { href: STATUS_URL, label: "Status" },
           ],
@@ -82,7 +84,7 @@ export function Footer({ locale }: { locale: Locale }) {
         {/* Thorn-style: logo left, multi-col nav, helpline rightish */}
         <div className="site-footer-grid">
           <div className="site-footer-brand">
-            <Link href="/" className="site-footer-logo-link" aria-label="Asmita home">
+            <Link href="/" className="site-footer-logo-link" aria-label={t(locale, "nav.home")}>
               {/* The logo: teal wordmark with the gold flame. A small static PNG; next/image adds nothing here. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/asmita-wordmark-v2.png" alt="Asmita" width={317} height={94} className="brand-logo brand-logo-footer" />
@@ -98,8 +100,8 @@ export function Footer({ locale }: { locale: Locale }) {
               </p>
             )}
             <div className="site-footer-lang">
-              <span className="site-footer-col-title !mb-0">{isHi ? "भाषा" : "Language"}</span>
-              <LanguageToggle locale={locale} />
+              <span className="site-footer-col-title !mb-0">{t(locale, "nav.language")}</span>
+              <LanguageToggle locale={locale} label={t(locale, "nav.language")} />
             </div>
           </div>
 
@@ -109,7 +111,10 @@ export function Footer({ locale }: { locale: Locale }) {
               <ul className="site-footer-col-list">
                 {col.links.map((link) => (
                   <li key={link.href + link.label}>
-                    {link.href.startsWith("https://") ? (
+                    {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                    {link.href === "/check-image" ? (
+                      <a href={link.href}>{link.label}</a>
+                    ) : link.href.startsWith("https://") ? (
                       <a href={link.href}>{link.label}</a>
                     ) : (
                       <Link href={link.href}>{link.label}</Link>

@@ -6,6 +6,7 @@ export const TALK_COPY_KEYS = [
   "talk.notice.heading", "talk.notice.ai", "talk.notice.recording", "talk.notice.noImages",
   "talk.notice.minors", "talk.notice.danger", "talk.notice.mic", "talk.start",
   "talk.status.connecting", "talk.status.listening", "talk.status.speaking", "talk.status.ended",
+  "talk.call.heading",
   "talk.error.busy", "talk.error.microphone", "talk.error.unavailable",
   "talk.mute", "talk.unmute", "talk.end", "talk.again", "talk.phone",
 ] as const satisfies readonly MessageKey[];

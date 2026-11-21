@@ -9,6 +9,7 @@ const toc: TocItem[] = [
   { id: "who-can-use", title: "Who can use Asmita" },
   { id: "account", title: "Your account and authentication" },
   { id: "how-a-case-works", title: "How a case works" },
+  { id: "search-and-watch", title: "When you ask Asmita to search, watch or share" },
   { id: "your-declaration", title: "Your declaration and undertaking" },
   { id: "acceptable-use", title: "Acceptable use" },
   { id: "rate-limits", title: "Rate limits and abuse prevention" },
@@ -40,7 +41,7 @@ export default function TermsPage() {
               us. Written in plain language. Reviewed against Indian law.
             </p>
             <p className="muted mt-6 max-w-prose text-sm leading-relaxed">
-              Last updated · 17 May 2026 · Version 0.4 · Draft pending legal
+              Last updated · 19 November 2026 · Version 0.5 · Draft pending legal
               review<ReadingTime label="{n} min read" />
             </p>
           </div>
@@ -151,7 +152,9 @@ export default function TermsPage() {
           <ReadingSection id="how-a-case-works" icon="clipboard" title={title("how-a-case-works")}>
             <p>
               A case begins with age attestation and a digital declaration.
-              You then add URLs as text. You may also submit image fingerprints.
+              You then add URLs as text. You may also submit fingerprints of
+              your images or videos, generated on your device - only the
+              code reaches Asmita, never the image or the video itself.
               Asmita identifies the
               platform from each URL and prepares a takedown notice for you to
               review and sign. Real dispatch requires human verification of the
@@ -162,8 +165,10 @@ export default function TermsPage() {
             </p>
             <p>
               Notices are sent by email with the reported URL in the signed
-              PDF attachment. The email provider and recipient may retain
-              copies beyond Asmita&rsquo;s retention period.
+              PDF attachment. Every notice asks the platform to act within 24
+              hours, alongside the timelines the law itself sets. The email
+              provider and recipient may retain copies beyond Asmita&rsquo;s
+              retention period.
             </p>
             <NextStep
               title="A full walkthrough"
@@ -171,6 +176,48 @@ export default function TermsPage() {
               cta="How it works"
               href="/how-it-works"
             />
+          </ReadingSection>
+
+          <ReadingSection id="search-and-watch" icon="compass" title={title("search-and-watch")}>
+            <p>
+              Several optional services sit beside the complaint flow. Each is
+              off until you switch it on or it follows from a case, each is
+              explained in the{" "}
+              <Link href="/privacy" className="link-underline text-[var(--ink)]">
+                Privacy Policy
+              </Link>
+              , and each can be stopped at any time from your case page.
+            </p>
+            <ItemCards
+              items={[
+                {
+                  title: "The web search (one tick).",
+                  body: "One tick on your case page signs a standing authorisation. It lets Asmita compare your fingerprints with images its crawler finds on public websites, and send takedown notices for confirmed copies in Asmita's own name as your authorised representative. You never see or sign those notices, and your signature is never copied onto them. Withdrawing the tick stops the search, deletes matches still under review, and stops copies no notice has been sent for.",
+                },
+                {
+                  title: "Watching without a complaint.",
+                  body: "You can fingerprint your images and ask Asmita to search for copies and alert you, without filing a complaint. No links are collected, and nothing is sent to any platform unless you later choose Take it down. Stopping the watch deletes the fingerprints it covers.",
+                },
+                {
+                  title: "Checks that content stays down.",
+                  body: "When a link you reported is marked removed, Asmita's crawler revisits the page about one, three and seven days later to confirm it is really gone. If the content is back, the link returns to its sent state and the existing follow-ups restart.",
+                },
+                {
+                  title: "Watching for re-uploads after resolution.",
+                  body: "If your case is resolved - in particular when everything on it was verified removed - and your search authorisation is still live, Asmita keeps searching for re-uploads for 12 months under the same authorisation.",
+                },
+                {
+                  title: "Sharing fingerprints with partner platforms.",
+                  body: "A separate tick shares your fingerprint codes with platforms that have joined Asmita's partner programme - only the codes and a case reference, never your images or your name. Partners must use them only to find and block the content, and must delete them when you withdraw.",
+                },
+              ]}
+            />
+            <Callout>
+              None of these services is a promise that every copy will be found
+              or removed. Perceptual matching is approximate - cropped or
+              heavily edited copies can be missed - and a person reviews every
+              possible match before anything is sent.
+            </Callout>
           </ReadingSection>
 
           <ReadingSection id="your-declaration" icon="scale" title={title("your-declaration")}>
@@ -255,7 +302,7 @@ export default function TermsPage() {
                 { body: "Force a platform to remove content. Platforms decide; we do everything legally available to make removal likely and fast." },
                 { body: "Provide legal advice. The notice templates are legally reviewed, but Asmita is not your lawyer." },
                 { body: "File a First Information Report (FIR) on your behalf. We prepare a police-ready FIR package after seven days; you file it at a station of your choice or through cybercrime.gov.in." },
-                { body: "Access, view, or process media behind a URL you submit. URLs are handled as text. You may submit a fingerprint generated on your device. The optional deeper AI check forwards an image to its provider only after your consent." },
+                { body: "Hold or view your images or videos. Fingerprints are generated on your device and only the codes reach us. The optional deeper AI check forwards an image to its provider only after your consent. The one exception is the web search you can ask for: its separate crawler service visits public websites and holds the pages and images it checks in memory only, long enough to fingerprint them, keeping nothing but match records - which a person reviews before anything is sent." },
               ]}
             />
           </ReadingSection>

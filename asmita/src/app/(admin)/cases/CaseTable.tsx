@@ -16,6 +16,8 @@ export type CaseTableRow = {
   platforms: string;
   age: string;
   ageTitle: string;
+  /** "Watch for my images" (WP22): the row shows a Watch label. */
+  watch: boolean;
 };
 
 const SHORTCUTS_KEY = "asmita-admin-shortcuts";
@@ -242,6 +244,11 @@ export function CaseTable({
                   <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`} tabIndex={-1}>
                     {row.referenceNumber}
                   </Link>
+                  {row.watch && (
+                    <span className="ml-2 whitespace-nowrap rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--brand-strong)]">
+                      Watch
+                    </span>
+                  )}
                 </td>
                 <td className="font-medium">{row.action}</td>
                 <td className={`a-nowrap tabular-nums ${row.overdue ? "font-semibold text-[var(--danger)]" : ""}`}>
@@ -268,9 +275,16 @@ export function CaseTable({
           {rows.map((row, index) => (
             <li className="grid gap-1 p-4" key={row.caseId}>
               <div className="flex items-baseline justify-between gap-2">
-                <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`}>
-                  {row.referenceNumber}
-                </Link>
+                <span className="flex items-baseline gap-2">
+                  <Link className="link-underline font-mono" href={`/admin/cases/${row.referenceNumber}`}>
+                    {row.referenceNumber}
+                  </Link>
+                  {row.watch && (
+                    <span className="whitespace-nowrap rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--brand-strong)]">
+                      Watch
+                    </span>
+                  )}
+                </span>
                 <button className="link-underline text-xs" onClick={() => openPeek(index)} type="button">
                   Preview
                 </button>

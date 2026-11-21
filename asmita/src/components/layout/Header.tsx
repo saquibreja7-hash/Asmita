@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { t } from "@/lib/i18n";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { NavLinks } from "@/components/layout/NavLinks";
 import { navGroups } from "@/components/layout/nav-config";
@@ -9,6 +10,11 @@ export function Header({ locale }: { locale: Locale }) {
   const complaintLabel = isHi ? "शिकायत दर्ज करें" : "File a complaint";
   return (
     <>
+      {/* Skip link: the first focusable element on the page, invisible until
+          focused, so keyboard users can jump past the whole chrome to main. */}
+      <a href="#main" className="skip-link">
+        {t(locale, "nav.skipToMain")}
+      </a>
       {/* Announcement bar: the one Ink surface on the page */}
       <div className="announce">
         <div className="container flex min-h-[40px] items-center justify-between gap-4 py-1.5">
@@ -28,13 +34,13 @@ export function Header({ locale }: { locale: Locale }) {
 
       <header className="site-header">
         <div className="container flex min-h-[72px] items-center justify-between gap-2 md:min-h-[80px]">
-          <Link href="/" className="fade flex min-w-0 items-center" aria-label="Asmita home">
+          <Link href="/" className="fade flex min-w-0 items-center" aria-label={t(locale, "nav.home")}>
             {/* The logo: teal wordmark with the gold flame. A small static PNG; next/image adds nothing here. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/asmita-wordmark-v2.png" alt="Asmita" width={317} height={94} className="brand-logo" />
           </Link>
 
-          <nav className="hidden items-center xl:flex" aria-label="Primary">
+          <nav className="hidden items-center xl:flex" aria-label={t(locale, "nav.primary")}>
             <NavLinks groups={navGroups(locale)} />
             <div className="ml-4 flex items-center gap-3">
               <Link href="/start" className="btn btn-primary btn-arrow !min-h-[44px] !px-6">

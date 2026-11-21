@@ -415,6 +415,15 @@ export async function listHashesForCase(caseId: string): Promise<DisplayHashSubm
   return records.map(toDisplay);
 }
 
+/**
+ * Memory path only: forgets the case's dev hash-store records. Used by
+ * stop-watching (WP22), whose database paths delete the HashSubmission rows
+ * themselves (src/lib/watch-ops.ts).
+ */
+export function clearMemoryHashesForCase(caseId: string) {
+  if (isDevNoDb()) devHashStore().delete(caseId);
+}
+
 export type HashReviewQueueRow = DisplayHashSubmission & {
   caseId: string;
   referenceNumber: string;
@@ -543,16 +552,36 @@ export async function reviewHashSubmission(input: {
   if (!record) throw new Error("hash_submission_not_found");
   if (record.status !== "PENDING_REVIEW") throw new Error("hash_submission_already_reviewed");
 
-  const updated = await db.hashSubmission.update({
-    where: { id: input.hashSubmissionId },
-    data: {
-      status: input.decision === "approve" ? "APPROVED" : "REJECTED",
-      flaggedForReview: false,
-      flagReason: input.reason ?? record.flagReason,
-      reviewedAt: new Date(),
-      reviewedById: input.reviewerId ?? null,
-    },
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.hashSubmission.update({
+      where: { id: input.hashSubmissionId },
+      data: {
+        status: input.decision === "approve" ? "APPROVED" : "REJECTED",
+        flaggedForReview: false,
+        flagReason: input.reason ?? record.flagReason,
+        reviewedAt: new Date(),
+        reviewedById: input.reviewerId ?? null,
+      },
+    });
+    // WP32: the partner feed follows the decision in the same transaction —
+    // an approval makes the fingerprint shareable (an ADD event, when her
+    // agreement is live), a rejection withdraws it (partner-feed.ts).
+    const { syncCaseFeedEventsPrisma } = await import("@/lib/partner-feed");
+    await syncCaseFeedEventsPrisma(tx, record.caseId);
+    return row;
   });
+
+  if (input.decision === "reject") {
+    // A rejected fingerprint's SSCD embeddings go at once (ADR 008, WP28):
+    // the pool stops serving them on the next build. Best-effort only — the
+    // rejection is already committed and must never fail because of this.
+    try {
+      const { deleteEmbeddingsForSubmission } = await import("@/lib/crawl-embeddings");
+      await deleteEmbeddingsForSubmission(input.hashSubmissionId);
+    } catch {
+      console.error("crawl_embedding_rejection_cleanup_failed");
+    }
+  }
 
   await writeAuditLog({
     eventType: input.decision === "approve" ? "HASH_APPROVED" : "HASH_REJECTED",

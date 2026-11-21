@@ -5,6 +5,7 @@ import { hashEmail, sha256 } from "@/lib/hash";
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { writeAuditLog } from "@/lib/audit";
 import { eraseCrawlMemoryForCases } from "@/lib/crawl-store";
+import { erasePartnerShareConsentsForCases } from "@/lib/partner-store";
 
 export type CaseRecord = {
   id: string;
@@ -13,6 +14,8 @@ export type CaseRecord = {
   registrationKeyHash?: string | null;
   createdAt: string;
   status: "OPEN" | "RESOLVED";
+  /** "Watch for my images" (WP22): a watch holds fingerprints and no links. */
+  mode?: "CASE" | "WATCH";
   urls: UrlRecord[];
   signedHashAdvisoryPdf?: string | null;
   hashAdvisoryPlatformIds?: string[];
@@ -22,7 +25,9 @@ export type UrlRecord = {
   id: string;
   domain: string;
   platformName: string;
-  status: "PENDING_REVIEW" | "NOTICE_QUEUED" | "REMOVED" | "REJECTED";
+  // NOTICE_SENT only appears through the removal re-check finding the content
+  // back online (link-verification.ts): nothing is sent from the memory store.
+  status: "PENDING_REVIEW" | "NOTICE_QUEUED" | "NOTICE_SENT" | "REMOVED" | "REJECTED";
   urlHash: string;
   platformId: string | null;
   flaggedForReview?: boolean;
@@ -40,6 +45,13 @@ export type UrlRecord = {
    * database column's existing rows.
    */
   crawlSourceChecked?: boolean;
+  /**
+   * The link address, encrypted like the database column. The memory store
+   * kept only a digest until the removal re-check needed the address to queue
+   * its page row (link-verification.ts); rows created before then read as
+   * purged, like a link whose retention blanking already ran.
+   */
+  urlEncrypted?: string;
   /** When she added it (admin New links). Absent on demo rows. */
   submittedAt?: string;
 };
@@ -75,7 +87,7 @@ export function createReferenceNumber() {
   return generateCaseReference();
 }
 
-export async function createCase(userId: string, registrationKeyHash?: string) {
+export async function createCase(userId: string, registrationKeyHash?: string, mode: "CASE" | "WATCH" = "CASE") {
   assertDevOrTest();
   const record: CaseRecord = {
     id: randomUUID(),
@@ -84,6 +96,7 @@ export async function createCase(userId: string, registrationKeyHash?: string) {
     registrationKeyHash,
     createdAt: new Date().toISOString(),
     status: "OPEN",
+    mode,
     urls: [],
   };
   cases.set(record.id, record);
@@ -141,6 +154,7 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
         status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
         flaggedForReview,
         flagReason: options?.flagReasons?.join(","),
+        urlEncrypted: encryptField(parsed.normalizedUrl),
       });
       return { ok: true as const, duplicate: false, url: duplicate };
     }
@@ -153,6 +167,7 @@ export async function addUrlsToCase(caseId: string, rawUrls: string[], options?:
       platformName: parsed.platform?.name || "Unknown - will be reviewed",
       status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
       urlHash: parsed.urlHash,
+      urlEncrypted: encryptField(parsed.normalizedUrl),
       platformId: null,
       flaggedForReview,
       flagReason: options?.flagReasons?.join(","),
@@ -273,15 +288,26 @@ export async function hardDeleteDueUsers(now = new Date()) {
     let caseCount = 0;
     let links = 0;
     const erasedCaseIds: string[] = [];
+    const erasedCaseRefs = new Map<string, string | null>();
     for (const [caseId, record] of cases.entries()) {
       if (record.userId === userId) {
         caseCount += 1;
         links += record.urls.length;
         erasedCaseIds.push(caseId);
+        erasedCaseRefs.set(caseId, record.referenceNumber);
         cases.delete(caseId);
       }
     }
+    // WP32: partners are told to delete what they hold of hers before the
+    // agreements go (feed WITHDRAW events, ids only), and outcome rows for
+    // her cases go too — they are the only partner rows that can hold one of
+    // her links. The feed's event log stays: it carries ids, never addresses.
+    const { withdrawSharedFingerprintsForErasureMemory } = await import("@/lib/partner-feed");
+    await withdrawSharedFingerprintsForErasureMemory(erasedCaseIds, erasedCaseRefs);
+    const { erasePartnerOutcomesForCases } = await import("@/lib/partner-store");
+    erasePartnerOutcomesForCases(erasedCaseIds);
     eraseCrawlMemoryForCases(erasedCaseIds);
+    erasePartnerShareConsentsForCases(erasedCaseIds);
     // Fingerprints are kept, as on the database path, but a kept video
     // fingerprint loses its frame list with the erasure (WP17).
     for (const caseId of erasedCaseIds) {

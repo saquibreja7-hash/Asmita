@@ -9,12 +9,13 @@
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BrowserRenderer, browserWorkerExecArgv, type BrowserImage } from "../../src/browser/browser-renderer.ts";
-import { CHROMIUM_ARGS } from "../../src/browser/chromium-args.ts";
+import { chromiumArgs } from "../../src/browser/chromium-args.ts";
 import { Logger } from "../../src/log.ts";
 import { RunMetrics } from "../../src/metrics.ts";
 import { productionPolicy } from "../../src/net/policy.ts";
 
 const FAKE_WORKER = fileURLToPath(new URL("../support/fake-browser-worker.mjs", import.meta.url));
+const NO_SANDBOX_WORKER = fileURLToPath(new URL("../support/fake-browser-worker-nosandbox.mjs", import.meta.url));
 
 let renderer: BrowserRenderer;
 let metrics: RunMetrics;
@@ -297,13 +298,99 @@ describe("browser renderer", () => {
 
 describe("browser worker launch settings", () => {
   it("keeps WebRTC off any path but the proxy (no non-proxied UDP)", () => {
-    expect(CHROMIUM_ARGS).toContain("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
-    expect(CHROMIUM_ARGS).toContain("--webrtc-ip-handling-policy=disable_non_proxied_udp");
+    for (const sandboxed of [true, false]) {
+      const args = chromiumArgs(sandboxed);
+      expect(args).toContain("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
+      expect(args).toContain("--webrtc-ip-handling-policy=disable_non_proxied_udp");
+    }
   });
 
   it("does not let the worker read /proc", () => {
     const argv = browserWorkerExecArgv("/app/dist/browser-worker.js", "/dev/shm", "/app/browsers");
     expect(argv.some((a) => a.startsWith("--allow-fs-read=/proc"))).toBe(false);
     expect(argv).toContain("--permission");
+  });
+});
+
+describe("browser sandbox self-test (WP25)", () => {
+  /** A renderer around a worker whose sandboxed launches always fail. */
+  const noSandboxRenderer = (opts: { allowUnsandboxed: boolean; lines: string[]; metrics: RunMetrics }) =>
+    new BrowserRenderer({
+      policy: productionPolicy(),
+      workerPath: NO_SANDBOX_WORKER,
+      log: new Logger({ sink: (l) => opts.lines.push(l), level: "debug" }),
+      metrics: opts.metrics,
+      config: {
+        userAgent: "AsmitaCrawler/0.1 (test)",
+        tmpDir: "/dev/shm",
+        pageTimeoutMs: 1000,
+        scrolls: 0,
+        scrollWaitMs: 0,
+        maxRequests: 50,
+        maxPageBytes: 1024 * 1024,
+        maxImages: 10,
+        maxImageBytes: 4096,
+        maxHtmlBytes: 64 * 1024,
+        connectTimeoutMs: 2000,
+        renderGraceMs: 300,
+        allowUnsandboxed: opts.allowUnsandboxed,
+      },
+    });
+
+  const firstRender = (r: BrowserRenderer) =>
+    r.render(new URL("http://page.test/ok"), "page.test", () => Promise.resolve(true));
+
+  it("records sandbox on when the sandboxed launch answers", async () => {
+    const one = make();
+    try {
+      expect((await firstRender(one)).ok).toBe(true);
+      expect(metrics.browser.sandboxTested).toBe(true);
+      expect(metrics.browser.sandboxOn).toBe(true);
+      expect(metrics.browser.workerUid).toBe(process.getuid?.() ?? 0);
+    } finally {
+      await one.close();
+    }
+  });
+
+  it("fails closed when the runtime refuses the sandbox: sticky, no respawn", async () => {
+    const lines: string[] = [];
+    const m = new RunMetrics();
+    const renderer = noSandboxRenderer({ allowUnsandboxed: false, lines, metrics: m });
+    try {
+      // The self-test ran (the launch was the test): the verdict is recorded
+      // in the summary booleans — on/off, never a URL.
+      expect(await firstRender(renderer)).toEqual({ ok: false, code: "browser_sandbox_unavailable" });
+      expect(m.browser.sandboxTested).toBe(true);
+      expect(m.browser.sandboxOn).toBe(false);
+      expect(m.browser.workerUid).toBe(-1);
+      expect(renderer.renderingRefused()).toBe(true);
+      // Every further render answers the same code without spawning a
+      // worker: the renderer is refused for the run, logged exactly once.
+      expect(await firstRender(renderer)).toEqual({ ok: false, code: "browser_sandbox_unavailable" });
+      expect(lines.filter((l) => l.includes("browser_rendering_disabled"))).toHaveLength(1);
+      // Refused renders are not counted as render failures in the summary's
+      // browser object (no render ever started); the code is in errors.
+      expect(m.browser.renders).toBe(0);
+      expect(m.browser.failed).toBe(0);
+    } finally {
+      await renderer.close();
+    }
+  });
+
+  it("renders unsandboxed only under the local-development override", async () => {
+    const lines: string[] = [];
+    const m = new RunMetrics();
+    const renderer = noSandboxRenderer({ allowUnsandboxed: true, lines, metrics: m });
+    try {
+      const result = await firstRender(renderer);
+      expect(result.ok).toBe(true);
+      // The self-test still ran and still recorded its verdict: sandbox off.
+      expect(m.browser.sandboxTested).toBe(true);
+      expect(m.browser.sandboxOn).toBe(false);
+      expect(lines.some((l) => l.includes("browser_unsandboxed_override"))).toBe(true);
+      expect(renderer.renderingRefused()).toBe(false);
+    } finally {
+      await renderer.close();
+    }
   });
 });

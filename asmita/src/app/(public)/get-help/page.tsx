@@ -203,7 +203,7 @@ export default async function GetHelpPage() {
                         <Link className="text-link" href={scenario.href}>
                           {scenario.href === "/minor-support" ? say("Get under-18 support", "कम उम्र में मदद लें") : say("File a complaint", "शिकायत दर्ज करें")}
                         </Link>
-                        {i === 3 && <Link className="text-link" href="/check-image">{say("Check the image if you want", "चाहें तो तस्वीर जाँचें")}</Link>}
+                        {i === 3 && <a className="text-link" href="/check-image">{say("Check the image if you want", "चाहें तो तस्वीर जाँचें")}</a>}
                       </div>
                     </details>
                   </li>
@@ -271,9 +271,16 @@ export default async function GetHelpPage() {
                       {locale === "hi" ? hindi.tools[i].body : tool.body}
                     </p>
                     <div className="mt-6">
-                      <Link href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
-                        {locale === "hi" ? hindi.tools[i].cta : tool.cta}
-                      </Link>
+                      {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                      {tool.href === "/check-image" ? (
+                        <a href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                          {locale === "hi" ? hindi.tools[i].cta : tool.cta}
+                        </a>
+                      ) : (
+                        <Link href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                          {locale === "hi" ? hindi.tools[i].cta : tool.cta}
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}

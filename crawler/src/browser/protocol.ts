@@ -26,6 +26,14 @@ export const LaunchMessageSchema = z.strictObject({
   proxyPort: z.number().int().min(1).max(65535),
   /** The crawler's own User-Agent, appended to Chromium's. */
   userAgentSuffix: z.string().min(3).max(200),
+  /**
+   * WP25: launch Chromium with its own sandbox (never `--no-sandbox`). The
+   * worker launches exactly as told — it never falls back by itself, so a
+   * bug there cannot re-enable an unsandboxed browser. A sandboxed launch
+   * that fails is reported as `browser_sandbox_unavailable` and the parent
+   * decides (fail closed, or the dev-only override).
+   */
+  sandboxed: z.boolean(),
 });
 
 export const RenderMessageSchema = z.strictObject({
@@ -65,9 +73,20 @@ export type AbortMessage = z.infer<typeof AbortMessageSchema>;
 // --- worker -> parent ---------------------------------------------------------
 
 /** The only ways a render can fail; the parent maps them to error codes. */
-export const WORKER_FAIL_CODES = ["browser_failed", "browser_aborted"] as const;
+export const WORKER_FAIL_CODES = ["browser_failed", "browser_aborted", "browser_sandbox_unavailable"] as const;
 
-export const ReadyMessageSchema = z.strictObject({ kind: z.literal("ready") });
+/**
+ * The launch answer (WP25): `sandboxed` confirms the mode Chromium actually
+ * runs under, and `uid` is the worker's own OS user. In the container image
+ * the worker is dropped onto a separate uid by the setuid helper, so a uid
+ * different from the crawler's proves the drop happened; booleans and ids
+ * only — never a URL, never a key.
+ */
+export const ReadyMessageSchema = z.strictObject({
+  kind: z.literal("ready"),
+  sandboxed: z.boolean(),
+  uid: z.number().int().min(0),
+});
 
 /** Mid-render question: may the page request this URL? (robots.txt) */
 export const CheckMessageSchema = z.strictObject({
@@ -95,7 +114,11 @@ export const RenderedMessageSchema = z.strictObject({
   html: z.string(),
   truncated: z.boolean(),
   stats: z.strictObject({
-    /** Requests the page made (before any was aborted by a cap). */
+    /**
+     * Requests the page made that were routed (capped). Fonts, audio/video
+     * media and the built-in ad/analytics hosts are aborted before routing
+     * and are not counted (crawler v3 WP15).
+     */
     requests: z.number().int().min(0),
     /** Image responses not handed over: over the per-page cap or too large. */
     imagesSkipped: z.number().int().min(0),
