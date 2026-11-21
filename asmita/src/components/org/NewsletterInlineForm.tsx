@@ -20,6 +20,7 @@ export function NewsletterInlineForm({
   source: string;
   variant?: "inline" | "footer";
 }) {
+  const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [fax, setFax] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -29,6 +30,11 @@ export function NewsletterInlineForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
+    if (!firstName.trim()) {
+      setError(t(locale, "org.newsletter.f.err.firstName"));
+      document.getElementById(`${source}-newsletter-first`)?.focus();
+      return;
+    }
     if (!EMAIL.test(email.trim())) {
       setError(t(locale, "org.newsletter.f.err.email"));
       document.getElementById(`${source}-newsletter-email`)?.focus();
@@ -38,7 +44,7 @@ export function NewsletterInlineForm({
     const response = await csrfFetch("/api/newsletter", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: email.trim(), locale, source, fax: fax || undefined }),
+      body: JSON.stringify({ firstName: firstName.trim(), email: email.trim(), locale, source, fax: fax || undefined }),
     }).catch(() => null);
     setSubmitting(false);
     if (response?.ok) {
@@ -73,14 +79,28 @@ export function NewsletterInlineForm({
         <label htmlFor={`${source}-newsletter-fax`}>Fax</label>
         <input id={`${source}-newsletter-fax`} tabIndex={-1} autoComplete="off" value={fax} onChange={(e) => setFax(e.target.value)} />
       </div>
-      <label htmlFor={`${source}-newsletter-email`} className={compact ? "sr-only" : "block text-[15px] font-medium text-[var(--ink)]"}>
+      <label htmlFor={`${source}-newsletter-first`} className={compact ? "sr-only" : "block text-[15px] font-medium text-[var(--ink)]"}>
+        {compact ? t(locale, "org.newsletter.footerFirstNameLabel") : t(locale, "org.newsletter.f.firstNameLabel")}
+      </label>
+      <input
+        id={`${source}-newsletter-first`}
+        type="text"
+        required
+        autoComplete="given-name"
+        className={`field ${compact ? "!min-h-[42px] !py-2 !text-sm" : ""}`}
+        placeholder={t(locale, "org.newsletter.f.firstNamePlaceholder")}
+        value={firstName}
+        onChange={(e) => setFirstName(e.target.value)}
+        aria-invalid={error ? true : undefined}
+      />
+      <label htmlFor={`${source}-newsletter-email`} className={compact ? "sr-only" : "mt-3 block text-[15px] font-medium text-[var(--ink)]"}>
         {/* The footer variant names the field for what it is: every victim
             page also carries the registration form's "Email address", and a
             screen reader (and Playwright's label lookup) must not see two
             fields with the same name on one page. */}
         {compact ? t(locale, "org.newsletter.footerEmailLabel") : t(locale, "org.newsletter.f.emailLabel")}
       </label>
-      <div className={compact ? "flex max-w-xs gap-2" : "mt-2 flex flex-col gap-3 sm:flex-row"}>
+      <div className={compact ? "flex max-w-xs flex-col gap-2" : "mt-2 flex flex-col gap-3 sm:flex-row"}>
         <input
           id={`${source}-newsletter-email`}
           type="email"

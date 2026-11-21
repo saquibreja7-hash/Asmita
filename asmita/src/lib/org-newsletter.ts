@@ -23,6 +23,7 @@ const MAX_MEMORY_SUBSCRIBERS = 1000;
 export const newsletterSignupSchema = z
   .object({
     email: z.string().trim().toLowerCase().max(254).email(),
+    firstName: z.string().trim().min(1).max(60),
     locale: z.enum(["en", "hi"]).default("en"),
     source: z.string().trim().min(1).max(80),
     // Hidden from people; a filled value means a bot.
@@ -45,6 +46,7 @@ export type NewsletterSubscriber = {
 /** Memory rows also carry the encrypted address and the hashed tokens. */
 type MemorySubscriber = NewsletterSubscriber & {
   emailEnc: string;
+  firstNameEnc?: string | null;
   confirmTokenHash: string | null;
   unsubscribeTokenHash: string | null;
 };
@@ -87,7 +89,9 @@ export function appBaseUrl() {
  * probe who is on the list. Already-confirmed addresses get no email and
  * no state change.
  */
-export async function subscribeToNewsletter(input: z.infer<typeof newsletterSignupSchema>): Promise<{
+export async function subscribeToNewsletter(
+  input: Omit<z.infer<typeof newsletterSignupSchema>, "firstName" | "fax"> & { firstName?: string },
+): Promise<{
   ok: true;
   /** The confirm token, when a confirmation email is needed. */
   confirmToken: string | null;
@@ -127,6 +131,7 @@ export async function subscribeToNewsletter(input: z.infer<typeof newsletterSign
   const record: MemorySubscriber = {
     id: crypto.randomUUID(),
     emailEnc: encryptField(email),
+    firstNameEnc: input.firstName ? encryptField(input.firstName) : null,
     emailHash,
     locale: input.locale,
     status: "PENDING",
@@ -145,6 +150,7 @@ export async function subscribeToNewsletter(input: z.infer<typeof newsletterSign
     await db.newsletterSubscriber.create({
       data: {
         emailEnc: record.emailEnc,
+        firstNameEnc: record.firstNameEnc ?? null,
         emailHash,
         locale: input.locale,
         status: "PENDING",

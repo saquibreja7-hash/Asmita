@@ -124,20 +124,20 @@ describe("POST /api/newsletter (routes)", () => {
   });
 
   it("answers ok for a new address and stores nothing when the honeypot is filled", async () => {
-    expect((await POST(req({ email: "ok@example.invalid", source: "t" }))).status).toBe(200);
+    expect((await POST(req({ email: "ok@example.invalid", firstName: "Asha", source: "t" }))).status).toBe(200);
     expect(newsletterSubscribers).toHaveLength(1);
-    const bot = await POST(req({ email: "bot@example.invalid", source: "t", fax: "1" }));
+    const bot = await POST(req({ email: "bot@example.invalid", firstName: "Asha", source: "t", fax: "1" }));
     expect(bot.status).toBe(200);
     expect(newsletterSubscribers).toHaveLength(1);
   });
 
   it("gives the same response for an address that is already confirmed (non-disclosure)", async () => {
-    const first = await POST(req({ email: "known@example.invalid", source: "t" }));
+    const first = await POST(req({ email: "known@example.invalid", firstName: "Asha", source: "t" }));
     const before = await first.json();
     const signup = newsletterSubscribers[0];
     signup.status = "CONFIRMED";
     signup.confirmTokenHash = null;
-    const second = await POST(req({ email: "known@example.invalid", source: "t" }));
+    const second = await POST(req({ email: "known@example.invalid", firstName: "Asha", source: "t" }));
     const after = await second.json();
     expect(second.status).toBe(first.status);
     expect(after).toEqual(before);
