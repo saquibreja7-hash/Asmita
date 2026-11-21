@@ -23,7 +23,6 @@
     "ENABLE_HASH_UPLOAD": "true",
     "ENABLE_PLATFORM_API": "false",
     "ENABLE_PROVENANCE_CHECK": "false",
-    // AI Lab (docs/lab/charter.md): off until the owner turns it on.
     "ENABLE_LAB": "false"
   },
   "env": {
@@ -71,7 +70,6 @@
         "ENABLE_PROVENANCE_CHECK": "true",
         "ESCALATION_DRAFTS_REVIEWED": "true",
         "ENABLE_CRAWLER": "true",
-        // AI Lab (docs/lab/charter.md): off until the owner turns it on.
         "ENABLE_LAB": "false"
       }
     }
