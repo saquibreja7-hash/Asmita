@@ -302,3 +302,103 @@ Lab hub and integration (branch `feat/lab-beta`, the integration branch with WP8
 - Full checks (`check.sh`, Node 22): crawler — npm ci, lint, type-check, 60 test files / 650 tests passed, build ok; asmita — npm ci, prisma generate, lint (0 errors, the same 6 pre-existing warnings WP91/92 recorded; none new), type-check clean, prisma validate ok, 237 test files / 2306 tests passed (10 new: `lab-hub.test.ts`). **ALL CHECKS PASSED**.
 
 **Not verified here.** Nothing was pushed (the owner's step, as before). No screenshot review of the hub page happened on this machine (no multimodal model here); the section is verified by the e2e journeys and the DOM-level assertions above instead.
+
+### WP101 done
+
+The first full verify of the merged `feat/lab-beta` failed one Playwright test
+(`DONE E2E_RC=1 SMOKE_RC=0`): `tests/e2e/notice-integrity.spec.ts:116` — "each
+signed URL notice sends exactly the fingerprints it lists…" — `page.waitForResponse`
+for the `POST /api/cases/<id>/hashes` never fired, and the test died at its 180 s
+budget. This WP is the fix lane for that run.
+
+**What the evidence shows.** The journey's own steps all completed: registration,
+the fingerprint ("Ready (quality…"), both clicks. The `POST /api/cases/create`
+was answered OK (the error's frame is the hashes wait, which only runs after the
+create wait resolved), and the error-context snapshot shows the browser on `/` —
+the QuickExit idle sign-out (`NEXT_PUBLIC_SESSION_IDLE_TIMEOUT_MS=60000` in the
+e2e environment) fires 60 s after the test's last input, so the flow had been
+stuck for at least a minute with nothing in flight (no `Error: aborted` noise,
+which a client-aborted in-flight request produces elsewhere in the same log).
+No server-side error appears anywhere in the window. The same helper passes in
+isolation: the whole spec is green through `e2e-some.sh` (4/4), and the sibling
+journeys (hash-flow at [43/105], the second notice-integrity journey at
+[70/105]) passed in the very run that failed. The failure is intermittent, and
+its signature is "one request after the create never completed, with no error
+anywhere".
+
+**The real defect this exposed (and the fix).** `csrfFetch` armed its 15 s
+abort only until the response *headers* arrived — `fetch()` resolves there —
+and then cleared the timer and handed the Response to the caller, whose
+`.json()` read a body that could stall forever with no abort armed. One stalled
+response in the filing flow left the survivor on "Creating…" with no error and
+no recovery, and hung the test the same way. `csrfFetch` now reads the body
+inside the same 15 s budget and returns a fully-buffered Response (status,
+statusText and headers round-tripped; `content-encoding`/`content-length`
+dropped from the reconstructed headers; a null-body status keeps a null body):
+the caller's `.json()` is instant, and a stalled exchange rejects at the
+deadline like every other stall. The app then shows its error and returns to a
+state where the survivor can act — and clicking "Create my case" again is safe
+by design: the create route is idempotency-keyed (`registrationKey`), so the
+retry replays the same case and the fingerprint upload goes on. The same fix
+covers the second candidate (a stalled mint/POST): those were already inside
+the 15 s window, but the window now also covers the body.
+
+Precedent: web audit WP53 fixed the sibling defect in this exact helper (the
+silent mint race) after the same test failed with a 403 in
+`verify-assistant-safety2`; this is the same pattern — the intermittent
+full-suite failure names the latent defect, the fix makes the disturbed
+scenario recoverable, and the original firing cannot be reproduced on demand.
+
+**What was not proven.** The original failure did not reproduce on this
+machine: the notice-integrity spec alone passes (4/4), and the disturbance (a
+>15 s stall inside the dev server under the 105-test full-suite load — the
+same class as the cold-compile 30 s Axe stall recorded in `verify-watch-mode`
+during WP34) could not be recreated at will, so which exact request stalled
+cannot be proven after the fact. To make the next occurrence legible,
+`playwright.config.ts` now records traces on first failure
+(`retain-on-failure`): the shipped setting (`on-first-retry`) was dead in this
+suite — no retries are configured — so a failure left no trace at all, which
+is why this one had to be reconstructed from log silence. A future stall now
+leaves a full network timeline behind.
+
+**Decisions made on my own.**
+
+- Fixed the client (`csrfFetch`) rather than the test: the test's assertions
+  are all still true, and a transient stall is a real client-side hazard for a
+  survivor on a bad connection, not a test artifact. No assertion was
+  weakened, skipped or deleted.
+- Kept the buffered body inside `csrfFetch` instead of bounding each caller's
+  `.json()` separately: one change covers every mutating call site at once,
+  and every caller only ever reads small JSON (no streaming responses go
+  through `csrfFetch`).
+- `trace: "retain-on-failure"` is kept as part of this WP: with retries at
+  zero the previous setting never wrote a trace, and this investigation had
+  nothing to look at. Traces cost disk only on failure and contain only
+  synthetic e2e data.
+
+**Checks (run, not assumed).**
+
+- Unit: `tests/unit/client-csrf.test.ts` — 3 new tests (a stalled body now
+  rejects at the deadline instead of resolving to an unreadable response; the
+  buffered response round-trips status, content-type and custom headers; a
+  null-body status like 204 survives reconstruction) — 9/9 green on Node 22
+  against the fixed code, and the stalled-body scenario was first run
+  against the OLD code, where it resolved at the headers and the caller's
+  body read never settled (vitest killed it at its own timeout): the defect,
+  demonstrated, not assumed.
+- One existing test double was updated, not weakened:
+  `tests/unit/crawl-consent-interaction.test.ts` builds fake Responses that
+  carried only `json()`; every real Response also has `text()`, which
+  csrfFetch now reads inside the exchange, so the double gained the method.
+  Both of that file's assertions and every other test are unchanged — the
+  two journeys it covers fail against the fix without it (the component saw
+  the read throw and showed its generic timeout error instead of the
+  server's answer) and pass with it: 14/14 across both files on Node 22.
+- Playwright: the failing spec `tests/e2e/notice-integrity.spec.ts` runs
+  4/4 through `e2e-some.sh` on this branch — the failing journey passes when
+  the full suite's load is absent, which is what marks the original failure
+  as the intermittent stall and not a broken journey.
+- The full-suite Playwright rerun, the worker smoke and `check.sh` on the
+  final tree run as the lane's own verify round 2 (`logs/verify-labbeta2/`),
+  which the supervisor starts on exactly this commit; this entry claims
+  nothing beyond the runs above until that log says so.

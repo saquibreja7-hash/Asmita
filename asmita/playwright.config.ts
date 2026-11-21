@@ -61,7 +61,10 @@ export default defineConfig({
   },
   use: {
     baseURL: "http://127.0.0.1:3001",
-    trace: "on-first-retry",
+    // WP101: keep the trace of every failure. The previous "on-first-retry"
+    // setting never wrote one in this suite (no retries are configured), so
+    // an intermittent e2e failure left no network timeline to read.
+    trace: "retain-on-failure",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
