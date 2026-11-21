@@ -136,9 +136,9 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
         </span>
       </div>
 
-      <h2 ref={heading} tabIndex={-1} className="section-title mt-6 outline-none">
+      <h1 ref={heading} tabIndex={-1} className="section-title mt-6 outline-none">
         {t(locale, question.title)}
-      </h2>
+      </h1>
       {question.sub && <p className="muted mt-3 text-base leading-[1.6]">{t(locale, question.sub)}</p>}
 
       <div className="mt-8 grid gap-3">
@@ -176,9 +176,9 @@ function StopScreen({
 }) {
   return (
     <div>
-      <h2 ref={headingRef} tabIndex={-1} className="section-title outline-none">
+      <h1 ref={headingRef} tabIndex={-1} className="section-title outline-none">
         {title}
-      </h2>
+      </h1>
       {intro}
       <p className="mt-8 text-sm font-medium text-[var(--text-muted)]">{orgsLabel}</p>
       <div className="mt-3 space-y-3">{children}</div>

@@ -17,7 +17,6 @@ export default async function TrackPage() {
       <div className="page-canvas">
         <div className="container py-8 md:py-20">
           <div className="mx-auto max-w-xl">
-            <p className="eyebrow">{t(locale, "track.eyebrow")}</p>
             <h1 className="page-title-sm mt-2">{t(locale, "track.title")}</h1>
             <RegisterForm locale={locale} mode="track" />
           </div>

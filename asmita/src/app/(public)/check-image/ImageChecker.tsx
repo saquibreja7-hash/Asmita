@@ -112,8 +112,8 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
           onChange={onInputChange}
           disabled={!ageConfirmed}
           className="sr-only"
-          aria-hidden={!ageConfirmed}
-          tabIndex={ageConfirmed ? 0 : -1}
+          aria-hidden="true"
+          tabIndex={-1}
         />
         <div className="rounded-[var(--radius-box)] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
           <p className="font-medium text-[var(--ink)]">{t(locale, "check.upload.label")}</p>
@@ -136,14 +136,20 @@ export function ImageChecker({ locale, deepCheckEnabled }: { locale: Locale; dee
         </div>
       </div>
 
+      <p className="sr-only" role="status">
+        {status === "checking" ? t(locale, "check.checking") : status === "done" && result
+          ? t(locale, result.ai ? "check.result.aiFound.title" : "check.result.noneFound.title")
+          : ""}
+      </p>
+
       {/* CHECKING */}
       {status === "checking" && (
-        <p className="muted mt-6 text-center text-sm">{t(locale, "check.checking")}</p>
+        <p className="muted mt-6 text-center text-sm" aria-hidden="true">{t(locale, "check.checking")}</p>
       )}
 
       {/* ERROR */}
       {status === "error" && (
-        <div className="mt-6 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
+        <div role="alert" className="mt-6 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
           <p className="font-display text-[18px] leading-snug tracking-tight">{t(locale, "check.error.title")}</p>
           <p className="muted mt-3 text-sm leading-[1.7]">{t(locale, "check.error.body")}</p>
         </div>

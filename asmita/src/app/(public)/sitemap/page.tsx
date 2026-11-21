@@ -53,7 +53,6 @@ export default async function SitemapPage() {
         <section className="hero" aria-label={say("Sitemap", "साइटमैप")}>
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-5xl">
-              <span className="eyebrow">{say("Sitemap", "साइटमैप")}</span>
               <h1 className="page-title mt-5 max-w-3xl">
                 {say("Every page, in one place", "हर पेज, एक जगह")}
               </h1>

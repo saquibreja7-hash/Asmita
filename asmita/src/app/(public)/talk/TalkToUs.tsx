@@ -120,6 +120,10 @@ export function TalkToUs({ copy }: { copy: TalkCopy }) {
 
   return (
     <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 md:p-8" style={{ boxShadow: "var(--shadow-soft)" }}>
+      <p className="muted mb-5 text-sm leading-[1.7]">
+        {linkify(copy["talk.phone"], HELPLINE.display, `tel:${HELPLINE.tel}`, "link-underline font-medium text-[var(--ink)]")}
+      </p>
+
       {phase === "notice" && (
         <div>
           <h2 className="subsection-title leading-tight">{copy["talk.notice.heading"]}</h2>
@@ -176,9 +180,7 @@ export function TalkToUs({ copy }: { copy: TalkCopy }) {
         </div>
       )}
 
-      <p className="muted mt-8 border-t border-[var(--line)] pt-5 text-sm leading-[1.7]">
-        {linkify(copy["talk.phone"], HELPLINE.display, `tel:${HELPLINE.tel}`, "link-underline font-medium text-[var(--ink)]")}
-      </p>
+
     </div>
   );
 }

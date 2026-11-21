@@ -2,6 +2,7 @@ import { Illustration } from "@/components/Illustration";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
+import { GRIEVANCE_RESOLUTION_DAYS, PLATFORM_DEADLINE_HOURS } from "@/lib/escalation-ladder";
 import { t } from "@/lib/i18n";
 
 export default async function HowItWorksPage() {
@@ -16,56 +17,15 @@ export default async function HowItWorksPage() {
     { num: "06", title: t(locale, "hiw.step6.title"), body: t(locale, "hiw.step6.body") },
   ];
 
-  const tierIconProps = {
-    width: 18,
-    height: 18,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.75,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-  };
-
-  const tiers = [
-    {
-      label: "Tier 01",
-      icon: (
-        <svg {...tierIconProps}>
-          <rect x="3" y="5" width="18" height="14" rx="2" />
-          <path d="M3 7l9 6 9-6" />
-        </svg>
-      ),
-      title: t(locale, "hiw.tier1.title"),
-      body: t(locale, "hiw.tier1.body"),
-    },
-    {
-      label: "Tier 02",
-      icon: (
-        <svg {...tierIconProps}>
-          <path d="M7 17L17 7" />
-          <path d="M9 7h8v8" />
-        </svg>
-      ),
-      title: t(locale, "hiw.tier2.title"),
-      body: t(locale, "hiw.tier2.body"),
-    },
-    {
-      label: "Tier 03",
-      icon: (
-        <svg {...tierIconProps}>
-          <path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z" />
-        </svg>
-      ),
-      title: t(locale, "hiw.tier3.title"),
-      body: t(locale, "hiw.tier3.body"),
-    },
-  ];
+  const tiers = ([1, 2, 3] as const).map((tier) => ({
+    title: t(locale, `hiw.tier${tier}.title`),
+    body: t(locale, `hiw.tier${tier}.body`),
+  }));
 
   const timeline = [
-    { day: "24h", title: t(locale, "hiw.tl1.title"), body: t(locale, "hiw.tl1.body") },
-    { day: "48h", title: t(locale, "hiw.tl2.title"), body: t(locale, "hiw.tl2.body") },
-    { day: "7 days", title: t(locale, "hiw.tl3.title"), body: t(locale, "hiw.tl3.body") },
+    { day: `${PLATFORM_DEADLINE_HOURS} ${locale === "hi" ? "घंटे" : "hours"}`, title: t(locale, "hiw.tl1.title"), body: t(locale, "hiw.tl1.body") },
+    { day: locale === "hi" ? "जवाब न मिलने पर" : "If unanswered", title: t(locale, "hiw.tl2.title"), body: t(locale, "hiw.tl2.body") },
+    { day: `${GRIEVANCE_RESOLUTION_DAYS} ${locale === "hi" ? "दिन" : "days"}`, title: t(locale, "hiw.tl3.title"), body: t(locale, "hiw.tl3.body") },
   ];
 
   return (
@@ -74,8 +34,7 @@ export default async function HowItWorksPage() {
         {/* HERO */}
         <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">{t(locale, "hiw.pill")}</span>
-            <h1 className="page-title mt-8">
+            <h1 className="page-title">
               {t(locale, "hiw.hero.title.1")}{" "}
               <em className="not-italic text-gradient">{t(locale, "hiw.hero.title.2")}</em>{" "}
               {t(locale, "hiw.hero.title.3")}
@@ -132,36 +91,20 @@ export default async function HowItWorksPage() {
         {/* ROUTING - three-tier card grid */}
         <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
-            <span className="eyebrow mb-4 block">{t(locale, "hiw.routing.eyebrow")}</span>
             <h2 className="section-title">
               {t(locale, "hiw.routing.title")}
             </h2>
             <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
               {t(locale, "hiw.routing.sub")}
             </p>
-            <div className="mt-10 grid gap-4 md:grid-cols-3">
+            <ul className="mt-6 divide-y divide-[var(--line)] border-y border-[var(--line)]">
               {tiers.map((tier) => (
-                <div
-                  key={tier.label}
-                  className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6"
-                  style={{ boxShadow: "var(--shadow-soft)" }}
-                >
-                  <p className="eyebrow">
-                    {tier.label}
-                  </p>
-                  <span
-                    className="mt-3 inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-box)] bg-[var(--brand-soft)] text-[var(--brand)]"
-                    aria-hidden
-                  >
-                    {tier.icon}
-                  </span>
-                  <h3 className="mt-2 text-[18px] leading-[1.25] md:text-[20px]">
-                    {tier.title}
-                  </h3>
-                  <p className="muted mt-3 text-sm leading-[1.75]">{tier.body}</p>
-                </div>
+                <li key={tier.title} className="grid gap-2 py-5 sm:grid-cols-[1fr_2fr] sm:gap-6">
+                  <h3 className="subsection-title">{tier.title}</h3>
+                  <p className="muted leading-relaxed">{tier.body}</p>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </section>
 
@@ -172,7 +115,6 @@ export default async function HowItWorksPage() {
         {/* ESCALATION - horizontal timeline */}
         <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
-            <span className="eyebrow mb-4 block">{t(locale, "hiw.escalation.eyebrow")}</span>
             <h2 className="section-title">
               {t(locale, "hiw.escalation.title")}
             </h2>
@@ -189,7 +131,7 @@ export default async function HowItWorksPage() {
                   }}
                 >
                   <p
-                    className="eyebrow mb-4"
+                    className="mb-3 text-sm font-medium"
                     style={{ color: i === 0 ? "var(--brand)" : i === 1 ? "var(--brand)" : "var(--danger)" }}
                   >
                     {item.day}

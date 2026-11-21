@@ -1,26 +1,23 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import type { Locale } from "@/lib/i18n";
 
-export function LanguageToggle({ initialLocale }: { initialLocale: Locale }) {
+function saveLocale(locale: Locale) {
+  document.cookie = `asmita_lang=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
+export function LanguageToggle({ locale }: { locale: Locale }) {
   const router = useRouter();
-  const [locale, setLocale] = useState<Locale>(initialLocale);
-  const mounted = useRef(false);
 
   useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
-      return;
-    }
-    document.cookie = `asmita_lang=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
     document.documentElement.lang = locale;
   }, [locale]);
 
   function switchLocale(next: Locale) {
     if (next === locale) return;
-    setLocale(next);
+    saveLocale(next);
     router.refresh();
   }
 

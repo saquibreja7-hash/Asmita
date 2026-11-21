@@ -5,6 +5,7 @@ import { getLocale } from "@/lib/get-locale";
 import { SupporterLogos } from "@/components/layout/Supporters";
 import { HELPLINE } from "@/lib/helpline";
 import { t } from "@/lib/i18n";
+import { PLATFORM_DEADLINE_HOURS } from "@/lib/escalation-ladder";
 import { CHAT_COPY_KEYS, type ChatCopy } from "./chat-copy";
 import { HomeChat } from "./HomeChat";
 import { AudiencePicker } from "./AudiencePicker";
@@ -62,9 +63,9 @@ const commitments = [
     detail: "Current reporting uses links as text. We do not receive or inspect the image.",
   },
   {
-    value: "24 hours",
+    value: `${PLATFORM_DEADLINE_HOURS} hours`,
     label: "Qualifying complaints",
-    detail: "Under the IT Rules, platforms must take reasonable removal steps within 24 hours of receiving a qualifying complaint.",
+    detail: `Under Rule 3(2)(b), platforms must take reasonable and practicable steps to remove or disable access within ${PLATFORM_DEADLINE_HOURS} hours of receiving a qualifying complaint.`,
   },
   {
     value: "No media",
@@ -114,7 +115,7 @@ const hindi = {
   ],
   commitments: [
     { value: "केवल URL", label: "बनावट में ही निजता", detail: "मौजूदा रिपोर्ट में लिंक केवल पाठ के रूप में लिए जाते हैं। हम तस्वीर प्राप्त या जाँच नहीं करते।" },
-    { value: "24 घंटे", label: "योग्य शिकायतें", detail: "IT Rules के तहत योग्य शिकायत मिलने पर प्लेटफ़ॉर्म को हटाने के उचित कदम 24 घंटे में उठाने होते हैं।" },
+    { value: `${PLATFORM_DEADLINE_HOURS} घंटे`, label: "योग्य शिकायतें", detail: `नियम 3(2)(b) के तहत, योग्य शिकायत मिलने के ${PLATFORM_DEADLINE_HOURS} घंटे के भीतर प्लेटफ़ॉर्म को सामग्री हटाने या उस तक पहुँच रोकने के लिए उचित और व्यावहारिक कदम उठाने होते हैं।` },
     { value: "कोई मीडिया नहीं", label: "हम क्या नहीं करते", detail: "आपके साझा किए लिंक पर मौजूद निजी सामग्री को हम खोलते, देखते या सहेजते नहीं हैं।" },
   ],
   faqs: [
@@ -148,14 +149,13 @@ export default async function HomePage() {
         <section className="home-hero" aria-label={say("Introduction", "परिचय")}>
           <div className="container relative z-[1] grid items-center gap-10 pb-14 pt-14 md:pb-20 md:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
             <div>
-              <span className="eyebrow">{say("Free and confidential, for India", "भारत के लिए नि:शुल्क और गोपनीय")}</span>
-              <h1 className="hero-title mt-7 max-w-3xl">
+              <h1 className="hero-title max-w-3xl">
                 {say("You are not alone. Let's take it down.", "आप अकेली नहीं हैं। आइए इसे हटवाएँ।")}
               </h1>
               <p className="font-size-large mt-6 max-w-xl text-[var(--text)]">
                 {say(
-                  "Asmita is a free takedown service for intimate images shared without consent. Share the links, sign the notice, and we handle the platforms. Your photos never leave your phone.",
-                  "अस्मिता बिना सहमति के साझा की गई अंतरंग तस्वीरों को हटवाने की मुफ़्त सेवा है। लिंक साझा करें, सूचना पर हस्ताक्षर करें, और प्लेटफ़ॉर्म से हम बात करेंगे। आपकी तस्वीरें कभी आपके फ़ोन से बाहर नहीं जातीं।",
+                  "Asmita offers free, confidential help in India for intimate images shared without consent. Share the links, sign the notice, and we handle the platforms. Your photos never leave your phone.",
+                  "अस्मिता भारत में बिना सहमति साझा की गई अंतरंग तस्वीरों को हटवाने के लिए मुफ़्त और गोपनीय मदद देती है। लिंक साझा करें, सूचना पर हस्ताक्षर करें, और प्लेटफ़ॉर्म से हम बात करेंगे। आपकी तस्वीरें कभी आपके फ़ोन से बाहर नहीं जातीं।",
                 )}
               </p>
               <div className="mt-9 flex flex-wrap items-center gap-3">
@@ -181,9 +181,8 @@ export default async function HomePage() {
         <section className="container pt-10 md:pt-14" aria-labelledby="help-heading">
           <div className="home-help-band grid gap-8 lg:grid-cols-[0.75fr_2fr] lg:items-center">
             <div>
-              <p className="eyebrow">{say("Get help right now", "अभी मदद प्राप्त करें")}</p>
               <h2 id="help-heading" className="section-title mt-3">
-                {say("Talk to someone, any time.", "किसी से बात करें, कभी भी।")}
+                {say("Call the helpline or use the AI assistant", "हेल्पलाइन पर कॉल करें या एआई सहायक से बात करें")}
               </h2>
               <p className="mt-3 text-[15px] leading-[1.6] text-[var(--text)]">
                 {say("Free and private. Choose whatever feels easiest.", "मुफ़्त और निजी। जो आसान लगे, वह चुनें।")}
@@ -281,14 +280,13 @@ export default async function HomePage() {
         <section id="issue" className="section-pad" aria-labelledby="issue-heading">
           <div className="container grid items-start gap-12 lg:grid-cols-[1.2fr_1fr] lg:gap-24">
             <div>
-              <span className="eyebrow">{say("The issue", "समस्या")}</span>
               <h2 id="issue-heading" className="section-title mt-5">
                 {say("The internet makes it easier to harm people. The law gives you a way back.", "इंटरनेट पर नुकसान फैलना आसान है। कानून कार्रवाई का रास्ता देता है।")}
               </h2>
               <p className="mt-6 max-w-xl text-[16px] leading-[1.5] text-[var(--text)] md:text-[18px]">
                 {say(
-                  "Non-consensual intimate imagery, deepfakes, morphing, and sextortion spread fast across platforms and WhatsApp groups. Platforms must act on certain takedown notices within 24 hours under Indian law. We turn that right into one calm, reviewable flow.",
-                  "बिना सहमति साझा की गई निजी तस्वीरें, डीपफ़ेक, बदली हुई तस्वीरें और धमकियाँ कई प्लेटफ़ॉर्म पर तेज़ी से फैल सकती हैं। भारतीय कानून के तहत कुछ हटाने की सूचनाओं पर प्लेटफ़ॉर्म को 24 घंटे में कार्रवाई करनी होती है। हम इस रास्ते को शांत और समझने योग्य चरणों में रखते हैं।",
+                  "Non-consensual intimate imagery, deepfakes, morphing, and sextortion spread fast across platforms and WhatsApp groups. Asmita helps you review and send a removal request for the links you report.",
+                  "बिना सहमति साझा की गई निजी तस्वीरें, डीपफ़ेक, बदली हुई तस्वीरें और धमकियाँ कई प्लेटफ़ॉर्म पर तेज़ी से फैल सकती हैं। अस्मिता रिपोर्ट किए गए लिंक हटाने का अनुरोध तैयार करने और भेजने में आपकी मदद करती है।",
                 )}
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
@@ -319,7 +317,6 @@ export default async function HomePage() {
           <div className="container">
             <div className="flex flex-wrap items-end justify-between gap-6">
               <div>
-                <span className="eyebrow">{say("What we do", "हम क्या करते हैं")}</span>
                 <h2 id="features-heading" className="section-title mt-5">
                   {say("Tools for taking action on content", "सामग्री पर कार्रवाई के साधन")}
                 </h2>
@@ -376,7 +373,6 @@ export default async function HomePage() {
         {/* AUDIENCES */}
         <section className="section-pad" aria-labelledby="audience-heading">
           <div className="container text-center">
-            <span className="eyebrow">{say("Who we help", "हम किसकी मदद करते हैं")}</span>
             <h2 id="audience-heading" className="section-title mx-auto mt-5 max-w-3xl">
               {say("Everyone has a role to play", "हर व्यक्ति मदद कर सकता है")}
             </h2>
@@ -444,7 +440,6 @@ export default async function HomePage() {
         <section className="section-pad" aria-labelledby="faq-heading">
           <div className="container grid gap-12 lg:grid-cols-[1fr_2fr] lg:gap-24">
             <div>
-              <span className="eyebrow">{say("Questions", "सवाल")}</span>
               <h2 id="faq-heading" className="section-title mt-5">
                 {say("Honest answers first", "पहले स्पष्ट जवाब")}
               </h2>

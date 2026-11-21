@@ -20,3 +20,21 @@ for (const route of routes) {
     expect(actionable).toEqual([]);
   });
 }
+
+test("the footer language control persists the selected language across viewport changes", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const english = page.getByRole("button", { name: "EN", exact: true });
+  const hindi = page.getByRole("button", { name: "हिंदी", exact: true });
+  const root = page.locator("html");
+
+  await hindi.click();
+  await expect(root).toHaveAttribute("lang", "hi");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(hindi).toHaveAttribute("aria-pressed", "true");
+
+  await english.click();
+  await expect(root).toHaveAttribute("lang", "en");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(english).toHaveAttribute("aria-pressed", "true");
+});

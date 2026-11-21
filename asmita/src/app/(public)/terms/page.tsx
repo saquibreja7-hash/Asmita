@@ -33,18 +33,13 @@ export default function TermsPage() {
         {/* HERO */}
         <section className="container page-hero text-center page-hero-split">
           <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">Terms of use</span>
-            <h1 className="page-title mt-8">
-              The rules of the
-              <br />
-              <em className="not-italic text-gradient">road</em>.
-            </h1>
+            <h1 className="page-title">Terms of use</h1>
             <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
               These Terms set out what you can expect from Asmita, what we
               expect from you, and the legal framework that holds both of
               us. Written in plain language. Reviewed against Indian law.
             </p>
-            <p className="eyebrow mt-8">
+            <p className="muted mt-6 max-w-prose text-sm leading-relaxed">
               Last updated · 17 May 2026 · Version 0.4 · Draft pending legal
               review<ReadingTime label="{n} min read" />
             </p>
@@ -59,7 +54,6 @@ export default function TermsPage() {
         {/* TL;DR */}
         <section className="container section-pad">
           <div className="mx-auto max-w-3xl">
-            <span className="eyebrow mb-4 block">The short version</span>
             <h2 className="section-title">Three things you are agreeing to.</h2>
             <ItemCards
               mark="check"

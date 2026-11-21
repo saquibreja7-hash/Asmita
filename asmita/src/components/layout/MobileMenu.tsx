@@ -10,6 +10,7 @@ import { NavItemLink, isCurrent } from "./NavLinks";
 export function MobileMenu({ locale, groups }: { locale: Locale; groups: NavGroup[] }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -20,7 +21,10 @@ export function MobileMenu({ locale, groups }: { locale: Locale; groups: NavGrou
       }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape" && !document.querySelector("dialog:modal")) {
+        if (wrapRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
+        setOpen(false);
+      }
     }
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -33,6 +37,7 @@ export function MobileMenu({ locale, groups }: { locale: Locale; groups: NavGrou
   return (
     <div className="relative" ref={wrapRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="btn btn-secondary !min-h-[44px] !px-4"
         aria-expanded={open}

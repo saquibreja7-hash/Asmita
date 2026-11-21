@@ -1,4 +1,4 @@
-import { Illustration } from "@/components/Illustration";
+import { QuickExit } from "@/components/QuickExit";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 const scenarios = [
   {
     title: "My private photos or video were shared without my consent.",
-    action: "Start a report and prepare a takedown notice.",
+    action: "File a complaint and prepare a takedown notice.",
     href: "/start",
   },
   {
@@ -36,8 +36,8 @@ const scenarios = [
   },
   {
     title: "There is a fake or AI-made nude of me.",
-    action: "Check the image first, then report it. A fake image is still abuse.",
-    href: "/check-image",
+    action: "You can report a fake image directly. Checking it for AI signals is optional.",
+    href: "/start",
   },
   {
     title: "Someone morphed my photo from social media.",
@@ -60,7 +60,7 @@ const steps = [
   {
     n: "2",
     title: "Report and send a takedown",
-    body: "We help you prepare a legally grounded notice. You read and sign it before verified delivery. Fingerprint generation stays on your device; an optional deeper AI check sends the image with consent.",
+    body: "We help you prepare a legally grounded notice. You read and sign it before verified delivery. Fingerprints are generated on your device. If a separate deeper image check is available, it sends the image only when you consent.",
   },
   {
     n: "3",
@@ -77,10 +77,10 @@ const steps = [
 const tools = [
   {
     tag: "Report",
-    title: "Start a report",
+    title: "File a complaint",
     body: "Prepare a takedown notice. Review and sign when you are ready; delivery requires verified contacts.",
     href: "/start",
-    cta: "Start a report",
+    cta: "File a complaint",
   },
   {
     tag: "Check",
@@ -100,21 +100,21 @@ const tools = [
 
 const hindi = {
   scenarios: [
-    { title: "मेरी निजी तस्वीर या वीडियो बिना मेरी सहमति के साझा किया गया है।", action: "रिपोर्ट शुरू करें। हम हटाने की सूचना तैयार करने में मदद करेंगे।" },
+    { title: "मेरी निजी तस्वीर या वीडियो बिना मेरी सहमति के साझा किया गया है।", action: "शिकायत दर्ज करें। हम हटाने की सूचना तैयार करने में मदद करेंगे।" },
     { title: "कोई मेरी तस्वीरें साझा करने की धमकी दे रहा है।", action: "इंतज़ार न करें। संदेशों को सबूत के रूप में सुरक्षित रखें और मदद लें।" },
     { title: "कोई पैसे माँग रहा है और तस्वीरें लीक करने की धमकी दे रहा है।", action: "और पैसे या सामग्री न भेजें। संदेश सुरक्षित रखें और घटना की रिपोर्ट करें।" },
-    { title: "मेरी नकली या AI से बनाई गई निजी तस्वीर है।", action: "तस्वीर में AI के संकेत जाँचें, फिर रिपोर्ट करें। नकली तस्वीर भी उत्पीड़न है।" },
+    { title: "मेरी नकली या AI से बनाई गई निजी तस्वीर है।", action: "आप नकली तस्वीर की शिकायत सीधे कर सकते हैं। एआई के संकेतों की जाँच वैकल्पिक है।" },
     { title: "किसी ने सोशल मीडिया की मेरी तस्वीर बदल दी है।", action: "बदली हुई तस्वीर की रिपोर्ट भी इसी रास्ते से की जा सकती है।" },
     { title: "तस्वीर में दिख रहा व्यक्ति 18 साल से कम उम्र का है।", action: "इसके लिए अलग, सुरक्षित रास्ता है। सही बाल-सुरक्षा सहायता देखें।" },
   ],
   steps: [
     { title: "पहले सुरक्षित सबूत रखें", body: "लिंक केवल पाठ के रूप में रखें। संदेश, खाते का नाम, तारीख और समय सुरक्षित रखें। निजी तस्वीर को सहेजने या आगे भेजने से बचें। 18 साल से कम उम्र के किसी व्यक्ति की निजी तस्वीर कभी न सहेजें या भेजें।" },
-    { title: "रिपोर्ट और हटाने की सूचना", body: "हम कानूनी आधार वाली सूचना तैयार करने में मदद करते हैं। आप उसे पढ़कर हस्ताक्षर करते हैं। आपकी तस्वीर आपके डिवाइस से बाहर नहीं जाती।" },
+    { title: "रिपोर्ट और हटाने की सूचना", body: "हम कानूनी आधार वाली सूचना तैयार करने में मदद करते हैं। आप उसे पढ़कर हस्ताक्षर करते हैं। डिजिटल फ़िंगरप्रिंट आपके डिवाइस पर बनते हैं। अलग से गहरी तस्वीर जाँच उपलब्ध हो तो उसमें तस्वीर केवल आपकी सहमति से भेजी जाती है।" },
     { title: "संपर्क रोकें और खाते सुरक्षित करें", body: "सबूत सुरक्षित रखने के बाद जवाब देना बंद करें। पासवर्ड बदलें, दो-कारक सुरक्षा चालू करें और खाते की गोपनीयता जाँचें।" },
     { title: "अतिरिक्त सहायता लें", body: "हेल्पलाइन, परामर्शदाता या व्यावहारिक मार्गदर्शिका से मदद लें। आपको यह अकेले नहीं झेलना है।" },
   ],
   tools: [
-    { tag: "रिपोर्ट", title: "रिपोर्ट शुरू करें", body: "हटाने की सूचना तैयार करें। आगे बढ़ने से पहले उसे पढ़ें और हस्ताक्षर करें।", cta: "रिपोर्ट शुरू करें" },
+    { tag: "रिपोर्ट", title: "शिकायत दर्ज करें", body: "हटाने की सूचना तैयार करें। आगे बढ़ने से पहले उसे पढ़ें और हस्ताक्षर करें।", cta: "शिकायत दर्ज करें" },
     { tag: "जाँच", title: "तस्वीर जाँचें", body: "देखें कि तस्वीर में AI से बनाए या बदले जाने के संकेत हैं या नहीं।", cta: "तस्वीर जाँचें" },
     { tag: "18 से कम", title: "नाबालिग के लिए सहायता", body: "18 साल से कम उम्र के व्यक्ति के लिए बाल-सुरक्षा रास्ता देखें। यहाँ तस्वीर अपलोड नहीं होती।", cta: "सही मदद देखें" },
   ],
@@ -125,14 +125,14 @@ export default async function GetHelpPage() {
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
   return (
     <AppShell>
+      <QuickExit locale={locale} enableIdle={false} />
       <div className="page-canvas">
         {/* HERO + safety first */}
         <section className="hero" aria-label={say("Get help", "मदद लें")}>
-          <div className="hero-content container section-pad page-hero-split">
+          <div className="hero-content container py-8 md:py-12">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("Get help", "मदद लें")}</span>
-              <h1 className="page-title mt-5">
-                {say("Something happened. Here is what to do.", "कुछ हुआ है। अब आप ये कदम उठा सकते हैं।")}
+              <h1 className="page-title">
+                {say("Get help with image-based abuse", "तस्वीरों के ज़रिए हुए उत्पीड़न में मदद लें")}
               </h1>
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
                 {say(
@@ -141,14 +141,18 @@ export default async function GetHelpPage() {
                 )}
               </p>
             </div>
-            <Illustration name="page-get-help" eager className="page-hero-art" />
+
+            <div className="mx-auto mt-6 flex max-w-3xl flex-wrap justify-center gap-3">
+              <Link className="btn btn-primary btn-arrow" href="/start">{say("File a complaint", "शिकायत दर्ज करें")}</Link>
+              <Link className="btn btn-secondary" href="/minor-support">{say("Under-18 help", "कम उम्र में मदद")}</Link>
+            </div>
 
             {/* Emergency strip — safety before instructions */}
-            <div className="mx-auto mt-10 max-w-3xl rounded-[var(--radius-box)] surface-card p-6">
+            <div className="mx-auto mt-6 max-w-3xl rounded-[var(--radius-box)] surface-card p-5">
               <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--ink)]">
                 {say("If you need urgent help", "अगर तुरंत मदद चाहिए")}
               </p>
-              <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+              <ul className="mt-4 grid gap-3 text-pretty sm:grid-cols-2">
                 <li className="text-[15px] leading-[1.5] text-[var(--text)]">
                   <strong>{say("In immediate danger?", "तुरंत खतरा है?")}</strong> {say("Call", "कॉल करें")}{" "}
                   <a className="text-link" href="tel:112">112</a>.
@@ -187,28 +191,24 @@ export default async function GetHelpPage() {
                   "जो भी हुआ है, मदद का रास्ता है। अपनी स्थिति के सबसे करीब विकल्प चुनें।",
                 )}
               </p>
-              <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {scenarios.map((s, i) => (
-                  <Link
-                    key={s.title}
-                    href={s.href}
-                    className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
-                  >
-                    <h3 className="text-[17px] font-medium leading-snug text-[var(--ink)]">
-                      &ldquo;{locale === "hi" ? hindi.scenarios[i].title : s.title}&rdquo;
-                    </h3>
-                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
-                      {locale === "hi" ? hindi.scenarios[i].action : s.action}
-                    </p>
-                    <span className="mt-4 inline-block text-sm font-medium text-[var(--ink)]">
-                      {say("What to do", "क्या करें")}{" "}
-                      <span className="transition-transform group-hover:translate-x-0.5 inline-block" aria-hidden>
-                        →
-                      </span>
-                    </span>
-                  </Link>
+              <ul className="mt-6 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+                {scenarios.map((scenario, i) => (
+                  <li key={scenario.title} className="py-4">
+                    <details className="faq-item">
+                      <summary>{locale === "hi" ? hindi.scenarios[i].title : scenario.title}</summary>
+                      <p className="max-w-prose text-[var(--text)]">
+                        {locale === "hi" ? hindi.scenarios[i].action : scenario.action}
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3">
+                        <Link className="text-link" href={scenario.href}>
+                          {scenario.href === "/minor-support" ? say("Get under-18 support", "कम उम्र में मदद लें") : say("File a complaint", "शिकायत दर्ज करें")}
+                        </Link>
+                        {i === 3 && <Link className="text-link" href="/check-image">{say("Check the image if you want", "चाहें तो तस्वीर जाँचें")}</Link>}
+                      </div>
+                    </details>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           </div>
         </section>
@@ -217,7 +217,6 @@ export default async function GetHelpPage() {
         <section className="transform-section" aria-labelledby="steps-heading">
           <div className="transform-content container section-pad">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("The four steps", "चार चरण")}</span>
               <h2
                 id="steps-heading"
                 className="section-title mt-4"
@@ -265,9 +264,6 @@ export default async function GetHelpPage() {
               <div className="mt-10 grid gap-8 md:grid-cols-3">
                 {tools.map((tool, i) => (
                   <div key={tool.title} className="flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 shadow-[var(--shadow-sm)]">
-                    <p className="eyebrow text-[var(--ink)]">
-                      {locale === "hi" ? hindi.tools[i].tag : tool.tag}
-                    </p>
                     <h3 className="mt-3 text-[19px] font-medium text-[var(--ink)]">
                       {locale === "hi" ? hindi.tools[i].title : tool.title}
                     </h3>
@@ -302,7 +298,7 @@ export default async function GetHelpPage() {
                     <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--success)]">
                       {say("What it can do", "क्या संभव है")}
                     </p>
-                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--text)]">
+                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-pretty text-[var(--text)]">
                       <li>{say("Get content removed from platforms that respond.", "कार्रवाई करने वाले प्लेटफ़ॉर्म से सामग्री हटवाई जा सकती है।")}</li>
                       <li>{say("Ask search engines to stop showing it in results.", "खोज परिणामों से सामग्री हटाने का अनुरोध किया जा सकता है।")}</li>
                       <li>{say("Track each reported link and submit a new link if content reappears.", "हर रिपोर्ट किए लिंक की स्थिति देखें; सामग्री दोबारा दिखे तो नया लिंक दें।")}</li>
@@ -312,7 +308,7 @@ export default async function GetHelpPage() {
                     <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--warning)]">
                       {say("What it cannot do", "क्या नहीं हो सकता")}
                     </p>
-                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-[var(--text)]">
+                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-pretty text-[var(--text)]">
                       <li>{say("Erase content from the whole internet or private devices.", "पूरे इंटरनेट या निजी डिवाइस से सामग्री मिटाने की गारंटी नहीं है।")}</li>
                       <li>{say("Force a platform that ignores the law to act instantly.", "किसी प्लेटफ़ॉर्म से तुरंत कार्रवाई करवाने की गारंटी नहीं है।")}</li>
                       <li>{say("Promise a result. We tell you exactly where things stand.", "किसी परिणाम का वादा नहीं है; हम स्थिति साफ़ बताते हैं।")}</li>
@@ -339,7 +335,7 @@ export default async function GetHelpPage() {
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
                 <Link className="btn btn-primary btn-arrow !m-0" href="/start">
-                  {say("Start a report", "रिपोर्ट शुरू करें")}
+                  {say("File a complaint", "शिकायत दर्ज करें")}
                 </Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/resources">
                   {say("Browse resources", "सहायता सामग्री देखें")}

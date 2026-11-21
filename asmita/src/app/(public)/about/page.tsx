@@ -41,8 +41,7 @@ export default async function AboutPage() {
         <section className="hero" aria-label={say("About Asmita", "अस्मिता के बारे में")}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("About", "परिचय")}</span>
-              <h1 className="page-title mt-5">
+              <h1 className="page-title">
                 {say("A response platform, not a bystander", "कार्रवाई में साथ देने वाला मंच")}
               </h1>
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
@@ -75,10 +74,10 @@ export default async function AboutPage() {
                 <h2 className="section-title">
                   {say("What we are not", "हम क्या नहीं हैं")}
                 </h2>
-                <ul className="mt-5 space-y-2 text-[16px] leading-[1.7] text-[var(--text)]">
+                <ul className="mt-5 space-y-2 text-[16px] leading-[1.7] text-pretty text-[var(--text)]">
                   <li>{say("Not a government body. We route you to official channels, but we are independent of them.", "हम सरकारी संस्था नहीं हैं। आधिकारिक रास्ते दिखाते हैं, पर उनसे स्वतंत्र हैं।")}</li>
                   <li>{say("Not a charity asking for donations.", "हम दान माँगने वाली संस्था नहीं हैं।")}</li>
-                  <li>{say("Not a place your image is ever uploaded, stored, or seen.", "यहाँ आपकी निजी तस्वीर अपलोड, सहेजी या देखी नहीं जाती।")}</li>
+                  <li>{say("Filing a complaint does not upload or store your photo.", "शिकायत दर्ज करने पर आपकी तस्वीर अपलोड या सहेजी नहीं जाती।")}</li>
                 </ul>
               </div>
             </div>
