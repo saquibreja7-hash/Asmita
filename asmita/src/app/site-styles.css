@@ -293,6 +293,10 @@
   height: auto;
 }
 
+/* Header: the PNG has an 18px transparent margin at this width (48px of
+   400px at 150px wide), so pull it back to line up with the page content. */
+.brand-logo-header { margin-left: -18px; }
+
 /* ── Phone refinements ────────────────────────────────────────── */
 
 @media (max-width: 640px) {
