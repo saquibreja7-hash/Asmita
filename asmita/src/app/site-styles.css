@@ -642,7 +642,7 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-pills);
+  border-radius: var(--radius-box);
   color: var(--text);
 }
 

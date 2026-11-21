@@ -45,7 +45,7 @@
   --radius-3xl: 40px;
   --radius-full: 100px;
   --radius-cards: var(--radius-box);
-  --radius-buttons: 100px;
+  --radius-buttons: var(--radius-box); /* buttons share the 12px box corner */
   --radius-pills: 9999px;
 
   --shadow-md: rgba(0, 0, 0, 0.1) 0px 0px 10px 0px;

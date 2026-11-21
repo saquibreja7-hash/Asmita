@@ -61,7 +61,7 @@ export function ReferenceCard({ reference, locale, note, className = "mt-8" }: {
         </p>
         <button
           aria-describedby="case-reference-title"
-          className={`inline-flex min-h-[44px] min-w-[7.5rem] shrink-0 items-center justify-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors ${
+          className={`inline-flex min-h-[44px] min-w-[7.5rem] shrink-0 items-center justify-center gap-2 rounded-[var(--radius-box)] border px-4 text-sm font-medium transition-colors ${
             copied
               ? "border-[var(--brand)] bg-[var(--brand)] text-white"
               : "border-[var(--brand)] bg-[var(--card)] text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]"
