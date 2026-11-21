@@ -30,6 +30,14 @@ async function syntheticPng(page: import("@playwright/test").Page): Promise<Buff
   return Buffer.from(base64, "base64");
 }
 
+test.beforeEach(async ({ page }) => {
+  // Pin the motion environment like tests/e2e/accessibility.spec.ts does, so
+  // scroll-into-view is instant (the site switches its smooth scrolling off
+  // under prefers-reduced-motion) and the bottom-of-page clicks are
+  // deterministic.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+});
+
 test("AI check exposes an age-gated local image picker", async ({ page }) => {
   await page.goto("/check-image");
   const picker = page.locator('input[type="file"]');
@@ -43,12 +51,27 @@ test("registered adult can generate a fingerprint and submit it with a URL", asy
   test.setTimeout(120_000);
   await register(page);
   await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic-test");
+  // Wait for the debounced link checks (WP40 A7: they render from the settled
+  // text ~600 ms after typing). Hashing a small file can finish inside that
+  // window, and then the first click blurs the still-focused textarea, the
+  // blur flush renders the checks and removes the platform question, and the
+  // reflow moves the page under the pointer so the click misses. Waiting for
+  // the app's own checks list makes the click land on a settled page.
+  await expect(page.locator("#url-checks")).toBeVisible();
+  // WP42: the hashing runs in the Web Worker, off the page's main thread.
+  // Its script is a same-origin file the bundler emits, so it loads with 200
+  // under the page's CSP (worker-src 'self').
+  const workerScript = page.waitForResponse(
+    (r) => /(hash[._-]?worker|turbopack-worker)/i.test(r.url()) && r.status() === 200,
+    { timeout: 30_000 },
+  );
   const picker = page.locator('input[type="file"]');
   await expect(picker).toHaveCount(1);
   await picker.setInputFiles({
     name: "synthetic.png", mimeType: "image/png",
     buffer: await syntheticPng(page),
   });
+  expect((await workerScript).ok()).toBe(true);
   await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
   await page.getByLabel(/I declare/).check();
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
@@ -99,7 +122,11 @@ test("hash-only survivor who does not know where the image is gets StopNCII guid
   });
   await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
   await page.getByLabel(/I declare/).check();
-  await expect(page.getByRole("button", { name: "Continue to review" })).toBeDisabled();
+  // The button is never disabled to block validation (WP40 A9): without a
+  // platform choice, submitting focuses the platform question and says why.
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await expect(page.getByRole("group", { name: "Which platforms is the content on?" })).toBeFocused();
+  await expect(page.getByRole("status").filter({ hasText: /Choose where the image is/ })).toBeVisible();
   const unsure = page.getByRole("checkbox", { name: /I am not sure where it is/ });
   await unsure.check();
   // Choosing a platform clears "not sure", and the other way round.

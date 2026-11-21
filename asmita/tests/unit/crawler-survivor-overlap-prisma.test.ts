@@ -8,6 +8,7 @@ const db = vi.hoisted(() => {
     case: { findMany: vi.fn() },
     deletionJob: { createMany: vi.fn() },
     crawlConsent: { updateMany: vi.fn() },
+    partnerShareConsent: { updateMany: vi.fn() },
     hashSubmission: { updateMany: vi.fn() },
     crawlFinding: { deleteMany: vi.fn() },
     // WP28 (ADR 008): a withdrawal now deletes the case's SSCD embeddings too.
@@ -42,6 +43,9 @@ beforeEach(() => {
   inMemoryAuditLog.splice(0, inMemoryAuditLog.length);
   db.platform.findFirst.mockResolvedValue({ id: "platform-ig" });
   db.$queryRaw.mockResolvedValue([{ id: "c1" }]);
+  // No partner-sharing agreement exists in these fixtures, so the deletion
+  // request's partner-share withdrawal is a no-op (no audit entry).
+  db.partnerShareConsent.updateMany.mockResolvedValue({ count: 0 });
 });
 afterEach(() => {
   vi.unstubAllEnvs();

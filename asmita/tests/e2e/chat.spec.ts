@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 // The E2E server has no SARVAM_CHAT_KEY, so a message that passes the limits
 // and the link guard ends with 503 and nothing reaches Sarvam.
@@ -42,6 +43,29 @@ test("survivor reads the chat notice first, and nothing is sent until they write
   expect([429, 503]).toContain((await reply).status());
   await expect(chat.getByRole("alert")).toContainText(/call the helpline/);
   await expect(chat.getByRole("link", { name: "+91 80654 80788" })).toHaveAttribute("href", "tel:+918065480788");
+});
+
+test("the open chat is accessible and Escape returns focus to its trigger", async ({ page }) => {
+  await page.goto("/");
+  const trigger = page.getByRole("button", { name: /Chat with us/ });
+  await trigger.click();
+  const chat = page.getByRole("dialog", { name: "Chat with Asmita Saathi" });
+  await chat.getByRole("button", { name: "Continue and start the chat" }).click();
+
+  const results = await new AxeBuilder({ page })
+    .include("dialog[open]")
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+  for (let i = 0; i < 10; i += 1) {
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => (
+      document.activeElement === document.body || Boolean(document.activeElement?.closest("dialog[open]"))
+    ))).toBe(true);
+  }
+  await page.keyboard.press("Escape");
+  await expect(chat).toBeHidden();
+  await expect(trigger).toBeFocused();
 });
 
 test("the chat route refuses links and images, routes under-18s, and caps messages site-wide", async ({ request }) => {

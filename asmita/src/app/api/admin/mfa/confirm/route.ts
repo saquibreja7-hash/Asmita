@@ -7,6 +7,7 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { writeAuditLog } from "@/lib/audit";
 import { logSecurityEvent } from "@/lib/security-log";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
+import { adminSessionCookieName } from "@/lib/cookie-names";
 
 const schema = z.object({ token: z.string().regex(/^\d{6}$/) });
 
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     actorId: auth.session.sub, data: { action: "ADMIN_MFA_CONFIRMED" },
   });
   const response = NextResponse.json({ ok: true, redirectTo: "/admin/cases" });
-  response.cookies.set("asmita_admin_session", session, {
+  response.cookies.set(adminSessionCookieName(), session, {
     httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production",
     path: "/", maxAge: 8 * 60 * 60,
   });

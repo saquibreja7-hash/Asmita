@@ -62,6 +62,9 @@ export function Illustration({
       height={height}
       className={`h-auto w-full ${className}`}
       loading={eager ? "eager" : "lazy"}
+      // The one eager illustration per page is the LCP candidate: give it the
+      // first fetch slot. Everything else stays lazy and unprioritised.
+      fetchPriority={eager ? "high" : undefined}
       decoding="async"
     />
   );

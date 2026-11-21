@@ -47,9 +47,9 @@ export default async function GuidesPage() {
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label={say("Practical guides", "व्यावहारिक मार्गदर्शिकाएँ")}>
-          <div className="hero-content container section-pad page-hero-split">
+          <div className="hero-content container py-8 md:py-14 page-hero-split">
             <div className="mx-auto max-w-3xl">
-              <Link href="/resources" className="eyebrow">
+              <Link href="/resources" className="text-link text-sm font-medium">
                 {say("Resources", "संसाधन")}
               </Link>
               <h1 className="page-title mt-4">
@@ -62,7 +62,7 @@ export default async function GuidesPage() {
                 {say("3 guides", "3 मार्गदर्शिकाएँ")}<ReadingTime label={t(locale, "reading.minutes")} />
               </p>
             </div>
-            <Illustration name="page-guides" eager className="page-hero-art" />
+            <Illustration name="page-guides" eager className="page-hero-art hidden lg:block" />
           </div>
         </section>
 

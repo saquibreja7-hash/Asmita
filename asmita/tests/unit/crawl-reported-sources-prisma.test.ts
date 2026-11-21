@@ -15,10 +15,18 @@ const db = vi.hoisted(() => {
     // WP28 (ADR 008): the erasure deletes the case's SSCD embeddings too.
     findingEmbedding: { deleteMany: fn() },
     crawlConsent: { findMany: fn(), deleteMany: fn() },
+    partnerShareConsent: { deleteMany: fn() },
+    // WP32: the erasure sweep withdraws shared fingerprints from the partner
+    // feed (inside the same transaction) and deletes outcome rows.
+    hashSubmission: { updateMany: fn(), findMany: fn() },
+    partnerFeedEvent: { findMany: fn(), createMany: fn() },
+    partnerOutcome: { deleteMany: fn() },
     submittedUrl: { findMany: fn(), findFirst: fn(), findUnique: fn(), create: fn(), updateMany: fn(), deleteMany: fn() },
-    hashSubmission: { updateMany: fn() },
     platform: { findFirst: fn() },
-    case: { create: fn(), findMany: fn(), findFirst: fn(), updateMany: fn() },
+    // WP33: the partner lookup behind the findings gate and the channel
+    // alert; no partners in these fixtures, so nothing is gated or sent.
+    platformPartner: { findMany: fn() },
+    case: { create: fn(), findMany: fn(), findFirst: fn(), findUnique: fn(), updateMany: fn() },
     user: { findUnique: fn(), updateMany: fn(), update: fn() },
     notice: { findMany: fn(), deleteMany: fn() },
     auditLog: { findMany: fn() },
@@ -26,6 +34,7 @@ const db = vi.hoisted(() => {
     hashDispatch: { updateMany: fn() },
     escalation: { deleteMany: fn() },
     urlPortalToken: { deleteMany: fn() },
+    linkVerification: { deleteMany: fn() },
     feedback: { deleteMany: fn() },
     adminAccessLog: { updateMany: fn() },
     sessionToken: { deleteMany: fn() },
@@ -50,9 +59,10 @@ const CONSENT = { id: "consent-1", hashSubmissionIds: ["h1"], signedAt: new Date
 
 const zeroCounts: Array<[Record<string, ReturnType<typeof vi.fn>>, string]> = [
   [db.emailDeliveryProof, "deleteMany"], [db.hashDispatch, "updateMany"], [db.escalation, "deleteMany"],
-  [db.urlPortalToken, "deleteMany"], [db.submittedUrl, "deleteMany"], [db.crawlFinding, "deleteMany"],
-  [db.crawlConsent, "deleteMany"], [db.hashSubmission, "updateMany"], [db.feedback, "deleteMany"],
-  [db.adminAccessLog, "updateMany"], [db.case, "updateMany"], [db.sessionToken, "deleteMany"],
+  [db.urlPortalToken, "deleteMany"], [db.linkVerification, "deleteMany"], [db.submittedUrl, "deleteMany"], [db.crawlFinding, "deleteMany"],
+  [db.crawlConsent, "deleteMany"], [db.partnerShareConsent, "deleteMany"], [db.hashSubmission, "updateMany"],
+  [db.partnerFeedEvent, "createMany"], [db.partnerOutcome, "deleteMany"], [db.feedback, "deleteMany"], [db.adminAccessLog, "updateMany"],
+  [db.case, "updateMany"], [db.sessionToken, "deleteMany"],
   [db.otpToken, "deleteMany"], [db.notice, "deleteMany"],
 ];
 
@@ -66,6 +76,10 @@ beforeEach(() => {
 
   db.submittedUrl.findMany.mockResolvedValue([]);
   db.submittedUrl.findFirst.mockResolvedValue(null);
+  // No platform partners exist in these fixtures: the WP33 findings gate
+  // passes and no channel alert is ever sent.
+  db.platformPartner.findMany.mockResolvedValue([]);
+  db.case.findUnique.mockResolvedValue({ referenceNumber: "ASMITA-2026-00001" });
   const storedUrl = (data: Record<string, unknown>) => ({
     id: "url-new", caseId: "c1", urlEncrypted: "enc", urlHash: "h", platformId: null,
     status: "PENDING_REVIEW", flaggedForReview: false, flagReason: null, signedNoticePdf: null, source: "SURVIVOR",
@@ -90,6 +104,10 @@ beforeEach(() => {
   db.crawlFinding.findMany.mockResolvedValue([]);
   db.crawlFinding.updateMany.mockResolvedValue({ count: 1 });
   db.crawlConsent.findMany.mockResolvedValue([{ ...CONSENT, caseId: "c1" }]);
+  // WP32: the erasure sweep's partner-feed withdrawal finds nothing shared
+  // by default (findMany must answer arrays, not counts).
+  db.hashSubmission.findMany.mockResolvedValue([]);
+  db.partnerFeedEvent.findMany.mockResolvedValue([]);
   db.case.findMany.mockResolvedValue([]);
   db.case.findFirst.mockResolvedValue(null);
   db.case.create.mockResolvedValue({ id: "case-new", referenceNumber: "ASMITA-2026-00001" });

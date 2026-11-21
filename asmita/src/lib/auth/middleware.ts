@@ -1,10 +1,13 @@
 import { cookies } from "next/headers";
 import { verifySession } from "@/lib/auth/jwt";
 import { getSessionUserStatus } from "@/lib/case-ops";
+import { readCookieWithFallback, sessionCookieName } from "@/lib/cookie-names";
 
 export async function requireSession(options?: { adultOnly?: boolean }) {
   const cookieStore = await cookies();
-  const session = await verifySession(cookieStore.get("asmita_session")?.value);
+  const session = await verifySession(
+    readCookieWithFallback((name) => cookieStore.get(name), sessionCookieName()),
+  );
   if (!session || session.namespace !== "victim" || session.role === "ADMIN") {
     return { ok: false as const, status: 401, error: "unauthorized" };
   }

@@ -8,6 +8,7 @@ import { crawlerEnabled } from "@/lib/crawler-auth";
 import {
   buildCrawlAuthorisationDraft,
   crawlAgreementRecord,
+  crawlAuthorisationTypeFor,
   getCrawlConsentState,
   recordCrawlConsent,
   withdrawCrawlConsent,
@@ -17,6 +18,7 @@ import { encryptField } from "@/lib/encryption";
 import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { templateDigest } from "@/lib/signed-template";
+import { stopWatching } from "@/lib/watch-ops";
 
 /*
  * The survivor's crawl authorisation for one case (src/lib/crawl-consent.ts).
@@ -25,8 +27,12 @@ import { templateDigest } from "@/lib/signed-template";
  * POST   switch on: she ticked the box ({ agreed: true }) for the text whose
  *        templateRef the page loaded. No name, contact or signature is asked
  *        for: the stored PDF records the full text, the fingerprints and when
- *        the account holder ticked the box.
- * DELETE withdraw: the search stops at once and unreviewed matches are deleted
+ *        the account holder ticked the box. A watch case (mode = WATCH) signs
+ *        the watch-only authorisation (scope = WATCH_ONLY); a case signs the
+ *        full one (WP22).
+ * DELETE withdraw: the search stops at once and unreviewed matches are
+ *        deleted. On a watch this is "Stop watching": her fingerprints are
+ *        deleted too (watch-ops.ts).
  *
  * Adults only (minors never reach the case flow). Switching on needs hash
  * upload and the crawler switched on, and a template reviewed by legal unless
@@ -68,7 +74,12 @@ export async function GET(_request: Request, context: Context) {
   const state = await getCrawlConsentState(owned.record.id);
   let draft = null;
   if (state.status !== "signed" && signingAvailable() && process.env.DATABASE_URL) {
-    const built = await buildCrawlAuthorisationDraft(owned.record.id, owned.record.referenceNumber, devFlagEnabled("DEV_SKIP_LEGAL_REVIEW"));
+    const built = await buildCrawlAuthorisationDraft(
+      owned.record.id,
+      owned.record.referenceNumber,
+      devFlagEnabled("DEV_SKIP_LEGAL_REVIEW"),
+      crawlAuthorisationTypeFor(owned.record.mode),
+    );
     if (!("error" in built)) draft = { subject: built.subject, body: built.body, templateRef: built.templateRef };
   }
   return NextResponse.json({ ...state, available: signingAvailable(), draft }, { headers: { "Cache-Control": "no-store" } });
@@ -88,10 +99,14 @@ export async function POST(request: Request, context: Context) {
   if (!parsed.success) return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
 
   const caseId = owned.record.id;
+  // A watch signs the watch-only authorisation; a case the full one. The case's
+  // mode decides, so the scope recorded is the scope the case is in.
+  const templateType = crawlAuthorisationTypeFor(owned.record.mode);
+  const scope = owned.record.mode === "WATCH" ? ("WATCH_ONLY" as const) : ("SEARCH_AND_NOTICE" as const);
   if ((await getCrawlConsentState(caseId)).status === "signed") {
     return NextResponse.json({ error: "already_signed" }, { status: 409 });
   }
-  const draft = await buildCrawlAuthorisationDraft(caseId, owned.record.referenceNumber, devFlagEnabled("DEV_SKIP_LEGAL_REVIEW"));
+  const draft = await buildCrawlAuthorisationDraft(caseId, owned.record.referenceNumber, devFlagEnabled("DEV_SKIP_LEGAL_REVIEW"), templateType);
   if ("error" in draft) return NextResponse.json({ error: draft.error }, { status: 409 });
   // She agrees only to the text and fingerprints the page loaded.
   if (draft.templateRef !== parsed.data.templateRef) {
@@ -123,9 +138,10 @@ export async function POST(request: Request, context: Context) {
     templateDigest: templateDigest(draft.template),
     signedAt: agreedAt,
     actorId: owned.userId,
+    scope,
   });
   if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 409 });
-  return NextResponse.json({ ok: true, fingerprintCount: draft.hashSubmissionIds.length });
+  return NextResponse.json({ ok: true, fingerprintCount: draft.hashSubmissionIds.length, scope });
 }
 
 export async function DELETE(request: Request, context: Context) {
@@ -134,6 +150,13 @@ export async function DELETE(request: Request, context: Context) {
   if (!owned.ok) return owned.response;
   const tooMany = await limited(owned.userId);
   if (tooMany) return tooMany;
+  // On a watch this is "Stop watching": the withdrawal plus her fingerprints
+  // (WP22). On a case, the withdrawal exactly as before.
+  if (owned.record.mode === "WATCH") {
+    const result = await stopWatching(owned.record.id, owned.userId);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
+    return NextResponse.json({ ok: true, fingerprintsDeleted: result.fingerprintsDeleted });
+  }
   const result = await withdrawCrawlConsent(owned.record.id, owned.userId);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
   return NextResponse.json({ ok: true });

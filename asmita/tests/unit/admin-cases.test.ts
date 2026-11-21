@@ -6,10 +6,15 @@ vi.mock("@/lib/db", () => ({
     submittedUrl: { findMany: vi.fn() },
     notice: { findMany: vi.fn() },
     hashSubmission: { groupBy: vi.fn(), findMany: vi.fn() },
+    crawlFinding: { groupBy: vi.fn(), findMany: vi.fn() },
     platform: { findMany: vi.fn() },
     noticeTemplate: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
     hashDispatch: { count: vi.fn() },
     auditLog: { findMany: vi.fn() },
+    // WP32: the case page lists what partner platforms reported (none here).
+    partnerOutcome: { findMany: vi.fn() },
+    // Removal re-checks (watch-and-verify WP23): no row by default.
+    linkVerification: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
 
@@ -221,6 +226,10 @@ describe("listAdminCases", () => {
     mocked.noticeTemplate.findMany.mockResolvedValue([{ templateType: "IT_RULES_2021", platformId: null }]);
     mocked.notice.findMany.mockResolvedValue([]);
     mocked.hashSubmission.groupBy.mockResolvedValue([]);
+    // WP22: the watch found-copies queue reads these; none of these fixtures
+    // are watches, so both stay empty.
+    mocked.crawlFinding.groupBy.mockResolvedValue([]);
+    mocked.crawlFinding.findMany.mockResolvedValue([]);
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -362,6 +371,8 @@ describe("listAdminCases", () => {
 describe("getAdminCaseDetail", () => {
   beforeEach(() => {
     vi.stubEnv("DATABASE_URL", "postgresql://localhost/test");
+    // WP32: no partner outcomes are reported on the synthetic cases.
+    mocked.partnerOutcome.findMany.mockResolvedValue([]);
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -464,6 +475,11 @@ describe("getAdminCaseDetail", () => {
       expect(args.select).not.toHaveProperty("urlEncrypted");
       expect(args.select).not.toHaveProperty("signedNoticePdf");
     }
+    // The removal re-check history carries no address (link-verification.ts).
+    const verificationRead = mocked.linkVerification.findMany.mock.calls[0]?.[0];
+    expect(verificationRead?.select).toEqual({
+      id: true, submittedUrlId: true, dueAt: true, attempt: true, outcome: true, checkedAt: true, enqueuedAt: true, createdAt: true,
+    });
     expect(mocked.hashSubmission.findMany.mock.calls[0][0].select).not.toHaveProperty("hashEncrypted");
   });
 

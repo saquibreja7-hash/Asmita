@@ -26,6 +26,29 @@
 # changed: no package manager use at runtime, read-only root filesystem,
 # non-root user, unwritable TMPDIR for the main process (the browser worker
 # child gets TMPDIR=BROWSER_TMP_DIR=/dev/shm, a tmpfs, set by its parent).
+#
+# WP25 (the browser sandbox) adds three things to the image:
+#   - the "browser-worker" user (uid/gid 30000) and a tiny setuid-root
+#     helper, /usr/local/bin/asmita-browser-drop (root:root, 4755), which
+#     drops the browser worker onto that uid before node starts — the same
+#     pattern as Chromium's own chrome-sandbox helper. The crawler spawns
+#     the worker through it (CRAWLER_BROWSER_WORKER_HELPER is set below),
+#     so a renderer exploit runs as a user that cannot read the key file
+#     (owned by the crawler's user, mode 0400 — the entrypoint fixes that
+#     when the platform starts the container as root) nor the parent's
+#     /proc/<pid>/environ. The worker's environment never holds the key in
+#     the first place (browserWorkerEnv is a fixed allowlist).
+#   - an entrypoint (docker/entrypoint.sh) that, when started as root,
+#     hands the mounted key file to the crawler's user and drops
+#     privileges ONCE to the node user; nothing keeps root afterwards.
+#     Started non-root (the image default, and how Cloudflare Containers
+#     runs it) it just execs the crawler.
+#   - Chromium's own sandbox is left ON: the crawler self-tests it at the
+#     first browser launch and fails closed (no --no-sandbox is ever passed
+#     on a working sandbox). Docker's default seccomp profile denies the
+#     unprivileged user namespaces it needs; run with
+#     --security-opt seccomp=crawler/docker/seccomp-userns.json to allow
+#     them (scripts/docker-sandbox-check.sh proves both modes).
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /src/crawler
@@ -35,6 +58,13 @@ COPY crawler/ ./
 COPY asmita/src/lib/pdq/pdq.ts /src/asmita/src/lib/pdq/pdq.ts
 COPY asmita/src/lib/crawl-page-key.ts /src/asmita/src/lib/crawl-page-key.ts
 RUN npm run build
+# The setuid drop helper for the browser worker (WP25). Compiled in the
+# build stage only; gcc never reaches the runtime image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && gcc -O2 -Wall -Wextra -DWORKER_UID=30000 -DWORKER_GID=30000 \
+       -o /out-browser-drop /src/crawler/docker/asmita-browser-drop.c
 
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
@@ -70,17 +100,26 @@ RUN printf '%s\n' \
 # installed by apt into the image filesystem, so the final stage inherits them.
 FROM deps
 WORKDIR /app
+# The browser worker runs as its own unprivileged user (WP25): a renderer
+# exploit then cannot read the key file or the parent's environment.
+RUN groupadd -g 30000 browser-worker \
+    && useradd -u 30000 -g 30000 -r -M -s /usr/sbin/nologin browser-worker
+COPY --from=build /out-browser-drop /usr/local/bin/asmita-browser-drop
+RUN chown root:root /usr/local/bin/asmita-browser-drop && chmod 4755 /usr/local/bin/asmita-browser-drop
+COPY --chmod=0555 crawler/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 ENV NODE_ENV=production \
     VIPS_DISC_THRESHOLD=2g \
     TMPDIR=/nonexistent-no-temp-files \
     PLAYWRIGHT_BROWSERS_PATH=/app/browsers \
     BROWSER_TMP_DIR=/dev/shm \
+    CRAWLER_BROWSER_WORKER_HELPER=/usr/local/bin/asmita-browser-drop \
     NODE_OPTIONS=--max-old-space-size=1536
-# main.js (crawler), decoder-worker.js (isolated decoder child process) and
-# browser-worker.js (isolated Chromium child process, WP7)
+# main.js (crawler), decoder-worker.js (isolated decoder child process),
+# browser-worker.js (isolated Chromium child process, WP7) and
+# sandbox-check.js (the WP25 standalone probe; no key, no network)
 COPY --from=build /src/crawler/dist/ ./dist/
 # "type": "module" for dist/main.js
 COPY crawler/package.json ./package.json
 USER node
-ENTRYPOINT ["node", "dist/main.js"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["run"]

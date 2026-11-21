@@ -30,7 +30,7 @@ export default async function FeedbackPage() {
         {/* WHAT NOT TO SEND - quiet trauma-informed line */}
         <section className="container py-10 text-center md:py-14">
           <div className="mx-auto max-w-2xl">
-            <p className="font-display text-[20px] leading-[1.5] tracking-tight text-[var(--ink)] md:text-[24px] md:leading-[1.45]">
+            <p className="text-xl leading-[1.5] font-semibold text-[var(--ink)] md:text-2xl md:leading-[1.45]">
               {say("Please do not paste intimate images, videos, or raw URLs here. This form is for service feedback only.", "कृपया यहाँ निजी तस्वीरें, वीडियो या URL न लिखें। यह फ़ॉर्म केवल सेवा पर प्रतिक्रिया के लिए है।")}
             </p>
           </div>
@@ -39,10 +39,7 @@ export default async function FeedbackPage() {
         {/* THE FORM */}
         <section className="container section-pad">
           <div className="mx-auto max-w-xl">
-            <p className="eyebrow text-center">
-              {say("The form", "फ़ॉर्म")}
-            </p>
-            <h2 className="section-title mt-4 text-center">
+            <h2 className="section-title text-center leading-[1.35]">
               {say("Three questions, none required.", "तीन सवाल; कोई भी अनिवार्य नहीं।")}
             </h2>
             <FeedbackForm locale={locale} />

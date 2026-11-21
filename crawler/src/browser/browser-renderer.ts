@@ -17,7 +17,7 @@
  * sees the page it is told to render, the bytes it hands back, and
  * yes/no verdicts.
  */
-import { fork, type ChildProcess } from "node:child_process";
+import { fork, spawn, type ChildProcess } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +26,7 @@ import type { Logger } from "../log.ts";
 import type { RunMetrics } from "../metrics.ts";
 import type { NetPolicy } from "../net/policy.ts";
 import { BrowserProxy } from "../net/browser-proxy.ts";
+import { sandboxLaunchPlan } from "./sandbox.ts";
 import {
   AbortMessageSchema,
   LaunchMessageSchema,
@@ -50,6 +51,42 @@ export function defaultBrowsersPath(): string {
 /** The ONLY environment the browser worker gets: no key, no config. */
 export function browserWorkerEnv(tmpDir: string, browsersPath: string): Record<string, string> {
   return { TMPDIR: tmpDir, TMP: tmpDir, TEMP: tmpDir, HOME: tmpDir, PLAYWRIGHT_BROWSERS_PATH: browsersPath };
+}
+
+/**
+ * WP25: how a browser worker is always spawned — through the optional
+ * setuid drop helper when one is configured (the container image sets
+ * CRAWLER_BROWSER_WORKER_HELPER; the helper drops the worker onto the
+ * separate browser-worker uid before node starts), or forked directly.
+ * Both the renderer and the standalone sandbox probe use this one path, so
+ * the probe answers for the real run. The IPC channel survives the
+ * helper's execvp: spawn wires NODE_CHANNEL_FD into the child's
+ * environment whatever the binary, and node's bootstrap picks the channel
+ * up after the exec chain. The helper runs no attacker-controlled code as
+ * root: it drops to the fixed compiled-in uid before execvp, the same
+ * pattern as Chromium's own chrome-sandbox helper.
+ */
+export function spawnBrowserWorker(opts: { workerPath: string; helper?: string; tmpDir: string; browsersPath: string; cwd: string }): ChildProcess {
+  const env = browserWorkerEnv(opts.tmpDir, opts.browsersPath);
+  const execArgv = browserWorkerExecArgv(opts.workerPath, opts.tmpDir, opts.browsersPath);
+  return opts.helper
+    ? // argv[1] is the temp directory: the helper puts it back into TMPDIR,
+      // which glibc's secure-exec scrub deletes for every setuid-root binary
+      // (Chromium would otherwise write its shared-memory files into /tmp,
+      // read-only in the image).
+      spawn(opts.helper, [opts.tmpDir, process.execPath, ...execArgv, opts.workerPath], {
+        env,
+        cwd: opts.cwd,
+        stdio: ["ignore", "ignore", "ignore", "ipc"],
+        serialization: "advanced",
+      })
+    : fork(opts.workerPath, [], {
+        execArgv,
+        env,
+        cwd: opts.cwd,
+        stdio: ["ignore", "ignore", "ignore", "ipc"],
+        serialization: "advanced",
+      });
 }
 
 /** Node flags for the worker: reads confined to its bundle, playwright-core,
@@ -105,11 +142,26 @@ export type BrowserRendererOptions = {
     renderGraceMs?: number;
     /** How long close() waits for a graceful stop before SIGKILL (tests lower it). */
     stopGraceMs?: number;
+    /**
+     * WP25: CRAWLER_ALLOW_UNSANDBOXED_BROWSER. When the sandboxed Chromium
+     * launch fails (the runtime grants no user namespaces), this is the only
+     * way rendering continues — with `--no-sandbox`, local development only.
+     * Default false: rendering is then disabled for the run (fail closed).
+     */
+    allowUnsandboxed?: boolean;
   };
   /** Override the worker script (tests use a fake worker). */
   workerPath?: string;
   /** Where Playwright's Chromium is installed. */
   browsersPath?: string;
+  /**
+   * WP25: optional setuid drop helper (container image). When set the worker
+   * is spawned through it: the helper — a few syscalls, setuid-root like
+   * Chromium's own chrome-sandbox — drops onto the separate browser-worker
+   * uid before exec'ing node, so the worker's OS user cannot read the key
+   * file. Absent (everywhere but the image) the worker is forked directly.
+   */
+  workerHelper?: string;
   log: Logger;
   metrics: RunMetrics;
   /** May the page request this URL? (robots.txt; the parent owns the rules.) */
@@ -141,14 +193,36 @@ export class BrowserRenderer {
   private nextRenderId = 1;
   private launchFailures = 0;
   private dead = false;
+  /**
+   * WP25: the runtime refused the sandboxed Chromium launch and the
+   * CRAWLER_ALLOW_UNSANDBOXED_BROWSER override was not set. Sticky for the
+   * run: every further render answers browser_sandbox_unavailable without
+   * spawning anything.
+   */
+  private sandboxRefused = false;
+  /** WP25: the sandbox mode the current worker generation launches under. */
+  private launchSandboxed = true;
   private chain: Promise<unknown> = Promise.resolve();
   private current: ActiveRender | null = null;
   private readonly workerPath: string;
   private readonly browsersPath: string;
+  private readonly workerHelper: string | undefined;
+  private readonly allowUnsandboxed: boolean;
 
   constructor(private readonly opts: BrowserRendererOptions) {
     this.workerPath = opts.workerPath ?? defaultBrowserWorkerPath();
     this.browsersPath = opts.browsersPath ?? defaultBrowsersPath();
+    this.workerHelper = opts.workerHelper;
+    this.allowUnsandboxed = opts.config.allowUnsandboxed ?? false;
+  }
+
+  /**
+   * WP25: true when the runtime refused the sandboxed launch and no override
+   * allows an unsandboxed browser. Callers use it to skip render work; every
+   * render still answers the same code through render().
+   */
+  renderingRefused(): boolean {
+    return this.sandboxRefused;
   }
 
   /**
@@ -201,12 +275,12 @@ export class BrowserRenderer {
   }
 
   private spawnWorker(): ChildProcess {
-    const child = fork(this.workerPath, [], {
-      execArgv: browserWorkerExecArgv(this.workerPath, this.opts.config.tmpDir, this.browsersPath),
-      env: browserWorkerEnv(this.opts.config.tmpDir, this.browsersPath),
+    const child = spawnBrowserWorker({
+      workerPath: this.workerPath,
+      helper: this.workerHelper,
+      tmpDir: this.opts.config.tmpDir,
+      browsersPath: this.browsersPath,
       cwd: dirname(dirname(this.workerPath)),
-      stdio: ["ignore", "ignore", "ignore", "ipc"],
-      serialization: "advanced",
     });
     // Crash output never reaches our logs; only exit codes and counters.
     // Exit/error handlers check the identity: a stale exit of a worker we
@@ -223,8 +297,55 @@ export class BrowserRenderer {
     return child;
   }
 
+  /**
+   * WP25: spawn a worker and run the launch handshake, asking Chromium to
+   * start exactly as `sandboxed` says. The worker's answer carries the mode
+   * and its own uid; a sandboxed launch the runtime refuses is reported as
+   * browser_sandbox_unavailable (the worker never degrades by itself).
+   */
+  private launchWorker(
+    sandboxed: boolean,
+  ): Promise<{ ok: true; sandboxed: boolean; uid: number } | { ok: false; code: "browser_launch_failed" | "browser_sandbox_unavailable" }> {
+    const child = this.spawnWorker();
+    this.child = child;
+    const launch = LaunchMessageSchema.parse({
+      kind: "launch",
+      proxyPort: this.proxy!.listenPort,
+      userAgentSuffix: this.opts.config.userAgent,
+      sandboxed,
+    });
+    const ready = new Promise<{ ok: true; sandboxed: boolean; uid: number } | { ok: false; code: "browser_launch_failed" | "browser_sandbox_unavailable" }>((resolve) => {
+      let settled = false;
+      const settle = (v: { ok: true; sandboxed: boolean; uid: number } | { ok: false; code: "browser_launch_failed" | "browser_sandbox_unavailable" }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        child.off("message", on);
+        resolve(v);
+      };
+      const timer = setTimeout(() => settle({ ok: false, code: "browser_launch_failed" }), LAUNCH_TIMEOUT_MS);
+      const on = (m: unknown) => {
+        const msg = parseWorkerMessage(m);
+        if (msg?.kind === "ready") {
+          settle({ ok: true, sandboxed: msg.sandboxed, uid: msg.uid });
+        } else if (msg?.kind === "failed" && msg.id === 0) {
+          // The worker could not launch Chromium; do not wait out the timer.
+          settle({ ok: false, code: msg.code === "browser_sandbox_unavailable" ? "browser_sandbox_unavailable" : "browser_launch_failed" });
+        }
+      };
+      child.on("message", on);
+      // A worker that dies before saying ready is a failed launch.
+      child.on("exit", () => settle({ ok: false, code: "browser_launch_failed" }));
+    });
+    child.send(launch);
+    return ready;
+  }
+
   private async ensureWorker(): Promise<{ ok: true } | { ok: false; code: ErrorCode }> {
     if (this.dead) return { ok: false, code: "browser_launch_failed" };
+    // WP25 fail closed: once the runtime refused the sandbox and no override
+    // was set, no further render spawns anything.
+    if (this.sandboxRefused) return { ok: false, code: "browser_sandbox_unavailable" };
     if (this.child && this.child.connected) return { ok: true };
     if (!this.proxy) {
       this.proxy = new BrowserProxy(this.opts.policy, {
@@ -234,45 +355,43 @@ export class BrowserRenderer {
       });
       await this.proxy.start();
     }
-    const child = this.spawnWorker();
-    this.child = child;
-    const launch = LaunchMessageSchema.parse({
-      kind: "launch",
-      proxyPort: this.proxy.listenPort,
-      userAgentSuffix: this.opts.config.userAgent,
-    });
-    const ready = new Promise<boolean>((resolve) => {
-      const settle = (v: boolean) => {
-        clearTimeout(timer);
-        resolve(v);
-      };
-      const timer = setTimeout(() => settle(false), LAUNCH_TIMEOUT_MS);
-      const on = (m: unknown) => {
-        const msg = parseWorkerMessage(m);
-        if (msg?.kind === "ready") {
-          settle(true);
-        } else if (msg?.kind === "failed" && msg.id === 0) {
-          // The worker could not launch Chromium; do not wait out the timer.
-          settle(false);
-        }
-      };
-      child.on("message", on);
-      // A worker that dies before saying ready is a failed launch.
-      child.on("exit", () => settle(false));
-    });
-    child.send(launch);
-    const launched = await ready;
-    if (!launched) {
+    // WP25: the sandbox self-test is the sandboxed launch itself. Chromium
+    // starts with its own sandbox on, always; only when the runtime refuses
+    // that does the plan (sandbox.ts) decide — fail closed, or the
+    // dev-only CRAWLER_ALLOW_UNSANDBOXED_BROWSER override retry unsandboxed.
+    let attempt = await this.launchWorker(this.launchSandboxed);
+    if (!attempt.ok && attempt.code === "browser_sandbox_unavailable") {
+      this.opts.metrics.browser.sandboxTested = true;
+      this.opts.metrics.browser.sandboxOn = false;
+      const plan = sandboxLaunchPlan(false, this.allowUnsandboxed);
+      if (!plan.renderingAllowed) {
+        this.killWorker();
+        this.sandboxRefused = true;
+        this.opts.log.error("browser_rendering_disabled", { code: "browser_sandbox_unavailable" });
+        return { ok: false, code: "browser_sandbox_unavailable" };
+      }
+      // Override (local development only): retry unsandboxed, and remember
+      // the mode so replacement workers launch the same way.
+      this.killWorker();
+      this.launchSandboxed = false;
+      this.opts.log.warn("browser_unsandboxed_override", { code: "browser_sandbox_unavailable" });
+      attempt = await this.launchWorker(false);
+    }
+    if (!attempt.ok) {
       this.killWorker();
       this.launchFailures += 1;
-      this.opts.log.warn("browser_launch_failed", { code: "browser_launch_failed" });
-      if (this.launchFailures >= MAX_LAUNCH_FAILURES) {
+      const code = attempt.code === "browser_sandbox_unavailable" ? "browser_sandbox_unavailable" : "browser_launch_failed";
+      this.opts.log.warn("browser_launch_failed", { code });
+      if (code === "browser_sandbox_unavailable" || this.launchFailures >= MAX_LAUNCH_FAILURES) {
         this.dead = true;
-        this.opts.log.error("browser_disabled_for_run", { code: "browser_launch_failed" });
+        this.opts.log.error("browser_disabled_for_run", { code });
       }
-      return { ok: false, code: "browser_launch_failed" };
+      return { ok: false, code };
     }
     this.launchFailures = 0;
+    this.opts.metrics.browser.sandboxTested = true;
+    this.opts.metrics.browser.sandboxOn = attempt.sandboxed;
+    this.opts.metrics.browser.workerUid = attempt.uid;
     return { ok: true };
   }
 

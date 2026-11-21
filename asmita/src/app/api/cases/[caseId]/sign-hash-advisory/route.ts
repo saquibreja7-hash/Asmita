@@ -183,6 +183,11 @@ export async function POST(
       where: { caseId, status: "PENDING_REVIEW" },
       data: { status: "APPROVED", reviewedAt: new Date() },
     });
+    // WP32: the auto-approval makes the fingerprints shareable with partner
+    // platforms, so the feed follows it here too (dev bypass only; in
+    // production the admin review route runs the same sync).
+    const { syncPartnerFeedForCase } = await import("@/lib/partner-feed");
+    await syncPartnerFeedForCase(caseId);
   }
 
   let dispatched = false;

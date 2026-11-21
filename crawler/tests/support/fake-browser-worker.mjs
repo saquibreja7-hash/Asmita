@@ -27,7 +27,8 @@ let ignoreStop = false;
 process.on("message", (m) => {
   if (!m || typeof m !== "object") return;
   if (m.kind === "launch") {
-    return process.send({ kind: "ready" });
+    // WP25: echo the mode the parent asked for and this process's own uid.
+    return process.send({ kind: "ready", sandboxed: m.sandboxed, uid: process.getuid?.() ?? 0 });
   }
   if (m.kind === "verdict") {
     return;

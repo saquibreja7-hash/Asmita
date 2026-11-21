@@ -6,11 +6,12 @@
 import { db } from "@/lib/db";
 import * as store from "@/lib/store";
 import { findPlatformByDomain } from "@/lib/platforms";
+import { COOKIE_BASE_NAMES } from "@/lib/cookie-names";
 
 export const ADDED_AFTER_MS = 5 * 60_000;
 export const NEW_LINKS_WINDOW_DAYS = 30;
 /** Per-browser marker of when this admin last opened New links. */
-export const NEW_LINKS_SEEN_COOKIE = "asmita_admin_links_seen";
+export const NEW_LINKS_SEEN_COOKIE = COOKIE_BASE_NAMES.adminLinksSeen;
 
 export type AddedLinkRow = {
   urlId: string;

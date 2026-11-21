@@ -28,4 +28,12 @@ describe("admin permissions", () => {
       expect(hasAdminPermission(role, "outreach:manage")).toBe(false);
     }
   });
+
+  it("grants the AI Lab to SUPER_ADMIN only", () => {
+    expect(hasAdminPermission("SUPER_ADMIN", "lab:manage")).toBe(true);
+    expect(listAdminPermissions("SUPER_ADMIN")).toContain("lab:manage");
+    for (const role of ["LEGAL_ADVISOR", "CASE_REVIEWER", "GO_EDITOR", "SUPPORT_AGENT"] as const) {
+      expect(hasAdminPermission(role, "lab:manage")).toBe(false);
+    }
+  });
 });

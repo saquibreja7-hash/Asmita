@@ -75,8 +75,7 @@ export default async function ResearchPage() {
         <section className="hero" aria-label={say("Research", "शोध")}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("Research", "शोध")}</span>
-              <h1 className="page-title mt-5">
+              <h1 className="page-title">
                 {say("Research and reporting", "शोध और रिपोर्ट")}
               </h1>
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">

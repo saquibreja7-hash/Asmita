@@ -70,7 +70,6 @@ export default async function SitemapPage() {
         <section className="hero" aria-label={say("Sitemap", "साइटमैप")}>
           <div className="hero-content container section-pad">
             <div className="mx-auto max-w-5xl">
-              <span className="eyebrow">{say("Sitemap", "साइटमैप")}</span>
               <h1 className="page-title mt-5 max-w-3xl">
                 {say("Every page, in one place", "हर पेज, एक जगह")}
               </h1>
@@ -94,9 +93,16 @@ export default async function SitemapPage() {
                   <ul className="mt-5 space-y-3 border-t border-[var(--line)] pt-5">
                     {group.links.map((link) => (
                       <li key={link.href}>
-                        <Link href={link.href} className="text-link font-medium">
-                          {locale === "hi" ? translateLink(link.href)?.label ?? link.label : link.label}
-                        </Link>
+                        {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                        {link.href === "/check-image" ? (
+                          <a href={link.href} className="text-link font-medium">
+                            {locale === "hi" ? translateLink(link.href)?.label ?? link.label : link.label}
+                          </a>
+                        ) : (
+                          <Link href={link.href} className="text-link font-medium">
+                            {locale === "hi" ? translateLink(link.href)?.label ?? link.label : link.label}
+                          </Link>
+                        )}
                         {link.note && (
                           <p className="mt-0.5 text-sm text-[var(--text)]">{locale === "hi" ? translateLink(link.href)?.note ?? link.note : link.note}</p>
                         )}

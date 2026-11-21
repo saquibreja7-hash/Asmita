@@ -57,10 +57,16 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
   const [index, setIndex] = useState(0);
   const [stop, setStop] = useState<Stop>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  // The first effect run is the initial render; every later index or stop
+  // change — including going back to question 1 — moves focus to the heading.
+  const firstRender = useRef(true);
 
-  // Move focus to each new question so screen readers announce it.
   useEffect(() => {
-    if (index > 0 || stop) heading.current?.focus({ preventScroll: true });
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    heading.current?.focus({ preventScroll: true });
   }, [index, stop]);
 
   function answer(outcome: Outcome) {
@@ -125,7 +131,7 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
     <div>
       <div className="flex items-center justify-between text-sm text-[var(--text-muted)]">
         {index > 0 ? (
-          <button className="underline underline-offset-4" onClick={() => setIndex(index - 1)} type="button">
+          <button className="inline-flex min-h-[44px] items-center underline underline-offset-4" onClick={() => setIndex(index - 1)} type="button">
             {t(locale, "eligibility.q.back")}
           </button>
         ) : (
@@ -136,9 +142,9 @@ export function EligibilityWizard({ locale }: { locale: Locale }) {
         </span>
       </div>
 
-      <h2 ref={heading} tabIndex={-1} className="section-title mt-6 outline-none">
+      <h1 ref={heading} tabIndex={-1} className="section-title mt-6 outline-none">
         {t(locale, question.title)}
-      </h2>
+      </h1>
       {question.sub && <p className="muted mt-3 text-base leading-[1.6]">{t(locale, question.sub)}</p>}
 
       <div className="mt-8 grid gap-3">
@@ -176,9 +182,9 @@ function StopScreen({
 }) {
   return (
     <div>
-      <h2 ref={headingRef} tabIndex={-1} className="section-title outline-none">
+      <h1 ref={headingRef} tabIndex={-1} className="section-title outline-none">
         {title}
-      </h2>
+      </h1>
       {intro}
       <p className="mt-8 text-sm font-medium text-[var(--text-muted)]">{orgsLabel}</p>
       <div className="mt-3 space-y-3">{children}</div>

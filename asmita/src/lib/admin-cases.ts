@@ -9,9 +9,12 @@
 
 import { db } from "@/lib/db";
 import { listAllCases } from "@/lib/case-ops";
+import { crawlMemory } from "@/lib/crawl-store";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { buildLadder } from "@/lib/escalation-ladder";
+import { listLinkVerifications } from "@/lib/link-verification";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED, platformDirectory } from "@/lib/platforms";
+import { listPartnerOutcomesForCase, type AdminPartnerOutcome } from "@/lib/partner-outcomes";
 import { isUrlExpired } from "@/lib/url-retention";
 import { getTier1ApiConfigFromEnv, routeTier1OrFallback } from "@/lib/tier1-api-client";
 import { checkSignedTemplate, loadSignedTemplate, type SignedTemplateRefusal } from "@/lib/signed-template";
@@ -24,6 +27,7 @@ export const CASE_STATUSES = ["OPEN", "PARTIALLY_RESOLVED", "ESCALATED", "RESOLV
 
 export const NEXT_ACTIONS = [
   "review_links",
+  "review_findings",
   "review_fingerprints",
   "send_notice",
   "blocked_legal_review",
@@ -83,6 +87,11 @@ export type CaseFacts = {
   notices: NoticeFact[];
   pendingFingerprints: number;
   oldestPendingFingerprint: Date | null;
+  /** "Watch for my images" (WP22): watches never wait on an operator except for a found copy that awaits review. */
+  mode?: "CASE" | "WATCH";
+  /** Found copies (CrawlFinding CANDIDATE) awaiting review, watches only (WP22). */
+  pendingFindings?: number;
+  oldestPendingFinding?: Date | null;
 };
 
 export type PlatformFact = {
@@ -145,6 +154,28 @@ export function deriveCaseWork(facts: CaseFacts, gates: Gates, now: Date): CaseW
     if (at) bucket.due = bucket.due === null ? at.getTime() : Math.min(bucket.due, at.getTime());
     buckets.set(kind, bucket);
   };
+
+  // A watch (WP22) never waits on an operator except when a copy its search
+  // found awaits review. Her fingerprints are reviewed from the Fingerprints
+  // queue, a watch has no links of hers to review, notices wait on her
+  // choices, and nothing about a watch is ever dispatched — so the watch is
+  // excluded from Needs action unless a finding awaits review.
+  if (facts.mode === "WATCH") {
+    const pendingFindings = facts.pendingFindings ?? 0;
+    if (pendingFindings > 0) {
+      const oldest = facts.oldestPendingFinding ?? facts.createdAt;
+      add("review_findings", new Date(oldest.getTime() + REVIEW_SLA_HOURS * HOUR), pendingFindings);
+    }
+    const bucket = buckets.get("review_findings");
+    return {
+      nextAction: (NEXT_ACTIONS.find((kind) => buckets.has(kind)) ?? "none"),
+      actionCount: bucket?.count ?? 0,
+      dueAt: bucket?.due != null ? new Date(bucket.due) : null,
+      ladderStep: null,
+      allRemoved: false,
+      platforms,
+    };
+  }
 
   const noticeByUrl = new Map(facts.notices.map((notice) => [notice.urlId, notice]));
   let ladderStep: number | null = null;
@@ -256,6 +287,8 @@ export type AdminCaseListRow = CaseWork & {
   createdAt: string;
   updatedAt: string;
   linkCount: number;
+  /** "Watch for my images" (WP22): the list shows a Watch label. */
+  mode: "CASE" | "WATCH";
 };
 
 export type AdminCaseListPage = {
@@ -333,6 +366,7 @@ export async function listAdminCases(
         createdAt: fact.createdAt.toISOString(),
         updatedAt: fact.updatedAt.toISOString(),
         linkCount: fact.links.length,
+        mode: fact.mode ?? "CASE",
       }),
     )
     .filter(
@@ -466,7 +500,7 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
   if (devNoDb()) return { facts: await loadMemoryCaseFacts(filters), gates };
 
   const where = caseWhere(filters);
-  const [cases, links, signed, notices, fingerprints] = await Promise.all([
+  const [cases, links, signed, notices, fingerprints, findings] = await Promise.all([
     db.case.findMany({
       where,
       select: {
@@ -476,6 +510,7 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
         createdAt: true,
         updatedAt: true,
         declarationSignedAt: true,
+        mode: true,
       },
     }),
     db.submittedUrl.findMany({
@@ -514,6 +549,14 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
       where: { status: "PENDING_REVIEW", case: where },
       _count: { _all: true },
       _min: { submittedAt: true },
+    }),
+    // Found copies awaiting review, for the watch queue (WP22). Address-free
+    // by construction: a case id, a count and the earliest sighting.
+    db.crawlFinding.groupBy({
+      by: ["caseId"],
+      where: { reviewStatus: "CANDIDATE", case: { ...where, mode: "WATCH" } },
+      _count: { _all: true },
+      _min: { firstSeenAt: true },
     }),
   ]);
 
@@ -566,6 +609,7 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
     ]);
   }
   const fingerprintsByCase = new Map(fingerprints.map((group) => [group.caseId, group]));
+  const findingsByCase = new Map(findings.map((group) => [group.caseId, group]));
 
   return {
     gates,
@@ -575,6 +619,12 @@ async function loadCaseFacts(filters: AdminCaseListFilters): Promise<{ facts: Ca
       notices: noticesByCase.get(record.id) ?? [],
       pendingFingerprints: fingerprintsByCase.get(record.id)?._count._all ?? 0,
       oldestPendingFingerprint: fingerprintsByCase.get(record.id)?._min.submittedAt ?? null,
+      ...(record.mode === "WATCH"
+        ? {
+            pendingFindings: findingsByCase.get(record.id)?._count._all ?? 0,
+            oldestPendingFinding: findingsByCase.get(record.id)?._min.firstSeenAt ?? null,
+          }
+        : {}),
     })),
   };
 }
@@ -593,6 +643,18 @@ async function loadMemoryCaseFacts(filters: AdminCaseListFilters): Promise<CaseF
     .filter((record) => !to || Date.parse(record.createdAt) < to)
     .map((record) => {
       const createdAt = new Date(record.createdAt);
+      // A watch's found copies awaiting review (WP22), from the crawler's
+      // memory store on this path.
+      let pendingFindings = 0;
+      let oldestPendingFinding: Date | null = null;
+      if (record.mode === "WATCH") {
+        for (const finding of crawlMemory().findings.values()) {
+          if (finding.caseId === record.id && finding.reviewStatus === "CANDIDATE") {
+            pendingFindings += 1;
+            if (!oldestPendingFinding || finding.firstSeenAt < oldestPendingFinding) oldestPendingFinding = finding.firstSeenAt;
+          }
+        }
+      }
       return {
         id: record.id,
         referenceNumber: record.referenceNumber,
@@ -622,6 +684,9 @@ async function loadMemoryCaseFacts(filters: AdminCaseListFilters): Promise<CaseF
           })),
         pendingFingerprints: 0,
         oldestPendingFingerprint: null,
+        mode: record.mode ?? "CASE",
+        pendingFindings,
+        oldestPendingFinding,
       };
     });
 }
@@ -680,6 +745,12 @@ export type AdminCaseLink = {
   };
   /** Why the hourly sweep could not send the next ladder step, if it could not. */
   ladderBlock: string | null;
+  /**
+   * Removal re-checks (watch-and-verify WP23), oldest attempt first: what
+   * was scheduled, what came of it and when. Counts and codes only — the
+   * table stores no address.
+   */
+  verifications: Array<{ id: string; attempt: number; outcome: string; dueAt: string; checkedAt: string | null }>;
 };
 
 export type AdminCaseFingerprint = {
@@ -705,11 +776,15 @@ export type AdminCaseDetail = {
   updatedAt: string;
   declarationSignedAt: string | null;
   ngoVerified: boolean;
+  /** "Watch for my images" (WP22): the case page shows a Watch label. */
+  mode: "CASE" | "WATCH";
   work: CaseWork;
   links: AdminCaseLink[];
   fingerprints: AdminCaseFingerprint[];
   /** Hash advisory dispatch would refuse because of its pinned template; sent: a platform already received it. */
   hashAdvisoryRefusal: null | { reason: SignedTemplateRefusal; sent: boolean };
+  /** WP32: what partner platforms reported they did (partner-outcomes.ts). */
+  partnerOutcomes: AdminPartnerOutcome[];
   timeline: Array<{ sequence: number; eventType: string; actorId: string; createdAt: string }>;
 };
 
@@ -743,6 +818,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
       updatedAt: true,
       declarationSignedAt: true,
       ngoVerified: true,
+      mode: true,
       hashAdvisorySignedHashIds: true,
       hashAdvisorySignedTemplateId: true,
       hashAdvisorySignedTemplateDigest: true,
@@ -812,6 +888,9 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
     ...links.flatMap((link) => (signedIds.has(link.id) ? link.signedHashSubmissionIds : [])),
     ...record.hashAdvisorySignedHashIds,
   ]);
+  // Removal re-checks (watch-and-verify WP23): one bounded read for the whole
+  // case; the rows carry no address, so the light-columns rule still holds.
+  const verifications = await listLinkVerifications(links.map((link) => link.id));
   const linkFacts: LinkFact[] = links.map((link) => ({
     id: link.id,
     status: link.status,
@@ -826,6 +905,14 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
   const originals = notices.filter((notice) => !notice.followUpOf && notice.sentAt);
   const blocks = await loadLadderBlocks(originals);
   const pending = hashes.filter((hash) => hash.status === "PENDING_REVIEW");
+  // A watch's found copies awaiting review (WP22): counts only, no addresses.
+  const pendingFindingRows = record.mode === "WATCH"
+    ? await db.crawlFinding.findMany({
+        where: { caseId: record.id, reviewStatus: "CANDIDATE" },
+        orderBy: { firstSeenAt: "asc" },
+        select: { firstSeenAt: true },
+      })
+    : [];
   const facts: CaseFacts = {
     id: record.id,
     referenceNumber: record.referenceNumber,
@@ -833,6 +920,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     declarationSignedAt: record.declarationSignedAt,
+    mode: record.mode,
     links: linkFacts,
     notices: originals
       .filter((notice, index) => originals.findIndex((other) => other.urlId === notice.urlId) === index)
@@ -846,6 +934,12 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
       })),
     pendingFingerprints: pending.length,
     oldestPendingFingerprint: pending[0]?.submittedAt ?? null,
+    ...(record.mode === "WATCH"
+      ? {
+          pendingFindings: pendingFindingRows.length,
+          oldestPendingFinding: pendingFindingRows[0]?.firstSeenAt ?? null,
+        }
+      : {}),
   };
 
   // A sent link keeps the NOTICE_QUEUED status (dispatch records a Notice
@@ -908,6 +1002,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
     updatedAt: record.updatedAt.toISOString(),
     declarationSignedAt: record.declarationSignedAt?.toISOString() ?? null,
     ngoVerified: record.ngoVerified,
+    mode: record.mode,
     work,
     links: links.map((link) => {
       const platform = link.platformId ? gates.platforms.get(link.platformId) : undefined;
@@ -978,6 +1073,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
             : null;
         })(),
         ladderBlock: fact?.ladderBlock ?? null,
+        verifications: verifications.get(link.id) ?? [],
       };
     }),
     fingerprints: hashes.map((hash) => ({
@@ -994,6 +1090,7 @@ export async function getAdminCaseDetail(reference: string, now = new Date()): P
       videoDurationSec: hash.videoDurationSec ?? null,
     })),
     hashAdvisoryRefusal,
+    partnerOutcomes: await listPartnerOutcomesForCase(record.id),
     timeline: timeline.map((event) => ({
       sequence: event.sequence,
       eventType: event.eventType,

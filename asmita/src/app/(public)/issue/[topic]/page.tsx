@@ -58,7 +58,7 @@ export default async function IssueTopicPage({
         <section className="hero" aria-label={content.term}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-5xl">
-              <Link href="/issue" className="eyebrow">
+              <Link href="/issue" className="text-link text-sm font-medium">
                 {say("The issue", "समस्या को समझें")}
               </Link>
               <h1 className="page-title mt-4 max-w-3xl">
@@ -67,6 +67,14 @@ export default async function IssueTopicPage({
               <p className="font-size-large mt-6 max-w-2xl text-[var(--ink)]">
                 {content.definition}
               </p>
+              {content.research && (
+                <p className="mt-3 max-w-2xl text-sm leading-[1.7] text-[var(--text-muted)]">
+                  {content.research.text}{" "}
+                  <a className="text-link" href={content.research.url} target="_blank" rel="noopener noreferrer">
+                    {say("Read the survey", "सर्वेक्षण पढ़ें")} <span aria-hidden>↗</span>
+                  </a>
+                </p>
+              )}
               <p className="eyebrow mt-6">
                 {content.term}<ReadingTime label={say("{n} min read", "{n} मिनट में पढ़ें")} />
               </p>

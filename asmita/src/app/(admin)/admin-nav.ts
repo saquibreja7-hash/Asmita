@@ -47,5 +47,9 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/admin/milestones", label: "Milestones", permission: "metrics:read" },
     ],
   },
+  {
+    heading: "Lab",
+    items: [{ href: "/admin/lab", label: "AI Lab", permission: "lab:manage" }],
+  },
   { heading: "Oversight", items: [{ href: "/admin/audit", label: "Audit", permission: "audit:read" }] },
 ];

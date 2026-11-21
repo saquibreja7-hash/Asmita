@@ -15,6 +15,7 @@ const NEEDS: Record<AdminPermission, string> = {
   "crawler:manage": "manage crawler sites",
   "content:manage": "manage org content",
   "outreach:manage": "manage outreach",
+  "lab:manage": "manage the AI Lab",
 };
 
 /**

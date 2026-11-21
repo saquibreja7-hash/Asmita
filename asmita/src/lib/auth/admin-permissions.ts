@@ -23,7 +23,10 @@ export type AdminPermission =
   // WP58, scorecard publishing.
   | "content:manage"
   // Organization pages: outreach submissions and the newsletter list.
-  | "outreach:manage";
+  | "outreach:manage"
+  // Manage the AI Lab (docs/lab/charter.md): E2 services, chokepoints,
+  // reports and its dashboard. SUPER_ADMIN only.
+  | "lab:manage";
 
 const rolePermissions: Record<AdminRole, ReadonlySet<AdminPermission>> = {
   SUPER_ADMIN: new Set([
@@ -40,6 +43,7 @@ const rolePermissions: Record<AdminRole, ReadonlySet<AdminPermission>> = {
     "crawler:manage",
     "content:manage",
     "outreach:manage",
+    "lab:manage",
   ]),
   LEGAL_ADVISOR: new Set(["cases:read", "templates:edit", "templates:activate", "audit:read"]),
   CASE_REVIEWER: new Set(["cases:read", "cases:review", "audit:read", "findings:review"]),

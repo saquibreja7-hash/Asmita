@@ -6,12 +6,15 @@ import { crawlMemory, type MemoryCrawlFinding } from "@/lib/crawl-store";
 import { consentCoversFinding, findingStillConsented, resolvePoolFingerprint, CRAWL_MATCH_THRESHOLD } from "@/lib/crawl-pool";
 import { enabledCrawlSourceDomain, ensureCrawlSourceForReportedHost } from "@/lib/crawl-sources";
 import { promoteDiscoveredSource } from "@/lib/crawl-discoveries";
+import { notifyReuploadFinding } from "@/lib/crawl-watch";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { sha256 } from "@/lib/hash";
 import { findPlatformByDomain, HUMAN_VERIFICATION_REQUIRED } from "@/lib/platforms";
+import { alertPartnerChannelOfFinding, partnerCrawlPermissionMissing } from "@/lib/partner-channel";
 import { parseSubmittedUrl } from "@/lib/url-parser";
 import { lockCaseForLinkWrite } from "@/lib/case-link-lock";
 import { isUrlExpired } from "@/lib/url-retention";
+import { notifyWatchCopyFound } from "@/lib/watch-ops";
 import * as store from "@/lib/store";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
@@ -31,7 +34,22 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
  *   SECOND_REVIEW_DISTANCE needs a second, different analyst before it is
  *   APPROVED. Final approval re-checks that the survivor's authorisation is
  *   still live, then adds the page URL to the case as a SubmittedUrl with
- *   source CRAWLER. Nothing is sent to anyone here.
+ *   source CRAWLER. Nothing is sent to anyone here except the WP33 partner
+ *   alert, which goes to the platform partner's channel (never the image,
+ *   never the survivor's data) and never affects the review's outcome.
+ * - WP33 gate: a finding whose page is on a platform partner's domain is
+ *   recorded only once the partner's written permission to crawl is
+ *   recorded; before that the report is refused.
+ * - Labels (review labels WP37): analysts can mark a finding "Looks AI-made",
+ *   "Sexual content" or "Possible minor", our own simple fields with who set
+ *   them and when, audited like a review. The possible-minor label is a
+ *   safety switch: while it is set the finding cannot be approved or
+ *   dismissed, no representative notice can be sent, and it is out of the
+ *   adult queue (reviewStatus MINOR_PROTOCOL). Clearing it needs a second,
+ *   different admin and a recorded reason, and only then does the finding
+ *   return to the review state it came from. No minors handling for crawler
+ *   findings exists yet beyond this state; the written POCSO procedure is
+ *   still pending (ADR 006, go-live gate 3).
  */
 
 export const MAX_FINDINGS_PER_BATCH = 50;
@@ -195,6 +213,11 @@ async function upsertFinding(input: NewFinding, now: Date): Promise<{ id: string
       quality: input.quality, firstSeenAt: now, lastSeenAt: now,
       sourceId: input.sourceId, runId: input.runId, reviewStatus: "CANDIDATE", method: input.method,
       reviewedById: null, reviewedAt: null, secondReviewedById: null, secondReviewedAt: null,
+      labelAiMade: false, labelAiMadeById: null, labelAiMadeAt: null,
+      labelSexual: false, labelSexualById: null, labelSexualAt: null,
+      labelPossibleMinor: false, labelPossibleMinorById: null, labelPossibleMinorAt: null,
+      labelPossibleMinorClearedById: null, labelPossibleMinorClearedAt: null, labelPossibleMinorClearReason: null,
+      minorProtocolBefore: null,
     };
     memory.findings.set(row.id, row);
     return { id: row.id, created: true };
@@ -327,6 +350,8 @@ export async function recordCrawlFindings(
 ): Promise<{ results: CrawlFindingResult[]; mediaRejected: boolean }> {
   const fingerprints = new Map<string, Awaited<ReturnType<typeof resolvePoolFingerprint>>>();
   const sources = new Map<string, string | null>();
+  // WP33: the partner-permission gate, cached per page host for this batch.
+  const partnerPermissionMissing = new Map<string, boolean>();
   const results: CrawlFindingResult[] = [];
   let mediaRejected = false;
 
@@ -353,6 +378,17 @@ export async function recordCrawlFindings(
     }
     if (!pageOnSourceHost(page.normalizedUrl, sourceDomain)) {
       results.push({ status: "rejected", reason: "page_not_in_source" });
+      continue;
+    }
+    // WP33: findings on a platform partner's domains are allowed only after
+    // the partner's written permission to crawl is recorded — until then
+    // Asmita does not monitor the partner, so its copies stay out of the
+    // crawl flow (and out of the partner channel) entirely.
+    if (!partnerPermissionMissing.has(page.domain)) {
+      partnerPermissionMissing.set(page.domain, await partnerCrawlPermissionMissing(page.domain));
+    }
+    if (partnerPermissionMissing.get(page.domain) === true) {
+      results.push({ status: "rejected", reason: "partner_permission_missing" });
       continue;
     }
     if (!fingerprints.has(item.fingerprintId)) fingerprints.set(item.fingerprintId, await resolvePoolFingerprint(item.fingerprintId));
@@ -412,7 +448,7 @@ export async function recordCrawlFindings(
 // ---------------------------------------------------------------------------
 // Analyst review
 
-export const FINDING_STATUSES = ["CANDIDATE", "APPROVED", "DISMISSED"] as const;
+export const FINDING_STATUSES = ["CANDIDATE", "APPROVED", "DISMISSED", "MINOR_PROTOCOL"] as const;
 export type FindingStatus = (typeof FINDING_STATUSES)[number];
 
 export type FindingPlatformView = {
@@ -465,6 +501,20 @@ export type CrawlFindingListRow = {
   noticeAttemptUnconfirmed: boolean;
   /** She withdrew the authorisation this finding was matched under, so no notice can go out for it. */
   crawlConsentWithdrawn: boolean;
+  /**
+   * The finding's case is a watch (WP22): she has not asked for removal yet,
+   * so a representative notice is refused (watch_only_consent) until she
+   * chooses "Take it down".
+   */
+  watchOnly: boolean;
+  /** Analyst labels (review labels WP37): set or not, and when; never who. */
+  labels: {
+    aiMade: { set: boolean; setAt: string | null };
+    sexual: { set: boolean; setAt: string | null };
+    possibleMinor: { set: boolean; setAt: string | null; clearedAt: string | null; clearReason: string | null };
+  };
+  /** The admin asking set the possible-minor label, so another admin must clear it. Never says who else did. */
+  currentAdminSetMinorLabel: boolean;
 };
 
 type FindingRow = Omit<MemoryCrawlFinding, "reviewStatus"> & { reviewStatus: string };
@@ -476,6 +526,7 @@ type ListExtras = {
   platform: FindingPlatformView | null;
   link: { status: string; sentAt: Date | string | null; claimPending: boolean; stopped: boolean } | null;
   consentWithdrawn: boolean;
+  watchOnly: boolean;
 };
 
 function toListRow(row: FindingRow, extras: ListExtras, viewerId?: string): CrawlFindingListRow {
@@ -508,6 +559,18 @@ function toListRow(row: FindingRow, extras: ListExtras, viewerId?: string): Craw
     noticeAttemptUnconfirmed: Boolean(extras.link?.claimPending) && !sentAt,
     // A sent notice is never undone by a withdrawal.
     crawlConsentWithdrawn: !sentAt && (Boolean(extras.link?.stopped) || extras.consentWithdrawn),
+    watchOnly: extras.watchOnly,
+    labels: {
+      aiMade: { set: Boolean(row.labelAiMade), setAt: row.labelAiMadeAt ? new Date(row.labelAiMadeAt).toISOString() : null },
+      sexual: { set: Boolean(row.labelSexual), setAt: row.labelSexualAt ? new Date(row.labelSexualAt).toISOString() : null },
+      possibleMinor: {
+        set: Boolean(row.labelPossibleMinor),
+        setAt: row.labelPossibleMinorAt ? new Date(row.labelPossibleMinorAt).toISOString() : null,
+        clearedAt: row.labelPossibleMinorClearedAt ? new Date(row.labelPossibleMinorClearedAt).toISOString() : null,
+        clearReason: row.labelPossibleMinorClearReason ?? null,
+      },
+    },
+    currentAdminSetMinorLabel: Boolean(viewerId) && row.labelPossibleMinorById === viewerId,
   };
 }
 
@@ -523,23 +586,30 @@ function platformView(
 /** Whether the authorisation a finding was matched under is no longer live. */
 function consentGone(
   finding: { caseId: string; crawlConsentId: string | null },
-  consents: Array<{ id: string; caseId: string; withdrawnAt: Date | null }>,
+  consents: Array<{ id: string; caseId: string; withdrawnAt: Date | null; convertedFromId?: string | null }>,
 ) {
-  if (finding.crawlConsentId) return !consents.some((c) => c.id === finding.crawlConsentId && !c.withdrawnAt);
+  if (finding.crawlConsentId) {
+    // The recorded authorisation is gone only while no live one replaced it
+    // at "Take it down" (convertedFromId; WP22).
+    const converted = consents.some((c) => !c.withdrawnAt && c.convertedFromId === finding.crawlConsentId);
+    return !converted && !consents.some((c) => c.id === finding.crawlConsentId && !c.withdrawnAt);
+  }
   return !consents.some((c) => c.caseId === finding.caseId && !c.withdrawnAt);
 }
 
-export type ListFindingsFilter = { status?: FindingStatus; caseId?: string; id?: string; limit?: number };
+export type ListFindingsFilter = { status?: FindingStatus; caseId?: string; id?: string; label?: FindingLabel; limit?: number };
 
 /**
  * The review list. Never carries a URL (encrypted or not), a PDQ value or
  * another admin's identity. viewerId is the admin asking, for
- * currentAdminGaveFirstReview.
+ * currentAdminGaveFirstReview and currentAdminSetMinorLabel.
  */
 export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerId?: string): Promise<CrawlFindingListRow[]> {
   const limit = Math.min(Math.max(filter.limit ?? 100, 1), 500);
-  const keep = (f: { id: string; caseId: string; reviewStatus: string }) =>
-    (!filter.status || f.reviewStatus === filter.status) && (!filter.caseId || f.caseId === filter.caseId) && (!filter.id || f.id === filter.id);
+  const labelFlag = filter.label ? LABEL_COLUMNS[filter.label].flag : null;
+  const keep = (f: { id: string; caseId: string; reviewStatus: string } & Record<string, unknown>) =>
+    (!filter.status || f.reviewStatus === filter.status) && (!filter.caseId || f.caseId === filter.caseId) && (!filter.id || f.id === filter.id)
+    && (!labelFlag || f[labelFlag] === true);
 
   if (isDevNoDb()) {
     const memory = crawlMemory();
@@ -567,6 +637,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
           // Nothing is ever sent from the memory store.
           link: link ? { status: link.status, sentAt: null, claimPending: false, stopped: Boolean(link.crawlConsentWithdrawnAt) } : null,
           consentWithdrawn: consentGone(f, memory.consents),
+          watchOnly: record?.mode === "WATCH",
         }, viewerId);
       });
   }
@@ -578,9 +649,10 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
       ...(filter.status ? { reviewStatus: filter.status } : {}),
       ...(filter.caseId ? { caseId: filter.caseId } : {}),
       ...(filter.id ? { id: filter.id } : {}),
+      ...(labelFlag ? { [labelFlag]: true } : {}),
     },
     include: {
-      case: { select: { referenceNumber: true } },
+      case: { select: { referenceNumber: true, mode: true } },
       source: { select: { domain: true } },
       hashSubmission: { select: { hashDigest: true } },
       submittedUrl: {
@@ -600,7 +672,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
   });
   const caseIds = [...new Set(rows.map((row) => row.caseId))];
   const consents = caseIds.length
-    ? await db.crawlConsent.findMany({ where: { caseId: { in: caseIds } }, select: { id: true, caseId: true, withdrawnAt: true } })
+    ? await db.crawlConsent.findMany({ where: { caseId: { in: caseIds } }, select: { id: true, caseId: true, withdrawnAt: true, convertedFromId: true } })
     : [];
   // Before approval there is no link: show the platform the source site belongs to.
   const domains = [...new Set(rows.filter((row) => !row.submittedUrl).map((row) => row.source.domain))];
@@ -628,6 +700,7 @@ export async function listCrawlFindings(filter: ListFindingsFilter = {}, viewerI
           }
         : null,
       consentWithdrawn: consentGone(row, consents),
+      watchOnly: row.case.mode === "WATCH",
     }, viewerId);
   });
 }
@@ -666,13 +739,17 @@ export type ReviewOutcome =
         | "consent_withdrawn"
         | "finding_expired"
         | "invalid_url"
-        | "case_not_found";
+        | "case_not_found"
+        | "minor_protocol_active";
     };
 
-type ReviewState = { reviewStatus: string; reviewedById: string | null };
+type ReviewState = { reviewStatus: string; reviewedById: string | null; labelPossibleMinor?: boolean | null };
 
 /**
- * Decides what a review does, without touching storage. A null distance (an
+ * Decides what a review does, without touching storage. While the
+ * possible-minor label is set (review labels WP37) no adult-flow action
+ * applies at all: the finding sits in the minors protocol state and only a
+ * second admin clearing the label can bring it back. A null distance (an
  * SSCD finding, ADR 008) means the two-step approval path, like a distance
  * above the threshold: a new layer starts strict.
  */
@@ -680,7 +757,8 @@ export function planReview(
   finding: { distance: number | null } & ReviewState,
   decision: ReviewDecision,
   reviewerId: string,
-): { action: "dismiss" | "first_approval" | "final_approval"; second: boolean } | { error: "already_reviewed" | "second_reviewer_required" } {
+): { action: "dismiss" | "first_approval" | "final_approval"; second: boolean } | { error: "already_reviewed" | "second_reviewer_required" | "minor_protocol_active" } {
+  if (finding.labelPossibleMinor) return { error: "minor_protocol_active" };
   if (finding.reviewStatus !== "CANDIDATE") return { error: "already_reviewed" };
   const firstDone = finding.reviewedById !== null;
   if (firstDone && finding.reviewedById === reviewerId) return { error: "second_reviewer_required" };
@@ -706,6 +784,52 @@ async function ensureSourceForApprovedFinding(host: string) {
     await ensureCrawlSourceForReportedHost(host);
   } catch {
     console.error("crawl_source_reported_failed");
+  }
+}
+
+/**
+ * WP33: the partner channel alert after an analyst accepts a finding on a
+ * partner's domain — the case reference, the page URL on the partner's own
+ * domain and the fingerprint id; never the image address, never a hash
+ * value, never anything about the survivor. Never allowed to fail the
+ * approval that triggers it: the review is already recorded when this
+ * runs, so a missing case row or a channel problem is logged, nothing more.
+ */
+async function alertPartnerChannelOfApprovedFinding(input: {
+  findingId: string;
+  caseId: string;
+  caseReference: string | null;
+  pageUrl: string;
+  pageDomain: string;
+  fingerprintId: string;
+  reviewerId: string;
+}): Promise<void> {
+  try {
+    if (input.caseReference === null) return;
+    await alertPartnerChannelOfFinding({
+      findingId: input.findingId,
+      caseId: input.caseId,
+      caseReference: input.caseReference,
+      pageUrl: input.pageUrl,
+      pageDomain: input.pageDomain,
+      fingerprintId: input.fingerprintId,
+      reviewerId: input.reviewerId,
+    });
+  } catch {
+    console.error("partner_channel_alert_failed");
+  }
+}
+
+/**
+ * Watch-and-verify WP24: when this approval is a re-upload found while her
+ * case is closed and inside its watch window, she gets the reference-only
+ * email. Never allowed to fail the approval, which is already committed.
+ */
+async function notifyReuploadIfWatching(caseId: string, findingId: string, now: Date) {
+  try {
+    await notifyReuploadFinding(caseId, findingId, now);
+  } catch {
+    console.error("reupload_email_failed"); // fixed code only, never an address
   }
 }
 
@@ -757,7 +881,7 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
     // Checked again under a lock in this transaction: a withdrawal either
     // committed first (refused here) or waits for this approval and then
     // stops the link it creates.
-    const live = await tx.$queryRaw<Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date }>>`SELECT "id", "hashSubmissionIds", "signedAt" FROM "CrawlConsent" WHERE "caseId" = ${finding.caseId} AND "withdrawnAt" IS NULL FOR SHARE`;
+    const live = await tx.$queryRaw<Array<{ id: string; hashSubmissionIds: string[]; signedAt: Date; convertedFromId: string | null }>>`SELECT "id", "hashSubmissionIds", "signedAt", "convertedFromId" FROM "CrawlConsent" WHERE "caseId" = ${finding.caseId} AND "withdrawnAt" IS NULL FOR SHARE`;
     if (!live.some((consent) => consentCoversFinding({ ...consent, signedAt: new Date(consent.signedAt) }, finding))) return "consent_withdrawn" as const;
     const claimed = await tx.crawlFinding.updateMany({ where: unchanged, data: { reviewStatus: "APPROVED", ...reviewerFields } });
     if (claimed.count === 0) return null;
@@ -789,6 +913,22 @@ export async function reviewCrawlFinding(input: { findingId: string; decision: R
   if (!outcome) return { ok: false, error: "already_reviewed" };
   await auditReview("CRAWL_FINDING_APPROVED", finding, input.reviewerId, { stage: "final", second: plan.second, submittedUrlId: outcome.submittedUrlId, createdUrl: outcome.createdUrl });
   await ensureSourceForApprovedFinding(parsed.domain);
+  const caseRow = await db.case.findUnique({ where: { id: finding.caseId }, select: { referenceNumber: true } });
+  await alertPartnerChannelOfApprovedFinding({
+    findingId: finding.id,
+    caseId: finding.caseId,
+    caseReference: caseRow?.referenceNumber ?? null,
+    pageUrl: parsed.normalizedUrl,
+    pageDomain: parsed.domain,
+    fingerprintId: finding.hashSubmissionId,
+    reviewerId: input.reviewerId,
+  });
+  // A watch (WP22): her copy-found alert, reference only, best-effort.
+  await notifyWatchCopyFound(finding.caseId, finding.id);
+  // A re-upload found on her closed, still-watching case (WP24): the same
+  // reference-only alert. The two conditions are disjoint (an open watch vs a
+  // closed case inside its re-upload window).
+  await notifyReuploadIfWatching(finding.caseId, finding.id, now);
   return { ok: true, status: "APPROVED", ...outcome };
 }
 
@@ -830,6 +970,7 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
       platformName: parsed.platform?.name || "Unknown - will be reviewed",
       status: crawlerUrlStatus(parsed),
       urlHash: parsed.urlHash,
+      urlEncrypted: encryptField(parsed.normalizedUrl),
       platformId: null,
       flaggedForReview: false,
       source: "CRAWLER",
@@ -838,6 +979,19 @@ async function reviewInMemory(findingId: string, decision: ReviewDecision, revie
   }
   await auditReview("CRAWL_FINDING_APPROVED", finding, reviewerId, { stage: "final", second: plan.second, submittedUrlId, createdUrl: !existing });
   await ensureSourceForApprovedFinding(parsed.domain);
+  await alertPartnerChannelOfApprovedFinding({
+    findingId: finding.id,
+    caseId: finding.caseId,
+    caseReference: record.referenceNumber,
+    pageUrl: parsed.normalizedUrl,
+    pageDomain: parsed.domain,
+    fingerprintId: finding.hashSubmissionId,
+    reviewerId,
+  });
+  // A watch (WP22): her copy-found alert, reference only, best-effort.
+  await notifyWatchCopyFound(finding.caseId, finding.id);
+  // A re-upload found on her closed, still-watching case (WP24), same rules.
+  await notifyReuploadIfWatching(finding.caseId, finding.id, now);
   return { ok: true, status: "APPROVED", submittedUrlId: submittedUrlId!, createdUrl: !existing };
 }
 
@@ -854,4 +1008,255 @@ async function auditReview(
     actorId: reviewerId,
     data: { caseId: finding.caseId, distance: finding.distance, ...extra },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Analyst labels (review labels WP37)
+
+/** The three labels, our own wording; not any external taxonomy. */
+export const FINDING_LABELS = ["aiMade", "sexual", "possibleMinor"] as const;
+export type FindingLabel = (typeof FINDING_LABELS)[number];
+
+/** How each label is addressed in URLs and queries (findings list, API). */
+export const LABEL_QUERY_KEYS: Record<FindingLabel, string> = {
+  aiMade: "ai-made",
+  sexual: "sexual",
+  possibleMinor: "possible-minor",
+};
+
+/** The column that holds each label's flag, the same name on every backend. */
+const LABEL_COLUMNS = {
+  aiMade: { flag: "labelAiMade", by: "labelAiMadeById", at: "labelAiMadeAt" },
+  sexual: { flag: "labelSexual", by: "labelSexualById", at: "labelSexualAt" },
+  possibleMinor: { flag: "labelPossibleMinor", by: "labelPossibleMinorById", at: "labelPossibleMinorAt" },
+} as const satisfies Record<FindingLabel, { flag: string; by: string; at: string }>;
+
+/** A label filter value from a query string, or null when it is not one. */
+export function findingLabelForQuery(raw: string | undefined): FindingLabel | null {
+  if (!raw) return null;
+  return FINDING_LABELS.find((label) => LABEL_QUERY_KEYS[label] === raw) ?? null;
+}
+
+export const CLEAR_REASON_MAX = 500;
+
+export type LabelAction = "set" | "clear";
+export type LabelErrorCode =
+  | "finding_not_found"
+  | "label_not_set"
+  | "label_conflict"
+  | "reason_required"
+  | "second_admin_required";
+export type LabelOutcome = { ok: true; changed: boolean } | { ok: false; error: LabelErrorCode };
+
+/** What one label action writes; every backend stores these fields the same way. */
+type LabelColumnWrite = {
+  labelAiMade?: boolean;
+  labelAiMadeById?: string | null;
+  labelAiMadeAt?: Date | null;
+  labelSexual?: boolean;
+  labelSexualById?: string | null;
+  labelSexualAt?: Date | null;
+  labelPossibleMinor?: boolean;
+  labelPossibleMinorById?: string | null;
+  labelPossibleMinorAt?: Date | null;
+  labelPossibleMinorClearedById?: string | null;
+  labelPossibleMinorClearedAt?: Date | null;
+  labelPossibleMinorClearReason?: string | null;
+  minorProtocolBefore?: string | null;
+  reviewStatus?: FindingStatus;
+};
+
+/** The finding state the label planner reads. */
+type LabelFindingState = {
+  id: string;
+  caseId: string;
+  reviewStatus: string;
+  labelAiMade: boolean;
+  labelSexual: boolean;
+  labelPossibleMinor: boolean;
+  labelPossibleMinorById: string | null;
+  minorProtocolBefore: string | null;
+};
+
+type LabelPlan =
+  | { ok: false; error: LabelErrorCode }
+  | { ok: true; changed: false }
+  | {
+      ok: true;
+      changed: true;
+      write: LabelColumnWrite;
+      /** The label flag column this action is conditional on, and its current value. */
+      flagColumn: string;
+      flagValue: boolean;
+      /** The reviewStatus the plan was computed from; the write is refused if it moved (possible minor only). */
+      guardStatus: string | null;
+      audit: { eventType: "CRAWL_FINDING_LABEL_SET" | "CRAWL_FINDING_LABEL_CLEARED"; data: Record<string, unknown> };
+    };
+
+/** The plain label fields one action writes, without the possible-minor extras. */
+function labelWriteFor(label: FindingLabel, action: LabelAction, adminId: string, now: Date): LabelColumnWrite {
+  if (label === "aiMade") {
+    return action === "set"
+      ? { labelAiMade: true, labelAiMadeById: adminId, labelAiMadeAt: now }
+      : { labelAiMade: false, labelAiMadeById: null, labelAiMadeAt: null };
+  }
+  if (label === "sexual") {
+    return action === "set"
+      ? { labelSexual: true, labelSexualById: adminId, labelSexualAt: now }
+      : { labelSexual: false, labelSexualById: null, labelSexualAt: null };
+  }
+  return action === "set"
+    ? { labelPossibleMinor: true, labelPossibleMinorById: adminId, labelPossibleMinorAt: now }
+    : { labelPossibleMinor: false };
+}
+
+/** Whether the label is currently set. */
+function labelIsSet(finding: LabelFindingState, label: FindingLabel): boolean {
+  return label === "aiMade" ? finding.labelAiMade : label === "sexual" ? finding.labelSexual : finding.labelPossibleMinor;
+}
+
+/**
+ * Decides one label action, without touching storage.
+ *
+ * - Any analyst may set or clear "Looks AI-made" and "Sexual content".
+ * - "Possible minor" is a safety switch: setting it moves a CANDIDATE or
+ *   APPROVED finding to MINOR_PROTOCOL (out of the adult queue, not
+ *   approvable, no notice) and remembers where it came from. Clearing it
+ *   needs an admin other than the setter and a recorded reason, and only
+ *   then does the finding return to that earlier state. A DISMISSED finding
+ *   keeps its dismissal: the label is recorded, nothing moves.
+ */
+function planLabelChange(
+  finding: LabelFindingState,
+  input: { action: LabelAction; label: FindingLabel; adminId: string; reason?: string },
+  now: Date,
+): LabelPlan {
+  const { action, label, adminId } = input;
+  const columns = LABEL_COLUMNS[label];
+  if (action === "set") {
+    if (labelIsSet(finding, label)) return { ok: true, changed: false };
+    const write = labelWriteFor(label, "set", adminId, now);
+    const data: Record<string, unknown> = { caseId: finding.caseId, label };
+    if (label === "possibleMinor") {
+      // Only the adult review states move; a DISMISSED finding keeps its
+      // dismissal (it is out of the adult flow already) and a clear restores
+      // nothing. The earlier clear record (if any) starts over.
+      const movesOutOfAdultFlow = finding.reviewStatus === "CANDIDATE" || finding.reviewStatus === "APPROVED";
+      write.labelPossibleMinorClearedById = null;
+      write.labelPossibleMinorClearedAt = null;
+      write.labelPossibleMinorClearReason = null;
+      write.minorProtocolBefore = movesOutOfAdultFlow ? (finding.reviewStatus as FindingStatus) : null;
+      if (movesOutOfAdultFlow) write.reviewStatus = "MINOR_PROTOCOL";
+      data.minorProtocol = movesOutOfAdultFlow;
+    }
+    return { ok: true, changed: true, write, flagColumn: columns.flag, flagValue: false, guardStatus: label === "possibleMinor" ? finding.reviewStatus : null, audit: { eventType: "CRAWL_FINDING_LABEL_SET", data } };
+  }
+
+  // Clear.
+  if (!labelIsSet(finding, label)) return { ok: false, error: "label_not_set" };
+  const data: Record<string, unknown> = { caseId: finding.caseId, label };
+  const write = labelWriteFor(label, "clear", adminId, now);
+  if (label !== "possibleMinor") {
+    return { ok: true, changed: true, write, flagColumn: columns.flag, flagValue: true, guardStatus: null, audit: { eventType: "CRAWL_FINDING_LABEL_CLEARED", data } };
+  }
+  const reason = (input.reason ?? "").trim().slice(0, CLEAR_REASON_MAX);
+  if (!reason) return { ok: false, error: "reason_required" };
+  if (finding.labelPossibleMinorById && finding.labelPossibleMinorById === adminId) return { ok: false, error: "second_admin_required" };
+  write.labelPossibleMinorClearedById = adminId;
+  write.labelPossibleMinorClearedAt = now;
+  write.labelPossibleMinorClearReason = reason;
+  // The setter stays on the row (labelPossibleMinorById) as the record of who
+  // set it; only the flag goes. A MINOR_PROTOCOL finding returns to the state
+  // the label took it out of.
+  const restoredTo = finding.reviewStatus === "MINOR_PROTOCOL" ? (finding.minorProtocolBefore as FindingStatus | null) ?? "CANDIDATE" : null;
+  if (restoredTo) write.reviewStatus = restoredTo;
+  data.reason = reason;
+  data.restoredTo = restoredTo;
+  return { ok: true, changed: true, write, flagColumn: columns.flag, flagValue: true, guardStatus: finding.reviewStatus, audit: { eventType: "CRAWL_FINDING_LABEL_CLEARED", data } };
+}
+
+async function auditLabel(
+  plan: { audit: { eventType: "CRAWL_FINDING_LABEL_SET" | "CRAWL_FINDING_LABEL_CLEARED"; data: Record<string, unknown> } },
+  finding: { id: string },
+  adminId: string,
+) {
+  await writeAuditLog({
+    eventType: plan.audit.eventType,
+    entityType: "CrawlFinding",
+    entityId: finding.id,
+    actorId: adminId,
+    data: plan.audit.data,
+  });
+}
+
+/**
+ * Sets or clears one analyst label on a finding, on the memory, Kysely and
+ * Prisma paths. Every change is audited like the review actions; a no-op
+ * (the label is already in the wanted state) changes and audits nothing.
+ *
+ * The write is conditional on the state it was planned from, so two
+ * concurrent actions on one finding cannot interleave: a set and a clear of
+ * the same label are mutually exclusive, and a possible-minor set or clear
+ * that raced a review is refused with `label_conflict` — reload and try
+ * again.
+ */
+export async function applyFindingLabel(input: {
+  findingId: string;
+  action: LabelAction;
+  label: FindingLabel;
+  adminId: string;
+  reason?: string;
+  now?: Date;
+}): Promise<LabelOutcome> {
+  const now = input.now ?? new Date();
+
+  if (isDevNoDb()) {
+    const finding = crawlMemory().findings.get(input.findingId);
+    if (!finding) return { ok: false, error: "finding_not_found" };
+    const plan = planLabelChange(finding, input, now);
+    if (!plan.ok) return plan;
+    if (plan.changed) {
+      Object.assign(finding, plan.write);
+      await auditLabel(plan, finding, input.adminId);
+    }
+    return { ok: true, changed: plan.changed };
+  }
+
+  if (usesWorkerKysely()) {
+    const db = getWorkerDb();
+    const finding = await db.selectFrom("CrawlFinding").selectAll().where("id", "=", input.findingId).executeTakeFirst();
+    if (!finding) return { ok: false, error: "finding_not_found" };
+    const plan = planLabelChange(finding as unknown as LabelFindingState, input, now);
+    if (!plan.ok) return plan;
+    if (!plan.changed) return { ok: true, changed: false };
+    // Conditional on the state the plan was made from: another admin's set or
+    // clear of the same label, or a review that moved the status, makes this
+    // a conflict instead of a half-applied label.
+    let update = db.updateTable("CrawlFinding").set(plan.write)
+      .where("id", "=", input.findingId)
+      .where(plan.flagColumn as "labelAiMade" | "labelSexual" | "labelPossibleMinor", "=", plan.flagValue);
+    if (plan.guardStatus !== null) update = update.where("reviewStatus", "=", plan.guardStatus as FindingStatus);
+    const updated = await update.returning("id").executeTakeFirst();
+    if (!updated) return { ok: false, error: "label_conflict" };
+    await auditLabel(plan, finding, input.adminId);
+    return { ok: true, changed: true };
+  }
+
+  const { db } = await import("@/lib/db");
+  const finding = await db.crawlFinding.findUnique({ where: { id: input.findingId } });
+  if (!finding) return { ok: false, error: "finding_not_found" };
+  const plan = planLabelChange(finding, input, now);
+  if (!plan.ok) return plan;
+  if (!plan.changed) return { ok: true, changed: false };
+  const flagWhere =
+    plan.flagColumn === "labelAiMade" ? { labelAiMade: plan.flagValue }
+    : plan.flagColumn === "labelSexual" ? { labelSexual: plan.flagValue }
+    : { labelPossibleMinor: plan.flagValue };
+  const updated = await db.crawlFinding.updateMany({
+    where: { id: input.findingId, ...flagWhere, ...(plan.guardStatus !== null ? { reviewStatus: plan.guardStatus as FindingStatus } : {}) },
+    data: plan.write,
+  });
+  if (updated.count === 0) return { ok: false, error: "label_conflict" };
+  await auditLabel(plan, finding, input.adminId);
+  return { ok: true, changed: true };
 }

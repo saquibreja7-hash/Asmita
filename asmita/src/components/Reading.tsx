@@ -11,9 +11,9 @@ export type TocItem = { id: string; title: string };
 
 export function ReadingLayout({ tocLabel, toc, children }: { tocLabel: string; toc: TocItem[]; children: React.ReactNode }) {
   return (
-    <div className="container py-14 md:py-20">
+    <div className="container py-8 md:py-14">
       <div className="mx-auto max-w-5xl gap-16 md:flex md:items-start">
-        <aside className="mb-12 md:mb-0 md:w-56 md:shrink-0">
+        <aside className="mb-8 md:mb-0 md:w-56 md:shrink-0">
           <div className="md:sticky md:top-24">
             <p className="eyebrow mb-4 block">{tocLabel}</p>
             <nav aria-label={tocLabel}>
@@ -24,7 +24,7 @@ export function ReadingLayout({ tocLabel, toc, children }: { tocLabel: string; t
                       href={`#${s.id}`}
                       className="flex items-baseline gap-2 rounded-[var(--radius-box)] px-2 py-1 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]"
                     >
-                      <span className="shrink-0 text-[10px] tabular-nums">{String(i + 1).padStart(2, "0")}</span>
+                      <span className="shrink-0 text-xs tabular-nums">{String(i + 1).padStart(2, "0")}</span>
                       <span className="leading-[1.5]">{s.title}</span>
                     </a>
                   </li>

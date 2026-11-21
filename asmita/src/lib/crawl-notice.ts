@@ -13,6 +13,7 @@ import {
   renderNoticeTemplate,
 } from "@/lib/notice-generator";
 import { assertVerifiedNoticeRecipient, dispatchTier2Notice } from "@/lib/notice-dispatch";
+import { copyNoticeToPartnerChannel } from "@/lib/partner-channel";
 import { generateNoticePdf, noticePdfErrorCode } from "@/lib/notice-pdf";
 import { checkSignedTemplate, templateDigest } from "@/lib/signed-template";
 import { parseSubmittedUrl } from "@/lib/url-parser";
@@ -181,6 +182,10 @@ export async function prepareRepresentativeNotice(input: {
   // reported exactly like a missing finding.
   const finding = await db.crawlFinding.findUnique({ where: { id: input.findingId } });
   if (!finding || finding.caseId !== input.caseId) return refuse(404, "finding_not_found");
+  // A finding marked possible minor is out of the adult flow entirely
+  // (review labels WP37): no representative notice may be prepared or sent
+  // for it while the label is set, whatever its review status.
+  if (finding.labelPossibleMinor) return refuse(409, "possible_minor_label_set");
   if (finding.reviewStatus !== "APPROVED") return refuse(409, "finding_not_approved");
   // An SSCD finding has no PDQ distance and always needs the second reviewer,
   // exactly like the least-certain PDQ matches (ADR 008, WP28).
@@ -217,6 +222,11 @@ export async function prepareRepresentativeNotice(input: {
     where: { caseId: finding.caseId, withdrawnAt: null },
     orderBy: { signedAt: "desc" },
   });
+  // A watch-only authorisation (WP22 "Watch for my images") never covers a
+  // notice: she has not asked for removal yet. She must choose "Take it
+  // down", which converts the watch into a case and asks for the full
+  // authorisation on the spot, before anything can be sent.
+  if (consent?.scope === "WATCH_ONLY") return refuse(409, "watch_only_consent");
   // It must list the matched fingerprint, and the finding must have been
   // recorded under it: a finding from an earlier authorisation is never sent
   // under a later one (consentCoversFinding).
@@ -349,7 +359,16 @@ export async function previewRepresentativeNotice(input: { findingId: string; ca
 }
 
 export type DispatchResult =
-  | { ok: true; dispatched: boolean; transport: typeof REPRESENTATIVE_TRANSPORT; messageId: string; sentAt: string; contentDigest: string }
+  | {
+      ok: true;
+      dispatched: boolean;
+      transport: typeof REPRESENTATIVE_TRANSPORT;
+      messageId: string;
+      sentAt: string;
+      contentDigest: string;
+      /** WP33: the partner channel copy, when the platform is a partner with one. */
+      partnerChannel?: { sent: boolean; reason?: string; partnerId?: string };
+    }
   | Refusal;
 
 /**
@@ -478,6 +497,33 @@ export async function dispatchRepresentativeNotice(input: {
         transport: REPRESENTATIVE_TRANSPORT,
       },
     });
+    // WP33: the platform partner's channel gets a copy of the same notice
+    // — in addition to the verified grievance contact, never instead of it.
+    // Never allowed to fail or retry-block the dispatch above: a channel
+    // problem is audited inside, not surfaced here.
+    let partnerChannel: { sent: boolean; reason?: string; partnerId?: string } | undefined;
+    try {
+      const page = parseSubmittedUrl(decryptField(link.urlEncrypted));
+      if (page.ok) {
+        const copy = await copyNoticeToPartnerChannel({
+          caseId: notice.caseId,
+          urlId: notice.urlId,
+          domain: page.domain,
+          subject: notice.subject,
+          body: notice.emailBody,
+          signedNoticePdf: pdf,
+          fingerprintIds: notice.fingerprintIds,
+          actorId: input.adminId,
+        });
+        partnerChannel = copy.sent
+          ? { sent: true, partnerId: copy.partnerId }
+          : copy.reason === "no_partner"
+            ? undefined
+            : { sent: false, reason: copy.reason };
+      }
+    } catch {
+      // The copy never fails the dispatch.
+    }
     return {
       ok: true,
       dispatched: result.dispatched,
@@ -485,6 +531,7 @@ export async function dispatchRepresentativeNotice(input: {
       messageId: result.notice.messageId,
       sentAt: result.notice.sentAt,
       contentDigest: notice.contentDigest,
+      ...(partnerChannel ? { partnerChannel } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "";

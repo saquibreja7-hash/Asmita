@@ -16,8 +16,8 @@ const stepKeys: Record<number, MessageKey> = {
 export function FlowProgress({ step, locale }: { step: 1 | 2 | 3 | 4; locale: Locale }) {
   return (
     <div className="mb-10">
-      <p className="eyebrow">
-        {t(locale, "flow.stepLabel")} {step}/{TOTAL}
+      <p className="text-sm font-medium text-[var(--text-muted)]">
+        {locale === "hi" ? `चरण ${step} / ${TOTAL}` : `Stage ${step} of ${TOTAL}`}
         <span className="sm:hidden"> · {t(locale, stepKeys[step])}</span>
       </p>
       {/* Phones: four thin segments. */}
@@ -30,7 +30,7 @@ export function FlowProgress({ step, locale }: { step: 1 | 2 | 3 | 4; locale: Lo
           />
         ))}
       </div>
-      <ol className="mt-4 hidden flex-wrap items-center gap-y-3 sm:flex" aria-label="Progress">
+      <ol className="mt-4 hidden flex-wrap items-center gap-y-3 sm:flex" aria-label={t(locale, "flow.progress")}>
         {Array.from({ length: TOTAL }, (_, i) => {
           const n = (i + 1) as 1 | 2 | 3 | 4;
           const state = n < step ? "done" : n === step ? "current" : "todo";

@@ -28,6 +28,7 @@ const fake = vi.hoisted(() => {
     ["crawlFinding", "caseId", "case", "RESTRICT"],
     ["crawlFinding", "hashSubmissionId", "hashSubmission", "RESTRICT"],
     ["submittedUrl", "crawlFindingId", "crawlFinding", "SET NULL"],
+    ["linkVerification", "submittedUrlId", "submittedUrl", "RESTRICT"],
   ];
 
   function matches(row: Row, where: Where = {}): boolean {
@@ -95,6 +96,12 @@ const fake = vi.hoisted(() => {
         const made = { id: `new-${rows().length + 1}`, deactivatedAt: null, ...create };
         rows().push(made);
         return made;
+      },
+      createMany: async ({ data }: { data: Row[] }) => {
+        maybeFail(table);
+        const made = Array.isArray(data) ? data : [data];
+        made.forEach((row) => rows().push({ ...row }));
+        return { count: made.length };
       },
       deleteMany: async ({ where }: { where: Where }) => {
         maybeFail(table);
@@ -179,6 +186,10 @@ function seed() {
     ],
     escalation: [{ id: "e1", noticeId: "n1" }],
     urlPortalToken: [{ id: "t1", urlId: "url2" }],
+    linkVerification: [
+      { id: "v1", submittedUrlId: "url1", attempt: 1, outcome: "GONE", checkedAt: due, enqueuedAt: due, dueAt: due },
+      { id: "v2", submittedUrlId: "url1", attempt: 2, outcome: "PENDING", checkedAt: null, enqueuedAt: null, dueAt: due },
+    ],
     hashSubmission: [
       { id: "h1", caseId: "c1", hashEncrypted: "enc:fingerprint-1", hashDigest: "digest-1", crawlPoolId: "fp_pool-1" },
       { id: "h2", caseId: "c1", hashEncrypted: "enc:fingerprint-2", hashDigest: "digest-2", crawlPoolId: null },
@@ -266,6 +277,8 @@ describe("hardDeleteDueUsers (database path)", () => {
     // Crawler authorisations and findings go; kept fingerprints leave the pool.
     expect(fake.tables.crawlConsent.map((r) => r.id)).toEqual(["cc2"]);
     expect(fake.tables.crawlFinding.map((r) => r.id)).toEqual(["cf3"]);
+    // Removal re-checks are her links' rows, so they go with the links.
+    expect(fake.tables.linkVerification).toEqual([]);
     expect(fake.tables.hashSubmission.map((r) => [r.id, r.crawlPoolId])).toEqual([["h1", null], ["h2", null], ["h3", "fp_pool-3"]]);
 
     expect(fake.tables.case.find((c) => c.id === "c1")).toMatchObject({
@@ -308,7 +321,10 @@ describe("hardDeleteDueUsers (database path)", () => {
         removed: {
           cases: 1, links: 2, notices: 2, escalations: 1,
           deliveryProofs: 3, feedback: 1, sessions: 1, otpCodes: 1,
-          crawlFindings: 2, crawlConsents: 1,
+          crawlFindings: 2, crawlConsents: 1, linkVerifications: 2,
+          // WP32: nothing was shared with partners in this seed, so no feed
+          // withdrawals and no outcome rows existed to delete.
+          partnerFeedEvents: 0, partnerOutcomes: 0,
         },
         retained: HARD_DELETE_RETAINED,
       },
@@ -316,6 +332,40 @@ describe("hardDeleteDueUsers (database path)", () => {
     expect(JSON.stringify(entries[0].data)).not.toContain("audit_metadata_only");
     expect(entries[0].data).not.toHaveProperty("removed.fingerprints");
     expect(HARD_DELETE_RETAINED.fingerprints).toContain("kept");
+  });
+
+  it("tells the partner feed to delete what it holds of hers, and drops her outcome rows (WP32)", async () => {
+    // h1 was shared with partners (an outstanding ADD); h2 never was.
+    fake.tables.partnerFeedEvent = [
+      { id: "fe1", seq: 1, fingerprintId: "h1", type: "ADD", kind: "image", caseId: "c1", caseRef: "ASM-TEST-0001" },
+    ];
+    // One outcome row on her case (it can hold one of her links), one on the
+    // other survivor's case, which must survive her erasure.
+    fake.tables.partnerOutcome = [
+      { id: "po1", partnerId: "p1", caseId: "c1", urlEncrypted: "enc:link-1", urlHash: "link-hash-1", submittedUrlId: "url1", fingerprintId: "h1", outcome: "REMOVED", note: null },
+      { id: "po2", partnerId: "p1", caseId: "c2", urlEncrypted: "enc:link-3", urlHash: "link-hash-3", submittedUrlId: "url3", fingerprintId: "h3", outcome: "REMOVED", note: null },
+    ];
+
+    expect(await hardDeleteDueUsers(now)).toEqual(["u1"]);
+
+    // The outstanding ADD got its WITHDRAW, carrying the case reference read
+    // before the case was cleared; the ADD stays as the append-only record,
+    // and the never-shared h2 gets nothing.
+    const events = fake.tables.partnerFeedEvent;
+    expect(events.filter((e) => e.fingerprintId === "h1").map((e) => e.type)).toEqual(["ADD", "WITHDRAW"]);
+    const withdraw = events.find((e) => e.type === "WITHDRAW")!;
+    expect(withdraw).toMatchObject({ caseId: "c1", caseRef: "ASM-TEST-0001", kind: "image" });
+    expect(events.filter((e) => e.fingerprintId === "h2")).toEqual([]);
+
+    // Her outcome row goes with her links; the other survivor's stays.
+    expect(fake.tables.partnerOutcome.map((r) => r.id)).toEqual(["po2"]);
+
+    // The audit's removed counts say exactly what happened.
+    const entry = inMemoryAuditLog.find((e) => e.eventType === "CASE_HARD_DELETED")!;
+    expect((entry.data as { removed: Record<string, number> }).removed).toMatchObject({
+      partnerFeedEvents: 1,
+      partnerOutcomes: 1,
+    });
   });
 
   it("rolls back a failed deletion, marks it FAILED without PII, and retries it on the next sweep", async () => {

@@ -98,7 +98,11 @@ describe("aggregateScorecard", () => {
       hashAdvisoriesSent: 3,
       urlNoticesSent: 12,
       shareActioned: 0.583, // 7 of 12 actioned
-      shareActionedWithinDeadline: 0.25, // 3 of 12 inside PLATFORM_DEADLINE_HOURS
+      // 5 of 12 inside PLATFORM_DEADLINE_HOURS. Master's WP26 (owner
+      // decision, 19 November 2026) moved the deadline from 2 to 24 hours;
+      // with 24 hours the fixtures' 1.5/2/10/12/20-hour responses all fall
+      // inside the window (the 100-hour one still does not).
+      shareActionedWithinDeadline: 0.417,
       medianHoursToFirstResponse: 10, // [1, 1.5, 2, 10, 12, 20, 100]
       medianHoursToRemoval: 6, // [1.5, 2, 10, 12]
       followUpsNeeded: 2,
@@ -196,7 +200,7 @@ describe("scorecardCsv", () => {
     expect(lines[0]).toBe(
       "Platform,Notices sent,Hash advisories sent,Link notices sent,Share actioned (%),Median hours to first response,Median hours to removal,Share actioned within deadline (%),Follow-ups needed",
     );
-    expect(csv).toContain("Example Chat,15,3,12,58.3,10,6,25.0,2");
+    expect(csv).toContain("Example Chat,15,3,12,58.3,10,6,41.7,2");
     const tinyLine = lines.find((line) => line.startsWith("Tiny Forum"));
     expect(tinyLine).toBe("Tiny Forum," + Array<string>(8).fill("Not enough notices to report").join(","));
     expect(csv.endsWith("\r\n")).toBe(true);

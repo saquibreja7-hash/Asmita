@@ -6,9 +6,10 @@
 // so it only ever reports facts the file states about itself: it does not guess,
 // and it cannot falsely accuse a genuine photo.
 //
-// Full C2PA Content Credential *verification* (signed manifests, SynthID) is
-// handled server-side by the optional OpenAI deeper check, not here, to avoid
-// shipping a WASM engine and a CDN dependency into the browser.
+// This is the SECOND signal on the check-image page. Signed C2PA Content
+// Credentials are read on-device by src/lib/c2pa-credentials.ts (the CAI's
+// c2pa-web engine, first-party WASM); the optional OpenAI deeper check
+// (/api/check-image) looks for OpenAI's own signals and requires her tick.
 
 // IPTC DigitalSourceType values that mean "made with generative AI".
 const AI_SOURCE_TYPES = [
@@ -39,7 +40,9 @@ export async function readImageProvenance(file: File): Promise<ProvenanceResult>
 
   try {
     const exifr = (await import("exifr")).default;
-    const data = await exifr.parse(file, { xmp: true, iptc: true, tiff: true });
+    // The bytes are read locally from the file she picked; exifr never leaves
+    // the page. (Passing the ArrayBuffer works in the browser and in Node.)
+    const data = await exifr.parse(await file.arrayBuffer(), { xmp: true, iptc: true, tiff: true });
     if (!data) return result;
 
     // DigitalSourceType can surface under a few key spellings depending on writer.
