@@ -519,11 +519,17 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 
 .site-footer-copy.hi { font-family: var(--font-deva), var(--font-sans); }
 
+/* Three link columns, spread so the last one ends on the right margin. */
 .site-footer-cols {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, max-content);
+  justify-content: space-between;
   gap: 40px 32px;
 }
+
+.site-footer-cols > .site-footer-col:last-child { text-align: right; }
+
+.site-footer-cols > .site-footer-col:last-child .site-footer-col-list { align-items: flex-end; }
 
 .site-footer-col-title {
   margin-bottom: 16px;
