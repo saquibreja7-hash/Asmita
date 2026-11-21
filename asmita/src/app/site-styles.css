@@ -1344,3 +1344,23 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 @media (max-width: 400px) {
   .site-footer-newsletter form { grid-template-columns: 1fr; }
 }
+
+/* /start: the under-18 path as a clear, separate row under the main action. */
+.start-minor {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 30rem;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 500;
+  line-height: 1.4;
+  transition: border-color 0.15s ease;
+}
+.start-minor > svg:first-child { flex: none; color: var(--coral-ink); }
+.start-minor-arrow { margin-left: auto; flex: none; color: var(--text-muted); transition: transform 0.2s ease; }
+.start-minor:hover { border-color: var(--brand); }
+.start-minor:hover .start-minor-arrow { transform: translateX(4px); color: var(--brand); }
