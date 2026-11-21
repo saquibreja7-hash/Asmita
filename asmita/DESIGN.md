@@ -17,7 +17,7 @@ Use the semantic tokens in `src/app/foundation-styles.css`. Never hard-code colo
 
 | Token | Use |
 |---|---|
-| `--page` | Page background (parchment `#f6f3f1`) |
+| `--page` | Page background: plain white `#ffffff` **(owner, 2026-11-21)** |
 | `--card` | Raised surfaces (white) |
 | `--ink` | Headings and main text |
 | `--text` | Body copy |
@@ -25,10 +25,12 @@ Use the semantic tokens in `src/app/foundation-styles.css`. Never hard-code colo
 | `--brand` | Deep teal `#0a5e5a`: links, accents, primary buttons |
 | `--brand-strong` | Brand hover; brand text on `--brand-soft` |
 | `--brand-soft` | Teal mist: tinted panels and bands |
-| `--line` | Borders and dividers |
+| `--line` | Borders and dividers (light neutral `#e3e1df`) |
+| `--coral`, `--coral-soft`, `--coral-ink` | The logo's warm orange. Fills and rules use `--coral`/`--coral-soft`; text and icons use `--coral-ink` (5:1 on white). Use it for ordered-step markers and warm highlights, never for buttons. |
 | `--danger`, `--warning`, `--success` (+ `-soft`) | Status only, never decoration |
 
-- Teal is the one strong colour. No second button colour.
+- Teal is the strong colour for actions. No second button colour. Orange is the warm secondary colour for markers and highlights.
+- Gradients only where they carry warmth into a closing band (teal mist into orange soft); never on buttons or text.
 - Old aliases (`--teal`, `--heading`, `--body`, `--muted` and so on) exist for old markup only; don't use them in new code.
 - WCAG 2.1 AA contrast is the floor for every text and background pair. Small teal text on `--brand-soft` uses `--brand-strong`.
 - Light mode only for now.
