@@ -15,9 +15,9 @@ export default async function TrackPage() {
     <AppShell>
       <QuickExit locale={locale} enableIdle={false} />
       <div className="page-canvas">
-        <div className="container py-8 md:py-20">
+        <div className="container py-10 md:py-20">
           <div className="mx-auto max-w-xl">
-            <h1 className="page-title-sm mt-2">{t(locale, "track.title")}</h1>
+            <h1 className="page-title">{t(locale, "track.title")}</h1>
             <RegisterForm locale={locale} mode="track" />
           </div>
         </div>
