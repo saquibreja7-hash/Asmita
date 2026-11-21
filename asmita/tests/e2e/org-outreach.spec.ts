@@ -20,7 +20,7 @@ test("get-involved renders in English and Hindi", async ({ page }) => {
   await page.goto("/get-involved");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Help us end image-based abuse");
   await expect(page.getByRole("link", { name: "Volunteer" }).first()).toBeVisible();
-  await expect(page.getByText("<TO_FILL: social links>")).toBeVisible();
+  await expect(page.getByText("TO_FILL")).toHaveCount(0);
 
   await page.context().addCookies([{ name: "asmita_lang", value: "hi", url: "http://127.0.0.1:3001" }]);
   await page.goto("/get-involved");

@@ -128,19 +128,14 @@ export default async function GetInvolvedPage() {
             <h2 id="other-ways-heading" className="section-title">
               {t(locale, "org.getInvolved.otherTitle")}
             </h2>
-            <div className="mt-10 grid gap-4 md:grid-cols-3">
+            <div className="mt-10 grid gap-4 md:grid-cols-2">
               <div className="surface-card p-7">
                 <p className="text-[17px] font-medium text-[var(--ink)]">{t(locale, "org.getInvolved.otherShare")}</p>
                 <Link className="arrow-link mt-4" href="/resources">
                   {locale === "hi" ? "संसाधन देखिए" : "See the resources"}
                 </Link>
               </div>
-              <div className="surface-card p-7">
-                <p className="text-[17px] font-medium text-[var(--ink)]">{t(locale, "org.getInvolved.otherFollow")}</p>
-                <p className="mt-4 text-sm leading-[1.6] text-[var(--danger)]">
-                  &lt;TO_FILL: social links&gt;
-                </p>
-              </div>
+              {/* The Follow us card returns when the social links are supplied. */}
               <div className="surface-card p-7">
                 <p className="text-[17px] font-medium text-[var(--ink)]">{t(locale, "org.getInvolved.otherTell")}</p>
                 <Link className="arrow-link mt-4" href="/get-help">
