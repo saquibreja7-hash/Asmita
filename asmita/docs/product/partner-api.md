@@ -12,11 +12,13 @@ repository does.
 ## What you get, in one paragraph
 
 An append-only feed of image fingerprints (PDQ hashes) that survivors asked
-Asmita to share with partner platforms, and an endpoint to tell Asmita what you
-did with them. You poll the feed with a cursor, store the hashes, match
-candidate content against them, remove what matches after a person confirms
-it, and report the outcome back. When a survivor withdraws her agreement, the
-feed tells you to delete her fingerprints, and you must.
+Asmita to share with partner platforms, a second copy of the same feed shaped
+for Meta's Hasher-Matcher-Actioner (`/signals`), and an endpoint to tell
+Asmita what you did with them. You poll a feed with a cursor or checkpoint,
+store the hashes, match candidate content against them, remove what matches
+after a person confirms it, and report the outcome back. When a survivor
+withdraws her agreement, the feed tells you to delete her fingerprints — as an
+explicit deletion record on `/signals` — and you must.
 
 ## Authentication
 
@@ -32,9 +34,14 @@ Authorization: Bearer ppk_...
 - A missing, wrong or revoked key gets `401 {"error":"unauthorized"}` — the same
   answer for all three, so nothing about the key is revealed.
 - A valid key of a suspended partner gets `403 {"error":"partner_suspended"}`.
+- Each key carries the scopes it was issued with: `feed` (read
+  `/fingerprints` and `/signals`) and `outcomes` (post to `/outcomes`). Keys
+  are issued with both by default; a key used on a route outside its scopes
+  gets `403 {"error":"insufficient_scope"}`. Ask Asmita for a narrower or
+  wider key rather than working around it.
 - Requests are rate limited per key and per source IP (`429 {"error":"rate_limited"}`).
-  The feed allows 300 requests/hour per key, outcome reporting 600/hour; if you
-  need more, tell us before scripting around it.
+  Each feed allows 300 requests/hour per key under its own bucket, outcome
+  reporting 600/hour; if you need more, tell us before scripting around it.
 - Keys can be revoked by either side at any time; a revoked key stops working
   immediately.
 
@@ -77,7 +84,8 @@ The meaning of each field:
   an outcome.
 - `kind` — `"image"` (a PDQ hash) or `"video"` (a list of frame hashes; vPDQ).
 - `hash` — the 64-character hex PDQ hash, present on `add` events for images.
-- `frames` — the frame hashes, present on `add` events for videos.
+- `frames` — for videos, **the full list of frame hashes** (the frames whose
+  quality clears Asmita's publishing bar), not only the best frame.
 - `caseRef` — the case reference. Quote it in replies to Asmita; it is all you
   ever learn about the case.
 
@@ -126,6 +134,95 @@ Use the fingerprints only to find and remove content that Asmita's notices and
 this feed cover, and to block re-uploads of it. Never use them to identify,
 profile or search for people. If you cannot honour that, the programme is not
 for you.
+
+## The HMA signal feed
+
+`GET /api/partner/v1/signals?checkpoint=<opaque>&page_size=<1..800>`
+
+The same events as `/fingerprints`, shaped the way Meta's open-source
+Hasher-Matcher-Actioner (HMA) consumes a signal exchange, so an HMA deployment
+can consume this feed through a small exchange plugin instead of a hand-written
+poller. `page_size` defaults to 500; the response carries at most `page_size`
+records. Every response is `Cache-Control: no-store`.
+
+```json
+{
+  "checkpoint": "eyJ0IjoxNzAwMDAwMDAwMDAwLCJzIjo0Mn0",
+  "has_more": true,
+  "records": [
+    {
+      "id": "6f96...-...-...",
+      "signal_type": "pdq",
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "deleted": false,
+      "updated_at": 1700000000,
+      "tags": ["asmita", "ncii", "survivor_consented"]
+    },
+    {
+      "id": "0f6e...-...-...",
+      "signal_type": "vpdq",
+      "hash": null,
+      "deleted": true,
+      "updated_at": 1700000100,
+      "tags": ["asmita", "ncii", "survivor_consented"]
+    }
+  ]
+}
+```
+
+- `id` — the fingerprint id, the same `fingerprintId` the rest of the partner
+  API uses.
+- `signal_type` — `pdq` (an image) or `vpdq` (a video).
+- `hash` — for a live record: the 64-hex **lowercase** PDQ hash for `pdq`, or
+  the vPDQ signal string for `vpdq` (below). `null` on a deletion record.
+- `deleted` — `false` for an addition, `true` for a withdrawal. **A deletion is
+  explicit and unambiguous**: delete the hash, every derived index entry and
+  any stored metadata for that `id` when you see `deleted: true`, even if you
+  never saw an addition for it. Deletion records are kept forever, so a
+  re-import cannot resurrect anything Asmita withdrew.
+- `updated_at` — when the event happened, unix seconds.
+- `tags` — the same three tags on every record; they say what the data is, and
+  carry nothing about any case or survivor.
+
+**The checkpoint.** `checkpoint` is opaque: echo it back on the next request,
+unchanged. Internally it names the last event's `(created time, sequence)`
+pair, records come in strict `(created, seq)` order — the sequence number
+breaks ties within one millisecond — and the checkpoint Asmita returns only
+ever moves forward, so a normal paging loop never misses an event and never
+sees one twice. Omit `checkpoint` (or send it empty) to read from the
+beginning; anything else that is not a checkpoint Asmita minted is
+`400 {"error":"invalid_checkpoint"}`. `has_more` is `true` while more records
+may follow: poll again immediately with the returned checkpoint. When it is
+`false`, poll again on your own schedule. A page may serve fewer records than
+it walked past — an addition that stopped being shareable between your polls
+is skipped while the checkpoint still advances — so an empty or short page
+with `has_more: true` is never a stall: keep following the checkpoint.
+
+**Quality.** Asmita does not publish a hash whose quality is below 50 — HMA
+does not filter imported hashes by quality, so Asmita filters before
+publishing, and a low-quality fingerprint simply never appears. For videos,
+frames below 50 are dropped from the frame list; a video with no frame left
+is never published.
+
+**vPDQ.** A video's `hash` is exactly python-threatexchange's vPDQ signal
+string: a JSON list of `"<hash>,<quality>,<timestamp>"` feature strings, with
+the timestamp to three decimal places —
+
+```json
+"hash": "[\"e3b0...b855,80,0.000\", \"cd5e...31aa,72,1.000\"]"
+```
+
+— so an exchange plugin can hand it to `VPDQSignal` unchanged. The same frame
+list (bare hashes) is on the `/fingerprints` route's `frames` field.
+
+**Human review, always.** A hash match is a high-signal indicator for review,
+not an automatic removal decision: route every match to a person who confirms
+the content before anything is blocked or taken down, exactly as Asmita's own
+analysts do. That is the condition of receiving this data (CDT's guidance on
+hash matching says the same).
+
+Errors: `400 invalid_checkpoint` or `400 invalid_page_size`, plus the auth,
+scope and rate-limit codes above; the feed allows 300 requests/hour per key.
 
 ## Reporting outcomes
 
@@ -190,10 +287,11 @@ Platforms that run Meta's open-source Hasher-Matcher-Actioner (HMA, now
 community-supported through ROOST) can consume this feed with a small exchange
 adapter instead of writing a poller: see
 `asmita/docs/product/partner-hma-adapter/` in Asmita's public repository. The
-adapter is a `SignalExchangeAPI` implementation that pages through this feed
-(forwarding your partner key), maps `add` events to PDQ signals under the
-`fingerprintId`, and turns every `withdraw` into a deletion, so withdrawals
-propagate as deletions automatically. Its README covers registration for
+adapter is a `SignalExchangeAPI` implementation that pages through
+`/api/partner/v1/signals` (the HMA-shaped feed above: opaque checkpoint,
+explicit deletion records, vPDQ signal strings), forwarding your partner key,
+and maps every `deleted: true` record to a deletion, so withdrawals propagate
+automatically. Its README covers registration for
 current HMA (Open Media Match) and the python-threatexchange CLI. The adapter
 is an example, not part of the Asmita application, and carries the
 ThreatExchange BSD licence notice.

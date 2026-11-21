@@ -336,6 +336,33 @@ describe("the feed's sync, in-memory store", () => {
     expect(await fingerprintWasShared("hash-2")).toBe(false);
   });
 
+  it("a video ADD serves its full frame list, not the best-frame hash, frames below the publish quality dropped (WP110)", async () => {
+    cases.set("case-1", memoryCase("case-1", "ASMITA-2026-00001"));
+    const frames = [
+      { hash: HEX_A, quality: 90, t: 0 },
+      { hash: HEX_B, quality: 30, t: 1 },
+      { hash: "ef".repeat(32), quality: 80, t: 2 },
+    ];
+    crawlMemory().fingerprints.set("hash-video", {
+      id: "hash-video", caseId: "case-1", hashEncrypted: encryptField(HEX_A), quality: 90,
+      status: "APPROVED", crawlPoolId: null, algorithm: "VPDQ",
+      videoFramesEncrypted: encryptField(JSON.stringify(frames)),
+    });
+    await agree("case-1");
+
+    const page = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
+    expect(page.events).toEqual([
+      { seq: expect.any(Number), type: "add", fingerprintId: "hash-video", kind: "video", frames: [HEX_A, "ef".repeat(32)], caseRef: "ASMITA-2026-00001" },
+    ]);
+
+    // Every frame below the publish quality: the ADD is held back entirely.
+    crawlMemory().fingerprints.get("hash-video")!.videoFramesEncrypted = encryptField(JSON.stringify([{ hash: HEX_A, quality: 40, t: 0 }]));
+    partnerMemory().feedEvents.length = 0; // replay the same ADD against the weaker frames
+    partnerMemory().feedEvents.push({ id: "e2", seq: 1, fingerprintId: "hash-video", type: "ADD", kind: "video", caseId: "case-1", caseRef: "ASMITA-2026-00001", createdAt: new Date() });
+    const weaker = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
+    expect(weaker.events).toEqual([]);
+  });
+
   it("account erasure withdraws what was shared of hers and drops her outcome rows (Rule 2)", async () => {
     cases.set("case-1", memoryCase("case-1", "ASMITA-2026-00001", "user-erase"));
     memoryFingerprint("hash-1", "case-1", "APPROVED");
@@ -443,18 +470,29 @@ describe("the feed, Kysely path", () => {
       { seq: 4, type: "WITHDRAW", fingerprintId: "hash-3", kind: "image", caseRef: "ASMITA-2026-00002" },
     ];
     mocks.kysely.state.rows.HashSubmission = [
-      { id: "hash-1", caseId: "case-1", status: "APPROVED", algorithm: "PDQ", hashEncrypted: encryptField(HEX_A) },
-      { id: "hash-2", caseId: "case-1", status: "REJECTED", algorithm: "PDQ", hashEncrypted: encryptField(HEX_B) },
-      { id: "hash-video", caseId: "case-1", status: "APPROVED", algorithm: "VPDQ", hashEncrypted: encryptField(JSON.stringify([HEX_A, HEX_B])) },
+      { id: "hash-1", caseId: "case-1", status: "APPROVED", algorithm: "PDQ", hashEncrypted: encryptField(HEX_A), quality: 100, videoFramesEncrypted: null },
+      { id: "hash-2", caseId: "case-1", status: "REJECTED", algorithm: "PDQ", hashEncrypted: encryptField(HEX_B), quality: 100, videoFramesEncrypted: null },
+      {
+        id: "hash-video", caseId: "case-1", status: "APPROVED", algorithm: "VPDQ", hashEncrypted: encryptField(HEX_A), quality: 90,
+        // The stored shape since video fingerprints: the full frame list lives
+        // in videoFramesEncrypted and hashEncrypted keeps only the best frame.
+        videoFramesEncrypted: encryptField(JSON.stringify([
+          { hash: HEX_A, quality: 90, t: 0 },
+          { hash: HEX_B, quality: 30, t: 1 },
+          { hash: "ef".repeat(32), quality: 80, t: 2 },
+        ])),
+      },
     ];
     mocks.kysely.state.rows.PartnerShareConsent = [{ caseId: "case-1", withdrawnAt: null }];
     mocks.kysely.state.rows.Case = [{ id: "case-1", "Case.id": "case-1", referenceNumber: "ASMITA-2026-00001", "User.ageOver18": true }];
 
     const page = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     // hash-2 was rejected since its ADD: its event is held back, its hash never served.
+    // hash-video serves its full frame list, not the best-frame hash, with the
+    // frames below the publish quality dropped (WP110).
     expect(page.events).toEqual([
       { seq: 1, type: "add", fingerprintId: "hash-1", kind: "image", hash: HEX_A, caseRef: "ASMITA-2026-00001" },
-      { seq: 3, type: "add", fingerprintId: "hash-video", kind: "video", frames: [HEX_A, HEX_B], caseRef: "ASMITA-2026-00001" },
+      { seq: 3, type: "add", fingerprintId: "hash-video", kind: "video", frames: [HEX_A, "ef".repeat(32)], caseRef: "ASMITA-2026-00001" },
       { seq: 4, type: "withdraw", fingerprintId: "hash-3", kind: "image", caseRef: "ASMITA-2026-00002" },
     ]);
 
