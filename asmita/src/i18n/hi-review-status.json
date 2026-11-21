@@ -139,7 +139,10 @@
       "case.watch.*",
       "lab.trace.*",
       "lab.exp.e3.cta",
-      "partnerShare.*"
+      "partnerShare.*",
+      "lab.detectors.*",
+      "lab.protect.*",
+      "lab.tracker.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
