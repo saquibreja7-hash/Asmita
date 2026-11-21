@@ -941,3 +941,32 @@ WP53 is a repair package for this branch's verify run, defined outside this spec
 - The full Playwright suite runs in the separate verify step.
 
 
+
+### WP77. Fix the organization pages' full verify (app) — 2026-11-21
+
+**Status: complete. All checks passed** (`check.sh`, both packages, Node 22), and this machine also ran the full chromium Playwright suite and the worker smoke green.
+
+WP77 is a repair package for this branch, defined outside this spec like the other web-audit WPs: the organization pages (`asmita/docs/org/spec.md`, WP56–57, built on a machine without Playwright) failed the full verify with `DONE E2E_RC=1 SMOKE_RC=1` and no test ever running. The full record — each cause, the reproduction, the fix, and every decision — is the WP77 section of `asmita/docs/org/progress.md`. No `crawler/` source changed.
+
+**What was built** — seven fixes, each in the code or in the new specs where the defect was:
+
+1. The verify's one-cause-wide failure: WP57's Supporters strip queried `OrgPartner` on every render of `/`, and Playwright's webServer polls `/` before global-setup provisions the throwaway database, so the run aborted at its 120 s timeout before global-setup ran — leaving the database empty for the worker smoke too. `SupporterLogos` now falls back to the static Cloudflare/Sarvam strip when the partner query fails.
+2. `LanguageToggle` wrote `asmita_lang` from a mount effect (StrictMode's double run defeats the old mounted guard), stamping each page's server locale over the cookie mid-navigation — the `/partners/[type]` pages alternated en/hi under a hi cookie. The write is now an effect keyed on an explicit choice state that stays null until a click.
+3. The volunteer form's hours select had no label (the i18n key existed, was never rendered); it is wrapped in the form's Field label.
+4. The footer newsletter input was accessibly named "Email address" — the same name as the registration form's email field on every page — strict-mode-violating 26 core tests; the footer variant is now "Email for the newsletter" (new key `org.newsletter.footerEmailLabel`, en+hi).
+5. The footer newsletter form put an email input on `/minor-support`, breaking the minor path's collects-nothing guarantee; AppShell/Footer take `withoutNewsletter` and the minor page sets it.
+6. The five WP56 org tables had no row-level security (the gap WP57's notes flagged; `database-hardening.spec` enforces it for every table): additive migration `20261122060000_org_tables_rls`, the house `asmita_app_all` policy.
+7. The two new specs' own defects: ambiguous locators (volunteer email `{ exact: true }`; the `/newsletter` signup scoped to `<main>`) and a missing teardown that left a partner public and would have flipped the Supporters strip for `smoke.spec`/`chat.spec` later in the same run.
+
+**Tests** (all run on this machine, Node 22 in containers, all passing)
+
+- e2e-some.sh, the two org specs: 9/9. e2e-some.sh, the full chromium suite: 71 tests — 67 passed, 4 skipped (mobile-project skips), 0 failed, two consecutive green runs after the last fix; the runs before them isolated the causes (26 tests on the email-name collision, then the RLS/minor-page trio).
+- Worker smoke through the Node 22 helper: `npm run build:vinext` + `node scripts/prepare-production-wrangler.mjs` + `SMOKE_CRAWLER=1 node scripts/worker-smoke.mjs` against a local Postgres 17 with all migrations and the seed — passed.
+- Package totals from the final `check.sh` run on the committed tree: `crawler` — lint, type-check, 58 test files / 628 tests, build ok (untouched by this WP, re-confirmed green). `asmita` — lint 0 errors, type-check clean, `prisma validate` ok, 172 test files / 1574 tests all passed.
+
+**Not done or not verified**
+
+- One transient ECONNRESET (`org-outreach`'s job test, `GET /api/csrf` under the loaded dev server) appeared in exactly one run and in no other; not changed, the helper has no retry.
+- One full run was killed mid-flight by another lane's e2e-some.sh on this host (the harness's throwaway `pg-some` container is shared between lanes and its start/remove sit outside the harness lock); re-run, infrastructure only.
+- The n22 worker-smoke run needed a Postgres 17 inside the same Node 22 container (PGDG; n22 has no host network and the migrations require 17 for MAINTAIN). The e2e suites ran through e2e-some.sh unchanged.
+- Root `CLAUDE.md` was not updated (no crawler behaviour changed; protected agent-instruction file).
