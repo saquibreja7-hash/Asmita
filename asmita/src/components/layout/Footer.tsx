@@ -101,7 +101,7 @@ export function Footer({ locale }: { locale: Locale }) {
             )}
             <div className="site-footer-lang">
               <span className="site-footer-col-title !mb-0">{t(locale, "nav.language")}</span>
-              <LanguageToggle locale={locale} label={t(locale, "nav.language")} />
+              <LanguageToggle initialLocale={locale} label={t(locale, "nav.language")} />
             </div>
           </div>
 

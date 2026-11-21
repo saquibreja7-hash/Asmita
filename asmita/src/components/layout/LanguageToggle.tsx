@@ -9,7 +9,7 @@ function saveLocale(locale: Locale) {
   document.cookie = `${COOKIE_BASE_NAMES.language}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
 
-export function LanguageToggle({ locale, label }: { locale: Locale; label: string }) {
+export function LanguageToggle({ initialLocale: locale, label }: { initialLocale: Locale; label: string }) {
   const router = useRouter();
 
   useEffect(() => {
