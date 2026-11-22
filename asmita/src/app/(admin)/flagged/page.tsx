@@ -1,4 +1,5 @@
 import { listFlaggedLinks } from "@/lib/admin-cases";
+import Link from "next/link";
 import { FlaggedTable } from "./FlaggedTable";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { deniedFor } from "../page-permission";
@@ -47,13 +48,18 @@ export default async function FlaggedPage({
 
   return (
     <section>
-      <div>
-        <p className="eyebrow">
-          Console · Flagged
-        </p>
-        <h1 className="mt-3">
-          Flagged review queue
-        </h1>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="eyebrow">
+            Console · Flagged
+          </p>
+          <h1 className="mt-3">
+            Flagged review queue
+          </h1>
+        </div>
+        <Link className="btn btn-secondary" href="/admin/review/links" prefetch={false}>
+          Review one by one
+        </Link>
       </div>
 
       <form className="a-card mt-6 grid grid-cols-2 gap-3 p-4 md:grid-cols-3 xl:grid-cols-6">

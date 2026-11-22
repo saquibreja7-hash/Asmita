@@ -61,6 +61,41 @@ const labReportAdapter: ReviewAdapter = {
     }
     return { ok: false, error: "invalid_payload" };
   },
+  // WP141: the job screen's card for a draft report, built Lab-side because
+  // nothing outside the Lab may import lab modules. The fields are the facts
+  // the Lab reports page shows; Lab work, so no complaint-workflow masking
+  // applies beyond never inventing anything the row does not carry.
+  async describeSubject(reportId, now) {
+    const report = await getLabReport(reportId);
+    if (!report) return null;
+    const fields: Array<{ label: string; value: string }> = [
+      { label: "Service", value: `${report.serviceName} (${report.serviceId})` },
+      { label: "Provider", value: report.provider },
+      { label: "Kind", value: report.chokepointKind },
+      { label: "Subject", value: report.subject },
+      { label: "Status", value: report.status === "DRAFT" ? "Draft, waiting to be sent" : report.status },
+      { label: "Abuse contact (prefill)", value: report.abuseContact },
+      { label: "Drafted", value: `${shortLabAge(report.createdAt, now)} ago` },
+    ];
+    if (report.channel) fields.push({ label: "Channel", value: report.channel });
+    return {
+      summary: `Lab report: ${report.subject}`,
+      caseId: null,
+      caseReference: null,
+      fields,
+      urlsPurged: false,
+    };
+  },
 };
+
+/** "3h 10m", "2d 4h" — the console's age wording, for the Lab card only. */
+function shortLabAge(iso: string, now: Date) {
+  const minutes = Math.max(0, Math.round((now.getTime() - new Date(iso).getTime()) / 60_000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 ? `${days}d ${hours % 24}h` : `${days}d`;
+}
 
 registerReviewAdapter(labReportAdapter);

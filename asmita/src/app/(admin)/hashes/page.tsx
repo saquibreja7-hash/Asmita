@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   listDispatchableHashCases,
   listHashReviewQueue,
@@ -49,6 +50,11 @@ export default async function HashQueuePage() {
           existed on our systems. Check account reputation, submission volume, quality
           scores, and declaration integrity.
         </p>
+        {rows.length > 0 && (
+          <Link className="btn btn-secondary mt-4" href="/admin/review/fingerprints" prefetch={false}>
+            Review one by one
+          </Link>
+        )}
       </div>
 
       <div className="mt-6 overflow-hidden a-card">

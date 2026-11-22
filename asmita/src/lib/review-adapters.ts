@@ -57,6 +57,23 @@ export type ReviewAdapterDecision = {
   reasonKind: "approve" | "reject" | null;
 };
 
+/**
+ * What the review screens show about one subject (WP141): ids and facts in
+ * the words the kind's own page uses, never an address. The only URL-shaped
+ * value a card may carry is a masked domain, exactly like the Flagged and
+ * Findings pages.
+ */
+export type ReviewSubjectCard = {
+  /** One line naming the item. */
+  summary: string;
+  caseId: string | null;
+  caseReference: string | null;
+  /** Facts in display order. */
+  fields: Array<{ label: string; value: string }>;
+  /** FINDING only: the stored addresses were purged, so Reveal has nothing to show. */
+  urlsPurged: boolean;
+};
+
 export type ReviewDecisionCtx = {
   /** The admin session's subject id: exactly what today's routes pass on. */
   reviewerId: string;
@@ -92,6 +109,13 @@ export type ReviewAdapter = {
   subjectNeedsReview(subjectId: string): Promise<ReviewSubjectState | null>;
   /** Performs the decision through the existing function. */
   decide(subjectId: string, decision: string, ctx: ReviewDecisionCtx): Promise<ReviewAdapterOutcome>;
+  /**
+   * Optional: the job screen's subject card (WP141). The Lab registers its
+   * own because nothing outside the Lab may import lab modules; the four
+   * complaint kinds describe themselves in the app layer, reusing their
+   * pages' own helpers. Read-only — no decision path.
+   */
+  describeSubject?(subjectId: string, now: Date): Promise<ReviewSubjectCard | null>;
 };
 
 // ---------------------------------------------------------------------------

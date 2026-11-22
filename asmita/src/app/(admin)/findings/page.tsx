@@ -48,6 +48,9 @@ export default async function FindingsPage({
         Pages where the crawler found an image close to a survivor&apos;s fingerprint. A match is a lead, not proof.
         No address is shown here: open a finding and reveal it with a reason.
       </p>
+      <Link className="btn btn-secondary mt-4" href="/admin/review/findings" prefetch={false}>
+        Review one by one
+      </Link>
 
       {!crawlerEnabled() && <CrawlerOffBanner />}
 

@@ -24,6 +24,7 @@ import { RecordReplyButton } from "./RecordReplyButton";
 import { RevealLink } from "./RevealLink";
 import { SendNoticeButton } from "./SendNoticeButton";
 import { VoidSignatureButton } from "./VoidSignatureButton";
+import { CaseTimeline } from "./CaseTimeline";
 
 export const dynamic = "force-dynamic";
 
@@ -239,19 +240,7 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
       )}
 
       <h2 className="mt-8">Timeline</h2>
-      {detail.timeline.length === 0 ? (
-        <p className="muted mt-3 text-sm">No recorded events.</p>
-      ) : (
-        <ol className="mt-4 grid gap-2 text-sm">
-          {detail.timeline.map((event) => (
-            <li className="grid gap-x-4 sm:grid-cols-[12rem_1fr_auto]" key={event.sequence}>
-              <span className="muted tabular-nums">{formatIst(event.createdAt)}</span>
-              <span>{event.eventType.replaceAll("_", " ").toLowerCase()}</span>
-              <span className="muted font-mono text-xs">{event.actorId}</span>
-            </li>
-          ))}
-        </ol>
-      )}
+      <CaseTimeline events={detail.timeline} />
     </section>
   );
 }

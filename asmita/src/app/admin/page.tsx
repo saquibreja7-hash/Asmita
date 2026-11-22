@@ -36,9 +36,11 @@ export default async function NeedsActionPage() {
     const queue = (kind: NextActionKind) => summary.queues.find((entry) => entry.kind === kind)!;
     const blocked = (["blocked_legal_review", "blocked_contact", "blocked_escalation"] as const).map(queue);
     tiles.push(
-      caseTile("Links to review", queue("review_links"), "review_links", now),
-      caseTile("Found copies to review", queue("review_findings"), "review_findings", now),
-      caseTile("Fingerprints to review", queue("review_fingerprints"), "review_fingerprints", now),
+      // The review kinds link to the review console (WP141); their case-list
+      // views stay reachable from the Cases page.
+      caseTile("Links to review", queue("review_links"), "review_links", now, "/admin/review"),
+      caseTile("Found copies to review", queue("review_findings"), "review_findings", now, "/admin/review"),
+      caseTile("Fingerprints to review", queue("review_fingerprints"), "review_fingerprints", now, "/admin/review"),
       caseTile("Ready to send", queue("send_notice"), "send_notice", now),
       {
         title: "Blocked",
@@ -77,8 +79,8 @@ export default async function NeedsActionPage() {
   }
 
   // Case queues lead; directory upkeep sits beside the work, not above it.
-  const caseTiles = tiles.filter((tile) => tile.href.startsWith("/admin/cases"));
-  const upkeep = tiles.filter((tile) => !tile.href.startsWith("/admin/cases"));
+  const caseTiles = tiles.filter((tile) => tile.href.startsWith("/admin/cases") || tile.href.startsWith("/admin/review"));
+  const upkeep = tiles.filter((tile) => !tile.href.startsWith("/admin/cases") && !tile.href.startsWith("/admin/review"));
 
   return (
     <section>
@@ -191,7 +193,7 @@ function TileLines({ lines }: { lines: string[] }) {
   );
 }
 
-function caseTile(title: string, queue: QueueSummary, kind: NextActionKind, now: Date): Tile {
+function caseTile(title: string, queue: QueueSummary, kind: NextActionKind, now: Date, href?: string): Tile {
   const lines: string[] = [];
   if (queue.overdue) {
     lines.push(kind === "awaiting_reply" ? `! ${queue.overdue} past the platform deadline` : `! ${queue.overdue} overdue`);
@@ -208,7 +210,7 @@ function caseTile(title: string, queue: QueueSummary, kind: NextActionKind, now:
   return {
     title,
     count: queue.count,
-    href: `/admin/cases?nextAction=${kind}`,
+    href: href ?? `/admin/cases?nextAction=${kind}`,
     lines,
     urgent: queue.overdue > 0 && kind !== "awaiting_reply",
   };

@@ -156,7 +156,10 @@ describe("the admin side of watches", () => {
     expect(nextActionLabel("review_findings", 2)).toBe("Review 2 found copies");
     expect(nextActionLabel("review_findings", 1)).toBe("Review 1 found copy");
     const page = readFileSync("src/app/admin/page.tsx", "utf8");
-    expect(page).toContain('caseTile("Found copies to review", queue("review_findings"), "review_findings", now)');
+    // WP141: the review-kind tiles link to the review console, not the case list.
+    expect(page).toContain(
+      'caseTile("Found copies to review", queue("review_findings"), "review_findings", now, "/admin/review")',
+    );
   });
 
   it("the cases list shows a Watch label on watch rows", () => {

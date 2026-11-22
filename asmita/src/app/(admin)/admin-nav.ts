@@ -8,6 +8,14 @@ export type AdminNavGroup = { heading: string | null; items: AdminNavItem[] };
 export const ADMIN_NAV: AdminNavGroup[] = [
   { heading: null, items: [{ href: "/admin", label: "Needs action", permission: null }] },
   {
+    heading: "Review",
+    items: [
+      // Every admin role can see at least one queue (the page filters rows
+      // by queue), so the link carries no single permission.
+      { href: "/admin/review", label: "Review", permission: null },
+    ],
+  },
+  {
     heading: "Work",
     items: [
       { href: "/admin/cases", label: "Cases", permission: "cases:read" },
