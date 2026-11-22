@@ -2,6 +2,137 @@
 
 One entry per work package of asmita/docs/research/research-tools-spec.md. Each entry starts with "### WPnn done".
 
+### WP114 done
+
+Registry data model and the infrastructure scanner (Track C, `feat/nudify-registry`, win-desktop). Built on the AI Lab E2 tracker; nothing outside WP114's scope was touched.
+
+**What was built**
+
+- Registrable domains now come from the Public Suffix List: `lab-lookup.ts`'s last-two-labels guess is replaced by `tldts` (MIT, 7.5.5), exported as `registrableDomain()` and reused by the scanner.
+- Prisma, additive migration `20261122100000_lab_infra_registry`: `LabProvider` (unique on name+kind), `LabInfraScan` (one scan of one service URL; no HTML stored), `LabInfraFinding` (unique on serviceId+category+value, `active` flag, first/last seen — never deleted, which is how "switched from X to Y" is derived), `LabServiceLink` (unique on A+B+reason+value), new enums (`LabInfraFindingCategory`, `LabInfraConfidence`, `LabServiceLinkReason`) and four new audit event values (`LAB_INFRA_SCAN_RUN`, `LAB_PROVIDER_CREATED`, `LAB_PROVIDER_UPDATED`, `LAB_FINDING_PROMOTED` — the last for WP115's promote action). Row-level security on all four tables like every other table. `lab-store.ts` gained the four memory tables for dev/tests.
+- Scanner in `src/lib/lab/infra/`: `signatures.json` v1, 16 signatures written by us from the providers' own documentation (Stripe, Razorpay, PayPal, Coinbase Commerce; Google/Apple/Telegram login widgets and Discord OAuth; Cloudflare `cf-ray`, Fastly `x-served-by`, Akamai `AkamaiGHost` headers; GA4 `G-…`, GTM `GTM-…`, Meta pixel ids; AdSense), each entry carrying the documentation URL it came from. Extractors: crypto addresses with full checksum validation (BTC bech32/bech32m, BTC base58 P2PKH/P2SH, ETH EIP-55, TRON base58check — keccak-256 implemented locally to avoid a runtime dependency), Telegram links and bots, app-store, social, referral and model-repository links. The landing-page fetch is GET-only, cookieless, JavaScript-free, at most 3 redirects with the chain recorded, one 10 s budget, at most 1 MB, HTML/text content-type gated (media responses are never read), private/loopback/link-local hosts refused (the liveness guard, reused), User-Agent `AsmitaLab/1.0 (+research; contact on /lab)`; nothing the page references is ever fetched and the HTML itself is never stored. DNS A/AAAA/NS/MX; ASN and network name via RDAP IP against the IANA bootstrap (cached 24 h); registrar via domain RDAP (IANA bootstrap, `LAB_RDAP_BASE_URL` kept as an operator override); certificate issuer and SANs via crt.sh JSON (10 s, 200 entries).
+- Change tracking per scan: findings in categories the run checked that the newest scan no longer sees become `active=false`; first-seen/last-seen preserved. Clustering after each scan: shared analytics ID, crypto address, IP (skipped when either service has an active CDN finding), exact NS set (skipped when every NS host is a big DNS provider's), and TLS SANs — idempotent `LabServiceLink` candidates for analysts to confirm or dismiss in WP115.
+- Runs: `POST /api/lab/services/[id]/infra-scan` (admin, `lab:manage`, CSRF, rate-limited to 20/hour per admin) and the weekly `GET /api/lab/cron/infra-scan` (CRON_SECRET; answers 200 `lab_disabled` skipped while the Lab is off). Schedule `30 3 * * 1` added to `cronRoutes` in `cloudflare-worker.ts` and `triggers.crons` in `wrangler.jsonc`; `ENABLE_LAB` stays `false` there. Hard caps per run: 100 services, 300 URLs.
+- Provider directory: lib CRUD with `LAB_PROVIDER_CREATED`/`LAB_PROVIDER_UPDATED` audit; seeds in `prisma/lab-provider-seeds.ts` (Cloudflare, Fastly, Akamai, Stripe, Razorpay, PayPal, Coinbase Commerce, Google, Google AdSense, Apple, Telegram, Discord) carry only names and each provider's own policy/abuse pages, all verified against the provider's site while building; abuse emails are empty for analysts to fill and every seed row is `verifiedAt = null`. A re-seed updates a row's URLs only while it is unverified and never touches an analyst's contact or verification.
+- Licences recorded in `src/lib/lab/infra/THIRD_PARTY.md` (tldts MIT, bundled PSL MPL 2.0, Keccak reference constants).
+
+**What was verified, and how**
+
+- The checksum math was verified against independent reference implementations offline (js-sha3 for keccak-256, the `bech32` and `bs58check` npm packages) plus the public BIP-173/BIP-350/EIP-55 vectors. This found and fixed one wrong Keccak round constant (round 21 must be `0x8000000000008080`) and one bech32 converter that emitted a padding byte; both were caught before landing.
+- 74 new or extended vitest cases (70 across the seven new files plus four new PSL cases in `lab-lookup.test.ts`): every extractor on invented HTML fixtures, all four crypto checksum families, signature and header matching, redirect cap (exactly 4 fetches then stop), 1 MB size cap, content-type gate, media-never-fetched (asserted on the requested URL list), private-host refusal including bracketed IPv6, the PSL cases the spec names (`example.co.in`, `a.b.example.com`, IP literals, IDNs), RDAP bootstrap/registrar/ASN and crt.sh parsing from synthetic JSON fixtures, `LAB_RDAP_BASE_URL` override, change tracking with the "switched" case, all five clustering rules and their guards, route auth/CSRF/rate-limit/caps, and the provider directory rules. Every fetch and DNS lookup in tests is mocked; no real site was touched from this machine.
+- `powershell … check.ps1 -Repo … -Scope asmita`: ALL CHECKS PASSED (lint, type-check, 2380 tests). `prisma validate` passes.
+
+**Not verified on this machine**
+
+- Playwright is not installed here. `tests/e2e/lab-infra-scan.spec.ts` is written to the repo's not-yet-run convention: an admin scans a service whose URLs are an invented `.test` host that cannot resolve and this dev server's own loopback address (which the scanner must refuse), so the full Playwright run — later, on a Playwright machine — never fetches a real site either.
+- The production Worker bundle (`npm run build`, `scripts/worker-smoke.mjs`) does not run in the lane checks; the scanner's Worker-specific risk (node:dns on workerd) is handled defensively (failures read as empty lookups, never errors) but was not exercised in workerd here.
+- No scan of a real tracked service was run, by design: the scanner was exercised only against invented hosts and synthetic fixtures.
+- crt.sh has no published rate-limit terms (community guidance suggests being gentle, ~1 request per 5 s); the weekly, ≤100-service cadence stays far below that, but the terms could not be formally verified.
+
+**User-facing sentences the owner should approve**
+
+WP114 ships no public pages and no admin UI — WP115 renders both — so the only user-facing strings to approve are:
+- The scanner introduces itself to every scanned landing page as `AsmitaLab/1.0 (+research; contact on /lab)`.
+- The provider directory seeds name the mainstream companies abuse reports go to (Cloudflare, Fastly, Akamai, Stripe, Razorpay, PayPal, Coinbase Commerce, Google, Google AdSense, Apple, Telegram, Discord), each with that company's own public policy or abuse page; no abuse email is pre-filled, and every row waits for an analyst's verification.
+- For WP115's page copy, the honest description to carry over: the scanner fetches one 1 MB-capped, 10-second, no-JavaScript copy of a service's public landing page, records only the extracted evidence (never the page), and never fetches anything the page references.
+
+**Decisions made myself**
+
+1. The spec's "no real service names" rule (section 0.3) is read as covering the tracked nudify services, survivors and abuse URLs. The provider directory and signature list necessarily name the mainstream companies reports are sent to — the same convention the complaint workflow's platform table already follows — and every name carries its own verified documentation or abuse-page URL. Test fixtures use invented `example.test` hosts everywhere except the signature hosts themselves, which must appear for matching to be provable.
+2. `ANALYTICS_ID` findings store tag ids only, never shared script hosts, so `SHARED_ANALYTICS_ID` clustering cannot fire on "everyone uses gtag".
+3. TLS SANs are stored under the `TLS_ISSUER` category as registrable-domain values carrying a "CT SAN" evidence marker; clustering matches only that marker, so a shared certificate issuer never links two services.
+4. The shared-IP CDN guard is two-sided: a pair is skipped when either service has an active CDN finding.
+5. The liveness private-host guard (reused by the scanner) now strips IPv6 brackets, which it previously missed — a safety fix to existing shared code, noted in the commit.
+6. Microsoft's login widget had no provider-documented fixed host I could verify, so it is absent from signatures v1 (the spec listed it as a candidate, not a requirement). Meta has no seed row because no abuse page was verified this session; the directory gains it when an analyst verifies one. Hugging Face and Civitai appear as MODEL_REPO_LINK findings but have no matching `LabChokepointKind`, so no provider rows exist for them.
+7. The big-DNS-provider list for NS clustering is a curated suffix list (cloudflare.com, googledomains.com, Route 53 `awsdns-*`, registrar-servers.com, domaincontrol.com and others); analysts extend it as they meet more.
+8. Findings belong to the service, and the scan row they point at is the newest scan of the run that saw them.
+9. keccak-256 was written from the algorithm description rather than vendoring a library, to keep the runtime dependency list unchanged; its constants were verified entry by entry against js-sha3's published table.
+10. Provider re-seeds never touch a verified row, mirroring the platform seed's no-clobber rule.
+11. The weekly cron slot is Monday 03:30 UTC (`30 3 * * 1`), clear of the daily 02:45 liveness run; the spec says "weekly" without a time.
+12. The e2e spec (not run on this machine) deliberately uses an unresolvable invented host and a loopback address, so the later Playwright run also never fetches a real site.
+
+### WP115 done
+
+Registry admin UI, provider reports and public aggregates (Track C, `feat/nudify-registry`, win-desktop). Built on WP114's data model and scanner; nothing outside WP115's scope was touched.
+
+**What was built**
+
+- Migration `20261122120000_lab_registry_review` (additive): `LabServiceLinkStatus` (CANDIDATE/CONFIRMED/DISMISSED) with review columns on `LabServiceLink`, `promotedAt`/`promotedChokepointId` on `LabInfraFinding`, `LAB_SERVICE_LINK_REVIEWED` in the audit enum, and `LabReport.chokepointId` made nullable plus `bulkProviderName`/`bulkAbuseContact`/`bulkServiceIds` for bulk reports. No new table, so the WP114 RLS policies still cover everything; every existing report keeps its chokepoint.
+- `/admin/lab/registry`: the services table (name, kind, status, last scan, chokepoints by kind, cluster badge) with server-side filters by status, scan category and provider, and the "Research behind this" disclosure. `/admin/lab/registry/[id]`: addresses and liveness, Infrastructure grouped by category with evidence, confidence, first/last seen and the struck-through "switched from" history, Related services with confirm/dismiss, the existing Chokepoints and Reports, and "Scan now" (WP114's rate-limited route). `/admin/lab/providers`: the directory with create, edit and mark-verified (recording who and when), per-provider dependents and report outcomes (actioned/refused/no reply/awaiting, median days to outcome), and the bulk-report panel. Both pages sit in the admin nav and the Lab dashboard links. Markers use the new `--coral-ink` token the spec names (dark orange, 6.5:1 on white); no coloured left-border stripes, no label above headings.
+- Promote a finding to a chokepoint in one action (`src/lib/lab/infra/promote.ts`, `POST /api/lab/infra-findings/[id]/promote`): kind mapped from the category, provider from the `LabProvider` directory, evidence notes pre-filled from the finding's own evidence and dates, contact from the directory only when the provider row is verified — otherwise the analyst types it; a finding promotes once; inactive findings (history) are refused; audited as `LAB_FINDING_PROMOTED`.
+- Bulk reports (`draftBulkLabReport` in lab-reports.ts, `POST /api/lab/reports/bulk`, `fillLabBulkReportTemplate` in report-templates.ts): one report to one provider listing 2–50 selected services, same verified-contact rule, reviewed/edited/sent/recorded through the existing single-report routes — a sent report is immutable, bulk drafts count as each listed service's report in the stats, and the provider page's report history and medians include them.
+- Public aggregates on `/lab/tracker`: "What the services depend on" (services using a card payment processor, a crypto gateway, behind a CDN, with a Telegram bot or channel) and the share that changed a reportable provider after the first report, all k ≥ 5-masked in `labPublicNumbers` itself — a count under five is null before it ever reaches the page, which renders "fewer than 5". A plain-words method block explains the weekly scan honestly (one 1 MB-capped, 10-second, JavaScript-free copy of the landing page; nothing the page references is fetched; the page is never stored), and a "The research behind this" disclosure cites Gibson et al. (USENIX Security 2025), ISD (2026), "It Takes a Forum" (2026) and CIR (2025) with links. All strings in English and Hindi (machine translated, listed in hi-review-status.json; paper titles stay English as citations).
+- No new third-party code, weights or data, so `src/lib/lab/infra/THIRD_PARTY.md` (WP114) still covers the licences; the research citations are links, not vendored material.
+
+**What was verified, and how**
+
+- 28 new and 2 extended vitest cases across four files (memory path, like every lab module's tests; Kysely and Prisma share the same logic): every promote rule (category mapping, provider required, wrong kind, verified-contact in all three shapes, evidence prefill, once-only, inactive refusal, `LAB_FINDING_PROMOTED` audit), link review with `LAB_SERVICE_LINK_REVIEWED`, the registry table and detail assembly (filters, last scan, badges, switched-from history), the provider directory (dependents by chokepoint and by finding, outcome counts, median days), the bulk template and draft rules (min 2, dedupe, unknown ids, verified-contact, override), bulk reports feeding the public numbers for every listed service, edit-after-send refused, k-anonymity masking (six publishable, four and one masked, raw counts absent from the serialized data), the changed-provider share (only after the report, only reportable categories — an analytics-tag change does not count — masked under five), the public numbers' fixed shape and no-names allowlist, and all five new routes (permission 403, CSRF 403, lab-off 503, payload and error-code mapping, happy paths, audits).
+- `prisma validate` passes; `npx prisma generate` regenerates the client and Kysely types from the new schema.
+- Smoke test on the dev server: `/lab/tracker` renders 200 with the honest empty state and the research disclosure; the new admin routes answer 200 (login page for anonymous visitors), so no module-scope crash. The dev server was stopped and port 3000 freed afterwards.
+- The Impeccable design detector over the changed UI files reports no findings.
+- `powershell … check.ps1 -Repo … -Scope asmita`: ALL CHECKS PASSED (lint, type-check, 2411 tests).
+
+**Not verified on this machine**
+
+- Playwright is not installed here. `tests/e2e/lab-registry.spec.ts` is written to the repo's not-yet-run convention (full journey: registry table and filters, one service's page with the scan-now button on an invented `.test` host that cannot resolve, the provider directory with verify, a bulk draft for two services, CSRF refusals, an anonymous visitor getting no registry, and the public tracker's rendered HTML carrying no service or provider name). `tests/e2e/lab-tracker.spec.ts` was updated for the research links: anchors must be internal or exactly the research-paper hosts, so the charter rule ("never link a service or provider") is asserted, not assumed. Neither has run.
+- The production Worker bundle and `scripts/worker-smoke.mjs` do not run in the lane checks; the Kysely aggregate in `latestInfraScanAtByService` (fn.max group-by) follows the generated types but was not exercised in workerd here.
+- No real tracked service or provider was touched: everything ran on invented `example.test` fixtures and the memory store.
+
+**User-facing sentences the owner should approve**
+
+- Public tracker, English: "What the services depend on" — "Using a card payment processor", "Using a crypto gateway", "Behind a CDN", "With a Telegram bot or channel", each with a count or "fewer than 5"; "A count under 5 shows as 'fewer than 5', because a very small count could hint at which services we watch."
+- Public tracker: "Of the [N] services we have reported, [N / fewer than 5] changed at least one company they depend on after our first report — host, CDN, registrar, payments, app store, ads or login platform."
+- Public tracker, method: "Every week a scan reads one public copy of each service's landing page — it does not run the page's code, downloads at most one megabyte within ten seconds, and records only what it can attribute: payment processors, crypto addresses, content networks, Telegram links and the like. It never fetches anything the page links to, and it never stores the page."
+- Public tracker: the "The research behind this" disclosure linking Gibson et al. (USENIX Security 2025), ISD (2026), "It Takes a Forum" (2026) and CIR (2025). These are the only external links on the page; the Hindi strings are machine translated and wait for native review.
+- Admin pages (English only): "Promote to chokepoint", "Draft one report to [provider] for several of these services", "Enter the abuse contact from the provider's own abuse page — it is not filled in for you until the provider is verified."
+
+**Decisions made myself**
+
+1. The spec's k ≥ 5 rule is applied to WP115's new public counts and share only; WP92's existing numbers (services tracked, by-kind table, 30-day metric) were owner-approved unmasked and changing them would be outside this WP. The owner may want the same masking there later.
+2. Masking happens inside `labPublicNumbers`: a count under five is returned as null and the page renders "fewer than 5", so the raw small number never reaches the page data at all. One extra bit (`dependencyEvidenceSeen`) distinguishes "nothing recorded yet" from a real-but-masked count so the page never shows four misleading "fewer than 5" rows on an empty registry.
+3. "Changed provider" covers the categories that map to a chokepoint (host, CDN, registrar, payments, app store, ads, login platform); an analytics-tag change is not a provider change, and neither are nameservers, mail, TLS or links. A switch counts when a finding that spans the first report's date stopped being seen and a different value in the same category first appeared after it.
+4. Only active findings can be promoted — history ("switched from") is not a live dependency, and promoting it would report a provider the service has left. Promotions are once per finding (`promotedAt`), so the record cannot fork.
+5. Bulk reports reuse the `LabReport` lifecycle with a nullable chokepoint and copied bulk fields rather than a second table: "Human review and send exactly as E2 does" pointed at the existing draft/edit/send/outcome machinery, and a sent report stays immutable either way. Bulk drafts need at least two services (one service is a single report) and at most fifty.
+6. The registry's "provider" filter matches by name across both directory rows and hand-entered chokepoints; the "category" filter uses the scan categories with at least one active finding anywhere.
+7. "How many active services depend on it" is read as services with a live dependency (an active finding on the provider's directory row or a chokepoint of its name and kind), not services whose liveness status is ACTIVE.
+8. "With a Telegram bot" is labelled "With a Telegram bot or channel" on the public page, because the scanner's TELEGRAM_LINK category honestly covers both.
+9. The lab-tracker e2e's "every anchor stays on this site" assertion was narrowed to "internal, or exactly the research-paper hosts" — the WP115 spec asks for the research links, and the updated assertion keeps proving no service or provider link can appear.
+10. `LabReportView.serviceId` became nullable and reports' chokepoint id now comes from the row (bulk rows carry null); the only visible change is on bulk reports, and every existing report view keeps its values.
+11. The admin nav gained two Lab items ("Service registry", "Providers"); the nav-permissions test's page map was extended for them, as that fixture has been for every prior page.
+12. `--coral-ink` (the token the spec names) did not exist in the CSS; it is added to foundation-styles.css as `#9a4508` — a dark orange that keeps marker text at ≥4.5:1 on white, parchment and coral-soft alike.
+
+
+### WP132 done
+
+Fix lane for the first full verify of `feat/nudify-registry` (WP114 + WP115 branch; dev-vm). The watcher's verify (`logs/verify-p2-feat-nudify-registry1/`, `DONE E2E_RC=1 SMOKE_RC=0`) failed 4 of 108 Playwright journeys; the worker smoke, the crawler package and all 2411 unit tests passed. All four failures live in the two WP114/WP115 e2e specs that were written on win-desktop without Playwright and had never executed — no product defect: every fix is in the specs themselves, no assertion was weakened, skipped or deleted, no app or crawler code changed, and the two files' "NOT YET RUN" headers are now truthful run documentation instead.
+
+**The four real causes**
+
+1. `tests/e2e/lab-infra-scan.spec.ts`, cron route: the journey expected `[200, 503]` from `GET /api/lab/cron/infra-scan` sent without a bearer, assuming the e2e harness configures no `CRON_SECRET`. It configures one (`playwright.config.ts`, like production), so the route correctly answered 401 — the same gated contract as every other cron route and the one the file's own second test asserts. The journey now sends the configured secret, the convention `health-check.spec.ts` and `url-retention.spec.ts` already use, and asserts a stronger result: 200, `ran: true`, one service scanned, and `urlsFetched: 0` — the cron path fetches nothing either.
+2. `tests/e2e/lab-registry.spec.ts`, mark-verified: after clicking "Mark verified" the journey kept looking for the row through a filter on a "Mark verified" button — but verification flips that button to "Unverify" (the mutation worked; the verify run's own snapshot shows the row as "verified 2026-11-22"). The verified-state assertion now re-scopes the row to the "Unverify" button. Same assertion, correct locator.
+3. and 4. `tests/e2e/lab-tracker.spec.ts`, English and Hindi: the tracker's honest-empty-state journeys need a database with no Lab rows, and the spec's header documents that invariant (it "sorts before lab.spec.ts, which seeds Lab rows"). The two new specs sort before `lab-tracker.spec.ts` and left their rows behind, so the tracker showed real numbers instead of the empty state. Both new specs now clean up after themselves in `test.afterEach`, deleting exactly the rows they created (matched by their per-run unique name markers) through the same `withAdmin` Postgres helper global-setup uses. The tracker spec itself is untouched, and so is `lab.spec.ts`.
+
+**Hardened while touching the same file.** The infra-scan journey picked "the newest service" by sorting UUIDs with `localeCompare` — it worked only because no other service existed yet; it now finds the service by its unique name, the pattern the registry journey already used. The registry journey's reports-page assertion was re-scoped to the bulk row: the page's chokepoint `<select>` also mentions the provider, and `getByText(...).first()` resolved to that hidden `<option>`, which is never "visible".
+
+**Verified, and how**
+
+- The three failing spec files plus `lab.spec.ts` (the journey that seeds Lab rows after the tracker) through `e2e-some.sh` (Node 22, Chromium, throwaway Postgres 17): 6/6 passed, `E2E_SOME_RC=0`. Two intermediate runs are logged too (`wp132-e2e-some1/2.log`): the first proved the cron and verified-row fixes but exposed the cleanup helper's parameter bug, the second proved the whole registry journey green end to end with only the cleanup failing.
+- The cleanup SQL itself was proven against a real migrated schema outside the suite: synthetic service/chokepoint/finding/scan/link/report/provider rows inserted, both specs' exact statements run (no bind errors), every row gone, the 12 seeded provider rows untouched.
+- Worker smoke through the Node 22 helper (`npm run build:vinext`, `node scripts/prepare-production-wrangler.mjs`, `SMOKE_CRAWLER=1 node scripts/worker-smoke.mjs`, Node 22 container, Postgres 17): "Worker smoke passed" — `SMOKE_RC=0`.
+- Full `check.sh` (Node 22, both packages): crawler lint + type-check + tests + build, asmita lint + type-check + `prisma validate` + the unit suite — printed `ALL CHECKS PASSED` (650 crawler tests and 2411 asmita tests).
+
+**Not verified on this machine**
+
+- The full 108-test Playwright suite was not re-run as one invocation here; the watcher's next verify runs it. The four fixed journeys pass in isolation with the suite's documented file order preserved, and no other spec creates Lab rows before `lab-tracker.spec.ts` (verified by grep: only `lab-infra-scan.spec.ts`, `lab-registry.spec.ts` and `lab.spec.ts` create Lab services).
+- The two Playwright specs still have never run on win-desktop (no Playwright there); they now run green on dev-vm.
+
+**Decisions made myself**
+
+1. The cron-route expectation was the spec's bug, not the route's: 401 without a bearer, once a secret is configured, is the deploy-time contract (the liveness cron route behaves identically and the unit suite enforces it); sending the secret makes the journey prove the weekly run actually happens and still fetches nothing.
+2. Test cleanup deletes only rows carrying the journey's own unique markers, never the seeded provider directory (the "seeded directory rows are all unverified" assertions depend on it) and never another spec's rows. The product rule "no deletes by design" governs the console and the API; the test harness already resets the whole schema between runs (global-setup), so targeted deletes in `afterEach` are the same discipline at journey granularity.
+3. The work-package text both says "Do not append to crawler/docs/v2-progress.md" and ends by asking for the WP132 entry there. Per the WP96/WP101 precedent, the final line wins: decisions made during the work live here, and the `crawler/docs/v2-progress.md` entry was appended only after `check.sh` printed ALL CHECKS PASSED.
+
+**User-facing sentences the owner should approve** — none; no product copy changed, only the two e2e specs.
 ### WP110 done
 
 WP110 — HMA-friendly signal feed, app side (Track A, branch `feat/hma-exchange`, 2026-11-21). The Safety Principles apply in full: this work touches the survivor complaint workflow's partner-sharing path, and every existing gate in `partner-feed.ts` and `partner-share-consent.ts` still holds, with tests.

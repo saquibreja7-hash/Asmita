@@ -4,14 +4,18 @@ import { LAB_CHOKEPOINT_KINDS, labMemory, resetLabMemory } from "@/lib/lab/lab-s
 import { createLabService } from "@/lib/lab/lab-services";
 import { createLabChokepoint } from "@/lib/lab/lab-chokepoints";
 import { draftLabReport, sendLabReport } from "@/lib/lab/lab-reports";
-import { labPublicNumbers } from "@/lib/lab/lab-stats";
+import { findingProviderKey, labPublicNumbers, LAB_PUBLIC_DEPENDENCY_CATEGORIES } from "@/lib/lab/lab-stats";
 import { runLabLivenessCheck } from "@/lib/lab/lab-liveness";
+import { recordInfraScan, recordScanFindings, listInfraFindingsForService } from "@/lib/lab/infra/store";
+import type { ExtractedFinding } from "@/lib/lab/infra/extract";
 
-// The public service tracker (docs/lab/beta-spec.md WP92): labPublicNumbers()
-// feeds /lab/tracker, so its answer may carry counts and medians only — never
-// a service name, URL, provider or abuse contact, exactly as the WP demands.
-// Invented data throughout (example.test); the liveness check runs with an
-// injected fetch, so nothing here reaches the network.
+// The public service tracker (docs/lab/beta-spec.md WP92, extended by WP115
+// of research-tools-spec.md): labPublicNumbers() feeds /lab/tracker, so its
+// answer may carry counts and medians only — never a service name, URL,
+// provider or abuse contact, exactly as the spec demands. WP115's counts are
+// k-anonymity masked: anything under five reads as null and never reaches
+// the page. Invented data throughout (example.test); the liveness check
+// runs with an injected fetch, so nothing here reaches the network.
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
@@ -71,6 +75,9 @@ describe("the public tracker numbers, memory path (WP92)", () => {
       servicesByStatus: { ACTIVE: 0, DOWN: 0, UNKNOWN: 0 },
       downWithin30Days: { reported: 0, downWithin: 0 },
       byKind: Object.fromEntries(LAB_CHOKEPOINT_KINDS.map((kind) => [kind, { reported: 0, down: 0, medianDays: null }])),
+      byCategory: { payment: null, crypto: null, cdn: null, telegram: null },
+      dependencyEvidenceSeen: false,
+      changedProviderAfterReport: { reported: 0, changed: null },
     });
   });
 
@@ -78,7 +85,10 @@ describe("the public tracker numbers, memory path (WP92)", () => {
     await seedReportedService("Shape probe tool", "shape.example.test", "HOST");
     const numbers = await labPublicNumbers();
     expect(Object.keys(numbers).sort()).toEqual([
+      "byCategory",
       "byKind",
+      "changedProviderAfterReport",
+      "dependencyEvidenceSeen",
       "downWithin30Days",
       "medianDaysToDown",
       "servicesByStatus",
@@ -86,6 +96,7 @@ describe("the public tracker numbers, memory path (WP92)", () => {
       "servicesTracked",
     ]);
     expect(Object.keys(numbers.byKind).sort()).toEqual([...LAB_CHOKEPOINT_KINDS].sort());
+    expect(Object.keys(numbers.byCategory).sort()).toEqual(LAB_PUBLIC_DEPENDENCY_CATEGORIES.map((entry) => entry.key).sort());
     expect(Object.keys(numbers.servicesByStatus).sort()).toEqual(["ACTIVE", "DOWN", "UNKNOWN"]);
   });
 
@@ -190,5 +201,142 @@ describe("the public tracker numbers, memory path (WP92)", () => {
     for (const value of collectStrings(numbers)) {
       expect(ALLOWED_STRINGS.has(value), `unexpected string in public numbers: ${value}`).toBe(true);
     }
+  });
+});
+
+describe("the WP115 registry aggregates on the public tracker", () => {
+  /** One finding row with exact dates and state, via the real record path. */
+  async function seedFinding(
+    serviceId: string,
+    category: ExtractedFinding["category"],
+    value: string,
+    seen: { first: Date; last: Date; active: boolean },
+    evidence = `evidence for ${value}`,
+  ) {
+    const scan = await recordInfraScan(
+      { serviceId, url: "https://tool.example.test/", finalUrl: null, httpStatus: 200, error: null },
+      "1",
+      seen.first,
+    );
+    await recordScanFindings(
+      serviceId,
+      scan.id,
+      [{ category, value, evidence, confidence: "HIGH" }],
+      new Set([category]),
+      seen.first,
+    );
+    const rows = await listInfraFindingsForService(serviceId);
+    const row = rows.find((entry) => entry.category === category && entry.value === value);
+    const memory = labMemory().infraFindings.get(row?.id ?? "");
+    if (!memory) throw new Error("finding seed failed");
+    memory.firstSeenAt = seen.first;
+    memory.lastSeenAt = seen.last;
+    memory.active = seen.active;
+  }
+
+  it("counts services per dependency category and masks anything under five", async () => {
+    // Six services pay by card, four sit behind a CDN, one runs a Telegram
+    // channel. Only the count of six is publishable; four and one read as
+    // "fewer than 5" and the raw number never leaves the function.
+    for (let index = 0; index < 6; index++) {
+      const service = await createLabService({ name: `Card tool ${index}`, kind: "WEBSITE", urls: [`https://card-${index}.example.test`] }, "admin-1");
+      if (!service.ok) throw new Error("seed failed");
+      await seedFinding(service.service.id, "PAYMENT", `js.pay-${index}.example.test`, { first: new Date(), last: new Date(), active: true });
+    }
+    for (let index = 0; index < 4; index++) {
+      const service = await createLabService({ name: `Cdn tool ${index}`, kind: "WEBSITE", urls: [`https://cdn-${index}.example.test`] }, "admin-1");
+      if (!service.ok) throw new Error("seed failed");
+      await seedFinding(service.service.id, "CDN", `cdn-${index}.example-cdn.example.test`, { first: new Date(), last: new Date(), active: true });
+    }
+    const telegram = await createLabService({ name: "Telegram tool", kind: "CHAT_BOT", urls: ["https://t.example.test"] }, "admin-1");
+    if (!telegram.ok) throw new Error("seed failed");
+    await seedFinding(telegram.service.id, "TELEGRAM_LINK", "t.me/example_bot", { first: new Date(), last: new Date(), active: true });
+
+    const numbers = await labPublicNumbers();
+    expect(numbers.byCategory.payment).toBe(6);
+    expect(numbers.byCategory.cdn).toBeNull();
+    expect(numbers.byCategory.telegram).toBeNull();
+    expect(numbers.byCategory.crypto).toBeNull();
+    expect(numbers.dependencyEvidenceSeen).toBe(true);
+    // The masked raw counts never appear in what the page would serialize.
+    const serialized = JSON.stringify(numbers.byCategory);
+    expect(serialized).not.toContain("4");
+    expect(serialized).not.toContain("1");
+    expect(serialized).toContain("6");
+  });
+
+  const OLD_NET = "A/AAAA tool.example.test → AS64500 OLD-NET";
+  const NEW_NET = "A/AAAA tool.example.test → AS64501 NEW-NET";
+
+  it("counts a provider change only after a report, only in reportable categories, masked below five", async () => {
+    const now = Date.now();
+    const before = (days: number) => new Date(now - days * DAY_MS);
+    const after = (days: number) => new Date(now + days * DAY_MS);
+
+    // Two switchers: reported, then they changed host after the report.
+    for (const domain of ["switch-one", "switch-two"]) {
+      const reported = await seedReportedService(`${domain} tool`, `${domain}.example.test`, "HOST", before(10));
+      await seedFinding(reported.service.id, "HOSTING_ASN", "192.0.2.10", { first: before(30), last: after(2), active: false }, OLD_NET);
+      await seedFinding(reported.service.id, "HOSTING_ASN", "198.51.100.20", { first: after(3), last: after(3), active: true }, NEW_NET);
+    }
+
+    // A switch that happened BEFORE the report is not "after a report".
+    const early = await seedReportedService("Early switch tool", "early.example.test", "HOST", before(2));
+    await seedFinding(early.service.id, "HOSTING_ASN", "192.0.2.30", { first: before(30), last: before(12), active: false }, OLD_NET);
+    await seedFinding(early.service.id, "HOSTING_ASN", "198.51.100.40", { first: before(11), last: before(3), active: true }, NEW_NET);
+
+    // An analytics-tag change after a report is not a provider change.
+    const tag = await seedReportedService("Tag tool", "tag.example.test", "HOST", before(10));
+    await seedFinding(tag.service.id, "ANALYTICS_ID", "G-OLDESTONE1", { first: before(30), last: after(2), active: false });
+    await seedFinding(tag.service.id, "ANALYTICS_ID", "G-NEWESTONE1", { first: after(3), last: after(3), active: true });
+
+    const numbers = await labPublicNumbers();
+    expect(numbers.changedProviderAfterReport.reported).toBe(4);
+    // Two switchers is under k=5: the count never leaves the function.
+    expect(numbers.changedProviderAfterReport.changed).toBeNull();
+
+    // Three more switchers bring the count to five and unmask it.
+    for (const domain of ["switch-three", "switch-four", "switch-five"]) {
+      const reported = await seedReportedService(`${domain} tool`, `${domain}.example.test`, "HOST", before(10));
+      await seedFinding(reported.service.id, "HOSTING_ASN", "192.0.2.50", { first: before(30), last: after(2), active: false }, OLD_NET);
+      await seedFinding(reported.service.id, "HOSTING_ASN", "198.51.100.60", { first: after(3), last: after(3), active: true }, NEW_NET);
+    }
+    const unmasked = await labPublicNumbers();
+    expect(unmasked.changedProviderAfterReport).toEqual({ reported: 7, changed: 5 });
+  });
+
+  it("does not count an IP change inside one network, nor a new script host of the same processor, as a switch", async () => {
+    const now = Date.now();
+    const before = (days: number) => new Date(now - days * DAY_MS);
+    const after = (days: number) => new Date(now + days * DAY_MS);
+    for (let index = 0; index < 5; index++) {
+      const rotated = await seedReportedService(`Rotate ${index} tool`, `rotate-${index}.example.test`, "HOST", before(10));
+      await seedFinding(rotated.service.id, "HOSTING_ASN", "192.0.2.70", { first: before(30), last: after(2), active: false }, OLD_NET);
+      await seedFinding(rotated.service.id, "HOSTING_ASN", "192.0.2.71", { first: after(3), last: after(3), active: true }, OLD_NET);
+      await seedFinding(rotated.service.id, "PAYMENT", "js.stripe.com", { first: before(30), last: after(2), active: false });
+      await seedFinding(rotated.service.id, "PAYMENT", "v3.js.stripe.com", { first: after(3), last: after(3), active: true });
+    }
+    const numbers = await labPublicNumbers();
+    expect(numbers.changedProviderAfterReport.reported).toBe(5);
+    expect(numbers.changedProviderAfterReport.changed).toBeNull();
+
+    // A move from one processor to another is a switch.
+    for (let index = 0; index < 5; index++) {
+      const moved = await seedReportedService(`Moved ${index} tool`, `moved-${index}.example.test`, "PAYMENT_PROCESSOR", before(10));
+      await seedFinding(moved.service.id, "PAYMENT", "js.stripe.com", { first: before(30), last: after(2), active: false });
+      await seedFinding(moved.service.id, "PAYMENT", "checkout.razorpay.com", { first: after(3), last: after(3), active: true });
+    }
+    const unmasked = await labPublicNumbers();
+    expect(unmasked.changedProviderAfterReport).toEqual({ reported: 10, changed: 5 });
+  });
+
+  it("keys a finding by its provider, never by its raw value", () => {
+    const base = { providerId: null };
+    expect(findingProviderKey({ ...base, category: "HOSTING_ASN", value: "192.0.2.1", evidence: OLD_NET })).toBe("asn:AS64500");
+    expect(findingProviderKey({ ...base, category: "HOSTING_ASN", value: "192.0.2.1", evidence: "A/AAAA x.example.test → EXAMPLE-NET" })).toBe("network:example-net");
+    expect(findingProviderKey({ ...base, category: "HOSTING_ASN", value: "192.0.2.1", evidence: "A/AAAA x.example.test → no RDAP network" })).toBeNull();
+    expect(findingProviderKey({ ...base, category: "PAYMENT", value: "js.stripe.com", evidence: "" })).toBe("name:Stripe");
+    expect(findingProviderKey({ ...base, category: "APP_STORE_LINK", value: "https://play.google.com/store/apps/details?id=a", evidence: "" })).toBe("store:play.google.com");
+    expect(findingProviderKey({ category: "PAYMENT", providerId: "p-1", value: "js.stripe.com", evidence: "" })).toBe("provider:p-1");
   });
 });

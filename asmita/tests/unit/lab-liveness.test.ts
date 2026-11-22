@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { inMemoryAuditLog } from "@/lib/audit";
 import { labMemory, resetLabMemory } from "@/lib/lab/lab-store";
 import { createLabService } from "@/lib/lab/lab-services";
-import { runLabLivenessCheck } from "@/lib/lab/lab-liveness";
+import { isPrivateHost, runLabLivenessCheck } from "@/lib/lab/lab-liveness";
 import * as livenessRoute from "@/app/api/lab/cron/liveness/route";
 import type { NextRequest } from "next/server";
 
@@ -120,5 +120,40 @@ describe("the liveness cron route", () => {
     const result = await runLabLivenessCheck({ fetchImpl: fetchSpy, maxServices: 1 });
     expect(result).toMatchObject({ servicesChecked: 1, servicesSkipped: 1 });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("isPrivateHost", () => {
+  const hostOf = (url: string) => new URL(url).hostname;
+
+  it("refuses IPv4-mapped and other ::-prefixed IPv6, site-local and benchmarking addresses", () => {
+    for (const url of [
+      "http://[::ffff:127.0.0.1]/",
+      "http://[::ffff:10.0.0.1]/",
+      "http://[::]/",
+      "http://[::1]/",
+      "http://[fec0::1]/",
+      "http://[feff::1]/",
+      "http://[fe80::1]/",
+      "http://[fc00::1]/",
+      "http://[fdab::1]/",
+      "http://198.18.0.1/",
+      "http://198.19.255.254/",
+    ]) {
+      expect(isPrivateHost(hostOf(url)), url).toBe(true);
+    }
+  });
+
+  it("allows public addresses and hostnames that merely start like an IPv6 prefix", () => {
+    for (const url of [
+      "http://[2001:db8::1]/",
+      "http://198.20.0.1/",
+      "http://203.0.113.5/",
+      "https://fcbarcelona.example.test/",
+      "https://fdroid.example.test/",
+      "https://fe80.example.test/",
+    ]) {
+      expect(isPrivateHost(hostOf(url)), url).toBe(false);
+    }
   });
 });
