@@ -17,6 +17,7 @@ describe("runCli", () => {
     expect(await runCli(["bogus"])).toBe(64);
     expect(await runCli(["match"])).toBe(64);
     expect(await runCli(["build-set"])).toBe(64);
+    expect(await runCli(["gend-eval"])).toBe(64);
   });
 
   it("a missing run directory exits 1", async () => {

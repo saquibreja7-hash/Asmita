@@ -1192,6 +1192,12 @@ model PlatformPartnerKey {
   partnerId  String
   keyHash    String    @unique
   label      String
+  // WP110 (research-tools spec): what this key may do on the partner API —
+  // "feed" covers GET /fingerprints and GET /signals, "outcomes" covers
+  // POST /outcomes. Issued keys default to both, so existing keys and the
+  // console's default form keep today's behaviour; a key with a narrower
+  // scope gets 403 insufficient_scope on the rest (partner-auth.ts).
+  scopes     String[]  @default(["feed", "outcomes"])
   createdAt  DateTime  @default(now())
   revokedAt  DateTime?
   lastUsedAt DateTime?
@@ -1257,8 +1263,14 @@ model PartnerFeedEvent {
   caseRef       String?
   createdAt     DateTime             @default(now())
 
+  // WP110 (research-tools spec): the /signals feed pages by (createdAt, seq)
+  // — the checkpoint is the last served event's pair — and the Kysely
+  // latest-event and erasure lookups are per fingerprint in seq order, so
+  // both need the composite indexes (additive; the single-column ones stay).
   @@index([fingerprintId])
   @@index([createdAt])
+  @@index([fingerprintId, seq])
+  @@index([createdAt, seq])
 }
 
 // Partner programme part 2 (WP32): what a partner platform reported it did

@@ -274,7 +274,7 @@ describe("partner status", () => {
     expect(await verifyPartnerKey(issued.key)).toEqual({ ok: false, reason: "suspended" });
 
     await setPlatformPartnerStatus({ partnerId, status: "ACTIVE" }, ACTOR);
-    expect(await verifyPartnerKey(issued.key)).toEqual({ ok: true, keyId: issued.keyId, partnerId });
+    expect(await verifyPartnerKey(issued.key)).toEqual({ ok: true, keyId: issued.keyId, partnerId, scopes: ["feed", "outcomes"] });
   });
 });
 
@@ -338,6 +338,7 @@ describe("partner keys", () => {
     expect(keys[0]).toEqual({
       id: issued.keyId,
       label: "k1",
+      scopes: ["feed", "outcomes"],
       createdAt: expect.any(String),
       revokedAt: null,
       lastUsedAt: null,

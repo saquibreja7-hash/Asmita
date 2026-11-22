@@ -11,7 +11,7 @@
  *     both classes are present; a transform whose items are all one class
  *     gets accuracy only (AUC null), which is the honest number.
  */
-import { buildDetectors, isDetectionScore, type BuiltDetectors, type Detector } from "./detectors/index.ts";
+import { buildDetectors, isDetectionScore, isNoFaceResult, type BuiltDetectors, type Detector } from "./detectors/index.ts";
 import { galleryItems, PROBE_TRANSFORMS, type SetItem, type Transform } from "./setformat.ts";
 import { accuracy, auc, mean, round } from "./metrics.ts";
 import { newRunDir, writeJson, writeJsonl } from "./runs.ts";
@@ -30,6 +30,8 @@ export type DetectorTransformStat = {
   meanScoreFake: number | null;
   meanScoreReal: number | null;
   errors: number;
+  /** Items the detector honestly could not score (GenD's no-face answer). */
+  noFace: number;
 };
 
 export type DetectorResult = {
@@ -37,6 +39,8 @@ export type DetectorResult = {
   name: string;
   items: number;
   errors: number;
+  /** Items the detector honestly could not score (summed over transforms). */
+  noFace: number;
   /** Accuracy over every scored item. */
   overallAccuracy: number | null;
   perTransform: Partial<Record<Transform, DetectorTransformStat>>;
@@ -69,7 +73,7 @@ export async function runDetect(
   }
 
   const rows: Array<Record<string, unknown>> = [];
-  type ItemOutcome = { score?: number; label?: "ai" | "real"; error?: string };
+  type ItemOutcome = { score?: number; label?: "ai" | "real"; noFace?: boolean; error?: string };
   const outcomes = new Map<string, Map<string, ItemOutcome>>(); // itemId -> detectorId -> outcome
   for (const item of set.items) {
     outcomes.set(item.id, new Map());
@@ -80,7 +84,9 @@ export async function runDetect(
       const result = await detector.detect(buffer);
       const outcome: ItemOutcome = isDetectionScore(result)
         ? { score: result.score, ...(result.label ? { label: result.label } : {}) }
-        : { error: result.error };
+        : isNoFaceResult(result)
+          ? { noFace: true }
+          : { error: result.error };
       outcomes.get(item.id)!.set(detector.id, outcome);
       rows.push({ detector: detector.id, item: item.id, transform: item.transform, label: item.label, ...outcome });
     }
@@ -91,21 +97,25 @@ export async function runDetect(
     let allLabels: boolean[] = [];
     let allScores: number[] = [];
     let errors = 0;
+    let noFaceTotal = 0;
     for (const t of [...PROBE_TRANSFORMS, "original", "dataset"] as const) {
       const bucket = set.items.filter((i) => i.transform === t);
       if (bucket.length === 0) continue;
       const labels: boolean[] = [];
       const scores: number[] = [];
       let bucketErrors = 0;
+      let bucketNoFace = 0;
       for (const item of bucket) {
         const o = outcomes.get(item.id)!.get(detector.id)!;
         if (o.error) { bucketErrors++; continue; }
+        if (o.noFace) { bucketNoFace++; continue; }
         labels.push(item.label === "fake");
         scores.push(o.label ? (o.label === "ai" ? 1 : 0) : (o.score ?? 0));
       }
       errors += bucketErrors;
+      noFaceTotal += bucketNoFace;
       if (labels.length === 0) {
-        perTransform[t] = { n: bucket.length, accuracy: null, auc: null, meanScoreFake: null, meanScoreReal: null, errors: bucketErrors };
+        perTransform[t] = { n: bucket.length, accuracy: null, auc: null, meanScoreFake: null, meanScoreReal: null, errors: bucketErrors, noFace: bucketNoFace };
         continue;
       }
       // AUC pool: this transform's items plus the untouched originals (the
@@ -115,7 +125,7 @@ export async function runDetect(
       const poolScoresNum: number[] = [];
       for (const item of poolItems) {
         const o = outcomes.get(item.id)!.get(detector.id)!;
-        if (o.error) continue;
+        if (o.error || o.noFace) continue;
         poolLabels.push(item.label === "fake");
         poolScoresNum.push(o.label ? (o.label === "ai" ? 1 : 0) : (o.score ?? 0));
       }
@@ -134,6 +144,7 @@ export async function runDetect(
         meanScoreFake: round(mean(fakeScores), 4),
         meanScoreReal: round(mean(realScores), 4),
         errors: bucketErrors,
+        noFace: bucketNoFace,
       };
       allLabels = allLabels.concat(labels);
       allScores = allScores.concat(scores);
@@ -143,6 +154,7 @@ export async function runDetect(
       name: detector.name,
       items: set.items.length,
       errors,
+      noFace: noFaceTotal,
       overallAccuracy: round(accuracy(allLabels, allScores), 4),
       perTransform,
     };

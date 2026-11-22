@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "kysely";
 import { decryptField } from "@/lib/encryption";
 import { crawlMemory } from "@/lib/crawl-store";
 import { partnerMemory } from "@/lib/partner-store";
@@ -39,6 +40,40 @@ import * as store from "@/lib/store";
 /** The feed's maximum page size (partner-sharing-spec.md, WP32). */
 export const PARTNER_FEED_MAX_PAGE = 500;
 
+/**
+ * The settle window, in seconds, that both partner feeds hold back the newest
+ * events for. PartnerFeedEvent.createdAt defaults to CURRENT_TIMESTAMP, the
+ * START time of the writing transaction, and seq comes from a sequence taken
+ * at insert time: neither follows commit order. Two concurrent writes (say a
+ * consent withdrawal and an unrelated approval) can commit in the opposite
+ * order to their (createdAt, seq), so serving the newest rows straight away
+ * could move a partner's checkpoint past an event that is still uncommitted —
+ * and that event, possibly a WITHDRAW tombstone, would then never be served.
+ * Serving only events older than this window (by the database clock) closes
+ * the race as long as no transaction that writes feed events stays open
+ * longer than the window; they are all short, single-request transactions.
+ * The cost is that a partner sees every change, deletions included, up to
+ * this long after it happens (docs/product/partner-api.md).
+ */
+export const PARTNER_FEED_SETTLE_SECONDS = 60;
+
+/** The memory backend's settle cutoff: events at or after it are not served yet. */
+function memorySettleCutoff(): number {
+  return Date.now() - PARTNER_FEED_SETTLE_SECONDS * 1000;
+}
+
+/** The Prisma backend's settle cutoff, from the database clock (not this isolate's). */
+async function prismaSettleCutoff(db: Awaited<ReturnType<typeof prismaDb>>): Promise<Date> {
+  const rows = await db.$queryRaw<Array<{ cutoff: Date }>>`SELECT now() - make_interval(secs => ${PARTNER_FEED_SETTLE_SECONDS}) AS "cutoff"`;
+  return new Date(rows[0]!.cutoff);
+}
+
+/** Cuts a seq-ordered page at its first event still inside the settle window. */
+function settledPrefix<T extends { createdAt: Date }>(rows: T[], cutoff: number): T[] {
+  const firstUnsettled = rows.findIndex((row) => new Date(row.createdAt).getTime() >= cutoff);
+  return firstUnsettled === -1 ? rows : rows.slice(0, firstUnsettled);
+}
+
 export type PartnerFeedKind = "image" | "video";
 
 /** The PDQ value the API carries for an image fingerprint. */
@@ -78,6 +113,97 @@ export function feedHashPayload(algorithm: string, decrypted: string): { hash: s
 
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
+}
+
+/**
+ * The quality a published hash must reach (WP110). HMA does not filter the
+ * hashes it imports by quality, so Asmita filters before publishing: the
+ * same 50 that flags a low-quality submission (hash-submission.ts) and that
+ * python-threatexchange itself applies to vPDQ features
+ * (vpdq_util.VPDQ_QUALITY_THRESHOLD).
+ */
+export const PARTNER_PUBLISH_MIN_QUALITY = 50;
+
+/** One kept frame of a video fingerprint, the shape validateVideoItem stored. */
+type StoredFrame = { hash: string; quality: number; t: number };
+
+/** Parses the decrypted videoFramesEncrypted value; null when it is not the stored shape. */
+function parseStoredFrames(value: string): StoredFrame[] | null {
+  let raw: unknown = null;
+  try {
+    raw = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const frames: StoredFrame[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) return null;
+    const candidate = entry as Record<string, unknown>;
+    if (typeof candidate.hash !== "string" || !PDQ_HASH.test(candidate.hash)) return null;
+    if (!Number.isInteger(candidate.quality) || (candidate.quality as number) < 0 || (candidate.quality as number) > 100) return null;
+    if (!Number.isInteger(candidate.t) || (candidate.t as number) < 0) return null;
+    frames.push({ hash: candidate.hash, quality: candidate.quality as number, t: candidate.t as number });
+  }
+  return frames;
+}
+
+/**
+ * The frames a fingerprint publishes (WP110): the full list decrypted from
+ * videoFramesEncrypted, with frames below the publish quality dropped. Null
+ * when nothing can be published — no stored list, unreadable, or no frame
+ * clears the quality bar.
+ */
+function publishedFrames(videoFramesEncrypted: string | null): StoredFrame[] | null {
+  if (!videoFramesEncrypted) return null;
+  let decrypted: string;
+  try {
+    decrypted = decryptField(videoFramesEncrypted);
+  } catch {
+    return null;
+  }
+  const frames = parseStoredFrames(decrypted);
+  if (!frames) return null;
+  const kept = frames.filter((frame) => frame.quality >= PARTNER_PUBLISH_MIN_QUALITY);
+  return kept.length > 0 ? kept : null;
+}
+
+/** The /fingerprints payload for a video: the published frames' bare hashes. */
+function publishedFrameHashes(videoFramesEncrypted: string | null): { frames: string[] } | null {
+  const frames = publishedFrames(videoFramesEncrypted);
+  return frames ? { frames: frames.map((frame) => frame.hash) } : null;
+}
+
+/**
+ * The /signals hash for a video fingerprint: python-threatexchange's vPDQ
+ * signal string, byte-for-byte as vpdq_util.vpdq_to_json writes it —
+ * json.dumps of the list of "<hash>,<quality>,<timestamp to 3 decimals>"
+ * feature strings, Python's default ", " list separator included — so an
+ * exchange plugin can hand it straight to VPDQSignal.
+ */
+export function vpdqSignalString(frames: Array<{ hash: string; quality: number; t: number }>): string {
+  const features = frames.map((frame) => `${frame.hash},${frame.quality},${frame.t.toFixed(3)}`);
+  return `[${features.map((feature) => JSON.stringify(feature)).join(", ")}]`;
+}
+
+/**
+ * The /signals hash value for a shareable fingerprint: the lowercase
+ * validated PDQ hash for an image (never below the publish quality), the
+ * vPDQ signal string for a video (frames below the publish quality dropped).
+ * Null when nothing may be published for this fingerprint.
+ */
+function publishedSignalValue(fact: ShareableFact): string | null {
+  if (kindForAlgorithm(fact.algorithm) === "video") {
+    const frames = publishedFrames(fact.videoFramesEncrypted);
+    return frames ? vpdqSignalString(frames) : null;
+  }
+  if (fact.quality < PARTNER_PUBLISH_MIN_QUALITY) return null;
+  try {
+    const parsed = feedHashPayload(fact.algorithm, decryptField(fact.hashEncrypted));
+    return parsed && "hash" in parsed ? parsed.hash : null;
+  } catch {
+    return null;
+  }
 }
 
 async function prismaDb() {
@@ -134,7 +260,9 @@ function memoryQueries(): FeedQueries {
     async fingerprintFacts(ids) {
       return ids.flatMap((id) => {
         const fingerprint = crawlMemory().fingerprints.get(id);
-        return fingerprint ? [{ id: fingerprint.id, caseId: fingerprint.caseId, status: fingerprint.status, algorithm: "PDQ" }] : [];
+        return fingerprint
+          ? [{ id: fingerprint.id, caseId: fingerprint.caseId, status: fingerprint.status, algorithm: fingerprint.algorithm ?? "PDQ" }]
+          : [];
       });
     },
     async latestEventTypes(ids) {
@@ -195,7 +323,10 @@ function kyselyQueries(db: ReturnType<typeof getWorkerDb>): FeedQueries {
     },
     async latestEventTypes(ids) {
       if (ids.length === 0) return new Map();
-      const rows = await db.selectFrom("PartnerFeedEvent").select(["fingerprintId", "type"]).orderBy("seq").execute();
+      // Per-fingerprint, in seq order (WP110: the (fingerprintId, seq) index
+      // serves this; the old form scanned the whole event table).
+      const rows = await db.selectFrom("PartnerFeedEvent").select(["fingerprintId", "type"]).orderBy("seq")
+        .where("fingerprintId", "in", ids).execute();
       return latestFromRows(rows, ids);
     },
     async liveConsentCaseIds(caseIds) {
@@ -412,7 +543,10 @@ export async function withdrawSharedFingerprintsForErasureKysely(
   return erasureWithdrawals(
     rows.map((row) => ({ id: row.id, caseId: row.caseId, algorithm: String(row.algorithm) })),
     async (ids) => {
-      const eventRows = await db.selectFrom("PartnerFeedEvent").select(["fingerprintId", "type"]).orderBy("seq").execute();
+      // Per-fingerprint, in seq order (WP110: indexed by (fingerprintId, seq);
+      // the old form scanned the whole event table).
+      const eventRows = await db.selectFrom("PartnerFeedEvent").select(["fingerprintId", "type"]).orderBy("seq")
+        .where("fingerprintId", "in", ids).execute();
       return latestFromRows(eventRows, ids);
     },
     caseRefById,
@@ -497,32 +631,42 @@ export type PartnerFeedPage = { events: PartnerFeedEventPayload[]; nextCursor: n
 
 type FeedRow = { seq: number; type: string; fingerprintId: string; kind: string; caseRef: string | null };
 
+// The page stops before the first event (in seq order) still inside the
+// settle window, so the cursor never moves past an event that a slower,
+// still-open transaction could yet commit with a lower seq.
 async function feedRows(cursor: number, limit: number): Promise<FeedRow[]> {
   if (isDevNoDb()) {
-    return partnerMemory().feedEvents
+    const rows = partnerMemory().feedEvents
       .filter((event) => event.seq > cursor)
       .sort((a, b) => a.seq - b.seq)
       .slice(0, limit);
+    return settledPrefix(rows, memorySettleCutoff());
   }
   if (usesWorkerKysely()) {
     return getWorkerDb().selectFrom("PartnerFeedEvent")
       .select(["seq", "type", "fingerprintId", "kind", "caseRef"])
-      .where("seq", ">", cursor).orderBy("seq").limit(limit).execute();
+      .where("seq", ">", cursor)
+      .where("seq", "<", sql<number>`coalesce((SELECT min("unsettled"."seq") FROM "PartnerFeedEvent" AS "unsettled" WHERE "unsettled"."seq" > ${cursor} AND "unsettled"."createdAt" >= now() - make_interval(secs => ${PARTNER_FEED_SETTLE_SECONDS})), 2147483648)`)
+      .orderBy("seq").limit(limit).execute();
   }
   const db = await prismaDb();
-  return db.partnerFeedEvent.findMany({
+  const cutoff = await prismaSettleCutoff(db);
+  const rows = await db.partnerFeedEvent.findMany({
     where: { seq: { gt: cursor } },
     orderBy: { seq: "asc" },
     take: limit,
-    select: { seq: true, type: true, fingerprintId: true, kind: true, caseRef: true },
+    select: { seq: true, type: true, fingerprintId: true, kind: true, caseRef: true, createdAt: true },
   });
+  return settledPrefix(rows, cutoff.getTime());
 }
 
 /**
  * One page of the feed: everything after `cursor` (0 = the beginning), at
  * most `limit` events. nextCursor is the seq of the last raw event when the
  * page was full — it advances even when ADD events were held back, so a
- * partner can never stall behind a page of filtered events.
+ * partner can never stall behind a page of filtered events. Events newer
+ * than PARTNER_FEED_SETTLE_SECONDS are not served yet (a page cut short by
+ * them is not full, so nextCursor is absent and the partner polls again).
  */
 export async function getPartnerFeedPage(cursor: number, limit: number): Promise<PartnerFeedPage> {
   const rows = await feedRows(cursor, limit);
@@ -533,7 +677,7 @@ export async function getPartnerFeedPage(cursor: number, limit: number): Promise
   // fingerprint is still shareable, so a withdrawn, rejected, unconsented or
   // minor fingerprint never appears in any page Asmita serves.
   const addIds = rows.filter((row) => row.type === "ADD").map((row) => row.fingerprintId);
-  const shareable = addIds.length > 0 ? await shareableFingerprints(addIds) : new Map<string, { algorithm: string; hashEncrypted: string }>();
+  const shareable = addIds.length > 0 ? await shareableFingerprints(addIds) : new Map<string, ShareableFact>();
 
   const events: PartnerFeedEventPayload[] = [];
   for (const row of rows) {
@@ -542,7 +686,14 @@ export async function getPartnerFeedPage(cursor: number, limit: number): Promise
       if (!fact) continue; // not shareable any more: never hand out the hash
       let parsed: { hash: string } | { frames: string[] } | null = null;
       try {
-        parsed = feedHashPayload(fact.algorithm, decryptField(fact.hashEncrypted));
+        parsed =
+          kindForAlgorithm(fact.algorithm) === "video"
+            ? // WP110: a video's frames are the full list kept in
+              // videoFramesEncrypted (not the best-frame hash the row carries),
+              // with frames below the publish quality dropped — so the two
+              // feeds publish the same frame set.
+              publishedFrameHashes(fact.videoFramesEncrypted)
+            : feedHashPayload(fact.algorithm, decryptField(fact.hashEncrypted));
       } catch {
         parsed = null; // unreadable stored value: never hand out a broken hash
       }
@@ -568,26 +719,41 @@ export async function getPartnerFeedPage(cursor: number, limit: number): Promise
   return { events, nextCursor };
 }
 
-/** The fingerprints (by id) that are shareable right now, with their stored values. */
-async function shareableFingerprints(ids: string[]): Promise<Map<string, { algorithm: string; hashEncrypted: string }>> {
-  const out = new Map<string, { algorithm: string; hashEncrypted: string }>();
-  let facts: Array<{ id: string; caseId: string; status: string; algorithm: string; hashEncrypted: string }> = [];
+/**
+ * The fingerprints (by id) that are shareable right now, with their stored
+ * values. The same re-derived Rule 2 check backs both feeds: a fingerprint
+ * is shareable only with a live agreement, an analyst approval and an adult
+ * case, whatever its feed events say (WP110 reuses this for /signals).
+ */
+type ShareableFact = { algorithm: string; hashEncrypted: string; quality: number; videoFramesEncrypted: string | null };
+
+async function shareableFingerprints(ids: string[]): Promise<Map<string, ShareableFact>> {
+  const out = new Map<string, ShareableFact>();
+  let facts: Array<{ id: string; caseId: string; status: string; algorithm: string; hashEncrypted: string; quality: number; videoFramesEncrypted: string | null }> = [];
   if (isDevNoDb()) {
     facts = ids.flatMap((id) => {
       const fingerprint = crawlMemory().fingerprints.get(id);
       return fingerprint
-        ? [{ id: fingerprint.id, caseId: fingerprint.caseId, status: fingerprint.status, algorithm: "PDQ", hashEncrypted: fingerprint.hashEncrypted }]
+        ? [{
+            id: fingerprint.id,
+            caseId: fingerprint.caseId,
+            status: fingerprint.status,
+            algorithm: fingerprint.algorithm ?? "PDQ",
+            hashEncrypted: fingerprint.hashEncrypted,
+            quality: fingerprint.quality,
+            videoFramesEncrypted: fingerprint.videoFramesEncrypted ?? null,
+          }]
         : [];
     });
   } else if (usesWorkerKysely()) {
     const rows = await getWorkerDb().selectFrom("HashSubmission")
-      .select(["id", "caseId", "status", "algorithm", "hashEncrypted"]).where("id", "in", ids).execute();
+      .select(["id", "caseId", "status", "algorithm", "hashEncrypted", "quality", "videoFramesEncrypted"]).where("id", "in", ids).execute();
     facts = rows.map((row) => ({ ...row, status: String(row.status), algorithm: String(row.algorithm) }));
   } else {
     const db = await prismaDb();
     facts = await db.hashSubmission.findMany({
       where: { id: { in: ids } },
-      select: { id: true, caseId: true, status: true, algorithm: true, hashEncrypted: true },
+      select: { id: true, caseId: true, status: true, algorithm: true, hashEncrypted: true, quality: true, videoFramesEncrypted: true },
     });
   }
   if (facts.length === 0) return out;
@@ -596,7 +762,12 @@ async function shareableFingerprints(ids: string[]): Promise<Map<string, { algor
   const [consentCases, adultCases] = await Promise.all([queries.liveConsentCaseIds(caseIds), queries.adultCaseIds(caseIds)]);
   for (const fact of facts) {
     if (isPartnerShareableStatus(fact.status) && consentCases.has(fact.caseId) && adultCases.has(fact.caseId)) {
-      out.set(fact.id, { algorithm: fact.algorithm, hashEncrypted: fact.hashEncrypted });
+      out.set(fact.id, {
+        algorithm: fact.algorithm,
+        hashEncrypted: fact.hashEncrypted,
+        quality: fact.quality,
+        videoFramesEncrypted: fact.videoFramesEncrypted,
+      });
     }
   }
   return out;
@@ -619,4 +790,177 @@ export async function fingerprintWasShared(fingerprintId: string): Promise<boole
   const db = await prismaDb();
   const row = await db.partnerFeedEvent.findFirst({ where: { fingerprintId }, select: { id: true } });
   return Boolean(row);
+}
+
+// ---------------------------------------------------------------------------
+// The HMA signal feed (WP110, research-tools spec): GET /api/partner/v1/signals
+//
+// The same append-only event log, served the way Meta's Hasher-Matcher-Actioner
+// consumes an exchange: an opaque checkpoint that never moves backwards, an
+// explicit deleted:true tombstone (hash null) for every withdrawal — HMA
+// deletes a bank entry exactly when a fetched value is None, and the
+// built-in StopNCII exchange's hashValue/hashStatus mix-up shows what a
+// fuzzy deletion design costs — and records ordered strictly by
+// (createdAt, seq), the pair HMA's fetcher asserts is monotonic.
+
+/** The /signals page cap (1..800; HMA's fetcher commits every 5000 records). */
+export const PARTNER_SIGNALS_MAX_PAGE = 800;
+export const PARTNER_SIGNALS_DEFAULT_PAGE = 500;
+
+/** Every record carries the same tags: the programme's data, nothing per case. */
+export const PARTNER_SIGNAL_TAGS = ["asmita", "ncii", "survivor_consented"] as const;
+
+/** The checkpoint pair: an event's (createdAt in ms, seq). Both strictly ordered. */
+export type PartnerSignalCheckpoint = { t: number; s: number };
+
+/** The position before every event: no event has createdAt = 0 or seq = 0. */
+export const PARTNER_SIGNALS_START: PartnerSignalCheckpoint = { t: 0, s: 0 };
+
+/** Mints the opaque checkpoint a caller echoes back on its next page. */
+export function encodePartnerSignalCheckpoint(checkpoint: PartnerSignalCheckpoint): string {
+  return Buffer.from(JSON.stringify({ t: checkpoint.t, s: checkpoint.s }), "utf8").toString("base64url");
+}
+
+/** Max sane magnitudes: a checkpoint a partner could not have got from us is malformed. */
+const CHECKPOINT_MAX_T = 4_102_444_800_000; // 2100-01-01T00:00:00.000Z
+const CHECKPOINT_MAX_S = 2 ** 31 - 1;
+const CHECKPOINT_MAX_LENGTH = 256;
+
+/**
+ * Parses a checkpoint exactly as encodePartnerSignalCheckpoint minted it:
+ * base64url of a JSON object with the two integer fields and nothing else.
+ * Null for anything else — the route answers 400 invalid_checkpoint.
+ */
+export function parsePartnerSignalCheckpoint(value: string): PartnerSignalCheckpoint | null {
+  if (value.length === 0 || value.length > CHECKPOINT_MAX_LENGTH) return null;
+  if (!/^[A-Za-z0-9_-]+={0,2}$/.test(value)) return null;
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length !== 2 || !("t" in record) || !("s" in record)) return null;
+  const t = record.t;
+  const s = record.s;
+  if (typeof t !== "number" || typeof s !== "number" || !Number.isInteger(t) || !Number.isInteger(s)) return null;
+  if (t < 0 || s < 0 || t > CHECKPOINT_MAX_T || s > CHECKPOINT_MAX_S) return null;
+  return { t, s };
+}
+
+export type PartnerSignalRecord = {
+  /** Asmita's fingerprint id, exactly what the outcomes route quotes. */
+  id: string;
+  signal_type: "pdq" | "vpdq";
+  /** The signal string: a PDQ hash, a vPDQ feature-list JSON, or null on a tombstone. */
+  hash: string | null;
+  deleted: boolean;
+  /** The event's createdAt, unix seconds. */
+  updated_at: number;
+  tags: string[];
+};
+
+export type PartnerSignalPage = { checkpoint: string; has_more: boolean; records: PartnerSignalRecord[] };
+
+type SignalRow = { seq: number; type: string; fingerprintId: string; kind: string; createdAt: Date };
+
+/** Whether the event sits strictly after the checkpoint pair. */
+function afterCheckpoint(event: { createdAt: Date; seq: number }, after: PartnerSignalCheckpoint): boolean {
+  const time = new Date(event.createdAt).getTime();
+  return time > after.t || (time === after.t && event.seq > after.s);
+}
+
+// Only events older than the settle window are served: ordered by createdAt,
+// that is a plain filter, and it keeps the checkpoint from passing an event a
+// still-open transaction will commit with an earlier createdAt.
+async function signalRows(after: PartnerSignalCheckpoint, limit: number): Promise<SignalRow[]> {
+  if (isDevNoDb()) {
+    const cutoff = memorySettleCutoff();
+    return partnerMemory().feedEvents
+      .filter((event) => afterCheckpoint(event, after) && new Date(event.createdAt).getTime() < cutoff)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.seq - b.seq)
+      .slice(0, limit)
+      .map((event) => ({ seq: event.seq, type: event.type, fingerprintId: event.fingerprintId, kind: event.kind, createdAt: event.createdAt }));
+  }
+  if (usesWorkerKysely()) {
+    const afterDate = new Date(after.t);
+    return getWorkerDb().selectFrom("PartnerFeedEvent")
+      .select(["seq", "type", "fingerprintId", "kind", "createdAt"])
+      .where((eb) => eb.or([
+        eb("createdAt", ">", afterDate),
+        eb.and([eb("createdAt", "=", afterDate), eb("seq", ">", after.s)]),
+      ]))
+      .where("createdAt", "<", sql<Date>`now() - make_interval(secs => ${PARTNER_FEED_SETTLE_SECONDS})`)
+      .orderBy("createdAt").orderBy("seq").limit(limit).execute();
+  }
+  const db = await prismaDb();
+  const afterDate = new Date(after.t);
+  const cutoff = await prismaSettleCutoff(db);
+  return db.partnerFeedEvent.findMany({
+    where: {
+      createdAt: { lt: cutoff },
+      OR: [
+        { createdAt: { gt: afterDate } },
+        { createdAt: afterDate, seq: { gt: after.s } },
+      ],
+    },
+    orderBy: [{ createdAt: "asc" }, { seq: "asc" }],
+    take: limit,
+    select: { seq: true, type: true, fingerprintId: true, kind: true, createdAt: true },
+  });
+}
+
+/** One raw event to one /signals record, or null when it must not be served. */
+function signalRecord(row: SignalRow, fact: ShareableFact | undefined): PartnerSignalRecord | null {
+  const updatedAt = Math.floor(new Date(row.createdAt).getTime() / 1000);
+  const signalType: PartnerSignalRecord["signal_type"] = row.type === "ADD" && fact
+    ? kindForAlgorithm(fact.algorithm) === "video" ? "vpdq" : "pdq"
+    : kindFromStored(row.kind) === "video" ? "vpdq" : "pdq";
+  if (row.type !== "ADD") {
+    // A withdrawal is an explicit deletion: hash null, deleted true, kept forever.
+    return { id: row.fingerprintId, signal_type: signalType, hash: null, deleted: true, updated_at: updatedAt, tags: [...PARTNER_SIGNAL_TAGS] };
+  }
+  if (!fact) return null; // not shareable any more: the ADD is held back
+  const hash = publishedSignalValue(fact);
+  if (hash === null) return null; // below the publish quality, or unreadable
+  return { id: row.fingerprintId, signal_type: signalType, hash, deleted: false, updated_at: updatedAt, tags: [...PARTNER_SIGNAL_TAGS] };
+}
+
+/**
+ * One page of the signal feed: at most `limit` raw events strictly after
+ * `start` (null = the beginning), ordered by (createdAt, seq). The returned
+ * checkpoint is the pair of the last raw event of the page — including a
+ * skipped one — so a caller can never stall behind a page of events that
+ * were not served, and it never moves backwards for a caller that pages in
+ * order (HMA's fetcher asserts exactly that). Events newer than
+ * PARTNER_FEED_SETTLE_SECONDS are held back until they settle.
+ */
+export async function getPartnerSignalPage(
+  start: PartnerSignalCheckpoint | null,
+  limit: number,
+): Promise<PartnerSignalPage> {
+  const after = start ?? PARTNER_SIGNALS_START;
+  const rows = await signalRows(after, limit);
+  if (rows.length === 0) {
+    return { checkpoint: encodePartnerSignalCheckpoint(after), has_more: false, records: [] };
+  }
+  const last = rows[rows.length - 1]!;
+  const next: PartnerSignalCheckpoint = { t: new Date(last.createdAt).getTime(), s: last.seq };
+
+  // Rule 2, re-derived at serve time by the same function the /fingerprints
+  // page uses: an ADD carries its hash only while the fingerprint is still
+  // shareable. An ADD that fails the check is skipped; the checkpoint still
+  // advances past it, so nothing stalls.
+  const addIds = rows.filter((row) => row.type === "ADD").map((row) => row.fingerprintId);
+  const shareable = addIds.length > 0 ? await shareableFingerprints(addIds) : new Map<string, ShareableFact>();
+
+  const records: PartnerSignalRecord[] = [];
+  for (const row of rows) {
+    const record = signalRecord(row, row.type === "ADD" ? shareable.get(row.fingerprintId) : undefined);
+    if (record) records.push(record);
+  }
+  return { checkpoint: encodePartnerSignalCheckpoint(next), has_more: rows.length === limit, records };
 }

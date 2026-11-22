@@ -8,11 +8,13 @@ import { labEnabled } from "@/lib/lab/flags";
 import { MessageCheckForm } from "./MessageCheckForm";
 
 /*
- * WP93 (docs/lab/beta-spec.md): the public message check tool, /lab/message-check.
- * A visitor pastes the text of a threatening message; the pattern rules run
- * in code and the optional short summary comes from Sarvam. Text only — no
- * images, no links followed — and nothing is stored or logged. The page 404s
- * while the Lab is off (it is on in dev and test), like every lab page.
+ * WP93 + WP117 (docs/lab/beta-spec.md, docs/research/research-tools-spec.md
+ * Track D): the public message check tool, /lab/message-check. A visitor
+ * pastes the text of a threatening message; the WP93 pattern rules and the
+ * WP117 classifier both run in code and the optional short summary comes
+ * from Sarvam. Text only — no images, no links followed — and nothing is
+ * stored or logged. The page 404s while the Lab is off (it is on in dev
+ * and test), like every lab page.
  */
 
 export const dynamic = "force-dynamic";
@@ -20,8 +22,12 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Check a threatening message",
   description:
-    "Paste the text of a threatening message or chat and see which sextortion patterns it matches, each explained in plain words. Nothing is stored or logged.",
+    "Paste the text of a threatening message or chat and see which sextortion patterns it matches — code rules plus a small classifier, each explained in plain words. Nothing is stored or logged.",
 };
+
+// The bias citation the "How this check works" section links to (the paper
+// is open access; the sources file records it as P19-1163).
+const SAP_ACL_2019_URL = "https://aclanthology.org/P19-1163/";
 
 const NEXT_STEPS = [
   "lab.message-check.next.noPay",
@@ -111,6 +117,30 @@ export default async function MessageCheckPage() {
                   ))}
                 </ul>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* HOW THIS CHECK WORKS — the research behind the patterns, the
+            synthetic training data, the honest per-script numbers, and the
+            bias finding. Credits and limits, in plain words, both
+            languages. */}
+        <section className="zone-white section-pad" aria-labelledby="message-check-how">
+          <div className="container">
+            <div className="mx-auto max-w-2xl">
+              <h2 id="message-check-how" className="section-title">{t(locale, "lab.message-check.how.title")}</h2>
+              <p className="mt-6 text-[16px] leading-[1.7] text-[var(--text)]">
+                {t(locale, "lab.message-check.how.patterns")}
+              </p>
+              <p className="mt-5 text-[16px] leading-[1.7] text-[var(--text)]">
+                {t(locale, "lab.message-check.how.synthetic")}
+              </p>
+              <p className="mt-5 text-[16px] leading-[1.7] text-[var(--text)]">
+                {t(locale, "lab.message-check.how.bias")}{" "}
+                <a href={SAP_ACL_2019_URL} className="text-link" rel="noopener noreferrer" target="_blank">
+                  {t(locale, "lab.message-check.how.biasCite")}
+                </a>
+              </p>
             </div>
           </div>
         </section>
