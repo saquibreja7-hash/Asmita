@@ -57,6 +57,12 @@ export type EmailHtmlInput = {
   preheader?: string;
   /** Document language. */
   lang?: "en" | "hi";
+  /**
+   * No link and no web address anywhere, not even the logo image or the
+   * sign-off's site address: for emails that must name no website (the watch
+   * "copy found" email). The wordmark is then plain styled text.
+   */
+  noLinks?: boolean;
 };
 
 /** Asmita's logo, served from Asmita's own site (the same file as the site header). */
@@ -65,18 +71,23 @@ function logoUrl() {
   return `${base}/asmita-wordmark-v2.png`;
 }
 
-function wordmark() {
+function wordmark(noLinks = false) {
+  if (noLinks) {
+    return `<span style="display:inline-block;font-family:${SERIF};font-size:28px;line-height:47px;color:${BRAND};">Asmita</span>`;
+  }
   // 317x94 source shown at 160x47. The alt text is styled so a blocked image
   // still reads as the wordmark.
   return `<img src="${escapeHtml(logoUrl())}" width="160" height="47" alt="Asmita" style="display:inline-block;border:0;outline:none;text-decoration:none;height:auto;max-width:160px;font-family:${SERIF};font-size:28px;line-height:47px;color:${BRAND};">`;
 }
 
-function signoff() {
-  return `<p class="a-ink" style="margin:0 0 3px 0;font-size:15px;font-weight:700;color:${INK};">Team Asmita</p>
+function signoff(noLinks = false) {
+  const team = `<p class="a-ink" style="margin:0 0 3px 0;font-size:15px;font-weight:700;color:${INK};">Team Asmita</p>`;
+  if (noLinks) return team;
+  return `${team}
     <p style="margin:2px 0 0 0;font-size:13px;"><a href="https://meriasmita.org" class="a-brand" style="color:${BRAND};text-decoration:none;font-weight:600;">meriasmita.org</a></p>`;
 }
 
-function shell(input: { lang: string; preheader: string; body: string; footer: string; signoff: string }) {
+function shell(input: { lang: string; preheader: string; body: string; footer: string; signoff: string; noLinks?: boolean }) {
   // The preheader padding keeps inbox previews from pulling body text.
   const preheader = `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(input.preheader)}${"&#8199;&#65279;&#847;".repeat(40)}</div>`;
   return `<!doctype html>
@@ -107,7 +118,7 @@ function shell(input: { lang: string; preheader: string; body: string; footer: s
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
         <tr><td>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-card" style="background:${CARD};border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(15,79,73,0.10);">
-            <tr><td align="center" class="a-band" style="background:${BAND};padding:30px 32px;">${wordmark()}</td></tr>
+            <tr><td align="center" class="a-band" style="background:${BAND};padding:30px 32px;">${wordmark(input.noLinks)}</td></tr>
             <tr><td style="padding:38px 36px 6px 36px;font-family:${SANS};">${input.body}</td></tr>
             ${input.signoff ? `<tr><td style="padding:0 36px 8px 36px;font-family:${SANS};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td class="a-line" style="border-top:1px solid ${LINE};padding-top:24px;">${input.signoff}</td></tr></table></td></tr>` : ""}
             ${input.footer ? `<tr><td style="padding:14px 36px 30px 36px;font-family:${SANS};">${input.footer}</td></tr>` : `<tr><td style="padding:0 0 24px 0;"></td></tr>`}
@@ -162,7 +173,8 @@ export function renderEmailHtml(input: EmailHtmlInput): string {
     preheader: input.preheader ?? "A message from Asmita.",
     body,
     footer,
-    signoff: signoff(),
+    signoff: signoff(input.noLinks),
+    noLinks: input.noLinks,
   });
 }
 

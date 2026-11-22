@@ -447,8 +447,10 @@ export function createWatchCopyFoundEmail(referenceNumber: string) {
     paragraphs: lines,
     highlight: referenceNumber,
     highlightLabel: "Case reference",
-    // No call-to-action button: the email carries no links by rule.
+    // No call-to-action button, logo image or site address: the email
+    // carries no links by rule.
     footerNotes: ["For your privacy, this email names no website and contains no links."],
+    noLinks: true,
   });
   return { subject, text, html };
 }
