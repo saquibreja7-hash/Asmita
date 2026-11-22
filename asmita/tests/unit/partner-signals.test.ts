@@ -128,6 +128,8 @@ const mocks = vi.hoisted(() => {
       createManyCalls: [] as Array<{ table: string; data: unknown }>,
       createCalls: [] as Array<{ table: string; data: Record<string, unknown> }>,
       findManyArgs: [] as Array<{ table: string; args: Record<string, unknown> }>,
+      // What the fake database clock answers for the settle cutoff query.
+      rawQueries: [] as string[],
     };
 
     function valueOf(entry: unknown): number | string | null {
@@ -143,6 +145,11 @@ const mocks = vi.hoisted(() => {
           const left = valueOf(row[key]);
           const right = valueOf(c.gt);
           return left !== null && right !== null && left > right;
+        }
+        if ("lt" in c) {
+          const left = valueOf(row[key]);
+          const right = valueOf(c.lt);
+          return left !== null && right !== null && left < right;
         }
         if ("in" in c) return Array.isArray(c.in) && c.in.includes(row[key]);
         if ("not" in c) return row[key] !== c.not;
@@ -216,6 +223,14 @@ const mocks = vi.hoisted(() => {
     const client = new Proxy({} as Record<string, unknown>, {
       get(_target, prop: string) {
         if (prop === "$transaction") return async (fn: (tx: unknown) => Promise<unknown>) => fn(client);
+        // The settle cutoff is the only raw query the feed makes: now() minus
+        // the window, answered from the (faked) clock.
+        if (prop === "$queryRaw") {
+          return async (strings: TemplateStringsArray, ...values: unknown[]) => {
+            state.rawQueries.push(strings.join("?"));
+            return [{ cutoff: new Date(Date.now() - (values[0] as number) * 1000) }];
+          };
+        }
         return delegate(prop);
       },
     });
@@ -239,8 +254,10 @@ import { encryptField } from "@/lib/encryption";
 import { hashPartnerKey, issuePartnerKey } from "@/lib/partner-auth";
 import {
   encodePartnerSignalCheckpoint,
+  getPartnerFeedPage,
   getPartnerSignalPage,
   parsePartnerSignalCheckpoint,
+  PARTNER_FEED_SETTLE_SECONDS,
   PARTNER_SIGNALS_DEFAULT_PAGE,
   PARTNER_SIGNALS_MAX_PAGE,
   PARTNER_SIGNALS_START,
@@ -606,6 +623,109 @@ describe("GET /api/partner/v1/signals, memory store", () => {
   });
 });
 
+// The review finding behind PARTNER_FEED_SETTLE_SECONDS: createdAt is the
+// writing transaction's START time and seq is taken at insert, so a slow
+// transaction (a consent withdrawal, say) can commit after a faster one that
+// started later. Serving the newest events at once would move the checkpoint
+// past the slow one's event, which would then never be served. The settle
+// window holds the tail back until such a transaction has committed.
+describe("the settle window (late commits are never skipped)", () => {
+  const BASE = 1_800_000_000_000;
+  const SETTLE_MS = PARTNER_FEED_SETTLE_SECONDS * 1000;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(BASE);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("/signals: an earlier-stamped withdrawal that commits after a later event is still delivered on the next poll", async () => {
+    seedFingerprint("f-b");
+    seedConsent("f-b");
+    // Tx B started 5s ago and has committed; tx A (the withdrawal) started
+    // 10s ago and is still open, so its event is not visible yet.
+    seedEvent(2, "f-b", "ADD", new Date(BASE - 5_000));
+
+    // A poll now sees B, but B is inside the settle window: nothing is
+    // served and the checkpoint stays where the caller was.
+    const early = await getPartnerSignalPage(null, PARTNER_SIGNALS_DEFAULT_PAGE);
+    expect(early.records).toEqual([]);
+    expect(parsePartnerSignalCheckpoint(early.checkpoint)).toEqual(PARTNER_SIGNALS_START);
+
+    // A commits a second later with its earlier start time stamped on it.
+    vi.setSystemTime(BASE + 1_000);
+    seedEvent(1, "f-a", "WITHDRAW", new Date(BASE - 10_000));
+
+    // Once both have settled, the next poll from the same checkpoint
+    // delivers A's tombstone first, then B — nothing is skipped.
+    vi.setSystemTime(BASE + SETTLE_MS + 1_000);
+    const next = await getPartnerSignalPage(parsePartnerSignalCheckpoint(early.checkpoint), PARTNER_SIGNALS_DEFAULT_PAGE);
+    expect(next.records.map((record) => [record.id, record.deleted])).toEqual([["f-a", true], ["f-b", false]]);
+    expect(parsePartnerSignalCheckpoint(next.checkpoint)).toEqual({ t: BASE - 5_000, s: 2 });
+
+    const after = await getPartnerSignalPage(parsePartnerSignalCheckpoint(next.checkpoint), PARTNER_SIGNALS_DEFAULT_PAGE);
+    expect(after.records).toEqual([]);
+  });
+
+  it("/signals: serves what has settled and holds back only the unsettled tail", async () => {
+    seedFingerprint("f-old");
+    seedConsent("f-old");
+    seedFingerprint("f-new");
+    seedConsent("f-new");
+    seedEvent(1, "f-old", "ADD", new Date(BASE - SETTLE_MS - 1));
+    seedEvent(2, "f-new", "ADD", new Date(BASE - SETTLE_MS + 1));
+
+    const page = await getPartnerSignalPage(null, PARTNER_SIGNALS_DEFAULT_PAGE);
+    expect(page.records.map((record) => record.id)).toEqual(["f-old"]);
+    expect(parsePartnerSignalCheckpoint(page.checkpoint)).toEqual({ t: BASE - SETTLE_MS - 1, s: 1 });
+
+    vi.setSystemTime(BASE + 2);
+    const later = await getPartnerSignalPage(parsePartnerSignalCheckpoint(page.checkpoint), PARTNER_SIGNALS_DEFAULT_PAGE);
+    expect(later.records.map((record) => record.id)).toEqual(["f-new"]);
+  });
+
+  it("/fingerprints: a lower seq that commits after a higher one is still delivered on the next poll", async () => {
+    seedFingerprint("f-b");
+    seedConsent("f-b");
+    // seq 2 (tx B) is committed and visible; seq 1 (tx A, a withdrawal)
+    // was taken earlier by a transaction that has not committed yet.
+    seedEvent(2, "f-b", "ADD", new Date(BASE - 5_000));
+
+    const early = await getPartnerFeedPage(0, 500);
+    expect(early).toEqual({ events: [], nextCursor: null });
+
+    vi.setSystemTime(BASE + 1_000);
+    seedEvent(1, "f-a", "WITHDRAW", new Date(BASE - 10_000));
+
+    vi.setSystemTime(BASE + SETTLE_MS + 1_000);
+    const next = await getPartnerFeedPage(0, 500);
+    expect(next.events.map((event) => [event.seq, event.type])).toEqual([[1, "withdraw"], [2, "add"]]);
+  });
+
+  it("/fingerprints: a page stops at the first unsettled event in seq order, with no nextCursor", async () => {
+    seedFingerprint("f-1");
+    seedConsent("f-1");
+    seedFingerprint("f-3");
+    seedConsent("f-3");
+    seedEvent(1, "f-1", "ADD", new Date(BASE - SETTLE_MS - 10_000));
+    // seq 2 is still settling; seq 3 is older (its transaction started
+    // earlier) but must not be served ahead of seq 2, or the cursor would
+    // pass seq 2 before it settles.
+    seedEvent(2, "f-2", "WITHDRAW", new Date(BASE - 1_000));
+    seedEvent(3, "f-3", "ADD", new Date(BASE - SETTLE_MS - 5_000));
+
+    const page = await getPartnerFeedPage(0, 2);
+    expect(page.events.map((event) => event.seq)).toEqual([1]);
+    expect(page.nextCursor).toBeNull();
+
+    vi.setSystemTime(BASE + SETTLE_MS);
+    const later = await getPartnerFeedPage(1, 2);
+    expect(later.events.map((event) => event.seq)).toEqual([2, 3]);
+  });
+});
+
 describe("GET /api/partner/v1/signals, the route", () => {
   async function seedKeyWithScopes(scopes?: readonly string[]) {
     const partnerId = seedPartner(`partner-${Math.random().toString(36).slice(2, 8)}`);
@@ -628,7 +748,7 @@ describe("GET /api/partner/v1/signals, the route", () => {
     const key = await seedKeyWithScopes();
     seedFingerprint("f-1");
     seedConsent("f-1");
-    seedEvent(1, "f-1", "ADD", new Date());
+    seedEvent(1, "f-1", "ADD", new Date(Date.now() - 2 * PARTNER_FEED_SETTLE_SECONDS * 1000));
 
     for (const bad of ["?checkpoint=abc", "?checkpoint=%7B%22t%22%3A1%7D", "?checkpoint=" + "x".repeat(300), "?page_size=0"]) {
       const response = await getSignals(request(key, bad));
@@ -760,6 +880,8 @@ describe("the /signals page, Kysely path", () => {
           ] },
         ],
       },
+      // The settle window, on the database clock.
+      ["createdAt", "<", expect.anything()],
     ]);
 
     // The shareability re-check is the /fingerprints one: the fingerprint
@@ -840,11 +962,14 @@ describe("the /signals page and key scopes, Prisma path", () => {
     expect(pageQuery.args.take).toBe(2);
     expect(pageQuery.args.select).toEqual({ seq: true, type: true, fingerprintId: true, kind: true, createdAt: true });
     expect(pageQuery.args.where).toEqual({
+      createdAt: { lt: expect.any(Date) },
       OR: [
         { createdAt: { gt: new Date(0) } },
         { createdAt: new Date(0), seq: { gt: 0 } },
       ],
     });
+    // The settle cutoff comes from the database clock, not the isolate's.
+    expect(mocks.prisma.state.rawQueries.at(-1)).toContain("now() - make_interval(secs => ?)");
 
     // The shareability re-check reads the same three relations.
     const hashQuery = mocks.prisma.state.findManyArgs.filter((entry) => entry.table === "hashSubmission").at(-1)!;

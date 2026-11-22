@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "kysely";
 import { decryptField } from "@/lib/encryption";
 import { crawlMemory } from "@/lib/crawl-store";
 import { partnerMemory } from "@/lib/partner-store";
@@ -38,6 +39,40 @@ import * as store from "@/lib/store";
 
 /** The feed's maximum page size (partner-sharing-spec.md, WP32). */
 export const PARTNER_FEED_MAX_PAGE = 500;
+
+/**
+ * The settle window, in seconds, that both partner feeds hold back the newest
+ * events for. PartnerFeedEvent.createdAt defaults to CURRENT_TIMESTAMP, the
+ * START time of the writing transaction, and seq comes from a sequence taken
+ * at insert time: neither follows commit order. Two concurrent writes (say a
+ * consent withdrawal and an unrelated approval) can commit in the opposite
+ * order to their (createdAt, seq), so serving the newest rows straight away
+ * could move a partner's checkpoint past an event that is still uncommitted —
+ * and that event, possibly a WITHDRAW tombstone, would then never be served.
+ * Serving only events older than this window (by the database clock) closes
+ * the race as long as no transaction that writes feed events stays open
+ * longer than the window; they are all short, single-request transactions.
+ * The cost is that a partner sees every change, deletions included, up to
+ * this long after it happens (docs/product/partner-api.md).
+ */
+export const PARTNER_FEED_SETTLE_SECONDS = 60;
+
+/** The memory backend's settle cutoff: events at or after it are not served yet. */
+function memorySettleCutoff(): number {
+  return Date.now() - PARTNER_FEED_SETTLE_SECONDS * 1000;
+}
+
+/** The Prisma backend's settle cutoff, from the database clock (not this isolate's). */
+async function prismaSettleCutoff(db: Awaited<ReturnType<typeof prismaDb>>): Promise<Date> {
+  const rows = await db.$queryRaw<Array<{ cutoff: Date }>>`SELECT now() - make_interval(secs => ${PARTNER_FEED_SETTLE_SECONDS}) AS "cutoff"`;
+  return new Date(rows[0]!.cutoff);
+}
+
+/** Cuts a seq-ordered page at its first event still inside the settle window. */
+function settledPrefix<T extends { createdAt: Date }>(rows: T[], cutoff: number): T[] {
+  const firstUnsettled = rows.findIndex((row) => new Date(row.createdAt).getTime() >= cutoff);
+  return firstUnsettled === -1 ? rows : rows.slice(0, firstUnsettled);
+}
 
 export type PartnerFeedKind = "image" | "video";
 
@@ -596,32 +631,42 @@ export type PartnerFeedPage = { events: PartnerFeedEventPayload[]; nextCursor: n
 
 type FeedRow = { seq: number; type: string; fingerprintId: string; kind: string; caseRef: string | null };
 
+// The page stops before the first event (in seq order) still inside the
+// settle window, so the cursor never moves past an event that a slower,
+// still-open transaction could yet commit with a lower seq.
 async function feedRows(cursor: number, limit: number): Promise<FeedRow[]> {
   if (isDevNoDb()) {
-    return partnerMemory().feedEvents
+    const rows = partnerMemory().feedEvents
       .filter((event) => event.seq > cursor)
       .sort((a, b) => a.seq - b.seq)
       .slice(0, limit);
+    return settledPrefix(rows, memorySettleCutoff());
   }
   if (usesWorkerKysely()) {
     return getWorkerDb().selectFrom("PartnerFeedEvent")
       .select(["seq", "type", "fingerprintId", "kind", "caseRef"])
-      .where("seq", ">", cursor).orderBy("seq").limit(limit).execute();
+      .where("seq", ">", cursor)
+      .where("seq", "<", sql<number>`coalesce((SELECT min("unsettled"."seq") FROM "PartnerFeedEvent" AS "unsettled" WHERE "unsettled"."seq" > ${cursor} AND "unsettled"."createdAt" >= now() - make_interval(secs => ${PARTNER_FEED_SETTLE_SECONDS})), 2147483648)`)
+      .orderBy("seq").limit(limit).execute();
   }
   const db = await prismaDb();
-  return db.partnerFeedEvent.findMany({
+  const cutoff = await prismaSettleCutoff(db);
+  const rows = await db.partnerFeedEvent.findMany({
     where: { seq: { gt: cursor } },
     orderBy: { seq: "asc" },
     take: limit,
-    select: { seq: true, type: true, fingerprintId: true, kind: true, caseRef: true },
+    select: { seq: true, type: true, fingerprintId: true, kind: true, caseRef: true, createdAt: true },
   });
+  return settledPrefix(rows, cutoff.getTime());
 }
 
 /**
  * One page of the feed: everything after `cursor` (0 = the beginning), at
  * most `limit` events. nextCursor is the seq of the last raw event when the
  * page was full — it advances even when ADD events were held back, so a
- * partner can never stall behind a page of filtered events.
+ * partner can never stall behind a page of filtered events. Events newer
+ * than PARTNER_FEED_SETTLE_SECONDS are not served yet (a page cut short by
+ * them is not full, so nextCursor is absent and the partner polls again).
  */
 export async function getPartnerFeedPage(cursor: number, limit: number): Promise<PartnerFeedPage> {
   const rows = await feedRows(cursor, limit);
@@ -828,10 +873,14 @@ function afterCheckpoint(event: { createdAt: Date; seq: number }, after: Partner
   return time > after.t || (time === after.t && event.seq > after.s);
 }
 
+// Only events older than the settle window are served: ordered by createdAt,
+// that is a plain filter, and it keeps the checkpoint from passing an event a
+// still-open transaction will commit with an earlier createdAt.
 async function signalRows(after: PartnerSignalCheckpoint, limit: number): Promise<SignalRow[]> {
   if (isDevNoDb()) {
+    const cutoff = memorySettleCutoff();
     return partnerMemory().feedEvents
-      .filter((event) => afterCheckpoint(event, after))
+      .filter((event) => afterCheckpoint(event, after) && new Date(event.createdAt).getTime() < cutoff)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.seq - b.seq)
       .slice(0, limit)
       .map((event) => ({ seq: event.seq, type: event.type, fingerprintId: event.fingerprintId, kind: event.kind, createdAt: event.createdAt }));
@@ -844,12 +893,15 @@ async function signalRows(after: PartnerSignalCheckpoint, limit: number): Promis
         eb("createdAt", ">", afterDate),
         eb.and([eb("createdAt", "=", afterDate), eb("seq", ">", after.s)]),
       ]))
+      .where("createdAt", "<", sql<Date>`now() - make_interval(secs => ${PARTNER_FEED_SETTLE_SECONDS})`)
       .orderBy("createdAt").orderBy("seq").limit(limit).execute();
   }
   const db = await prismaDb();
   const afterDate = new Date(after.t);
+  const cutoff = await prismaSettleCutoff(db);
   return db.partnerFeedEvent.findMany({
     where: {
+      createdAt: { lt: cutoff },
       OR: [
         { createdAt: { gt: afterDate } },
         { createdAt: afterDate, seq: { gt: after.s } },
@@ -883,7 +935,8 @@ function signalRecord(row: SignalRow, fact: ShareableFact | undefined): PartnerS
  * checkpoint is the pair of the last raw event of the page — including a
  * skipped one — so a caller can never stall behind a page of events that
  * were not served, and it never moves backwards for a caller that pages in
- * order (HMA's fetcher asserts exactly that).
+ * order (HMA's fetcher asserts exactly that). Events newer than
+ * PARTNER_FEED_SETTLE_SECONDS are held back until they settle.
  */
 export async function getPartnerSignalPage(
   start: PartnerSignalCheckpoint | null,

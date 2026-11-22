@@ -20,6 +20,15 @@ after a person confirms it, and report the outcome back. When a survivor
 withdraws her agreement, the feed tells you to delete her fingerprints — as an
 explicit deletion record on `/signals` — and you must.
 
+**Both feeds run about a minute behind.** An event is served only once it is
+at least 60 seconds old (by Asmita's database clock), on `/fingerprints` and
+`/signals` alike. Two changes written at the same moment can be committed in
+the opposite order to their sequence and timestamp; holding back the newest
+minute lets every such change settle before your cursor or checkpoint moves
+past it, so no event (a withdrawal least of all) is ever skipped. Expect any
+change, deletions included, to reach you within the settle window plus your
+own poll interval — a few minutes at most with the polling suggested below.
+
 ## Authentication
 
 Every request carries a bearer key that an Asmita admin issues you in the
@@ -91,7 +100,10 @@ The meaning of each field:
 
 `nextCursor` is present when more events may follow: poll again immediately
 with `cursor=<nextCursor>`. When it is absent you are up to date; poll again on
-your own schedule (every 1 to 5 minutes is plenty).
+your own schedule (every 1 to 5 minutes is plenty). Events from the last 60
+seconds are not served yet (see "Both feeds run about a minute behind" above):
+a page stops short of the first one, with no `nextCursor`, and they arrive on
+a later poll with the same cursor.
 
 Rules of the feed:
 
@@ -196,7 +208,10 @@ may follow: poll again immediately with the returned checkpoint. When it is
 `false`, poll again on your own schedule. A page may serve fewer records than
 it walked past — an addition that stopped being shareable between your polls
 is skipped while the checkpoint still advances — so an empty or short page
-with `has_more: true` is never a stall: keep following the checkpoint.
+with `has_more: true` is never a stall: keep following the checkpoint. Records
+from the last 60 seconds are held back until they settle (see "Both feeds run
+about a minute behind" above), so a deletion reaches you within about a
+minute plus your poll interval, never instantly.
 
 **Quality.** Asmita does not publish a hash whose quality is below 50 — HMA
 does not filter imported hashes by quality, so Asmita filters before
@@ -291,7 +306,8 @@ package is a `SignalExchangeAPI` implementation that pages through
 `/api/partner/v1/signals` (the HMA-shaped feed above: opaque checkpoint,
 explicit deletion records, vPDQ signal strings), forwarding your partner key,
 and maps every `deleted: true` record to a deletion, so withdrawals propagate
-automatically. Its README covers building the wheel, registering the exchange
+automatically, within minutes (the feed's settle window plus HMA's fetch
+interval). Its README covers building the wheel, registering the exchange
 on current HMA (Open Media Match) and the python-threatexchange CLI, and
 reporting outcomes back. It is not part of the Asmita application, and it
 carries the ThreatExchange BSD licence notice (BSD-3-Clause, with Meta's

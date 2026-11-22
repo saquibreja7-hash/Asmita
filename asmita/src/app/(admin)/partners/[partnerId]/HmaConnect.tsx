@@ -91,7 +91,7 @@ export function HmaConnect() {
       <p className="muted mt-3 max-w-2xl text-sm">
         Meta&apos;s open-source Hasher-Matcher-Actioner pulls hashes from Asmita through the
         Asmita exchange package. Three steps, then HMA&apos;s own fetcher keeps the bank in
-        sync — including deletions the moment a survivor withdraws her consent.
+        sync — including deletions, within minutes of a survivor withdrawing her consent.
       </p>
       <ol className="mt-4 grid gap-6">
         {BLOCKS.map((block) => (

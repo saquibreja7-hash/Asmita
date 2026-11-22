@@ -76,6 +76,13 @@ async function post(request: APIRequestContext, path: string, data: unknown, met
 const markTemplateReviewed = (templateType: string) =>
   withAdmin((db) => db.query(`UPDATE "NoticeTemplate" SET "reviewedByLegal" = true WHERE "templateType" = $1 AND "isActive"`, [templateType]));
 
+// Both feeds hold back events younger than PARTNER_FEED_SETTLE_SECONDS (60s).
+// Rather than wait, the journey ages this fingerprint's events by two minutes
+// in the throwaway database — every one of them by the same amount, so their
+// order is unchanged — exactly as if the partner had polled later.
+const settleFeedEvents = (fingerprintId: string) =>
+  withAdmin((db) => db.query(`UPDATE "PartnerFeedEvent" SET "createdAt" = "createdAt" - interval '2 minutes' WHERE "fingerprintId" = $1`, [fingerprintId]));
+
 test.describe("partner signals (WP110)", () => {
   test("admin-issued key reads a consented synthetic fingerprint from /signals, and withdrawal becomes an explicit deletion", async ({ page, browser, request }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
@@ -131,6 +138,7 @@ test.describe("partner signals (WP110)", () => {
     expect(agreed.ok()).toBe(true);
 
     // 4. The partner key reads the HMA signal feed: one live record.
+    await settleFeedEvents(hashId!);
     const signals = (await (await request.get("/api/partner/v1/signals", { headers: auth })).json()) as {
       checkpoint: string;
       has_more: boolean;
@@ -160,6 +168,7 @@ test.describe("partner signals (WP110)", () => {
     const withdrawn = await post(page.request, `/api/cases/${caseId}/partner-share`, {}, "delete");
     expect(withdrawn.ok()).toBe(true);
 
+    await settleFeedEvents(hashId!);
     const after = (await (await request.get("/api/partner/v1/signals", { headers: auth })).json()) as {
       checkpoint: string;
       has_more: boolean;

@@ -5,8 +5,9 @@ A `SignalExchangeAPI` for [python-threatexchange](https://github.com/meta/Threat
 Hasher-Matcher-Actioner (HMA / Open Media Match) subscribe to Asmita as a
 hash bank: HMA pulls the image fingerprints (PDQ) and video fingerprints
 (vPDQ) of survivors who consented to sharing, straight from Asmita's HMA
-signal feed, and deletes them again the moment a survivor withdraws her
-consent.
+signal feed, and deletes them again within minutes of a survivor withdrawing
+her consent (the feed serves events once they are 60 seconds old, plus HMA's
+own fetch interval).
 
 This package is the supported successor of the example adapter that used to
 live in `asmita/docs/product/partner-hma-adapter/` in the Asmita repository.

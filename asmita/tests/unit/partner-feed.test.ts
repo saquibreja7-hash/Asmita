@@ -138,6 +138,7 @@ import {
   getPartnerFeedPage,
   kindForAlgorithm,
   PARTNER_FEED_MAX_PAGE,
+  PARTNER_FEED_SETTLE_SECONDS,
   syncPartnerFeedFingerprint,
   syncPartnerFeedForCase,
 } from "@/lib/partner-feed";
@@ -156,6 +157,18 @@ const template = {
   isActive: true,
   version: 1,
 };
+
+/**
+ * The feed holds back events younger than PARTNER_FEED_SETTLE_SECONDS; these
+ * tests poll right after writing, so they age every memory event past the
+ * window first (all by the same amount, so their order is unchanged), as if
+ * the partner had polled a minute later.
+ */
+function settleFeed() {
+  for (const event of partnerMemory().feedEvents) {
+    event.createdAt = new Date(new Date(event.createdAt).getTime() - (PARTNER_FEED_SETTLE_SECONDS + 1) * 1000);
+  }
+}
 
 const HEX_A = "ab".repeat(32);
 const HEX_B = "cd".repeat(32);
@@ -288,6 +301,7 @@ describe("the feed's sync, in-memory store", () => {
     await agree("case-2");
     expect(partnerMemory().feedEvents).toHaveLength(6);
 
+    settleFeed();
     const first = await getPartnerFeedPage(0, 4);
     expect(first.events).toHaveLength(4);
     expect(first.nextCursor).toBe(first.events[3]!.seq);
@@ -297,6 +311,7 @@ describe("the feed's sync, in-memory store", () => {
     const walked = [...first.events, ...second.events];
     expect(walked.map((e) => e.seq)).toEqual(partnerMemory().feedEvents.map((e) => e.seq));
     // A cursor at the end answers empty, with no nextCursor.
+    settleFeed();
     expect(await getPartnerFeedPage(walked[5]!.seq, 4)).toEqual({ events: [], nextCursor: null });
   });
 
@@ -308,6 +323,7 @@ describe("the feed's sync, in-memory store", () => {
 
     // A partner polling from the beginning sees only the WITHDRAW — the ADD
     // is held back, so the withdrawn fingerprint never appears.
+    settleFeed();
     const page = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     expect(page.events).toEqual([
       { seq: expect.any(Number), type: "withdraw", fingerprintId: "hash-1", kind: "image", caseRef: "ASMITA-2026-00001" },
@@ -315,6 +331,7 @@ describe("the feed's sync, in-memory store", () => {
 
     // While it is shareable again, the ADD carries the hash and nothing else.
     await agree("case-1");
+    settleFeed();
     const live = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     const add = live.events.find((e) => e.type === "add")!;
     expect(add).toEqual({
@@ -324,6 +341,7 @@ describe("the feed's sync, in-memory store", () => {
 
     // An unreadable stored hash is never served either.
     crawlMemory().fingerprints.get("hash-1")!.hashEncrypted = "not-encrypted";
+    settleFeed();
     const broken = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     expect(broken.events.filter((e) => e.type === "add")).toEqual([]);
   });
@@ -350,6 +368,7 @@ describe("the feed's sync, in-memory store", () => {
     });
     await agree("case-1");
 
+    settleFeed();
     const page = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     expect(page.events).toEqual([
       { seq: expect.any(Number), type: "add", fingerprintId: "hash-video", kind: "video", frames: [HEX_A, "ef".repeat(32)], caseRef: "ASMITA-2026-00001" },
@@ -359,6 +378,7 @@ describe("the feed's sync, in-memory store", () => {
     crawlMemory().fingerprints.get("hash-video")!.videoFramesEncrypted = encryptField(JSON.stringify([{ hash: HEX_A, quality: 40, t: 0 }]));
     partnerMemory().feedEvents.length = 0; // replay the same ADD against the weaker frames
     partnerMemory().feedEvents.push({ id: "e2", seq: 1, fingerprintId: "hash-video", type: "ADD", kind: "video", caseId: "case-1", caseRef: "ASMITA-2026-00001", createdAt: new Date() });
+    settleFeed();
     const weaker = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     expect(weaker.events).toEqual([]);
   });
