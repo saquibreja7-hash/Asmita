@@ -67,9 +67,19 @@ async function reportWithFingerprint(page: Page, links: string[]) {
   return caseId;
 }
 
+// Each GET /api/csrf sets a new CSRF cookie, and a page open in the same
+// context fetches its own token on load. If that lands between our token and
+// our POST, the cookie no longer matches and the server answers 403
+// csrf_failed before the route runs. Retry that one case with a fresh pair;
+// any other answer, including a real 403, is returned as is.
 async function post(request: APIRequestContext, path: string, data: unknown) {
-  const { token } = (await (await request.get("/api/csrf")).json()) as { token: string };
-  return request.post(path, { data, headers: { "x-csrf-token": token } });
+  for (let attempt = 0; ; attempt++) {
+    const { token } = (await (await request.get("/api/csrf")).json()) as { token: string };
+    const response = await request.post(path, { data, headers: { "x-csrf-token": token } });
+    if (response.status() !== 403 || attempt >= 2) return response;
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    if (body.error !== "csrf_failed") return response;
+  }
 }
 
 // A later fingerprint, added by the survivor after signing: refused, because
