@@ -3,6 +3,7 @@ import { z } from "zod";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { hashEmail, sha256 } from "@/lib/hash";
 import { writeAuditLog } from "@/lib/audit";
+import { csvCell } from "@/lib/csv-cell";
 
 /*
  * Newsletter sign-ups (docs/org/spec.md, WP56), double opt-in. The address
@@ -291,7 +292,3 @@ async function decryptEmail(emailHash: string): Promise<string> {
   return row ? safeDecrypt(row.emailEnc) ?? "" : "";
 }
 
-function csvCell(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}

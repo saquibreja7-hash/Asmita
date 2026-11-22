@@ -3,6 +3,7 @@ import { z } from "zod";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { hashEmail } from "@/lib/hash";
 import { writeAuditLog } from "@/lib/audit";
+import { csvCell } from "@/lib/csv-cell";
 import {
   ACADEMIC_INTERESTS,
   ACADEMIC_PARTNER_TYPES,
@@ -595,7 +596,3 @@ export async function exportOrgSubmissionsCsv(
   return `${lines.join("\n")}\n`;
 }
 
-function csvCell(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
