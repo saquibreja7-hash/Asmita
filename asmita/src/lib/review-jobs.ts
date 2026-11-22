@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import { encryptField } from "@/lib/encryption";
 import { hasAdminPermission, type AdminRole } from "@/lib/auth/admin-permissions";
+import { containsUrlLikeText } from "@/lib/url-like-text";
+import { writeAuditLog } from "@/lib/audit";
 import { MINOR_HOLD_QUEUE_KEY, SYSTEM_REVIEW_QUEUES } from "@/lib/review-queue-seeds";
 import {
   ensureSystemReviewReasons,
@@ -17,6 +19,13 @@ import {
   type ReviewSubjectState,
 } from "@/lib/review-adapters";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import {
+  recordRoutingEvaluations,
+  resetReviewRoutingMemory,
+  routeSubjectForKind,
+  listRoutingRules,
+  type RuleEvaluation,
+} from "@/lib/review-routing";
 
 /*
  * Review console core (review-console-spec.md, WP140): queues, leased jobs
@@ -59,6 +68,8 @@ export type ReviewQueueRow = {
   sortOrder: number;
   requireReasonOnReject: boolean;
   requireReasonOnApprove: boolean;
+  /** WP143 queues admin: set when an empty custom queue is archived. */
+  archivedAt: Date | null;
 };
 
 export type ReviewJobRow = {
@@ -152,6 +163,7 @@ export function resetReviewMemory(): void {
   queuesEnsured = false;
   lastLazySyncAt = 0;
   resetReviewReasonMemory();
+  resetReviewRoutingMemory();
 }
 
 function isDevNoDb() {
@@ -195,7 +207,7 @@ export async function ensureSystemQueues(): Promise<void> {
     for (const seed of SYSTEM_REVIEW_QUEUES) {
       if (!memory.queues.has(seed.key)) {
         const now = new Date();
-        memory.queues.set(seed.key, { ...seed, createdAt: now, updatedAt: now });
+        memory.queues.set(seed.key, { ...seed, archivedAt: null, createdAt: now, updatedAt: now });
       }
     }
   } else if (usesWorkerKysely()) {
@@ -255,6 +267,7 @@ function toQueueRow(row: {
   sortOrder: number;
   requireReasonOnReject: boolean;
   requireReasonOnApprove: boolean;
+  archivedAt?: Date | null;
 }): ReviewQueueRow {
   return {
     id: row.id,
@@ -267,6 +280,7 @@ function toQueueRow(row: {
     sortOrder: row.sortOrder,
     requireReasonOnReject: row.requireReasonOnReject,
     requireReasonOnApprove: row.requireReasonOnApprove,
+    archivedAt: row.archivedAt ?? null,
   };
 }
 
@@ -299,7 +313,7 @@ export async function getReviewQueueByKey(key: string): Promise<ReviewQueueRow |
   return row ? toQueueRow(row) : null;
 }
 
-async function getReviewQueueById(id: string): Promise<ReviewQueueRow | null> {
+export async function getReviewQueueById(id: string): Promise<ReviewQueueRow | null> {
   await ensureSystemQueues();
   if (isDevNoDb()) {
     const queue = [...reviewMemory().queues.values()].find((item) => item.id === id);
@@ -315,7 +329,7 @@ async function getReviewQueueById(id: string): Promise<ReviewQueueRow | null> {
 }
 
 /** The kind's default queue, or null when seeding has not run. */
-async function defaultQueueForKind(kind: ReviewSubjectKind): Promise<ReviewQueueRow | null> {
+export async function defaultQueueForKind(kind: ReviewSubjectKind): Promise<ReviewQueueRow | null> {
   const queues = await listReviewQueues();
   const defaults = queues.filter((queue) => queue.subjectKind === kind && queue.isDefault);
   return defaults.sort((a, b) => a.sortOrder - b.sortOrder)[0] ?? null;
@@ -333,6 +347,235 @@ export function canSeeReviewQueue(
 ): boolean {
   if (queue.protected || queue.subjectKind === null) return role === "SUPER_ADMIN";
   return hasAdminPermission(role, reviewVisibilityPermission(queue.subjectKind));
+}
+
+// ---------------------------------------------------------------------------
+// Queues admin (WP143): custom queues per kind. A custom queue is a routing
+// destination only — it changes no decision, no gate, no permission; the
+// system queues and the protected minor-hold queue are never editable.
+
+const QUEUE_NAME_MAX = 80;
+const QUEUE_DESCRIPTION_MAX = 240;
+const QUEUE_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
+
+export type QueueAdminResult = { ok: true; queue: ReviewQueueRow } | { ok: false; error: string };
+
+function slugifyQueueKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function cleanQueueName(value: unknown): { ok: true; text: string } | { ok: false; error: string } {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text || text.length > QUEUE_NAME_MAX) return { ok: false, error: "invalid_name" };
+  if (containsUrlLikeText(text)) return { ok: false, error: "links_not_allowed" };
+  return { ok: true, text };
+}
+
+function cleanQueueDescription(value: unknown): { ok: true; text: string | null } | { ok: false; error: string } {
+  if (value == null || (typeof value === "string" && value.trim() === "")) return { ok: true, text: null };
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text || text.length > QUEUE_DESCRIPTION_MAX) return { ok: false, error: "invalid_description" };
+  if (containsUrlLikeText(text)) return { ok: false, error: "links_not_allowed" };
+  return { ok: true, text };
+}
+
+async function auditQueueChange(actorId: string, action: string, queue: ReviewQueueRow): Promise<void> {
+  // Queue changes are console config: they audit as ADMIN_ACTION with the
+  // key and ids only, like the WP142 reason changes.
+  await writeAuditLog({
+    eventType: "ADMIN_ACTION",
+    entityType: "ReviewQueue",
+    entityId: queue.id,
+    actorId,
+    data: { action, key: queue.key, subjectKind: queue.subjectKind },
+  });
+}
+
+/** How many jobs wait in a queue (the archive gate: only empty queues go). */
+async function countPendingJobsInQueue(queueId: string): Promise<number> {
+  if (isDevNoDb()) {
+    return [...reviewMemory().jobs.values()].filter((job) => job.queueId === queueId && job.status === "PENDING").length;
+  }
+  if (usesWorkerKysely()) {
+    const row = await getWorkerDb().selectFrom("ReviewJob")
+      .select((eb) => eb.fn.countAll<string>().as("num"))
+      .where("queueId", "=", queueId).where("status", "=", "PENDING")
+      .executeTakeFirst();
+    return Number(row?.num ?? 0);
+  }
+  const { db } = await import("@/lib/db");
+  return await db.reviewJob.count({ where: { queueId, status: "PENDING" } });
+}
+
+/**
+ * Adds a custom queue for a kind. Never a default queue, never protected:
+ * the protected minor-hold queue exists exactly once and is not editable.
+ */
+export async function createReviewQueue(input: {
+  name: string;
+  description?: string | null;
+  subjectKind: ReviewSubjectKind;
+  sortOrder?: number;
+  requireReasonOnReject?: boolean;
+  requireReasonOnApprove?: boolean;
+  role: AdminRole;
+  actorId: string;
+  now?: Date;
+}): Promise<QueueAdminResult> {
+  if (!hasAdminPermission(input.role, "review:manage")) return { ok: false, error: "permission_denied" };
+  const now = input.now ?? new Date();
+  const name = cleanQueueName(input.name);
+  if (!name.ok) return name;
+  const description = cleanQueueDescription(input.description);
+  if (!description.ok) return description;
+  const key = slugifyQueueKey(name.text);
+  if (!QUEUE_KEY_PATTERN.test(key)) return { ok: false, error: "invalid_name" };
+  if (await getReviewQueueByKey(key)) return { ok: false, error: "queue_key_exists" };
+  const sortOrder =
+    typeof input.sortOrder === "number" && Number.isInteger(input.sortOrder)
+      ? input.sortOrder
+      : (await listReviewQueues()).reduce((max, queue) => Math.max(max, queue.sortOrder), 0) + 10;
+
+  const queue: ReviewQueueRow = {
+    id: randomUUID(),
+    key,
+    name: name.text,
+    description: description.text,
+    subjectKind: input.subjectKind,
+    isDefault: false,
+    protected: false,
+    sortOrder,
+    requireReasonOnReject: input.requireReasonOnReject ?? true,
+    requireReasonOnApprove: input.requireReasonOnApprove ?? false,
+    archivedAt: null,
+  };
+  const stored = { ...queue, createdAt: now, updatedAt: now };
+  if (isDevNoDb()) {
+    reviewMemory().queues.set(queue.key, stored);
+  } else if (usesWorkerKysely()) {
+    await getWorkerDb().insertInto("ReviewQueue").values({
+      id: queue.id, key: queue.key, name: queue.name, description: queue.description,
+      subjectKind: queue.subjectKind, isDefault: false, protected: false, sortOrder: queue.sortOrder,
+      requireReasonOnReject: queue.requireReasonOnReject, requireReasonOnApprove: queue.requireReasonOnApprove,
+      createdAt: now, updatedAt: now,
+    }).execute();
+  } else {
+    const { db } = await import("@/lib/db");
+    await db.reviewQueue.create({
+      data: {
+        id: queue.id, key: queue.key, name: queue.name, description: queue.description,
+        subjectKind: queue.subjectKind, isDefault: false, protected: false, sortOrder: queue.sortOrder,
+        requireReasonOnReject: queue.requireReasonOnReject, requireReasonOnApprove: queue.requireReasonOnApprove,
+      },
+    });
+  }
+  await auditQueueChange(input.actorId, "create", queue);
+  return { ok: true, queue };
+}
+
+/** Renames a custom queue and edits its description, order and reason flags. */
+export async function renameReviewQueue(input: {
+  queueId: string;
+  name?: string;
+  description?: string | null;
+  sortOrder?: number;
+  requireReasonOnReject?: boolean;
+  requireReasonOnApprove?: boolean;
+  role: AdminRole;
+  actorId: string;
+  now?: Date;
+}): Promise<QueueAdminResult> {
+  if (!hasAdminPermission(input.role, "review:manage")) return { ok: false, error: "permission_denied" };
+  const now = input.now ?? new Date();
+  const queue = await getReviewQueueById(input.queueId);
+  if (!queue) return { ok: false, error: "queue_not_found" };
+  if (queue.protected) return { ok: false, error: "protected_queue" };
+  if (queue.isDefault) return { ok: false, error: "system_queue" };
+  if (queue.archivedAt !== null) return { ok: false, error: "queue_archived" };
+
+  let name = queue.name;
+  if (input.name !== undefined) {
+    const cleaned = cleanQueueName(input.name);
+    if (!cleaned.ok) return cleaned;
+    name = cleaned.text;
+  }
+  let description = queue.description;
+  if (input.description !== undefined) {
+    const cleaned = cleanQueueDescription(input.description);
+    if (!cleaned.ok) return cleaned;
+    description = cleaned.text;
+  }
+  if (typeof input.sortOrder === "number" && (!Number.isInteger(input.sortOrder) || Math.abs(input.sortOrder) > 100_000)) {
+    return { ok: false, error: "invalid_sort_order" };
+  }
+  const saved: ReviewQueueRow = {
+    ...queue,
+    name,
+    description,
+    sortOrder: typeof input.sortOrder === "number" ? input.sortOrder : queue.sortOrder,
+    requireReasonOnReject: input.requireReasonOnReject ?? queue.requireReasonOnReject,
+    requireReasonOnApprove: input.requireReasonOnApprove ?? queue.requireReasonOnApprove,
+  };
+  const data = {
+    name: saved.name,
+    description: saved.description,
+    sortOrder: saved.sortOrder,
+    requireReasonOnReject: saved.requireReasonOnReject,
+    requireReasonOnApprove: saved.requireReasonOnApprove,
+    updatedAt: now,
+  };
+  if (isDevNoDb()) {
+    const stored = reviewMemory().queues.get(queue.key);
+    if (stored) Object.assign(stored, data);
+  } else if (usesWorkerKysely()) {
+    await getWorkerDb().updateTable("ReviewQueue").set(data).where("id", "=", queue.id).execute();
+  } else {
+    const { db } = await import("@/lib/db");
+    await db.reviewQueue.update({ where: { id: queue.id }, data });
+  }
+  await auditQueueChange(input.actorId, "rename", saved);
+  return { ok: true, queue: saved };
+}
+
+/**
+ * Archives a custom queue: only empty ones, only custom ones, and only ones
+ * no routing rule points at, so a live rule can never lose its destination
+ * quietly. System queues and the protected minor-hold queue are refused.
+ */
+export async function archiveReviewQueue(input: {
+  queueId: string;
+  role: AdminRole;
+  actorId: string;
+  now?: Date;
+}): Promise<QueueAdminResult> {
+  if (!hasAdminPermission(input.role, "review:manage")) return { ok: false, error: "permission_denied" };
+  const now = input.now ?? new Date();
+  const queue = await getReviewQueueById(input.queueId);
+  if (!queue) return { ok: false, error: "queue_not_found" };
+  if (queue.protected) return { ok: false, error: "protected_queue" };
+  if (queue.isDefault) return { ok: false, error: "system_queue" };
+  if (queue.archivedAt !== null) return { ok: true, queue };
+  if ((await countPendingJobsInQueue(queue.id)) > 0) return { ok: false, error: "queue_not_empty" };
+  const { listRoutingRules } = await import("@/lib/review-routing");
+  if ((await listRoutingRules()).some((rule) => rule.destinationQueueId === queue.id)) {
+    return { ok: false, error: "queue_in_use" };
+  }
+
+  const saved: ReviewQueueRow = { ...queue, archivedAt: now };
+  if (isDevNoDb()) {
+    const stored = reviewMemory().queues.get(queue.key);
+    if (stored) stored.archivedAt = now;
+  } else if (usesWorkerKysely()) {
+    await getWorkerDb().updateTable("ReviewQueue").set({ archivedAt: now, updatedAt: now }).where("id", "=", queue.id).execute();
+  } else {
+    const { db } = await import("@/lib/db");
+    await db.reviewQueue.update({ where: { id: queue.id }, data: { archivedAt: now, updatedAt: now } });
+  }
+  await auditQueueChange(input.actorId, "archive", saved);
+  return { ok: true, queue: saved };
 }
 
 // ---------------------------------------------------------------------------
@@ -391,6 +634,8 @@ type CreateJobInput = {
   caseId: string | null;
   enqueueSource: ReviewEnqueueSource;
   priority?: number;
+  routedByRuleId?: string | null;
+  routedByRuleVersion?: number | null;
   now: Date;
 };
 
@@ -407,8 +652,8 @@ async function createJob(input: CreateJobInput): Promise<ReviewJobRow> {
       claimedBy: null,
       claimedUntil: null,
       enqueueSource: input.enqueueSource,
-      routedByRuleId: null,
-      routedByRuleVersion: null,
+      routedByRuleId: input.routedByRuleId ?? null,
+      routedByRuleVersion: input.routedByRuleVersion ?? null,
       createdAt: input.now,
       updatedAt: input.now,
       closedAt: null,
@@ -425,6 +670,8 @@ async function createJob(input: CreateJobInput): Promise<ReviewJobRow> {
     status: "PENDING" as const,
     priority: input.priority ?? 0,
     enqueueSource: input.enqueueSource,
+    routedByRuleId: input.routedByRuleId ?? null,
+    routedByRuleVersion: input.routedByRuleVersion ?? null,
     createdAt: input.now,
     updatedAt: input.now,
   };
@@ -439,19 +686,46 @@ async function createJob(input: CreateJobInput): Promise<ReviewJobRow> {
 }
 
 /**
- * The queue a subject belongs in: the minor check first (a "Possible minor"
- * label always wins, WP140), then the kind's default queue until WP143's
- * routing rules exist.
+ * The queue a subject belongs in (WP143): the minor check first — a subject
+ * under a "Possible minor" label always goes to minor-hold and the routing
+ * rules never see it — then the LIVE rules of the kind in sequence order;
+ * the first match sets the queue and the priority, and no match uses the
+ * kind's default queue. The evaluations come back for the routing log.
  */
-async function queueForSubject(state: ReviewSubjectState, kind: ReviewSubjectKind): Promise<ReviewQueueRow | null> {
-  if (state.minorHold) return getReviewQueueByKey(MINOR_HOLD_QUEUE_KEY);
-  return defaultQueueForKind(kind);
+type SubjectRouting = {
+  queue: ReviewQueueRow | null;
+  priority: number;
+  routedByRuleId: string | null;
+  routedByRuleVersion: number | null;
+  evaluations: RuleEvaluation[];
+};
+
+async function queueForSubject(
+  state: ReviewSubjectState,
+  kind: ReviewSubjectKind,
+  subjectId: string,
+  now: Date,
+  cache: { rules?: import("@/lib/review-routing").ReviewRoutingRuleRow[]; queues?: ReviewQueueRow[] } = {},
+): Promise<SubjectRouting> {
+  if (state.minorHold) {
+    const queue = await getReviewQueueByKey(MINOR_HOLD_QUEUE_KEY);
+    return { queue, priority: 0, routedByRuleId: null, routedByRuleVersion: null, evaluations: [] };
+  }
+  const routed = await routeSubjectForKind(kind, subjectId, now, cache);
+  const queue = routed.destination?.queue ?? (await defaultQueueForKind(kind));
+  return {
+    queue,
+    priority: routed.destination?.priority ?? 0,
+    routedByRuleId: routed.destination?.ruleId ?? null,
+    routedByRuleVersion: routed.destination?.ruleVersion ?? null,
+    evaluations: routed.evaluations,
+  };
 }
 
 /**
  * Opens (or keeps open) the review job for one subject. A second enqueue
- * merges into the open job; when the minor check changes the subject's
- * queue, the open job moves and any lease is released.
+ * merges into the open job; when the minor check or a routing rule changes
+ * the subject's queue, the open job moves and any lease is released.
  */
 export async function enqueueForReview(
   kind: ReviewSubjectKind,
@@ -464,7 +738,8 @@ export async function enqueueForReview(
   if (!adapter) return { ok: false, error: "adapter_unavailable" };
   const state = await adapter.subjectNeedsReview(subjectId);
   if (!state) return { ok: true, jobId: null, merged: false };
-  const queue = await queueForSubject(state, kind);
+  const routing = await queueForSubject(state, kind, subjectId, now);
+  const queue = routing.queue;
   if (!queue) return { ok: false, error: "review_queue_missing" };
   const caseId = options.caseId ?? state.caseId ?? null;
 
@@ -472,9 +747,14 @@ export async function enqueueForReview(
   if (existing) {
     if (existing.queueId === queue.id) {
       await touchJob(existing.id, now);
-      return { ok: true, jobId: existing.id, merged: true };
+    } else {
+      await moveOpenJobToQueue(existing, queue, now, {
+        priority: routing.priority,
+        routedByRuleId: routing.routedByRuleId,
+        routedByRuleVersion: routing.routedByRuleVersion,
+      });
     }
-    await moveOpenJobToQueue(existing, queue, now);
+    await recordRoutingEvaluations(existing.id, routing.evaluations, now);
     return { ok: true, jobId: existing.id, merged: true };
   }
   try {
@@ -483,9 +763,13 @@ export async function enqueueForReview(
       subjectKind: kind,
       subjectId,
       caseId,
-      enqueueSource: options.source ?? "MANUAL",
+      enqueueSource: routing.routedByRuleId ? "RULE" : options.source ?? "MANUAL",
+      priority: routing.priority,
+      routedByRuleId: routing.routedByRuleId,
+      routedByRuleVersion: routing.routedByRuleVersion,
       now,
     });
+    await recordRoutingEvaluations(job.id, routing.evaluations, now);
     return { ok: true, jobId: job.id, merged: false };
   } catch (err) {
     // A concurrent enqueue of the same subject hit the one-open-job index;
@@ -518,21 +802,41 @@ async function touchJob(jobId: string, now: Date) {
  * Moves an open job to another queue and releases any lease: the holder's
  * screen shows a lost claim, which is the safe outcome when an item's queue
  * changes under them. Guarded on PENDING, so a job decided in the meantime
- * is left alone.
+ * is left alone. WP143: the move carries the routing rule that caused it
+ * (null when the minor check or the default queue did) and its priority.
  */
-async function moveOpenJobToQueue(job: ReviewJobRow, queue: ReviewQueueRow, now: Date): Promise<boolean> {
+async function moveOpenJobToQueue(
+  job: ReviewJobRow,
+  queue: ReviewQueueRow,
+  now: Date,
+  routing: { priority?: number; routedByRuleId?: string | null; routedByRuleVersion?: number | null } = {},
+): Promise<boolean> {
+  const priority = routing.priority ?? 0;
+  const routedByRuleId = routing.routedByRuleId ?? null;
+  const routedByRuleVersion = routing.routedByRuleVersion ?? null;
   if (isDevNoDb()) {
     const memory = reviewMemory();
     const stored = memory.jobs.get(job.id);
     if (!stored || stored.status !== "PENDING") return false;
     stored.queueId = queue.id;
+    stored.priority = priority;
+    stored.routedByRuleId = routedByRuleId;
+    stored.routedByRuleVersion = routedByRuleVersion;
     stored.claimedBy = null;
     stored.claimedUntil = null;
     stored.updatedAt = now;
     await closeOpenClaims(memory, job.id, now, "released");
     return true;
   }
-  const data = { queueId: queue.id, claimedBy: null, claimedUntil: null, updatedAt: now };
+  const data = {
+    queueId: queue.id,
+    priority,
+    routedByRuleId,
+    routedByRuleVersion,
+    claimedBy: null,
+    claimedUntil: null,
+    updatedAt: now,
+  };
   if (usesWorkerKysely()) {
     const result = await getWorkerDb().updateTable("ReviewJob").set(data)
       .where("id", "=", job.id).where("status", "=", "PENDING").executeTakeFirst();
@@ -1123,6 +1427,7 @@ export async function moveJob(
   if (!target) return { ok: false, error: "queue_not_found" };
   if (job.status !== "PENDING") return { ok: false, error: "job_closed" };
   if (queue.protected) return { ok: false, error: "minor_hold" };
+  if (target.archivedAt !== null) return { ok: false, error: "queue_archived" };
   if (target.subjectKind !== null && target.subjectKind !== job.subjectKind) {
     return { ok: false, error: "queue_kind_mismatch" };
   }
@@ -1268,7 +1573,9 @@ export async function queueSummaries(
   viewer: { role: AdminRole; emailHash: string },
   now = new Date(),
 ): Promise<ReviewQueueSummary[]> {
-  const queues = (await listReviewQueues()).filter((queue) => canSeeReviewQueue(viewer.role, queue));
+  const queues = (await listReviewQueues())
+    .filter((queue) => queue.archivedAt === null)
+    .filter((queue) => canSeeReviewQueue(viewer.role, queue));
   const fourHoursAgo = now.getTime() - 4 * 60 * 60_000;
   const dayAgo = now.getTime() - 24 * 60 * 60_000;
 
@@ -1348,12 +1655,12 @@ async function listPendingJobsOfKind(kind: ReviewSubjectKind): Promise<ReviewJob
  * review are closed as resolved elsewhere, and the minor check runs before
  * anything else — a subject under a "Possible minor" label is moved to
  * minor-hold whatever else is true, and a label cleared through the
- * existing flow brings the subject back to its kind's queue.
+ * existing flow brings the subject back through the routing rules to the
+ * queue it belongs in now (WP143).
  */
 export async function syncReviewJobs(now = new Date()): Promise<ReviewSyncResult> {
   await ensureSystemQueues();
   const result: ReviewSyncResult = { enqueued: 0, closed: 0, moved: 0, kindsWithoutAdapters: [] };
-  const minorHold = await getReviewQueueByKey(MINOR_HOLD_QUEUE_KEY);
 
   for (const kind of REVIEW_SUBJECT_KINDS) {
     const adapter = await getReviewAdapter(kind);
@@ -1367,39 +1674,95 @@ export async function syncReviewJobs(now = new Date()): Promise<ReviewSyncResult
     const openJobs = new Map<string, ReviewJobRow>();
     for (const job of await listPendingJobsOfKind(kind)) openJobs.set(job.subjectId, job);
 
+    // One routing pass per kind per sync: the kind's rules are loaded once
+    // and shared by every subject (WP143); a kind with no rules never loads
+    // facts at all.
+    const cache: Parameters<typeof queueForSubject>[4] = { rules: await listRoutingRules(kind) };
+    const desiredFor = async (subjectId: string, state: ReviewSubjectState): Promise<SubjectRouting> =>
+      queueForSubject(state, kind, subjectId, now, cache);
+
     for (const [subjectId, job] of openJobs) {
       const state = open.get(subjectId);
       if (!state) {
         if (await closeJobAsResolvedElsewhere(job, now)) result.closed += 1;
         continue;
       }
-      const desired = state.minorHold ? minorHold : await defaultQueueForKind(kind);
-      if (desired && job.queueId !== desired.id) {
-        if (await moveOpenJobToQueue(job, desired, now)) result.moved += 1;
+      const desired = await desiredFor(subjectId, state);
+      if (!desired.queue) continue;
+      if (job.queueId !== desired.queue.id) {
+        if (await moveOpenJobToQueue(job, desired.queue, now, {
+          priority: desired.priority,
+          routedByRuleId: desired.routedByRuleId,
+          routedByRuleVersion: desired.routedByRuleVersion,
+        })) {
+          result.moved += 1;
+        }
+      } else if (
+        job.priority !== desired.priority ||
+        job.routedByRuleId !== desired.routedByRuleId ||
+        job.routedByRuleVersion !== desired.routedByRuleVersion
+      ) {
+        // Same queue, new priority or provenance from a rule: patch in
+        // place, the holder keeps the item (an ordering change only).
+        await patchJobRouting(job, desired, now);
       }
+      await recordRoutingEvaluations(job.id, desired.evaluations, now);
     }
 
     for (const [subjectId, state] of open) {
       if (openJobs.has(subjectId)) continue;
-      const queue = state.minorHold ? minorHold : await defaultQueueForKind(kind);
-      if (!queue) continue;
+      const desired = await desiredFor(subjectId, state);
+      if (!desired.queue) continue;
       try {
         const job = await createJob({
-          queueId: queue.id,
+          queueId: desired.queue.id,
           subjectKind: kind,
           subjectId,
           caseId: state.caseId,
-          enqueueSource: "SYNC",
+          enqueueSource: desired.routedByRuleId ? "RULE" : "SYNC",
+          priority: desired.priority,
+          routedByRuleId: desired.routedByRuleId,
+          routedByRuleVersion: desired.routedByRuleVersion,
           now,
         });
         openJobs.set(subjectId, job);
         result.enqueued += 1;
+        await recordRoutingEvaluations(job.id, desired.evaluations, now);
       } catch (err) {
         if (!isUniqueViolation(err)) throw err;
       }
     }
   }
   return result;
+}
+
+/** Patches a job's priority and routing provenance in place, PENDING only. */
+async function patchJobRouting(
+  job: ReviewJobRow,
+  desired: { priority: number; routedByRuleId: string | null; routedByRuleVersion: number | null },
+  now: Date,
+): Promise<void> {
+  if (isDevNoDb()) {
+    const stored = reviewMemory().jobs.get(job.id);
+    if (!stored || stored.status !== "PENDING") return;
+    stored.priority = desired.priority;
+    stored.routedByRuleId = desired.routedByRuleId;
+    stored.routedByRuleVersion = desired.routedByRuleVersion;
+    stored.updatedAt = now;
+    return;
+  }
+  const data = {
+    priority: desired.priority,
+    routedByRuleId: desired.routedByRuleId,
+    routedByRuleVersion: desired.routedByRuleVersion,
+    updatedAt: now,
+  };
+  if (usesWorkerKysely()) {
+    await getWorkerDb().updateTable("ReviewJob").set(data).where("id", "=", job.id).where("status", "=", "PENDING").execute();
+    return;
+  }
+  const { db } = await import("@/lib/db");
+  await db.reviewJob.updateMany({ where: { id: job.id, status: "PENDING" }, data });
 }
 
 /**

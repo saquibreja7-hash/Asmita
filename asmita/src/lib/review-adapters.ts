@@ -7,6 +7,9 @@ import { crawlerEnabled } from "@/lib/crawler-auth";
 import { applyFindingLabel, reviewCrawlFinding } from "@/lib/crawl-findings";
 import { actOnPartnerApplication } from "@/lib/partner-admin";
 import { listPartnerApplications } from "@/lib/platform-partners";
+import { findPlatformByDomain } from "@/lib/platforms";
+import type { RoutingFacts, RoutingFieldDef } from "@/lib/review-routing";
+import { usesWorkerKysely } from "@/lib/worker-kysely";
 import { db } from "@/lib/db";
 
 /*
@@ -116,6 +119,17 @@ export type ReviewAdapter = {
    * pages' own helpers. Read-only — no decision path.
    */
   describeSubject?(subjectId: string, now: Date): Promise<ReviewSubjectCard | null>;
+  /**
+   * WP143 routing: the kind's fixed, typed allowlist of fields a routing
+   * rule may read. Existing columns only — never survivor free text, never
+   * an address. The Lab registers its own from the Lab side.
+   */
+  routingFields?: readonly RoutingFieldDef[];
+  /**
+   * WP143 routing: the facts of one subject by field key, or null when the
+   * subject cannot be read. Values only from the allowlist above.
+   */
+  routingFacts?(subjectId: string, now: Date): Promise<RoutingFacts | null>;
 };
 
 // ---------------------------------------------------------------------------
@@ -133,8 +147,10 @@ async function ensureLabAdapterLoaded(): Promise<void> {
   if (adapters.has("LAB_REPORT")) return;
   // The only sanctioned crossing of the charter boundary: queue code never
   // names a lab function, it only asks the Lab's own module to load, and
-  // that module registers itself. A failure (never expected) leaves the kind
-  // unregistered and callers answer "adapter_unavailable".
+  // that module registers itself exactly once per process (a registry reset
+  // stays reset until the Lab side re-registers — the WP140 contract). A
+  // failure (never expected) leaves the kind unregistered and callers answer
+  // "adapter_unavailable".
   labAdapterLoad ??= import("@/lib/lab/lab-review-adapter").then(
     () => undefined,
     () => undefined,
@@ -207,6 +223,270 @@ async function flaggedLinkSubject(urlId: string): Promise<ReviewSubjectState | n
 }
 
 // ---------------------------------------------------------------------------
+// WP143 routing: the fixed, typed field allowlists per kind and the facts
+// loaders behind them. Fields read existing columns only — no survivor free
+// text and no URLs; a set field (labels, flag reasons) holds fixed codes.
+
+const ENUM_OPS = ["eq", "neq", "in", "is_empty"] as const;
+const NUMBER_OPS = ["eq", "neq", "lt", "lte", "gt", "gte"] as const;
+const NUMBER_EMPTY_OPS = ["eq", "neq", "lt", "lte", "gt", "gte", "is_empty"] as const;
+const SET_OPS = ["eq", "neq", "in", "is_empty"] as const;
+
+export const LINK_ROUTING_FIELDS: readonly RoutingFieldDef[] = [
+  { key: "platformTier", label: "Platform tier", type: "enum", values: ["TIER_1", "TIER_2", "TIER_3"], ops: ENUM_OPS, emptyPossible: true, emptyLabel: "Unknown platform" },
+  { key: "platformKey", label: "Platform", type: "string", ops: ENUM_OPS, emptyPossible: true, emptyLabel: "Unknown platform" },
+  { key: "urlSource", label: "Link source", type: "enum", values: ["SURVIVOR", "CRAWLER"], ops: ENUM_OPS, emptyPossible: false, emptyLabel: "" },
+  { key: "flagReason", label: "Flag reason", type: "set", ops: SET_OPS, emptyPossible: true, emptyLabel: "No flag reason" },
+  { key: "caseMode", label: "Case mode", type: "enum", values: ["CASE", "WATCH"], ops: ENUM_OPS, emptyPossible: true, emptyLabel: "Unknown case" },
+  { key: "ageHours", label: "Age (hours)", type: "number", ops: NUMBER_OPS, emptyPossible: false, emptyLabel: "" },
+];
+
+export const FINGERPRINT_ROUTING_FIELDS: readonly RoutingFieldDef[] = [
+  { key: "algorithm", label: "Algorithm", type: "enum", values: ["PDQ", "VPDQ"], ops: ENUM_OPS, emptyPossible: false, emptyLabel: "" },
+  { key: "quality", label: "Quality", type: "number", ops: NUMBER_OPS, emptyPossible: false, emptyLabel: "" },
+  { key: "caseMode", label: "Case mode", type: "enum", values: ["CASE", "WATCH"], ops: ENUM_OPS, emptyPossible: true, emptyLabel: "Unknown case" },
+  { key: "ageHours", label: "Age (hours)", type: "number", ops: NUMBER_OPS, emptyPossible: false, emptyLabel: "" },
+];
+
+export const FINDING_ROUTING_FIELDS: readonly RoutingFieldDef[] = [
+  { key: "method", label: "Match method", type: "enum", values: ["PDQ", "VPDQ", "SSCD"], ops: ENUM_OPS, emptyPossible: false, emptyLabel: "" },
+  { key: "distance", label: "Distance", type: "number", ops: NUMBER_EMPTY_OPS, emptyPossible: true, emptyLabel: "No distance (SSCD)" },
+  { key: "quality", label: "Quality", type: "number", ops: NUMBER_OPS, emptyPossible: false, emptyLabel: "" },
+  { key: "consentScope", label: "Consent scope", type: "enum", values: ["SEARCH_AND_NOTICE", "WATCH_ONLY"], ops: ENUM_OPS, emptyPossible: true, emptyLabel: "No authorisation row" },
+  { key: "sourceKind", label: "Crawl source", type: "enum", values: ["ADMIN", "REPORTED", "DISCOVERED", "PARTNER"], ops: ENUM_OPS, emptyPossible: true, emptyLabel: "Unknown source" },
+  { key: "labels", label: "Labels", type: "set", ops: SET_OPS, emptyPossible: true, emptyLabel: "No labels" },
+  { key: "ageHours", label: "Age (hours)", type: "number", ops: NUMBER_OPS, emptyPossible: false, emptyLabel: "" },
+];
+
+export const PARTNER_APPLICATION_ROUTING_FIELDS: readonly RoutingFieldDef[] = [
+  { key: "platformTier", label: "Platform tier", type: "enum", values: ["TIER_1", "TIER_2", "TIER_3"], ops: ENUM_OPS, emptyPossible: true, emptyLabel: "Not in the platform directory" },
+  { key: "ageHours", label: "Age (hours)", type: "number", ops: NUMBER_OPS, emptyPossible: false, emptyLabel: "" },
+];
+
+/** Hours since a timestamp, never negative — the ageHours routing field. */
+function routingAgeHours(from: Date | string, now: Date): number {
+  return Math.max(0, (now.getTime() - new Date(from).getTime()) / 3_600_000);
+}
+
+/** The case's mode by id, or null when the case cannot be read. */
+async function routingCaseMode(caseId: string): Promise<string | null> {
+  if (isDevNoDb()) {
+    const { cases } = await import("@/lib/store");
+    return cases.get(caseId)?.mode ?? "CASE";
+  }
+  if (usesWorkerKysely()) {
+    const { getWorkerDb } = await import("@/lib/worker-kysely");
+    const row = await getWorkerDb().selectFrom("Case").select("mode").where("id", "=", caseId).executeTakeFirst();
+    return row?.mode ?? null;
+  }
+  const row = await db.case.findUnique({ where: { id: caseId }, select: { mode: true } });
+  return row?.mode ?? null;
+}
+
+function routingFlagReasonSet(flagReason: string | null | undefined): string[] {
+  if (!flagReason) return [];
+  return flagReason
+    .split(",")
+    .map((code) => code.trim())
+    .filter(Boolean);
+}
+
+async function flaggedLinkFacts(urlId: string, now: Date): Promise<RoutingFacts | null> {
+  if (isDevNoDb()) {
+    const { cases } = await import("@/lib/store");
+    for (const record of cases.values()) {
+      const url = record.urls.find((item) => item.id === urlId);
+      if (!url) continue;
+      // The memory store keeps no platform id on the row; its platform source
+      // of truth is the static directory, resolved by domain exactly as the
+      // row's own platformName was (store.ts addUrlsToCase).
+      const platform = findPlatformByDomain(url.domain);
+      return {
+        platformTier: platform?.tier ?? null,
+        platformKey: platform?.id ?? null,
+        urlSource: url.source ?? "SURVIVOR",
+        flagReason: routingFlagReasonSet(url.flagReason),
+        caseMode: record.mode ?? "CASE",
+        ageHours: routingAgeHours(url.submittedAt ?? record.createdAt, now),
+      };
+    }
+    return null;
+  }
+  if (usesWorkerKysely()) {
+    const { getWorkerDb } = await import("@/lib/worker-kysely");
+    const row = await getWorkerDb().selectFrom("SubmittedUrl as su")
+      .leftJoin("Platform as p", "p.id", "su.platformId")
+      .leftJoin("Case as cm", "cm.id", "su.caseId")
+      .select([
+        "su.source", "su.flagReason", "su.submittedAt", "su.platformId",
+        "p.tier as platformTier", "cm.mode as caseMode",
+      ])
+      .where("su.id", "=", urlId)
+      .executeTakeFirst();
+    if (!row) return null;
+    return {
+      platformTier: row.platformTier ?? null,
+      platformKey: row.platformId ?? null,
+      urlSource: row.source ?? "SURVIVOR",
+      flagReason: routingFlagReasonSet(row.flagReason),
+      caseMode: row.caseMode ?? null,
+      ageHours: routingAgeHours(row.submittedAt, now),
+    };
+  }
+  const row = await db.submittedUrl.findUnique({
+    where: { id: urlId },
+    select: {
+      source: true, flagReason: true, submittedAt: true, platformId: true,
+      platform: { select: { tier: true } },
+      case: { select: { mode: true } },
+    },
+  });
+  if (!row) return null;
+  return {
+    platformTier: row.platform?.tier ?? null,
+    platformKey: row.platformId,
+    urlSource: row.source ?? "SURVIVOR",
+    flagReason: routingFlagReasonSet(row.flagReason),
+    caseMode: row.case?.mode ?? null,
+    ageHours: routingAgeHours(row.submittedAt, now),
+  };
+}
+
+async function fingerprintFacts(hashId: string, now: Date): Promise<RoutingFacts | null> {
+  let row: { algorithm: string; quality: number; submittedAt: Date | string; caseId: string } | null = null;
+  if (isDevNoDb()) {
+    const { listHashReviewQueue } = await import("@/lib/hash-submission");
+    row = (await listHashReviewQueue()).find((entry) => entry.id === hashId) ?? null;
+  } else if (usesWorkerKysely()) {
+    const { getWorkerDb } = await import("@/lib/worker-kysely");
+    row = (await getWorkerDb().selectFrom("HashSubmission")
+      .select(["algorithm", "quality", "submittedAt", "caseId"])
+      .where("id", "=", hashId)
+      .executeTakeFirst()) ?? null;
+  } else {
+    row = await db.hashSubmission.findUnique({
+      where: { id: hashId },
+      select: { algorithm: true, quality: true, submittedAt: true, caseId: true },
+    });
+  }
+  if (!row) return null;
+  return {
+    algorithm: row.algorithm,
+    quality: row.quality,
+    caseMode: await routingCaseMode(row.caseId),
+    ageHours: routingAgeHours(row.submittedAt, now),
+  };
+}
+
+async function findingFacts(findingId: string, now: Date): Promise<RoutingFacts | null> {
+  if (isDevNoDb()) {
+    const { crawlMemory } = await import("@/lib/crawl-store");
+    const finding = crawlMemory().findings.get(findingId);
+    if (!finding) return null;
+    const consent = finding.crawlConsentId ? crawlMemory().consents.find((item) => item.id === finding.crawlConsentId) ?? null : null;
+    const source = crawlMemory().sources.get(finding.sourceId) ?? null;
+    const labels = [
+      ...(finding.labelAiMade ? ["ai_made"] : []),
+      ...(finding.labelSexual ? ["sexual"] : []),
+      ...(finding.labelPossibleMinor ? ["possible_minor"] : []),
+    ];
+    return {
+      method: finding.method,
+      distance: finding.distance,
+      quality: finding.quality,
+      consentScope: consent?.scope ?? null,
+      sourceKind: source?.origin ?? null,
+      labels,
+      ageHours: routingAgeHours(finding.firstSeenAt, now),
+    };
+  }
+  if (usesWorkerKysely()) {
+    const { getWorkerDb } = await import("@/lib/worker-kysely");
+    const row = await getWorkerDb().selectFrom("CrawlFinding as f")
+      .leftJoin("CrawlConsent as cc", "cc.id", "f.crawlConsentId")
+      .leftJoin("CrawlSource as cs", "cs.id", "f.sourceId")
+      .select([
+        "f.method", "f.distance", "f.quality", "f.firstSeenAt",
+        "f.labelAiMade", "f.labelSexual", "f.labelPossibleMinor",
+        "cc.scope as consentScope", "cs.origin as sourceKind",
+      ])
+      .where("f.id", "=", findingId)
+      .executeTakeFirst();
+    if (!row) return null;
+    const labels = [
+      ...(row.labelAiMade ? ["ai_made"] : []),
+      ...(row.labelSexual ? ["sexual"] : []),
+      ...(row.labelPossibleMinor ? ["possible_minor"] : []),
+    ];
+    return {
+      method: row.method,
+      distance: row.distance ?? null,
+      quality: row.quality,
+      consentScope: row.consentScope ?? null,
+      sourceKind: row.sourceKind ?? null,
+      labels,
+      ageHours: routingAgeHours(row.firstSeenAt, now),
+    };
+  }
+  const row = await db.crawlFinding.findUnique({
+    where: { id: findingId },
+    select: {
+      method: true, distance: true, quality: true, firstSeenAt: true,
+      labelAiMade: true, labelSexual: true, labelPossibleMinor: true,
+      crawlConsentId: true,
+      source: { select: { origin: true } },
+    },
+  });
+  if (!row) return null;
+  // CrawlFinding carries no relation to CrawlConsent (the id is provenance
+  // only), so the authorisation's scope is a second lookup by id.
+  const consent = row.crawlConsentId
+    ? await db.crawlConsent.findUnique({ where: { id: row.crawlConsentId }, select: { scope: true } })
+    : null;
+  const labels = [
+    ...(row.labelAiMade ? ["ai_made"] : []),
+    ...(row.labelSexual ? ["sexual"] : []),
+    ...(row.labelPossibleMinor ? ["possible_minor"] : []),
+  ];
+  return {
+    method: row.method,
+    distance: row.distance,
+    quality: row.quality,
+    consentScope: consent?.scope ?? null,
+    sourceKind: row.source?.origin ?? null,
+    labels,
+    ageHours: routingAgeHours(row.firstSeenAt, now),
+  };
+}
+
+async function partnerApplicationFacts(applicationId: string, now: Date): Promise<RoutingFacts | null> {
+  let row: { websiteDomain: string; createdAt: Date | string } | null = null;
+  if (isDevNoDb()) {
+    row = (await listPartnerApplications()).find((entry) => entry.id === applicationId) ?? null;
+  } else if (usesWorkerKysely()) {
+    const { getWorkerDb } = await import("@/lib/worker-kysely");
+    row = (await getWorkerDb().selectFrom("PlatformPartnerApplication")
+      .select(["websiteDomain", "createdAt"])
+      .where("id", "=", applicationId)
+      .executeTakeFirst()) ?? null;
+  } else {
+    row = await db.platformPartnerApplication.findUnique({
+      where: { id: applicationId },
+      select: { websiteDomain: true, createdAt: true },
+    });
+  }
+  if (!row) return null;
+  // The applicant's website domain against the platform directory, the same
+  // resolution the app itself uses for a submitted host (link-check.ts);
+  // nothing is fetched, and an unknown domain reads as empty.
+  const platform = findPlatformByDomain(row.websiteDomain);
+  return {
+    platformTier: platform?.tier ?? null,
+    ageHours: routingAgeHours(row.createdAt, now),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Flagged links — the single approve/reject routes
 // (src/app/api/admin/review-queue/[caseId]/[urlId]/{approve,reject}).
 
@@ -237,6 +517,8 @@ const flaggedLinkAdapter: ReviewAdapter = {
     return rows.map((row) => ({ subjectId: row.id, caseId: row.caseId, minorHold: false }));
   },
   subjectNeedsReview: flaggedLinkSubject,
+  routingFields: LINK_ROUTING_FIELDS,
+  routingFacts: flaggedLinkFacts,
   async decide(urlId, decision, ctx) {
     if (!hasAdminPermission(ctx.role, "cases:review")) return { ok: false, error: "permission_denied" };
     // The console's reasons are internal (WP142): they are recorded on the
@@ -282,6 +564,8 @@ const fingerprintAdapter: ReviewAdapter = {
     const row = (await listHashReviewQueue()).find((item) => item.id === hashSubmissionId);
     return row ? { subjectId: hashSubmissionId, caseId: row.caseId, minorHold: false } : null;
   },
+  routingFields: FINGERPRINT_ROUTING_FIELDS,
+  routingFacts: fingerprintFacts,
   async decide(hashSubmissionId, decision, ctx) {
     if (!hasAdminPermission(ctx.role, "cases:review")) return { ok: false, error: "permission_denied" };
     // The hashes routes are off when hash upload is off; same refusal here.
@@ -372,6 +656,8 @@ const findingAdapter: ReviewAdapter = {
     if (row.reviewStatus === "MINOR_PROTOCOL") return { subjectId: findingId, caseId: row.caseId, minorHold: true };
     return null;
   },
+  routingFields: FINDING_ROUTING_FIELDS,
+  routingFacts: findingFacts,
   async decide(findingId, decision, ctx) {
     if (!hasAdminPermission(ctx.role, "findings:review")) return { ok: false, error: "permission_denied" };
     if (!crawlerEnabled()) return { ok: false, error: "crawler_disabled" };
@@ -426,6 +712,8 @@ const partnerApplicationAdapter: ReviewAdapter = {
     if (row.status !== "NEW" && row.status !== "CONTACTED") return null;
     return { subjectId: applicationId, caseId: null, minorHold: false };
   },
+  routingFields: PARTNER_APPLICATION_ROUTING_FIELDS,
+  routingFacts: partnerApplicationFacts,
   async decide(applicationId, decision, ctx) {
     if (!hasAdminPermission(ctx.role, "platforms:edit")) return { ok: false, error: "permission_denied" };
     if (decision !== "contacted" && decision !== "approve" && decision !== "decline") {

@@ -285,6 +285,9 @@ enum AuditEventType {
   LAB_LIVENESS_RUN
   CRAWL_FINDING_LABEL_SET
   CRAWL_FINDING_LABEL_CLEARED
+  // Review console WP143: every routing-rule save, status change, move, and
+  // every queues-admin change. Data carries ids only, never a condition value.
+  REVIEW_RULE_CHANGED
   PARTNER_SHARE_CONSENT_GIVEN
   PARTNER_SHARE_CONSENT_WITHDRAWN
   PARTNER_OUTCOME_REPORTED
@@ -1445,7 +1448,11 @@ model ReviewQueue {
   sortOrder               Int
   // WP142 reasons are enforced server-side in decideJob, not only in the UI.
   requireReasonOnReject   Boolean           @default(true)
-  requireReasonOnApprove  Boolean           @default(false)
+  requireReasonOnApprove Boolean           @default(false)
+  // WP143 queues admin: set when a SUPER_ADMIN archives an empty custom
+  // queue. Archived queues are hidden from the console, receive no jobs and
+  // are refused as rule destinations; rows stay for old decisions' labels.
+  archivedAt             DateTime?
   createdAt               DateTime          @default(now())
   updatedAt               DateTime          @updatedAt
 
@@ -1581,4 +1588,82 @@ model CaseNote {
 
   @@index([caseId, createdAt])
   @@index([authorEmailHash])
+}
+
+// WP143 (review-console-spec.md): ordered routing rules. A rule only ever
+// chooses a queue and a priority for a subject that already needs a human —
+// it never decides, approves, rejects, dispatches, labels, sends email or
+// changes a gate, and it can never route into or out of the protected
+// minor-hold queue or into a queue of another kind (enforced on save and
+// re-checked at evaluation). Conditions read a fixed, typed allowlist of
+// existing columns only (review-adapters.ts): no survivor free text, no URLs.
+enum ReviewRuleStatus {
+  DRAFT
+  LIVE
+  DISABLED
+}
+
+model ReviewRoutingRule {
+  id                String           @id @default(cuid())
+  name              String
+  description       String?
+  subjectKind       ReviewSubjectKind
+  // Order within the kind; the first LIVE match wins. { all: [...] } or
+  // { any: [...] } of { field, op, value } leaves (one level, no nesting).
+  sequence          Int
+  condition         Json
+  // A queue of the same kind, never protected, never archived.
+  destinationQueueId String
+  priority          Int              @default(0)
+  status            ReviewRuleStatus @default(DRAFT)
+  // Bumped on every save; every version is kept in ReviewRoutingRuleVersion.
+  version           Int              @default(1)
+  // Admin email hash: displayed as a handle, never an email.
+  createdBy         String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([subjectKind, status, sequence])
+}
+
+// Append-only copy of every saved version of a rule (WP143: "version history
+// with who and when"). Rows are never updated or deleted.
+model ReviewRoutingRuleVersion {
+  id                 String           @id @default(uuid())
+  ruleId             String
+  version            Int
+  name               String
+  description        String?
+  subjectKind        ReviewSubjectKind
+  sequence           Int
+  condition          Json
+  destinationQueueId String
+  priority           Int
+  status             ReviewRuleStatus
+  createdBy          String
+  savedAt            DateTime         @default(now())
+
+  @@unique([ruleId, version])
+  @@index([ruleId, savedAt])
+}
+
+// One evaluation of one rule against one job (WP143: "why is this here").
+// Deduplicated per (job, rule, version): a re-run that changes nothing
+// writes nothing, and details carry outcome flags and per-condition booleans
+// only — never a field value, never an address, never survivor text. A DRAFT
+// rule that matches is logged as would_have_matched (shadow mode) and has no
+// effect. Pruned after 90 days by the maintenance cron.
+model ReviewRoutingLog {
+  id          String   @id @default(uuid())
+  jobId       String
+  ruleId      String?
+  ruleVersion Int?
+  matched     Boolean
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  @@unique([jobId, ruleId, ruleVersion])
+  @@index([jobId, createdAt])
+  @@index([ruleId])
+  @@index([createdAt])
 }

@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { getReviewAdapter, type ReviewAdapterDecision } from "@/lib/review-adapters";
 import { canSeeReviewQueue, getReviewJobWithQueue } from "@/lib/review-jobs";
+import { routingExplanationForJob } from "@/lib/review-routing";
 import { listReviewReasons } from "@/lib/review-reasons";
 import { guidanceHtmlForQueue } from "@/lib/review-guidance";
 import { listCaseNotes } from "@/lib/case-notes";
@@ -90,7 +91,7 @@ export default async function ReviewJobPage({
       .map((reason) => ({ code: reason.code, label: reason.label }));
   }
 
-  const [subject, left, caseReference, otherJobs, timeline, caseDecisions, notes] = await Promise.all([
+  const [subject, left, caseReference, otherJobs, timeline, caseDecisions, notes, routing] = await Promise.all([
     describeReviewSubject(job.subjectKind, job.subjectId, now),
     countPendingJobsForQueue(queue.id),
     job.caseId ? caseReferenceFor(job.caseId) : Promise.resolve(null),
@@ -100,6 +101,9 @@ export default async function ReviewJobPage({
     job.caseId
       ? listCaseNotes(job.caseId, { emailHash: auth.session.emailHash, role: auth.session.adminRole })
       : Promise.resolve([]),
+    // WP143: "Routed here by rule X (version N)" or "Default queue". The
+    // protected queue explains itself already, so it shows no line.
+    queue.protected ? Promise.resolve(null) : routingExplanationForJob(job, job.id),
   ]);
 
   // The job screen shows case data; the console logs case views like the
@@ -138,6 +142,12 @@ export default async function ReviewJobPage({
           </Link>
         </p>
       )}
+      {routing && (
+        <p className="muted mt-1 text-xs">
+          {routing.line}
+          {routing.draftLine && <span> · {routing.draftLine}</span>}
+        </p>
+      )}
       {notedMessage && (
         <p className="mt-3 text-sm text-[var(--brand)]" role="status">
           {notedMessage}
@@ -148,7 +158,7 @@ export default async function ReviewJobPage({
         <div className="min-w-0">
           {subject ? (
             <div className="a-card p-4">
-              <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
                 {subject.fields.map((field) => (
                   <div key={field.label}>
                     <dt className="eyebrow">{field.label}</dt>

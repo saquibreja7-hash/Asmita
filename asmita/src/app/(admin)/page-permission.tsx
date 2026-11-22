@@ -14,6 +14,7 @@ const NEEDS: Record<AdminPermission, string> = {
   "findings:review": "review crawler findings",
   "crawler:manage": "manage crawler sites",
   "lab:manage": "manage the AI Lab",
+  "review:manage": "manage review routing",
 };
 
 /**

@@ -9,6 +9,7 @@ import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { pruneRateLimitBuckets } from "@/lib/rate-limit";
 import { countFailedDeletionJobs } from "@/lib/case-ops";
 import { syncReviewJobs } from "@/lib/review-jobs";
+import { pruneRoutingLogs } from "@/lib/review-routing";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     rateLimitBucketsPruned?: number;
     failedDeletions?: number;
     reviewJobs?: { enqueued: number; closed: number; moved: number };
+    routingLogsPruned?: number;
     error?: string;
   } = { startedAt: startedAt.toISOString() };
 
@@ -82,6 +84,10 @@ export async function GET(request: NextRequest) {
       closed: reviewJobs.closed,
       moved: reviewJobs.moved,
     };
+
+    // Review console (WP143): the routing log is diagnostics ("why is this
+    // here") and is bounded by its retention, not by anything else.
+    result.routingLogsPruned = await pruneRoutingLogs(startedAt);
 
     result.finishedAt = new Date().toISOString();
     return NextResponse.json(result);

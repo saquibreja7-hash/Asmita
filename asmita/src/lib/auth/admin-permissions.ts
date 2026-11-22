@@ -21,7 +21,11 @@ export type AdminPermission =
   | "crawler:manage"
   // Manage the AI Lab (docs/lab/charter.md): E2 services, chokepoints,
   // reports and its dashboard. SUPER_ADMIN only.
-  | "lab:manage";
+  | "lab:manage"
+  // Manage the review console's own configuration (review-console-spec.md
+  // WP143): routing rules, custom queues and (WP144) reasons and access.
+  // SUPER_ADMIN only.
+  | "review:manage";
 
 const rolePermissions: Record<AdminRole, ReadonlySet<AdminPermission>> = {
   SUPER_ADMIN: new Set([
@@ -37,6 +41,7 @@ const rolePermissions: Record<AdminRole, ReadonlySet<AdminPermission>> = {
     "findings:review",
     "crawler:manage",
     "lab:manage",
+    "review:manage",
   ]),
   LEGAL_ADVISOR: new Set(["cases:read", "templates:edit", "templates:activate", "audit:read"]),
   CASE_REVIEWER: new Set(["cases:read", "cases:review", "audit:read", "findings:review"]),

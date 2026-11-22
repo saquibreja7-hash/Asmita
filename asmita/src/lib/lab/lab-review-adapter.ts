@@ -2,6 +2,7 @@ import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { labEnabled } from "@/lib/lab/flags";
 import { getLabReport, listLabReports, sendLabReport } from "@/lib/lab/lab-reports";
 import { registerReviewAdapter, type ReviewAdapter } from "@/lib/review-adapters";
+import type { RoutingFacts, RoutingFieldDef } from "@/lib/review-routing";
 
 /*
  * The Lab's review adapter (review-console-spec.md WP140, docs/lab/charter.md
@@ -15,7 +16,27 @@ import { registerReviewAdapter, type ReviewAdapter } from "@/lib/review-adapters
  * Lab's Resend sender, or as a web-form submission the analyst made with the
  * copied text. Either way the stored text becomes the record, exactly as on
  * the AI Lab reports page.
+ *
+ * WP143: the Lab also owns the routing fields a rule may read about a lab
+ * report. Lab work, so the complaint-workflow's masking rules do not apply
+ * beyond never inventing anything the row does not carry; the fields are the
+ * report's own columns (chokepoint kind, age) — no free text, no addresses.
  */
+
+/** The Lab's routing fields (WP143): what a rule may read about a report. */
+const LAB_REPORT_ROUTING_FIELDS: readonly RoutingFieldDef[] = [
+  { key: "chokepointKind", label: "Chokepoint kind", type: "enum", values: ["HOST", "CDN", "REGISTRAR", "PAYMENT_PROCESSOR", "APP_STORE", "AD_NETWORK", "PLATFORM_ACCOUNT"], ops: ["eq", "neq", "in", "is_empty"] as const, emptyPossible: false, emptyLabel: "" },
+  { key: "ageHours", label: "Age (hours)", type: "number", ops: ["eq", "neq", "lt", "lte", "gt", "gte"] as const, emptyPossible: false, emptyLabel: "" },
+];
+
+async function labReportFacts(reportId: string, now: Date): Promise<RoutingFacts | null> {
+  const report = await getLabReport(reportId);
+  if (!report) return null;
+  return {
+    chokepointKind: report.templateKind,
+    ageHours: Math.max(0, (now.getTime() - new Date(report.createdAt).getTime()) / 3_600_000),
+  };
+}
 
 function looksLikeEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -28,6 +49,8 @@ const labReportAdapter: ReviewAdapter = {
     { code: "send_email", label: "Send by email", reasonKind: null },
     { code: "send_web_form", label: "Record web-form submission", reasonKind: null },
   ],
+  routingFields: LAB_REPORT_ROUTING_FIELDS,
+  routingFacts: labReportFacts,
   async listOpenSubjects() {
     return (await listLabReports())
       .filter((report) => report.status === "DRAFT")
@@ -98,4 +121,14 @@ function shortLabAge(iso: string, now: Date) {
   return hours % 24 ? `${days}d ${hours % 24}h` : `${days}d`;
 }
 
-registerReviewAdapter(labReportAdapter);
+/**
+ * Registers the Lab's adapter with the shared review registry. The Lab module
+ * is imported once per process; the registry can be reset underneath it (the
+ * test seam), so this is the idempotent entry point the registry calls — and
+ * the one place that names lab functions, keeping the charter boundary.
+ */
+export function ensureLabReviewAdapterRegistered(): void {
+  registerReviewAdapter(labReportAdapter);
+}
+
+ensureLabReviewAdapterRegistered();

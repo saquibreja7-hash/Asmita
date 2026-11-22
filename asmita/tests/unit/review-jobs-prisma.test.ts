@@ -26,6 +26,12 @@ const db = vi.hoisted(() => {
     // WP142 reasons: the seeded create-only upsert, and the code lookup
     // decideJob validates a picked reason with.
     reviewReason: { upsert: fn(), findUnique: fn(), findMany: fn() },
+    // WP143 routing: the rules the sync asks about per kind (empty here —
+    // these tests exercise the queue machinery, the routing tests their
+    // own), the append-only version rows, and the deduped routing log.
+    reviewRoutingRule: { findMany: fn(), findUnique: fn(), create: fn(), update: fn(), count: fn() },
+    reviewRoutingRuleVersion: { findMany: fn(), create: fn() },
+    reviewRoutingLog: { findMany: fn(), createMany: fn(), create: fn(), deleteMany: fn() },
     $queryRaw: fn(),
     $transaction: fn(),
     __tx: tx,
@@ -126,6 +132,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   seedQueueRow();
   db.reviewDecision.findUnique.mockResolvedValue(null);
+  // WP143: no rules configured, so every subject takes its kind's default
+  // queue and no routing-log rows are written.
+  db.reviewRoutingRule.findMany.mockResolvedValue([]);
+  db.reviewRoutingRule.findUnique.mockResolvedValue(null);
+  db.reviewRoutingRuleVersion.findMany.mockResolvedValue([]);
+  db.reviewRoutingLog.findMany.mockResolvedValue([]);
+  db.reviewRoutingLog.createMany.mockResolvedValue({ count: 0 });
   db.reviewJobClaim.create.mockResolvedValue({ id: "claim-new" });
   db.reviewJobClaim.findFirst.mockResolvedValue(null);
   db.reviewJob.updateMany.mockResolvedValue({ count: 1 });

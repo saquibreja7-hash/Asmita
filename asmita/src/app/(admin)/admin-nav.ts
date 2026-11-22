@@ -13,6 +13,8 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       // Every admin role can see at least one queue (the page filters rows
       // by queue), so the link carries no single permission.
       { href: "/admin/review", label: "Review", permission: null },
+      // Routing rules and custom queues (WP143): the owner only.
+      { href: "/admin/review/rules", label: "Routing rules", permission: "review:manage" },
     ],
   },
   {

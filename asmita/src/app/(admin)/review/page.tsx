@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { maybeSyncReviewJobs, queueSummaries } from "@/lib/review-jobs";
 import { QueueList, type ReviewQueueRowView } from "./QueueList";
 
@@ -36,10 +37,15 @@ export default async function ReviewQueueListPage() {
         {/* Hidden from the nav model for now: the page refuses every role
             but SUPER_ADMIN, and a nav item must never 403 for its viewer.
             WP144's review:manage permission gives it a proper home. */}
-        {auth.session.adminRole === "SUPER_ADMIN" && (
-          <Link className="link-underline text-sm" href="/admin/review/settings" prefetch={false}>
-            Review settings
-          </Link>
+        {hasAdminPermission(auth.session.adminRole, "review:manage") && (
+          <span className="flex flex-wrap gap-4 text-sm">
+            <Link className="link-underline" href="/admin/review/rules" prefetch={false}>
+              Routing rules
+            </Link>
+            <Link className="link-underline" href="/admin/review/settings" prefetch={false}>
+              Review settings
+            </Link>
+          </span>
         )}
       </div>
       <p className="muted mt-3 max-w-2xl text-sm">
