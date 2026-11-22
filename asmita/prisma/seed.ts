@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { platformSeedCreateData, platformSeedUpdateData } from "./platform-seed-data";
 import { templateSeeds } from "./template-seeds";
+import { SYSTEM_REVIEW_QUEUES } from "../src/lib/review-queue-seeds";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -309,6 +310,27 @@ async function main() {
         },
       });
     }
+  }
+
+  // Review console (WP140): the six system queues. Create-only upsert — a
+  // re-seed never clobbers an admin's later renames or edits.
+  for (const queue of SYSTEM_REVIEW_QUEUES) {
+    await prisma.reviewQueue.upsert({
+      where: { key: queue.key },
+      create: {
+        id: queue.id,
+        key: queue.key,
+        name: queue.name,
+        description: queue.description,
+        subjectKind: queue.subjectKind,
+        isDefault: queue.isDefault,
+        protected: queue.protected,
+        sortOrder: queue.sortOrder,
+        requireReasonOnReject: queue.requireReasonOnReject,
+        requireReasonOnApprove: queue.requireReasonOnApprove,
+      },
+      update: {},
+    });
   }
 
   console.log("Seeded platforms and notice templates.");

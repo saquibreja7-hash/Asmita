@@ -7,6 +7,11 @@ vi.mock("@/lib/case-ops", () => ({
   hardDeleteDueUsers: vi.fn(),
   countFailedDeletionJobs: vi.fn().mockResolvedValue(0),
 }));
+// WP140 added the review-job sync to the maintenance cron; its behaviour is
+// covered by the review-jobs tests, so the cron test stubs it.
+vi.mock("@/lib/review-jobs", () => ({
+  syncReviewJobs: vi.fn().mockResolvedValue({ enqueued: 0, closed: 0, moved: 0, kindsWithoutAdapters: [] }),
+}));
 vi.mock("@/lib/db", () => ({
   db: {
     platform: { findMany: vi.fn() },

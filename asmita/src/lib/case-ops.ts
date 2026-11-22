@@ -662,7 +662,21 @@ export async function addUrlsToCase(
   // Reported crawl sources for these hosts are created by the hourly sweep,
   // never inline in her request (see registerCaseWithUrls).
   const results = await addUrlsToCaseUnfiltered(caseId, rawUrls, options);
-  return withoutFindingState(results);
+  const visible = withoutFindingState(results);
+  // WP140: a link that now awaits review opens its review-console job at
+  // once, rather than at the next sync. Best-effort by design: the sync
+  // backfills the job on any failure, and her filing flow never fails
+  // because of it.
+  for (const result of visible) {
+    if (!result.ok || !isAwaitingReview(result.url)) continue;
+    try {
+      const { enqueueForReview } = await import("@/lib/review-jobs");
+      await enqueueForReview("FLAGGED_LINK", result.url.id, { caseId });
+    } catch {
+      console.error("review_enqueue_failed");
+    }
+  }
+  return visible;
 }
 
 async function addUrlsToCaseUnfiltered(
@@ -874,6 +888,19 @@ export async function reviewSubmittedUrl(input: {
   reviewerId?: string;
   reason?: string;
 }): Promise<DisplayUrl> {
+  // WP140: the memory twin, so the review console's dev/test backend goes
+  // through the same review as the database paths. The store's url rows
+  // carry no platformId, so the unknown-platform guard reads the domain
+  // through the same directory the flagged page uses for "known".
+  if (isDevNoDb()) {
+    const record = store.cases.get(input.caseId);
+    const url = record?.urls.find((item) => item.id === input.urlId);
+    if (!url) throw new Error("url_not_found");
+    if (input.decision === "approve" && !findPlatformByDomain(url.domain)) {
+      throw new Error("unknown_platform_requires_investigation");
+    }
+    return memoryDisplayUrl(await store.reviewSubmittedUrl(input));
+  }
   const db = await getPrismaDb();
   const url = await db.submittedUrl.findFirst({ where: { id: input.urlId, caseId: input.caseId } });
   if (!url) throw new Error("url_not_found");

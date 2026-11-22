@@ -295,6 +295,14 @@ export async function draftLabReport(
     actorId,
     data: { chokepointId: context.chokepointId, templateKind: context.chokepointKind },
   });
+  // WP140: a new draft opens its review-console job at once. Best-effort:
+  // the sync backfills the job, and drafting never fails because of it.
+  try {
+    const { enqueueForReview } = await import("@/lib/review-jobs");
+    await enqueueForReview("LAB_REPORT", view.id);
+  } catch {
+    console.error("review_enqueue_failed");
+  }
   return { ok: true, report: view };
 }
 

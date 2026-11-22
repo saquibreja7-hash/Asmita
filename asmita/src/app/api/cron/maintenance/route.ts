@@ -8,6 +8,7 @@ import type { PlatformDirectoryEntry } from "@/lib/platforms";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { pruneRateLimitBuckets } from "@/lib/rate-limit";
 import { countFailedDeletionJobs } from "@/lib/case-ops";
+import { syncReviewJobs } from "@/lib/review-jobs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     deliverability?: ReturnType<typeof summarizeDeliverability>;
     rateLimitBucketsPruned?: number;
     failedDeletions?: number;
+    reviewJobs?: { enqueued: number; closed: number; moved: number };
     error?: string;
   } = { startedAt: startedAt.toISOString() };
 
@@ -70,6 +72,16 @@ export async function GET(request: NextRequest) {
         route: "/api/cron/maintenance",
       });
     }
+
+    // Review console (WP140): reconcile the review jobs with the source
+    // tables. The maintenance cron is the sync's reliable run; page loads
+    // only top it up lazily.
+    const reviewJobs = await syncReviewJobs(startedAt);
+    result.reviewJobs = {
+      enqueued: reviewJobs.enqueued,
+      closed: reviewJobs.closed,
+      moved: reviewJobs.moved,
+    };
 
     result.finishedAt = new Date().toISOString();
     return NextResponse.json(result);

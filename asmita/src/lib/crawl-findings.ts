@@ -439,6 +439,14 @@ export async function recordCrawlFindings(
         actorId: `crawler:${keyId}`,
         data: { caseId: fingerprint.caseId, distance: item.distance, sourceId: item.sourceId, runId: body.runId },
       });
+      // WP140: a new finding opens its review-console job at once. The
+      // ingest batch never fails because of it; the sync backfills the job.
+      try {
+        const { enqueueForReview } = await import("@/lib/review-jobs");
+        await enqueueForReview("FINDING", stored.id, { caseId: fingerprint.caseId });
+      } catch {
+        console.error("review_enqueue_failed");
+      }
     }
     results.push({ status: "accepted" });
   }

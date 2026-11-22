@@ -1398,3 +1398,141 @@ model LabReport {
   @@index([chokepointId])
   @@index([status])
 }
+
+// Review console (docs/product/review-console-spec.md, WP140). Queues,
+// leased jobs and decisions over the review subjects that already exist.
+// The source tables stay authoritative: a decision on a job goes through
+// the existing library function for its subject (review-adapters.ts), with
+// that function's permission check and audit event, so the console is a new
+// way to reach decisions, never a new way to make them. Rows carry ids
+// only: never an address, never survivor text.
+enum ReviewSubjectKind {
+  FLAGGED_LINK
+  FINGERPRINT
+  FINDING
+  PARTNER_APPLICATION
+  LAB_REPORT
+}
+
+enum ReviewJobStatus {
+  PENDING
+  CLOSED
+}
+
+enum ReviewEnqueueSource {
+  SYNC
+  RULE
+  MOVED
+  MANUAL
+}
+
+// One review queue. The six system queues are seeded (review-queue-seeds.ts);
+// minor-hold is protected (SUPER_ADMIN only) and takes every kind.
+model ReviewQueue {
+  id                      String            @id
+  key                     String            @unique
+  name                    String
+  description             String?
+  // Null = any kind: only minor-hold, where any subject may land while a
+  // possible minor is involved.
+  subjectKind             ReviewSubjectKind?
+  isDefault               Boolean           @default(false)
+  protected               Boolean           @default(false)
+  sortOrder               Int
+  // WP142 reasons are enforced server-side in decideJob, not only in the UI.
+  requireReasonOnReject   Boolean           @default(true)
+  requireReasonOnApprove  Boolean           @default(false)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  jobs ReviewJob[]
+
+  @@index([sortOrder])
+}
+
+// One subject waiting for a human. One open job per subject: the partial
+// unique index on (subjectKind, subjectId) WHERE status = 'PENDING' is raw
+// SQL in the migration (Prisma cannot express partial indexes); a second
+// enqueue merges into the open job instead of creating one.
+model ReviewJob {
+  id                  String             @id @default(cuid())
+  queueId             String
+  subjectKind         ReviewSubjectKind
+  // A SubmittedUrl, HashSubmission, CrawlFinding, PlatformPartnerApplication
+  // or LabReport id. Never an address.
+  subjectId           String
+  caseId              String?
+  status              ReviewJobStatus    @default(PENDING)
+  priority            Int                @default(0)
+  // Admin email hash: who holds the lease.
+  claimedBy           String?
+  claimedUntil        DateTime?
+  enqueueSource       ReviewEnqueueSource
+  // WP143 routing rules; null means the kind's default queue.
+  routedByRuleId      String?
+  routedByRuleVersion Int?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  closedAt            DateTime?
+  closedReason        String?
+
+  queue ReviewQueue @relation(fields: [queueId], references: [id])
+
+  @@index([queueId, status, priority(sort: Desc), createdAt])
+  @@index([caseId])
+  @@index([claimedBy, status])
+}
+
+// The decision that closed a job. jobId is unique, so a retried submit is
+// idempotent. The reason note is encryptField output and is internal: it is
+// never sent to a platform or a survivor and never appears in a notice.
+model ReviewDecision {
+  id                String           @id @default(uuid())
+  jobId             String           @unique
+  queueId           String
+  subjectKind       ReviewSubjectKind
+  subjectId         String
+  caseId            String?
+  // "" for system decisions (the sync closing a resolved-elsewhere job).
+  reviewerEmailHash String
+  // e.g. approve, reject, dismiss, label_possible_minor, move, close_stale.
+  decision          String
+  reasonCode        String?
+  // encryptField output; free text, decrypted only for the reviewer UI.
+  reasonNote        String?
+  // When the deciding claim began, for handle-time metrics.
+  claimedAt         DateTime?
+  decidedAt         DateTime
+  // The audit entry of the existing decision function, once writeAuditLog
+  // can return it; null until then.
+  auditEventId      String?
+
+  @@index([queueId])
+  @@index([subjectKind, subjectId])
+  @@index([decidedAt])
+}
+
+// One lease at a time on a job, from claim to decision/skip/release
+// (handle-time metrics).
+model ReviewJobClaim {
+  id                String    @id @default(uuid())
+  jobId             String
+  reviewerEmailHash String
+  claimedAt         DateTime  @default(now())
+  releasedAt        DateTime?
+  // decided | skipped | expired | released
+  outcome           String?
+
+  @@index([jobId])
+  @@index([reviewerEmailHash])
+}
+
+// A reviewer's 30-minute "not for me" on one job.
+model ReviewSkip {
+  reviewerEmailHash String
+  jobId             String
+  until             DateTime
+
+  @@id([reviewerEmailHash, jobId])
+  @@index([until])
+}

@@ -1,0 +1,432 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// WP140 on the Prisma (Node) path, against a mocked client in the style of
+// the other Prisma tests. What the spec makes the real test: the claim is
+// ONE raw statement against Postgres with the ReviewSkip subquery and FOR
+// UPDATE SKIP LOCKED (captured with its parameters), a decision commits its
+// ReviewDecision, its job closure and its claim closure in one transaction,
+// the sync closes resolved-elsewhere jobs behind a PENDING guard, a retried
+// decide returns the earlier decision, and the queue's reason flags are
+// enforced on the server. The subjects come from stub adapters; the
+// adapters' own database paths are exercised by their routes' tests.
+
+const db = vi.hoisted(() => {
+  const fn = () => vi.fn();
+  const tx = {
+    reviewDecision: { create: fn() },
+    reviewJob: { updateMany: fn(), createMany: fn() },
+    reviewJobClaim: { updateMany: fn() },
+  };
+  const self = {
+    reviewQueue: { upsert: fn(), findUnique: fn(), findMany: fn() },
+    reviewJob: { create: fn(), findUnique: fn(), findFirst: fn(), findMany: fn(), updateMany: fn() },
+    reviewDecision: { create: fn(), findUnique: fn() },
+    reviewJobClaim: { create: fn(), findFirst: fn(), updateMany: fn() },
+    reviewSkip: { upsert: fn() },
+    $queryRaw: fn(),
+    $transaction: fn(),
+    __tx: tx,
+  };
+  return self;
+});
+
+vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => false, getWorkerDb: () => { throw new Error("worker path must not run here"); } }));
+vi.mock("@/lib/db", () => ({ db }));
+vi.mock("@/lib/security-log", () => ({ logSecurityEvent: vi.fn() }));
+
+import { SYSTEM_REVIEW_QUEUES, MINOR_HOLD_QUEUE_KEY } from "@/lib/review-queue-seeds";
+import { registerReviewAdapter, resetReviewAdapters, type ReviewAdapter } from "@/lib/review-adapters";
+import {
+  claimNextJob,
+  decideJob,
+  ensureSystemQueues,
+  moveJob,
+  resetReviewMemory,
+  skipJob,
+  syncReviewJobs,
+} from "@/lib/review-jobs";
+import { decryptField } from "@/lib/encryption";
+
+const NOW = new Date("2026-11-22T10:00:00Z");
+const MINOR_HOLD_ID = SYSTEM_REVIEW_QUEUES.find((queue) => queue.key === MINOR_HOLD_QUEUE_KEY)!.id;
+const LINKS_QUEUE = SYSTEM_REVIEW_QUEUES.find((queue) => queue.key === "links")!;
+
+function seedQueueRow() {
+  // Both lookups land here: by id (the job's queue) and by key (the requeue).
+  db.reviewQueue.findUnique.mockImplementation(async (args: { where: { id?: string; key?: string } }) =>
+    SYSTEM_REVIEW_QUEUES.find((queue) => queue.id === args.where.id || queue.key === args.where.key) ?? null,
+  );
+  db.reviewQueue.findMany.mockResolvedValue(SYSTEM_REVIEW_QUEUES as never);
+}
+
+function seedJob(overrides: Record<string, unknown> = {}) {
+  const job = {
+    id: "job-1",
+    queueId: LINKS_QUEUE.id,
+    subjectKind: "FLAGGED_LINK",
+    subjectId: "url-1",
+    caseId: "case-1",
+    status: "PENDING",
+    priority: 0,
+    claimedBy: null,
+    claimedUntil: null,
+    enqueueSource: "SYNC",
+    routedByRuleId: null,
+    routedByRuleVersion: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    closedAt: null,
+    closedReason: null,
+    ...overrides,
+  };
+  db.reviewJob.findUnique.mockResolvedValue(job as never);
+  db.reviewJob.findFirst.mockResolvedValue(job as never);
+  // listPendingJobsOfKind asks per kind; answer only for the seeded kind.
+  db.reviewJob.findMany.mockImplementation(async (args: { where?: { subjectKind?: string } }) =>
+    args.where?.subjectKind === job.subjectKind ? [job] : [],
+  );
+  return job;
+}
+
+/** A stub adapter per kind, so the queue machinery is tested on its own. */
+function stubAdapter(kind: "FLAGGED_LINK" | "FINDING"): ReviewAdapter {
+  return {
+    kind,
+    permission: "cases:review",
+    decisions: [
+      { code: "approve", label: "Approve", reasonKind: "approve" },
+      { code: "reject", label: "Reject", reasonKind: "reject" },
+    ],
+    listOpenSubjects: async () => [],
+    subjectNeedsReview: async () => null,
+    decide: vi.fn(async (): Promise<import("@/lib/review-adapters").ReviewAdapterOutcome> => ({ ok: true, resolved: true })),
+  };
+}
+
+beforeEach(() => {
+  vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
+  resetReviewMemory();
+  resetReviewAdapters();
+  vi.clearAllMocks();
+  seedQueueRow();
+  db.reviewDecision.findUnique.mockResolvedValue(null);
+  db.reviewJobClaim.create.mockResolvedValue({ id: "claim-new" });
+  db.reviewJobClaim.findFirst.mockResolvedValue(null);
+  db.reviewJob.updateMany.mockResolvedValue({ count: 1 });
+  db.reviewJobClaim.updateMany.mockResolvedValue({ count: 1 });
+  db.reviewJob.findMany.mockResolvedValue([]);
+  db.__tx.reviewJob.updateMany.mockResolvedValue({ count: 1 });
+  db.__tx.reviewJob.createMany.mockResolvedValue({ count: 1 });
+  db.__tx.reviewJobClaim.updateMany.mockResolvedValue({ count: 1 });
+  db.$transaction.mockImplementation(async (run: (client: unknown) => Promise<unknown>) => run(db.__tx));
+  registerReviewAdapter(stubAdapter("FLAGGED_LINK"));
+  registerReviewAdapter(stubAdapter("FINDING"));
+  for (const kind of ["FINGERPRINT", "PARTNER_APPLICATION", "LAB_REPORT"] as const) {
+    registerReviewAdapter({
+      kind,
+      permission: "cases:review",
+      decisions: [],
+      listOpenSubjects: async () => [],
+      subjectNeedsReview: async () => null,
+      decide: vi.fn(async (): Promise<import("@/lib/review-adapters").ReviewAdapterOutcome> => ({ ok: true, resolved: true })),
+    });
+  }
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("seeding the system queues", () => {
+  it("upserts all six create-only, never clobbering later admin edits", async () => {
+    await ensureSystemQueues();
+    await ensureSystemQueues();
+    // The second call is short-circuited per isolate; the first ran six upserts.
+    expect(db.reviewQueue.upsert).toHaveBeenCalledTimes(6);
+    const calls = db.reviewQueue.upsert.mock.calls as Array<[Record<string, unknown>]>;
+    expect(calls.map(([args]) => (args.where as { key: string }).key)).toEqual(
+      SYSTEM_REVIEW_QUEUES.map((queue) => queue.key),
+    );
+    const minorHold = calls[5]![0];
+    expect(minorHold.create).toMatchObject({ protected: true, subjectKind: null });
+    // A re-seed keeps an admin's renames: update is empty.
+    expect(calls.every(([args]) => Object.keys(args.update as object).length === 0)).toBe(true);
+  });
+});
+
+describe("the Prisma claim", () => {
+  it("claims with one raw statement, exactly the spec's, and writes the claim row", async () => {
+    db.$queryRaw.mockResolvedValue([
+      {
+        id: "job-1",
+        queueId: LINKS_QUEUE.id,
+        subjectKind: "FLAGGED_LINK",
+        subjectId: "url-1",
+        caseId: "case-1",
+        status: "PENDING",
+        priority: 0,
+        claimedBy: "hash-a",
+        claimedUntil: new Date(NOW.getTime() + 10 * 60_000),
+        enqueueSource: "SYNC",
+        routedByRuleId: null,
+        routedByRuleVersion: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+        closedAt: null,
+        closedReason: null,
+      },
+    ]);
+
+    const claimed = await claimNextJob({ queueId: LINKS_QUEUE.id, reviewerEmailHash: "hash-a", now: NOW });
+    expect(claimed.job?.id).toBe("job-1");
+    expect(claimed.claimId).toBe("claim-new");
+
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+    const tagged = (db.$queryRaw.mock.calls[0] as unknown[]) as [TemplateStringsArray, ...unknown[]];
+    const text = tagged[0]!.join("");
+    expect(text).toContain('UPDATE "ReviewJob"');
+    expect(text).toContain('now() + interval \'10 minutes\'');
+    expect(text).toContain('SELECT "jobId" FROM "ReviewSkip"');
+    expect(text).toContain("FOR UPDATE SKIP LOCKED LIMIT 1");
+    // The queue once and the reviewer four times, as parameters.
+    expect(tagged.slice(1)).toEqual([
+      "hash-a",
+      LINKS_QUEUE.id,
+      "hash-a",
+      "hash-a",
+      "hash-a",
+    ]);
+    expect(db.reviewJobClaim.create).toHaveBeenCalledWith({
+      data: { jobId: "job-1", reviewerEmailHash: "hash-a", claimedAt: NOW },
+      select: { id: true },
+    });
+  });
+
+  it("answers with no job when the statement returns nothing", async () => {
+    db.$queryRaw.mockResolvedValue([]);
+    const claimed = await claimNextJob({ queueId: LINKS_QUEUE.id, reviewerEmailHash: "hash-a", now: NOW });
+    expect(claimed).toEqual({ job: null, claimId: null });
+    expect(db.reviewJobClaim.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("the Prisma decide", () => {
+  it("commits the decision, the job closure and the claim closure in one transaction", async () => {
+    seedJob({ claimedBy: "hash-a", claimedUntil: new Date(NOW.getTime() + 10 * 60_000) });
+    db.reviewJobClaim.findFirst.mockResolvedValue({ claimedAt: new Date(NOW.getTime() - 60_000) });
+
+    const result = await decideJob({
+      jobId: "job-1",
+      me: "hash-a",
+      reviewerId: "admin-1",
+      role: "CASE_REVIEWER",
+      decision: "reject",
+      reasonCode: "not_the_content",
+      reasonNote: "Checked twice: not a link to the reported content.",
+      now: NOW,
+    });
+    expect(result).toMatchObject({ ok: true, closed: true });
+
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(db.__tx.reviewDecision.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        jobId: "job-1",
+        queueId: LINKS_QUEUE.id,
+        decision: "reject",
+        reviewerEmailHash: "hash-a",
+        reasonCode: "not_the_content",
+        claimedAt: new Date(NOW.getTime() - 60_000),
+        decidedAt: NOW,
+      }),
+    });
+    // The free-text note is encrypted before it is stored, and never carries
+    // an address even then.
+    const decisionData = (db.__tx.reviewDecision.create.mock.calls[0] as [{ data: { reasonNote: string | null } }])[0].data;
+    expect(decisionData.reasonNote).not.toBeNull();
+    expect(decisionData.reasonNote).not.toContain("Checked twice");
+    expect(decryptField(decisionData.reasonNote!)).toBe("Checked twice: not a link to the reported content.");
+
+    expect(db.__tx.reviewJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job-1", status: "PENDING" },
+      data: expect.objectContaining({
+        status: "CLOSED",
+        closedReason: "reject",
+        claimedBy: null,
+        claimedUntil: null,
+      }),
+    });
+    expect(db.__tx.reviewJobClaim.updateMany).toHaveBeenCalledWith({
+      where: { jobId: "job-1", releasedAt: null },
+      data: { releasedAt: NOW, outcome: "decided" },
+    });
+  });
+
+  it("returns the earlier decision on a retried submit, without deciding again", async () => {
+    db.reviewDecision.findUnique.mockResolvedValue({
+      id: "decision-1",
+      jobId: "job-1",
+      queueId: LINKS_QUEUE.id,
+      subjectKind: "FLAGGED_LINK",
+      subjectId: "url-1",
+      caseId: "case-1",
+      reviewerEmailHash: "hash-a",
+      decision: "reject",
+      reasonCode: "not_the_content",
+      reasonNote: null,
+      claimedAt: null,
+      decidedAt: NOW,
+      auditEventId: null,
+    });
+    seedJob({ status: "CLOSED", closedAt: NOW, closedReason: "reject" });
+
+    const result = await decideJob({
+      jobId: "job-1",
+      me: "hash-a",
+      reviewerId: "admin-1",
+      role: "CASE_REVIEWER",
+      decision: "reject",
+      reasonCode: "not_the_content",
+      now: NOW,
+    });
+    expect(result).toMatchObject({ ok: true, closed: true, idempotent: true });
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses without the lease, and enforces the queue's reason flag on the server", async () => {
+    seedJob({ claimedBy: "hash-a", claimedUntil: new Date(NOW.getTime() + 10 * 60_000) });
+
+    const lost = await decideJob({
+      jobId: "job-1",
+      me: "hash-b",
+      reviewerId: "admin-2",
+      role: "CASE_REVIEWER",
+      decision: "approve",
+      now: NOW,
+    });
+    expect(lost).toEqual({ ok: false, error: "claim_lost" });
+
+    const noReason = await decideJob({
+      jobId: "job-1",
+      me: "hash-a",
+      reviewerId: "admin-1",
+      role: "CASE_REVIEWER",
+      decision: "reject",
+      now: NOW,
+    });
+    expect(noReason).toEqual({ ok: false, error: "reason_required" });
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("requeues a possible-minor decision into minor-hold in the same transaction", async () => {
+    const findingAdapter = stubAdapter("FINDING");
+    registerReviewAdapter(findingAdapter);
+    (findingAdapter.decide as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, resolved: true, requeueKey: "minor-hold" });
+    seedJob({
+      subjectKind: "FINDING",
+      queueId: SYSTEM_REVIEW_QUEUES.find((queue) => queue.key === "findings")!.id,
+      claimedBy: "hash-a",
+      claimedUntil: new Date(NOW.getTime() + 10 * 60_000),
+    });
+
+    const result = await decideJob({
+      jobId: "job-1",
+      me: "hash-a",
+      reviewerId: "admin-1",
+      role: "CASE_REVIEWER",
+      decision: "approve",
+      now: NOW,
+    });
+    expect(result).toMatchObject({ ok: true, closed: true });
+    expect(db.__tx.reviewJob.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          queueId: MINOR_HOLD_ID,
+          subjectKind: "FINDING",
+          subjectId: "url-1",
+          status: "PENDING",
+          enqueueSource: "MOVED",
+        }),
+      ],
+      skipDuplicates: true,
+    });
+  });
+});
+
+describe("the Prisma sync, skip and move", () => {
+  it("closes a resolved-elsewhere job behind the PENDING guard, with a system decision", async () => {
+    seedJob({ subjectId: "url-gone" });
+    const result = await syncReviewJobs(NOW);
+    expect(result.closed).toBe(1);
+
+    expect(db.$transaction).toHaveBeenCalled();
+    expect(db.__tx.reviewJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job-1", status: "PENDING" },
+      data: expect.objectContaining({ status: "CLOSED", closedReason: "resolved_elsewhere", claimedBy: null }),
+    });
+    expect(db.__tx.reviewDecision.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ jobId: "job-1", decision: "close_stale", reviewerEmailHash: "" }),
+    });
+    expect(db.__tx.reviewJobClaim.updateMany).toHaveBeenCalledWith({
+      where: { jobId: "job-1", releasedAt: null },
+      data: { releasedAt: NOW, outcome: "released" },
+    });
+  });
+
+  it("skips for this reviewer only: skip upsert, lease release, claim closed", async () => {
+    seedJob({ claimedBy: "hash-a", claimedUntil: new Date(NOW.getTime() + 10 * 60_000) });
+    expect(await skipJob("job-1", "hash-a", NOW)).toEqual({ ok: true });
+
+    expect(db.reviewSkip.upsert).toHaveBeenCalledWith({
+      where: { reviewerEmailHash_jobId: { reviewerEmailHash: "hash-a", jobId: "job-1" } },
+      create: { reviewerEmailHash: "hash-a", jobId: "job-1", until: new Date(NOW.getTime() + 30 * 60_000) },
+      update: { until: new Date(NOW.getTime() + 30 * 60_000) },
+    });
+    expect(db.reviewJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job-1", claimedBy: "hash-a", status: "PENDING" },
+      data: { claimedBy: null, claimedUntil: null, updatedAt: NOW },
+    });
+    expect(db.reviewJobClaim.updateMany).toHaveBeenCalledWith({
+      where: { jobId: "job-1", reviewerEmailHash: "hash-a", releasedAt: null },
+      data: { releasedAt: NOW, outcome: "skipped" },
+    });
+  });
+
+  it("moves a job into minor-hold: decision, closure and reopen in one transaction", async () => {
+    seedJob({ claimedBy: "hash-a", claimedUntil: new Date(NOW.getTime() + 10 * 60_000) });
+    const result = await moveJob("job-1", "hash-a", MINOR_HOLD_ID, { note: "Suspected minor, escalated.", now: NOW });
+    expect(result).toMatchObject({ ok: true, queueKey: MINOR_HOLD_QUEUE_KEY });
+
+    expect(db.__tx.reviewDecision.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ jobId: "job-1", decision: "move", reviewerEmailHash: "hash-a" }),
+    });
+    const moveDecision = (db.__tx.reviewDecision.create.mock.calls[0] as [{ data: { reasonNote: string | null } }])[0].data;
+    expect(decryptField(moveDecision.reasonNote!)).toBe("Suspected minor, escalated.");
+    expect(db.__tx.reviewJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job-1", status: "PENDING" },
+      data: expect.objectContaining({ closedReason: "moved" }),
+    });
+    expect(db.__tx.reviewJob.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ queueId: MINOR_HOLD_ID, subjectId: "url-1", enqueueSource: "MOVED" })],
+      skipDuplicates: true,
+    });
+  });
+
+  it("refuses to move out of minor-hold and to a queue of another kind", async () => {
+    seedJob({ claimedBy: "hash-a", claimedUntil: new Date(NOW.getTime() + 10 * 60_000) });
+    expect(await moveJob("job-1", "hash-a", SYSTEM_REVIEW_QUEUES.find((q) => q.key === "fingerprints")!.id, { now: NOW })).toEqual({
+      ok: false,
+      error: "queue_kind_mismatch",
+    });
+
+    seedJob({ id: "job-2", subjectId: "url-2", queueId: MINOR_HOLD_ID, claimedBy: "hash-b", claimedUntil: new Date(NOW.getTime() + 10 * 60_000) });
+    db.reviewQueue.findUnique.mockImplementation(async (args: { where: { id: string } }) => {
+      const queue = SYSTEM_REVIEW_QUEUES.find((item) => item.id === args.where.id);
+      return queue ? { ...queue, protected: queue.key === MINOR_HOLD_QUEUE_KEY } : null;
+    });
+    expect(await moveJob("job-2", "hash-b", LINKS_QUEUE.id, { now: NOW })).toEqual({
+      ok: false,
+      error: "minor_hold",
+    });
+    expect(db.__tx.reviewDecision.create).not.toHaveBeenCalled();
+  });
+});
