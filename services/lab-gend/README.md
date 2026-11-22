@@ -125,3 +125,19 @@ docker run --rm -p 8080:8080 -e GEND_TOKEN=<secret> lab-gend:onnx
 The service code is Apache-2.0 (repository licence). Vendored GenD files
 are MIT (`LICENSE-GenD.txt`); full licence chain with pins:
 `THIRD_PARTY.md`.
+
+## Detector panel integration (WP113)
+
+The Asmita detector panel (`/lab/detectors`) calls this service as its
+fourth row when two environment values are set on the app side (never
+committed):
+
+- `LAB_GEND_URL` — this service's base URL (e.g. `https://<host>`);
+- `LAB_GEND_TOKEN` — the same secret as `GEND_TOKEN` here.
+
+Unset → the row shows "not configured" and no image is sent. Set → the
+panel forwards the exact uploaded bytes (≤ 10 MB, JPEG/PNG/WebP) to
+`POST /v1/score` and maps `image_p_fake` onto its 0–100 score and verdict
+bands; `status: "no_face"` shows "No face found: this detector only checks
+face swaps" instead of a score. Deployment notes for the whole integration:
+`asmita/docs/lab/gend.md`.

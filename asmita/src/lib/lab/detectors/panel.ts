@@ -1,6 +1,7 @@
 import {
   buildDetectorRegistry,
   isDetectionScore,
+  isNoFaceResult,
   isSkipped,
   registryOptionsFromEnv,
   type DetectionResult,
@@ -20,7 +21,11 @@ export type DetectorBand = "likely_ai" | "unclear" | "likely_camera";
 export type DetectorRow = {
   id: string;
   name: string;
-  status: "scored" | "not_configured" | "error";
+  /**
+   * "no_face": a face-swap detector (GenD) found no face to score — an
+   * honest answer with its own message, never a score.
+   */
+  status: "scored" | "not_configured" | "no_face" | "error";
   /** 0..100, present only when status is "scored". */
   score?: number;
   /** Present only when status is "scored". */
@@ -93,6 +98,9 @@ export async function runDetectorPanel(image: LabImage, options: RunPanelOptions
       if (isDetectionScore(outcome)) {
         const score = Math.round(outcome.score * 100);
         return { id, name, status: "scored", score, band: verdictBand(outcome.score) };
+      }
+      if (isNoFaceResult(outcome)) {
+        return { id, name, status: "no_face" };
       }
       return { id, name, status: "error", error: outcome.error };
     }),

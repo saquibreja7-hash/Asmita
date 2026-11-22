@@ -1,7 +1,7 @@
 /*
  * Detector adapters for the public detector panel (/lab/detectors,
- * docs/lab/beta-spec.md WP90). The interface and the three hosted adapters
- * reuse the E1 detector benchmark's design (tools/lab-bench/src/detectors),
+ * docs/lab/beta-spec.md WP90). The interface and the hosted adapters reuse
+ * the E1 detector benchmark's design (tools/lab-bench/src/detectors),
  * which lives in its own offline package the Worker app cannot import: same
  * Detector shape, same provider endpoints and defensive response parsing,
  * same rule that an adapter whose key is unset is skipped ("not
@@ -10,10 +10,15 @@
  * Differences from lab-bench, on purpose: the app has no sharp, so the image
  * is forwarded exactly as uploaded (already capped at 10 MB and sniffed to
  * JPEG/PNG/WebP by the route) instead of being downscaled to a JPEG; the
- * local ONNX model stays a lab-bench offline tool — this panel runs only the
- * three hosted detectors the WP names; and each adapter's options carry a
- * provider-prefixed key name so no two adapters can ever read one another's
- * credential through a shared options object.
+ * local ONNX model stays a lab-bench offline tool; and each adapter's options
+ * carry a provider-prefixed key name so no two adapters can ever read one
+ * another's credential through a shared options object.
+ *
+ * The fourth adapter (research-tools spec WP113) is Asmita's own lab-gend
+ * service (services/lab-gend, WP112): the open GenD face-swap detector
+ * (Yermakov, Čech, Matas, Fritz, WACV 2026, MIT) behind a bearer-token HTTP
+ * endpoint the owner hosts outside the Worker. Unset LAB_GEND_URL or
+ * LAB_GEND_TOKEN leaves its row "not configured" like every keyless adapter.
  *
  * All scores are P(AI-generated / manipulated) in [0, 1]. Unit tests inject a
  * fake fetch: no test or fixture ever contacts a provider, and no key is
@@ -30,7 +35,14 @@ export type DetectionScore = {
   label?: "ai" | "real";
 };
 
-export type DetectionResult = DetectionScore | { error: string };
+/** A face-swap detector's honest answer when it finds no face to score. */
+export type NoFaceResult = { noFace: true };
+
+export function isNoFaceResult(r: DetectionResult): r is NoFaceResult {
+  return (r as NoFaceResult).noFace === true;
+}
+
+export type DetectionResult = DetectionScore | NoFaceResult | { error: string };
 
 export function isDetectionScore(r: DetectionResult): r is DetectionScore {
   return typeof (r as DetectionScore).score === "number";
@@ -302,9 +314,76 @@ export function createSightengineDetector(opts: SightengineOptions = {}): Detect
   };
 }
 
+// ── GenD (services/lab-gend, research-tools spec WP113) ────────────────
+
+export type GendOptions = {
+  /** Base URL of the lab-gend service, e.g. http://127.0.0.1:8080 (env LAB_GEND_URL). */
+  gendUrl?: string;
+  /** Shared bearer secret with the service (env LAB_GEND_TOKEN). */
+  gendToken?: string;
+  fetchFn?: FetchLike;
+};
+
+/**
+ * The lab-gend inference service (services/lab-gend, WP112) as a panel
+ * adapter: multipart upload of the exact bytes, `image_p_fake` read from the
+ * service's JSON answer. The service detects and aligns the faces itself, so
+ * the panel sends the image untouched — the same request a deployment makes.
+ *
+ * GenD is a face-swap/reenactment detector: when the service finds no face
+ * it answers `status: "no_face"` with a null score, and the adapter reports
+ * that honestly as a no-face result, never a score of 0.
+ */
+export function createGendDetector(opts: GendOptions = {}): DetectorFactoryResult {
+  const baseUrl = opts.gendUrl;
+  const token = opts.gendToken;
+  if (!baseUrl) return { skipped: "LAB_GEND_URL is not set" };
+  if (!token) return { skipped: "LAB_GEND_TOKEN is not set" };
+  const url = baseUrl.replace(/\/+$/, "");
+  const doFetch = opts.fetchFn ?? ((url: string, init?: RequestInit) => fetch(url, init));
+
+  return {
+    detector: {
+      id: "gend",
+      name: "GenD (open model, CTU Prague)",
+      async detect(image: LabImage) {
+        try {
+          const form = new FormData();
+          form.append("image", new Blob([image.bytes], { type: image.mime }), "image");
+          const res = await doFetch(`${url}/v1/score`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: form,
+            signal: AbortSignal.timeout(30_000),
+          });
+          if (!res.ok) return { error: `gend_http_${res.status}` };
+          const text = await res.text();
+          let json: unknown;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            return { error: "gend_bad_response" };
+          }
+          const body = json as { status?: unknown; image_p_fake?: unknown };
+          if (body.status === "no_face") return { noFace: true };
+          if (typeof body.image_p_fake !== "number" || !Number.isFinite(body.image_p_fake)) {
+            // The service's no-face answer is a null score; anything else
+            // non-numeric is a protocol break, never a silent 0.
+            if (body.image_p_fake === null) return { noFace: true };
+            return { error: "gend_bad_response" };
+          }
+          return { score: clampScore(body.image_p_fake) };
+        } catch {
+          return { error: "gend_request_failed" };
+        }
+      },
+    },
+  };
+}
+
 // ── Registry ────────────────────────────────────────────────────────────
 
-export type DetectorRegistryOptions = OpenAiOptions & HiveOptions & SightengineOptions;
+export type DetectorRegistryOptions = OpenAiOptions & HiveOptions & SightengineOptions & GendOptions;
 
 /**
  * One row of the fixed panel order. The id and display name are known even
@@ -322,10 +401,12 @@ export function buildDetectorRegistry(opts: DetectorRegistryOptions = {}): Regis
   const openai = createOpenAiDetector(opts);
   const hive = createHiveDetector(opts);
   const sightengine = createSightengineDetector(opts);
+  const gend = createGendDetector(opts);
   return [
     { id: "openai", name: detectorName(openai, "OpenAI vision"), result: openai },
     { id: "hive", name: detectorName(hive, "Hive AI-generated detection"), result: hive },
     { id: "sightengine", name: detectorName(sightengine, "Sightengine ai-generated"), result: sightengine },
+    { id: "gend", name: detectorName(gend, "GenD (open model, CTU Prague)"), result: gend },
   ];
 }
 
@@ -347,6 +428,8 @@ export function registryOptionsFromEnv(
     sightengineUser: env.SIGHTENGINE_USER || undefined,
     sightengineSecret: env.SIGHTENGINE_SECRET || undefined,
     sightengineBaseUrl: env.SIGHTENGINE_BASE_URL || undefined,
+    gendUrl: env.LAB_GEND_URL || undefined,
+    gendToken: env.LAB_GEND_TOKEN || undefined,
     fetchFn,
   };
 }
