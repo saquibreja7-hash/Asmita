@@ -56,7 +56,7 @@ function ExternalLink({
 
 const OPEN_MEANS = [
   "A tool counts as open here when anyone can download its source code or model weights, when its licence lets a commercial platform or a public NGO service use it, and when no paid tier is required for the core function. A repository anyone can read is not enough on its own; the licence has to allow the uses a real service needs.",
-  "Some services in this field are free to use but not open source: they run on someone else's machines, and their code cannot be audited. Three are listed here in their own group — StopNCII.org, for adults' intimate images; Take It Down, for images taken when the person was under 18; and Asmita's own fingerprint feed for approved partner platforms. Each carries the Not open source mark, and its page says what that means.",
+  "Some services in this field are free to use but not open source: they run on someone else's machines, and their code cannot be audited. Two are listed here in the Free services group: StopNCII.org, for adults' intimate images, and Take It Down, for images taken when the person was under 18. Each carries the Not open source mark, and its page says what that means. Asmita's own fingerprint feed is listed separately under From Asmita: it is free for approved partner platforms but is not an open-source package, and its partner API is documented in Asmita's public repository.",
 ];
 
 const WE_CHECK: [label: string, text: string][] = [
@@ -66,7 +66,7 @@ const WE_CHECK: [label: string, text: string][] = [
   ],
   [
     "Maintenance",
-    "A release or a commit in the last 18 months, or a stated reason from the maintainers that the tool is stable as it is.",
+    "A release or a commit in the last 18 months, or a stated reason from the maintainers that the tool is stable as it is. One listed tool, SSCD, is archived; it is listed because Asmita uses it, and its page says it gets no new fixes.",
   ],
   [
     "Fit",

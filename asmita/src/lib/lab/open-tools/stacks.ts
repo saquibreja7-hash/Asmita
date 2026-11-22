@@ -307,7 +307,7 @@ export const STACKS: readonly Stack[] = [
     ],
     indiaNotes: [
       "Users type prompts in Hindi, Hinglish, Hindi written in the Latin script, and other Indian languages. The prompt classifier was trained mainly on English, so build a test set in the languages your users use before trusting it.",
-      "If your app also hosts content, the complaint timelines intermediaries are expected to meet apply to you too: Rule 3(2)(b) of the IT Rules, 2021 requires intermediaries to act on a complaint about non-consensual intimate content within 24 hours.",
+      "If your app also hosts content, these rules may be relevant: Rule 3(2)(b) of the IT Rules, 2021 requires intermediaries to act on a complaint about non-consensual intimate content within 24 hours.",
       "The IT Rules Amendment of 2026 shortens that to two hours for non-consensual nudity.",
       "This is a summary for orientation, not legal advice. Check the current rules with your own lawyer.",
     ],

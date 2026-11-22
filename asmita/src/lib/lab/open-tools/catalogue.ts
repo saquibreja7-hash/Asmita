@@ -274,8 +274,8 @@ export const OPEN_TOOLS: readonly OpenTool[] = [
     ],
     gettingStarted: [
       { step: "Read the README and the architecture document in the repository." },
-      { step: "Provision a PostgreSQL database." },
       { step: "Start the stack the README shows, application and database together.", code: "docker compose up" },
+      { step: "Or provision your own PostgreSQL database and point the application at it instead of the bundled one." },
       { step: "Point your upload pipeline at the API and send a test image twice: the second copy should match." },
       { step: "Add an exchange, StopNCII for example, once you have joined that programme." },
     ],
