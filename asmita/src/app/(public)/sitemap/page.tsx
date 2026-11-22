@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   description: "Every public page on Asmita, in one place.",
 };
 
-const groupTitlesHi = ["मदद लें", "समस्या को समझें", "हम किसकी मदद करते हैं", "संसाधन", "AI लैब", "अस्मिता के बारे में", "नीतियाँ"] as const;
+const groupTitlesHi = ["मदद लें", "समस्या को समझें", "हम किसकी मदद करते हैं", "संसाधन", "जुड़िए", "AI लैब", "अस्मिता के बारे में", "नीतियाँ"] as const;
 const linksHi: Record<string, { label: string; note?: string }> = {
   "/get-help": { label: "मदद लें", note: "स्थितियाँ, कदम और साधन" },
   "/start": { label: "केस शुरू करें", note: "गोपनीय रिपोर्ट शुरू करें" },
