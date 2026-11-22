@@ -16,6 +16,9 @@ const kysely = vi.hoisted(() => {
     calls: [] as Array<{ op: string; table: string; detail: Record<string, unknown> }>,
     raws: [] as Array<{ text: string[]; values: unknown[] }>,
     rawRows: [] as Array<Record<string, unknown>>,
+    // WP145: the metrics statements run in a fixed order, so the fake can
+    // answer each one from a queue instead of one shared result set.
+    rawQueue: [] as Array<Array<Record<string, unknown>>>,
   };
 
   const plain = (col: string) => (col.includes(".") ? col.split(".")[1]! : col);
@@ -136,11 +139,13 @@ vi.mock("kysely", async (importOriginal) => {
   return {
     ...actual,
     // The claim is raw SQL (one statement against Postgres); the fake
-    // records the fragments and answers with the configured rows.
+    // records the fragments and answers with the configured rows. The
+    // metrics statements answer from the queue in order (WP145).
     sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
       execute: async () => {
         kysely.state.raws.push({ text: [...strings], values });
-        return { rows: kysely.state.rawRows };
+        const rows = kysely.state.rawQueue.length > 0 ? kysely.state.rawQueue.shift()! : kysely.state.rawRows;
+        return { rows };
       },
     }),
   };
@@ -161,6 +166,8 @@ import {
   skipJob,
   syncReviewJobs,
 } from "@/lib/review-jobs";
+import { reviewMetrics } from "@/lib/review-metrics";
+import { listDecisionLogPage } from "@/lib/review-decisions-log";
 
 const NOW = new Date("2026-11-22T10:00:00Z");
 const MINOR_HOLD_ID = SYSTEM_REVIEW_QUEUES.find((queue) => queue.key === MINOR_HOLD_QUEUE_KEY)!.id;
@@ -238,6 +245,7 @@ beforeEach(() => {
   kysely.state.calls = [];
   kysely.state.raws = [];
   kysely.state.rawRows = [];
+  kysely.state.rawQueue = [];
   seedQueues();
   registerReviewAdapter(stubAdapter("FLAGGED_LINK", async () => ({ ok: true, resolved: true })));
   registerReviewAdapter(stubAdapter("FINGERPRINT", async () => ({ ok: true, resolved: true })));
@@ -489,5 +497,148 @@ describe("queue visibility stays role-checked on the Worker path too", () => {
     expect(minorHold.protected).toBe(true);
     expect(canSeeReviewQueue("CASE_REVIEWER", minorHold)).toBe(false);
     expect(canSeeReviewQueue("SUPER_ADMIN", minorHold)).toBe(true);
+  });
+});
+
+describe("the Kysely metrics (WP145)", () => {
+  it("runs the group-bys in Postgres: date_trunc buckets, joined durations, per-queue counts", async () => {
+    // Eight statements in a fixed order; the fake answers each from the queue.
+    kysely.state.rawQueue = [
+      // Jobs created per bucket.
+      [{ bucket: new Date("2026-11-21T00:00:00Z"), n: 3 }, { bucket: new Date("2026-11-22T00:00:00Z"), n: 1 }],
+      // Open now per queue.
+      [
+        { queueId: LINKS_ID, n: 2, oldest: new Date("2026-11-20T00:00:00Z") },
+        { queueId: FINGERPRINTS_ID, n: 1, oldest: new Date("2026-11-21T00:00:00Z") },
+      ],
+      // Created-to-decided seconds.
+      [{ secs: 100 }, { secs: 300 }, { secs: 200 }, { secs: 500 }, { secs: 400 }],
+      // Handle seconds.
+      [{ secs: 10 }, { secs: 30 }, { secs: 20 }, { secs: 40 }, { secs: 50 }],
+      // Decisions by queue, by reviewer.
+      [{ queueId: LINKS_ID, n: 5 }],
+      [{ reviewerEmailHash: "hash-a", n: 4 }, { reviewerEmailHash: "", n: 1 }],
+      // Skips by queue (joined to the job).
+      [{ queueId: LINKS_ID, n: 2 }],
+      // Resolved elsewhere.
+      [{ n: 1 }],
+    ];
+
+    const metrics = await reviewMetrics({ days: 7, bucket: "day", now: NOW });
+    const texts = kysely.state.raws.map((entry) => entry.text.join(""));
+
+    // The bucketed count is one date_trunc group-by over the window.
+    expect(texts[0]).toContain("date_trunc(");
+    expect(texts[0]).toContain('FROM "ReviewJob"');
+    expect(texts[0]).toContain("GROUP BY 1 ORDER BY 1");
+    expect(kysely.state.raws[0]!.values).toContain("day");
+    // Open now groups by queueId.
+    expect(texts[1]).toContain('FROM "ReviewJob" WHERE "status" = \'PENDING\' GROUP BY "queueId"');
+    // Time to first review joins the decision to its job.
+    expect(texts[2]).toContain('EXTRACT(EPOCH FROM (d."decidedAt" - j."createdAt"))');
+    expect(texts[2]).toContain('JOIN "ReviewJob" j ON j."id" = d."jobId"');
+    // Handle time reads the deciding claim.
+    expect(texts[3]).toContain('EXTRACT(EPOCH FROM ("decidedAt" - "claimedAt"))');
+    expect(texts[3]).toContain('"claimedAt" IS NOT NULL');
+    // Decisions group by queue and by reviewer hash.
+    expect(texts[4]).toContain('FROM "ReviewDecision"');
+    expect(texts[4]).toContain('GROUP BY "queueId"');
+    expect(texts[5]).toContain('GROUP BY "reviewerEmailHash"');
+    // Skips join the claim to its job's queue.
+    expect(texts[6]).toContain('FROM "ReviewJobClaim" c JOIN "ReviewJob" j ON j."id" = c."jobId"');
+    expect(texts[6]).toContain("c.\"outcome\" = 'skipped'");
+    // Resolved elsewhere counts closedReason over the window.
+    expect(texts[7]).toContain("resolved_elsewhere");
+
+    // And the page's figures come back assembled from those rows.
+    expect(metrics.jobsCreatedPerBucket).toHaveLength(8);
+    expect(metrics.jobsCreatedPerBucket.map((entry) => [entry.bucketStart.slice(0, 10), entry.count])).toEqual([
+      ["2026-11-15", 0],
+      ["2026-11-16", 0],
+      ["2026-11-17", 0],
+      ["2026-11-18", 0],
+      ["2026-11-19", 0],
+      ["2026-11-20", 0],
+      ["2026-11-21", 3],
+      ["2026-11-22", 1],
+    ]);
+    expect(metrics.openNow).toBe(3);
+    expect(metrics.openPerQueue[0]).toMatchObject({ queueKey: "links", count: 2, oldestCreatedAt: "2026-11-20T00:00:00.000Z" });
+    expect(metrics.timeToDecision).toEqual({ samples: 5, medianSeconds: 300, p90Seconds: 500 });
+    expect(metrics.handleTime).toEqual({ samples: 5, medianSeconds: 30 });
+    expect(metrics.decisionsByQueue).toEqual([{ queueId: LINKS_ID, queueKey: "links", queueName: "Flagged links", count: 5 }]);
+    expect(metrics.decisionsByReviewer).toEqual([
+      { reviewerEmailHash: "hash-a", count: 4 },
+      { reviewerEmailHash: "", count: 1 },
+    ]);
+    expect(metrics.skipsByQueue).toEqual([{ queueId: LINKS_ID, queueKey: "links", queueName: "Flagged links", count: 2 }]);
+    expect(metrics.resolvedElsewhere).toBe(1);
+  });
+});
+
+describe("the Kysely decisions log (WP145)", () => {
+  it("queries the safe columns, filters and pages newest first, then enriches", async () => {
+    const decidedAt = new Date("2026-11-22T09:00:00Z");
+    kysely.state.rows.ReviewDecision = [
+      {
+        id: "decision-1",
+        jobId: "job-1",
+        queueId: LINKS_ID,
+        subjectKind: "FLAGGED_LINK",
+        subjectId: "url-1",
+        caseId: "case-1",
+        reviewerEmailHash: "hash-a",
+        decision: "reject",
+        reasonCode: null,
+        reasonNote: "must-never-be-selected",
+        claimedAt: new Date("2026-11-22T08:59:00Z"),
+        decidedAt,
+      },
+      {
+        id: "decision-2",
+        jobId: "job-2",
+        queueId: LINKS_ID,
+        subjectKind: "FLAGGED_LINK",
+        subjectId: "url-2",
+        caseId: "case-1",
+        reviewerEmailHash: "",
+        decision: "close_stale",
+        reasonCode: null,
+        reasonNote: null,
+        claimedAt: null,
+        decidedAt,
+      },
+    ];
+    kysely.state.rows.ReviewJob = [
+      { id: "job-1", routedByRuleId: null, routedByRuleVersion: null },
+      { id: "job-2", routedByRuleId: null, routedByRuleVersion: null },
+    ];
+    kysely.state.rows.Case = [{ id: "case-1", referenceNumber: "ASMITA-2026-KYSEL" }];
+
+    const page = await listDecisionLogPage({ emailHash: "hash-a" }, { queueKey: "links" }, { limit: 50 });
+
+    const select = callsOn("select", "ReviewDecision")[0]!;
+    expect(select).toBeTruthy();
+    // The filter reached the query, and the page fetches one extra row.
+    expect(select.detail.wheres).toContainEqual(["queueId", "=", LINKS_ID]);
+    expect(select.detail.limit).toBe(51);
+    // Newest first, id as the tiebreak: the last orderBy clause is the id.
+    expect(select.detail.orderBy).toEqual(["id", "desc"]);
+    // The row reads the safe columns only — never the note.
+    expect(String(select.detail.select)).not.toContain("reasonNote");
+
+    expect(page.rows).toHaveLength(2);
+    // Same decidedAt, so the id tiebreak orders the page: decision-2 first.
+    expect(page.rows[0]).toMatchObject({
+      queueName: "Flagged links",
+      caseReference: "ASMITA-2026-KYSEL",
+      reviewer: "System",
+      decision: "close_stale",
+      handleSeconds: null,
+      routing: "Default queue",
+    });
+    expect(page.rows[1]).toMatchObject({ reviewer: "You", decision: "reject", handleSeconds: 60 });
+    // The enrichment never carries the note either.
+    expect(JSON.stringify(page.rows)).not.toContain("must-never-be-selected");
   });
 });

@@ -8,6 +8,9 @@ import type { AdminUrlReviewRow } from "@/lib/admin-cases";
 import { ReviewActions } from "./ReviewActions";
 
 const MAX = 50;
+// WP145 bulk safety: above this many items the operator types the exact
+// count before the decision runs.
+const TYPE_ABOVE = 10;
 
 const ERRORS: Record<string, string> = {
   not_awaiting_review: "already decided",
@@ -24,11 +27,14 @@ function selectable(row: AdminUrlReviewRow) {
 export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; canReview: boolean }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
+  const [confirming, setConfirming] = useState<"approve" | "reject" | null>(null);
+  const [typedCount, setTypedCount] = useState("");
   const [reason, setReason] = useState("");
   const [results, setResults] = useState<Result[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const countRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   // WP144: a bulk decision over 10 items needs a fresh authenticator code;
   // the shared hook answers that refusal with a code dialog and retries.
@@ -38,6 +44,10 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
   const referenceOf = useMemo(() => new Map(rows.map((row) => [row.urlId, row.referenceNumber])), [rows]);
   const allChosen = choosable.length > 0 && choosable.every((row) => selected.has(row.urlId));
   const investigationSelected = rows.filter((row) => selected.has(row.urlId) && row.investigationOnly).length;
+  // WP145 bulk safety: above ten items the operator types the exact count
+  // before the decision runs; the server refuses a mismatch.
+  const needsTyping = selected.size > TYPE_ABOVE;
+  const typedOk = !needsTyping || typedCount.trim() === String(selected.size);
 
   function toggle(urlId: string) {
     setSelected((current) => {
@@ -48,6 +58,17 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
     });
   }
 
+  function openConfirm(decision: "approve" | "reject") {
+    setConfirming(decision);
+    setTypedCount("");
+    setError(null);
+    setTimeout(() => {
+      if (needsTyping) countRef.current?.focus();
+      else if (decision === "reject") reasonRef.current?.focus();
+      else confirmRef.current?.focus();
+    }, 0);
+  }
+
   async function run(decision: "approve" | "reject") {
     setBusy(true);
     setError(null);
@@ -55,6 +76,8 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
     const outcome: StepUpPostResult = await post("/api/admin/bulk/links", {
       decision,
       urlIds: Array.from(selected),
+      // WP145: the confirmed count names exactly what will be decided.
+      confirmedCount: selected.size,
       ...(decision === "reject" ? { reason } : {}),
     });
     setBusy(false);
@@ -66,7 +89,9 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
           ? "Nothing was changed: a bulk decision over 10 items needs a fresh authenticator code."
           : outcome.error === "reason_required"
             ? "Give a reason of at least 3 characters."
-            : "Nothing was changed: the request failed.",
+            : outcome.error === "count_not_confirmed"
+              ? "Nothing was changed: type the exact count to confirm."
+              : "Nothing was changed: the request failed.",
       );
       return;
     }
@@ -77,73 +102,118 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
     }
     setResults(body.results);
     setSelected(new Set(body.results.filter((result) => !result.ok).map((result) => result.urlId)));
-    setRejecting(false);
+    setConfirming(null);
+    setTypedCount("");
     setReason("");
     router.refresh();
   }
+
+  const decisionText =
+    confirming === "approve"
+      ? selected.size === 1
+        ? "approve 1 link"
+        : `approve ${selected.size} links`
+      : selected.size === 1
+        ? "reject 1 link"
+        : `reject ${selected.size} links`;
 
   return (
     <>
       {canReview && selected.size > 0 && (
         <div
           aria-label="Bulk actions"
-          className="sticky top-2 z-10 mt-6 flex flex-wrap items-center gap-3 rounded-[var(--radius-box)] border border-[var(--ink)] bg-[var(--page)] p-3 text-sm"
+          className="sticky top-2 z-10 mt-6 rounded-[var(--radius-box)] border border-[var(--ink)] bg-[var(--page)] p-3 text-sm"
           role="region"
         >
-          <span className="tabular-nums">
-            {selected.size} selected
-            {investigationSelected > 0 && ` (${investigationSelected} on unknown platforms, reject only)`}
-          </span>
-          {!rejecting ? (
-            <>
-              <button className="btn btn-primary px-3 py-1 text-xs" disabled={busy} onClick={() => run("approve")} type="button">
-                Approve {selected.size}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="tabular-nums">
+              {selected.size} selected
+              {investigationSelected > 0 && ` (${investigationSelected} on unknown platforms, reject only)`}
+            </span>
+            {confirming === null ? (
+              <>
+                {/* WP145: a bulk decision opens a confirm step that states
+                    the exact count and the decision, never a one-click run. */}
+                <button className="btn btn-primary px-3 py-1 text-xs" disabled={busy} onClick={() => openConfirm("approve")} type="button">
+                  Approve {selected.size}…
+                </button>
+                <button className="btn btn-secondary px-3 py-1 text-xs" disabled={busy} onClick={() => openConfirm("reject")} type="button">
+                  Reject {selected.size}…
+                </button>
+              </>
+            ) : (
+              <span className="font-medium">{`You are about to ${decisionText}.`}</span>
+            )}
+            <button
+              className="link-underline ml-auto text-xs"
+              onClick={() => {
+                setSelected(new Set());
+                setConfirming(null);
+                setTypedCount("");
+              }}
+              type="button"
+            >
+              Clear
+            </button>
+          </div>
+          {confirming !== null && (
+            <form
+              className="mt-3 grid gap-2 border-t border-[var(--line)] pt-3 md:grid-cols-[auto_1fr_auto_auto]"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run(confirming);
+              }}
+            >
+              {needsTyping && (
+                <label className="grid gap-1 text-xs">
+                  <span className="eyebrow">Type {selected.size} to confirm</span>
+                  <input
+                    aria-label={`Type ${selected.size} to confirm`}
+                    className="field py-1 text-sm"
+                    inputMode="numeric"
+                    onChange={(event) => setTypedCount(event.target.value)}
+                    placeholder={String(selected.size)}
+                    ref={countRef}
+                    value={typedCount}
+                  />
+                </label>
+              )}
+              {confirming === "reject" && (
+                <label className="grid gap-1 text-xs">
+                  <span className="eyebrow">Reason for rejecting, shown in the survivor&apos;s case</span>
+                  <input
+                    className="field py-1 text-sm"
+                    id="bulk-reject-reason"
+                    maxLength={500}
+                    minLength={3}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder="Reason the survivor will see"
+                    ref={reasonRef}
+                    required
+                    value={reason}
+                  />
+                </label>
+              )}
+              <button
+                className="btn btn-primary self-end px-3 py-1 text-xs"
+                disabled={busy || !typedOk || (confirming === "reject" && reason.trim().length < 3)}
+                ref={confirmRef}
+                type="submit"
+              >
+                {`Confirm: ${decisionText}`}
               </button>
               <button
-                className="btn btn-secondary px-3 py-1 text-xs"
-                disabled={busy}
+                className="link-underline self-end text-xs"
                 onClick={() => {
-                  setRejecting(true);
-                  setTimeout(() => reasonRef.current?.focus(), 0);
+                  setConfirming(null);
+                  setTypedCount("");
                 }}
                 type="button"
               >
-                Reject {selected.size}…
-              </button>
-            </>
-          ) : (
-            <form
-              className="flex flex-wrap items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void run("reject");
-              }}
-            >
-              <label className="sr-only" htmlFor="bulk-reject-reason">
-                Reason for rejecting, shown in the survivor&apos;s case
-              </label>
-              <input
-                className="field py-1 text-sm"
-                id="bulk-reject-reason"
-                maxLength={500}
-                minLength={3}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="Reason the survivor will see"
-                ref={reasonRef}
-                required
-                value={reason}
-              />
-              <button className="btn btn-primary px-3 py-1 text-xs" disabled={busy || reason.trim().length < 3} type="submit">
-                Reject {selected.size}
-              </button>
-              <button className="link-underline text-xs" onClick={() => setRejecting(false)} type="button">
                 Cancel
               </button>
             </form>
           )}
-          <button className="link-underline ml-auto text-xs" onClick={() => setSelected(new Set())} type="button">
-            Clear
-          </button>
         </div>
       )}
 

@@ -300,6 +300,10 @@ enum AuditEventType {
   // never the note text.
   CASE_NOTE_ADDED
   CASE_NOTE_DELETED
+  // Review console WP145: the one summary event of a bulk review run (the
+  // existing per-item events are unchanged). Data carries counts and ids
+  // only, never an address.
+  ADMIN_BULK_ACTION
 }
 
 enum DeletionJobStatus {

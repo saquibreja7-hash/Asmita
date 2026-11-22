@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // WP144: the bulk flagged-link decision needs a fresh authenticator proof
 // once it covers more than ten items (review-console-spec.md). The route's
 // own per-item review, its audit events and its 50-item cap are covered by
-// the flagged-link tests; this file pins the new gate only. Placeholder
-// ids throughout; no survivor data is involved.
+// tests/unit/bulk-links.test.ts; this file pins the new gate only. Since
+// WP145 gave the route its memory-backend path, the gate is pinned against
+// the real dev store instead of a mocked lookup. Placeholder ids
+// throughout; no survivor data is involved.
 
 const authCookie = vi.hoisted(() => ({ token: "" }));
 
@@ -13,8 +15,7 @@ vi.mock("next/headers", () => ({
     ? { value: authCookie.token } : undefined }),
 }));
 
-const db = vi.hoisted(() => ({ submittedUrl: { findMany: vi.fn() } }));
-vi.mock("@/lib/db", () => ({ db }));
+vi.mock("@/lib/db", () => ({ db: {} }));
 
 import { signAdminSession } from "@/lib/auth/jwt";
 import { stepUpNow } from "@/lib/auth/step-up";
@@ -22,7 +23,12 @@ import { generateTotp } from "@/lib/auth/admin-mfa";
 import { confirmAdminMfa, enrolAdminMfa, resetAdminMfa } from "@/lib/auth/admin-mfa-store";
 import { hashEmail } from "@/lib/hash";
 import { createCsrfPair } from "@/lib/csrf";
+import { createCase } from "@/lib/store";
+import { addUrlsToCase, cases } from "@/lib/store";
+import { resetReviewMemory, reviewMemory, syncReviewJobs } from "@/lib/review-jobs";
 import { POST as bulkLinksRoute } from "@/app/api/admin/bulk/links/route";
+
+const NOW = new Date("2026-11-22T12:00:00Z");
 
 const OWNER = "bulk-owner@example.test";
 const OWNER_HASH = hashEmail(OWNER);
@@ -36,12 +42,25 @@ function request(body: unknown) {
   return new Request("https://asmita.test/api/admin/bulk/links", {
     method: "POST",
     headers: {
-      cookie: `asmita_csrf=${csrf.nonce}; asmita_admin_session=${authCookie.token}`,
+      cookie: `asmita_admin_session=${authCookie.token}; asmita_csrf=${csrf.nonce}`,
       "x-csrf-token": csrf.token,
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
   });
+}
+
+/** Flagged links on invented hosts, so the reject path decides them all. */
+async function seedFlaggedLinks(count: number) {
+  const record = await createCase("user-stepup");
+  const urls = Array.from({ length: count }, (_, index) => `https://stepup-${index}.example.test/post/1`);
+  const results = await addUrlsToCase(record.id, urls, { flagReasons: ["many_unrelated_domains"] });
+  const urlIds = results.filter((result) => result.ok).map((result) => result.url.id);
+  if (urlIds.length !== count) throw new Error("expected every invented link to be flagged");
+  // The memory store's addUrlsToCase has no enqueue hook (the hook lives in
+  // the database path), so the sync opens the console's jobs here.
+  await syncReviewJobs(NOW);
+  return urlIds;
 }
 
 beforeEach(() => {
@@ -50,8 +69,9 @@ beforeEach(() => {
   delete process.env.DEV_SKIP_ADMIN_MFA;
   process.env.ADMIN_EMAILS = OWNER;
   process.env.ADMIN_ROLES = `${OWNER}=SUPER_ADMIN`;
-  db.submittedUrl.findMany.mockReset().mockResolvedValue([]);
   authCookie.token = "";
+  resetReviewMemory();
+  cases.clear();
 });
 
 beforeEach(async () => {
@@ -71,6 +91,8 @@ afterEach(async () => {
 
 describe("bulk decisions over ten items need step-up MFA", () => {
   it("refuses eleven items on a stale proof and lets ten through", async () => {
+    const urlIds = await seedFlaggedLinks(11);
+
     // A proof half an hour old: outside the 15-minute window.
     authCookie.token = await signAdminSession({
       sub: "admin-owner",
@@ -79,22 +101,24 @@ describe("bulk decisions over ten items need step-up MFA", () => {
       mfaComplete: true,
       mfaAt: stepUpNow(new Date(Date.now() - 30 * MINUTE)),
     });
-    const ids = (count: number) => Array.from({ length: count }, (_, index) => `url-${index}`);
 
-    const eleven = await bulkLinksRoute(request({ decision: "approve", urlIds: ids(11) }));
+    const eleven = await bulkLinksRoute(request({ decision: "reject", urlIds, confirmedCount: 11, reason: "Bulk check" }));
     expect(eleven.status).toBe(403);
     expect(await eleven.json()).toEqual({ error: "mfa_step_up_required" });
     // The per-item work never ran.
-    expect(db.submittedUrl.findMany).not.toHaveBeenCalled();
+    expect([...reviewMemory().decisions.values()]).toHaveLength(0);
 
-    // Ten items stay on the ordinary session; the route proceeds to the
-    // (mocked) lookup and reports every item as not found.
-    const ten = await bulkLinksRoute(request({ decision: "approve", urlIds: ids(10) }));
+    // Ten items stay on the ordinary session; the route proceeds and
+    // decides every one of them.
+    const ten = await bulkLinksRoute(request({ decision: "reject", urlIds: urlIds.slice(0, 10), confirmedCount: 10, reason: "Bulk check" }));
     expect(ten.status).toBe(200);
-    expect(db.submittedUrl.findMany).toHaveBeenCalled();
+    const body = await ten.json();
+    expect(body.succeeded).toBe(10);
+    expect([...reviewMemory().decisions.values()]).toHaveLength(10);
   });
 
   it("lets eleven items through once the proof is fresh", async () => {
+    const urlIds = await seedFlaggedLinks(11);
     authCookie.token = await signAdminSession({
       sub: "admin-owner",
       emailHash: OWNER_HASH,
@@ -102,8 +126,8 @@ describe("bulk decisions over ten items need step-up MFA", () => {
       mfaComplete: true,
       mfaAt: stepUpNow(),
     });
-    const ids = Array.from({ length: 11 }, (_, index) => `url-${index}`);
-    const response = await bulkLinksRoute(request({ decision: "approve", urlIds: ids }));
+    const response = await bulkLinksRoute(request({ decision: "reject", urlIds, confirmedCount: 11, reason: "Bulk check" }));
     expect(response.status).toBe(200);
+    expect((await response.json()).succeeded).toBe(11);
   });
 });

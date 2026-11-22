@@ -1,17 +1,19 @@
 import Link from "next/link";
+import { requireAdminPermission } from "@/lib/auth/require-admin";
 import {
   listDispatchableHashCases,
   listHashReviewQueue,
   listVerifiedDispatchPlatforms,
   videoFingerprintLabel,
 } from "@/lib/hash-submission";
-import HashReviewActions from "./HashReviewActions";
 import HashDispatchForm from "./HashDispatchForm";
+import { HashesTable, type HashesRowView } from "./HashesTable";
 import { deniedFor } from "../page-permission";
 
 export default async function HashQueuePage() {
   const denied = await deniedFor("cases:read");
   if (denied) return denied;
+  const canReview = (await requireAdminPermission("cases:review")).ok;
   if (process.env.ENABLE_HASH_UPLOAD !== "true") {
     return (
       <section>
@@ -45,65 +47,33 @@ export default async function HashQueuePage() {
           Fingerprint review queue
         </h1>
         <p className="muted mt-6 max-w-2xl text-sm">
-          Every client-generated perceptual hash waits here for human review before any
-          advisory is dispatched. You are reviewing metadata only - the image never
-          existed on our systems. Check account reputation, submission volume, quality
-          scores, and declaration integrity.
-        </p>
-        {rows.length > 0 && (
-          <Link className="btn btn-secondary mt-4" href="/admin/review/fingerprints" prefetch={false}>
-            Review one by one
-          </Link>
-        )}
+        Every client-generated perceptual hash waits here for human review before any
+        advisory is dispatched. You are reviewing metadata only - the image never
+        existed on our systems. Check account reputation, submission volume, quality
+        scores, and declaration integrity.
+      </p>
+      {rows.length > 0 && (
+        <Link className="btn btn-secondary mt-4" href="/admin/review/fingerprints" prefetch={false}>
+          Review one by one
+        </Link>
+      )}
       </div>
 
-      <div className="mt-6 overflow-hidden a-card">
-        <table className="w-full min-w-[760px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-[var(--line)]">
-              <Th>Case</Th>
-              <Th>Hash digest</Th>
-              <Th>Quality</Th>
-              <Th>Platform</Th>
-              <Th>Flags</Th>
-              <Th>Age</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr className="border-t border-[var(--line)]" key={row.id}>
-                <td className="font-mono p-4">{row.referenceNumber}</td>
-                <td className="font-mono p-4 text-[var(--text-muted)]">
-                  {row.algorithm === "VPDQ" ? (
-                    <>
-                      {/* A video never shows a single-hash digest as its identity: it is named by its frames. */}
-                      <span className="text-[var(--ink)]">{videoFingerprintLabel(row.videoFrameCount, row.videoDurationSec)}</span>
-                      <span className="block text-xs">{row.hashDigest.slice(0, 16)}…</span>
-                    </>
-                  ) : (
-                    <>{row.hashDigest.slice(0, 16)}…</>
-                  )}
-                </td>
-                <td className="p-4 tabular-nums">{row.quality}/100</td>
-                <td className="p-4">{row.requestedPlatformName ?? <span className="text-[var(--text-muted)]">-</span>}</td>
-                <td className="p-4">{row.flagReason ?? "-"}</td>
-                <td className="font-mono p-4 tabular-nums">
-                  {Math.floor(row.ageMinutes / 60)}h {row.ageMinutes % 60}m
-                </td>
-                <td className="p-4">
-                  <HashReviewActions hashId={row.id} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && (
-          <p className="muted p-6 text-center text-sm">
-            No hash submissions awaiting review.
-          </p>
-        )}
-      </div>
+      <HashesTable
+        canReview={canReview}
+        rows={rows.map((row): HashesRowView => ({
+          id: row.id,
+          referenceNumber: row.referenceNumber,
+          digestText:
+            row.algorithm === "VPDQ"
+              ? `${videoFingerprintLabel(row.videoFrameCount, row.videoDurationSec)} · ${row.hashDigest.slice(0, 16)}…`
+              : `${row.hashDigest.slice(0, 16)}…`,
+          quality: row.quality,
+          platformName: row.requestedPlatformName,
+          flagReason: row.flagReason,
+          ageText: `${Math.floor(row.ageMinutes / 60)}h ${row.ageMinutes % 60}m`,
+        }))}
+      />
 
       <div className="mt-8">
         <p className="eyebrow">
@@ -126,10 +96,3 @@ export default async function HashQueuePage() {
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="eyebrow p-4">
-      {children}
-    </th>
-  );
-}

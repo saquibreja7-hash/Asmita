@@ -20,7 +20,7 @@ const db = vi.hoisted(() => {
   const self = {
     reviewQueue: { upsert: fn(), findUnique: fn(), findMany: fn() },
     reviewJob: { create: fn(), findUnique: fn(), findFirst: fn(), findMany: fn(), updateMany: fn() },
-    reviewDecision: { create: fn(), findUnique: fn() },
+    reviewDecision: { create: fn(), findUnique: fn(), findMany: fn() },
     reviewJobClaim: { create: fn(), findFirst: fn(), updateMany: fn() },
     reviewSkip: { upsert: fn() },
     // WP144 queue access: the visibility checks read these.
@@ -34,6 +34,8 @@ const db = vi.hoisted(() => {
     reviewRoutingRule: { findMany: fn(), findUnique: fn(), create: fn(), update: fn(), count: fn() },
     reviewRoutingRuleVersion: { findMany: fn(), create: fn() },
     reviewRoutingLog: { findMany: fn(), createMany: fn(), create: fn(), deleteMany: fn() },
+    // WP145 decisions log: the case lookups (reference → id, id → reference).
+    case: { findUnique: fn() },
     $queryRaw: fn(),
     $transaction: fn(),
     __tx: tx,
@@ -57,6 +59,8 @@ import {
   skipJob,
   syncReviewJobs,
 } from "@/lib/review-jobs";
+import { reviewMetrics } from "@/lib/review-metrics";
+import { listDecisionLogPage } from "@/lib/review-decisions-log";
 import { decryptField } from "@/lib/encryption";
 
 const NOW = new Date("2026-11-22T10:00:00Z");
@@ -150,6 +154,11 @@ beforeEach(() => {
   db.reviewJob.updateMany.mockResolvedValue({ count: 1 });
   db.reviewJobClaim.updateMany.mockResolvedValue({ count: 1 });
   db.reviewJob.findMany.mockResolvedValue([]);
+  // WP145 decisions log: page rows, routing provenance, case lookups and
+  // the reason labels, all empty until a test seeds them.
+  db.reviewDecision.findMany.mockResolvedValue([]);
+  db.case.findUnique.mockResolvedValue(null);
+  db.reviewReason.findMany.mockResolvedValue([]);
   db.__tx.reviewJob.updateMany.mockResolvedValue({ count: 1 });
   db.__tx.reviewJob.createMany.mockResolvedValue({ count: 1 });
   db.__tx.reviewJobClaim.updateMany.mockResolvedValue({ count: 1 });
@@ -478,5 +487,113 @@ describe("the Prisma sync, skip and move", () => {
       error: "minor_hold",
     });
     expect(db.__tx.reviewDecision.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("the Prisma decisions log and metrics (WP145)", () => {
+  it("filters and keyset-pages decisions through the client, never selecting the note", async () => {
+    const decidedAt = new Date("2026-11-22T09:00:00Z");
+    db.reviewDecision.findMany.mockResolvedValue([
+      {
+        id: "decision-1",
+        jobId: "job-1",
+        queueId: LINKS_QUEUE.id,
+        subjectKind: "FLAGGED_LINK",
+        subjectId: "url-1",
+        caseId: "case-1",
+        reviewerEmailHash: "hash-a",
+        decision: "reject",
+        reasonCode: "duplicate_link",
+        claimedAt: new Date("2026-11-22T08:59:00Z"),
+        decidedAt,
+      },
+    ]);
+    db.reviewJob.findMany.mockResolvedValue([{ id: "job-1", routedByRuleId: null, routedByRuleVersion: null }]);
+    db.reviewReason.findMany.mockResolvedValue([
+      { queueKey: "links", decision: "reject", code: "duplicate_link", label: "Duplicate of another link" },
+    ]);
+    db.case.findUnique.mockImplementation(async (args: { where: { id?: string; referenceNumber?: string } }) => {
+      if (args.where.referenceNumber === "ASMITA-2026-PRISM") return { id: "case-1" };
+      if (args.where.id === "case-1") return { id: "case-1", referenceNumber: "ASMITA-2026-PRISM" };
+      return null;
+    });
+
+    const cursorTime = new Date("2026-11-22T10:00:00Z");
+    const page = await listDecisionLogPage(
+      { emailHash: "hash-a" },
+      { queueKey: "links", decision: "reject", fromIstDay: "2026-11-20", toIstDay: "2026-11-22", caseReference: "ASMITA-2026-PRISM" },
+      { before: `${cursorTime.getTime()}:decision-0`, limit: 50 },
+    );
+
+    const query = db.reviewDecision.findMany.mock.calls[0]![0] as {
+      where: Record<string, unknown>;
+      orderBy: Array<Record<string, string>>;
+      take: number;
+      select: Record<string, boolean>;
+    };
+    expect(query.where.queueId).toBe(LINKS_QUEUE.id);
+    expect(query.where.decision).toBe("reject");
+    expect(query.where.caseId).toBe("case-1");
+    // IST days are inclusive: the 20th starts at 00:00 IST.
+    expect((query.where.decidedAt as { gte: Date }).gte).toEqual(new Date("2026-11-19T18:30:00Z"));
+    expect((query.where.decidedAt as { lte: Date }).lte).toEqual(new Date("2026-11-22T18:29:59.999Z"));
+    // The keyset cursor: strictly older, or the same instant with a lower id.
+    expect(query.where.OR).toEqual([
+      { decidedAt: { lt: cursorTime } },
+      { AND: [{ decidedAt: cursorTime }, { id: { lt: "decision-0" } }] },
+    ]);
+    expect(query.orderBy).toEqual([{ decidedAt: "desc" }, { id: "desc" }]);
+    expect(query.take).toBe(51);
+    // The safe columns only — never the note.
+    expect(Object.keys(query.select)).not.toContain("reasonNote");
+
+    expect(page.rows).toHaveLength(1);
+    expect(page.rows[0]).toMatchObject({
+      queueName: "Flagged links",
+      decision: "reject",
+      reasonLabel: "Duplicate of another link",
+      reviewer: "You",
+      caseReference: "ASMITA-2026-PRISM",
+      routing: "Default queue",
+      handleSeconds: 60,
+    });
+  });
+
+  it("runs the metric group-bys as raw statements against Postgres", async () => {
+    const windowStart = new Date(NOW.getTime() - 7 * 86_400_000);
+    db.$queryRaw
+      .mockResolvedValueOnce([{ bucket: new Date("2026-11-21T00:00:00Z"), n: 3 }])
+      .mockResolvedValueOnce([{ queueId: LINKS_QUEUE.id, n: 2, oldest: new Date("2026-11-20T00:00:00Z") }])
+      .mockResolvedValueOnce([{ secs: 100 }, { secs: 300 }, { secs: 200 }, { secs: 500 }, { secs: 400 }])
+      .mockResolvedValueOnce([{ secs: 10 }, { secs: 30 }, { secs: 20 }, { secs: 40 }, { secs: 50 }])
+      .mockResolvedValueOnce([{ queueId: LINKS_QUEUE.id, n: 5 }])
+      .mockResolvedValueOnce([{ reviewerEmailHash: "hash-a", n: 5 }])
+      .mockResolvedValueOnce([{ queueId: LINKS_QUEUE.id, n: 2 }])
+      .mockResolvedValueOnce([{ n: 1 }]);
+
+    const metrics = await reviewMetrics({ days: 7, bucket: "day", now: NOW });
+
+    const calls = db.$queryRaw.mock.calls as unknown as Array<
+      [Array<string>, ...unknown[]]
+    >;
+    expect(calls).toHaveLength(8);
+    expect(String(calls[0]![0])).toContain("date_trunc(");
+    expect(String(calls[0]![0])).toContain("GROUP BY 1 ORDER BY 1");
+    // The bucket selector and the window start are both parameters.
+    expect(calls[0]![1]).toBe("day");
+    expect(calls[0]![2]).toEqual(windowStart);
+    expect(String(calls[2]![0])).toContain('EXTRACT(EPOCH FROM (d."decidedAt" - j."createdAt"))');
+    expect(String(calls[6]![0])).toContain('FROM "ReviewJobClaim" c JOIN "ReviewJob" j ON j."id" = c."jobId"');
+    expect(String(calls[7]![0])).toContain("resolved_elsewhere");
+
+    expect(metrics.jobsCreatedPerBucket.at(-1)).toMatchObject({ count: 0 });
+    expect(metrics.jobsCreatedPerBucket.find((entry) => entry.bucketStart.startsWith("2026-11-21"))).toMatchObject({ count: 3 });
+    expect(metrics.openNow).toBe(2);
+    expect(metrics.timeToDecision).toEqual({ samples: 5, medianSeconds: 300, p90Seconds: 500 });
+    expect(metrics.handleTime).toEqual({ samples: 5, medianSeconds: 30 });
+    expect(metrics.decisionsByQueue).toEqual([{ queueId: LINKS_QUEUE.id, queueKey: "links", queueName: "Flagged links", count: 5 }]);
+    expect(metrics.decisionsByReviewer).toEqual([{ reviewerEmailHash: "hash-a", count: 5 }]);
+    expect(metrics.skipsByQueue).toEqual([{ queueId: LINKS_QUEUE.id, queueKey: "links", queueName: "Flagged links", count: 2 }]);
+    expect(metrics.resolvedElsewhere).toBe(1);
   });
 });

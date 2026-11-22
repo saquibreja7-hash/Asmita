@@ -1740,6 +1740,110 @@ export async function moveJob(
 }
 
 // ---------------------------------------------------------------------------
+// Decisions made outside the lease (WP145 bulk routes)
+
+export type RecordDecisionResult = { ok: true; jobId: string | null } | { ok: false; error: string };
+
+/**
+ * WP145: records the console's ReviewDecision on the open job of a subject
+ * that was just decided through an existing review function OUTSIDE the
+ * console's lease (the bulk routes). The decision has already happened —
+ * this writes the console's own record and closes the job, nothing else:
+ * it never calls an adapter, never dispatches and never touches a gate,
+ * exactly like the sync's close_stale. A job someone holds is closed and
+ * their lease released (the item was decided; the holder's screen says so
+ * on its next heartbeat). A subject with no open job records nothing —
+ * the existing function's own audit entry stays the record — and a job
+ * that already has a decision is returned as-is (idempotent).
+ */
+export async function recordDecisionOnOpenJob(input: {
+  subjectKind: ReviewSubjectKind;
+  subjectId: string;
+  decision: string;
+  reviewerEmailHash: string;
+  reasonNote?: string;
+  now?: Date;
+}): Promise<RecordDecisionResult> {
+  const now = input.now ?? new Date();
+  const job = await findOpenJobForSubject(input.subjectKind, input.subjectId);
+  if (!job) return { ok: true, jobId: null };
+  if (await getDecisionByJobId(job.id)) return { ok: true, jobId: job.id };
+
+  const decisionRow = {
+    id: randomUUID(),
+    jobId: job.id,
+    queueId: job.queueId,
+    subjectKind: job.subjectKind,
+    subjectId: job.subjectId,
+    caseId: job.caseId,
+    reviewerEmailHash: input.reviewerEmailHash,
+    decision: input.decision,
+    reasonCode: null,
+    reasonNote: input.reasonNote?.trim() ? encryptField(input.reasonNote.trim()) : null,
+    claimedAt: null,
+    decidedAt: now,
+    auditEventId: null,
+  };
+
+  if (isDevNoDb()) {
+    const memory = reviewMemory();
+    memory.decisions.set(job.id, decisionRow);
+    const stored = memory.jobs.get(job.id)!;
+    stored.status = "CLOSED";
+    stored.closedAt = now;
+    stored.closedReason = input.decision;
+    stored.claimedBy = null;
+    stored.claimedUntil = null;
+    stored.updatedAt = now;
+    closeOpenClaims(memory, job.id, now, "released");
+    return { ok: true, jobId: job.id };
+  }
+
+  if (usesWorkerKysely()) {
+    try {
+      await getWorkerDb().transaction().execute(async (trx) => {
+        const closed = await trx.updateTable("ReviewJob")
+          .set({ status: "CLOSED", closedAt: now, closedReason: input.decision, claimedBy: null, claimedUntil: null, updatedAt: now })
+          .where("id", "=", job.id).where("status", "=", "PENDING")
+          .executeTakeFirst();
+        if (Number(closed.numUpdatedRows) === 0) throw new Error("already_closed");
+        await trx.insertInto("ReviewDecision").values(decisionRow).execute();
+        await trx.updateTable("ReviewJobClaim")
+          .set({ releasedAt: now, outcome: "released" })
+          .where("jobId", "=", job.id).where("releasedAt", "is", null)
+          .execute();
+      });
+      return { ok: true, jobId: job.id };
+    } catch (err) {
+      if (isUniqueViolation(err)) return { ok: true, jobId: job.id };
+      if (err instanceof Error && err.message === "already_closed") return { ok: true, jobId: job.id };
+      throw err;
+    }
+  }
+
+  const { db } = await import("@/lib/db");
+  try {
+    await db.$transaction(async (tx) => {
+      const closed = await tx.reviewJob.updateMany({
+        where: { id: job.id, status: "PENDING" },
+        data: { status: "CLOSED", closedAt: now, closedReason: input.decision, claimedBy: null, claimedUntil: null, updatedAt: now },
+      });
+      if (closed.count === 0) throw new Error("already_closed");
+      await tx.reviewDecision.create({ data: decisionRow });
+      await tx.reviewJobClaim.updateMany({
+        where: { jobId: job.id, releasedAt: null },
+        data: { releasedAt: now, outcome: "released" },
+      });
+    });
+    return { ok: true, jobId: job.id };
+  } catch (err) {
+    if (isUniqueViolation(err)) return { ok: true, jobId: job.id };
+    if (err instanceof Error && err.message === "already_closed") return { ok: true, jobId: job.id };
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Summaries
 
 export type ReviewQueueSummary = {

@@ -518,6 +518,22 @@ export type VerifiedPlatformOption = {
 
 // Cases with at least one admin-approved hash, ready for advisory dispatch.
 export async function listDispatchableHashCases(): Promise<DispatchableCase[]> {
+  if (isDevNoDb()) {
+    // The memory twin: the dev hash store plus the store's own references.
+    const { cases } = await import("@/lib/store");
+    const byCase = new Map<string, DispatchableCase>();
+    for (const [caseId, submissions] of devHashStore()) {
+      const referenceNumber = cases.get(caseId)?.referenceNumber ?? "";
+      for (const submission of submissions) {
+        if (submission.status !== "APPROVED" && submission.status !== "DISPATCHED") continue;
+        const entry = byCase.get(caseId) ?? { caseId, referenceNumber, approvedCount: 0, dispatchedCount: 0 };
+        if (submission.status === "APPROVED") entry.approvedCount += 1;
+        else entry.dispatchedCount += 1;
+        byCase.set(caseId, entry);
+      }
+    }
+    return Array.from(byCase.values()).sort((a, b) => a.referenceNumber.localeCompare(b.referenceNumber));
+  }
   const records = await db.hashSubmission.findMany({
     where: { status: { in: ["APPROVED", "DISPATCHED"] } },
     include: { case: { select: { referenceNumber: true } } },
@@ -582,6 +598,14 @@ export async function listHashPickerPlatforms(): Promise<HashPickerPlatform[]> {
 
 // Keep old export for any existing admin callers.
 export async function listVerifiedDispatchPlatforms(): Promise<VerifiedPlatformOption[]> {
+  if (isDevNoDb()) {
+    // The memory twin: the static directory is the dev store's platform
+    // source of truth, with the same id derivation the picker uses.
+    return platformDirectory
+      .filter((platform) => platform.lastContactVerifiedByHuman && platform.grievanceEmail)
+      .map((platform) => ({ id: devPlatformId(platform.id), name: platform.name }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }
   const platforms = await db.platform.findMany({
     where: {
       isActive: true,

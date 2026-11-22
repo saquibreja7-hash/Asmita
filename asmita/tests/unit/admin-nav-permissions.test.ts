@@ -26,6 +26,8 @@ const PAGE_FILES: Record<string, string> = {
   "/admin/lab": "admin/lab/page.tsx",
   "/admin/review/rules": "(admin)/review/rules/page.tsx",
   "/admin/review/settings": "(admin)/review/settings/page.tsx",
+  "/admin/review/decisions": "(admin)/review/decisions/page.tsx",
+  "/admin/review/metrics": "(admin)/review/metrics/page.tsx",
   "/admin/admins": "(admin)/admins/page.tsx",
 };
 
@@ -48,8 +50,10 @@ describe("admin nav and page permissions", () => {
     expect(visibleFor("SUPER_ADMIN")).toHaveLength(items.length);
     // The Review console (WP141) is the one nav item every role sees: each
     // role can reach at least one queue, and the page filters the rows.
-    expect(visibleFor("GO_EDITOR")).toEqual(["Needs action", "Review", "Platforms", "Platform partners", "Response rates", "Analytics", "Milestones", "Audit"]);
+    // The decisions log (WP145) follows audit:read and the metrics page
+    // metrics:read, like the Insight pages they sit beside.
+    expect(visibleFor("GO_EDITOR")).toEqual(["Needs action", "Review", "Decisions log", "Review metrics", "Platforms", "Platform partners", "Response rates", "Analytics", "Milestones", "Audit"]);
     expect(visibleFor("SUPPORT_AGENT")).toEqual(["Needs action", "Review", "Cases", "New links", "Flagged links", "Fingerprints"]);
-    expect(visibleFor("LEGAL_ADVISOR")).toEqual(["Needs action", "Review", "Cases", "New links", "Flagged links", "Fingerprints", "Templates", "Audit"]);
+    expect(visibleFor("LEGAL_ADVISOR")).toEqual(["Needs action", "Review", "Decisions log", "Cases", "New links", "Flagged links", "Fingerprints", "Templates", "Audit"]);
   });
 });
