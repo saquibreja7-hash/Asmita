@@ -110,11 +110,14 @@ export async function subscribeToNewsletter(
   const confirmTokenHash = sha256(confirmToken);
   const now = new Date().toISOString();
   if (existing) {
-    // Pending or unsubscribed: a fresh single-use token, clock restarted.
+    // Pending or unsubscribed: a fresh single-use token, clock restarted, and
+    // the first name given this time (unsubscribing cleared the old one).
+    const firstNameEnc = input.firstName ? encryptField(input.firstName) : null;
     if (devNoDb()) {
       const current = newsletterSubscribers.find((entry) => entry.emailHash === emailHash);
       if (current) {
         current.status = "PENDING";
+        current.firstNameEnc = firstNameEnc;
         current.locale = input.locale;
         current.confirmTokenHash = confirmTokenHash;
         current.updatedAt = now;
@@ -123,7 +126,7 @@ export async function subscribeToNewsletter(
       const { db } = await import("@/lib/db");
       await db.newsletterSubscriber.update({
         where: { emailHash },
-        data: { status: "PENDING", locale: input.locale, confirmTokenHash, unsubscribedAt: null },
+        data: { status: "PENDING", firstNameEnc, locale: input.locale, confirmTokenHash, unsubscribedAt: null },
       });
     }
     return { ok: true, confirmToken, unsubscribeToken: null, email };
