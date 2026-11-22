@@ -285,7 +285,8 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
         camera.aspect = w / h;
         // Pull back on narrow screens so the whole scene stays in view.
         const dist = Math.max(19, 37 / camera.aspect);
-        camera.position.set(focus.x, focus.y - dist * 0.36, dist);
+        // Straight on, at 90 degrees to the scene: no tilt.
+        camera.position.set(focus.x, focus.y, dist);
         camera.lookAt(focus);
         camera.updateProjectionMatrix();
       };
