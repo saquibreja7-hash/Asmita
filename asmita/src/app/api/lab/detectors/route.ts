@@ -16,8 +16,9 @@ import { getClientIp } from "@/lib/request-ip";
  * The image is held in memory for this request only: it is never written to
  * disk, database or logs — no bytes, no filename, no hash of it — and it is
  * sent nowhere except the detector providers named in the WP (OpenAI vision,
- * Hive, Sightengine) and only to those whose keys are configured. Adapters
- * whose keys are unset answer "not configured"; the panel still renders.
+ * Hive, Sightengine) and the Lab's own GenD service (WP113), and only to
+ * those whose keys are configured. Adapters whose keys are unset answer
+ * "not configured"; the panel still renders.
  *
  * Guarded by: the Lab switch (503 lab_disabled while ENABLE_LAB is off), CSRF
  * on the POST, a declared-content-length pre-check, a per-IP rate-limit

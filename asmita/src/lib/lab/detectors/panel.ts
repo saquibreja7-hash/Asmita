@@ -1,6 +1,7 @@
 import {
   buildDetectorRegistry,
   isDetectionScore,
+  isNoFaceResult,
   isSkipped,
   registryOptionsFromEnv,
   type DetectionResult,
@@ -20,7 +21,11 @@ export type DetectorBand = "likely_ai" | "unclear" | "likely_camera";
 export type DetectorRow = {
   id: string;
   name: string;
-  status: "scored" | "not_configured" | "error";
+  /**
+   * "no_face": a face-swap detector (GenD) found no face to score — an
+   * honest answer with its own message, never a score.
+   */
+  status: "scored" | "not_configured" | "no_face" | "error";
   /** 0..100, present only when status is "scored". */
   score?: number;
   /** Present only when status is "scored". */
@@ -46,9 +51,18 @@ export function verdictBand(score: number): DetectorBand {
   return "unclear";
 }
 
-/** Bands differ among the detectors that actually scored the image. */
+/**
+ * Bands differ among the detectors that actually scored the image.
+ * GenD only checks for face swaps, so a low GenD score says nothing about a fully generated
+ * image; it counts only when it lands in "likely AI".
+ */
 export function bandsDisagree(rows: DetectorRow[]): boolean {
-  const bands = new Set(rows.filter((row) => row.status === "scored").map((row) => row.band));
+  const bands = new Set(
+    rows
+      .filter((row) => row.status === "scored")
+      .filter((row) => row.id !== "gend" || row.band === "likely_ai")
+      .map((row) => row.band),
+  );
   return bands.size > 1;
 }
 
@@ -93,6 +107,9 @@ export async function runDetectorPanel(image: LabImage, options: RunPanelOptions
       if (isDetectionScore(outcome)) {
         const score = Math.round(outcome.score * 100);
         return { id, name, status: "scored", score, band: verdictBand(outcome.score) };
+      }
+      if (isNoFaceResult(outcome)) {
+        return { id, name, status: "no_face" };
       }
       return { id, name, status: "error", error: outcome.error };
     }),

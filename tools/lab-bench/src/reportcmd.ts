@@ -46,14 +46,14 @@ export function renderMarkdown(results: MatchResults | DetectResults): string {
     }
     for (const note of results.notes) lines.push(`- note: ${note}`);
   } else {
-    lines.push("Accuracy and AUC per detector and per transform. AUC pools the transform's items with the untouched originals; it is blank where a pool has a single class.", "");
-    lines.push("| detector | transform | n | accuracy | AUC | mean fake | mean real | errors |");
-    lines.push("|---|---|---|---|---|---|---|---|");
+    lines.push("Accuracy and AUC per detector and per transform. AUC pools the transform's items with the untouched originals; it is blank where a pool has a single class. \"no-face\" counts images a face-swap detector (GenD) could not score.", "");
+    lines.push("| detector | transform | n | accuracy | AUC | mean fake | mean real | errors | no-face |");
+    lines.push("|---|---|---|---|---|---|---|---|---|");
     for (const d of results.detectors) {
       for (const [t, stat] of Object.entries(d.perTransform)) {
-        lines.push(`| ${d.id} | ${t} | ${stat.n} | ${pct(stat.accuracy)} | ${pct(stat.auc)} | ${num(stat.meanScoreFake, 3)} | ${num(stat.meanScoreReal, 3)} | ${stat.errors} |`);
+        lines.push(`| ${d.id} | ${t} | ${stat.n} | ${pct(stat.accuracy)} | ${pct(stat.auc)} | ${num(stat.meanScoreFake, 3)} | ${num(stat.meanScoreReal, 3)} | ${stat.errors} | ${stat.noFace} |`);
       }
-      lines.push(`| ${d.id} | **overall** | ${d.items} | ${pct(d.overallAccuracy)} | — | — | — | ${d.errors} |`);
+      lines.push(`| ${d.id} | **overall** | ${d.items} | ${pct(d.overallAccuracy)} | — | — | — | ${d.errors} | ${d.noFace} |`);
     }
     for (const s of results.skipped) lines.push(`- ${s.id}: skipped — ${s.reason}`);
   }
