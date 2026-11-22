@@ -12,7 +12,7 @@ vi.mock("@/lib/email", () => ({ sendReuploadFoundNotification: vi.fn() }));
 import { inMemoryAuditLog } from "@/lib/audit";
 import { crawlMemory, resetCrawlMemory } from "@/lib/crawl-store";
 import { getCrawlConsentState, withdrawCrawlConsent } from "@/lib/crawl-consent";
-import { buildCrawlPool, caseHasPoolFingerprints, isCaseOpen } from "@/lib/crawl-pool";
+import { buildCrawlPool, caseHasPoolFingerprints, isCaseOpen, MIN_POOL_QUALITY } from "@/lib/crawl-pool";
 import { createCrawlSource } from "@/lib/crawl-sources";
 import { recordCrawlFindings, reviewCrawlFinding } from "@/lib/crawl-findings";
 import {
@@ -232,6 +232,16 @@ describe("the pool keeps her fingerprints while the case is open or the window r
   it("open case: in the pool whatever the window", async () => {
     await seedCase({ addLink: false });
     seedLiveConsent(record.id, null);
+    expect((await buildCrawlPool(nowAt(0))).fingerprints).toHaveLength(1);
+  });
+
+  it("an approved image fingerprint below quality 50 stays out of the pool", async () => {
+    await seedCase({ addLink: false });
+    seedLiveConsent(record.id, null);
+    crawlMemory().fingerprints.get("hash-1")!.quality = MIN_POOL_QUALITY - 1;
+    expect((await buildCrawlPool(nowAt(0))).fingerprints).toHaveLength(0);
+    expect(await caseHasPoolFingerprints(record.id, nowAt(0))).toBe(false);
+    crawlMemory().fingerprints.get("hash-1")!.quality = MIN_POOL_QUALITY;
     expect((await buildCrawlPool(nowAt(0))).fingerprints).toHaveLength(1);
   });
 

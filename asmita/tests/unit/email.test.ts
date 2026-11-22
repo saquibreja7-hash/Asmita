@@ -54,3 +54,29 @@ describe("createVictimConfirmationEmail", () => {
     process.env.TRANSACTIONAL_EMAIL_FROM = originalTransactional;
   });
 });
+
+describe("email layouts (redesign)", () => {
+  it("a notice letter shows the signed text verbatim and adds no words to it", async () => {
+    const { renderNoticeLetterHtml } = await import("@/lib/email-html");
+    const text = "To: Grievance Officer\n\n1.  Remove <this> & \"that\".\n\nYours faithfully,\nAsmita";
+    const html = renderNoticeLetterHtml("Notice ASMITA-2026-00001", text);
+    const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\n/g, "<br>");
+    // Line breaks become <br> so Outlook, which ignores pre-wrap, keeps the layout.
+    expect(html).toContain(`white-space:pre-wrap;word-break:break-word;">${escaped}</div>`);
+    expect([...html.matchAll(/src="([^"]+)"/g)].map((m) => m[1])).toEqual(["https://meriasmita.org/asmita-wordmark-v2.png"]);
+  });
+
+  it("survivor emails carry no remote resources, a neutral preview line and the safety note", async () => {
+    const { renderEmailHtml, SAFETY_NOTE } = await import("@/lib/email-html");
+    const html = renderEmailHtml({ title: "Your verification code", paragraphs: ["Enter this code."], highlight: "123456", highlightStyle: "code" });
+    // The one image is Asmita's own logo from its own site; nothing else remote.
+    const srcs = [...html.matchAll(/src="([^"]+)"/g)].map((m) => m[1]);
+    expect(srcs).toEqual(["https://meriasmita.org/asmita-wordmark-v2.png"]);
+    expect(html).toContain('alt="Asmita"');
+    expect(html).not.toMatch(/url\(/i);
+    expect(html.toLowerCase()).not.toContain("free and confidential");
+    expect(html).toContain("A message from Asmita.");
+    expect(html).toContain(SAFETY_NOTE.replace(/'/g, "'"));
+    expect(html).not.toMatch(/border-left/i);
+  });
+});
