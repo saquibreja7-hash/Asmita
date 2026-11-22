@@ -168,17 +168,19 @@ describe("the how-we-choose page body", () => {
     expect(html).not.toMatch(/<h[3-6][\s>]/);
   });
 
-  it("says what open means, and names the three not-open-source services", async () => {
+  it("says what open means, names the two free services, and lists the Asmita feed apart", async () => {
     const html = await markup();
     expect(html).toContain("anyone can download its source code or model weights");
     expect(html).toContain("no paid tier is required for the core function");
     expect(html).toContain("the licence has to allow the uses a real service needs");
-    // The three services are exactly the catalogue's not-open-source trio.
+    // The catalogue's not-open-source entries: two free services plus Asmita's own feed.
     const closed = OPEN_TOOLS.filter((tool) => !tool.openSource);
     expect(closed.map((tool) => tool.slug)).toEqual(["stopncii", "take-it-down", "asmita-fingerprint-feed"]);
     expect(html).toContain("StopNCII.org");
     expect(html).toContain("Take It Down");
-    expect(html).toContain("fingerprint feed for approved partner platforms");
+    expect(html).toContain("Two are listed here in the Free services group");
+    expect(html).toContain("listed separately under From Asmita");
+    expect(html).toContain("free for approved partner platforms but is not an open-source package");
     expect(html).toContain("carries the Not open source mark");
   });
 
