@@ -88,6 +88,10 @@ const asks = [
 
 const faqs = [
   {
+    q: "What does a notice from Meri Asmita look like?",
+    a: "Every notice is a survivor-signed complaint: the case reference, the reported link, the signed PDF, and a fingerprint annex when there are approved fingerprints. The full page for trust and safety teams is at /for-platforms/trusted-flagger — what we check before sending, the deadlines the notice sets, and how to reach us about one.",
+  },
+  {
     q: "Does it cost anything?",
     a: "No. The partner programme is free for platforms.",
   },
@@ -105,7 +109,7 @@ const faqs = [
   },
   {
     q: "Do you have an API we can integrate with?",
-    a: "Yes. Fingerprints arrive through an authenticated JSON feed you poll with a cursor, and you report outcomes back to the same API. The integration guide is docs/product/partner-api.md in Asmita's public repository, and it comes with a ready-made exchange adapter for platforms that run Hasher-Matcher-Actioner (docs/product/partner-hma-adapter/). Ask us for a partner key when you are onboarded.",
+    a: "Yes. Fingerprints arrive through an authenticated JSON feed you poll with a cursor, and you report outcomes back to the same API. The integration guide is docs/product/partner-api.md in Asmita's public repository, and it comes with a ready-made exchange package for platforms that run Hasher-Matcher-Actioner (integrations/hma/tx-extension-asmita). Ask us for a partner key when you are onboarded.",
   },
   {
     q: "What if a fingerprint matches something that is not abuse?",
@@ -152,6 +156,11 @@ export default function ForPlatformsPage() {
                 <a className="btn btn-secondary !m-0" href="#how">How it works</a>
               </div>
               <p className="muted mt-6 text-sm">The partner programme is opening now. We bring platforms on one at a time.</p>
+              <p className="mt-3">
+                <Link className="arrow-link" href="/for-platforms/trusted-flagger">
+                  Trust &amp; safety teams: see what a notice contains
+                </Link>
+              </p>
             </div>
             <Illustration name="page-what-we-do" eager className="page-hero-art" />
           </div>

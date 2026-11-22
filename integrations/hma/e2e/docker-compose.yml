@@ -1,0 +1,129 @@
+# End-to-end test stack for the Asmita <-> HMA signal exchange
+# (research-tools spec WP111, integrations/hma/e2e).
+#
+#   postgresql   one throwaway Postgres 17 for both sides
+#   migrations   the official HMA image running its db-migrate script
+#   hma          HMA (Open Media Match) with the tx-extension-asmita wheel
+#                installed (e2e/hma-asmita.Dockerfile)
+#   asmita       the Asmita Next dev server with its own database
+#                (e2e/asmita.Dockerfile + asmita-entry.sh)
+#
+# Run with run-e2e.sh in this directory, never with `docker compose up`
+# alone: the journey (two synthetic consented fingerprints, the exchange
+# registration, the withdrawal) is driven by that script. Everything here
+# is disposable: throwaway secrets, throwaway data, published only on
+# loopback.
+
+name: asmita-hma-e2e
+
+x-postgres-variables: &postgres-variables
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_HOST: postgresql
+  POSTGRES_DB: media_match
+
+x-omm-variables: &omm-variables
+  OMM_CONFIG: /app/omm_config.py
+  OMM_DATABASE_URI: "postgresql+psycopg2://postgres:postgres@postgresql/media_match"
+
+services:
+  postgresql:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-asmita-db.sh:ro
+    environment:
+      <<: *postgres-variables
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 1s
+      retries: 5
+      start_period: 5s
+      timeout: 10s
+    networks:
+      - backend
+
+  migrations:
+    # Same derived image as the app: it carries our omm_config.py at
+    # /app/omm_config.py, which the stock image does not.
+    image: asmita-hma-e2e-hma:latest
+    restart: "no"
+    environment:
+      <<: *omm-variables
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    networks:
+      - backend
+    command: /app/scripts/db-migrate.sh
+
+  hma:
+    build:
+      context: ".."
+      dockerfile: e2e/hma-asmita.Dockerfile
+    image: asmita-hma-e2e-hma:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5100:5100"
+    environment:
+      <<: *omm-variables
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      asmita:
+        condition: service_started
+    networks:
+      - backend
+
+  asmita:
+    # Built by run-e2e.sh from the repository root (docker build -f
+    # integrations/hma/e2e/asmita.Dockerfile .), because compose clamps
+    # build contexts at the compose file's project directory and this image
+    # needs the repo root as its context.
+    image: asmita-hma-e2e-asmita:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # The entry script sets DATABASE_URL/DIRECT_URL after the migrations.
+      POSTGRES_PASSWORD: postgres
+      # Same shape as asmita/playwright.config.ts: no mail key, so the OTP
+      # code comes back in the response as devOtp; hash upload on; legal
+      # gates enforced and satisfied inside the throwaway database; admin
+      # MFA enforced and the synthetic admin enrolled by run-e2e.sh.
+      RESEND_API_KEY: ""
+      ENABLE_HASH_UPLOAD: "true"
+      DEV_SKIP_LEGAL_REVIEW: "false"
+      DEV_SKIP_ADMIN_MFA: "false"
+      DEV_OTP_CODE: ""
+      OTP_GLOBAL_HOURLY_LIMIT: "1000"
+      ADMIN_EMAILS: "hma-e2e-admin@example.invalid"
+      ADMIN_ROLES: "hma-e2e-admin@example.invalid=SUPER_ADMIN"
+      # Throwaway test values, never anything real (same class as the
+      # committed Playwright config's JWT secret).
+      JWT_SECRET: "hma-e2e-test-only-jwt-secret-32ch"
+      CRON_SECRET: "hma-e2e-test-only-cron-secret-32ch"
+      HEALTH_CHECK_SECRET: "hma-e2e-test-only-health-secret-32ch"
+      MAINTENANCE_MODE: "false"
+      SARVAM_API_KEY: ""
+      SARVAM_CHAT_KEY: ""
+      OPENAI_API_KEY: ""
+      ENABLE_CRAWLER: "false"
+      ENABLE_LAB: "false"
+      ENABLE_PLATFORM_API: "false"
+      ENABLE_PROVENANCE_CHECK: "false"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    networks:
+      - backend
+
+volumes:
+  postgres-data:
+
+networks:
+  backend:
+    driver: bridge

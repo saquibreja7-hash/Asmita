@@ -524,6 +524,15 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
   gap: 12px;
   margin-top: 28px;
 }
+
+/* Compact newsletter sign-up in the footer (org pages, WP56). */
+.site-footer-newsletter {
+  margin-top: 28px;
+}
+.site-footer-newsletter .site-footer-col-title {
+  margin-bottom: 10px;
+}
+
 .site-footer-desc {
   max-width: 320px;
   color: var(--color-graphite);
@@ -585,6 +594,25 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
 }
 
 .site-footer-col-list a:hover { opacity: 0.5; }
+
+.site-footer-utility {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+
+.site-footer-utility a {
+  color: var(--color-graphite);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: -0.033em;
+  padding: 4px 0;
+}
+
+.site-footer-utility a:hover { color: var(--color-off-black); }
 
 .site-footer-bottom {
   color: var(--color-graphite);

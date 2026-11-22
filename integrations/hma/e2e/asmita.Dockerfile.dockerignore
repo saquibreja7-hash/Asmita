@@ -1,0 +1,28 @@
+# Build-context exclusions for the asmita image (asmita.Dockerfile).
+# Mirrors asmita/.gitignore: dependencies are reinstalled by npm ci in the
+# image, dev artifacts are regenerated, and .env* files must NEVER enter a
+# build context (a developer's local secrets are not the image's business).
+
+**/node_modules
+**/.next
+**/.next-old-*
+**/dist
+**/.vinext
+**/.wrangler
+**/coverage
+**/test-results
+**/.lighthouseci
+**/*.tsbuildinfo
+**/next-env.d.ts
+asmita/src/generated
+asmita/public/c2pa
+asmita/public/ort
+asmita/public/human
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+.git
+crawler
+tools
+asmita/tests/e2e/test-results

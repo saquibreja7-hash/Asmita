@@ -31,6 +31,12 @@ export type MemoryPlatformPartnerKey = {
   /** sha256 of the bearer key. The key itself exists only at issue time. */
   keyHash: string;
   label: string;
+  /**
+   * WP110: what the key may do — "feed" (fingerprints + signals) and/or
+   * "outcomes". Rows seeded before scopes existed read as both, exactly like
+   * the database default.
+   */
+  scopes?: string[];
   createdAt: Date;
   revokedAt: Date | null;
   lastUsedAt: Date | null;

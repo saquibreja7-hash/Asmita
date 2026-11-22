@@ -146,6 +146,12 @@ const eslintConfig = defineConfig([
     // node_modules into public/c2pa on install by scripts/copy-c2pa-assets.mjs
     // and gitignored there. Third-party generated code; never ours to lint.
     "public/c2pa/**",
+    // The Lab trace tool's browser runtime (onnxruntime-web's WASM engine
+    // and the face-landmark library's minified IIFE build), vendored from
+    // node_modules into public/ort and public/human on install by
+    // scripts/copy-lab-assets.mjs and gitignored there. Same rule.
+    "public/ort/**",
+    "public/human/**",
   ]),
 ]);
 

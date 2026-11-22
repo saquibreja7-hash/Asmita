@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
+import { signAnswer } from "@/lib/sign-retry";
 import { t, type Locale } from "@/lib/i18n";
 import { isPdfSafeText } from "@/lib/pdf-text";
 import { FormError } from "@/components/FormError";
@@ -85,22 +86,28 @@ export function SignNoticeForm({ caseId, urlId, templateRef, platformName, hashA
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        if (data.error === "notice_changed_since_preview") {
-          // Reload the page so the preview shows the current text, and ask
-          // for a fresh review and confirmation. The typed details are kept.
-          setAgreed(false);
-          setError(t(locale, "sign.error.noticeChanged"));
-          router.refresh();
-          return;
-        }
-        setError(data.error === "already_signed"
-          ? t(locale, "sign.error.alreadySigned")
-          : data.error === "name_script_unsupported"
+        const answer = signAnswer(false, data.error);
+        if (answer.kind === "error") {
+          if (answer.code === "notice_changed_since_preview") {
+            // Reload the page so the preview shows the current text, and ask
+            // for a fresh review and confirmation. The typed details are kept.
+            setAgreed(false);
+            setError(t(locale, "sign.error.noticeChanged"));
+            router.refresh();
+            return;
+          }
+          setError(answer.code === "name_script_unsupported"
             ? t(locale, "sign.error.nameScript")
-            : data.error === "notice_pdf_failed"
+            : answer.code === "notice_pdf_failed"
               ? t(locale, "sign.error.pdf")
               : t(locale, "sign.error.generic"));
-        return;
+          return;
+        }
+        // 409 already_signed: this notice (or advisory) was signed by an
+        // earlier attempt whose answer never arrived (WP131's dropped
+        // exchange). It is signed, so continue to the confirmation exactly
+        // like a successful sign — the crawl-consent tick recovers the same
+        // refusal the same way.
       }
       // The endpoint waits until no other notice is ready to sign.
       await csrfFetch(`/api/cases/${caseId}/acknowledge`, { method: "POST" }).catch(() => undefined);

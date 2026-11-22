@@ -48,6 +48,43 @@ export function toDetectedFaces(faces: DetectedFace[]): DetectedFace[] {
   return [...faces].sort((a, b) => b.box.w * b.box.h - a.box.w * a.box.h || a.box.x - b.box.x);
 }
 
+/**
+ * The eye-centre landmark points of one side of a human face result.
+ * Human 3.3.6 annotates the mesh with contours — `leftEyeUpper0`,
+ * `leftEyeLower0`, … — and an iris ring `leftEyeIris`; a combined
+ * `leftEye` key does not exist (the first real locator run found every
+ * face silently dropped by the old `annotations.leftEye` lookup). The
+ * iris ring is the pupil: the best centre; otherwise the lid contours
+ * (never the eyebrow) centroid to the same place.
+ */
+export function eyePointsOf(
+  annotations: Record<string, Array<{ x: number; y: number }> | undefined> | undefined,
+  side: "left" | "right",
+): Array<{ x: number; y: number }> {
+  // Human 3.3.6 annotates points as [x, y, z] triples, and emits an
+  // `*EyeIris` key of null placeholders when the iris model is off, so
+  // every candidate is normalised and validated, not just length-checked.
+  const valid = (pts: ReadonlyArray<unknown> | undefined): Array<{ x: number; y: number }> => {
+    const out: Array<{ x: number; y: number }> = [];
+    for (const p of pts ?? []) {
+      const point = Array.isArray(p) ? { x: p[0] as number, y: p[1] as number } : (p as { x: number; y: number });
+      if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) out.push(point);
+    }
+    return out;
+  };
+  const iris = valid(annotations?.[`${side}EyeIris`]);
+  if (iris.length) return iris;
+  const direct = valid(annotations?.[`${side}Eye`]);
+  if (direct.length) return direct;
+  const ring: Array<{ x: number; y: number }> = [];
+  for (const [key, value] of Object.entries(annotations ?? {})) {
+    if (key.startsWith(`${side}Eye`) && !key.includes("brow") && key !== `${side}EyeIris`) {
+      ring.push(...valid(value));
+    }
+  }
+  return ring;
+}
+
 export type HumanLocatorOptions = {
   /**
    * Where human's model files live. Default: the author's CDN (fetched once
@@ -150,9 +187,9 @@ export class HumanFaceLocator implements FaceLocator {
       const faces: DetectedFace[] = [];
       for (const f of res.face) {
         if (f.score < this.minScore) continue;
-        const leftEyePts = f.annotations["leftEye"];
-        const rightEyePts = f.annotations["rightEye"];
-        if (!leftEyePts?.length || !rightEyePts?.length) continue;
+        const leftEyePts = eyePointsOf(f.annotations, "left");
+        const rightEyePts = eyePointsOf(f.annotations, "right");
+        if (!leftEyePts.length || !rightEyePts.length) continue;
         faces.push({
           box: { x: f.box[0], y: f.box[1], w: f.box[2], h: f.box[3] },
           leftEye: centroid(leftEyePts),

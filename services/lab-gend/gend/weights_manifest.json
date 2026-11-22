@@ -1,0 +1,33 @@
+{
+  "gend": {
+    "repo": "yermandy/GenD_CLIP_L_14",
+    "revision": "891ce014a0308386c4d7d25b3dcf436a22db5504",
+    "licence": "MIT",
+    "files": {
+      "config.json": { "sha256": "7f2761e13678191774a152121f1630d19baa33a74216dd264d54445d96b16229", "bytes": 193 },
+      "model.safetensors": { "sha256": "d76f0bdfd74a29fe1b1c1b84a80ac92486993e426878e8c7a3944281fbb96833", "bytes": 1215928160 }
+    }
+  },
+  "clip_base": {
+    "repo": "openai/clip-vit-large-patch14",
+    "revision": "32bd64288804d66eefd0ccbe215aa642df71cc41",
+    "licence": "MIT",
+    "files": {
+      "config.json": { "sha256": "8a09b467700c58138c29d53c605b34ebc69beaadd13274a8a2af8ad2c2f4032a", "bytes": 4519 },
+      "model.safetensors": { "sha256": "a2bf730a0c7debf160f7a6b50b3aaf3703e7e88ac73de7a314903141db026dcb", "bytes": 1710540580 },
+      "preprocessor_config.json": { "sha256": "910e70b3956ac9879ebc90b22fb3bc8a75b6a0677814500101a4c072bd7857bd", "bytes": 316 },
+      "tokenizer.json": { "sha256": "a83e0809aa4c3af7208b2df632a7a69668c6d48775b3c3fe4e1b1199d1f8b8f4", "bytes": 2224003 },
+      "tokenizer_config.json": { "sha256": "deef455e52fa5e8151e339add0582e4235f066009601360999d3a9cda83b1129", "bytes": 905 },
+      "special_tokens_map.json": { "sha256": "f8c0d6c39aee3f8431078ef6646567b0aba7f2246e9c54b8b99d55c22b707cbf", "bytes": 389 },
+      "vocab.json": { "sha256": "3f0c4f7d2086b61b38487075278ea9ed04edb53a03cbb045b86c27190fa8fb69", "bytes": 961143 },
+      "merges.txt": { "sha256": "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a", "bytes": 524619 }
+    }
+  },
+  "yunet": {
+    "url": "https://github.com/opencv/opencv_zoo/raw/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+    "licence": "MIT",
+    "files": {
+      "face_detection_yunet_2023mar.onnx": { "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4", "bytes": 232589 }
+    }
+  }
+}

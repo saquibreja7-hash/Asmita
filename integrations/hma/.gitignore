@@ -1,0 +1,9 @@
+# Throwaway e2e outputs: the built wheel, the seeded state (it holds the
+# throwaway partner key and session cookies for the container database only),
+# python and docker build leftovers.
+dist/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+e2e-state.json
+*.log
