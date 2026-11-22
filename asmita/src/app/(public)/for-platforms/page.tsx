@@ -105,7 +105,7 @@ const faqs = [
   },
   {
     q: "Do you have an API we can integrate with?",
-    a: "Yes. Fingerprints arrive through an authenticated JSON feed you poll with a cursor, and you report outcomes back to the same API. The integration guide is docs/product/partner-api.md in Asmita's public repository, and it comes with a ready-made exchange adapter for platforms that run Hasher-Matcher-Actioner (docs/product/partner-hma-adapter/). Ask us for a partner key when you are onboarded.",
+    a: "Yes. Fingerprints arrive through an authenticated JSON feed you poll with a cursor, and you report outcomes back to the same API. The integration guide is docs/product/partner-api.md in Asmita's public repository, and it comes with a ready-made exchange package for platforms that run Hasher-Matcher-Actioner (integrations/hma/tx-extension-asmita). Ask us for a partner key when you are onboarded.",
   },
   {
     q: "What if a fingerprint matches something that is not abuse?",

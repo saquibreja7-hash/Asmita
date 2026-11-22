@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tx-extension-asmita"
+version = "1.0.0"
+description = "Asmita signal exchange for python-threatexchange / Hasher-Matcher-Actioner"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "Asmita" }]
+keywords = ["threatexchange", "hasher-matcher-actioner", "hma", "ncii"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+# The minor is pinned to what this package is tested against (1.2.18, the
+# version HMA 1.2.2 installs); the <2 bound refuses breaking 2.x changes.
+dependencies = ["threatexchange>=1.2.18,<2"]
+
+[project.urls]
+Homepage = "https://github.com/saquibreja7-hash/Asmita"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tx_extension_asmita"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/tx_extension_asmita", "tests", "README.md", "LICENSE", "NOTICE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
