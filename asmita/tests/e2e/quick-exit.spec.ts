@@ -9,8 +9,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function completeAdultRegistration(page: Page, email: string) {
   await page.goto("/register");
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("radio", { name: "I am 18 years of age or older." }).check();
+  await page.getByRole("radio", { name: "I was 18 or older." }).check();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Email address").fill(email);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");

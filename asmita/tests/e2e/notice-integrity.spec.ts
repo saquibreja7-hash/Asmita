@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 import { adminContext } from "./support/admin";
 import { withAdmin } from "./support/database";
+import { survivorPost } from "./support/survivor-post";
 
 // ADR 004, M8 + M9: what the survivor signs is exactly what is sent. Each
 // signed document records its own fingerprints; dispatch sends only those,
@@ -9,8 +10,8 @@ import { withAdmin } from "./support/database";
 
 async function register(page: Page) {
   await page.goto("/register");
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("radio", { name: "I am 18 years of age or older." }).check();
+  await page.getByRole("radio", { name: "I was 18 or older." }).check();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Email address").fill(`integrity-${randomUUID()}@example.invalid`);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -72,10 +73,14 @@ async function post(request: APIRequestContext, path: string, data: unknown) {
   return request.post(path, { data, headers: { "x-csrf-token": token } });
 }
 
+// The survivor's own API posts go through survivorPost (support/survivor-post):
+// minting in the live page's shared cookie jar races the page's own csrfFetch
+// mints, and the pair stops matching — the silent 403 one full-suite run hit.
+
 // A later fingerprint, added by the survivor after signing: refused, because
 // fingerprints are only added while the case is being created.
 async function expectFingerprintRefused(page: Page, caseId: string) {
-  const response = await post(page.request, `/api/cases/${caseId}/hashes`, {
+  const response = await survivorPost(page, `/api/cases/${caseId}/hashes`, {
     hashes: [{ hash: randomBytes(32).toString("hex"), quality: 90 }],
     declaration: true,
   });
@@ -183,7 +188,7 @@ test.describe("notice integrity", () => {
     expect(preview.ok(), await preview.text()).toBe(true);
     const templateRef = preview.headers()["x-notice-template-ref"];
     expect(templateRef).toBeTruthy();
-    const signed = await post(page.request, `/api/cases/${caseId}/sign-hash-advisory`, {
+    const signed = await survivorPost(page, `/api/cases/${caseId}/sign-hash-advisory`, {
       name: "Synthetic Survivor",
       contact: "survivor@example.invalid",
       platformIds: [whatsapp],

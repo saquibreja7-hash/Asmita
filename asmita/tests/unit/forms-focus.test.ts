@@ -47,6 +47,18 @@ describe("registration age radios (A12)", () => {
     expect(html.match(/type="radio"/g)).toHaveLength(2);
     expect(html.match(/name="ageNow"/g)).toHaveLength(2);
   });
+
+  it("ship disabled and are enabled by hydration, so no answer is lost to a pre-hydration click", () => {
+    // The server markup must carry the gate: a click that lands before React
+    // attaches its handlers would toggle the native radio, hydration would
+    // reset it, and her answer would be silently lost (the e2e age-gate hang
+    // WP172 fixed). Enabled state arrives with hydration, like the Continue
+    // button's own !hydrated guard.
+    const html = renderToStaticMarkup(createElement(RegisterForm, { locale: "en" }));
+    expect(html.match(/<input[^>]*type="radio"[^>]*disabled=""/g)).toHaveLength(2);
+    const src = source("src/app/(auth)/register/RegisterForm.tsx");
+    expect(src).toContain("disabled={!hydrated}");
+  });
 });
 
 describe("registration code box (A3)", () => {

@@ -21,11 +21,12 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 import { adminContext } from "./support/admin";
 import { withAdmin } from "./support/database";
+import { survivorPost } from "./support/survivor-post";
 
 async function register(page: Page) {
   await page.goto("/register");
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("radio", { name: "I am 18 years of age or older." }).check();
+  await page.getByRole("radio", { name: "I was 18 or older." }).check();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Email address").fill(`crawler-${randomUUID()}@example.invalid`);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -115,11 +116,13 @@ test.describe("crawler journey", () => {
     );
     expect((await post(first, `/api/admin/hashes/${hashId}/approve`, {})).ok()).toBe(true);
 
-    // Opt-in: she signs the crawl authorisation she was shown.
+    // Opt-in: she signs the crawl authorisation she was shown. (Through
+    // survivorPost: her case page is live, and a mint in the shared cookie
+    // jar races the page's own csrfFetch mints.)
     await markTemplateReviewed("CRAWL_AUTHORISATION");
     const state = await (await page.request.get(`/api/cases/${caseId}/crawl-consent`)).json();
     expect(state).toMatchObject({ status: "none", available: true });
-    const signed = await post(page.request, `/api/cases/${caseId}/crawl-consent`, {
+    const signed = await survivorPost(page, `/api/cases/${caseId}/crawl-consent`, {
       agreed: true,
       templateRef: state.draft.templateRef,
     });

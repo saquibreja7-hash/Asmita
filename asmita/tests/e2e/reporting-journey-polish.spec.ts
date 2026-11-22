@@ -4,8 +4,8 @@ import { withAdmin } from "./support/database";
 
 test("the code arrives in one box: typed key by key, pasted, and autofilled", async ({ page }) => {
   await page.goto("/register");
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("radio", { name: "I am 18 years of age or older." }).check();
+  await page.getByRole("radio", { name: "I was 18 or older." }).check();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Your email address." })).toBeFocused();
   await page.getByLabel("Email address").fill(`otp-${randomUUID()}@example.invalid`);
@@ -44,8 +44,8 @@ test("the code arrives in one box: typed key by key, pasted, and autofilled", as
 
 test("a wrong code is announced as an alert and focus returns to the box", async ({ page }) => {
   await page.goto("/register");
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("radio", { name: "I am 18 years of age or older." }).check();
+  await page.getByRole("radio", { name: "I was 18 or older." }).check();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Email address").fill(`otp-${randomUUID()}@example.invalid`);
   await page.getByRole("button", { name: "Send verification code" }).click();
@@ -62,8 +62,8 @@ test("a wrong code is announced as an alert and focus returns to the box", async
 
 test("a YouTube case without a verified contact does not offer signing or redirect to a form", async ({ page }, testInfo) => {
   await page.goto("/register");
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("radio", { name: "I am 18 years of age or older." }).check();
+  await page.getByRole("radio", { name: "I was 18 or older." }).check();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Email address").fill(`youtube-${randomUUID()}@example.invalid`);
   const response = page.waitForResponse("**/api/auth/request-otp");

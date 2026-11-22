@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 async function completeAdultRegistration(page: import("@playwright/test").Page, email: string) {
   await page.goto("/register");
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("radio", { name: "I am 18 years of age or older." }).check();
+  await page.getByRole("radio", { name: "I was 18 or older." }).check();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Email address").fill(email);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");
@@ -62,7 +62,7 @@ test("minor pathway has no URL submission form", async ({ page }) => {
 
 test("minor registration branches before collecting email", async ({ page }) => {
   await page.goto("/register");
-  await page.getByText("I am under 18 years of age.").click();
+  await page.getByRole("radio", { name: "I am under 18 years of age." }).check();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/minor-support$/);
   await expect(page.locator("input[type='email']")).toHaveCount(0);

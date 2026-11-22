@@ -90,6 +90,15 @@ export async function warmConsoleRoutes(browser: Browser): Promise<void> {
       "/api/auth/verify-otp",
       "/api/cases/create",
       "/api/cases/warm-up/hashes",
+      // WP145's bulk specs are the only callers of these two routes, so
+      // without a warm-up their first-hit compile lands inside a test's
+      // clock — and a cold route plus a busy dev server once pushed the
+      // confirm POST past the client's 15-second abort (the spec then
+      // waited 30 s for a "12 done" that could never arrive). In isolation
+      // the 12-item reject answers in ~0.4 s; compiling here keeps it that
+      // far away from every test's clock.
+      "/api/admin/bulk/links",
+      "/api/admin/bulk/fingerprints",
     ]) {
       await page.request.post(path, { data: {} }).catch(() => undefined);
     }
@@ -160,8 +169,13 @@ export async function seedFlaggedCase(page: Page): Promise<{ caseId: string; ref
     window.sessionStorage.removeItem("asmita_submit_draft");
   });
   await page.goto("/register");
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
+  // The radios are disabled until the page hydrates (like the Continue
+  // button), and check() by role waits for that: a blind click on the label
+  // text can land before React attaches its handlers, the native toggle is
+  // then reset by hydration, and the second question never appears — the
+  // exact hang the WP172 verify run hit under full-suite load.
+  await page.getByRole("radio", { name: "I am 18 years of age or older." }).check();
+  await page.getByRole("radio", { name: "I was 18 or older." }).check();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Email address").fill(`review-${Date.now()}-${randomUUID().slice(0, 6)}@filing.example.com`);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");

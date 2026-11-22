@@ -8,8 +8,8 @@ import { withAdmin } from "./support/database";
 
 async function register(page: Page) {
   await page.goto("/register");
-  await page.getByText("I am 18 years of age or older.").click();
-  await page.getByText("I was 18 or older.").click();
+  await page.getByRole("radio", { name: "I am 18 years of age or older." }).check();
+  await page.getByRole("radio", { name: "I was 18 or older." }).check();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Email address").fill(`ladder-${Date.now()}@example.org`);
   const otpResponse = page.waitForResponse("**/api/auth/request-otp");

@@ -140,7 +140,11 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
           </p>
           {/* The two answers are one question, so they are one radio group
               with a legend and a shared name (WP40 A12). The legend is hidden
-              because the heading above already asks it on screen. */}
+              because the heading above already asks it on screen. The radios
+              stay disabled until hydration, like the Continue button below:
+              a click that lands before React attaches its handlers toggles
+              the native input, hydration then resets it to the untouched
+              state, and her answer is silently lost on a slow connection. */}
           <fieldset className="mt-6 space-y-3">
             <legend className="sr-only">{t(locale, "eligibility.ageNow.title")}</legend>
             {(["adult", "minor"] as const).map((value) => (
@@ -157,6 +161,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
                   name="ageNow"
                   checked={ageConfirmed === value}
                   onChange={() => setAgeConfirmed(value)}
+                  disabled={!hydrated}
                   className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--brand)]"
                 />
                 <span className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
@@ -185,6 +190,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
                     name="ageThen"
                     checked={ageThen === value}
                     onChange={() => setAgeThen(value)}
+                    disabled={!hydrated}
                     className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--brand)]"
                   />
                   <span className="text-[15px] font-medium leading-[1.4] text-[var(--ink)]">
