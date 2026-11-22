@@ -440,7 +440,503 @@ button.ot-chip[aria-pressed="true"] {
    motion get none. */
 @media (prefers-reduced-motion: reduce) {
   .ot-stage-btn,
-  button.ot-chip {
+  button.ot-chip,
+  .ot-copy {
     transition: none;
   }
+}
+
+/* ── Tool pages (WP152) ─────────────────────────────────────────── */
+
+/* The one-line notice shown in the Hindi locale only: the body is English
+   by owner decision, and the chrome around it is translated. */
+.ot-en-note {
+  margin: 0 0 20px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.ot-tool-head {
+  padding-top: clamp(40px, 5vw, 72px);
+  padding-bottom: clamp(28px, 4vw, 48px);
+}
+
+.ot-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+.ot-crumb-sep {
+  color: var(--text-muted);
+}
+
+.ot-crumb-here {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.ot-tool-title {
+  margin-top: 16px;
+}
+
+.ot-tool-by {
+  margin: 12px 0 0;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.ot-tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* The two-column body: main 2/3, sticky aside 1/3 at 1024px and up; below
+   that the aside follows the header, before the content, as the spec asks. */
+.ot-tool-body {
+  padding-bottom: clamp(56px, 7vw, 96px);
+}
+
+.ot-tool-grid {
+  display: grid;
+  gap: clamp(32px, 4vw, 56px);
+}
+
+@media (min-width: 1024px) {
+  .ot-tool-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+
+  .ot-tool-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .ot-glance {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 96px;
+    align-self: start;
+  }
+}
+
+/* The two-column body: main 2/3, sticky aside 1/3 at 1024px and up; below
+   that the aside follows the header, before the content, as the spec asks.
+   Both children need min-width: 0 — the diagram keeps a 560px minimum so
+   its labels stay readable, and without this the grid item's automatic
+   minimum size would let it push the column past the viewport, where
+   .page-canvas's overflow-x: hidden would clip text instead of letting the
+   diagram scroll inside its own box (the strip's pattern on phones). */
+.ot-tool-main,
+.ot-glance {
+  min-width: 0;
+}
+
+/* The "At a glance" card */
+.ot-glance {
+  padding: clamp(24px, 3vw, 32px);
+}
+
+.ot-glance-title {
+  margin: 0 0 20px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.ot-glance-list {
+  display: grid;
+  gap: 20px;
+  margin: 0;
+}
+
+.ot-glance-list dt {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.ot-glance-list dd {
+  margin: 4px 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.ot-glance-effort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ot-glance-effortnote {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.ot-glance-links {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ot-glance-checked {
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* The content sections */
+.ot-section + .ot-section {
+  margin-top: clamp(48px, 6vw, 72px);
+}
+
+.ot-prose {
+  max-width: 68ch;
+  margin: 20px 0 0;
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.ot-prose + .ot-prose {
+  margin-top: 16px;
+}
+
+/* Numbered steps: the number sits in a round marker (the one round shape
+   the design rules allow for step numbers), coral like the stack diagram's
+   step markers. The number is real text, so it is never colour alone. */
+.ot-steps {
+  display: grid;
+  gap: 14px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: ot-step;
+}
+
+.ot-steps > li {
+  position: relative;
+  counter-increment: ot-step;
+  padding-left: 44px;
+  max-width: 68ch;
+}
+
+.ot-step-n {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: var(--coral-soft);
+  color: var(--coral-ink, #b4461f);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.ot-step-text {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+/* Plain bullets: quiet neutral markers, meaning carried by the list. */
+.ot-bullets {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ot-bullets > li {
+  position: relative;
+  padding-left: 20px;
+  max-width: 68ch;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.ot-bullets > li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--line);
+}
+
+/* Code snippets: monospace on the muted surface, 12px corners, with the
+   copy button over the block's top-right corner (it renders only after
+   hydration, so the code text is never covered by a dead control). */
+.ot-code {
+  position: relative;
+  margin-top: 14px;
+  max-width: 68ch;
+}
+
+.ot-code pre {
+  margin: 0;
+  padding: 16px 20px;
+  overflow-x: auto;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+}
+
+.ot-code code {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre;
+}
+
+.ot-copy {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.ot-copy:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.ot-copy:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.ot-docs-link {
+  margin: 24px 0 0;
+}
+
+/* The read-only workflow strip sits between the section heading and the
+   bullets; it keeps its scrollable row below the desktop width. */
+.ot-section .ot-strip {
+  margin-top: 24px;
+  padding-bottom: 8px;
+}
+
+/* The credit card: quiet, no chips, no icons. */
+.ot-credit {
+  max-width: 68ch;
+  margin-top: 20px;
+  padding: 28px;
+}
+
+.ot-credit p {
+  max-width: 62ch;
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.ot-credit p + p {
+  margin-top: 12px;
+}
+
+.ot-paper {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* Related-tool cards reuse the directory grid, two across inside the main
+   column on wide screens. */
+.ot-tool-main .ot-grid {
+  margin-top: 24px;
+}
+
+@media (min-width: 1024px) {
+  .ot-tool-main .ot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* The sources list: small, ordered, every URL spelled out. */
+.ot-sources {
+  display: grid;
+  gap: 8px;
+  max-width: 68ch;
+  margin: 20px 0 0;
+  padding-left: 24px;
+}
+
+.ot-sources > li {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* The closing band's stack links */
+.ot-stack-links {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ot-stack-links .text-link {
+  font-size: 1.0625rem;
+  font-weight: 500;
+}
+
+/* ── Diagrams (WP152, spec Part C4) ────────────────────────────── */
+
+.ot-diagram {
+  max-width: 100%;
+  margin-top: 28px;
+  overflow-x: auto;
+}
+
+.ot-dg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+  font-family: var(--font-sans);
+}
+
+.ot-dg-box {
+  fill: var(--card);
+  stroke: var(--line);
+  stroke-width: 1.75;
+}
+
+.ot-dg-label {
+  fill: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ot-dg-text {
+  fill: var(--text);
+  font-size: 14px;
+}
+
+.ot-dg-muted {
+  fill: var(--text-muted);
+  font-size: 14px;
+}
+
+.ot-dg-line {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ot-dg-soft {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ot-dg-tint {
+  fill: var(--brand-soft);
+  stroke: var(--brand);
+  stroke-width: 1.75;
+}
+
+.ot-dg-code {
+  fill: var(--surface-muted);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.ot-dg-codehit {
+  fill: var(--brand-soft);
+  stroke: var(--brand);
+  stroke-width: 1.75;
+}
+
+.ot-dg-band-soft {
+  fill: var(--brand-soft);
+  stroke: var(--line);
+  stroke-width: 1.75;
+}
+
+.ot-dg-bandlabel {
+  fill: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ot-dg-arrow {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ot-dg-match {
+  fill: var(--coral-soft);
+  stroke: var(--coral);
+  stroke-width: 1.75;
+}
+
+.ot-dg-dot {
+  fill: var(--coral);
+}
+
+.ot-dg-attention {
+  fill: var(--coral-ink, #b4461f);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ot-dg-attention-muted {
+  fill: var(--coral-ink, #b4461f);
+  font-size: 14px;
 }

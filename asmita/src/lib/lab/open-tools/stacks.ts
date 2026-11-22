@@ -442,3 +442,14 @@ export const STACK_BY_SLUG: ReadonlyMap<string, Stack> = new Map(
 export function getStack(slug: string): Stack | undefined {
   return STACK_BY_SLUG.get(slug);
 }
+
+/**
+ * The stacks whose steps use one catalogue tool, in STACKS order. The tool
+ * pages' closing band links to these (spec Part C3, WP152): a platform that
+ * has read about one tool can jump straight to the guide that uses it.
+ */
+export function stacksUsingTool(slug: string): readonly Stack[] {
+  return STACKS.filter((stack) =>
+    stack.steps.some((step) => step.tools.includes(slug)),
+  );
+}
