@@ -631,6 +631,11 @@ button.ot-chip[aria-pressed="true"] {
   padding: 0;
   list-style: none;
   counter-reset: ot-step;
+  /* One bounded column: a code snippet's long unbreakable line must not
+     size the track (an auto track grows to max-content, which pushed the
+     whole list past a phone viewport — found by the WP155 audit). The
+     pre inside already scrolls on its own, like the diagram boxes. */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .ot-steps > li {
@@ -1332,4 +1337,23 @@ button.ot-chip[aria-pressed="true"] {
 .ot-dg-link {
   cursor: pointer;
 }
+
+/* ── How we choose (WP155) ──────────────────────────────────────── */
+
+/* A short editorial page: one column at the 68ch reading measure, on
+   the tool pages' header pattern and section rhythm. The prose classes
+   already hold the measure; this wrapper keeps the section headings,
+   lists and the credit card inside it too. */
+.ot-how-body {
+  padding-bottom: clamp(64px, 8vw, 120px);
+}
+
+.ot-how-main {
+  max-width: 68ch;
+}
+
+.ot-how-cta {
+  margin: 28px 0 0;
+}
+
 

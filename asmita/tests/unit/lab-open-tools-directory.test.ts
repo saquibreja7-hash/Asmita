@@ -317,6 +317,17 @@ describe("the sitemap and the i18n dictionaries", () => {
     "lab.openTools.tool.stacks.back",
     "lab.openTools.tool.copy",
     "lab.openTools.tool.copied",
+    // WP155 (docs/lab/open-tools-spec.md): the how-we-choose page added
+    // its chrome to the same lab.openTools.* namespace — title, lede and
+    // the five section headings. The exact-set contract grows with the
+    // namespace; every rule below applies to them too.
+    "lab.openTools.how.title",
+    "lab.openTools.how.lede",
+    "lab.openTools.how.openMeans",
+    "lab.openTools.how.weCheck",
+    "lab.openTools.how.notList",
+    "lab.openTools.how.suggest",
+    "lab.openTools.how.credit",
   ];
 
   it("exists in both dictionaries, exactly this key set, non-empty", () => {

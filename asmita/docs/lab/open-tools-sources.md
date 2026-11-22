@@ -372,3 +372,27 @@ partner models "free to access, platform-agnostic in deployment, and have no
 commercial or output restrictions in their licenses". The eligibility
 criteria file is linked from the README but was not read separately; the
 page quotes only the README's wording.
+
+## Re-checks for the how-we-choose page (WP155)
+
+Read again on 22 November 2026, before writing
+`src/app/(public)/lab/open-tools/how-we-choose/page.tsx`. The page's
+own method text (what "open" means here, the five checks, the three
+refusals, the suggest-a-tool instructions) is the spec's Part C3
+wording, and the three not-open-source services it names (StopNCII.org,
+Take It Down, the Asmita partner feed) come from Part D and the checks
+above. The only tool facts the page states itself are the two ROOST
+links and their licence, both re-confirmed at their repositories:
+
+- https://github.com/roostorg/awesome-safety-tools — the repository page
+  describes "a directory of open source tools for online trust and
+  safety", shows the CC-BY-4.0 licence, and keeps its own header line
+  that the list "is not an endorsement, but rather an attempt to
+  organize and map the available technology".
+- https://github.com/roostorg/model-community — the repository page
+  describes "making open safety AI models accessible and beneficial to
+  the safety community", shows the CC-BY-4.0 licence, and lists the
+  partner-model folders (gpt-oss-safeguard among them).
+
+Both re-reads confirmed what the two directory entries already say. No
+other source was read for WP155; no new tool fact entered the build.

@@ -1647,5 +1647,12 @@
   "lab.stacks.page.forPlatforms": "For platforms",
   "lab.stacks.page.feedback": "Feedback",
   "lab.stacks.page.close.title": "All tools in this stack",
-  "lab.stacks.page.close.others": "See the other stacks"
+  "lab.stacks.page.close.others": "See the other stacks",
+  "lab.openTools.how.title": "How we choose tools",
+  "lab.openTools.how.lede": "What 'open' means in this directory, what we check before a tool is listed, and how to tell us about one we missed.",
+  "lab.openTools.how.openMeans": "What 'open' means here",
+  "lab.openTools.how.weCheck": "What we check before listing",
+  "lab.openTools.how.notList": "What we do not list",
+  "lab.openTools.how.suggest": "Suggest a tool or report an error",
+  "lab.openTools.how.credit": "Credit"
 }

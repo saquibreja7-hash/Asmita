@@ -1647,5 +1647,12 @@
   "lab.stacks.page.forPlatforms": "प्लेटफ़ॉर्म के लिए",
   "lab.stacks.page.feedback": "प्रतिक्रिया",
   "lab.stacks.page.close.title": "इस स्टैक के सभी टूल",
-  "lab.stacks.page.close.others": "दूसरे स्टैक देखें"
+  "lab.stacks.page.close.others": "दूसरे स्टैक देखें",
+  "lab.openTools.how.title": "हम टूल कैसे चुनते हैं",
+  "lab.openTools.how.lede": "इस निर्देशिका में 'ओपन' का क्या अर्थ है, किसी टूल को सूची में लेने से पहले हम क्या जाँच करते हैं, और किसी छूटे हुए टूल के बारे में हमें बताने का तरीका।",
+  "lab.openTools.how.openMeans": "'ओपन' का यहाँ अर्थ",
+  "lab.openTools.how.weCheck": "सूची में लेने से पहले हम क्या जाँच करते हैं",
+  "lab.openTools.how.notList": "हम क्या सूचीबद्ध नहीं करते",
+  "lab.openTools.how.suggest": "टूल सुझाएँ या त्रुटि बताएँ",
+  "lab.openTools.how.credit": "श्रेय"
 }
