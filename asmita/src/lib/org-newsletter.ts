@@ -226,6 +226,8 @@ export async function unsubscribeNewsletterSubscriber(token: string): Promise<{ 
     const current = newsletterSubscribers.find((entry) => entry.unsubscribeTokenHash === unsubscribeTokenHash);
     if (!current) return { ok: false, error: "token_invalid" };
     current.status = "UNSUBSCRIBED";
+    // The first name is only for sending the newsletter; drop it on the way out.
+    current.firstNameEnc = null;
     current.unsubscribedAt = new Date().toISOString();
     current.updatedAt = current.unsubscribedAt;
     email = safeDecrypt(current.emailEnc);
@@ -235,7 +237,7 @@ export async function unsubscribeNewsletterSubscriber(token: string): Promise<{ 
     if (!row) return { ok: false, error: "token_invalid" };
     const updated = await db.newsletterSubscriber.update({
       where: { id: row.id },
-      data: { status: "UNSUBSCRIBED", unsubscribedAt: new Date() },
+      data: { status: "UNSUBSCRIBED", unsubscribedAt: new Date(), firstNameEnc: null },
     });
     email = safeDecrypt(updated.emailEnc);
   }
