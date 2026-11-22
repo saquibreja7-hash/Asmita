@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { HmaConnect } from "@/app/(admin)/partners/[partnerId]/HmaConnect";
+import { HmaConnect } from "@/app/(admin)/platform-partners/[partnerId]/HmaConnect";
 
 const render = () => renderToStaticMarkup(createElement(HmaConnect));
 // The markup escapes quotes and angle brackets; the code-snippet assertions
