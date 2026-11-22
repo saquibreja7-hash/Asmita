@@ -8,7 +8,6 @@ import { labEnabled } from "@/lib/lab/flags";
 import { getOpenTool } from "@/lib/lab/open-tools/catalogue";
 import { STACKS } from "@/lib/lab/open-tools/stacks";
 import type { Stack } from "@/lib/lab/open-tools/types";
-import { stackIsBuilt } from "./built-stacks";
 
 export const metadata: Metadata = {
   title: "Free stacks",
@@ -20,12 +19,12 @@ export const dynamic = "force-dynamic";
 
 // The free stacks index (docs/lab/open-tools-spec.md, Part C3): one large
 // card per stack, in the WP150 data's order. Like every Lab page it
-// answers 404 while ENABLE_LAB is off. WP153 builds the page behind the
-// first stack only; the other two cards say "Coming next" without a link
-// until WP154 renders their pages. Static content only: the stacks are
-// typed data in the repository, nothing here stores user input or fetches
-// anything at runtime. The index hero and card text are translated (Part
-// C6); the stack pages' bodies are English only.
+// answers 404 while ENABLE_LAB is off. WP154 completes the set, so every
+// card links its stack's page — the WP153 "Coming next" state is gone.
+// Static content only: the stacks are typed data in the repository,
+// nothing here stores user input or fetches anything at runtime. The
+// index hero and card text are translated (Part C6); the stack pages'
+// bodies are English only.
 
 /** The tools one stack uses, in first-appearance order, deduplicated. */
 function stackTools(stack: Stack) {
@@ -41,7 +40,6 @@ function stackTools(stack: Stack) {
 }
 
 function StackCard({ stack, locale }: { stack: Stack; locale: Locale }) {
-  const built = stackIsBuilt(stack.slug);
   const hindi = locale === "hi";
   const title = hindi ? stack.hi.title : stack.title;
   const who = hindi ? stack.hi.forWho : stack.forWho;
@@ -52,13 +50,9 @@ function StackCard({ stack, locale }: { stack: Stack; locale: Locale }) {
     <article className="ot-stacks-card">
       <p className="ot-stacks-who">{who}</p>
       <h3 className="ot-stacks-job">
-        {built ? (
-          <Link className="text-link" href={`/lab/stacks/${stack.slug}`}>
-            {title}
-          </Link>
-        ) : (
-          title
-        )}
+        <Link className="text-link" href={`/lab/stacks/${stack.slug}`}>
+          {title}
+        </Link>
       </h3>
       <ul className="ot-stacks-tools" aria-label={t(locale, "lab.stacks.index.toolsLabel")}>
         {tools.map((tool) => (
@@ -68,13 +62,9 @@ function StackCard({ stack, locale }: { stack: Stack; locale: Locale }) {
         ))}
       </ul>
       <p className="ot-stacks-meta">{meta}</p>
-      {built ? (
-        <Link className="btn btn-secondary" href={`/lab/stacks/${stack.slug}`}>
-          {t(locale, "lab.stacks.index.read")}
-        </Link>
-      ) : (
-        <span className="ot-chip ot-stacks-soon">{t(locale, "lab.stacks.index.comingNext")}</span>
-      )}
+      <Link className="btn btn-secondary" href={`/lab/stacks/${stack.slug}`}>
+        {t(locale, "lab.stacks.index.read")}
+      </Link>
     </article>
   );
 }

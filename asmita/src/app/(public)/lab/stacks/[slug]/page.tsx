@@ -18,9 +18,10 @@ import { BUILT_STACK_SLUGS, stackIsBuilt, WITH_ASMITA_LINK } from "../built-stac
 // and the closing band with every tool in the stack. All content comes
 // from the WP150 stack data, so the page holds no facts of its own.
 //
-// WP153 renders the stop-reuploads stack only; the other two stacks exist
-// in the data and answer 404 here until WP154 builds their pages, and the
-// index marks them "Coming next".
+// WP153 built this template behind the first stack; WP154 renders all
+// three stacks (stop-reuploads, ai-app-guardrails, rules-and-review)
+// through it. stackIsBuilt keeps the invariant that only stacks listed
+// in built-stacks.ts resolve, so data without a declared page 404s.
 //
 // Like every Lab page this answers 404 while ENABLE_LAB is off, so the
 // gate runs per request (force-dynamic) while generateStaticParams still

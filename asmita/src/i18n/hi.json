@@ -1625,7 +1625,6 @@
   "lab.stacks.lede": "एक ख़ास काम के लिए ओपन टूलों के तैयार संयोजन, सेटअप के क्रम और हर क़दम की लागत के साथ।",
   "lab.stacks.index.heading": "तीन तरह की संस्थाओं के लिए तीन स्टैक",
   "lab.stacks.index.read": "स्टैक पढ़ें",
-  "lab.stacks.index.comingNext": "अगले चरण में",
   "lab.stacks.index.toolsLabel": "इस स्टैक में टूल",
   "lab.stacks.index.close.title": "इन स्टैकों के पीछे के टूल",
   "lab.stacks.index.close.body": "किसी स्टैक में नाम लिए गए हर टूल का ओपन टूल निर्देशिका में अपना पृष्ठ है: वह क्या करता है, उसका लाइसेंस और सीमाएँ, और कैसे शुरू करें।",

@@ -1625,7 +1625,6 @@
   "lab.stacks.lede": "Ready-made combinations of open tools for a specific job, with the order to set them up in and what each step costs.",
   "lab.stacks.index.heading": "Three stacks for three kinds of organisation",
   "lab.stacks.index.read": "Read the stack",
-  "lab.stacks.index.comingNext": "Coming next",
   "lab.stacks.index.toolsLabel": "Tools in this stack",
   "lab.stacks.index.close.title": "The tools behind these stacks",
   "lab.stacks.index.close.body": "Every tool named in a stack has its own page in the open tools directory: what it does, its licence and limits, and how to start.",

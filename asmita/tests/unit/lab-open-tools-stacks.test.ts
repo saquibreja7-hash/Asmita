@@ -129,6 +129,19 @@ describe("the India notes reuse the /for-platforms laws verbatim", () => {
     expect(notes.some((note) => note.includes("Significant social media intermediaries have further duties under the IT Rules"))).toBe(true);
     expect(notes[notes.length - 1]).toBe(NOT_LEGAL_ADVICE);
   });
+
+  it("stacks 1 and 3 carry the spec's WhatsApp re-compression note (Part E: stack 3's notes are stack 1's, plus)", () => {
+    // Part E, stack 1: "...add: 'Images in India are often forwarded through
+    // WhatsApp, which re-compresses them. PDQ usually survives this; test
+    // with your own re-compressed samples.'" Stack 3's India notes are "as
+    // Stack 1, plus" the significant-intermediary line, so both carry it.
+    const whatsapp =
+      "Images in India are often forwarded through WhatsApp, which re-compresses them. PDQ usually survives this; test with your own re-compressed samples.";
+    for (const stack of [STACKS[0], STACKS[2]]) {
+      expect(stack.indiaNotes.includes(whatsapp), `${stack.slug} carries the WhatsApp note`).toBe(true);
+    }
+    expect(STACKS[1].indiaNotes.includes(whatsapp)).toBe(false);
+  });
 });
 
 describe("stack content style (Part A4 and C5)", () => {

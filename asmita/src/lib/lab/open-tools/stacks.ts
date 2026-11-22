@@ -444,6 +444,7 @@ export const STACKS: readonly Stack[] = [
       "Rule 3(2)(b) of the IT Rules, 2021 requires intermediaries to act on a complaint about non-consensual intimate content within 24 hours.",
       "The IT Rules Amendment of 2026 shortens that to two hours for non-consensual nudity.",
       "MeitY's Standard Operating Procedure of November 2025 sets out how intermediaries handle these complaints, including stopping the same content from returning.",
+      "Images in India are often forwarded through WhatsApp, which re-compresses them. PDQ usually survives this; test with your own re-compressed samples.",
       "Significant social media intermediaries have further duties under the IT Rules; check them with your lawyer.",
       "This is a summary for orientation, not legal advice. Check the current rules with your own lawyer.",
     ],

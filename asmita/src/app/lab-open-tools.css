@@ -1022,14 +1022,6 @@ button.ot-chip[aria-pressed="true"] {
   color: var(--text-muted);
 }
 
-.ot-stacks-soon {
-  align-self: flex-start;
-  min-height: 0;
-  padding: 6px 12px;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
 /* One stack page */
 
 .ot-stack-head {
