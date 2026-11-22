@@ -43,7 +43,29 @@ export async function csrfFetch(input: RequestInfo | URL, init: RequestInit = {}
       () => undefined,
     );
     await turn;
-    return await send();
+    const response = await send();
+    // The budget has to cover the whole exchange, not stop at the headers.
+    // fetch() resolves when the response headers arrive, so a caller's later
+    // `.json()` on a body the server never finished waited forever with the
+    // timeout already cleared: one stalled response in the filing flow left
+    // the survivor on "Creating…" — no error, no recovery (WP101; the
+    // full-suite e2e run died exactly there, waiting for a request the app
+    // never sent). Read the body here, still inside the budget, and hand
+    // back a fully-buffered response: the caller's `.json()` is instant, and
+    // a stalled body now aborts at the deadline like every other stall.
+    const body = await response.text();
+    // A null-body status (204/205/304) must not carry a body, and the
+    // reconstructed headers must not claim an encoding the decoded text no
+    // longer has. Everything else (status, content-type, custom headers)
+    // round-trips unchanged.
+    const headers = new Headers(response.headers);
+    headers.delete("content-encoding");
+    headers.delete("content-length");
+    return new Response(body || null, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   } finally {
     window.clearTimeout(timeout);
   }

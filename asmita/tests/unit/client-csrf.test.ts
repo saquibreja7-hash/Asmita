@@ -128,4 +128,84 @@ describe("csrfFetch", () => {
     expect(response.status).toBe(200);
     expect(calls[calls.length - 1].headers["x-csrf-token"]).toBe("token-c");
   });
+
+  it("reads the response body inside the budget: a stalled body rejects at the deadline instead of hanging the caller", async () => {
+    // WP101: fetch() resolves when the headers arrive, so the old csrfFetch
+    // cleared its 15 s timeout and handed back a response whose body might
+    // never arrive — every caller's `.json()` then waited forever with no
+    // abort armed. Compress the deadline to 50 ms and stall the body the way
+    // a real stalled response behaves (headers arrive, the body only ends
+    // when the fetch's abort errors the stream): the whole exchange must
+    // reject, never resolve to an unreadable response.
+    vi.stubGlobal("window", {
+      setTimeout: (fn: () => void) => setTimeout(fn, 50),
+      clearTimeout: (id?: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const headers: Record<string, string> = {};
+        new Headers(init?.headers).forEach((value, key) => {
+          headers[key] = value;
+        });
+        calls.push({ url: String(input), headers });
+        if (String(input) === "/api/csrf") {
+          return new Response(JSON.stringify({ token: "token-s" }), { status: 200 });
+        }
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            init?.signal?.addEventListener("abort", () => controller.error(new Error("The operation was aborted")), {
+              once: true,
+            });
+          },
+        });
+        return new Response(stream, { status: 200, headers: { "content-type": "application/json" } });
+      }),
+    );
+    const csrfFetch = await importCsrfFetch();
+
+    const outcome = await Promise.race([
+      csrfFetch("/api/example", { method: "POST" }).then(
+        () => "resolved",
+        () => "rejected",
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve("still-pending"), 5_000)),
+    ]);
+
+    expect(outcome).toBe("rejected");
+    // The stalled POST did leave with a real token, exactly like the mint
+    // race-free path; only the exchange itself went over budget.
+    expect(calls[calls.length - 1].headers["x-csrf-token"]).toBe("token-s");
+  });
+
+  it("returns a fully-buffered response with the original status and content-type", async () => {
+    const csrfFetch = await importCsrfFetch();
+    queue.push(new Response(JSON.stringify({ token: "token-b2" }), { status: 200 }));
+    queue.push(
+      new Response(JSON.stringify({ caseId: "case-1" }), {
+        status: 201,
+        headers: { "content-type": "application/json", "x-notice-template-ref": "ref-9" },
+      }),
+    );
+
+    const response = await csrfFetch("/api/example", { method: "POST" });
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("content-type")).toBe("application/json");
+    expect(response.headers.get("x-notice-template-ref")).toBe("ref-9");
+    expect(await response.json()).toEqual({ caseId: "case-1" });
+  });
+
+  it("round-trips a null-body status without inventing a body or an encoding", async () => {
+    const csrfFetch = await importCsrfFetch();
+    queue.push(new Response(JSON.stringify({ token: "token-n" }), { status: 200 }));
+    queue.push(new Response(null, { status: 204, headers: { "x-custom": "kept", "content-encoding": "gzip" } }));
+
+    const response = await csrfFetch("/api/example", { method: "POST" });
+
+    expect(response.status).toBe(204);
+    expect(await response.text()).toBe("");
+    expect(response.headers.get("x-custom")).toBe("kept");
+    expect(response.headers.get("content-encoding")).toBe(null);
+  });
 });

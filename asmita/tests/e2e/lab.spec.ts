@@ -63,10 +63,38 @@ test.describe("AI Lab, E2", () => {
     await expect(page.getByText("Aggregate numbers only. We never name or link a service on this page.")).toBeVisible();
     await expect(page.getByRole("link", { name: "AI Lab" })).toBeVisible();
 
+    // WP96 (docs/lab/beta-spec.md): the hub's "Try the beta tools" section —
+    // one card per tool, every card carrying the Beta badge.
+    await expect(page.getByRole("heading", { name: "Try the beta tools" })).toBeVisible();
+    await expect(page.getByText("Beta: experimental")).toHaveCount(7);
+    for (const [tool, href] of [
+      ["Trace a morph", "/lab/trace"],
+      ["Detector panel", "/lab/detectors"],
+      ["Photo protection", "/lab/protect"],
+      ["Service tracker", "/lab/tracker"],
+      ["Check a message", "/lab/message-check"],
+      ["Content Credentials stamp", "/lab/stamp"],
+      ["Spot the fake", "/lab/spot-the-fake"],
+    ] as const) {
+      await expect(page.getByRole("link", { name: tool })).toHaveAttribute("href", href);
+    }
+    // And a card really navigates to its tool.
+    await page.getByRole("link", { name: "Spot the fake" }).click();
+    await expect(page).toHaveURL(/\/lab\/spot-the-fake$/);
+    await page.goBack();
+
     // The service's name and address never reach the public page.
     const html = await page.content();
     expect(html).not.toContain(serviceName);
     expect(html).not.toContain(serviceUrl);
+
+    // WP96: the beta tools section renders in Hindi too — the heading, a
+    // card's link, and the same seven Beta badges.
+    await page.context().addCookies([{ name: "asmita_lang", value: "hi", url: "http://127.0.0.1:3001" }]);
+    await page.goto("/lab");
+    await expect(page.getByRole("heading", { name: "बीटा टूल आज़माएँ" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "झूठी तस्वीर पहचानिए" })).toHaveAttribute("href", "/lab/spot-the-fake");
+    await expect(page.getByText("बीटा: प्रायोगिक")).toHaveCount(7);
 
     // And the console's own dashboard shows the tracked service.
     await admin.goto("/admin/lab");
