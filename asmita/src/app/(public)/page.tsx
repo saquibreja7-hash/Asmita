@@ -89,7 +89,7 @@ const offers = [
   },
   {
     href: "/for-platforms",
-    icon: "layers" as const,
+    icon: "overlap" as const,
     tone: "tone-teal",
     title: ["Platform partner channel", "प्लेटफ़ॉर्म पार्टनर चैनल"],
     body: [
