@@ -1151,6 +1151,18 @@ async function eraseUserWithKysely(tx: Transaction<DB>, userId: string, now: Dat
       eb("caseReference", "in", caseRows.map((row) => row.referenceNumber)),
     ])).execute());
     await tx.updateTable("AdminAccessLog").set({ reason: null }).where("entityId", "in", [...caseIds, ...urlIds, ...findingIds]).execute();
+    // Review console rows about her case go too: analysts' internal notes and
+    // the console's jobs and decisions (their reason notes are free text).
+    await tx.deleteFrom("CaseNote").where("caseId", "in", caseIds).execute();
+    const reviewJobIds = (await tx.selectFrom("ReviewJob").select("id").where("caseId", "in", caseIds).execute()).map((r) => r.id);
+    if (reviewJobIds.length) {
+      await tx.deleteFrom("ReviewRoutingLog").where("jobId", "in", reviewJobIds).execute();
+      await tx.deleteFrom("ReviewSkip").where("jobId", "in", reviewJobIds).execute();
+      await tx.deleteFrom("ReviewJobClaim").where("jobId", "in", reviewJobIds).execute();
+      await tx.deleteFrom("ReviewDecision").where("jobId", "in", reviewJobIds).execute();
+    }
+    await tx.deleteFrom("ReviewDecision").where("caseId", "in", caseIds).execute();
+    if (reviewJobIds.length) await tx.deleteFrom("ReviewJob").where("id", "in", reviewJobIds).execute();
     await tx.updateTable("Case").set({
       status: "CLOSED", registrationKeyHash: null, state: null, city: null, ngoVerifierId: null,
       declarationSignedAt: null, declarationIpHash: null, firPackageGeneratedAt: null,
@@ -1230,6 +1242,17 @@ async function eraseUserWithPrisma(tx: Prisma.TransactionClient, userId: string,
       where: { OR: [{ caseId: { in: caseIds } }, { caseReference: { in: caseRows.map((row) => row.referenceNumber) } }] },
     })).count;
     await tx.adminAccessLog.updateMany({ where: { entityId: { in: [...caseIds, ...urlIds, ...findingIds] } }, data: { reason: null } });
+    // Review console rows about her case go too (see the Kysely twin above).
+    await tx.caseNote.deleteMany({ where: { caseId: { in: caseIds } } });
+    const reviewJobIds = (await tx.reviewJob.findMany({ where: { caseId: { in: caseIds } }, select: { id: true } })).map((r) => r.id);
+    if (reviewJobIds.length) {
+      await tx.reviewRoutingLog.deleteMany({ where: { jobId: { in: reviewJobIds } } });
+      await tx.reviewSkip.deleteMany({ where: { jobId: { in: reviewJobIds } } });
+      await tx.reviewJobClaim.deleteMany({ where: { jobId: { in: reviewJobIds } } });
+      await tx.reviewDecision.deleteMany({ where: { jobId: { in: reviewJobIds } } });
+    }
+    await tx.reviewDecision.deleteMany({ where: { caseId: { in: caseIds } } });
+    if (reviewJobIds.length) await tx.reviewJob.deleteMany({ where: { id: { in: reviewJobIds } } });
     await tx.case.updateMany({
       where: { id: { in: caseIds } },
       data: {
