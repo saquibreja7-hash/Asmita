@@ -33,7 +33,7 @@ const STATUS_LABELS: Record<OrgPostStatus, string> = {
 
 const ERRORS: Record<string, string> = {
   slug_taken: "That slug is already used.",
-  case_study_checks_required: "Record consent and confirm the story is anonymised before publishing a case study.",
+  case_study_checks_required: "Record consent and confirm the story is anonymised before publishing a case study, or keeping one live after an edit.",
   not_a_draft: "Only a draft can be deleted.",
   post_not_found: "This post no longer exists; load the list again.",
 };

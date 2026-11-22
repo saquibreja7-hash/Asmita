@@ -153,6 +153,40 @@ describe("org post publish rules", () => {
     expect(stories.map((story) => story.slug)).toContain(created.post.slug);
   });
 
+  it("refuses an edit that would leave a published case study live without consent or anonymisation", async () => {
+    const story = { kind: "CASE_STUDY", titleEn: "One survivor's story", consentRecorded: true, anonymised: true };
+    const created = await createOrgPost(parse(story), ACTOR);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect((await setOrgPostStatus(created.post.id, "PUBLISHED", ACTOR)).ok).toBe(true);
+
+    expect(await updateOrgPost(created.post.id, parse({ ...story, consentRecorded: false }), ACTOR)).toEqual({
+      ok: false,
+      error: "case_study_checks_required",
+    });
+    expect(await updateOrgPost(created.post.id, parse({ ...story, anonymised: false }), ACTOR)).toEqual({
+      ok: false,
+      error: "case_study_checks_required",
+    });
+    const live = await getPublishedOrgPostBySlug(created.post.slug);
+    expect(live?.consentRecorded && live.anonymised).toBe(true);
+
+    // A published news post cannot be turned into an unchecked case study either.
+    const news = await createOrgPost(parse({ titleEn: "A news piece" }), ACTOR);
+    expect(news.ok).toBe(true);
+    if (!news.ok) return;
+    await setOrgPostStatus(news.post.id, "PUBLISHED", ACTOR);
+    expect(await updateOrgPost(news.post.id, parse({ kind: "CASE_STUDY", titleEn: "A news piece" }), ACTOR)).toEqual({
+      ok: false,
+      error: "case_study_checks_required",
+    });
+    expect((await getPublishedOrgPostBySlug(news.post.slug))?.kind).toBe("NEWS");
+
+    // Edits that keep both checks still go through.
+    const fine = await updateOrgPost(created.post.id, parse({ ...story, titleEn: "One survivor's story, revised" }), ACTOR);
+    expect(fine.ok).toBe(true);
+  });
+
   it("related posts share the kind and exclude the post itself", async () => {
     const newsA = await createOrgPost(parse({ titleEn: "News piece A" }), ACTOR);
     const newsB = await createOrgPost(parse({ titleEn: "News piece B" }), ACTOR);

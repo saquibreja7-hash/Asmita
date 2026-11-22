@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { isSafeLink, safeLink } from "@/lib/safe-link";
 import { writeAuditLog } from "@/lib/audit";
 import { SIZES, type IllustrationName } from "@/components/Illustration";
 
@@ -87,7 +88,7 @@ const postFields = {
   bodyHi: z.string().max(60_000).optional(),
   coverIllustration: illustrationEnum.optional(),
   coverImagePath: text(1, 300).regex(/^\//, "own_path").optional(),
-  attachmentUrl: text(1, 300).optional(),
+  attachmentUrl: safeLink(300).optional(),
   attachmentLabel: text(1, 120).optional(),
   ctaLabel: text(2, 60).optional(),
   ctaUrl: z.string().trim().max(500).optional(),
@@ -107,7 +108,7 @@ function checkInvariants(
   if (Boolean(post.ctaLabel) !== Boolean(post.ctaUrl)) {
     ctx.addIssue({ code: "custom", message: "cta_needs_both", path: ["ctaUrl"] });
   }
-  if (post.ctaUrl && !/^https?:\/\//i.test(post.ctaUrl) && !post.ctaUrl.startsWith("/")) {
+  if (post.ctaUrl && !isSafeLink(post.ctaUrl)) {
     ctx.addIssue({ code: "custom", message: "cta_url_scheme", path: ["ctaUrl"] });
   }
 }
@@ -250,9 +251,15 @@ export async function updateOrgPost(
   id: string,
   input: z.infer<typeof orgPostUpdateSchema>,
   actorId: string,
-): Promise<{ ok: true; post: OrgPost } | { ok: false; error: "post_not_found" | "slug_taken" }> {
+): Promise<
+  | { ok: true; post: OrgPost }
+  | { ok: false; error: "post_not_found" | "slug_taken" | "case_study_checks_required" }
+> {
   const slug = input.slug ?? slugifyOrgTitle(input.titleEn);
   if (await slugTaken(slug, id)) return { ok: false, error: "slug_taken" };
+  // The publish gate in setOrgPostStatus must also hold for edits: a live post
+  // may not become, or stay, a case study without consent and anonymisation.
+  const unsafeCaseStudy = input.kind === "CASE_STUDY" && !(input.consentRecorded && input.anonymised);
   const fields = {
     slug,
     kind: input.kind,
@@ -277,13 +284,26 @@ export async function updateOrgPost(
   if (devNoDb()) {
     const current = orgPosts.find((entry) => entry.id === id);
     if (!current) return { ok: false, error: "post_not_found" };
+    if (unsafeCaseStudy && current.status === "PUBLISHED") return { ok: false, error: "case_study_checks_required" };
     Object.assign(current, fields, { updatedAt: new Date().toISOString() });
     post = current;
   } else {
     const { db } = await import("@/lib/db");
     try {
-      const row = await db.orgPost.update({ where: { id }, data: fields });
-      post = rowToPost(row);
+      if (unsafeCaseStudy) {
+        // Conditional write so a publish racing this edit cannot slip past the gate.
+        const changed = await db.orgPost.updateMany({ where: { id, status: { not: "PUBLISHED" } }, data: fields });
+        if (changed.count === 0) {
+          const exists = await db.orgPost.findUnique({ where: { id }, select: { id: true } });
+          return { ok: false, error: exists ? "case_study_checks_required" : "post_not_found" };
+        }
+        const row = await db.orgPost.findUnique({ where: { id } });
+        if (!row) return { ok: false, error: "post_not_found" };
+        post = rowToPost(row);
+      } else {
+        const row = await db.orgPost.update({ where: { id }, data: fields });
+        post = rowToPost(row);
+      }
     } catch (err) {
       if ((err as { code?: string }).code === "P2025") return { ok: false, error: "post_not_found" };
       if ((err as { code?: string }).code === "P2002") return { ok: false, error: "slug_taken" };
