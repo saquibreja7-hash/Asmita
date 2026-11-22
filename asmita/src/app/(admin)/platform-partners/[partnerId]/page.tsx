@@ -4,6 +4,7 @@ import { deniedFor } from "../../page-permission";
 import { getPlatformPartner, listPlatformPartnerKeys } from "@/lib/partner-admin";
 import { getPartnerMetrics } from "@/lib/partner-metrics";
 import { PartnerManager } from "./PartnerManager";
+import { HmaConnect } from "./HmaConnect";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +87,11 @@ export default async function PartnerDetailPage({ params }: { params: Promise<{ 
       <div className="mt-6">
         <PartnerManager keys={keys} partner={partner} />
       </div>
+
+      <section className="mt-8">
+        <h2>Connect with HMA</h2>
+        <HmaConnect />
+      </section>
     </section>
   );
 }

@@ -56,6 +56,8 @@ beforeEach(() => {
   vi.stubEnv("HIVE_API_KEY", "");
   vi.stubEnv("SIGHTENGINE_USER", "");
   vi.stubEnv("SIGHTENGINE_SECRET", "");
+  vi.stubEnv("LAB_GEND_URL", "");
+  vi.stubEnv("LAB_GEND_TOKEN", "");
 });
 
 afterEach(() => {
@@ -139,7 +141,7 @@ describe("/api/lab/detectors", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     const body = (await response.json()) as { rows: Array<{ id: string; status: string }>; disagree: boolean };
-    expect(body.rows.map((row) => row.id)).toEqual(["openai", "hive", "sightengine"]);
+    expect(body.rows.map((row) => row.id)).toEqual(["openai", "hive", "sightengine", "gend"]);
     expect(body.rows.every((row) => row.status === "not_configured")).toBe(true);
     expect(body.disagree).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -167,6 +169,40 @@ describe("/api/lab/detectors", () => {
       band: "likely_ai",
     });
     expect(body.rows.filter((row) => row.id !== "openai").every((row) => row.status === "not_configured")).toBe(true);
+  });
+
+  it("scores through the GenD service and reports its no-face answer honestly", async () => {
+    vi.stubEnv("LAB_GEND_URL", "http://127.0.0.1:8099");
+    vi.stubEnv("LAB_GEND_TOKEN", "test-token");
+    // The first call scores a face, the second finds none: the fake answers
+    // by counting calls, exactly like the real service's two answers.
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        return new Response(
+          JSON.stringify(
+            calls === 1
+              ? { model: "GenD_CLIP_L_14@test", detector: "YuNet@2023mar", faces: [{ box: [1, 2, 3, 4], p_fake: 0.912 }], image_p_fake: 0.912, status: "ok", timings_ms: {} }
+              : { model: "GenD_CLIP_L_14@test", detector: "YuNet@2023mar", faces: [], image_p_fake: null, status: "no_face", timings_ms: {} },
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+    const first = await detectorsRoute.POST(panelRequest({ ip: "203.0.113.17" }));
+    const bodyOne = (await first.json()) as { rows: Array<{ id: string; status: string; score?: number; band?: string }> };
+    expect(bodyOne.rows.find((row) => row.id === "gend")).toMatchObject({
+      status: "scored",
+      score: 91,
+      band: "likely_ai",
+    });
+    expect(bodyOne.rows.filter((row) => row.id !== "gend").every((row) => row.status === "not_configured")).toBe(true);
+
+    const second = await detectorsRoute.POST(panelRequest({ ip: "203.0.113.18" }));
+    const bodyTwo = (await second.json()) as { rows: Array<{ id: string; status: string }> };
+    expect(bodyTwo.rows.find((row) => row.id === "gend")).toMatchObject({ status: "no_face" });
   });
 
   it("caps runs per IP", async () => {

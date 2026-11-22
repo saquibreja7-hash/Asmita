@@ -5,7 +5,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t, type MessageKey } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
-import { labPublicNumbers } from "@/lib/lab/lab-stats";
+import { labPublicNumbers, LAB_PUBLIC_DEPENDENCY_CATEGORIES } from "@/lib/lab/lab-stats";
+import { LAB_RESEARCH_CREDITS } from "@/lib/lab/research-credits";
 import { LAB_CHOKEPOINT_KINDS, type LabChokepointKind, type LabServiceStatus } from "@/lib/lab/lab-store";
 
 export const metadata: Metadata = {
@@ -42,6 +43,15 @@ const STATUS_BARS: { status: LabServiceStatus; labelKey: MessageKey; color: stri
   { status: "ACTIVE", labelKey: "lab.tracker.chart.active", color: "var(--ink)" },
   { status: "UNKNOWN", labelKey: "lab.tracker.chart.unknown", color: "var(--muted)" },
 ];
+
+// WP115: the dependency counts, in the spec's reading order. Counts under 5
+// never leave lab-stats.ts; the page only ever sees a number or "null".
+const DEPENDENCY_LABELS: Record<(typeof LAB_PUBLIC_DEPENDENCY_CATEGORIES)[number]["key"], MessageKey> = {
+  payment: "lab.tracker.depends.payment",
+  crypto: "lab.tracker.depends.crypto",
+  cdn: "lab.tracker.depends.cdn",
+  telegram: "lab.tracker.depends.telegram",
+};
 
 export default async function TrackerPage() {
   if (!labEnabled()) notFound();
@@ -183,6 +193,57 @@ export default async function TrackerPage() {
                     </p>
                   )}
                 </div>
+
+                {/* WP115: what the services depend on, from the weekly scans.
+                    k ≥ 5: a count below five never reaches this page, and
+                    the row reads "fewer than 5" instead. */}
+                <div className="mx-auto mt-12 max-w-3xl">
+                  <h3 className="text-center font-semibold">{t(locale, "lab.tracker.depends.title")}</h3>
+                  {!numbers.dependencyEvidenceSeen ? (
+                    <p className="muted mt-4 text-center text-sm leading-[1.7]">{t(locale, "lab.tracker.depends.empty")}</p>
+                  ) : (
+                    <div className="mt-5 overflow-hidden rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)]">
+                      <table className="w-full text-left text-sm">
+                        <caption className="sr-only">{t(locale, "lab.tracker.depends.title")}</caption>
+                        <thead>
+                          <tr className="border-b border-[var(--line)]">
+                            <th scope="col" className="px-4 py-3 font-semibold">{t(locale, "lab.tracker.depends.title")}</th>
+                            <th scope="col" className="px-4 py-3 text-right font-semibold">{t(locale, "lab.tracker.stat.services")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {LAB_PUBLIC_DEPENDENCY_CATEGORIES.map(({ key }) => {
+                            const count = numbers.byCategory[key];
+                            return (
+                              <tr key={key} className="border-b border-[var(--line)] last:border-b-0">
+                                <td className="px-4 py-3">{t(locale, DEPENDENCY_LABELS[key])}</td>
+                                <td className="px-4 py-3 text-right tabular-nums font-medium text-[var(--ink)]">
+                                  {count === null ? t(locale, "lab.tracker.depends.fewer") : count}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p className="muted mt-4 text-center text-sm leading-[1.7]">{t(locale, "lab.tracker.depends.note")}</p>
+
+                  {numbers.changedProviderAfterReport.reported > 0 && (
+                    <p className="muted mt-6 text-center text-sm leading-[1.7]">
+                      <strong className="font-semibold text-[var(--ink)]">{t(locale, "lab.tracker.changed.title")}: </strong>
+                      {t(locale, "lab.tracker.changed.prefix")}{" "}
+                      <strong className="tabular-nums text-[var(--ink)]">{numbers.changedProviderAfterReport.reported}</strong>{" "}
+                      {t(locale, "lab.tracker.changed.middle")}{" "}
+                      <strong className="tabular-nums text-[var(--ink)]">
+                        {numbers.changedProviderAfterReport.changed === null
+                          ? t(locale, "lab.tracker.changed.fewer")
+                          : numbers.changedProviderAfterReport.changed}
+                      </strong>{" "}
+                      {t(locale, "lab.tracker.changed.suffix")}
+                    </p>
+                  )}
+                </div>
               </>
             )}
 
@@ -211,7 +272,26 @@ export default async function TrackerPage() {
                 <h3 className="font-semibold">{t(locale, "lab.tracker.method.kinds.title")}</h3>
                 <p className="mt-2 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.tracker.method.kinds.body")}</p>
               </div>
+              <div>
+                <h3 className="font-semibold">{t(locale, "lab.tracker.method.depends.title")}</h3>
+                <p className="mt-2 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.tracker.method.depends.body")}</p>
+              </div>
             </div>
+
+            {/* WP115: the research this work follows. These are the only
+                external links on the page, and the e2e journey checks
+                exactly that: research hosts, never a service or provider. */}
+            <details className="mx-auto mt-10 max-w-2xl rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-4">
+              <summary className="cursor-pointer font-semibold">{t(locale, "lab.tracker.research.title")}</summary>
+              <p className="mt-3 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.tracker.research.body")}</p>
+              <ul className="mt-3 grid list-disc gap-2 pl-6 text-sm leading-[1.7]">
+                {LAB_RESEARCH_CREDITS.map((credit) => (
+                  <li key={credit.url}>
+                    <a className="link-underline" href={credit.url} rel="noopener noreferrer" target="_blank">{credit.label}</a>
+                  </li>
+                ))}
+              </ul>
+            </details>
             <p className="mt-8">
               <Link href="/minor-support" className="link-underline text-sm text-[var(--text-muted)]">
                 {t(locale, "lab.tracker.minor")}{" "}

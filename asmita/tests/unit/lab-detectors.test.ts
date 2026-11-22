@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildDetectorRegistry,
   clampScore,
+  createGendDetector,
   createHiveDetector,
   createOpenAiDetector,
   createSightengineDetector,
   firstJsonObject,
   hiveScoreFromOutput,
+  isNoFaceResult,
   isSkipped,
   sightengineScoreFromResponse,
   type FetchLike,
@@ -169,11 +171,111 @@ describe("Sightengine adapter", () => {
   });
 });
 
+describe("GenD adapter (WP113)", () => {
+  it("is skipped without the service URL or the token", () => {
+    const both = createGendDetector({});
+    expect(isSkipped(both)).toBe(true);
+    if (isSkipped(both)) expect(both.skipped).toBe("LAB_GEND_URL is not set");
+    const noToken = createGendDetector({ gendUrl: "http://127.0.0.1:8099" });
+    expect(isSkipped(noToken)).toBe(true);
+    if (isSkipped(noToken)) expect(noToken.skipped).toBe("LAB_GEND_TOKEN is not set");
+    const noUrl = createGendDetector({ gendToken: "test-token" });
+    expect(isSkipped(noUrl)).toBe(true);
+    if (isSkipped(noUrl)) expect(noUrl.skipped).toBe("LAB_GEND_URL is not set");
+  });
+
+  it("refuses a plain-http service URL unless it is local", () => {
+    const remote = createGendDetector({ gendUrl: "http://gend.example.test:8080", gendToken: "test-token" });
+    expect(isSkipped(remote)).toBe(true);
+    if (isSkipped(remote)) expect(remote.skipped).toBe("LAB_GEND_URL must be https");
+    expect(isSkipped(createGendDetector({ gendUrl: "not a url", gendToken: "test-token" }))).toBe(true);
+    expect(isSkipped(createGendDetector({ gendUrl: "https://gend.example.test", gendToken: "test-token" }))).toBe(false);
+    expect(isSkipped(createGendDetector({ gendUrl: "http://localhost:8099", gendToken: "test-token" }))).toBe(false);
+  });
+
+  it("posts the exact bytes with the bearer token and maps image_p_fake", async () => {
+    const fetchFn: FetchLike = vi.fn(async () =>
+      jsonResponse({
+        model: "GenD_CLIP_L_14@test",
+        detector: "YuNet@2023mar",
+        faces: [{ box: [10, 12, 140, 140], p_fake: 0.87 }],
+        image_p_fake: 0.87,
+        status: "ok",
+        timings_ms: { decode: 5, detect: 3, score: 900, total: 908 },
+      }),
+    );
+    const detector = detectorOf(
+      createGendDetector({ gendUrl: "http://127.0.0.1:8099/", gendToken: "test-token", fetchFn }),
+    );
+    expect(await detector.detect(IMAGE)).toEqual({ score: 0.87 });
+    // One request to the service's score endpoint, trailing slash normalised.
+    const [url, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://127.0.0.1:8099/v1/score");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
+    // The image travels as multipart form data, exactly as the route sniffed it.
+    const body = init.body as FormData;
+    expect(body.get("image")).toBeInstanceOf(Blob);
+  });
+
+  it("reports the service's no-face answer, never a zero score", async () => {
+    const fetchFn: FetchLike = vi.fn(async () =>
+      jsonResponse({
+        model: "GenD_CLIP_L_14@test",
+        detector: "YuNet@2023mar",
+        faces: [],
+        image_p_fake: null,
+        status: "no_face",
+        timings_ms: { decode: 5, detect: 3, score: 0, total: 8 },
+      }),
+    );
+    const detector = detectorOf(createGendDetector({ gendUrl: "http://127.0.0.1:8099", gendToken: "t", fetchFn }));
+    const result = await detector.detect(IMAGE);
+    expect(result).toEqual({ noFace: true });
+    expect(isNoFaceResult(result)).toBe(true);
+
+    // The null-score spelling of the same answer.
+    const nullScore: FetchLike = vi.fn(async () => jsonResponse({ faces: [], image_p_fake: null, status: "ok" }));
+    const other = detectorOf(createGendDetector({ gendUrl: "http://127.0.0.1:8099", gendToken: "t", fetchFn: nullScore }));
+    expect(await other.detect(IMAGE)).toEqual({ noFace: true });
+  });
+
+  it("turns provider failures into fixed error codes, 429 included", async () => {
+    const detector = detectorOf(createGendDetector({ gendUrl: "http://127.0.0.1:8099", gendToken: "t" }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error": "busy"}', { status: 429 })));
+    expect(await detector.detect(IMAGE)).toEqual({ error: "gend_http_429" });
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("not json", { status: 200 })));
+    expect(await detector.detect(IMAGE)).toEqual({ error: "gend_bad_response" });
+
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ faces: [{ box: [0, 0, 10, 10], p_fake: 0.5 }], status: "ok" })));
+    expect(await detector.detect(IMAGE)).toEqual({ error: "gend_bad_response" });
+
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ image_p_fake: "0.9", status: "ok" })));
+    expect(await detector.detect(IMAGE)).toEqual({ error: "gend_bad_response" });
+
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down"); }));
+    expect(await detector.detect(IMAGE)).toEqual({ error: "gend_request_failed" });
+    vi.unstubAllGlobals();
+  });
+
+  it("clamps an out-of-range score rather than trusting the wire", async () => {
+    const fetchFn: FetchLike = vi.fn(async () => jsonResponse({ faces: [], image_p_fake: 1.4, status: "ok" }));
+    const detector = detectorOf(createGendDetector({ gendUrl: "http://127.0.0.1:8099", gendToken: "t", fetchFn }));
+    expect(await detector.detect(IMAGE)).toEqual({ score: 1 });
+  });
+});
+
 describe("the registry", () => {
   it("keeps the fixed panel order and names skipped rows", () => {
     const rows = buildDetectorRegistry({});
-    expect(rows.map((row) => row.id)).toEqual(["openai", "hive", "sightengine"]);
-    expect(rows.map((row) => row.name)).toEqual(["OpenAI vision", "Hive AI-generated detection", "Sightengine ai-generated"]);
+    expect(rows.map((row) => row.id)).toEqual(["openai", "hive", "sightengine", "gend"]);
+    expect(rows.map((row) => row.name)).toEqual([
+      "OpenAI vision",
+      "Hive AI-generated detection",
+      "Sightengine ai-generated",
+      "GenD (open model, CTU Prague)",
+    ]);
     expect(rows.every((row) => isSkipped(row.result))).toBe(true);
   });
 
@@ -182,6 +284,13 @@ describe("the registry", () => {
     expect(isSkipped(rows[0]!.result)).toBe(true);
     expect(isSkipped(rows[1]!.result)).toBe(false);
     expect(isSkipped(rows[2]!.result)).toBe(true);
+    expect(isSkipped(rows[3]!.result)).toBe(true);
+  });
+
+  it("builds the GenD adapter when both its env values are set", () => {
+    const rows = buildDetectorRegistry({ gendUrl: "http://127.0.0.1:8099", gendToken: "test-token" });
+    expect(isSkipped(rows[3]!.result)).toBe(false);
+    if (!isSkipped(rows[3]!.result)) expect(rows[3]!.result.detector.id).toBe("gend");
   });
 });
 
@@ -205,6 +314,14 @@ describe("verdict bands", () => {
     expect(bandsDisagree([row("likely_ai"), row(undefined, "error")])).toBe(false);
     expect(bandsDisagree([row(undefined, "error"), row(undefined, "not_configured")])).toBe(false);
   });
+
+  it("does not count a low or unclear GenD score as disagreement, since GenD only checks face swaps", () => {
+    const row = (band: DetectorRow["band"]): DetectorRow => ({ id: "x", name: "X", status: "scored", band });
+    const gend = (band: DetectorRow["band"]): DetectorRow => ({ ...row(band), id: "gend" });
+    expect(bandsDisagree([row("likely_ai"), gend("likely_camera")])).toBe(false);
+    expect(bandsDisagree([row("likely_ai"), gend("unclear")])).toBe(false);
+    expect(bandsDisagree([row("likely_camera"), gend("likely_ai")])).toBe(true);
+  });
 });
 
 describe("runDetectorPanel", () => {
@@ -212,7 +329,7 @@ describe("runDetectorPanel", () => {
     const fetchSpy = vi.fn(async () => new Response("must not be called"));
     vi.stubGlobal("fetch", fetchSpy);
     const result = await runDetectorPanel(IMAGE, { env: {}, fetchFn: fetchSpy });
-    expect(result.rows).toHaveLength(3);
+    expect(result.rows).toHaveLength(4);
     expect(result.rows.every((row) => row.status === "not_configured")).toBe(true);
     expect(result.disagree).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -224,7 +341,7 @@ describe("runDetectorPanel", () => {
     const result = await runDetectorPanel(IMAGE, { env: { OPENAI_API_KEY: "test-key" }, fetchFn });
     const openai = result.rows.find((row) => row.id === "openai");
     expect(openai).toMatchObject({ status: "scored", score: 80, band: "likely_ai" });
-    expect(result.rows.filter((row) => row.status === "not_configured")).toHaveLength(2);
+    expect(result.rows.filter((row) => row.status === "not_configured")).toHaveLength(3);
     expect(result.disagree).toBe(false);
   });
 
@@ -270,5 +387,47 @@ describe("runDetectorPanel", () => {
       timeoutMs: 10,
     });
     expect(result.rows.find((row) => row.id === "openai")).toMatchObject({ status: "error", error: "timeout" });
+  });
+
+  it("bands a GenD score through the same 0..100 scale as every other row", async () => {
+    const fetchFn: FetchLike = vi.fn(async () =>
+      jsonResponse({ faces: [{ box: [0, 0, 50, 50], p_fake: 0.724 }], image_p_fake: 0.724, status: "ok" }),
+    );
+    const result = await runDetectorPanel(IMAGE, {
+      env: { LAB_GEND_URL: "http://127.0.0.1:8099", LAB_GEND_TOKEN: "test-token" },
+      fetchFn,
+    });
+    expect(result.rows.find((row) => row.id === "gend")).toMatchObject({
+      status: "scored",
+      score: 72,
+      band: "likely_ai",
+    });
+    // The three keyless rows stay honest.
+    expect(result.rows.filter((row) => row.status === "not_configured")).toHaveLength(3);
+  });
+
+  it("shows a GenD no-face answer as its own row status, not a score and not an error", async () => {
+    const fetchFn: FetchLike = vi.fn(async () =>
+      jsonResponse({ faces: [], image_p_fake: null, status: "no_face" }),
+    );
+    const result = await runDetectorPanel(IMAGE, {
+      env: { LAB_GEND_URL: "http://127.0.0.1:8099", LAB_GEND_TOKEN: "test-token" },
+      fetchFn,
+    });
+    const gend = result.rows.find((row) => row.id === "gend");
+    expect(gend).toMatchObject({ status: "no_face" });
+    expect(gend?.score).toBeUndefined();
+    // A no-face answer is not a disagreement: nothing scored against it.
+    expect(result.disagree).toBe(false);
+  });
+
+  it("times a hung GenD service out without sinking the panel", async () => {
+    const fetchFn: FetchLike = () => new Promise(() => {});
+    const result = await runDetectorPanel(IMAGE, {
+      env: { LAB_GEND_URL: "http://127.0.0.1:8099", LAB_GEND_TOKEN: "test-token" },
+      fetchFn,
+      timeoutMs: 10,
+    });
+    expect(result.rows.find((row) => row.id === "gend")).toMatchObject({ status: "error", error: "timeout" });
   });
 });

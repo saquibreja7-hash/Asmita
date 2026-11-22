@@ -138,6 +138,7 @@ import {
   getPartnerFeedPage,
   kindForAlgorithm,
   PARTNER_FEED_MAX_PAGE,
+  PARTNER_FEED_SETTLE_SECONDS,
   syncPartnerFeedFingerprint,
   syncPartnerFeedForCase,
 } from "@/lib/partner-feed";
@@ -156,6 +157,18 @@ const template = {
   isActive: true,
   version: 1,
 };
+
+/**
+ * The feed holds back events younger than PARTNER_FEED_SETTLE_SECONDS; these
+ * tests poll right after writing, so they age every memory event past the
+ * window first (all by the same amount, so their order is unchanged), as if
+ * the partner had polled a minute later.
+ */
+function settleFeed() {
+  for (const event of partnerMemory().feedEvents) {
+    event.createdAt = new Date(new Date(event.createdAt).getTime() - (PARTNER_FEED_SETTLE_SECONDS + 1) * 1000);
+  }
+}
 
 const HEX_A = "ab".repeat(32);
 const HEX_B = "cd".repeat(32);
@@ -288,6 +301,7 @@ describe("the feed's sync, in-memory store", () => {
     await agree("case-2");
     expect(partnerMemory().feedEvents).toHaveLength(6);
 
+    settleFeed();
     const first = await getPartnerFeedPage(0, 4);
     expect(first.events).toHaveLength(4);
     expect(first.nextCursor).toBe(first.events[3]!.seq);
@@ -297,6 +311,7 @@ describe("the feed's sync, in-memory store", () => {
     const walked = [...first.events, ...second.events];
     expect(walked.map((e) => e.seq)).toEqual(partnerMemory().feedEvents.map((e) => e.seq));
     // A cursor at the end answers empty, with no nextCursor.
+    settleFeed();
     expect(await getPartnerFeedPage(walked[5]!.seq, 4)).toEqual({ events: [], nextCursor: null });
   });
 
@@ -308,6 +323,7 @@ describe("the feed's sync, in-memory store", () => {
 
     // A partner polling from the beginning sees only the WITHDRAW — the ADD
     // is held back, so the withdrawn fingerprint never appears.
+    settleFeed();
     const page = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     expect(page.events).toEqual([
       { seq: expect.any(Number), type: "withdraw", fingerprintId: "hash-1", kind: "image", caseRef: "ASMITA-2026-00001" },
@@ -315,6 +331,7 @@ describe("the feed's sync, in-memory store", () => {
 
     // While it is shareable again, the ADD carries the hash and nothing else.
     await agree("case-1");
+    settleFeed();
     const live = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     const add = live.events.find((e) => e.type === "add")!;
     expect(add).toEqual({
@@ -324,6 +341,7 @@ describe("the feed's sync, in-memory store", () => {
 
     // An unreadable stored hash is never served either.
     crawlMemory().fingerprints.get("hash-1")!.hashEncrypted = "not-encrypted";
+    settleFeed();
     const broken = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     expect(broken.events.filter((e) => e.type === "add")).toEqual([]);
   });
@@ -334,6 +352,35 @@ describe("the feed's sync, in-memory store", () => {
     await agree("case-1");
     expect(await fingerprintWasShared("hash-1")).toBe(true);
     expect(await fingerprintWasShared("hash-2")).toBe(false);
+  });
+
+  it("a video ADD serves its full frame list, not the best-frame hash, frames below the publish quality dropped (WP110)", async () => {
+    cases.set("case-1", memoryCase("case-1", "ASMITA-2026-00001"));
+    const frames = [
+      { hash: HEX_A, quality: 90, t: 0 },
+      { hash: HEX_B, quality: 30, t: 1 },
+      { hash: "ef".repeat(32), quality: 80, t: 2 },
+    ];
+    crawlMemory().fingerprints.set("hash-video", {
+      id: "hash-video", caseId: "case-1", hashEncrypted: encryptField(HEX_A), quality: 90,
+      status: "APPROVED", crawlPoolId: null, algorithm: "VPDQ",
+      videoFramesEncrypted: encryptField(JSON.stringify(frames)),
+    });
+    await agree("case-1");
+
+    settleFeed();
+    const page = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
+    expect(page.events).toEqual([
+      { seq: expect.any(Number), type: "add", fingerprintId: "hash-video", kind: "video", frames: [HEX_A, "ef".repeat(32)], caseRef: "ASMITA-2026-00001" },
+    ]);
+
+    // Every frame below the publish quality: the ADD is held back entirely.
+    crawlMemory().fingerprints.get("hash-video")!.videoFramesEncrypted = encryptField(JSON.stringify([{ hash: HEX_A, quality: 40, t: 0 }]));
+    partnerMemory().feedEvents.length = 0; // replay the same ADD against the weaker frames
+    partnerMemory().feedEvents.push({ id: "e2", seq: 1, fingerprintId: "hash-video", type: "ADD", kind: "video", caseId: "case-1", caseRef: "ASMITA-2026-00001", createdAt: new Date() });
+    settleFeed();
+    const weaker = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
+    expect(weaker.events).toEqual([]);
   });
 
   it("account erasure withdraws what was shared of hers and drops her outcome rows (Rule 2)", async () => {
@@ -443,18 +490,29 @@ describe("the feed, Kysely path", () => {
       { seq: 4, type: "WITHDRAW", fingerprintId: "hash-3", kind: "image", caseRef: "ASMITA-2026-00002" },
     ];
     mocks.kysely.state.rows.HashSubmission = [
-      { id: "hash-1", caseId: "case-1", status: "APPROVED", algorithm: "PDQ", hashEncrypted: encryptField(HEX_A) },
-      { id: "hash-2", caseId: "case-1", status: "REJECTED", algorithm: "PDQ", hashEncrypted: encryptField(HEX_B) },
-      { id: "hash-video", caseId: "case-1", status: "APPROVED", algorithm: "VPDQ", hashEncrypted: encryptField(JSON.stringify([HEX_A, HEX_B])) },
+      { id: "hash-1", caseId: "case-1", status: "APPROVED", algorithm: "PDQ", hashEncrypted: encryptField(HEX_A), quality: 100, videoFramesEncrypted: null },
+      { id: "hash-2", caseId: "case-1", status: "REJECTED", algorithm: "PDQ", hashEncrypted: encryptField(HEX_B), quality: 100, videoFramesEncrypted: null },
+      {
+        id: "hash-video", caseId: "case-1", status: "APPROVED", algorithm: "VPDQ", hashEncrypted: encryptField(HEX_A), quality: 90,
+        // The stored shape since video fingerprints: the full frame list lives
+        // in videoFramesEncrypted and hashEncrypted keeps only the best frame.
+        videoFramesEncrypted: encryptField(JSON.stringify([
+          { hash: HEX_A, quality: 90, t: 0 },
+          { hash: HEX_B, quality: 30, t: 1 },
+          { hash: "ef".repeat(32), quality: 80, t: 2 },
+        ])),
+      },
     ];
     mocks.kysely.state.rows.PartnerShareConsent = [{ caseId: "case-1", withdrawnAt: null }];
     mocks.kysely.state.rows.Case = [{ id: "case-1", "Case.id": "case-1", referenceNumber: "ASMITA-2026-00001", "User.ageOver18": true }];
 
     const page = await getPartnerFeedPage(0, PARTNER_FEED_MAX_PAGE);
     // hash-2 was rejected since its ADD: its event is held back, its hash never served.
+    // hash-video serves its full frame list, not the best-frame hash, with the
+    // frames below the publish quality dropped (WP110).
     expect(page.events).toEqual([
       { seq: 1, type: "add", fingerprintId: "hash-1", kind: "image", hash: HEX_A, caseRef: "ASMITA-2026-00001" },
-      { seq: 3, type: "add", fingerprintId: "hash-video", kind: "video", frames: [HEX_A, HEX_B], caseRef: "ASMITA-2026-00001" },
+      { seq: 3, type: "add", fingerprintId: "hash-video", kind: "video", frames: [HEX_A, "ef".repeat(32)], caseRef: "ASMITA-2026-00001" },
       { seq: 4, type: "withdraw", fingerprintId: "hash-3", kind: "image", caseRef: "ASMITA-2026-00002" },
     ]);
 

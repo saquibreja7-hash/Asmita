@@ -257,6 +257,77 @@ test("each link gets its own notice, signed one after another on the review scre
   expect(await confirmations()).toBe(1);
 });
 
+// WP131: the dev-server stall class (WP101's lost hash-upload answer, this
+// WP's lost sign-notice answer) leaves the survivor mid-sign when an attempt
+// lands on the server but its HTTP answer never arrives. Her retry is then
+// answered 409 already_signed — and the journey must continue from there,
+// not strand her on a screen for a notice she already signed.
+test("a sign whose answer was lost still finishes the journey when retried", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
+  test.setTimeout(180_000);
+  await markTemplateReviewed("IT_RULES_2021");
+  await register(page);
+  await page.getByLabel("Links where the content appears").fill(
+    [`https://www.whatsapp.com/channel/asmita-synthetic-${randomUUID()}`, `https://wa.me/asmita-synthetic-${randomUUID()}`].join("\n"),
+  );
+  await page.getByLabel(/I declare/).check();
+  const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
+  await page.getByRole("button", { name: "Continue to review" }).click();
+  await page.getByRole("button", { name: "Create my case" }).click();
+  const { caseId } = (await (await createResponse).json()) as { caseId: string };
+
+  // The first notice signs normally, and the review screen offers the next.
+  await page.getByLabel("Full name", { exact: true }).fill("Synthetic Survivor");
+  await page.getByLabel("Email address").fill("survivor@example.invalid");
+  await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
+  const signed = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
+  await page.getByRole("button", { name: "Sign and submit" }).click();
+  expect((await signed).ok()).toBe(true);
+  await expect(page.getByText("Signed. Here is the notice for your next link.")).toBeVisible();
+
+  // The lost attempt: the second notice's sign request reaches the server
+  // and saves the PDF, but its answer never makes it back to the browser.
+  // The preview names exactly the notice the screen holds, so this is the
+  // same request the retry will be answered about.
+  const stale = await page.request.get(`/api/cases/${caseId}/preview-notice`);
+  expect(stale.ok()).toBe(true);
+  const staleUrlId = stale.headers()["x-notice-url-id"];
+  const staleRef = stale.headers()["x-notice-template-ref"];
+  expect(staleUrlId).toBeTruthy();
+  expect(staleRef).toBeTruthy();
+  const landed = await post(page.request, `/api/cases/${caseId}/sign-notice`, {
+    urlId: staleUrlId,
+    templateRef: staleRef,
+    name: "Synthetic Survivor",
+    contact: "survivor@example.invalid",
+  });
+  expect(landed.ok(), await landed.text()).toBe(true);
+
+  // She never saw that answer, so she clicks again. The retry is refused
+  // with 409 already_signed — the notice IS signed — and the journey
+  // continues anyway instead of showing a dead end.
+  await page.getByLabel("Full name", { exact: true }).fill("Synthetic Survivor");
+  await page.getByLabel("Email address").fill("survivor@example.invalid");
+  await page.getByRole("checkbox", { name: /I confirm that the information above is accurate/ }).check();
+  const retried = page.waitForResponse((r) => r.url().endsWith("/sign-notice"));
+  await page.getByRole("button", { name: "Sign and submit" }).click();
+  const retryResponse = await retried;
+  expect(retryResponse.status()).toBe(409);
+  expect(await retryResponse.json()).toEqual({ error: "already_signed" });
+
+  // The recovery behaves exactly like a successful sign: the confirmation
+  // page arrives, both PDFs exist, and exactly one confirmation is sent.
+  await expect(page).toHaveURL(/\/case\/[^/]+\/confirmation$/, { timeout: 30_000 });
+  const signedNotices = await withAdmin((db) =>
+    db.query('SELECT 1 FROM "SubmittedUrl" WHERE "caseId" = $1 AND "signedNoticePdf" IS NOT NULL', [caseId]),
+  );
+  expect(signedNotices.rowCount).toBe(2);
+  const confirmations = await withAdmin(async (db) => (await db.query(
+    `SELECT 1 FROM audit_log WHERE "entityId" = $1 AND "eventType" = 'NOTICE_SENT' AND data->>'messageType' = 'victim_confirmation'`, [caseId],
+  )).rowCount);
+  expect(confirmations).toBe(1);
+});
+
 test("a form-only link listed first does not hide the notices that can be signed", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
   test.setTimeout(180_000);

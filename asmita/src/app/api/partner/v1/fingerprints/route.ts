@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 const FEED_REQUESTS_PER_HOUR = 300;
 
 export async function GET(request: Request) {
-  const auth = await authenticatePartner(request, "v1/fingerprints", FEED_REQUESTS_PER_HOUR);
+  const auth = await authenticatePartner(request, "v1/fingerprints", FEED_REQUESTS_PER_HOUR, "feed");
   if (!auth.ok) return auth.response;
 
   const params = new URL(request.url).searchParams;

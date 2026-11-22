@@ -51,6 +51,7 @@
     "react-server-dom-webpack": "^19.3.0",
     "resend": "^6.12.3",
     "sarvam-conv-ai-sdk": "0.0.42",
+    "tldts": "^7.5.5",
     "vinext": "1.4.0",
     "zod": "^4.4.3"
   },
