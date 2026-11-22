@@ -14,11 +14,6 @@ import { writeAuditLog } from "@/lib/audit";
 import { createCsrfPair } from "@/lib/csrf";
 import { GET as LIST, POST as COMPUTE } from "@/app/api/admin/org/scorecard/route";
 import { GET as GET_SNAPSHOT, PUT as PUT_SNAPSHOT } from "@/app/api/admin/org/scorecard/[id]/route";
-import { GET as GET_CSV } from "@/app/research/platform-scorecard.csv/route";
-import {
-  SCORECARD_DEADLINE_TEXT,
-  SCORECARD_MIN_NOTICES_TEXT,
-} from "@/app/(public)/research/platform-scorecard/page";
 import {
   aggregateScorecard,
   latestCompletedScorecardPeriod,
@@ -363,10 +358,8 @@ describe("the published scorecard is what the public sees", () => {
     vi.clearAllMocks();
   });
 
-  it("hides everything while nothing is published, then serves the CSV once it is", async () => {
+  it("reports nothing published until a snapshot is published, and never leaks drafts", async () => {
     expect(await hasPublishedScorecard()).toBe(false);
-    const noCsv = await GET_CSV(new Request("https://asmita.test/research/platform-scorecard.csv"));
-    expect(noCsv.status).toBe(404);
 
     const { snapshot } = (await (await COMPUTE(adminRequest("/api/admin/org/scorecard", "POST", { period: "2026-Q3" }))).json()) as {
       snapshot: ScorecardSnapshot;
@@ -374,13 +367,6 @@ describe("the published scorecard is what the public sees", () => {
     await publishScorecardSnapshot(snapshot.id, "admin-1");
     expect(await hasPublishedScorecard()).toBe(true);
     expect(await listPublishedScorecardPeriods()).toEqual(["2026-Q3"]);
-
-    const csv = await GET_CSV(new Request("https://asmita.test/research/platform-scorecard.csv"));
-    expect(csv.status).toBe(200);
-    expect(csv.headers.get("content-type")).toContain("text/csv");
-    expect(csv.headers.get("content-disposition")).toContain("platform-scorecard-2026-Q3.csv");
-    const body = await csv.text();
-    expect(body.split("\r\n")[0]).toContain("Platform,Notices sent");
 
     // Drafts never leak: a second period stays draft, so no CSV for it.
     await recomputeScorecardSnapshot("2026-Q2", "admin-1");
@@ -446,24 +432,10 @@ describe("the /research lists", () => {
     expect((await listPublishedOrgPosts({ kind: "LAB_NOTE" })).posts).toEqual([]);
   });
 
-  it("give every post one URL, policy posts under /policy and the rest under /news", () => {
-    expect(orgPostHref({ slug: "ask", kind: "POLICY" })).toBe("/policy/ask");
-    expect(orgPostHref({ slug: "sign", kind: "CAMPAIGN" })).toBe("/policy/sign");
+  it("give every post one URL under /news, whatever its kind", () => {
+    expect(orgPostHref({ slug: "ask", kind: "POLICY" })).toBe("/news/ask");
+    expect(orgPostHref({ slug: "sign", kind: "CAMPAIGN" })).toBe("/news/sign");
     expect(orgPostHref({ slug: "hello", kind: "NEWS" })).toBe("/news/hello");
     expect(orgPostHref({ slug: "study", kind: "RESEARCH" })).toBe("/news/study");
-  });
-});
-
-// ─── The page quotes the constants, never its own numbers ──────────────────
-
-describe("the scorecard page agrees with the constants it quotes", () => {
-  it("states the deadline the escalation ladder actually enforces", () => {
-    expect(SCORECARD_DEADLINE_TEXT).toContain(`${PLATFORM_DEADLINE_HOURS} hours`);
-    expect(SCORECARD_DEADLINE_TEXT).not.toContain(`${PLATFORM_DEADLINE_HOURS + 1} hours`);
-  });
-
-  it("states the small-number threshold the aggregation actually applies", () => {
-    expect(SCORECARD_MIN_NOTICES_TEXT).toContain(`${SCORECARD_MIN_NOTICES} `);
-    expect(SCORECARD_MIN_NOTICES_TEXT).not.toContain(`${SCORECARD_MIN_NOTICES + 1} `);
   });
 });

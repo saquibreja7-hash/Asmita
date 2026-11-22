@@ -35,7 +35,7 @@ Branch: `feat/org-pages`. Built 20 November 2026.
 
 | Page / file | Placeholder | What the owner needs to supply |
 |---|---|---|
-| /get-involved ("Other ways to help") | `<TO_FILL: social links>` | The organization's social media URLs/handles, as links. |
+| /get-involved ("Other ways to help") | plain LinkedIn icon, no link yet | The organization's social media URLs. The icon in the "Follow us" card is not a link; wrap it in `<a>` and add the other networks when the URLs are supplied. |
 | /careers ("Why work with us") — key `org.careers.whyIntro` | `<TO_FILL: benefits — for example salary bands, leave policy, remote-work policy>` | The real benefits summary, in both languages (the key exists in `en.json` and `hi.json`). |
 | /training (each of the 6 programmes) | `<TO_FILL: session length>` | How long a session of that programme runs. |
 | /training (each of the 6 programmes) | `<TO_FILL: cost, or 'free for <TO_FILL>' >` | Cost, or who gets it free (e.g. "free for government schools"). |
@@ -270,3 +270,11 @@ Decisions made on my own (second round)
 2. **Updated the existing WP77 entry in crawler/docs/v2-progress.md in place** — the work package both forbids appending to that file and requires the WP77 entry to reflect the completed state.
 3. **org-advocacy.spec keeps its published snapshot at the end of its file** (no teardown): the file's last test depends on the publish, and no other spec in the suite asserts the nav or sitemap state a published snapshot changes (searched; also confirmed by the full-suite run on the shared throwaway database).
 4. **The static XML sitemap keeps its WP58 shape** (no scorecard URL): that decision is WP58's own (see its item 10 above) and re-verified — nothing in the verify exercises it.
+
+## 2026-11-21: public pages removed
+
+Owner decision: /press, /research (including /research/platform-scorecard and its CSV), /policy (including /policy/[slug]) and the /newsletter landing page were taken out because they were mostly empty or repeated other pages. The newsletter sign-up lives in the footer; /newsletter/confirm and /newsletter/unsubscribe stay because the confirmation emails link to them. Footer, header nav, sitemap, get-involved cards and tests were updated. Every post kind now lives under /news/[slug]. The admin screens (posts, scorecard, newsletter) and the scorecard library are unchanged; restore the public pages from git history when they are needed again.
+
+## 2026-11-21: volunteer form, careers and training
+
+Owner decisions: the volunteer form no longer asks which languages the person knows; "Roles you are interested in" became "Areas you want to volunteer in" (legal, policy and advocacy, research and data, technology and engineering, design and creative, translation, outreach and communications, writing and content, something else; one to three). The newsletter form was taken off /careers (the footer has it; we are not hiring right now). The /training page, its request form and the upcoming-sessions block on /get-involved were removed. The training-request API kind and the admin events screens stay in the backend, unused by the public site; restore the page from git history if programmes start.

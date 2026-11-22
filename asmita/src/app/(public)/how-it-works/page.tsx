@@ -151,7 +151,8 @@ export default async function HowItWorksPage() {
         </div>
 
         {/* CLOSING */}
-        <section className="container page-hero text-center">
+        <section className="zone-sunset">
+          <div className="zone-sunset-content container page-hero text-center">
           <div className="mx-auto max-w-2xl">
             <h2 className="section-title">
               {t(locale, "hiw.closing.title")}
@@ -167,6 +168,7 @@ export default async function HowItWorksPage() {
                 {t(locale, "hiw.closing.cta2")}
               </Link>
             </div>
+          </div>
           </div>
         </section>
       </div>

@@ -1543,6 +1543,7 @@ model NewsletterSubscriber {
   id                   String    @id @default(uuid())
   emailEnc             String
   emailHash            String    @unique
+  firstNameEnc         String?
   locale               String    @default("en")
   status               String    @default("PENDING")
   confirmTokenHash     String?

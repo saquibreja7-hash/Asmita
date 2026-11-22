@@ -14,6 +14,7 @@ export const siteMap: SiteGroup[] = [
   {
     title: "Get help",
     links: [
+      { href: "/help", label: "Help and filing", note: "Every way to get help, and how a complaint works" },
       { href: "/get-help", label: "Get help", note: "Situations, steps, and tools" },
       { href: "/start", label: "Start a case", note: "Begin a confidential report" },
       { href: "/eligibility", label: "Check eligibility" },
@@ -45,8 +46,6 @@ export const siteMap: SiteGroup[] = [
       { href: "/resources/legal", label: "Your legal rights" },
       { href: "/faq", label: "FAQ" },
       { href: "/news", label: "News", note: "Updates, stories, research and campaigns" },
-      { href: "/policy", label: "Policy and advocacy" },
-      { href: "/press", label: "Press", note: "Releases, coverage and the media kit" },
     ],
   },
   {
@@ -60,8 +59,6 @@ export const siteMap: SiteGroup[] = [
       { href: "/partners/academic", label: "Universities and researchers" },
       { href: "/volunteer", label: "Volunteer" },
       { href: "/careers", label: "Careers" },
-      { href: "/training", label: "Training and workshops" },
-      { href: "/newsletter", label: "Newsletter" },
     ],
   },
   {
@@ -89,7 +86,6 @@ export const siteMap: SiteGroup[] = [
       { href: "/about", label: "About" },
       { href: "/what-we-do", label: "What we do" },
       { href: "/how-it-works", label: "How it works" },
-      { href: "/research", label: "Research" },
       { href: "/for-platforms", label: "For platforms" },
       { href: "/for-platforms/trusted-flagger", label: "What a notice contains", note: "For trust and safety teams" },
       { href: "/contact", label: "Contact" },

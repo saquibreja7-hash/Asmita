@@ -5,7 +5,6 @@ import { siteMap } from "@/lib/site-map";
 import { issueContentHi } from "@/lib/issue-content-hi";
 import { audiencesHi } from "@/lib/audience-content-hi";
 import { getLocale } from "@/lib/get-locale";
-import { hasPublishedScorecard } from "@/lib/scorecard-snapshots";
 
 export const metadata: Metadata = {
   title: "Sitemap",
@@ -22,6 +21,7 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/issue": { label: "तस्वीरों के ज़रिए दुर्व्यवहार" },
   "/glossary": { label: "शब्दावली" },
   "/who-we-help": { label: "हम किसकी मदद करते हैं" },
+  "/help": { label: "मदद और शिकायत", note: "मदद के सभी रास्ते, और शिकायत कैसे होती है" },
   "/resources": { label: "संसाधन" },
   "/resources/guides": { label: "व्यावहारिक मार्गदर्शिकाएँ" },
   "/resources/directory": { label: "सहायता सूची", note: "सार्वजनिक सेवाएँ; मौजूदा उपलब्धता जाँचें" },
@@ -30,10 +30,7 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/about": { label: "परिचय" },
   "/what-we-do": { label: "हम क्या करते हैं" },
   "/how-it-works": { label: "प्रक्रिया कैसे काम करती है" },
-  "/research": { label: "शोध" },
   "/for-platforms": { label: "प्लेटफ़ॉर्म के लिए", note: "अंग्रेज़ी में" },
-  "/press": { label: "प्रेस", note: "विज्ञप्तियाँ, कवरेज और मीडिया किट" },
-  "/research/platform-scorecard": { label: "प्लेटफ़ॉर्म स्कोरकार्ड" },
   "/contact": { label: "संपर्क" },
   "/feedback": { label: "प्रतिक्रिया" },
   "/privacy": { label: "निजता" },
@@ -61,20 +58,7 @@ export default async function SitemapPage() {
     if (href.startsWith("/who-we-help/")) return { label: audiencesHi[href.slice(13)]?.term };
     return linksHi[href];
   };
-  // The scorecard page joins the list only once a snapshot is published
-  // (WP58) — the same rule as the header nav.
-  const scorecardPublished = await hasPublishedScorecard();
-  const groups = siteMap.map((group) =>
-    group.title === "Resources" && scorecardPublished
-      ? {
-          ...group,
-          links: [
-            ...group.links,
-            { href: "/research/platform-scorecard", label: "Platform scorecard", note: "How platforms respond to our notices" },
-          ],
-        }
-      : group,
-  );
+  const groups = siteMap;
   return (
     <AppShell>
       <div className="page-canvas">

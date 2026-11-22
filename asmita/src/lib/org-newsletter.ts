@@ -24,6 +24,7 @@ const MAX_MEMORY_SUBSCRIBERS = 1000;
 export const newsletterSignupSchema = z
   .object({
     email: z.string().trim().toLowerCase().max(254).email(),
+    firstName: z.string().trim().min(1).max(60),
     locale: z.enum(["en", "hi"]).default("en"),
     source: z.string().trim().min(1).max(80),
     // Hidden from people; a filled value means a bot.
@@ -46,6 +47,7 @@ export type NewsletterSubscriber = {
 /** Memory rows also carry the encrypted address and the hashed tokens. */
 type MemorySubscriber = NewsletterSubscriber & {
   emailEnc: string;
+  firstNameEnc?: string | null;
   confirmTokenHash: string | null;
   unsubscribeTokenHash: string | null;
 };
@@ -88,7 +90,9 @@ export function appBaseUrl() {
  * probe who is on the list. Already-confirmed addresses get no email and
  * no state change.
  */
-export async function subscribeToNewsletter(input: z.infer<typeof newsletterSignupSchema>): Promise<{
+export async function subscribeToNewsletter(
+  input: Omit<z.infer<typeof newsletterSignupSchema>, "firstName" | "fax"> & { firstName?: string },
+): Promise<{
   ok: true;
   /** The confirm token, when a confirmation email is needed. */
   confirmToken: string | null;
@@ -106,11 +110,14 @@ export async function subscribeToNewsletter(input: z.infer<typeof newsletterSign
   const confirmTokenHash = sha256(confirmToken);
   const now = new Date().toISOString();
   if (existing) {
-    // Pending or unsubscribed: a fresh single-use token, clock restarted.
+    // Pending or unsubscribed: a fresh single-use token, clock restarted, and
+    // the first name given this time (unsubscribing cleared the old one).
+    const firstNameEnc = input.firstName ? encryptField(input.firstName) : null;
     if (devNoDb()) {
       const current = newsletterSubscribers.find((entry) => entry.emailHash === emailHash);
       if (current) {
         current.status = "PENDING";
+        current.firstNameEnc = firstNameEnc;
         current.locale = input.locale;
         current.confirmTokenHash = confirmTokenHash;
         current.updatedAt = now;
@@ -119,7 +126,7 @@ export async function subscribeToNewsletter(input: z.infer<typeof newsletterSign
       const { db } = await import("@/lib/db");
       await db.newsletterSubscriber.update({
         where: { emailHash },
-        data: { status: "PENDING", locale: input.locale, confirmTokenHash, unsubscribedAt: null },
+        data: { status: "PENDING", firstNameEnc, locale: input.locale, confirmTokenHash, unsubscribedAt: null },
       });
     }
     return { ok: true, confirmToken, unsubscribeToken: null, email };
@@ -128,6 +135,7 @@ export async function subscribeToNewsletter(input: z.infer<typeof newsletterSign
   const record: MemorySubscriber = {
     id: crypto.randomUUID(),
     emailEnc: encryptField(email),
+    firstNameEnc: input.firstName ? encryptField(input.firstName) : null,
     emailHash,
     locale: input.locale,
     status: "PENDING",
@@ -146,6 +154,7 @@ export async function subscribeToNewsletter(input: z.infer<typeof newsletterSign
     await db.newsletterSubscriber.create({
       data: {
         emailEnc: record.emailEnc,
+        firstNameEnc: record.firstNameEnc ?? null,
         emailHash,
         locale: input.locale,
         status: "PENDING",
@@ -220,6 +229,8 @@ export async function unsubscribeNewsletterSubscriber(token: string): Promise<{ 
     const current = newsletterSubscribers.find((entry) => entry.unsubscribeTokenHash === unsubscribeTokenHash);
     if (!current) return { ok: false, error: "token_invalid" };
     current.status = "UNSUBSCRIBED";
+    // The first name is only for sending the newsletter; drop it on the way out.
+    current.firstNameEnc = null;
     current.unsubscribedAt = new Date().toISOString();
     current.updatedAt = current.unsubscribedAt;
     email = safeDecrypt(current.emailEnc);
@@ -229,7 +240,7 @@ export async function unsubscribeNewsletterSubscriber(token: string): Promise<{ 
     if (!row) return { ok: false, error: "token_invalid" };
     const updated = await db.newsletterSubscriber.update({
       where: { id: row.id },
-      data: { status: "UNSUBSCRIBED", unsubscribedAt: new Date() },
+      data: { status: "UNSUBSCRIBED", unsubscribedAt: new Date(), firstNameEnc: null },
     });
     email = safeDecrypt(updated.emailEnc);
   }

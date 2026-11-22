@@ -53,19 +53,14 @@ test("the skip link is the first Tab stop and moves focus to main", async ({ pag
   await expect(page.locator("main#main")).toBeFocused();
 });
 
-// The language toggle lives in the footer; its two buttons must be thumb-sized.
-test("language toggle buttons are at least 44px tall", async ({ page, isMobile }) => {
+// The language button lives in the footer and must be thumb-sized.
+test("the footer language button is at least 44px tall", async ({ page, isMobile }) => {
   test.skip(!isMobile, "mobile project only");
   await page.goto("/");
-  const buttons = page.locator(".seg button");
-  await expect(buttons).toHaveCount(2);
-  const heights = await buttons.evaluateAll((nodes) =>
-    nodes.map((node) => node.getBoundingClientRect().height),
-  );
-  expect(heights).toHaveLength(2);
-  for (const height of heights) {
-    expect(height).toBeGreaterThanOrEqual(44);
-  }
+  const button = page.locator(".lang-button");
+  await expect(button).toHaveCount(1);
+  const height = await button.evaluate((node) => node.getBoundingClientRect().height);
+  expect(height).toBeGreaterThanOrEqual(44);
 });
 
 // A20: every step change — forward or back — lands focus on the question
@@ -84,20 +79,29 @@ test("eligibility wizard focuses the question heading on every step change", asy
   await expect(heading).toHaveText("How old are you now?");
 });
 
-test("the footer language control persists the selected language across viewport changes", async ({ page }) => {
+test("the footer language drawer switches language and keeps it across viewport changes", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  const english = page.getByRole("button", { name: "EN", exact: true });
-  const hindi = page.getByRole("button", { name: "हिंदी", exact: true });
   const root = page.locator("html");
+  const button = page.locator(".lang-button");
+  const drawer = page.getByRole("dialog", { name: "Choose language" });
 
-  await hindi.click();
+  await button.click();
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("button", { name: /हिंदी/ }).click();
+  await expect(drawer).toBeHidden();
   await expect(root).toHaveAttribute("lang", "hi");
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(hindi).toHaveAttribute("aria-pressed", "true");
+  await expect(button).toBeFocused();
 
-  await english.click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(button).toContainText("हिंदी");
+
+  await button.click();
+  const drawerHi = page.getByRole("dialog", { name: "भाषा चुनें" });
+  await expect(drawerHi).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawerHi).toBeHidden();
+  await button.click();
+  await drawerHi.getByRole("button", { name: /English/ }).click();
   await expect(root).toHaveAttribute("lang", "en");
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await expect(english).toHaveAttribute("aria-pressed", "true");
 });
