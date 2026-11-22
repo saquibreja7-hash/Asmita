@@ -26,6 +26,16 @@ function request(email: string) {
   });
 }
 
+/** The same request with an arbitrary JSON body (the Admins page posts a target key). */
+function requestWithBody(body: Record<string, unknown>) {
+  const csrf = createCsrfPair();
+  return new Request("https://asmita.test/api/admin/mfa/reset", {
+    method: "POST",
+    headers: { cookie: `asmita_csrf=${csrf.nonce}`, "x-csrf-token": csrf.token, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 describe("POST /api/admin/mfa/reset", () => {
   const saved: Record<string, string | undefined> = {};
   const names = ["DATABASE_URL", "ADMIN_EMAILS", "ADMIN_ROLES", "DEV_SKIP_ADMIN_MFA"];
@@ -68,5 +78,28 @@ describe("POST /api/admin/mfa/reset", () => {
     const response = await resetMfa(request(STRANGER));
     expect(response.status).toBe(400);
     expect((await response.json()).error).toBe("not_an_admin");
+  });
+
+  it("resolves the Admins page's opaque target key on the server and issues the code", async () => {
+    // The page never carries the admin's email hash: it posts only the key
+    // (the hash of the hash), and the route resolves it against the
+    // allowlist here.
+    const response = await resetMfa(requestWithBody({ adminKey: hashEmail(hashEmail(WITH_ROLE)) }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).enrolmentCode).toMatch(/^\d{12}$/);
+  });
+
+  it("refuses a target key that matches no allowlisted admin", async () => {
+    const response = await resetMfa(requestWithBody({ adminKey: hashEmail(hashEmail(STRANGER)) }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe("not_an_admin");
+  });
+
+  it("refuses a request that names two targets", async () => {
+    const response = await resetMfa(
+      requestWithBody({ email: WITH_ROLE, adminKey: hashEmail(hashEmail(WITH_ROLE)) }),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe("invalid_payload");
   });
 });

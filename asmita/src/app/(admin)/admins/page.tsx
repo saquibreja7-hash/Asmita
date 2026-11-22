@@ -66,7 +66,11 @@ export default async function AdminsPage() {
   // The grant form offers the allowlisted admins who can actually sign in.
   const adminOptions = admins
     .filter((admin) => admin.role !== null)
-    .map((admin) => ({ emailHash: admin.emailHash, maskedEmail: admin.maskedEmail, handle: admin.handle }));
+    .map((admin) => ({
+      targetKey: admin.targetKey,
+      maskedEmail: admin.maskedEmail,
+      handle: admin.handle,
+    }));
 
   return (
     <section>
@@ -82,7 +86,7 @@ export default async function AdminsPage() {
         <h2>Admins</h2>
         <ul className="a-card mt-4">
           {admins.map((admin) => (
-            <li className="border-b border-[var(--line)] p-4 last:border-b-0" key={admin.emailHash}>
+            <li className="border-b border-[var(--line)] p-4 last:border-b-0" key={admin.targetKey}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="font-mono font-medium">
                   {admin.maskedEmail} <span className="muted text-xs">({admin.handle})</span>
@@ -104,7 +108,7 @@ export default async function AdminsPage() {
                     : "No review queues"
                   : ""}
               </p>
-              {admin.role && <AdminResetButton emailHash={admin.emailHash} maskedEmail={admin.maskedEmail} />}
+              {admin.role && <AdminResetButton targetKey={admin.targetKey} maskedEmail={admin.maskedEmail} />}
             </li>
           ))}
           {admins.length === 0 && <li className="muted p-6 text-sm">No admins are allowlisted (ADMIN_EMAILS).</li>}
@@ -140,7 +144,7 @@ export default async function AdminsPage() {
                 )}
                 <GrantAccessForm
                   adminOptions={adminOptions.map((admin) => ({
-                    emailHash: admin.emailHash,
+                    targetKey: admin.targetKey,
                     maskedEmail: `${admin.maskedEmail} (${admin.handle})`,
                   }))}
                   queueId={queue.id}

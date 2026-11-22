@@ -399,13 +399,20 @@ async function registerCaseWithUrlsUnfiltered(
 
   if (isDevNoDb()) {
     const record = await store.createCase(userId, options?.registrationKeyHash);
+    let results: Awaited<ReturnType<typeof store.addUrlsToCase>>;
     try {
-      const results = await store.addUrlsToCase(record.id, rawUrls, options);
+      results = await store.addUrlsToCase(record.id, rawUrls, options);
       if (results.some((result) => !result.ok)) throw new Error("validated_url_rejected");
     } catch (error) {
       store.cases.delete(record.id);
       throw error;
     }
+    // WP140: flagged links open their review-console jobs at once; the sync
+    // backfills on any failure.
+    await enqueueAwaitingLinksForReview(
+      record.id,
+      results.flatMap((result) => (result.ok && isAwaitingReview(result.url) ? [result.url.id] : [])),
+    );
     return { ok: true, id: record.id, referenceNumber: record.referenceNumber, accepted: uniqueUrls.length };
   }
 
@@ -415,6 +422,7 @@ async function registerCaseWithUrlsUnfiltered(
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const referenceNumber = generateCaseReference();
       try {
+        const awaitingLinks: string[] = [];
         const record = await workerDb.transaction().execute(async (tx) => {
           const createdCase = await tx.insertInto("Case").values({
             id: randomUUID(), referenceNumber, userId, registrationKeyHash: options?.registrationKeyHash ?? null, status: "OPEN",
@@ -426,17 +434,23 @@ async function registerCaseWithUrlsUnfiltered(
                 .where(sql<boolean>`${parsed.domain} = ANY("domainPatterns") OR ${`www.${parsed.domain}`} = ANY("domainPatterns")`)
                 .executeTakeFirst()
               : null;
+            const linkId = randomUUID();
+            const linkStatus = parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW";
             await tx.insertInto("SubmittedUrl").values({
-              id: randomUUID(), caseId: createdCase.id, urlEncrypted: encryptField(parsed.normalizedUrl), urlHash: parsed.urlHash,
+              id: linkId, caseId: createdCase.id, urlEncrypted: encryptField(parsed.normalizedUrl), urlHash: parsed.urlHash,
               domain: parsed.domain, platformId: platform?.id ?? null,
-              status: parsed.platform && !flaggedForReview ? "NOTICE_QUEUED" : "PENDING_REVIEW",
+              status: linkStatus,
               flaggedForReview, flagReason: options?.flagReasons?.join(",") ?? null,
             }).execute();
+            // WP140: the review job opens at once for a link that awaits
+            // review; collected inside the transaction, enqueued after it.
+            if (isAwaitingReview({ status: linkStatus, flaggedForReview })) awaitingLinks.push(linkId);
           }
           return createdCase;
         });
         await writeAuditLog({ eventType: "CASE_CREATED", entityType: "Case", entityId: record.id, actorId: userId });
         await writeAuditLog({ eventType: "URL_SUBMITTED", entityType: "Case", entityId: record.id, actorId: userId, data: { accepted: uniqueUrls.length } });
+        await enqueueAwaitingLinksForReview(record.id, awaitingLinks);
         return { ok: true, ...record, accepted: uniqueUrls.length };
       } catch (error) {
         if (options?.registrationKeyHash && (error as { code?: string }).code === "23505") {
@@ -453,6 +467,7 @@ async function registerCaseWithUrlsUnfiltered(
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const referenceNumber = generateCaseReference();
     try {
+      const awaitingLinks: string[] = [];
       const record = await db.$transaction(async (tx) => {
         const createdCase = await tx.case.create({
           data: { referenceNumber, userId, registrationKeyHash: options?.registrationKeyHash, status: "OPEN" },
@@ -470,7 +485,7 @@ async function registerCaseWithUrlsUnfiltered(
                 select: { id: true },
               })
             : null;
-          await tx.submittedUrl.create({
+          const link = await tx.submittedUrl.create({
             data: {
               caseId: createdCase.id,
               urlEncrypted: encryptField(parsed.normalizedUrl),
@@ -481,7 +496,11 @@ async function registerCaseWithUrlsUnfiltered(
               flaggedForReview,
               flagReason: options?.flagReasons?.join(",") ?? null,
             },
+            select: { id: true, status: true, flaggedForReview: true },
           });
+          // WP140: the review job opens at once for a link that awaits
+          // review; collected inside the transaction, enqueued after it.
+          if (isAwaitingReview(link)) awaitingLinks.push(link.id);
         }
         return createdCase;
       });
@@ -493,6 +512,7 @@ async function registerCaseWithUrlsUnfiltered(
         actorId: userId,
         data: { accepted: uniqueUrls.length },
       });
+      await enqueueAwaitingLinksForReview(record.id, awaitingLinks);
       return { ok: true, ...record, accepted: uniqueUrls.length };
     } catch (error) {
       if ((error as { code?: string }).code !== "P2002") throw error;
@@ -663,20 +683,29 @@ export async function addUrlsToCase(
   // never inline in her request (see registerCaseWithUrls).
   const results = await addUrlsToCaseUnfiltered(caseId, rawUrls, options);
   const visible = withoutFindingState(results);
-  // WP140: a link that now awaits review opens its review-console job at
-  // once, rather than at the next sync. Best-effort by design: the sync
-  // backfills the job on any failure, and her filing flow never fails
-  // because of it.
-  for (const result of visible) {
-    if (!result.ok || !isAwaitingReview(result.url)) continue;
+  await enqueueAwaitingLinksForReview(
+    caseId,
+    visible.flatMap((result) => (result.ok && isAwaitingReview(result.url) ? [result.url.id] : [])),
+  );
+  return visible;
+}
+
+/**
+ * WP140: a link that now awaits review opens its review-console job at once,
+ * rather than at the next sync — at filing (registerCaseWithUrls) and when
+ * links are added to an existing case (addUrlsToCase). Best-effort by design:
+ * the sync backfills the job on any failure, and her filing flow never
+ * fails because of it.
+ */
+async function enqueueAwaitingLinksForReview(caseId: string, urlIds: string[]): Promise<void> {
+  for (const urlId of urlIds) {
     try {
       const { enqueueForReview } = await import("@/lib/review-jobs");
-      await enqueueForReview("FLAGGED_LINK", result.url.id, { caseId });
+      await enqueueForReview("FLAGGED_LINK", urlId, { caseId });
     } catch {
       console.error("review_enqueue_failed");
     }
   }
-  return visible;
 }
 
 async function addUrlsToCaseUnfiltered(

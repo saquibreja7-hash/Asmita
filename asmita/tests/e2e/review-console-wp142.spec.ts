@@ -1,7 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { adminContext } from "./support/admin";
 import { withAdmin } from "./support/database";
-import { seedFlaggedCase } from "./support/review";
+import {
+  acquireReviewQueueLock,
+  releaseReviewQueueLock,
+  resolveLeftoverFlaggedLinks,
+  seedFlaggedCase,
+  warmConsoleRoutes,
+} from "./support/review";
 
 // Review console WP142 (review-console-spec.md): the reason picker with the
 // seeded reasons, the guidance drawer reading the per-queue draft, internal
@@ -9,6 +15,18 @@ import { seedFlaggedCase } from "./support/review";
 // reason settings. These specs run on dev-vm against the throwaway Postgres;
 // every link and name below is invented. The console never shows an
 // address, and the specs assert the submitted links never appear.
+
+// Spec files run in parallel and the review console is one shared queue
+// system: this file-level lock serialises the review-console specs against
+// each other while the rest of the suite keeps running in parallel, and the
+// warm-up compiles the routes before any test's clock runs.
+test.beforeAll(async ({ browser }) => {
+  await acquireReviewQueueLock();
+  await warmConsoleRoutes(browser);
+});
+test.afterAll(async () => {
+  await releaseReviewQueueLock();
+});
 
 test("the reason picker offers the seeded reasons, and Other demands its note", async ({ browser, page }) => {
   test.setTimeout(180_000);
@@ -49,9 +67,15 @@ test("the reason picker offers the seeded reasons, and Other demands its note", 
     );
     expect(decision.rows[0].reasonCode).toBe("duplicate_link");
     expect(decision.rows[0].reasonNote).toBeNull();
-    const reason = await db.query(`SELECT "flagReason" FROM "SubmittedUrl" WHERE domain = 'youtube.com' AND "caseId" = $1`, [
-      decision.rows[0].caseId,
-    ]);
+    // The survivor-visible flag reason of the link that was decided: the
+    // console's internal reason never reaches it, and the existing review
+    // clears it exactly as today's one-click reject does. (The link is
+    // addressed by the decided job's subject, not by domain: any of the
+    // case's links may be the oldest pending job.)
+    const reason = await db.query(
+      `SELECT u."flagReason" FROM "SubmittedUrl" u JOIN "ReviewJob" j ON j."subjectId" = u.id WHERE j.id = $1`,
+      [firstJobUrl.split("/").pop()!],
+    );
     expect(reason.rows[0].flagReason).toBeNull();
   });
 
@@ -80,7 +104,14 @@ test("the reason picker offers the seeded reasons, and Other demands its note", 
 
 test("internal notes: written from the job screen, read on the case page, deleted by their author", async ({ browser, page }) => {
   test.setTimeout(180_000);
+  // The note must land on THIS case, so the queue must hold only this
+  // case's links when the job is claimed (the shared database may hold
+  // other specs' flagged links, and the console hands out the oldest
+  // first). Resolve the leftovers, seed, then resolve anything that
+  // arrived meanwhile — never this case's own links.
+  await resolveLeftoverFlaggedLinks();
   const seeded = await seedFlaggedCase(page);
+  await resolveLeftoverFlaggedLinks({ exceptCaseId: seeded.caseId });
   const admin = await adminContext(browser, "e2e-admin");
   const adminPage = await admin.newPage();
 
@@ -103,14 +134,17 @@ test("internal notes: written from the job screen, read on the case page, delete
 
   // The note is stored encrypted and linked to the job it was written from.
   await withAdmin(async (db) => {
-    const rows = await db.query(`SELECT "jobId", "bodyEncrypted", "deletedAt" FROM "CaseNote" WHERE "caseId" = $1`, [seeded.caseId]);
+    const rows = await db.query(
+      `SELECT "id", "jobId", "bodyEncrypted", "deletedAt" FROM "CaseNote" WHERE "caseId" = $1`,
+      [seeded.caseId],
+    );
     expect(rows.rowCount).toBe(1);
     expect(rows.rows[0].jobId).toBe(jobId);
     expect(rows.rows[0].deletedAt).toBeNull();
     expect(String(rows.rows[0].bodyEncrypted)).not.toContain("helpline desk");
     expect(String(rows.rows[0].bodyEncrypted)).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
     const events = await db.query(
-      `SELECT "eventType", "data" FROM "AuditLog" WHERE "eventType" IN ('CASE_NOTE_ADDED', 'CASE_NOTE_DELETED') AND "entityId" = $1`,
+      `SELECT "eventType", "data" FROM "audit_log" WHERE "eventType" IN ('CASE_NOTE_ADDED', 'CASE_NOTE_DELETED') AND "entityId" = $1`,
       [rows.rows[0].id],
     );
     expect(events.rows.map((row: { eventType: string }) => row.eventType)).toEqual(["CASE_NOTE_ADDED"]);
@@ -122,14 +156,14 @@ test("internal notes: written from the job screen, read on the case page, delete
   await expect(adminPage.getByRole("heading", { name: "Notes" })).toBeVisible();
   await expect(adminPage.getByRole("list", { name: "Internal case notes" })).toContainText("She will call back in the evening.");
   await adminPage.getByRole("button", { name: "Delete" }).click();
-  await expect(adminPage.getByRole("list", { name: "Internal case notes" })).not.toContainText("She will call back in the evening.", {
-    timeout: 30_000,
-  });
+  // The note's text leaves the page. (Asserted on the text, not the list:
+  // the list itself disappears once the case's last note is gone.)
+  await expect(adminPage.getByText("She will call back in the evening.")).toHaveCount(0, { timeout: 30_000 });
   await withAdmin(async (db) => {
     const rows = await db.query(`SELECT "deletedAt" FROM "CaseNote" WHERE "caseId" = $1`, [seeded.caseId]);
     expect(rows.rows[0].deletedAt).not.toBeNull();
     const events = await db.query(
-      `SELECT "eventType" FROM "AuditLog" WHERE "eventType" IN ('CASE_NOTE_ADDED', 'CASE_NOTE_DELETED') ORDER BY "sequence" ASC`,
+      `SELECT "eventType" FROM "audit_log" WHERE "eventType" IN ('CASE_NOTE_ADDED', 'CASE_NOTE_DELETED') ORDER BY "sequence" ASC`,
     );
     expect(events.rows.map((row: { eventType: string }) => row.eventType)).toEqual(["CASE_NOTE_ADDED", "CASE_NOTE_DELETED"]);
   });
@@ -154,8 +188,13 @@ test("review settings: a SUPER_ADMIN shapes the reasons, everyone else is refuse
   const linksCard = ownerPage.locator("div.a-card", { hasText: "Flagged links" }).first();
   await expect(linksCard).toContainText("Not a link to the reported content");
   await expect(linksCard).toContainText("Other (explain)");
-  // The protected queue offers no decisions and says so.
-  await expect(ownerPage.locator("div.a-card", { hasText: "Possible minor" })).toContainText("offers no decisions");
+  // The protected queue offers no decisions and says so. (Matched by its
+  // heading, not its text: the Crawler findings card also names its
+  // "Label possible minor" decision.)
+  const minorHoldCard = ownerPage
+    .locator("div.a-card")
+    .filter({ has: ownerPage.getByRole("heading", { name: "Possible minor", exact: true }) });
+  await expect(minorHoldCard).toContainText("offers no decisions");
 
   // Add a reason to the links queue's reject decision (the second decision
   // group of the card: the adapter's order is approve, then reject).

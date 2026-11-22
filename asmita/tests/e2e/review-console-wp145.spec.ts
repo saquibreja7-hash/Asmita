@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { adminContext, testAdminHash } from "./support/admin";
 import { withAdmin } from "./support/database";
-import { FLAG_COUNT, seedFlaggedCase } from "./support/review";
+import {
+  acquireReviewQueueLock,
+  FLAG_COUNT,
+  releaseReviewQueueLock,
+  resolveLeftoverFlaggedLinks,
+  seedFlaggedCase,
+  warmConsoleRoutes,
+} from "./support/review";
 
 // Review console WP145 (review-console-spec.md): decisions log, review
 // metrics and safer bulk actions. These specs run on dev-vm against the
@@ -12,6 +19,18 @@ import { FLAG_COUNT, seedFlaggedCase } from "./support/review";
 // event beside the existing per-item events. The decisions log and its CSV
 // carry ids, labels and handles only — the specs assert the submitted links
 // never appear there. Every link and every fingerprint below is invented.
+
+// Spec files run in parallel and the review console is one shared queue
+// system: this file-level lock serialises the review-console specs against
+// each other while the rest of the suite keeps running in parallel, and the
+// warm-up compiles the routes before any test's clock runs.
+test.beforeAll(async ({ browser }) => {
+  await acquireReviewQueueLock();
+  await warmConsoleRoutes(browser);
+});
+test.afterAll(async () => {
+  await releaseReviewQueueLock();
+});
 
 async function registerForFingerprint(page: import("@playwright/test").Page) {
   await page.goto("/register");
@@ -62,15 +81,16 @@ test("bulk links confirm the exact count, demand the typed count above ten, and 
   await expect(adminPage.getByText(`${2 * FLAG_COUNT} selected`)).toBeVisible();
 
   // The confirm step states the exact count and the decision; above ten
-  // items the count must also be typed.
+  // items the count must also be typed, and a reject also needs its
+  // survivor-visible reason before the confirm button enables.
   await adminPage.getByRole("button", { name: `Reject ${2 * FLAG_COUNT}…` }).click();
   await expect(adminPage.getByText(`You are about to reject ${2 * FLAG_COUNT} links.`)).toBeVisible();
   const typed = adminPage.getByLabel(`Type ${2 * FLAG_COUNT} to confirm`);
   await typed.fill("11");
+  await adminPage.getByLabel("Reason for rejecting, shown in the survivor's case").fill("Not the survivor's content");
   await expect(adminPage.getByRole("button", { name: `Confirm: reject ${2 * FLAG_COUNT} links` })).toBeDisabled();
   await typed.fill(String(2 * FLAG_COUNT));
   await expect(adminPage.getByRole("button", { name: `Confirm: reject ${2 * FLAG_COUNT} links` })).toBeEnabled();
-  await adminPage.getByLabel("Reason for rejecting, shown in the survivor's case").fill("Not the survivor's content");
   await adminPage.getByRole("button", { name: `Confirm: reject ${2 * FLAG_COUNT} links` }).click();
 
   await expect(adminPage.getByText(`${2 * FLAG_COUNT} done`)).toBeVisible({ timeout: 30_000 });
@@ -124,15 +144,22 @@ test("bulk fingerprints approve through the same confirm step", async ({ browser
   await expect(page.getByText(/ready.*quality|fingerprint ready/i)).toBeVisible();
   await page.getByText(/I declare that I am the person depicted/).click();
   const createResponse = page.waitForResponse((r) => r.url().endsWith("/api/cases/create"));
+  // The fingerprint is posted by the page as its own second request, after
+  // the case exists; the row only reaches the queue when that lands, so the
+  // spec waits for it instead of racing the page's background work.
+  const hashResponse = page.waitForResponse((r) => /\/api\/cases\/[^/]+\/hashes$/.test(r.url()), { timeout: 60_000 });
   await page.getByRole("button", { name: "Continue to review" }).click();
   await page.getByRole("button", { name: "Create my case" }).click();
   const created = (await (await createResponse).json()) as { caseId: string; referenceNumber: string };
+  expect((await hashResponse).ok()).toBe(true);
 
   const admin = await adminContext(browser, "e2e-admin");
   const adminPage = await admin.newPage();
   await adminPage.goto("/admin/hashes");
   const box = adminPage.getByRole("checkbox", { name: new RegExp(created.referenceNumber) });
-  await expect(box).toHaveCount(1);
+  // The first test to open this page in a run pays the dev server's
+  // compile; give the row time to appear.
+  await expect(box).toHaveCount(1, { timeout: 30_000 });
   await box.check();
   await adminPage.getByRole("button", { name: "Approve 1…" }).click();
   await expect(adminPage.getByText("You are about to approve 1 fingerprint.")).toBeVisible();
@@ -153,7 +180,14 @@ test("bulk fingerprints approve through the same confirm step", async ({ browser
 
 test("the decisions log lists what was decided, and its CSV carries no address", async ({ browser, page }) => {
   test.setTimeout(240_000);
+  // The reject below must land on THIS case's seeded-platform link, so the
+  // queue must hold only this case's links when it is claimed (the shared
+  // database may hold other specs' flagged links, and the console hands out
+  // the oldest first). Resolve the leftovers, seed, then resolve anything
+  // that arrived meanwhile — never this case's own links.
+  await resolveLeftoverFlaggedLinks();
   const seeded = await seedFlaggedCase(page);
+  await resolveLeftoverFlaggedLinks({ exceptCaseId: seeded.caseId });
   const admin = await adminContext(browser, "e2e-admin");
   const adminPage = await admin.newPage();
 
@@ -209,16 +243,20 @@ test("the metrics page labels every figure and says when there is not enough dat
   const adminPage = await admin.newPage();
   await adminPage.goto("/admin/review/metrics");
   await expect(adminPage.getByRole("heading", { name: "Review metrics" })).toBeVisible();
-  await expect(adminPage.getByText("Open now")).toBeVisible();
-  await expect(adminPage.getByText("Decisions by queue")).toBeVisible();
-  await expect(adminPage.getByText("Decisions by reviewer")).toBeVisible();
-  await expect(adminPage.getByText("Skips by queue")).toBeVisible();
-  await expect(adminPage.getByText("Jobs created, by day")).toBeVisible();
+  // The figure's own label exactly (a table heading and caption on the same
+  // page repeat the words "Open now").
+  await expect(adminPage.getByText("Open now", { exact: true })).toBeVisible();
+  // Each section is matched by its heading: every table's sr-only caption
+  // repeats the heading's words.
+  await expect(adminPage.getByRole("heading", { name: /Decisions by queue/ })).toBeVisible();
+  await expect(adminPage.getByRole("heading", { name: /Decisions by reviewer/ })).toBeVisible();
+  await expect(adminPage.getByRole("heading", { name: /Skips by queue/ })).toBeVisible();
+  await expect(adminPage.getByRole("heading", { name: /Jobs created, by day/ })).toBeVisible();
   // The window and bucket controls keep their state in the URL.
   await adminPage.getByRole("link", { name: "Last 90 days" }).click();
   await expect(adminPage).toHaveURL(/days=90/);
   await adminPage.getByRole("link", { name: "By week" }).click();
   await expect(adminPage).toHaveURL(/days=90&bucket=week/);
-  await expect(adminPage.getByText("Jobs created, by week")).toBeVisible();
+  await expect(adminPage.getByRole("heading", { name: /Jobs created, by week/ })).toBeVisible();
   await admin.close();
 });

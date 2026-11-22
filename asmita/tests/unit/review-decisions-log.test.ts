@@ -324,7 +324,10 @@ describe("the CSV export of the filtered set", () => {
     const row = lines[1]!;
     expect(row).toContain(`"Flagged links"`);
     expect(row).toContain(`"Flagged link"`);
-    expect(row).toContain(`"reject"`);
+    // The Decision column carries the word the log's table shows, not the
+    // raw code (WP171: the page and the export must agree).
+    expect(row).toContain(`"Rejected"`);
+    expect(row).not.toContain(`"reject"`);
     expect(row).toContain(`"Duplicate of another link"`);
     expect(row).toContain(`"You"`);
     expect(row).toContain("ASMITA-");
@@ -346,8 +349,8 @@ describe("the CSV export of the filtered set", () => {
     expect(all.count).toBe(2);
     const rejects = await exportDecisionLogCsv(VIEWER, { decision: "reject" });
     expect(rejects.count).toBe(1);
-    expect(rejects.csv).toContain("reject");
-    expect(rejects.csv).not.toContain(`"approve"`);
+    expect(rejects.csv).toContain("Rejected");
+    expect(rejects.csv).not.toContain('"Approved"');
   });
 });
 
@@ -392,7 +395,8 @@ describe("GET /api/admin/review/decisions/export", () => {
     expect(response.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
     const csv = await response.text();
     expect(csv).toContain("Decided at (IST)");
-    expect(csv).toContain("reject");
+    // The Decision column carries the word the log's table shows (WP171).
+    expect(csv).toContain("Rejected");
 
     const audit = inMemoryAuditLog.filter(
       (event) => event.eventType === "ADMIN_ACTION" && (event.data as { action?: string }).action === "decisions_csv_export",

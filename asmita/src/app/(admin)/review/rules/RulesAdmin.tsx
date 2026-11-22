@@ -392,18 +392,27 @@ function RuleForm({
               ))}
             </select>
           </label>
-          <label className="grid gap-1 sm:max-w-[12rem]">
-            <span className="text-xs font-semibold">Priority</span>
+          <div className="grid gap-1 sm:max-w-[12rem]">
+            {/* The hint stays out of the label so the input's accessible
+                name is exactly "Priority" — screen readers announce the
+                name, and the hint belongs to aria-describedby instead. */}
+            <label className="grid gap-1" htmlFor={`${idPrefix}-priority`}>
+              <span className="text-xs font-semibold">Priority</span>
+            </label>
             <input
+              aria-describedby={`${idPrefix}-priority-hint`}
               className="field py-1 text-xs"
+              id={`${idPrefix}-priority`}
               max={100}
               min={-100}
               onChange={(event) => setWorking({ ...working, priority: Number(event.target.value) })}
               type="number"
               value={working.priority}
             />
-            <span className="muted text-[11px]">Higher numbers are offered first. 0 is the default.</span>
-          </label>
+            <span className="muted text-[11px]" id={`${idPrefix}-priority-hint`}>
+              Higher numbers are offered first. 0 is the default.
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button className="btn btn-primary" disabled={busy || !working.name.trim() || queues.length === 0} onClick={() => void save()} type="button">

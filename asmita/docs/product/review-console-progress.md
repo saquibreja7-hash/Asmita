@@ -288,3 +288,54 @@ Decisions log, review metrics and safer bulk actions. Built by Hermes on win-des
 9. The impeccable skill's interview step was substituted with the repo's own design system and the previous WPs' conventions (the task forbids asking): incumbent `admin.css` vocabulary, the milestones bar as the existing chart style, no coloured left-border stripes, and the design detector plus DOM-measured 1280px/390px checks in place of its visual pass.
 10. Fixed in passing because the live pass walked straight into them: the bulk links route and the two hash-submission functions behind the Fingerprints page had no memory branch and 500ed on the dev backend; each now follows the module's dual-backend pattern, which rule 4 of the spec requires of every console path.
 
+### WP171 done
+
+The dev-vm verification of WP140-WP145: the first time the review console's database paths and its five Playwright spec files ever ran (they were written on win-desktop, which has no Postgres and no Playwright). The full verify failed with E2E_RC=1 SMOKE_RC=0: ten review-console specs failed while the unit suite (2521 tests), lint, type-check, prisma validate and the Worker smoke all passed. Built by Hermes on dev-vm, 22 November 2026.
+
+**What was found and fixed**
+
+Real app bugs, all on paths that only a real database or a real browser can reach:
+
+- **The filing never opened review jobs** (`registerCaseWithUrls` in `src/lib/case-ops.ts`). WP140's "jobs appear without waiting for the sync" hook was wired into `addUrlsToCase` (links added to an existing case) but not into the filing itself, so a new case's flagged links waited for the throttled 30-second sync. The hook now runs at filing on all three backends (memory, Kysely, Prisma), best-effort exactly like the add-URL path; unit tests cover it (jobs open at once, a replayed registration opens nothing, an unflagged known-platform filing opens nothing).
+- **The Admins page rendered the full sha256 of every admin's email.** The reset button's props and the queue-access select's option values carried the single-step hash into the page HTML and the RSC payload. The page now targets an admin by an opaque key — the hash *of* the email hash — and `/api/admin/mfa/reset` and the queue-access route resolve it against the allowlist on the server (`adminTargetKey`/`allowlistedHashByTargetKey` in `admin-allowlist.ts`); email and emailHash remain accepted for API callers, so the WP144 spec's own posts are unchanged.
+- **A note's id was not the id the audit event named** (`addCaseNote`'s Prisma branch passed no `id` to the create, so Prisma minted its own while the CASE_NOTE_ADDED entry and the route's answer carried the library's). The stored row now carries exactly the library's id on every backend; a mocked-client unit test pins it.
+- **The decisions-log CSV exported raw decision codes** ("reject") where the log's table shows words ("Rejected"); the CSV's Decision column now uses the same display labels as the page. Three unit assertions that pinned the raw code were updated to the corrected behaviour (recorded here and in the commit message).
+- **The rules builder's Priority input had no exact accessible name "Priority"** — the hint sentence sat inside the wrapping label, so the name read "Priority Higher numbers are offered first. 0 is the default." The hint moved to `aria-describedby`; visually identical, and screen readers get the concise name.
+
+Spec bugs (the five files were never run before):
+
+- The notes spec queried a table called `AuditLog` (it is `audit_log`) and read `rows[0].id` from a SELECT that did not include `id`; the routing spec's SQL alias `AS queueKey` was unquoted, so Postgres folded it and the assertion always read undefined; the review-loop spec approved "the seeded-platform link" assuming claim order is creation order (six jobs created within the same millisecond tie arbitrarily — it now skips to its platform link, still deciding every non-approved link exactly once); the notes spec asserted on the list element after the last note was deleted, but the list disappears when empty (asserted on the text now); the bulk-fingerprints spec raced the page's own background POST of the fingerprint (it awaits the `/hashes` response now).
+- Playwright runs spec files in parallel against one shared database, and the console is one shared queue system. The five review files now take a file-level Postgres advisory lock (`support/review.ts`), so they run one at a time in whatever order workers grab them; the rest of the suite stays parallel. Specs that need their own case's items resolve leftover flagged links first — through the same state the app's own review leaves (status REJECTED, flags cleared, a system `close_stale` decision, released claims) — and again after seeding, never touching their own case's links. The routing spec switches its rule off through the page's own status control at the end (and its afterAll force-disables any live rule whatever happened), because a live TIER_1 rule would route every later spec's seeded-platform links out of the default queue; the review-loop's decision and skip counts are scoped to its seeded case; the "no rule was created" check is scoped to the refused rule's name.
+- Cold start: on a fresh tree the dev server compiles each route on first request, and the first spec to touch the filing chain paid minutes of compile inside its own timeout. Each review file's `beforeAll` now warms the filing and console routes outside any test's clock; `seedFlaggedCase` also clears the remembered age answer (sessionStorage) so a second seeding on the same page walks the age gate again (the wp145 bulk spec seeds twice and used to hang on a gate that never reappears).
+- Ambiguous locators made precise: the settings page's "Possible minor" card is matched by its heading (the Crawler findings card names its "Label possible minor" decision); the Admins page's h1 by level (an h2 repeats the word); the step-up dialog's code input by exact label (the dialog's own aria-label contains the same words) and its Cancel scoped to the dialog (the rule builder's form carries one too); the metrics page's sections by heading role (every table's sr-only caption repeats the heading's words); the Test panel's field labels are matched without `exact` because a wrapping label around a select includes the option texts in Playwright's label matching.
+
+**What was verified, and how**
+
+- `e2e-some.sh` runs of the five review spec files together (chromium, throwaway Postgres 17), iterated until green: the last run passed all 15 tests in 4.6m.
+- The full unit suite, lint, type-check and `prisma validate` pass; new/updated unit tests: the filing-opens-jobs pair in `review-jobs.test.ts` (memory), the Prisma-path id consistency in `case-notes.test.ts`, the adminKey reset cases in `admin-mfa-reset.test.ts`, the targetKey row assertions in `admin-directory.test.ts`, the CSV decision-word updates in `review-decisions-log.test.ts`.
+- The full e2e suite (all specs, chromium, throwaway Postgres) and the Worker smoke (`build:vinext` + `prepare-production-wrangler` + `SMOKE_CRAWLER=1 worker-smoke`) pass: E2E_RC=0 SMOKE_RC=0. `check.sh` prints ALL CHECKS PASSED.
+
+**Not verified on this machine**
+
+- The mobile project of the e2e suite is not part of the lane's verify (chromium only, as in `verify-branch.sh`); nothing here was run on a phone viewport.
+- The queue-access adminKey path is exercised end to end through the Admins page form (the wp144 spec's grant goes through it); the `emailHash` API form of the same routes is covered by unit tests only, no separate e2e posts it directly.
+
+**Sentences the owner should approve (user-facing behaviour)**
+
+- A flagged link a survivor files now opens its review job the moment her case is created, not up to half a minute later at the next sync.
+- The Admins page no longer carries any admin's email hash in its HTML; the reset and queue-access actions target an opaque key that only the server can resolve, and the page looks exactly the same.
+- An internal note's audit entry now points at the note a reload actually shows, and deleting a note from the case page works against the row that exists.
+- The decisions log's CSV now says "Rejected" the way the page does, instead of the internal code "reject".
+
+**Decisions made on this lane**
+
+1. The review specs serialize against each other with a Postgres advisory lock rather than test retries or relaxed assertions: the console's counts, its oldest-first claim and its routing are only meaningful with no other review spec mid-flight, and the rest of the suite keeps running in parallel.
+2. Specs that need their own case's items resolve leftover flagged links through the app's own end state (REJECTED, flags cleared, `close_stale` decision, claims released) rather than deleting rows: the console's invariants (one decision per closed job, no open claim on a closed job) keep holding for the setup data.
+3. The review-loop spec's exact queue-count assertions were replaced by an exact case-scoped database check (each of the six links open exactly once) plus "at least" counts and a skip cap with headroom, because another spec file may file a flagged link mid-test; the per-link fact is now asserted where the global number never could be.
+4. The routing spec's live rule is switched off at the end through the page's own status control (a real action, audited), with an afterAll that force-disables any live rule so a failure anywhere in the spec cannot leak routing into the other files.
+5. The filing-opens-jobs hook lives in `case-ops.ts` as `enqueueAwaitingLinksForReview`, shared by the filing and the add-URL path, best-effort with the same fixed `review_enqueue_failed` log code as the other hooks; the sync stays the backstop.
+6. The Admins page's opaque key is the hash of the email hash (sha256(sha256(email))): the page already renders a 4-hex handle from the single-step hash, so the single-step hash is already half-public; the key adds no new correlation power while removing the full hash from every page source.
+7. The CSV's Decision column shows the same word as the log's table (REVIEW_DECISION_LABELS, with the underscore fallback); the raw code remains available through the decision filter values.
+8. `warmConsoleRoutes` warms only the routes the review specs drive, as unauthenticated requests that compile and fail fast; it runs inside the file lock, so the first review file of a run pays the compile and the rest are instant.
+9. The queue-ownership SQL in `support/review.ts` writes the same rows the sync's own `closeJobAsResolvedElsewhere` writes, so a later sync finds nothing to reopen and no half-state; it never touches the calling spec's own case (the `exceptCaseId` guard covers both the subject flip and the job close).
+

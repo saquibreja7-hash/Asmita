@@ -1,7 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { adminContext, testAdminHash } from "./support/admin";
 import { withAdmin } from "./support/database";
-import { FLAG_COUNT, seedFlaggedCase } from "./support/review";
+import {
+  acquireReviewQueueLock,
+  FLAG_COUNT,
+  releaseReviewQueueLock,
+  resolveLeftoverFlaggedLinks,
+  seedFlaggedCase,
+  warmConsoleRoutes,
+} from "./support/review";
 
 // Review console WP141 (review-console-spec.md). These specs run on dev-vm
 // against the throwaway Postgres: the review loop end to end through the
@@ -10,16 +17,56 @@ import { FLAG_COUNT, seedFlaggedCase } from "./support/review";
 // CASE_REVIEWER. The console never shows an address: the specs assert the
 // full submitted links never appear on any screen.
 
+// The review-console spec files share one queue system but Playwright runs
+// spec files in parallel: the file-level lock below serialises them against
+// each other (in whatever order the workers grab them) so a queue this file
+// empties is not refilled mid-test by another review spec. The warm-up
+// compiles the routes the specs drive before any test's clock runs.
+test.beforeAll(async ({ browser }) => {
+  await acquireReviewQueueLock();
+  await warmConsoleRoutes(browser);
+});
+test.afterAll(async () => {
+  await releaseReviewQueueLock();
+});
+
+/** The decision panel's "N left in this queue" figure, as a number. */
+async function leftInQueue(page: Page): Promise<number> {
+  const text = (await page.getByText(/\d+ left in this queue/).textContent()) ?? "";
+  return Number(/(\d+)/.exec(text)?.[1] ?? 0);
+}
+
 test("the review loop: start reviewing, approve with a reason, skip on, catch up", async ({ browser, page }) => {
   test.setTimeout(180_000);
-  // Seed through the survivor's own flow, then work the queue as a SUPER_ADMIN.
+  // The links queue is shared with the rest of the suite: resolve what
+  // other specs left waiting, seed this spec's own case, then resolve
+  // anything that arrived meanwhile, so this case's links are the queue's
+  // own work while it is worked here.
+  await resolveLeftoverFlaggedLinks();
   const seeded = await seedFlaggedCase(page);
+  await resolveLeftoverFlaggedLinks({ exceptCaseId: seeded.caseId });
+
+  // Every seeded link is open in the links queue, exactly once each. This
+  // is the exact per-link fact; the row and panel counts below can only be
+  // "at least", because another spec file may file a flagged link of its
+  // own while this test runs.
+  await withAdmin(async (db) => {
+    const open = await db.query(
+      `SELECT count(*)::int AS n FROM "ReviewJob" j
+         JOIN "SubmittedUrl" u ON u.id = j."subjectId"
+        WHERE j."caseId" = $1 AND j."subjectKind" = 'FLAGGED_LINK' AND j.status = 'PENDING'`,
+      [seeded.caseId],
+    );
+    expect(open.rows[0].n).toBe(FLAG_COUNT);
+  });
+
   const admin = await adminContext(browser, "e2e-admin");
   const adminPage = await admin.newPage();
 
   await adminPage.goto("/admin/review");
   const linksRow = adminPage.getByRole("listitem").filter({ hasText: "Flagged links" });
-  await expect(linksRow).toContainText(`${FLAG_COUNT}`);
+  const waiting = Number((await linksRow.locator('span[data-empty="false"]').textContent()) ?? "0");
+  expect(waiting).toBeGreaterThanOrEqual(FLAG_COUNT);
   // A queue with nothing in it says so, and its button is disabled.
   const partnerRow = adminPage.getByRole("listitem").filter({ hasText: "Partner applications" });
   await expect(partnerRow).toContainText("Nothing to review");
@@ -35,18 +82,34 @@ test("the review loop: start reviewing, approve with a reason, skip on, catch up
   await adminPage.getByRole("link", { name: "Queues" }).click();
   await expect(adminPage.getByRole("heading", { name: "Review" })).toBeVisible();
 
-  // Start reviewing: the first job is the seeded-platform link, oldest first.
+  // Start reviewing: claim until the seeded-platform link is in hand. The
+  // queue may hand out any of this case's links first when several jobs
+  // were created within the same millisecond (claim order is createdAt, and
+  // a tie between rows is not an ordering the app promises), and skipping
+  // is the reviewer's own way past an item, so the flow stays honest. Every
+  // non-approved link is still skipped exactly once before the end, so the
+  // final counts stay exact.
   await adminPage.getByRole("listitem").filter({ hasText: "Flagged links" }).getByRole("link", { name: "Start reviewing" }).click();
   await expect(adminPage).toHaveURL(/\/admin\/review\/links\/[^/]+$/, { timeout: 30_000 });
+  const seededPlatform = adminPage.getByRole("heading", { name: "Link on youtube.com · YouTube" });
+  for (
+    let attempt = 0;
+    attempt < FLAG_COUNT && !(await seededPlatform.isVisible().catch(() => false));
+    attempt += 1
+  ) {
+    const urlBefore = adminPage.url();
+    await adminPage.keyboard.press("s");
+    await adminPage.waitForURL((url) => url.toString() !== urlBefore, { timeout: 30_000 }).catch(() => undefined);
+  }
   const firstJobUrl = adminPage.url();
-  await expect(adminPage.getByRole("heading", { name: "Link on youtube.com · YouTube" })).toBeVisible();
+  await expect(seededPlatform).toBeVisible();
   await expect(adminPage.getByText(`Case ${seeded.referenceNumber}`)).toBeVisible();
-  await expect(adminPage.getByText(`${FLAG_COUNT} left in this queue`)).toBeVisible();
+  expect(await leftInQueue(adminPage)).toBeGreaterThanOrEqual(FLAG_COUNT);
   await expect(adminPage.locator("main")).not.toContainText("watch?v=");
 
   // Refreshing keeps the claim: the same job, still decidable.
   await adminPage.reload();
-  await expect(adminPage.getByRole("heading", { name: "Link on youtube.com · YouTube" })).toBeVisible();
+  await expect(seededPlatform).toBeVisible();
   await expect(adminPage.getByRole("radio", { name: /Approve link/ })).toBeVisible();
 
   // Approve with a reason, from the keyboard: 1 chooses, the note records,
@@ -56,13 +119,14 @@ test("the review loop: start reviewing, approve with a reason, skip on, catch up
   await adminPage.keyboard.press("Control+Enter");
   await expect(adminPage).not.toHaveURL(firstJobUrl, { timeout: 30_000 });
   await expect(adminPage.getByRole("heading", { name: /^Link on/ })).toBeVisible();
-  await expect(adminPage.getByText(`${FLAG_COUNT - 1} left in this queue`)).toBeVisible();
+  expect(await leftInQueue(adminPage)).toBeGreaterThanOrEqual(FLAG_COUNT - 1);
 
   // Skip the rest, one keypress each, until the queue is caught up. Every
   // successful skip navigates (to the next job or the caught-up page), so
-  // waiting for the URL to change keeps the keypresses in step.
+  // waiting for the URL to change keeps the keypresses in step. The cap
+  // leaves room for a flagged link another spec file filed mid-test.
   const caughtUp = adminPage.getByRole("heading", { name: "You're all caught up" });
-  for (let i = 0; i < FLAG_COUNT; i += 1) {
+  for (let i = 0; i < FLAG_COUNT * 2; i += 1) {
     if (await caughtUp.isVisible().catch(() => false)) break;
     const urlBefore = adminPage.url();
     await adminPage.keyboard.press("s");
@@ -71,15 +135,24 @@ test("the review loop: start reviewing, approve with a reason, skip on, catch up
   await expect(caughtUp).toBeVisible({ timeout: 30_000 });
   await expect(adminPage.getByRole("link", { name: "Back to the queues" })).toBeVisible();
 
-  // The decisions are recorded: one approval by this admin, the rest skipped.
+  // The decisions are recorded: one approval by this admin on this case,
+  // the rest of the case's jobs skipped. (The queries are scoped to the
+  // seeded case: the database is shared, and the same synthetic admin also
+  // decides items for other specs.)
   const adminHash = testAdminHash("e2e-admin");
   await withAdmin(async (db) => {
     const decisions = await db.query(
-      `SELECT count(*)::int AS n FROM "ReviewDecision" WHERE "reviewerEmailHash" = $1 AND decision = 'approve'`,
-      [adminHash],
+      `SELECT count(*)::int AS n FROM "ReviewDecision"
+        WHERE "reviewerEmailHash" = $1 AND decision = 'approve' AND "caseId" = $2`,
+      [adminHash, seeded.caseId],
     );
     expect(decisions.rows[0].n).toBe(1);
-    const skips = await db.query(`SELECT count(*)::int AS n FROM "ReviewSkip" WHERE "reviewerEmailHash" = $1`, [adminHash]);
+    const skips = await db.query(
+      `SELECT count(*)::int AS n FROM "ReviewSkip"
+        WHERE "reviewerEmailHash" = $1
+          AND "jobId" IN (SELECT id FROM "ReviewJob" WHERE "caseId" = $2)`,
+      [adminHash, seeded.caseId],
+    );
     expect(skips.rows[0].n).toBe(FLAG_COUNT - 1);
     // The approved link moved on exactly as the one-click buttons move it.
     const approved = await db.query(
@@ -87,12 +160,13 @@ test("the review loop: start reviewing, approve with a reason, skip on, catch up
       [seeded.caseId],
     );
     expect(approved.rows[0].status).toBe("NOTICE_QUEUED");
-    // The internal reason never reached the survivor-visible flag reason.
+    // The internal reason never reached the survivor-visible flag reason
+    // (the console's approve leaves it empty, like today's one-click buttons).
     const reason = await db.query(
       `SELECT "flagReason" FROM "SubmittedUrl" WHERE "caseId" = $1 AND domain = 'youtube.com'`,
       [seeded.caseId],
     );
-    expect(reason.rows[0].flagReason).not.toContain("Checked against the case notes");
+    expect(reason.rows[0].flagReason ?? "").not.toContain("Checked against the case notes");
   });
   await admin.close();
 });

@@ -1,4 +1,4 @@
-import { createAdminIdentity, listAllowlistedAdminEmails, resolveAdminRole } from "@/lib/auth/admin-allowlist";
+import { adminTargetKey, createAdminIdentity, listAllowlistedAdminEmails, resolveAdminRole } from "@/lib/auth/admin-allowlist";
 import type { AdminRole } from "@/lib/auth/admin-permissions";
 import { getAdminMfaEnrolment } from "@/lib/auth/admin-mfa-store";
 import { readAuditTrailForEntities } from "@/lib/audit";
@@ -25,6 +25,12 @@ import {
 export type AdminDirectoryRow = {
   /** The admin's email hash: the id every console row already uses. */
   emailHash: string;
+  /**
+   * Opaque key for the page's targeting actions (reset MFA, queue access):
+   * the hash OF the email hash, resolved back to the admin only on the
+   * server. The page never renders or posts the single-step hash.
+   */
+  targetKey: string;
   /** Short handle from the hash, so two admins with the same mask differ. */
   handle: string;
   /** Masked address for display: "o*****@example.org", never the full one. */
@@ -83,6 +89,7 @@ export async function listAdminDirectory(): Promise<AdminDirectoryRow[]> {
       : [];
     rows.push({
       emailHash: identity.emailHash,
+      targetKey: adminTargetKey(identity.emailHash),
       handle: identity.emailHash.slice(0, 4),
       maskedEmail: maskAdminEmail(identity.email),
       role,

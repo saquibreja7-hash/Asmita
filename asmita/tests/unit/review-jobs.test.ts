@@ -233,6 +233,56 @@ describe("system queues", () => {
   });
 });
 
+describe("the filing opens jobs at once", () => {
+  it("a flagged filing opens one links job per awaiting link, with no sync yet", async () => {
+    const { registerComplaintReviewAdapters } = await import("@/lib/review-adapters");
+    registerComplaintReviewAdapters();
+    const { registerCaseWithUrls } = await import("@/lib/case-ops");
+    const filed = await registerCaseWithUrls("user-1", [
+      "https://forum.example.test/post/1",
+      "https://other.example.test/post/2",
+    ], { flagReasons: ["many_unrelated_domains"] });
+    expect(filed.ok).toBe(true);
+    if (!filed.ok) return;
+    // WP171: the jobs appear at the moment the case is filed — the sync is
+    // the backstop, not the only path.
+    const linksQueue = await getReviewQueueByKey("links");
+    if (!linksQueue) throw new Error("links queue missing");
+    const open = [...reviewMemory().jobs.values()].filter(
+      (job) => job.caseId === filed.id && job.subjectKind === "FLAGGED_LINK" && job.status === "PENDING",
+    );
+    expect(open).toHaveLength(2);
+    expect(open.every((job) => job.queueId === linksQueue.id)).toBe(true);
+
+    // A replayed registration (same key) creates nothing new.
+    const keyed = await registerCaseWithUrls("user-2", ["https://third.example.test/post/3"], {
+      registrationKeyHash: "key-filing",
+      flagReasons: ["many_unrelated_domains"],
+    });
+    expect(keyed.ok).toBe(true);
+    const replay = await registerCaseWithUrls("user-2", ["https://third.example.test/post/3"], {
+      registrationKeyHash: "key-filing",
+      flagReasons: ["many_unrelated_domains"],
+    });
+    expect(replay.ok && "replayed" in replay).toBe(true);
+    const keyedId = keyed.ok ? keyed.id : "";
+    const replayedOpen = [...reviewMemory().jobs.values()].filter(
+      (job) => job.caseId === keyedId && job.subjectKind === "FLAGGED_LINK" && job.status === "PENDING",
+    );
+    expect(replayedOpen).toHaveLength(1);
+  });
+
+  it("an unflagged filing on known platforms opens no job", async () => {
+    const { registerComplaintReviewAdapters } = await import("@/lib/review-adapters");
+    registerComplaintReviewAdapters();
+    const { registerCaseWithUrls } = await import("@/lib/case-ops");
+    const filed = await registerCaseWithUrls("user-1", ["https://www.youtube.com/watch?v=asmita-1"]);
+    expect(filed.ok).toBe(true);
+    const open = [...reviewMemory().jobs.values()].filter((job) => job.status === "PENDING");
+    expect(open).toHaveLength(0);
+  });
+});
+
 describe("sync: jobs follow the source of truth", () => {
   it("opens a job per flagged link, fingerprint, finding, application and lab report", async () => {
     const link = await seedFlaggedLink();

@@ -10,8 +10,9 @@ import { useStepUpPost, type StepUpPostResult } from "../step-up-mfa";
  * /api/admin/mfa/reset behaviour returns once) and the queue-access controls.
  * Both need a fresh authenticator code; the shared step-up dialog asks for
  * it and retries the original request. No full email address is ever
- * rendered or sent: the reset targets the admin's email hash, and the
- * access rows carry roles and hashes only.
+ * rendered or sent, and no single-step email hash either: both actions
+ * target the admin by an opaque key (the hash of the email hash), which
+ * only the server resolves against the allowlist.
  */
 
 const ERRORS: Record<string, string> = {
@@ -35,7 +36,7 @@ function inWords(code: string | undefined): string {
 }
 
 /** Reset one admin's authenticator; shows the one-time enrolment code once. */
-export function AdminResetButton({ emailHash, maskedEmail }: { emailHash: string; maskedEmail: string }) {
+export function AdminResetButton({ targetKey, maskedEmail }: { targetKey: string; maskedEmail: string }) {
   const router = useRouter();
   const { post, stepUpDialog } = useStepUpPost();
   const [busy, setBusy] = useState(false);
@@ -45,7 +46,7 @@ export function AdminResetButton({ emailHash, maskedEmail }: { emailHash: string
   async function reset() {
     setBusy(true);
     setError(null);
-    const result: StepUpPostResult = await post("/api/admin/mfa/reset", { emailHash });
+    const result: StepUpPostResult = await post("/api/admin/mfa/reset", { adminKey: targetKey });
     setBusy(false);
     if (!result.ok) {
       setError(inWords(result.error));
@@ -105,7 +106,7 @@ export function GrantAccessForm({
   queueId: string;
   queueName: string;
   roleOptions: string[];
-  adminOptions: Array<{ emailHash: string; maskedEmail: string }>;
+  adminOptions: Array<{ targetKey: string; maskedEmail: string }>;
 }) {
   const router = useRouter();
   const { post, stepUpDialog } = useStepUpPost();
@@ -116,7 +117,7 @@ export function GrantAccessForm({
   async function add() {
     const body: Record<string, unknown> = {};
     if (target.startsWith("role:")) body.role = target.slice(5);
-    else if (target.startsWith("admin:")) body.adminEmailHash = target.slice(6);
+    else if (target.startsWith("admin:")) body.adminKey = target.slice(6);
     else {
       setError("Choose a role or an admin.");
       return;
@@ -159,7 +160,7 @@ export function GrantAccessForm({
           </optgroup>
           <optgroup label="One admin">
             {adminOptions.map((admin) => (
-              <option key={admin.emailHash} value={`admin:${admin.emailHash}`}>
+              <option key={admin.targetKey} value={`admin:${admin.targetKey}`}>
                 {admin.maskedEmail}
               </option>
             ))}

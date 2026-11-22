@@ -1,7 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { adminContext } from "./support/admin";
 import { withAdmin } from "./support/database";
-import { seedFlaggedCase } from "./support/review";
+import {
+  acquireReviewQueueLock,
+  releaseReviewQueueLock,
+  resolveLeftoverFlaggedLinks,
+  seedFlaggedCase,
+  warmConsoleRoutes,
+} from "./support/review";
 
 // Review console WP143 (review-console-spec.md): routing rules. The owner
 // builds a custom queue and a rule in the structured builder, tests it with
@@ -12,8 +18,35 @@ import { seedFlaggedCase } from "./support/review";
 // below is invented, and the specs assert the submitted links never appear
 // in any routing row.
 
+// Spec files run in parallel and the review console is one shared queue
+// system: this file-level lock serialises the review-console specs against
+// each other while the rest of the suite keeps running in parallel, and the
+// warm-up compiles the routes before any test's clock runs.
+test.beforeAll(async ({ browser }) => {
+  await acquireReviewQueueLock();
+  await warmConsoleRoutes(browser);
+});
+test.afterAll(async () => {
+  // A live rule is shared state: the first test switches its own rule off
+  // through the page as its last step, but a failure or timeout anywhere
+  // before that would leave it routing every later spec's seeded-platform
+  // links out of the default queue. Whatever happened, this file leaves no
+  // live rule behind.
+  await withAdmin(async (db) => {
+    await db.query(`UPDATE "ReviewRoutingRule" SET status = 'DISABLED' WHERE status = 'LIVE'`).catch(() => undefined);
+  });
+  await releaseReviewQueueLock();
+});
+
 test("a live rule routes a freshly filed link into a custom queue, and the console explains why", async ({ browser, page }) => {
-  test.setTimeout(240_000);
+  // Two full filings plus the builder and the Test panel on the dev server:
+  // this spec is the longest in the file and needs the room.
+  test.setTimeout(600_000);
+  // The links queue is shared: earlier files leave pending links behind, and
+  // a live TIER_1 rule would sweep their seeded-platform jobs into the
+  // custom queue too. Resolve the leftovers first so this spec's own two
+  // cases are the queue's whole world.
+  await resolveLeftoverFlaggedLinks();
   // One case before any rule exists, so the sync's re-routing is also
   // exercised: its links start in the default queue.
   await seedFlaggedCase(page);
@@ -46,9 +79,13 @@ test("a live rule routes a freshly filed link into a custom queue, and the conso
   await linksSection.getByLabel("Status").selectOption("LIVE");
   await expect(linksSection.getByText("v2")).toBeVisible({ timeout: 30_000 });
 
-  // The Test panel: hand-entered values, a dry run.
+  // The Test panel: hand-entered values, a dry run. (The label is matched
+  // without exact: a wrapping label's text for a select includes the
+  // option texts, so the exact name never matches; the rule builder is
+  // closed by the save, so the builder's "Platform tier value" control is
+  // no longer on the page.)
   await linksSection.getByRole("button", { name: "Test these rules" }).click();
-  await linksSection.getByLabel("Platform tier", { exact: true }).selectOption("TIER_1");
+  await linksSection.getByLabel("Platform tier").selectOption("TIER_1");
   await linksSection.getByRole("button", { name: "Run test" }).click();
   await expect(linksSection.getByText("Would take this item")).toBeVisible({ timeout: 30_000 });
   await expect(linksSection.getByText("Chosen queue: Big platforms")).toBeVisible();
@@ -60,7 +97,9 @@ test("a live rule routes a freshly filed link into a custom queue, and the conso
   await ownerPage.goto("/admin/review");
   await expect(ownerPage.getByRole("list", { name: "Review queues" })).toContainText("Big platforms", { timeout: 30_000 });
   await ownerPage.getByRole("listitem").filter({ hasText: "Big platforms" }).getByRole("link", { name: "Preview" }).click();
-  await expect(ownerPage.getByRole("heading", { name: "Big platforms" })).toBeVisible();
+  // (The preview page of a custom queue is this run's first hit of the
+  // dynamic route, so its compile can outlast a default timeout.)
+  await expect(ownerPage.getByRole("heading", { name: "Big platforms" })).toBeVisible({ timeout: 30_000 });
 
   // The job screen explains the routing in the spec's words.
   await ownerPage.goto("/admin/review/big-platforms");
@@ -69,12 +108,17 @@ test("a live rule routes a freshly filed link into a custom queue, and the conso
 
   const jobId = ownerPage.url().split("/").pop()!;
   await withAdmin(async (db) => {
-    // The fresh job: routed by the rule, in the custom queue, with the rule's
-    // priority, and created by routing.
+    // The fresh job: the second case's seeded-platform link, routed by the
+    // rule at filing, in the custom queue, with the rule's priority.
+    // (Scoped to that case: the query is exact, and the shared database
+    // holds other specs' jobs too. The alias is quoted: Postgres folds an
+    // unquoted alias to lowercase, and the row's queueKey would read
+    // undefined.)
     const job = await db.query(
-      `SELECT j.priority, j."routedByRuleVersion", q.key AS queueKey, j."subjectKind"
+      `SELECT j.priority, j."routedByRuleVersion", q.key AS "queueKey", j."subjectKind"
          FROM "ReviewJob" j JOIN "ReviewQueue" q ON q.id = j."queueId"
-        WHERE j."enqueueSource" = 'RULE'`,
+        WHERE j."enqueueSource" = 'RULE' AND j."caseId" = $1`,
+      [second.caseId],
     );
     expect(job.rows[0]).toMatchObject({ priority: 5, queueKey: "big-platforms", subjectKind: "FLAGGED_LINK" });
 
@@ -95,6 +139,16 @@ test("a live rule routes a freshly filed link into a custom queue, and the conso
     ]);
     expect(url.rows[0].status).toBe("PENDING_REVIEW");
   });
+
+  // The rule is shared state: every later spec files flagged links too, and
+  // a live TIER_1 rule would route each of their seeded-platform links into
+  // this custom queue. Switch it off through the page's own status control
+  // so the suite leaves routing as it found it (the rule and its versions
+  // stay, audited and inspectable, exactly as a disabled rule in production).
+  await ownerPage.goto("/admin/review/rules");
+  await linksSection.getByLabel("Status").selectOption("DISABLED");
+  await expect(linksSection.getByText("Big platforms first")).toBeVisible();
+  await expect(linksSection.getByLabel("Status")).toHaveValue("DISABLED");
   await owner.close();
 });
 

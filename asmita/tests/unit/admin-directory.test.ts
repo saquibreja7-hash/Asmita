@@ -126,4 +126,18 @@ describe("listAdminDirectory", () => {
     expect(serialised).not.toContain("directory-norole");
     expect(serialised).toContain("d*****@example.test");
   });
+
+  it("gives every row an opaque target key that is not the email hash", async () => {
+    const { allowlistedHashByTargetKey } = await import("@/lib/auth/admin-allowlist");
+    const rows = await listAdminDirectory();
+    for (const row of rows) {
+      // The key is the hash OF the hash: a page carrying it does not carry
+      // the single-step hash that every console row is keyed by.
+      expect(row.targetKey).toBe(hashEmail(row.emailHash));
+      expect(row.targetKey).not.toBe(row.emailHash);
+      expect(allowlistedHashByTargetKey(row.targetKey)).toBe(row.emailHash);
+    }
+    // A key that matches no allowlisted admin resolves to nothing.
+    expect(allowlistedHashByTargetKey(hashEmail(hashEmail("stranger@example.test")))).toBeNull();
+  });
 });

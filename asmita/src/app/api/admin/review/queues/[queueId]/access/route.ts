@@ -2,24 +2,30 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { allowlistedHashByTargetKey } from "@/lib/auth/admin-allowlist";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { requireStepUp } from "@/lib/auth/step-up";
 import { grantReviewQueueAccess } from "@/lib/review-jobs";
 
 // POST /api/admin/review/queues/[queueId]/access — narrow one queue by
 // adding an access row (review-console-spec.md WP144). The row names either
-// one role or one admin, never both; review:manage (SUPER_ADMIN only) is
-// re-checked in the library, and changing queue access needs a fresh
-// authenticator proof (step-up MFA). The protected minor-hold queue ignores
-// rows and refuses them here.
+// one role or one admin, never both; the Admins page targets an admin by
+// their opaque key (the hash of the email hash, resolved against the
+// allowlist here, so the page never renders the single-step hash either).
+// review:manage (SUPER_ADMIN only) is re-checked in the library, and
+// changing queue access needs a fresh authenticator proof (step-up MFA).
+// The protected minor-hold queue ignores rows and refuses them here.
 
 const schema = z
   .object({
     role: z.enum(["SUPER_ADMIN", "LEGAL_ADVISOR", "CASE_REVIEWER", "GO_EDITOR", "SUPPORT_AGENT"]).optional(),
     adminEmailHash: z.string().regex(/^[a-f0-9]{16,128}$/).optional(),
+    adminKey: z.string().regex(/^[a-f0-9]{16,128}$/).optional(),
   })
   .strict()
-  .refine((value) => Boolean(value.role) !== Boolean(value.adminEmailHash), { message: "one_target_required" });
+  .refine((value) => [value.role, value.adminEmailHash, value.adminKey].filter(Boolean).length === 1, {
+    message: "one_target_required",
+  });
 
 const CHANGES_PER_HOUR = 120;
 
@@ -48,7 +54,8 @@ export async function POST(request: Request, context: { params: Promise<{ queueI
   const result = await grantReviewQueueAccess({
     queueId,
     role: parsed.data.role,
-    adminEmailHash: parsed.data.adminEmailHash,
+    adminEmailHash:
+      parsed.data.adminEmailHash ?? (allowlistedHashByTargetKey(parsed.data.adminKey ?? "") ?? undefined),
     callerRole: auth.session.adminRole,
     actorId: auth.session.sub,
   });

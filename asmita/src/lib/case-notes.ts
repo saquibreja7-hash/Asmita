@@ -112,6 +112,10 @@ export async function addCaseNote(input: {
     const { db } = await import("@/lib/db");
     await db.caseNote.create({
       data: {
+        // The row's id is the audit event's entityId and the id the routes
+        // answer with, so the stored row must carry exactly this id on
+        // every backend (Prisma would mint its own otherwise).
+        id: row.id,
         caseId: row.caseId,
         jobId: row.jobId,
         authorEmailHash: row.authorEmailHash,

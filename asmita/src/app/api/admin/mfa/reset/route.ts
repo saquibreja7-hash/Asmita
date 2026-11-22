@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
-import { allowlistedEmailByHash, resolveAdminRole } from "@/lib/auth/admin-allowlist";
+import { allowlistedEmailByHash, allowlistedHashByTargetKey, resolveAdminRole } from "@/lib/auth/admin-allowlist";
 import { resetAdminMfa } from "@/lib/auth/admin-mfa-store";
 import { issueAdminEnrolmentCode } from "@/lib/auth/admin-enrolment";
 import { requireStepUp } from "@/lib/auth/step-up";
@@ -16,9 +16,15 @@ const schema = z
     // The Admins page targets an admin by their email hash, so no full
     // email address ever travels to the browser (WP144).
     emailHash: z.string().regex(/^[a-f0-9]{16,128}$/).optional(),
+    // The page's own button goes one step further and posts only this
+    // opaque key (the hash of the email hash), so the single-step hash is
+    // never rendered or sent either. Server-side resolution only.
+    adminKey: z.string().regex(/^[a-f0-9]{16,128}$/).optional(),
   })
   .strict()
-  .refine((value) => Boolean(value.email) !== Boolean(value.emailHash), { message: "one_target_required" });
+  .refine((value) => [value.email, value.emailHash, value.adminKey].filter(Boolean).length === 1, {
+    message: "one_target_required",
+  });
 
 /*
  * Resets or invites an admin: clears any authenticator enrolment and issues a
@@ -46,8 +52,11 @@ export async function POST(request: Request) {
   }
 
   // A hash is resolved back to its allowlisted email on the server, so the
-  // Admins page never has to carry the address itself.
-  const email = parsed.data.email ?? allowlistedEmailByHash(parsed.data.emailHash!);
+  // Admins page never has to carry the address itself; a target key goes
+  // through the same allowlist resolution one step further (hash of hash).
+  const email = parsed.data.email
+    ?? allowlistedEmailByHash(parsed.data.emailHash ?? "")
+    ?? (parsed.data.adminKey ? allowlistedEmailByHash(allowlistedHashByTargetKey(parsed.data.adminKey) ?? "") : null);
   if (!email) {
     return NextResponse.json({ error: "not_an_admin" }, { status: 400 });
   }

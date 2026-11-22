@@ -1,7 +1,7 @@
 import { REVIEW_SUBJECT_KINDS, type ReviewSubjectKind } from "@/lib/review-adapters";
 import { listReviewQueues } from "@/lib/review-jobs";
 import { reasonLabelIndex } from "@/lib/review-reasons";
-import { reviewerHandle } from "@/lib/review-views";
+import { REVIEW_DECISION_LABELS, reviewerHandle } from "@/lib/review-views";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
 /*
@@ -446,7 +446,10 @@ export async function exportDecisionLogCsv(
         istTimestamp(row.decidedAt),
         row.queueName,
         KIND_LABELS[row.subjectKind] ?? row.subjectKind,
-        row.decision,
+        // The CSV carries the same decision word the log's table shows,
+        // never the raw code (a row that says "Rejected" on the page says
+        // "Rejected" in the export).
+        REVIEW_DECISION_LABELS[row.decision] ?? row.decision.replaceAll("_", " "),
         row.reasonLabel ?? "",
         row.reviewer,
         row.caseReference ?? "",

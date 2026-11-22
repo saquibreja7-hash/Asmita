@@ -3,6 +3,7 @@ import { SignJWT } from "jose";
 import { expect, test, type APIRequestContext, type Browser } from "@playwright/test";
 import { adminContext, testAdminEmail, testAdminHash } from "./support/admin";
 import { withAdmin } from "./support/database";
+import { acquireReviewQueueLock, releaseReviewQueueLock, warmConsoleRoutes } from "./support/review";
 
 // Review console WP144 (review-console-spec.md): queue access, the Admins
 // page and step-up MFA. The owner narrows the Flagged links queue to one
@@ -12,6 +13,18 @@ import { withAdmin } from "./support/database";
 // prompt. These specs run on dev-vm against the throwaway Postgres; every
 // address below is a synthetic @example.invalid one, and the specs assert
 // the full addresses never reach the page.
+
+// Spec files run in parallel and the review console is one shared queue
+// system: this file-level lock serialises the review-console specs against
+// each other while the rest of the suite keeps running in parallel, and the
+// warm-up compiles the routes before any test's clock runs.
+test.beforeAll(async ({ browser }) => {
+  await acquireReviewQueueLock();
+  await warmConsoleRoutes(browser);
+});
+test.afterAll(async () => {
+  await releaseReviewQueueLock();
+});
 
 /** A session whose last authenticator proof is older than the 15-minute window. */
 async function staleAdminContext(browser: Browser, sub = "e2e-admin") {
@@ -48,7 +61,9 @@ test("queue access narrows who sees a queue, and the protected queue ignores row
 
   // The Admins page lists every allowlisted admin with masked addresses.
   await ownerPage.goto("/admin/admins");
-  await expect(ownerPage.getByRole("heading", { name: "Admins" })).toBeVisible({ timeout: 30_000 });
+  // The page's main heading (an h2 section on the same page repeats the
+  // word, so the level pins this to the title).
+  await expect(ownerPage.getByRole("heading", { name: "Admins", level: 1 })).toBeVisible({ timeout: 30_000 });
   await expect(ownerPage.getByText("e*****@example.invalid").first()).toBeVisible();
   for (const sub of ["e2e-admin", "e2e-reviewer", "integrity-admin", "admin-1", "e2e-access-admin", "e2e-new-admin"]) {
     await expect(ownerPage.getByText(`${sub}@example.invalid`)).toHaveCount(0);
@@ -118,16 +133,21 @@ test("a stale authenticator proof refuses the step-up actions and asks for a fre
     timeout: 30_000,
   });
 
-  // A wrong code keeps the dialog open with the failure in words.
-  await stalePage.getByLabel("Authenticator code").fill("000000");
+  // A wrong code keeps the dialog open with the failure in words. (The
+  // input's exact label: the dialog form's own aria-label also contains
+  // the words "authenticator code".)
+  await stalePage.getByLabel("Authenticator code", { exact: true }).fill("000000");
   await stalePage.getByRole("button", { name: "Confirm" }).click();
   await expect(stalePage.getByText("That code was not accepted. Try the next one.")).toBeVisible({ timeout: 30_000 });
-  await stalePage.getByRole("button", { name: "Cancel" }).click();
+  // The dialog's own Cancel (the rule builder's form below is still open
+  // and carries one too).
+  await stalePage.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
   await expect(stalePage.getByRole("dialog")).toHaveCount(0);
   await expect(linksSection.getByText("Nothing was changed: this needs a fresh authenticator code.")).toBeVisible();
 
   // The API refuses too, with the code the console listens for, and the
-  // rule was never created.
+  // refused rule was never created. (Scoped by name: other review specs
+  // legitimately leave their own rules behind in this shared database.)
   const refused = await post(stale.request, "/api/admin/review/rules", {
     name: "Should not exist",
     subjectKind: "FLAGGED_LINK",
@@ -137,7 +157,7 @@ test("a stale authenticator proof refuses the step-up actions and asks for a fre
   expect(refused.status()).toBe(403);
   expect(await refused.json()).toEqual({ error: "mfa_step_up_required" });
   await withAdmin(async (db) => {
-    const rules = await db.query(`SELECT count(*)::int AS n FROM "ReviewRoutingRule"`);
+    const rules = await db.query(`SELECT count(*)::int AS n FROM "ReviewRoutingRule" WHERE name = 'Should not exist'`);
     expect(rules.rows[0].n).toBe(0);
   });
 

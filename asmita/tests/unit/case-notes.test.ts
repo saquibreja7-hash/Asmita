@@ -9,6 +9,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/security-log", () => ({ logSecurityEvent: vi.fn() }));
 
+// WP171: the Prisma branch of the same library, against a mocked client.
+// The row's id is the audit event's entityId and the routes' answer, so the
+// stored row must carry exactly the id the library generated — Prisma would
+// silently mint its own otherwise, and the audit event would point at an id
+// no row has.
+const prisma = vi.hoisted(() => {
+  const db = {
+    caseNote: {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => data),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+      findUnique: vi.fn(async () => null),
+    },
+    case: { findUnique: vi.fn(async () => ({ id: "case-1" })) },
+  };
+  return { db };
+});
+vi.mock("@/lib/worker-kysely", () => ({ usesWorkerKysely: () => false, getWorkerDb: () => { throw new Error("no worker db"); } }));
+vi.mock("@/lib/db", () => ({ db: prisma.db }));
+
 import { inMemoryAuditLog } from "@/lib/audit";
 import { cases, createCase } from "@/lib/store";
 import { decryptField } from "@/lib/encryption";
@@ -163,5 +182,27 @@ describe("soft-deleting a note", () => {
       await softDeleteCaseNote({ noteId: added.note.id, viewerEmailHash: "hash-owner", role: SUPER, actorId: "admin-9" }),
     ).toMatchObject({ ok: true });
     expect(await listCaseNotes(caseId, { emailHash: ME, role: SUPER })).toHaveLength(0);
+  });
+});
+
+describe("the Prisma path", () => {
+  it("stores the row with exactly the id the audit event names", async () => {
+    vi.stubEnv("DATABASE_URL", "postgresql://placeholder.invalid/asmita_test");
+    const added = await addCaseNote({
+      caseId: "case-1",
+      body: "One id everywhere.",
+      authorEmailHash: ME,
+      authorId: "admin-1",
+      role: SUPPORT,
+      now: NOW,
+    });
+    expect(added.ok).toBe(true);
+    const data = prisma.db.caseNote.create.mock.calls[0][0].data as Record<string, unknown>;
+    expect(typeof data.id).toBe("string");
+    // WP171 regression: the audit event's entityId is the row the database
+    // actually holds, not an id only the library generated.
+    expect(data.id).toBe(added.ok ? added.note.id : "");
+    expect(inMemoryAuditLog.at(-1)?.entityId).toBe(data.id);
+    expect(prisma.db.caseNote.create.mock.calls[0][0].data).not.toHaveProperty("body");
   });
 });
