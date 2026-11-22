@@ -377,7 +377,10 @@ export function canSeeReviewQueueWithRows(
   rows: Array<{ role: AdminRole | null; adminEmailHash: string | null }>,
 ): boolean {
   if (queue.protected || queue.subjectKind === null) return viewer.role === "SUPER_ADMIN";
-  if (rows.length === 0) return canSeeReviewQueue(viewer.role, queue);
+  // Rows only narrow: a listed role or person still needs the kind's own
+  // permission, so a row can never show a queue to a role that lacks it.
+  if (!canSeeReviewQueue(viewer.role, queue)) return false;
+  if (rows.length === 0) return true;
   return (
     rows.some((row) => row.role === viewer.role) ||
     rows.some((row) => row.adminEmailHash !== null && row.adminEmailHash === viewer.emailHash)

@@ -3,6 +3,8 @@ import { listReviewQueues } from "@/lib/review-jobs";
 import { reasonLabelIndex } from "@/lib/review-reasons";
 import { REVIEW_DECISION_LABELS, reviewerHandle } from "@/lib/review-views";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import { csvCell } from "@/lib/csv-cell";
+import type { AdminRole } from "@/lib/auth/admin-permissions";
 
 /*
  * The decisions log (review-console-spec.md, WP145): ReviewDecision rows,
@@ -140,15 +142,32 @@ export type DecisionLogRow = {
   routing: string | null;
 };
 
+/**
+ * Who is reading the log. Decisions on protected queues (minor-hold, and
+ * any-kind queues) are shown only to a SUPER_ADMIN, the same rule as the
+ * queue itself; without a role they are hidden.
+ */
+export type DecisionLogViewer = { emailHash: string; role?: AdminRole };
+
+function isProtectedQueue(queue: { protected: boolean; subjectKind: ReviewSubjectKind | null }): boolean {
+  return queue.protected || queue.subjectKind === null;
+}
+
 type ResolvedFilters = {
   queueId?: string;
+  /** Protected queues the viewer may not see. */
+  hiddenQueueIds?: string[];
   caseId?: string;
   from?: Date;
   to?: Date;
 } & Omit<DecisionLogFilters, "queueKey" | "caseReference" | "fromIstDay" | "toIstDay">;
 
-async function resolveFilters(filters: DecisionLogFilters): Promise<ResolvedFilters> {
+async function resolveFilters(filters: DecisionLogFilters, viewer: DecisionLogViewer): Promise<ResolvedFilters> {
   const resolved: ResolvedFilters = { ...filters };
+  if (viewer.role !== "SUPER_ADMIN") {
+    const hidden = (await listReviewQueues()).filter(isProtectedQueue).map((queue) => queue.id);
+    if (hidden.length > 0) resolved.hiddenQueueIds = hidden;
+  }
   delete (resolved as Record<string, unknown>).queueKey;
   delete (resolved as Record<string, unknown>).caseReference;
   delete (resolved as Record<string, unknown>).fromIstDay;
@@ -185,6 +204,7 @@ async function caseIdForReference(reference: string): Promise<string | null> {
 
 function matchesFilters(row: DecisionRow, filters: ResolvedFilters): boolean {
   if (filters.queueId !== undefined && row.queueId !== filters.queueId) return false;
+  if (filters.hiddenQueueIds?.includes(row.queueId)) return false;
   if (filters.subjectKind !== undefined && row.subjectKind !== filters.subjectKind) return false;
   if (filters.decision !== undefined && row.decision !== filters.decision) return false;
   if (filters.reviewerEmailHash !== undefined && row.reviewerEmailHash !== filters.reviewerEmailHash) return false;
@@ -214,13 +234,13 @@ const DECISION_COLUMNS = [
  * when this is the last page.
  */
 export async function listDecisionLogPage(
-  viewer: { emailHash: string },
+  viewer: DecisionLogViewer,
   filters: DecisionLogFilters,
   options: { before?: string; limit?: number } = {},
 ): Promise<{ rows: DecisionLogRow[]; nextBefore: string | null }> {
   const limit = Math.min(Math.max(options.limit ?? DECISION_LOG_PAGE_SIZE, 1), DECISION_CSV_MAX_ROWS);
   const cursor = decodeDecisionCursor(options.before);
-  const resolved = await resolveFilters(filters);
+  const resolved = await resolveFilters(filters, viewer);
   const fetched = limit + 1;
 
   let page: DecisionRow[];
@@ -239,6 +259,7 @@ export async function listDecisionLogPage(
   } else if (usesWorkerKysely()) {
     let query = getWorkerDb().selectFrom("ReviewDecision").select(DECISION_COLUMNS);
     if (resolved.queueId !== undefined) query = query.where("queueId", "=", resolved.queueId);
+    if (resolved.hiddenQueueIds !== undefined) query = query.where("queueId", "not in", resolved.hiddenQueueIds);
     if (resolved.subjectKind !== undefined) query = query.where("subjectKind", "=", resolved.subjectKind);
     if (resolved.decision !== undefined) query = query.where("decision", "=", resolved.decision);
     if (resolved.reviewerEmailHash !== undefined) query = query.where("reviewerEmailHash", "=", resolved.reviewerEmailHash);
@@ -259,7 +280,11 @@ export async function listDecisionLogPage(
     const { db } = await import("@/lib/db");
     page = (await db.reviewDecision.findMany({
       where: {
-        ...(resolved.queueId !== undefined ? { queueId: resolved.queueId } : {}),
+        ...(resolved.queueId !== undefined
+          ? { queueId: resolved.queueId }
+          : resolved.hiddenQueueIds !== undefined
+            ? { queueId: { notIn: resolved.hiddenQueueIds } }
+            : {}),
         ...(resolved.subjectKind !== undefined ? { subjectKind: resolved.subjectKind } : {}),
         ...(resolved.decision !== undefined ? { decision: resolved.decision } : {}),
         ...(resolved.reviewerEmailHash !== undefined ? { reviewerEmailHash: resolved.reviewerEmailHash } : {}),
@@ -404,9 +429,14 @@ export function istTimestamp(value: Date | string): string {
   return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} IST`;
 }
 
-/** RFC 4180: every field quoted, inner quotes doubled. */
+/**
+ * RFC 4180: every field quoted, inner quotes doubled. Queue names and reason
+ * labels are admin-editable, so the shared csvCell guard neutralises a value
+ * that starts with a formula trigger before it reaches a spreadsheet.
+ */
 function csvField(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
+  const cell = csvCell(value);
+  return cell.startsWith('"') ? cell : `"${cell}"`;
 }
 
 export const DECISION_CSV_COLUMNS: readonly string[] = [
@@ -435,7 +465,7 @@ const KIND_LABELS: Record<ReviewSubjectKind, string> = {
  * Capped at DECISION_CSV_MAX_ROWS newest rows; the caller reports a cap.
  */
 export async function exportDecisionLogCsv(
-  viewer: { emailHash: string },
+  viewer: DecisionLogViewer,
   filters: DecisionLogFilters,
 ): Promise<{ csv: string; count: number; capped: boolean }> {
   const { rows } = await listDecisionLogPage(viewer, filters, { limit: DECISION_CSV_MAX_ROWS });
@@ -475,8 +505,10 @@ export type DecisionLogFilterOptions = {
 };
 
 /** The selects the filter form offers. Ids and labels only. */
-export async function decisionLogFilterOptions(viewer: { emailHash: string }): Promise<DecisionLogFilterOptions> {
-  const queues = await listReviewQueues();
+export async function decisionLogFilterOptions(viewer: DecisionLogViewer): Promise<DecisionLogFilterOptions> {
+  const queues = (await listReviewQueues()).filter(
+    (queue) => viewer.role === "SUPER_ADMIN" || !isProtectedQueue(queue),
+  );
   const labels = await reasonLabelIndex();
   const reasons = new Map<string, string>();
   for (const [key, label] of labels) {
