@@ -23,6 +23,10 @@ import {
 // empties is not refilled mid-test by another review spec. The warm-up
 // compiles the routes the specs drive before any test's clock runs.
 test.beforeAll(async ({ browser }) => {
+  // The lock may wait for another review-console file (up to its 20-minute
+  // limit), then the warm-up compiles the console routes: far past the
+  // default 30 s hook timeout.
+  test.setTimeout(22 * 60_000);
   await acquireReviewQueueLock();
   await warmConsoleRoutes(browser);
 });
