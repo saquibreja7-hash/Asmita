@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { safeLink } from "@/lib/safe-link";
 import { writeAuditLog } from "@/lib/audit";
 
 /*
@@ -41,7 +42,7 @@ export const orgEventSchema = z
     endsAt: z.string().datetime().optional(),
     mode: z.enum(ORG_EVENT_MODES),
     city: text(2, 80).optional(),
-    registrationUrl: z.string().trim().url().max(500).optional(),
+    registrationUrl: safeLink(500).optional(),
     descriptionMd: z.string().trim().min(1).max(20_000),
   })
   .strict()
