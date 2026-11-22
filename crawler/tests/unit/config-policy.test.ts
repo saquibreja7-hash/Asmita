@@ -52,8 +52,16 @@ describe("config", () => {
     expect(keysOf({ ...good, ASMITA_API_URL: "http://10.0.0.5:8787" })).toEqual(["ASMITA_API_URL"]);
   });
   it("has no setting that could loosen the crawl network policy", () => {
-    const keys = Object.keys(ConfigSchema.shape);
+    // WP25 exception, on purpose: CRAWLER_ALLOW_UNSANDBOXED_BROWSER (the
+    // name the work package mandates) matches the ALLOW scan but bypasses
+    // the BROWSER sandbox only, never the network policy — the scan below
+    // still covers every other key, the "override never reaches the
+    // network or crawl code" test pins the separation, and
+    // browser-sandbox.test.ts pins that the value is a strict boolean
+    // defaulting to false.
+    const keys = Object.keys(ConfigSchema.shape).filter((k) => k !== "CRAWLER_ALLOW_UNSANDBOXED_BROWSER");
     for (const k of keys) expect(k).not.toMatch(/LOOPBACK|PRIVATE|LOCAL|INSECURE|ALLOW|PORT|SSRF|UNSAFE|PROXY|DNS|RESOLV/i);
+    expect(loadConfig(good).CRAWLER_ALLOW_UNSANDBOXED_BROWSER).toBe(false);
   });
 });
 
@@ -105,5 +113,14 @@ describe("static guarantees in src/", () => {
     for (const f of files.filter((x) => !x.path.endsWith("main.ts"))) {
       expect(f.text, f.path).not.toMatch(/process\.env/);
     }
+  });
+  it("the browser-sandbox override never reaches the network or crawl code", () => {
+    // WP25: CRAWLER_ALLOW_UNSANDBOXED_BROWSER is the one config key whose
+    // name the ALLOW scan above must tolerate (the spec mandates the name).
+    // Its whole effect is the browser sandbox decision (browser/sandbox.ts,
+    // browser-renderer.ts): nothing under net/ or crawl/ may mention it.
+    const guarded = files.filter((f) => /[\\/]src[\\/](net|crawl)[\\/]/.test(f.path));
+    expect(guarded.length).toBeGreaterThan(10);
+    for (const f of guarded) expect(f.text, f.path).not.toContain("CRAWLER_ALLOW_UNSANDBOXED_BROWSER");
   });
 });

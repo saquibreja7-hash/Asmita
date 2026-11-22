@@ -64,8 +64,7 @@ export default async function WhatWeDoPage() {
         <section className="hero" aria-label={say("What we do", "हम क्या करते हैं")}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("What we do", "हम क्या करते हैं")}</span>
-              <h1 className="page-title mt-5">
+              <h1 className="page-title">
                 {say("Tools for taking action on content", "सामग्री पर कार्रवाई के साधन")}
               </h1>
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
@@ -90,9 +89,16 @@ export default async function WhatWeDoPage() {
                     <h2 className="subsection-title mt-4">{locale === "hi" ? hindi.capabilities[i].title : c.title}</h2>
                     <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--text)]">{locale === "hi" ? hindi.capabilities[i].body : c.body}</p>
                     <div className="mt-6">
-                      <Link href={c.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
-                        {locale === "hi" ? hindi.capabilities[i].cta : c.cta}
-                      </Link>
+                      {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                      {c.href === "/check-image" ? (
+                        <a href={c.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                          {locale === "hi" ? hindi.capabilities[i].cta : c.cta}
+                        </a>
+                      ) : (
+                        <Link href={c.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                          {locale === "hi" ? hindi.capabilities[i].cta : c.cta}
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -105,7 +111,6 @@ export default async function WhatWeDoPage() {
         <section className="transform-section" aria-labelledby="flow-heading">
           <div className="transform-content container section-pad">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{say("How it fits together", "ये चरण कैसे जुड़ते हैं")}</span>
               <h2 id="flow-heading" className="section-title mt-4">
                 {say("From a link to a takedown", "लिंक से हटाने की कार्रवाई तक")}
               </h2>

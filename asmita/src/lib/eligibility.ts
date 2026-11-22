@@ -2,7 +2,9 @@
 // adult when the content was made, may add links before confirming their
 // email. Nothing they type reaches the server until they have a session; the
 // cookie only lets the server render /submit for them.
-export const ELIGIBLE_COOKIE = "asmita_eligible";
+import { COOKIE_BASE_NAMES } from "@/lib/cookie-names";
+
+export const ELIGIBLE_COOKIE = COOKIE_BASE_NAMES.eligibleAdult;
 const ELIGIBLE_KEY = "asmita_eligibility";
 export const DRAFT_KEY = "asmita_submit_draft";
 
@@ -13,7 +15,11 @@ export function rememberEligibleAdult() {
     // Private mode: the age questions are asked again on the email step.
   }
   const secure = location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `${ELIGIBLE_COOKIE}=1; Path=/; Max-Age=86400; SameSite=Lax${secure}`;
+  // A session cookie with no Max-Age (web audit WP41, S10): the 24-hour
+  // window let a shared phone reopen /submit a day later without answering
+  // the age questions again. It still lasts the whole browser session,
+  // which is all the flow needs; everything else about it is unchanged.
+  document.cookie = `${ELIGIBLE_COOKIE}=1; Path=/; SameSite=Lax${secure}`;
 }
 
 // Someone who answers as a minor, even after answering as an adult on this

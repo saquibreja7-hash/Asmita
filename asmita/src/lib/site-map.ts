@@ -44,6 +44,43 @@ export const siteMap: SiteGroup[] = [
       { href: "/resources/directory", label: "Support directory", note: "Public helplines and services; check current availability" },
       { href: "/resources/legal", label: "Your legal rights" },
       { href: "/faq", label: "FAQ" },
+      { href: "/news", label: "News", note: "Updates, stories, research and campaigns" },
+      { href: "/policy", label: "Policy and advocacy" },
+      { href: "/press", label: "Press", note: "Releases, coverage and the media kit" },
+    ],
+  },
+  {
+    title: "Get involved",
+    links: [
+      { href: "/get-involved", label: "Get involved", note: "Every way to help, in one place" },
+      { href: "/partners", label: "Partner with us", note: "NGOs, legal, police, universities, platforms" },
+      { href: "/partners/ngos", label: "NGOs and helplines" },
+      { href: "/partners/legal", label: "Legal partners" },
+      { href: "/partners/law-enforcement", label: "Police and cyber cells" },
+      { href: "/partners/academic", label: "Universities and researchers" },
+      { href: "/volunteer", label: "Volunteer" },
+      { href: "/careers", label: "Careers" },
+      { href: "/training", label: "Training and workshops" },
+      { href: "/newsletter", label: "Newsletter" },
+    ],
+  },
+  {
+    // WP96 (docs/lab/beta-spec.md): every Lab route sits in the sitemap —
+    // the hub and each beta tool — and none of them in the header nav
+    // (nav-config.ts): the Lab is reached from the hub and the footer only.
+    title: "AI Lab",
+    links: [
+      { href: "/lab", label: "AI Lab", note: "Research experiments and beta tools; separate from filing a complaint" },
+      { href: "/lab/open-tools", label: "Open tools", note: "Directory of free trust-and-safety tools, and the free stacks built on them" },
+      { href: "/lab/open-tools/how-we-choose", label: "How we choose tools", note: "What 'open' means here, what we check before listing, and how to suggest a tool" },
+      { href: "/lab/stacks", label: "Free stacks", note: "Step-by-step guides combining those tools for one job each" },
+      { href: "/lab/trace", label: "Trace a morph" },
+      { href: "/lab/detectors", label: "Detector panel" },
+      { href: "/lab/protect", label: "Photo protection" },
+      { href: "/lab/tracker", label: "Service tracker" },
+      { href: "/lab/message-check", label: "Check a message" },
+      { href: "/lab/stamp", label: "Content Credentials stamp" },
+      { href: "/lab/spot-the-fake", label: "Spot the fake" },
     ],
   },
   {
@@ -53,6 +90,8 @@ export const siteMap: SiteGroup[] = [
       { href: "/what-we-do", label: "What we do" },
       { href: "/how-it-works", label: "How it works" },
       { href: "/research", label: "Research" },
+      { href: "/for-platforms", label: "For platforms" },
+      { href: "/for-platforms/trusted-flagger", label: "What a notice contains", note: "For trust and safety teams" },
       { href: "/contact", label: "Contact" },
       { href: "/feedback", label: "Feedback" },
     ],

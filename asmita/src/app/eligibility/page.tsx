@@ -1,3 +1,4 @@
+import { QuickExit } from "@/components/QuickExit";
 import { AppShell } from "@/components/layout/AppShell";
 import { EligibilityWizard } from "./EligibilityWizard";
 import { FlowProgress } from "@/components/FlowProgress";
@@ -8,6 +9,7 @@ export default async function EligibilityPage() {
 
   return (
     <AppShell>
+      <QuickExit locale={locale} enableIdle={false} />
       <div className="page-canvas">
         <div className="container py-8 md:py-20">
           <div className="mx-auto max-w-xl">

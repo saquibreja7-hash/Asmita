@@ -104,7 +104,11 @@ function canned(withRun: boolean) {
         { reviewStatus: "CANDIDATE", count: "2" },
         { reviewStatus: "APPROVED", count: "1" },
         { reviewStatus: "DISMISSED", count: "1" },
+        { reviewStatus: "MINOR_PROTOCOL", count: "1" },
       ],
+      { count: "2" }, // labelAiMade
+      { count: "1" }, // labelSexual
+      { count: "1" }, // labelPossibleMinor
       ...(withRun ? [{ runId: "run-x", lastSeenAt: RUN_LAST_SEEN }, { count: "3", first: RUN_FIRST_SEEN, last: RUN_LAST_SEEN }] : [undefined]),
     ],
   };
@@ -140,7 +144,7 @@ describe("getCrawlerStats, Kysely path", () => {
     expect(stats.pagesCrawledToday).toBe(4);
     expect(stats.queue).toEqual({ live: 8, pending: 3, due: 1, claimed: 2, scheduled: 5, dead: 2 });
     expect(stats.pagesByStatus).toEqual({ pending: 3, fetched: 2, notModified: 1, gone: 1, blocked: 1, error: 1, dead: 1 });
-    expect(stats.findings).toEqual({ awaitingReview: 2, approved: 1, dismissed: 1 });
+    expect(stats.findings).toEqual({ awaitingReview: 2, approved: 1, dismissed: 1, minorProtocol: 1, labels: { aiMade: 2, sexual: 1, possibleMinor: 1 } });
     expect(stats.lastRun).toEqual({
       activityAt: RUN_LAST_SEEN.toISOString(),
       findingRun: { runId: "run-x", firstSeenAt: RUN_FIRST_SEEN.toISOString(), lastSeenAt: RUN_LAST_SEEN.toISOString(), findings: 3 },
@@ -151,10 +155,10 @@ describe("getCrawlerStats, Kysely path", () => {
     canned(true);
     await getCrawlerStats(NOW);
     const calls = kysely.state.calls;
-    expect(calls).toHaveLength(11);
+    expect(calls).toHaveLength(14);
     expect(callsOn("CrawlSource")).toHaveLength(3);
     expect(callsOn("CrawlPage")).toHaveLength(5);
-    expect(callsOn("CrawlFinding")).toHaveLength(3);
+    expect(callsOn("CrawlFinding")).toHaveLength(6);
     expect(calls.every((call) => call.op === "select")).toBe(true); // reads only
     for (const call of calls) {
       for (const select of (call.detail.selects as unknown[]) ?? []) {
@@ -185,17 +189,21 @@ describe("getCrawlerStats, Kysely path", () => {
     const claimedWheres = wheresOf("CrawlPage", 3);
     expect(claimedWheres).toContainEqual(["status", "not in", ["DEAD", "GONE"]]);
     expect(claimedWheres).toContainEqual(["claimedUntil", ">", NOW]);
-    // CrawlFinding[1]: the newest run; CrawlFinding[2]: its window.
-    const newest = callsOn("CrawlFinding")[1]!.detail;
+    // The three label counts (WP37): one where each, on the label flag.
+    expect(wheresOf("CrawlFinding", 1)).toContainEqual(["labelAiMade", "=", true]);
+    expect(wheresOf("CrawlFinding", 2)).toContainEqual(["labelSexual", "=", true]);
+    expect(wheresOf("CrawlFinding", 3)).toContainEqual(["labelPossibleMinor", "=", true]);
+    // CrawlFinding[4]: the newest run; CrawlFinding[5]: its window.
+    const newest = callsOn("CrawlFinding")[4]!.detail;
     expect(newest.orderBy).toEqual(["lastSeenAt", "desc"]);
     expect(newest.limit).toBe(1);
-    expect(wheresOf("CrawlFinding", 2)).toContainEqual(["runId", "=", "run-x"]);
+    expect(wheresOf("CrawlFinding", 5)).toContainEqual(["runId", "=", "run-x"]);
   });
 
   it("asks one statement less when no finding has ever been reported", async () => {
     canned(false);
     const stats = await getCrawlerStats(NOW);
-    expect(kysely.state.calls).toHaveLength(10);
+    expect(kysely.state.calls).toHaveLength(13);
     expect(stats.lastRun).toEqual({
       activityAt: LAST_SOURCE_CRAWL.toISOString(), // the source visit is the newest activity left
       findingRun: null,

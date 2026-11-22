@@ -43,6 +43,6 @@ test("admin logout clears the session at every path it was ever set", async ({ b
 
   expect((await context.cookies()).filter((c) => c.name === "asmita_admin_session")).toEqual([]);
   await page.goto("/admin/cases");
-  await expect(page.getByText("Restricted workspace")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in to admin." })).toBeVisible();
   await context.close();
 });

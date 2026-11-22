@@ -2,6 +2,7 @@ import {
   listDispatchableHashCases,
   listHashReviewQueue,
   listVerifiedDispatchPlatforms,
+  videoFingerprintLabel,
 } from "@/lib/hash-submission";
 import HashReviewActions from "./HashReviewActions";
 import HashDispatchForm from "./HashDispatchForm";
@@ -68,7 +69,15 @@ export default async function HashQueuePage() {
               <tr className="border-t border-[var(--line)]" key={row.id}>
                 <td className="font-mono p-4">{row.referenceNumber}</td>
                 <td className="font-mono p-4 text-[var(--text-muted)]">
-                  {row.hashDigest.slice(0, 16)}…
+                  {row.algorithm === "VPDQ" ? (
+                    <>
+                      {/* A video never shows a single-hash digest as its identity: it is named by its frames. */}
+                      <span className="text-[var(--ink)]">{videoFingerprintLabel(row.videoFrameCount, row.videoDurationSec)}</span>
+                      <span className="block text-xs">{row.hashDigest.slice(0, 16)}…</span>
+                    </>
+                  ) : (
+                    <>{row.hashDigest.slice(0, 16)}…</>
+                  )}
                 </td>
                 <td className="p-4 tabular-nums">{row.quality}/100</td>
                 <td className="p-4">{row.requestedPlatformName ?? <span className="text-[var(--text-muted)]">-</span>}</td>

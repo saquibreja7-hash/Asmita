@@ -7,7 +7,6 @@ export default function AdminLoginPage() {
       <div className="page-canvas">
         <section className="container pb-10 pt-20 text-center md:pb-12 md:pt-32">
           <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">Restricted workspace</span>
             <h1 className="page-title-sm mt-8">
               Sign in to{" "}
               <em className="not-italic text-gradient">admin</em>.

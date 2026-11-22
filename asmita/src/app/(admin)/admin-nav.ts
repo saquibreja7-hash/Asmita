@@ -22,8 +22,21 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     heading: "Directory",
     items: [
       { href: "/admin/platforms", label: "Platforms", permission: "platforms:edit" },
+      { href: "/admin/partners", label: "Platform partners", permission: "platforms:edit" },
       { href: "/admin/templates", label: "Templates", permission: "templates:edit" },
       { href: "/admin/crawl-sources", label: "Crawler sites", permission: "crawler:manage" },
+    ],
+  },
+  {
+    heading: "Organization",
+    items: [
+      { href: "/admin/org/posts", label: "Org posts", permission: "content:manage" },
+      { href: "/admin/org/submissions", label: "Outreach inbox", permission: "outreach:manage" },
+      { href: "/admin/org/jobs", label: "Org jobs", permission: "content:manage" },
+      { href: "/admin/org/events", label: "Org events", permission: "content:manage" },
+      { href: "/admin/org/partners", label: "Org partners", permission: "content:manage" },
+      { href: "/admin/org/newsletter", label: "Newsletter", permission: "outreach:manage" },
+      { href: "/admin/org/scorecard", label: "Scorecard", permission: "content:manage" },
     ],
   },
   {
@@ -32,6 +45,14 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/admin/metrics", label: "Response rates", permission: "metrics:read" },
       { href: "/admin/analytics", label: "Analytics", permission: "metrics:read" },
       { href: "/admin/milestones", label: "Milestones", permission: "metrics:read" },
+    ],
+  },
+  {
+    heading: "Lab",
+    items: [
+      { href: "/admin/lab", label: "AI Lab", permission: "lab:manage" },
+      { href: "/admin/lab/registry", label: "Service registry", permission: "lab:manage" },
+      { href: "/admin/lab/providers", label: "Providers", permission: "lab:manage" },
     ],
   },
   { heading: "Oversight", items: [{ href: "/admin/audit", label: "Audit", permission: "audit:read" }] },

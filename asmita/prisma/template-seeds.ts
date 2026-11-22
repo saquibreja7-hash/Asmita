@@ -18,7 +18,11 @@ import { TemplateType } from "@prisma/client";
 // - Variables: {{caseReference}}, {{platformName}}, {{url}}, {{declarationReference}};
 //   ESCALATION_L1 also uses {{originalSentAt}}.
 // - Rule 3(2)(b) removal period is TWO HOURS since G.S.R. 120(E) (in force
-//   20.02.2026). The ladder's PLATFORM_DEADLINE_HOURS must match.
+//   20.02.2026). Owner decision, 19 November 2026 (WP26): every sentence that
+//   asks the platform to act asks for TWENTY-FOUR (24) HOURS, phrased as
+//   Asmita's request and never attributed to the Rule; every sentence that
+//   states what the Rule requires keeps TWO HOURS. The ladder's
+//   PLATFORM_DEADLINE_HOURS carries the 24-hour ask and must match the asks.
 
 // The Indian-law core shared by the IT Rules notice and the joint notice, so
 // both say exactly the same thing about Indian law.
@@ -95,11 +99,11 @@ export const templateSeeds = [
   {
     templateType: TemplateType.IT_RULES_2021,
     subjectTemplate:
-      "Complaint under Rule 3(2)(b) of the IT Rules, 2021 for removal of non-consensual intimate imagery within two hours - {{caseReference}}",
+      "Complaint under Rule 3(2)(b) of the IT Rules, 2021 for removal of non-consensual intimate imagery within twenty-four hours - {{caseReference}}",
     bodyTemplate: [
       "To: The Grievance Officer / Resident Grievance Officer, {{platformName}}",
       "",
-      "Subject: Complaint under Rule 3(2)(b) of the IT Rules, 2021 for removal of non-consensual intimate imagery within two hours - {{caseReference}}",
+      "Subject: Complaint under Rule 3(2)(b) of the IT Rules, 2021 for removal of non-consensual intimate imagery within twenty-four hours - {{caseReference}}",
       "",
       "Madam / Sir,",
       "",
@@ -133,7 +137,7 @@ export const templateSeeds = [
       "",
       "The Complainant, through Asmita, calls upon the Noticee to:",
       "",
-      "(i)   REMOVE or DISABLE ACCESS to the content identified at paragraph 2 within TWO (2) HOURS of receipt of this complaint, as Rule 3(2)(b) of the IT Rules requires;",
+      "(i)   REMOVE or DISABLE ACCESS to the content identified at paragraph 2 within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests (Rule 3(2)(b) of the IT Rules requires it within two hours);",
       "",
       "(ii)  ACKNOWLEDGE this complaint within TWENTY-FOUR (24) HOURS, by reply to Notice@meriasmita.org quoting the case reference at paragraph 2;",
       "",
@@ -352,7 +356,7 @@ export const templateSeeds = [
       "",
       "The Complainant, through Asmita, calls upon the Noticee to:",
       "",
-      "(i)   REMOVE or DISABLE ACCESS to the content identified at paragraph 3 within TWO (2) HOURS of receipt of this complaint, as Rule 3(2)(b) of the IT Rules requires (the United States period of forty-eight hours is longer and does not extend it);",
+      "(i)   REMOVE or DISABLE ACCESS to the content identified at paragraph 3 within TWENTY-FOUR (24) HOURS of receipt of this complaint, as Asmita requests (Rule 3(2)(b) of the IT Rules requires it within two hours; the United States period of forty-eight hours is longer and does not extend it);",
       "",
       "(ii)  ACKNOWLEDGE this complaint within TWENTY-FOUR (24) HOURS, by reply to Notice@meriasmita.org quoting the case reference at paragraph 3;",
       "",
@@ -599,6 +603,10 @@ export const templateSeeds = [
     // (src/lib/crawl-consent.ts). Addressed to Asmita, not to a platform;
     // nothing is sent when she signs it. Unsignable in production until a
     // human legal reviewer records the review.
+    // Item 2's last sentence (WP28, ADR 008) authorises keeping a numerical
+    // description of an analyst-confirmed copy — never the image itself — so
+    // altered versions can be found too; it changed the legal text, so a
+    // re-seed resets reviewedByLegal until a reviewer records it again.
     templateType: TemplateType.CRAWL_AUTHORISATION,
     subjectTemplate:
       "Authorisation to search for copies of my images - {{caseReference}}",
@@ -610,7 +618,7 @@ export const templateSeeds = [
       "",
       "1.  I authorise Asmita (meriasmita.org) to compare the fingerprints set out at the end of this authorisation with images that Asmita's search service finds on public websites. Each fingerprint was made on my own device; Asmita has never received the images themselves.",
       "",
-      "2.  I understand how the search works. A separate Asmita service visits public pages on websites that a person at Asmita has approved. It works out the fingerprint of each image it sees, compares it with my fingerprints, and keeps nothing about an image that does not match. When an image is close to one of my fingerprints, it records only the address of the page and of the image, never the image.",
+      "2.  I understand how the search works. A separate Asmita service visits public pages on websites that a person at Asmita has approved. It works out the fingerprint of each image it sees, compares it with my fingerprints, and keeps nothing about an image that does not match. When an image is close to one of my fingerprints, it records only the address of the page and of the image, never the image. Where a person at Asmita has confirmed that a copy matches, Asmita may also keep a numerical description of that confirmed copy — never the image itself — so that altered versions of it can be found too.",
       "",
       "3.  I understand that a match is only a possible match. A person at Asmita reviews every possible match, and a less certain match is checked by a second person, before anything is done with it.",
       "",
@@ -651,10 +659,80 @@ export const templateSeeds = [
       "",
       "3.  In the authorisation referred to above, the Complainant has declared that the images from which her fingerprints were made are intimate images of her, and that she did not consent to any copy of them being shared or published. The content at the location above matched one of those fingerprints.",
       "",
-      "4.  Asmita requests that you remove or disable access to the content at the location above, and preserve the related records. Applicable removal period: within two (2) hours of receipt of this notice, under Rule 3(2)(b) of the IT Rules as amended by G.S.R. 120(E) (in force from 20 February 2026).",
+      "4.  Asmita requests that you remove or disable access to the content at the location above, and preserve the related records. Applicable removal period: within twenty-four (24) hours of receipt of this notice, as Asmita requests; Rule 3(2)(b) of the IT Rules as amended by G.S.R. 120(E) (in force from 20 February 2026) requires removal within two (2) hours.",
       "",
       "5.  Please reply to this notice with the case reference above.",
     ].join("\n"),
     legalCitations: ["IT Rules 2021, Rule 3(2)(b) - complaint by any person on her behalf; removal within 2 hours"],
+  },
+  {
+    // The survivor's agreement, given with one tick on her case page, that
+    // Asmita may share her fingerprints with platforms that joined the
+    // partner programme (src/lib/partner-share-consent.ts, WP31). Addressed
+    // to Asmita, not to a platform; nothing is sent when she ticks. No PDF
+    // and no signature: the template id and digest pin the exact text she
+    // ticked against, and the fingerprint ids she was shown are stored on
+    // the consent row. The wording starts from the plain text the owner
+    // approved for drafting (partner-sharing-spec.md, WP31) and is unreviewed
+    // until a human legal reviewer records the review. Platform obligations
+    // match what /for-platforms promises partners.
+    templateType: TemplateType.PARTNER_SHARING_CONSENT,
+    subjectTemplate:
+      "Agreement to share my image fingerprints with partner platforms - {{caseReference}}",
+    bodyTemplate: [
+      "AGREEMENT TO SHARE MY IMAGE FINGERPRINTS WITH PARTNER PLATFORMS",
+      "",
+      "Asmita Case Reference: {{caseReference}}",
+      "Declaration Reference: {{declarationReference}}",
+      "",
+      "1.  I agree that Asmita may send the fingerprints listed at the end of this agreement to online platforms that have joined Asmita's partner programme, so they can find and remove copies of my images and stop them being uploaded again.",
+      "",
+      "2.  Platforms receive only the fingerprints, never my images or my name. The platforms undertake to use the fingerprints only to find and remove the content, to block it being uploaded again, and to delete the fingerprints when Asmita tells them to.",
+      "",
+      "3.  I can withdraw this agreement at any time from my case page, and Asmita will ask the platforms to delete them.",
+      "",
+      "[The list of fingerprints covered by this agreement is appended below.]",
+    ].join("\n"),
+    legalCitations: ["MeitY NCII SOP v.1 (October 2025) - crawler and hash technology to identify and take down such content"],
+  },
+  {
+    // The watch-only authorisation for "Watch for my images"
+    // (watch-and-verify WP22). She lets Asmita compare her fingerprints with
+    // images on public websites and alert her; nothing is sent to any
+    // platform unless she later chooses "Take it down" and signs the full
+    // CRAWL_AUTHORISATION. Addressed to Asmita; nothing is sent when she
+    // agrees to it. Unsignable in production until a human legal reviewer
+    // records the review. Item 8 matches CRAWL_AUTHORISATION's declaration,
+    // so the two agree about what her fingerprints are.
+    templateType: TemplateType.WATCH_AUTHORISATION,
+    subjectTemplate:
+      "Authorisation to watch for copies of my images - {{caseReference}}",
+    bodyTemplate: [
+      "AUTHORISATION TO WATCH FOR COPIES OF MY IMAGES",
+      "",
+      "Asmita Case Reference: {{caseReference}}",
+      "Declaration Reference: {{declarationReference}}",
+      "",
+      "1.  I authorise Asmita (meriasmita.org) to compare the fingerprints set out at the end of this authorisation with images that Asmita's search service finds on public websites. Each fingerprint was made on my own device; Asmita has never received the images themselves.",
+      "",
+      "2.  I understand how the search works. A separate Asmita service visits public pages on websites that a person at Asmita has approved. It works out the fingerprint of each image it sees, compares it with my fingerprints, and keeps nothing about an image that does not match. When an image is close to one of my fingerprints, it records only the address of the page and of the image, never the image.",
+      "",
+      "3.  I understand that a match is only a possible match. A person at Asmita reviews every possible match, and a less certain match is checked by a second person, before I am told about it.",
+      "",
+      "4.  Nothing is sent to any website or platform under this authorisation. If a reviewer confirms a possible copy, Asmita tells me, and I choose what happens next. A takedown notice is sent only if I later ask for it, under a separate authorisation.",
+      "",
+      "5.  I understand that the addresses of possible matches are stored encrypted. Asmita deletes each address thirty (30) days after it is found, as with links reported to a case.",
+      "",
+      "6.  I can withdraw this authorisation at any time from my watch page. When I withdraw it, the search for my fingerprints stops, my fingerprints are deleted from Asmita, and possible matches that nobody has reviewed yet are deleted.",
+      "",
+      "7.  I confirm that I am an adult, that the fingerprints listed below were made from images of me, and that I give this authorisation voluntarily.",
+      "",
+      "8.  I declare that the images from which the fingerprints listed below were made are intimate images of me, and that I did not consent to any copy of them being shared or published on a website or platform.",
+      "",
+      "[The list of fingerprints covered by this authorisation is appended below.]",
+    ].join("\n"),
+    legalCitations: [
+      "IT Rules 2021, Rule 3(2)(b) - the removal track a takedown notice would use; this authorisation asks only for comparison and alerting, and sends nothing",
+    ],
   },
 ] as const;

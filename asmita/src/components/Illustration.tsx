@@ -1,7 +1,7 @@
 // Decorative scene illustrations from /images/illustrations. They repeat what
 // the text says, so screen readers skip them. The images have transparent
 // paper, so they sit on any light background; keep them off dark sections.
-const SIZES = {
+export const SIZES = {
   "home-hero": [720, 540, "webp"],
   "how-1-tell": [720, 720, "webp"],
   "how-2-send": [720, 720, "webp"],
@@ -62,6 +62,9 @@ export function Illustration({
       height={height}
       className={`h-auto w-full ${className}`}
       loading={eager ? "eager" : "lazy"}
+      // The one eager illustration per page is the LCP candidate: give it the
+      // first fetch slot. Everything else stays lazy and unprioritised.
+      fetchPriority={eager ? "high" : undefined}
       decoding="async"
     />
   );

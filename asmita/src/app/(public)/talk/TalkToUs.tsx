@@ -35,12 +35,26 @@ export function TalkToUs({ copy }: { copy: TalkCopy }) {
   const [error, setError] = useState<ErrorKey>("talk.error.unavailable");
   const [muted, setMuted] = useState(false);
   const agentRef = useRef<ConversationAgent | null>(null);
+  // The heading of whichever screen is showing; focus moves to it when the
+  // call view replaces the notice or she starts over (WP40 A11).
+  const noticeHeadingRef = useRef<HTMLHeadingElement>(null);
+  const callHeadingRef = useRef<HTMLHeadingElement>(null);
+  const inCallView = phase !== "notice";
+  const previousInCallView = useRef(inCallView);
 
   useEffect(() => {
     return () => {
       void agentRef.current?.stop();
     };
   }, []);
+
+  // Starting (or ending) the call is a step change: focus the new screen's
+  // heading so screen readers announce the move (WP40 A11).
+  useEffect(() => {
+    if (previousInCallView.current === inCallView) return;
+    previousInCallView.current = inCallView;
+    (inCallView ? callHeadingRef : noticeHeadingRef).current?.focus({ preventScroll: true });
+  }, [inCallView]);
 
   async function endCall() {
     const agent = agentRef.current;
@@ -120,9 +134,13 @@ export function TalkToUs({ copy }: { copy: TalkCopy }) {
 
   return (
     <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6 md:p-8" style={{ boxShadow: "var(--shadow-soft)" }}>
+      <p className="muted mb-5 text-sm leading-[1.7]">
+        {linkify(copy["talk.phone"], HELPLINE.display, `tel:${HELPLINE.tel}`, "link-underline font-medium text-[var(--ink)]")}
+      </p>
+
       {phase === "notice" && (
         <div>
-          <h2 className="subsection-title leading-tight">{copy["talk.notice.heading"]}</h2>
+          <h2 ref={noticeHeadingRef} tabIndex={-1} className="subsection-title outline-none leading-tight">{copy["talk.notice.heading"]}</h2>
           <ul className="mt-5 space-y-3 text-base leading-[1.7] text-[var(--ink)]">
             <li>{copy["talk.notice.ai"]}</li>
             <li>{copy["talk.notice.recording"]}</li>
@@ -141,6 +159,9 @@ export function TalkToUs({ copy }: { copy: TalkCopy }) {
 
       {phase !== "notice" && (
         <div>
+          {/* The new screen's heading, off-screen but announced by the focus
+              move when the call starts (WP40 A11). */}
+          <h2 ref={callHeadingRef} tabIndex={-1} className="sr-only outline-none">{copy["talk.call.heading"]}</h2>
           <p role="status" aria-live="polite" className="text-[20px] font-medium leading-tight text-[var(--ink)]">
             {status ? copy[status] : ""}
           </p>
@@ -176,9 +197,7 @@ export function TalkToUs({ copy }: { copy: TalkCopy }) {
         </div>
       )}
 
-      <p className="muted mt-8 border-t border-[var(--line)] pt-5 text-sm leading-[1.7]">
-        {linkify(copy["talk.phone"], HELPLINE.display, `tel:${HELPLINE.tel}`, "link-underline font-medium text-[var(--ink)]")}
-      </p>
+
     </div>
   );
 }

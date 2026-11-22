@@ -1,5 +1,5 @@
 /** Run counters. Only numbers and fixed reason/error codes, never URLs. */
-import type { ErrorCode } from "./errors.ts";
+import { fetchFailureClass, type ErrorCode } from "./errors.ts";
 
 export type SkipReason =
   | "duplicate_url"
@@ -41,6 +41,13 @@ export class RunMetrics {
   pagesXml = 0;
   /** Sitemap documents parsed (index or urlset, WP4). */
   sitemapDocs = 0;
+  /**
+   * Sitemap probes made (crawler v3 WP9): /sitemap.xml, /sitemap_index.xml
+   * and the registrable parent's /sitemap.xml, fetched directly when a
+   * source's robots.txt names no sitemap. Robots-refused probes (which
+   * never reach the network) and budget-refused ones are not counted.
+   */
+  sitemapProbes = 0;
   /** Addresses taken from sitemaps: page locs, child sitemaps, image locs (WP4). */
   sitemapUrlsTaken = 0;
   /** <image:loc> image candidates taken from sitemaps (WP4). */
@@ -51,6 +58,14 @@ export class RunMetrics {
   feedEntriesTaken = 0;
   /** Sitemap/feed documents that hit the MAX_SITEMAP_URLS cap (WP4). */
   docsTruncated = 0;
+  /**
+   * Fetched HTML pages whose normalised body digest had already appeared on
+   * five or more distinct URLs of the same source this run (crawler v3
+   * WP14): soft-404s — nothing extracted from them, reported `gone`. They
+   * are still pages fetched (the body must be read to recognise one), so
+   * they count in pagesFetched too.
+   */
+  pagesSoft404 = 0;
   /** Links skipped as obvious non-content: login, cart, search, calendar (WP4). */
   linksSkippedNonContent = 0;
   /** Links dropped by the per-path query-variant cap (WP4). */
@@ -102,6 +117,26 @@ export class RunMetrics {
   /** Images refused because the source hit MAX_OFFSITE_HOST_FAILURES. */
   imageHostFailuresCapped = 0;
   matches = 0;
+  /**
+   * Matches against video fingerprints (video-fingerprints spec WP20): the
+   * image sat within the threshold of a survivor video's frame. Counted per
+   * hit like the matches loop finds them; a count only, never a frame.
+   */
+  videoMatches = 0;
+  /**
+   * Video previews hashed (video-fingerprints spec WP21): image candidates
+   * tagged "video preview" — a video poster, the og:image of a page that
+   * declares an og:video, a JSON-LD VideoObject thumbnailUrl, a
+   * video-sitemap <video:thumbnail_loc>, or a preview sprite sheet. A
+   * sprite counts once here (its tiles are in spriteTiles). A count only.
+   */
+  videoPreviews = 0;
+  /**
+   * Tiles hashed out of preview sprite sheets (video-fingerprints spec
+   * WP21): each tile is matched against the pool like an image of its own.
+   * Bounded by MAX_SPRITE_TILES per sprite.
+   */
+  spriteTiles = 0;
   findingsQueued = 0;
   findingsPosted = 0;
   /** Accepted by the server (new or already known: it no longer says which). */
@@ -118,11 +153,60 @@ export class RunMetrics {
   poolSyncFailures = 0;
   sourcesCrawled = 0;
   sourcesInvalid = 0;
-  /** Browser rendering (WP7): renders attempted, failures, images handed over. */
-  readonly browser: { renders: number; failed: number; images: number } = { renders: 0, failed: 0, images: 0 };
+  /**
+   * Browser rendering (WP7): renders attempted, failures, images handed over.
+   * WP25 adds the sandbox self-test's answer: `sandboxTested` says the
+   * sandboxed launch ran at all (false when no page needed a browser this
+   * run), `sandboxOn` whether Chromium's own sandbox is up, `workerUid` the
+   * worker's OS user once a worker answered (the container image drops the
+   * worker onto a separate uid that cannot read the key file; -1 until
+   * then). Booleans, ids and counts only — never a URL.
+   */
+  readonly browser: { renders: number; failed: number; images: number; sandboxTested: boolean; sandboxOn: boolean; workerUid: number } = {
+    renders: 0,
+    failed: 0,
+    images: 0,
+    sandboxTested: false,
+    sandboxOn: false,
+    workerUid: -1,
+  };
   readonly imagesSkipped: Partial<Record<SkipReason, number>> = {};
   readonly errors: Partial<Record<ErrorCode, number>> = {};
   readonly robots: Record<string, number> = {};
+  /**
+   * Fetch failures by class (crawler v3 WP13, review fix): permanent (a DNS
+   * name not found, a definite TLS certificate failure — reported `error`
+   * with the `permanent` hint, never retried in this run) and temporary
+   * (timeouts, resets, 5xx/429/503 — today's backoff). Counted wherever an
+   * error code with a class is recorded; every other error has no class
+   * and no line here.
+   */
+  readonly failures: { permanent: number; temporary: number } = { permanent: 0, temporary: 0 };
+  /**
+   * Sources whose home page (the depth-0 seed) failed permanently this run
+   * (WP13), counted once per source — the whole site is dead, whatever the
+   * rest of its rows do. A count only, never a hostname.
+   */
+  homePermanentFailures = 0;
+  // --- SSCD second layer (WP28). Only reported while ENABLE_SSCD is on
+  // (see summary): counts only, never a vector, a similarity of an
+  // individual image or a model name.
+  /** SSCD inferences run this pass (second layer, borderline scores, seeding). */
+  sscdInferences = 0;
+  /** Second-layer hits above the threshold that became findings. */
+  sscdMatches = 0;
+  /** Images that wanted an SSCD inference past SSCD_MAX_PER_RUN. */
+  sscdSkippedBudget = 0;
+  /** Images on a source outside SSCD_SCOPE that wanted an SSCD inference. */
+  sscdSkippedScope = 0;
+  /** Embedding offers posted to the app. */
+  sscdEmbeddingsPosted = 0;
+  /** Embedding offers the app stored (or already had — idempotent). */
+  sscdEmbeddingsStored = 0;
+  /** Embedding offers the app refused (not confirmed, wrong model, ...). */
+  sscdEmbeddingsRejected = 0;
+  /** Embedding offers still undelivered at exit. */
+  sscdEmbeddingsUnsent = 0;
 
   constructor(now: number = Date.now()) {
     this.startedAt = now;
@@ -132,12 +216,14 @@ export class RunMetrics {
     if (n > 0) this.imagesSkipped[reason] = (this.imagesSkipped[reason] ?? 0) + n;
   }
 
-  error(code: ErrorCode): void {
+  error(code: ErrorCode, status?: number): void {
     this.errors[code] = (this.errors[code] ?? 0) + 1;
+    const cls = fetchFailureClass({ code, status });
+    if (cls !== null) this.failures[cls]++;
   }
 
-  summary(opts: { now?: number; budgetPages: number; budgetImages: number; outcome: string }): Record<string, number | string | Record<string, number>> {
-    return {
+  summary(opts: { now?: number; budgetPages: number; budgetImages: number; outcome: string; sscd?: boolean }): Record<string, number | string | boolean | Record<string, number | boolean>> {
+    const base: Record<string, number | string | boolean | Record<string, number | boolean>> = {
       outcome: opts.outcome,
       durationMs: (opts.now ?? Date.now()) - this.startedAt,
       sourcesCrawled: this.sourcesCrawled,
@@ -147,7 +233,9 @@ export class RunMetrics {
       pagesNotModified: this.pagesNotModified,
       pagesNonHtml: this.pagesNonHtml,
       pagesXml: this.pagesXml,
+      pagesSoft404: this.pagesSoft404,
       sitemapDocs: this.sitemapDocs,
+      sitemapProbes: this.sitemapProbes,
       sitemapUrlsTaken: this.sitemapUrlsTaken,
       sitemapImages: this.sitemapImages,
       feedsParsed: this.feedsParsed,
@@ -172,6 +260,9 @@ export class RunMetrics {
       imageHostFailuresCapped: this.imageHostFailuresCapped,
       imagesSkipped: { ...this.imagesSkipped } as Record<string, number>,
       matches: this.matches,
+      videoMatches: this.videoMatches,
+      videoPreviews: this.videoPreviews,
+      spriteTiles: this.spriteTiles,
       findingsQueued: this.findingsQueued,
       findingsPosted: this.findingsPosted,
       findingsAccepted: this.findingsAccepted,
@@ -185,11 +276,27 @@ export class RunMetrics {
       poolSyncFailures: this.poolSyncFailures,
       browser: { ...this.browser },
       errors: { ...this.errors } as Record<string, number>,
+      failures: { ...this.failures },
+      homePermanentFailures: this.homePermanentFailures,
       robots: { ...this.robots },
       budgetPagesUsed: this.pagesAttempted,
       budgetPages: opts.budgetPages,
       budgetImagesUsed: this.imagesSeen,
       budgetImages: opts.budgetImages,
     };
+    // WP28: the SSCD counters exist in the summary only while the second
+    // layer is on — switched off, the log line is byte-for-byte what it
+    // always was ("nothing changes when off"). Counts only (rule 3).
+    if (opts.sscd) {
+      base.sscdInferences = this.sscdInferences;
+      base.sscdMatches = this.sscdMatches;
+      base.sscdSkippedBudget = this.sscdSkippedBudget;
+      base.sscdSkippedScope = this.sscdSkippedScope;
+      base.sscdEmbeddingsPosted = this.sscdEmbeddingsPosted;
+      base.sscdEmbeddingsStored = this.sscdEmbeddingsStored;
+      base.sscdEmbeddingsRejected = this.sscdEmbeddingsRejected;
+      base.sscdEmbeddingsUnsent = this.sscdEmbeddingsUnsent;
+    }
+    return base;
   }
 }

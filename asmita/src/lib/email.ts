@@ -70,6 +70,25 @@ export async function sendNoticeDraft(
   }, idempotencyKey ? { idempotencyKey } : undefined));
 }
 
+// The AI Lab's own sender address (docs/lab/charter.md, E2): chokepoint
+// reports go out under it, not under the survivor notice sender, so a
+// provider always sees which Asmita arm wrote to it.
+export function getLabEmailFrom() {
+  return process.env.LAB_EMAIL_FROM || process.env.EMAIL_FROM || "Asmita Lab <Lab@meriasmita.org>";
+}
+
+export async function sendLabReportEmail(to: string, subject: string, text: string, idempotencyKey?: string) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-lab-report" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getLabEmailFrom(),
+    to,
+    subject,
+    text,
+  }, idempotencyKey ? { idempotencyKey } : undefined));
+}
+
 export function createVictimConfirmationEmail(referenceNumber: string, dashboardUrl: string) {
   const subject = `Asmita case ${referenceNumber}`;
   const text = [
@@ -228,6 +247,136 @@ export async function sendL3FirReadyNotification(
   }, idempotencyKey ? { idempotencyKey } : undefined));
 }
 
+/*
+ * Watch-and-verify WP23: a removal re-check found her content online again
+ * and her link went back to the notice-sent state. Like every survivor email
+ * it carries only her case reference and a sign-in prompt — never the
+ * address, the site, the platform or anything about the content beyond the
+ * fact that it is back. The wording is new legal text created unreviewed
+ * (watch-and-verify spec rule 5): counsel must read it before real use.
+ */
+export function createLinkStillOnlineEmail(
+  referenceNumber: string,
+  dashboardUrl: string,
+  locale: Locale = "en",
+) {
+  // English only for now, like the other escalation emails.
+  void locale;
+  const lines = [
+    "Content you had reported as removed may be online again.",
+    "We have followed up on it. You do not need to do anything right now.",
+    "Sign in to see where your case stands.",
+  ];
+  return {
+    subject: `Update on Asmita case ${referenceNumber}`,
+    text: [
+      "Hello,",
+      "",
+      `An update on Asmita case ${referenceNumber}.`,
+      "",
+      ...lines.flatMap((line) => [line, ""]),
+      `Open your dashboard: ${dashboardUrl}`,
+      "",
+      "For privacy, this email contains no submitted URLs or personal information.",
+    ].join("\n"),
+    html: renderEmailHtml({
+      title: "An update on your case.",
+      paragraphs: lines,
+      highlight: referenceNumber,
+      highlightLabel: "Case reference",
+      cta: { label: "See your next steps", url: dashboardUrl },
+      footerNotes: [PRIVACY_NOTE],
+    }),
+  };
+}
+
+export async function sendLinkStillOnlineNotification(
+  to: string,
+  referenceNumber: string,
+  dashboardUrl: string,
+  locale: Locale = "en",
+  // The hourly sweep sends this once per still-online episode: the key stops
+  // a retry from emailing twice.
+  idempotencyKey?: string,
+) {
+  const { subject, text, html } = createLinkStillOnlineEmail(referenceNumber, dashboardUrl, locale);
+  if (!process.env.RESEND_API_KEY) {
+    return { id: `dev-verify-still-${referenceNumber}` };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text,
+    html,
+  }, idempotencyKey ? { idempotencyKey } : undefined));
+}
+
+/*
+ * Watch-and-verify WP24: an analyst approved a new copy of her image found
+ * while her case is closed and inside its re-upload watch window. Like every
+ * survivor email it carries only her case reference and a sign-in prompt —
+ * never the address, the site, the platform or anything about the content
+ * beyond the fact that a copy was found. The wording is new legal text
+ * created unreviewed (watch-and-verify spec rule 5): counsel must read it
+ * before real use.
+ */
+export function createReuploadFoundEmail(
+  referenceNumber: string,
+  dashboardUrl: string,
+  locale: Locale = "en",
+) {
+  // English only for now, like the other escalation emails.
+  void locale;
+  const lines = [
+    "A new copy of your image may have been found on the internet.",
+    "A trained Asmita reviewer has confirmed it. Asmita can send a takedown notice for you, under the authorisation you already gave.",
+    "Sign in to see it on your case page.",
+  ];
+  return {
+    subject: `Update on Asmita case ${referenceNumber}`,
+    text: [
+      "Hello,",
+      "",
+      `An update on Asmita case ${referenceNumber}.`,
+      "",
+      ...lines.flatMap((line) => [line, ""]),
+      `Open your dashboard: ${dashboardUrl}`,
+      "",
+      "For privacy, this email contains no submitted URLs or personal information.",
+    ].join("\n"),
+    html: renderEmailHtml({
+      title: "An update on your case.",
+      paragraphs: lines,
+      highlight: referenceNumber,
+      highlightLabel: "Case reference",
+      cta: { label: "See your next steps", url: dashboardUrl },
+      footerNotes: [PRIVACY_NOTE],
+    }),
+  };
+}
+
+export async function sendReuploadFoundNotification(
+  to: string,
+  referenceNumber: string,
+  dashboardUrl: string,
+  locale: Locale = "en",
+  // One email per approved finding: the key stops a retry from emailing twice.
+  idempotencyKey?: string,
+) {
+  const { subject, text, html } = createReuploadFoundEmail(referenceNumber, dashboardUrl, locale);
+  if (!process.env.RESEND_API_KEY) {
+    return { id: `dev-reupload-${referenceNumber}` };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text,
+    html,
+  }, idempotencyKey ? { idempotencyKey } : undefined));
+}
+
 export function createLegalPackageReadyEmail(referenceNumber: string, dashboardUrl: string) {
   return {
     subject: `Legal package ready for Asmita case ${referenceNumber}`,
@@ -274,6 +423,50 @@ export async function sendVictimConfirmation(to: string, referenceNumber: string
   }, { idempotencyKey: `case-confirmation/${referenceNumber}` }));
 }
 
+/*
+ * "Watch for my images" (WP22): an analyst approved a possible copy on her
+ * watch. The email carries only her case reference and a sign-in prompt —
+ * never a link, image, site name or platform name (shared phones and
+ * inboxes). She sees the site name, and her choices, after signing in.
+ */
+export function createWatchCopyFoundEmail(referenceNumber: string) {
+  const lines = [
+    "We may have found a copy of your image. Sign in to Asmita to see it.",
+  ];
+  const subject = `Update on Asmita case ${referenceNumber}`;
+  const text = [
+    "Hello,",
+    "",
+    `An update on Asmita case ${referenceNumber}.`,
+    "",
+    ...lines.flatMap((line) => [line, ""]),
+    "For your privacy, this email names no website and contains no links.",
+  ].join("\n");
+  const html = renderEmailHtml({
+    title: "An update on your watch.",
+    paragraphs: lines,
+    highlight: referenceNumber,
+    highlightLabel: "Case reference",
+    // No call-to-action button: the email carries no links by rule.
+    footerNotes: ["For your privacy, this email names no website and contains no links."],
+  });
+  return { subject, text, html };
+}
+
+export async function sendWatchCopyFoundEmail(to: string, referenceNumber: string, idempotencyKey?: string) {
+  const { subject, text, html } = createWatchCopyFoundEmail(referenceNumber);
+  if (!process.env.RESEND_API_KEY) {
+    return { id: `dev-watch-found-${referenceNumber}` };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text,
+    html,
+  }, idempotencyKey ? { idempotencyKey } : undefined));
+}
+
 function assertEmailSent(result: unknown): EmailSendResult {
   const response = result as { data?: { id?: string } | null; error?: { name?: string; message?: string } | null };
   // The same idempotency key with a different payload (or still in flight):
@@ -285,4 +478,79 @@ function assertEmailSent(result: unknown): EmailSendResult {
     throw new Error(`email_send_failed:${response.error.message || "unknown_resend_error"}`);
   }
   return response.data ? { id: response.data.id, data: response.data } : (result as EmailSendResult);
+}
+
+// ─── Organization pages (docs/org/spec.md, WP56) ─────────────────────
+
+export function getOrgInboxEmail() {
+  return process.env.ORG_INBOX_EMAIL || "";
+}
+
+/**
+ * Notification to the organization inbox for a public-form submission.
+ * With ORG_INBOX_EMAIL unset (local development), the message is logged
+ * instead of sent — nothing is lost while no inbox exists. The log line
+ * carries only the form kind and submission id: the subject and body hold the
+ * submitter's name and organisation, which stay out of logs.
+ */
+export async function sendOrgInboxNotification(
+  subject: string,
+  text: string,
+  meta: { kind: string; submissionId: string },
+) {
+  const inbox = getOrgInboxEmail();
+  if (!inbox) {
+    console.warn(JSON.stringify({ event: "org_inbox_notification", kind: meta.kind, submissionId: meta.submissionId }));
+    return { id: "org-inbox-logged" };
+  }
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-org-inbox" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to: inbox,
+    subject,
+    text,
+  }));
+}
+
+/** A short acknowledgement to a person who submitted a public org form. */
+export async function sendOrgAcknowledgement(to: string, subject: string, lines: string[]) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-org-acknowledgement" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text: ["Hello,", "", ...lines.flatMap((line) => [line, ""]), "Meri Asmita"].join("\n"),
+    html: renderEmailHtml({ title: subject, paragraphs: lines, footerNotes: ["You are receiving this because you submitted a form on meriasmita.org."] }),
+  }));
+}
+
+/** The newsletter double-opt-in confirmation email. */
+export async function sendNewsletterConfirmEmail(to: string, confirmUrl: string) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-newsletter-confirm" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject: "Confirm your Meri Asmita newsletter",
+    text: [
+      "Hello,",
+      "",
+      "Please confirm that you want to receive the Meri Asmita newsletter.",
+      "Open this link to confirm:",
+      confirmUrl,
+      "",
+      "If you did not sign up, you can ignore this email. Nothing else is sent until you confirm.",
+    ].join("\n"),
+    html: renderEmailHtml({
+      title: "Confirm your subscription",
+      paragraphs: ["Please confirm that you want to receive the Meri Asmita newsletter."],
+      cta: { label: "Confirm subscription", url: confirmUrl },
+      footerNotes: ["If you did not sign up, you can ignore this email. Nothing else is sent until you confirm."],
+    }),
+  }));
 }

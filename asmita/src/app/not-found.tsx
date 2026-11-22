@@ -7,8 +7,7 @@ export default function NotFound() {
       <div className="page-canvas">
         <section className="container page-hero text-center">
           <div className="mx-auto max-w-2xl">
-            <span className="eyebrow">Page not found · 404</span>
-            <h1 className="page-title mt-8">
+            <h1 className="page-title">
               This page isn&rsquo;t{" "}
               <em className="not-italic text-gradient">here</em>.
             </h1>

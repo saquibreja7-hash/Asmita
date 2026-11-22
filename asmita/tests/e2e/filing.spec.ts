@@ -41,8 +41,12 @@ test("each pasted line is checked where it is typed, and only valid links reach 
   await links.fill("Digital fingerprint");
   await expect(checks.getByText("Not a web link")).toBeVisible();
   await page.getByText(/I declare that I am the person depicted/).click();
-  await expect(cta).toBeDisabled();
+  // The button is never disabled to block validation (WP40 A9): submitting
+  // with nothing to file focuses the link box and says why.
+  await expect(cta).toBeEnabled();
+  await cta.click();
   await expect(page.getByRole("status").filter({ hasText: "Add at least one link or fingerprint" })).toBeVisible();
+  await expect(links).toBeFocused();
 
   // A link without https:// is accepted, a repeat is flagged, and bad lines are left out.
   await links.fill("youtube.com/watch?v=asmita-synthetic\nhttps://youtube.com/watch?v=asmita-synthetic\nDigital fingerprint");
@@ -78,6 +82,11 @@ test("links can be added before the email code, and nothing reaches the server u
   await expect(page).toHaveURL(/\/submit$/);
 
   await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
+  // Wait for the debounced link checks to settle before anything is clicked:
+  // the textarea keeps focus after typing, and a click inside the 600 ms
+  // debounce window blurs it, flushing the checks mid-click — the reflow
+  // moves the declaration card under the pointer and the click misses it.
+  await expect(page.locator("#url-checks")).toBeVisible();
   await page.getByText(/I declare that I am the person depicted/).click();
   await page.getByRole("button", { name: "Continue to review" }).click();
   await expect(page).toHaveURL(/\/register$/);
@@ -104,6 +113,8 @@ test("someone under 18 when the content was made goes to the minor pathway, even
   await answer("18 or over");
   await expect(page).toHaveURL(/\/submit$/);
   await page.getByLabel("Links where the content appears").fill("https://www.youtube.com/watch?v=asmita-synthetic");
+  // Same as above: let the debounced checks settle before the click.
+  await expect(page.locator("#url-checks")).toBeVisible();
   await page.getByText(/I declare that I am the person depicted/).click();
   await page.getByRole("button", { name: "Continue to review" }).click();
   await expect(page).toHaveURL(/\/register$/);

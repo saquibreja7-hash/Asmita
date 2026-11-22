@@ -58,11 +58,13 @@ Checked in this order, on both preview and dispatch, server-side at send time.
 | `crawler_disabled` | 503 | `ENABLE_CRAWLER` is off |
 | `database_required` | 503 | Memory store (local dev without `DATABASE_URL`) |
 | `finding_not_found` | 404 | No such finding, or it belongs to another case than `caseId` |
+| `possible_minor_label_set` | 409 | The finding carries the possible-minor label (review labels WP37): it sits in the minors protocol, out of the adult flow, and no representative notice can be prepared or sent for it while the label is set. A second, different admin must clear the label with a reason |
 | `finding_not_approved` | 409 | Not `APPROVED` |
 | `second_review_required` | 409 | Distance above 20 and no second reviewer |
 | `finding_expired` | 410 | Finding past 30-day retention or its addresses purged |
 | `crawler_link_not_found` | 409 | No `CRAWLER` link for this finding on this case. This also covers approval that reused the survivor's own link: hers is never sent this way |
 | `consent_withdrawn` | 409 | The link was stopped by a withdrawal (permanent), no live authorisation exists, or the live one does not list the matched fingerprint |
+| `watch_only_consent` | 409 | The case's only live authorisation is watch-only (WP22 "Watch for my images"): she has not asked for removal yet. "Take it down" converts the watch into a case and asks for the full authorisation on the spot; only then can this finding's notice go out |
 | `url_expired` | 410 | The link is past retention |
 | `url_not_ready_for_dispatch` | 409 | The link status is not `NOTICE_QUEUED` (already sent, removed, or pending review) |
 | `crawler_link_not_survivor_signed` | 409 | Defence in depth: the link carries a survivor signature |
@@ -93,6 +95,21 @@ Dispatch only:
 
 Before sending, the encrypted PDF and digest are stored on the link as a claim. A retry resends the same stored bytes under the same Resend idempotency key, so a send that succeeded but was not recorded is never repeated. The claim is released only when a withdrawal is noticed right after this request made it, before anything was sent. The same `Notice` row, status transition and verified-recipient check are used as for survivor notices. URL retention blanks `representativeNoticePdf` at 30 days, as it does `signedNoticePdf`.
 
+## Watch-only authorisations (WP22)
+
+A case can be a watch ("Watch for my images"): she fingerprinted her images and
+ticked the watch-only authorisation (`CrawlConsent.scope = WATCH_ONLY`), which
+permits comparison and alerting and nothing else. While that is the case's only
+live authorisation, preview and dispatch both refuse with `watch_only_consent`,
+and the findings console shows "Watch only: she has not asked for removal yet"
+instead of a preview button. Findings are approved as on any case (the found
+link is added, she is alerted by email with her case reference only). When she
+chooses "Take it down", the watch becomes a case (`Case.mode = CASE`), the
+watch-only authorisation is withdrawn without stopping the found links, and the
+full authorisation she signs next records the one it replaced
+(`convertedFromId`), so findings recorded under the watch are covered by it and
+the gates above then behave exactly as for a case that was never a watch.
+
 ## Withdrawal
 
 When she withdraws her authorisation, every crawler link on the case with no notice sent gets `crawlConsentWithdrawnAt`. The UI can show this through `crawlConsentWithdrawn` on the case views. Those links can never be sent, even under a later authorisation. Notices already sent are untouched. Unreviewed findings are deleted, as before.
@@ -102,9 +119,9 @@ If she later signs a new authorisation, findings are deduplicated per authorisat
 ## Not covered yet
 
 - **Follow-ups and escalation.** Representative notices are excluded from the hourly sweep (24h follow-up, 48h and 7-day survivor emails) and from the ladder:
-  - The follow-up cover (`ESCALATION_L1`) restates the notice as a Rule 3(2)(b) complaint with a two-hour deadline, which the representative notice does not state.
+  - The follow-up cover (`ESCALATION_L1`) restates the notice as a Rule 3(2)(b) complaint with the Rule's two-hour deadline, which the representative notice does not demand (WP26: it asks for twenty-four hours, stating the Rule's period as law).
   - The survivor emails say a deadline passed.
-  - The survivor view gets `representativeNoticeSentAt` instead of `noticeSentAt`, so no two-hour ladder is drawn.
+  - The survivor view gets `representativeNoticeSentAt` instead of `noticeSentAt`, so no ladder is drawn.
 
   Bringing them in needs a reviewed representative follow-up template and a deadline counsel confirms.
 - The platform API transport.
@@ -114,3 +131,5 @@ If she later signs a new authorisation, findings are deduplicated per authorisat
 ## For counsel
 
 The particulars block and the signature line are the only text that code adds. Please review the wording in `src/lib/crawl-notice.ts` (`particulars`, `signatureBlock`). Both template seeds still carry `[CITATION REQUIRED — verify with legal advisor]` for the legal basis of acting as representative and for the removal period.
+
+The perceptual-hash annex appended to every representative notice (and to hash advisories and URL notices, from the same single builder, `src/lib/case-hash-annex.ts` / `buildHashAnnex` in `src/lib/notice-generator.ts`) now also lists video fingerprints (vPDQ, video-fingerprints spec WP19): each is one entry, "Video fingerprint (vPDQ, N frames)", followed by at most 200 evenly spaced frame hashes and one plain sentence on how vPDQ is matched. That entry wording is new platform-facing text and has not been legally reviewed; counsel must read it before any video fingerprint is dispatched to a platform.

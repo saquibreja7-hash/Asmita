@@ -3,11 +3,12 @@ import { getCrawlFindingSummary } from "@/lib/crawl-findings";
 import { crawlerEnabled } from "@/lib/crawler-auth";
 import { adminFor } from "../../page-permission";
 import { CrawlerOffBanner } from "../CrawlerOffBanner";
+import { LabelControls } from "../LabelControls";
 import { NoticeStep } from "../NoticeStep";
 import { RevealAddress } from "../RevealAddress";
 import { ReviewControls } from "../ReviewControls";
 import { SafetyNote } from "../SafetyNote";
-import { noticeLabel, platformLabel, reviewLabel, shortDate } from "../finding-view";
+import { labelList, noticeLabel, platformLabel, reviewLabel, shortDate, matchLine, borderlineScoreLine } from "../finding-view";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,8 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
   // Address-free: the addresses come only from the reasoned, audited reveal.
   const finding = await getCrawlFindingSummary(id, adminId);
   const enabled = crawlerEnabled();
+  // The borderline SSCD score of a PDQ match, when the crawler sent one (WP28).
+  const borderline = finding ? borderlineScoreLine(finding) : null;
   if (!finding) {
     return (
       <section>
@@ -32,6 +35,8 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
       </section>
     );
   }
+
+  const minorLabelSet = finding.labels.possibleMinor.set;
 
   return (
     <section>
@@ -49,8 +54,18 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
         <dd className="font-mono">{finding.caseReference ?? "Unknown"}</dd>
         <dt className="muted">Fingerprint</dt>
         <dd className="font-mono">{finding.fingerprintRef ? `${finding.fingerprintRef}…` : "-"}</dd>
-        <dt className="muted">Distance</dt>
-        <dd className="tabular-nums">{finding.distance} (lower is closer)</dd>
+        {/* PDQ and VPDQ keep today's distance line; an SSCD finding shows the second layer's similarity instead. */}
+        <dt className="muted">{finding.method === "SSCD" ? "Match" : "Distance"}</dt>
+        <dd className="tabular-nums">
+          {matchLine(finding)}
+          {finding.method === "SSCD" && finding.needsSecondReview ? " · needs a second reviewer" : ""}
+        </dd>
+        {borderline && (
+          <>
+            <dt className="muted">SSCD score</dt>
+            <dd className="tabular-nums">{borderline}</dd>
+          </>
+        )}
         <dt className="muted">Quality</dt>
         <dd className="tabular-nums">{finding.quality}/100</dd>
         <dt className="muted">Source</dt>
@@ -68,7 +83,25 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
         </dd>
         <dt className="muted">Notice</dt>
         <dd>{noticeLabel(finding)}</dd>
+        <dt className="muted">Labels</dt>
+        <dd>{labelList(finding).length === 0 ? "None" : labelList(finding).join(" · ")}</dd>
       </dl>
+
+      <h2 className="mt-8">Labels</h2>
+      <p className="muted mt-2 max-w-2xl text-sm">
+        Analyst labels for the review record. &quot;Possible minor&quot; is a safety switch: setting it stops the adult flow
+        for this finding at once — it cannot be approved or dismissed, no representative notice can be sent, and it
+        leaves the review queue for the minors protocol. Only a second, different admin with a recorded reason can
+        clear it.
+      </p>
+      <div className="mt-4">
+        <LabelControls
+          crawlerEnabled={enabled}
+          currentAdminSetMinorLabel={finding.currentAdminSetMinorLabel}
+          findingId={finding.id}
+          labels={finding.labels}
+        />
+      </div>
 
       <h2 className="mt-8">Address</h2>
       <div className="mt-4">
@@ -84,11 +117,12 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
           distance={finding.distance}
           findingId={finding.id}
           needsSecondReview={finding.needsSecondReview}
+          possibleMinorLabel={minorLabelSet}
           reviewStatus={finding.reviewStatus}
         />
       </div>
 
-      {(finding.reviewStatus === "APPROVED" || finding.crawlConsentWithdrawn) && (
+      {(finding.reviewStatus === "APPROVED" || finding.reviewStatus === "MINOR_PROTOCOL" || finding.crawlConsentWithdrawn) && (
         <>
           <h2 className="mt-8">Notice</h2>
           <p className="muted mt-2 max-w-2xl text-sm">

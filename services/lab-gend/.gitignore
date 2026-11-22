@@ -1,0 +1,11 @@
+# weights are downloaded at image build time or by scripts/fetch_weights.py;
+# they are never committed
+weights/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/

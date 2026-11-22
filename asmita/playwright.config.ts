@@ -23,6 +23,8 @@ export default defineConfig({
       // crawler-journey.spec.ts: the crawler routes answer only while this is
       // on. The app never fetches; no crawler process runs in E2E.
       ENABLE_CRAWLER: "true",
+      // lab.spec.ts: the Lab console and public page answer while this is on.
+      ENABLE_LAB: "true",
       ENABLE_PLATFORM_API: "false",
       // Quick Exit tests: the idle sign-out is short enough to exercise
       // without slowing the suite down.
@@ -48,6 +50,11 @@ export default defineConfig({
       DEV_OTP_CODE: "",
       OPENAI_API_KEY: "",
       DIRECT_URL: "",
+      // No GenD service either: lab-detectors.spec.ts asserts the row's
+      // honest "not configured" state, which a stray .env.local must not
+      // turn into a real call.
+      LAB_GEND_URL: "",
+      LAB_GEND_TOKEN: "",
       MAINTENANCE_MODE: "false",
       JWT_SECRET: "e2e-test-only-jwt-secret-32-chars-long",
       CRON_SECRET: "e2e-test-only-cron-secret-32-chars-long",
@@ -59,7 +66,10 @@ export default defineConfig({
   },
   use: {
     baseURL: "http://127.0.0.1:3001",
-    trace: "on-first-retry",
+    // WP101: keep the trace of every failure. The previous "on-first-retry"
+    // setting never wrote one in this suite (no retries are configured), so
+    // an intermittent e2e failure left no network timeline to read.
+    trace: "retain-on-failure",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },

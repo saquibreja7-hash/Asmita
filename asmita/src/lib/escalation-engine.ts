@@ -23,7 +23,9 @@ export type EscalationSchedule = {
 export type EscalationAction = "email_follow_up" | "victim_notification" | "fir_package";
 export type EscalationLevel = 1 | 2 | 3;
 
-const ESCALATION_HOURS: Record<EscalationLevel, number> = { 1: 24, 2: 48, 3: 24 * 7 };
+// Level 1 (24h) is the platform-facing follow-up; the trusted-flagger page
+// (WP57) reads it so its copy can never drift from the engine.
+export const ESCALATION_HOURS: Record<EscalationLevel, number> = { 1: 24, 2: 48, 3: 24 * 7 };
 const ESCALATION_ACTION: Record<EscalationLevel, EscalationAction> = {
   1: "email_follow_up",
   2: "victim_notification",
@@ -231,10 +233,12 @@ export async function runDueEscalationsFromDb(now: Date = new Date()): Promise<D
      * A representative notice (crawler link, crawl-notice.ts) is excluded
      * from every automated step for now: the follow-up cover (ESCALATION_L1)
      * restates the notice as a complaint "on behalf of the Complainant" under
-     * Rule 3(2)(b) with a two-hour deadline, which the representative notice
-     * does not state, and the 48-hour and 7-day survivor emails tell her a
-     * deadline passed. Nothing is recorded, so including them later needs no
-     * data repair. The query filters them out too; this is the backstop.
+     * Rule 3(2)(b) with the Rule's two-hour deadline, which the representative
+     * notice does not demand (WP26: it asks for twenty-four hours, stating the
+     * Rule's period as law), and the 48-hour and 7-day survivor emails tell
+     * her a deadline passed. Nothing is recorded, so including them later
+     * needs no data repair. The query filters them out too; this is the
+     * backstop.
      */
     if (notice.submittedUrl.source === "CRAWLER") {
       summary.skipped.push({ noticeId: notice.id, reason: "representative_notice" });
