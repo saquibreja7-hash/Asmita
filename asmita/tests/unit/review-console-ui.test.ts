@@ -19,11 +19,21 @@ const DECISIONS: PanelDecision[] = [
   { code: "reject", label: "Reject link", reasonKind: "reject" },
 ];
 
+// The seeded links reasons (WP142), as the server hands them to the panel.
+const REASONS = {
+  reject: [
+    { code: "not_reported_content", label: "Not a link to the reported content" },
+    { code: "duplicate_link", label: "Duplicate of another link" },
+    { code: "other", label: "Other (explain)" },
+  ],
+};
+
 const BASE = {
   jobId: "job-1",
   queueKey: "links",
   queueName: "Flagged links",
   decisions: DECISIONS,
+  reasons: REASONS,
   requireReasonOnReject: true,
   requireReasonOnApprove: false,
   left: 3,
@@ -59,6 +69,17 @@ describe("the decision panel's states", () => {
     const html = render();
     expect(html).toContain("Never sent to the survivor or a platform.");
     expect(html).toContain("Recorded encrypted, internal only.");
+    expect(html).toContain("Note (internal)");
+  });
+
+  it("renders the queue's sanitised guidance in the drawer when there is one", () => {
+    const html = render({ guidanceHtml: "<h3>Flagged links</h3><p>Approve sends nothing.</p>" });
+    expect(html).toContain("Approve sends nothing.");
+  });
+
+  it("still says no guidance exists when the queue has none", () => {
+    const html = render({ guidanceHtml: null });
+    expect(html).toContain("No written guidance for this queue yet.");
   });
 
   it("shows the lost-claim state instead of decisions, with the way to the next item", () => {
@@ -87,6 +108,8 @@ describe("panelState: the submit gate in every state", () => {
   const base = {
     decisions: DECISIONS,
     decision: null as string | null,
+    reasonCode: null as string | null,
+    reasons: REASONS,
     note: "",
     requireReasonOnReject: true,
     requireReasonOnApprove: false,
@@ -109,7 +132,27 @@ describe("panelState: the submit gate in every state", () => {
     expect(state.hint).toBe("Choose a reason");
   });
 
-  it("accepts the reason once written", () => {
+  it("accepts a picked reason, with no note demanded for a plain reason", () => {
+    const state = panelState({ ...base, decision: "reject", reasonCode: "duplicate_link" });
+    expect(state.reasonMet).toBe(true);
+    expect(state.noteRequired).toBe(false);
+    expect(state.submitDisabled).toBe(false);
+    expect(state.hint).toBe("");
+  });
+
+  it("requires the note for Other (explain)", () => {
+    const state = panelState({ ...base, decision: "reject", reasonCode: "other" });
+    expect(state.reasonMet).toBe(true);
+    expect(state.noteRequired).toBe(true);
+    expect(state.noteMet).toBe(false);
+    expect(state.submitDisabled).toBe(true);
+    expect(state.hint).toBe("Explain this reason in the note");
+    const explained = panelState({ ...base, decision: "reject", reasonCode: "other", note: "Checked twice." });
+    expect(explained.noteMet).toBe(true);
+    expect(explained.submitDisabled).toBe(false);
+  });
+
+  it("accepts the reason once written as a note", () => {
     const state = panelState({ ...base, decision: "reject", note: "Duplicate of another link" });
     expect(state.submitDisabled).toBe(false);
     expect(state.hint).toBe("");

@@ -23,6 +23,9 @@ const db = vi.hoisted(() => {
     reviewDecision: { create: fn(), findUnique: fn() },
     reviewJobClaim: { create: fn(), findFirst: fn(), updateMany: fn() },
     reviewSkip: { upsert: fn() },
+    // WP142 reasons: the seeded create-only upsert, and the code lookup
+    // decideJob validates a picked reason with.
+    reviewReason: { upsert: fn(), findUnique: fn(), findMany: fn() },
     $queryRaw: fn(),
     $transaction: fn(),
     __tx: tx,
@@ -35,6 +38,7 @@ vi.mock("@/lib/db", () => ({ db }));
 vi.mock("@/lib/security-log", () => ({ logSecurityEvent: vi.fn() }));
 
 import { SYSTEM_REVIEW_QUEUES, MINOR_HOLD_QUEUE_KEY } from "@/lib/review-queue-seeds";
+import { SYSTEM_REVIEW_REASONS } from "@/lib/review-reason-seeds";
 import { registerReviewAdapter, resetReviewAdapters, type ReviewAdapter } from "@/lib/review-adapters";
 import {
   claimNextJob,
@@ -57,6 +61,18 @@ function seedQueueRow() {
     SYSTEM_REVIEW_QUEUES.find((queue) => queue.id === args.where.id || queue.key === args.where.key) ?? null,
   );
   db.reviewQueue.findMany.mockResolvedValue(SYSTEM_REVIEW_QUEUES as never);
+  // WP142: the seeded reasons answer the code lookup decideJob makes, and
+  // the create-only seeding upserts every seed with an empty update.
+  db.reviewReason.findUnique.mockImplementation(
+    async (args: { where: { queueKey_decision_code: { queueKey: string; decision: string; code: string } } }) => {
+      const { queueKey, decision, code } = args.where.queueKey_decision_code;
+      const seed = SYSTEM_REVIEW_REASONS.find(
+        (reason) => reason.queueKey === queueKey && reason.decision === decision && reason.code === code,
+      );
+      return seed ? { id: `reason-${seed.code}`, ...seed, active: true, createdAt: NOW } : null;
+    },
+  );
+  db.reviewReason.upsert.mockResolvedValue(null);
 }
 
 function seedJob(overrides: Record<string, unknown> = {}) {
@@ -152,6 +168,21 @@ describe("seeding the system queues", () => {
     // A re-seed keeps an admin's renames: update is empty.
     expect(calls.every(([args]) => Object.keys(args.update as object).length === 0)).toBe(true);
   });
+
+  it("seeds the WP142 reasons create-only as well", async () => {
+    const { ensureSystemReviewReasons } = await import("@/lib/review-reasons");
+    await ensureSystemReviewReasons();
+    const calls = db.reviewReason.upsert.mock.calls as unknown as Array<[Record<string, Record<string, unknown>>]>;
+    expect(calls).toHaveLength(SYSTEM_REVIEW_REASONS.length);
+    // A re-seed keeps an admin's renames and deactivations: update is empty.
+    expect(calls.every(([args]) => Object.keys(args.update).length === 0)).toBe(true);
+    expect(calls[0]![0].create).toMatchObject({ queueKey: "links", decision: "reject", code: "not_reported_content" });
+    // decideJob validates a picked reason against the same rows.
+    const reason = await db.reviewReason.findUnique({
+      where: { queueKey_decision_code: { queueKey: "links", decision: "reject", code: "not_reported_content" } },
+    });
+    expect(reason).toMatchObject({ label: "Not a link to the reported content", active: true });
+  });
 });
 
 describe("the Prisma claim", () => {
@@ -221,7 +252,7 @@ describe("the Prisma decide", () => {
       reviewerId: "admin-1",
       role: "CASE_REVIEWER",
       decision: "reject",
-      reasonCode: "not_the_content",
+      reasonCode: "not_reported_content",
       reasonNote: "Checked twice: not a link to the reported content.",
       now: NOW,
     });
@@ -234,7 +265,7 @@ describe("the Prisma decide", () => {
         queueId: LINKS_QUEUE.id,
         decision: "reject",
         reviewerEmailHash: "hash-a",
-        reasonCode: "not_the_content",
+        reasonCode: "not_reported_content",
         claimedAt: new Date(NOW.getTime() - 60_000),
         decidedAt: NOW,
       }),
@@ -271,7 +302,7 @@ describe("the Prisma decide", () => {
       caseId: "case-1",
       reviewerEmailHash: "hash-a",
       decision: "reject",
-      reasonCode: "not_the_content",
+      reasonCode: "not_reported_content",
       reasonNote: null,
       claimedAt: null,
       decidedAt: NOW,
@@ -285,7 +316,7 @@ describe("the Prisma decide", () => {
       reviewerId: "admin-1",
       role: "CASE_REVIEWER",
       decision: "reject",
-      reasonCode: "not_the_content",
+      reasonCode: "not_reported_content",
       now: NOW,
     });
     expect(result).toMatchObject({ ok: true, closed: true, idempotent: true });

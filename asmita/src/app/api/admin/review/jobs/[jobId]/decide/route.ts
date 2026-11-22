@@ -35,6 +35,8 @@ const STATUS: Record<string, number> = {
   application_not_found: 404,
   unknown_decision: 400,
   reason_required: 400,
+  reason_note_required: 400,
+  invalid_reason: 400,
   invalid_payload: 400,
   no_abuse_email: 409,
   claim_lost: 409,

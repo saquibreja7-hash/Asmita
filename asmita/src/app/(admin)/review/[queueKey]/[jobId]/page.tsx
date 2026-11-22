@@ -5,6 +5,9 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { getReviewAdapter, type ReviewAdapterDecision } from "@/lib/review-adapters";
 import { canSeeReviewQueue, getReviewJobWithQueue } from "@/lib/review-jobs";
+import { listReviewReasons } from "@/lib/review-reasons";
+import { guidanceHtmlForQueue } from "@/lib/review-guidance";
+import { listCaseNotes } from "@/lib/case-notes";
 import {
   caseReferenceFor,
   caseTimelineFor,
@@ -17,6 +20,7 @@ import { recordAdminAccess } from "@/lib/admin-access-log";
 import { CaseTimeline } from "@/app/(admin)/cases/[reference]/CaseTimeline";
 import { formatIst } from "@/app/(admin)/cases/case-format";
 import { RevealAddress } from "@/app/(admin)/findings/RevealAddress";
+import { CaseNotes } from "@/app/(admin)/cases/[reference]/CaseNotes";
 import { describeReviewSubject } from "../../subject-view";
 import { DecisionPanel } from "./DecisionPanel";
 
@@ -76,14 +80,26 @@ export default async function ReviewJobPage({
   const adapter = queue.protected ? null : await getReviewAdapter(job.subjectKind);
   const decisions: readonly ReviewAdapterDecision[] = queue.protected ? [] : adapter?.decisions ?? [];
   const canDecide = Boolean(adapter && hasAdminPermission(auth.session.adminRole, adapter.permission));
+  const canNote = hasAdminPermission(auth.session.adminRole, "cases:note");
 
-  const [subject, left, caseReference, otherJobs, timeline, caseDecisions] = await Promise.all([
+  // The queue's active reasons per decision, for the panel's reason picker
+  // (WP142). Inactive reasons never reach the picker.
+  const reasons: Record<string, Array<{ code: string; label: string }>> = {};
+  for (const entry of decisions) {
+    reasons[entry.code] = (await listReviewReasons(queue.key, entry.code, { activeOnly: true }))
+      .map((reason) => ({ code: reason.code, label: reason.label }));
+  }
+
+  const [subject, left, caseReference, otherJobs, timeline, caseDecisions, notes] = await Promise.all([
     describeReviewSubject(job.subjectKind, job.subjectId, now),
     countPendingJobsForQueue(queue.id),
     job.caseId ? caseReferenceFor(job.caseId) : Promise.resolve(null),
     job.caseId ? listOtherOpenJobsForCase(job.caseId, job.id, now) : Promise.resolve([]),
     job.caseId ? caseTimelineFor(job.caseId, job.subjectId) : Promise.resolve([]),
     job.caseId ? listCaseDecisions(job.caseId, auth.session.emailHash) : Promise.resolve([]),
+    job.caseId
+      ? listCaseNotes(job.caseId, { emailHash: auth.session.emailHash, role: auth.session.adminRole })
+      : Promise.resolve([]),
   ]);
 
   // The job screen shows case data; the console logs case views like the
@@ -187,7 +203,7 @@ export default async function ReviewJobPage({
                         <li className="flex flex-wrap items-baseline justify-between gap-2" key={row.jobId}>
                           <span>
                             {row.decisionLabel}
-                            {row.reasonCode ? <span className="muted"> · {row.reasonCode}</span> : null}
+                            {row.reasonLabel && <span className="muted"> · {row.reasonLabel}</span>}
                             <span className="muted"> · {row.reviewer}</span>
                           </span>
                           <span className="muted tabular-nums text-xs">{formatIst(row.decidedAt)}</span>
@@ -195,6 +211,15 @@ export default async function ReviewJobPage({
                       ))}
                     </ul>
                   )}
+                </div>
+                <div className="mt-6">
+                  <p className="eyebrow">Internal notes</p>
+                  <CaseNotes
+                    canNote={canNote}
+                    caseId={job.caseId}
+                    jobId={job.id}
+                    notes={notes}
+                  />
                 </div>
               </>
             ) : (
@@ -209,12 +234,14 @@ export default async function ReviewJobPage({
               canDecide={canDecide}
               claimLost={!held}
               decisions={decisions}
+              guidanceHtml={guidanceHtmlForQueue(queue.key)}
               jobId={job.id}
               left={left}
               lostMessage={lostMessage || undefined}
               protectedQueue={queue.protected}
               queueKey={queue.key}
               queueName={queue.name}
+              reasons={reasons}
               requireReasonOnApprove={queue.requireReasonOnApprove}
               requireReasonOnReject={queue.requireReasonOnReject}
             />

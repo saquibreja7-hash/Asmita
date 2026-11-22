@@ -1,4 +1,5 @@
 import type { ReviewJobRow, ReviewQueueRow } from "@/lib/review-jobs";
+import { reasonLabelIndex } from "@/lib/review-reasons";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
 /*
@@ -247,12 +248,19 @@ export type CaseDecisionRow = {
   decision: string;
   decisionLabel: string;
   reasonCode: string | null;
+  /**
+   * The reason's label at read time (WP142): reasons are never deleted, so
+   * a decision keeps its label even after the reason is deactivated or
+   * renamed. Null when the decision carried no picked reason.
+   */
+  reasonLabel: string | null;
   reviewer: ReviewDecisionLabel;
   decidedAt: string;
 };
 
 type DecisionRow = {
   jobId: string;
+  queueId: string;
   decision: string;
   reasonCode: string | null;
   reviewerEmailHash: string;
@@ -273,7 +281,7 @@ export async function listCaseDecisions(
       .sort((left, right) => new Date(right.decidedAt).getTime() - new Date(left.decidedAt).getTime());
   } else if (usesWorkerKysely()) {
     rows = (await getWorkerDb().selectFrom("ReviewDecision")
-      .select(["jobId", "decision", "reasonCode", "reviewerEmailHash", "decidedAt"])
+      .select(["jobId", "queueId", "decision", "reasonCode", "reviewerEmailHash", "decidedAt"])
       .where("caseId", "=", caseId)
       .orderBy("decidedAt", "desc")
       .limit(limit)
@@ -284,14 +292,20 @@ export async function listCaseDecisions(
       where: { caseId },
       orderBy: { decidedAt: "desc" },
       take: limit,
-      select: { jobId: true, decision: true, reasonCode: true, reviewerEmailHash: true, decidedAt: true },
+      select: { jobId: true, queueId: true, decision: true, reasonCode: true, reviewerEmailHash: true, decidedAt: true },
     })) as unknown as DecisionRow[];
   }
+  const { listReviewQueues } = await import("@/lib/review-jobs");
+  const queueKeys = new Map((await listReviewQueues()).map((queue) => [queue.id, queue.key]));
+  const labels = await reasonLabelIndex();
   return rows.map((row) => ({
     jobId: row.jobId,
     decision: row.decision,
     decisionLabel: REVIEW_DECISION_LABELS[row.decision] ?? row.decision.replaceAll("_", " "),
     reasonCode: row.reasonCode,
+    reasonLabel: row.reasonCode
+      ? (labels.get(`${queueKeys.get(row.queueId) ?? ""}\u0000${row.decision}\u0000${row.reasonCode}`) ?? row.reasonCode)
+      : null,
     reviewer: reviewerHandle(row.reviewerEmailHash, viewerEmailHash),
     decidedAt: new Date(row.decidedAt).toISOString(),
   }));

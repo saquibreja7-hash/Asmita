@@ -5,6 +5,7 @@ import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { getAdminCaseDetail, type AdminCaseLink } from "@/lib/admin-cases";
 import { recordAdminAccess } from "@/lib/admin-access-log";
+import { listCaseNotes } from "@/lib/case-notes";
 import { ReviewActions } from "../../flagged/ReviewActions";
 import HashReviewActions from "../../hashes/HashReviewActions";
 import HashDispatchForm from "../../hashes/HashDispatchForm";
@@ -25,6 +26,7 @@ import { RevealLink } from "./RevealLink";
 import { SendNoticeButton } from "./SendNoticeButton";
 import { VoidSignatureButton } from "./VoidSignatureButton";
 import { CaseTimeline } from "./CaseTimeline";
+import { CaseNotes } from "./CaseNotes";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +67,8 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
   );
 
   const canReview = hasAdminPermission(auth.session.adminRole, "cases:review");
+  const canNote = hasAdminPermission(auth.session.adminRole, "cases:note");
+  const notes = await listCaseNotes(detail.caseId, { emailHash: auth.session.emailHash, role: auth.session.adminRole });
   const hashesEnabled = process.env.ENABLE_HASH_UPLOAD === "true";
   const due = dueText(detail.work.nextAction, detail.work.dueAt, now);
   const [advisoryCases, advisoryPlatforms] =
@@ -241,6 +245,15 @@ export default async function AdminCasePage({ params }: { params: Promise<{ refe
 
       <h2 className="mt-8">Timeline</h2>
       <CaseTimeline events={detail.timeline} />
+
+      <h2 className="mt-8">Notes</h2>
+      <p className="muted mt-2 max-w-2xl text-sm">
+        Internal working memory for the team. Encrypted at rest, never sent to a survivor or a
+        platform, never in any export.
+      </p>
+      <div className="mt-3">
+        <CaseNotes canNote={canNote} caseId={detail.caseId} notes={notes} />
+      </div>
     </section>
   );
 }

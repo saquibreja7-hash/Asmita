@@ -4,6 +4,12 @@ import { encryptField } from "@/lib/encryption";
 import { hasAdminPermission, type AdminRole } from "@/lib/auth/admin-permissions";
 import { MINOR_HOLD_QUEUE_KEY, SYSTEM_REVIEW_QUEUES } from "@/lib/review-queue-seeds";
 import {
+  ensureSystemReviewReasons,
+  getReviewReasonByCode,
+  reasonRequiresNote,
+  resetReviewReasonMemory,
+} from "@/lib/review-reasons";
+import {
   getReviewAdapter,
   REVIEW_SUBJECT_KINDS,
   reviewVisibilityPermission,
@@ -145,6 +151,7 @@ export function resetReviewMemory(): void {
   memoryGlobals.__asmitaReviewStore = undefined;
   queuesEnsured = false;
   lastLazySyncAt = 0;
+  resetReviewReasonMemory();
 }
 
 function isDevNoDb() {
@@ -841,6 +848,7 @@ export async function decideJob(input: {
 }): Promise<DecideJobResult> {
   const now = input.now ?? new Date();
   await ensureSystemQueues();
+  await ensureSystemReviewReasons();
   const loaded = await getReviewJobWithQueue(input.jobId);
   if (!loaded) return { ok: false, error: "job_not_found" };
   const { job, queue } = loaded;
@@ -872,6 +880,18 @@ export async function decideJob(input: {
   }
   if (decisionDef.reasonKind === "approve" && queue.requireReasonOnApprove && !hasReason) {
     return { ok: false, error: "reason_required" };
+  }
+
+  // WP142: a picked reason must be one of this queue's active reasons for
+  // this decision — a deactivated or invented code is refused before the
+  // existing function runs — and "Other (explain)" carries its explanation
+  // in the note. A plain note without a code stays valid (WP141 behaviour).
+  if (input.reasonCode?.trim()) {
+    const reason = await getReviewReasonByCode(queue.key, input.decision, input.reasonCode.trim());
+    if (!reason || !reason.active) return { ok: false, error: "invalid_reason" };
+    if (reasonRequiresNote(reason.code) && !input.reasonNote?.trim()) {
+      return { ok: false, error: "reason_note_required" };
+    }
   }
 
   const outcome = await adapter.decide(job.subjectId, input.decision, {

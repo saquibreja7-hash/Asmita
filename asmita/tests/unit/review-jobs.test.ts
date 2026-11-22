@@ -487,7 +487,7 @@ describe("decisions", () => {
       reviewerId: "admin-1",
       role: REVIEWER,
       decision: "reject",
-      reasonCode: "not_the_content",
+      reasonCode: "not_reported_content",
       reasonNote: "Checked twice: not a link to the reported content.",
     });
     expect(rejected).toMatchObject({ ok: true, closed: true });
@@ -497,7 +497,7 @@ describe("decisions", () => {
     expect(record.urls[0].flagReason ?? null).toBeNull();
     const decision = reviewMemory().decisions.get(job!.id)!;
     expect(decision.reasonNote).not.toContain("Checked twice");
-    expect(decision.reasonCode).toBe("not_the_content");
+    expect(decision.reasonCode).toBe("not_reported_content");
     expect(decision.reasonNote && decryptField(decision.reasonNote)).toBe(
       "Checked twice: not a link to the reported content.",
     );
@@ -762,7 +762,9 @@ describe("no address ever reaches a review row", () => {
     await syncReviewJobs(NOW);
     const { job } = await claimLinks(reviewer("a"));
     expect(job).toBeTruthy();
-    await skipJob(job!.id, reviewer("a"));
+    // Pinned to NOW like every other call: without it skipJob reads the real
+    // clock, and after 10:10 UTC the fixture's lease has already expired.
+    await skipJob(job!.id, reviewer("a"), NOW);
     await claimLinks(reviewer("b"), new Date(NOW.getTime() + MINUTE));
     await decide({
       jobId: job!.id,

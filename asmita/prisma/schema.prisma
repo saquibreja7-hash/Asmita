@@ -293,6 +293,10 @@ enum AuditEventType {
   WATCH_CONVERTED
   CONTENT_STILL_ONLINE
   CRAWL_WATCH_STARTED
+  // WP142 review console: internal case notes. Data carries ids only,
+  // never the note text.
+  CASE_NOTE_ADDED
+  CASE_NOTE_DELETED
 }
 
 enum DeletionJobStatus {
@@ -1535,4 +1539,46 @@ model ReviewSkip {
 
   @@id([reviewerEmailHash, jobId])
   @@index([until])
+}
+
+// WP142 (review-console-spec.md): the internal reasons a reviewer can pick
+// for a decision, seeded per system queue by review-reason-seeds.ts. A
+// SUPER_ADMIN adds, renames, reorders and deactivates them; a reason is
+// never deleted, so a decision that used it always keeps its label. Reasons
+// are internal: never sent to a platform or a survivor, never in a notice.
+model ReviewReason {
+  id        String   @id @default(cuid())
+  // The queue's key (not its id): stable across queue renames.
+  queueKey  String
+  // The adapter decision the reason belongs to (reject, dismiss, ...).
+  decision  String
+  // Stable machine code, stored on ReviewDecision.reasonCode.
+  code      String
+  label     String
+  active    Boolean  @default(true)
+  sortOrder Int
+  createdAt DateTime @default(now())
+
+  @@unique([queueKey, decision, code])
+  @@index([queueKey, decision, active, sortOrder])
+}
+
+// WP142: internal case notes (the redesign doc's Phase 4 notes). Written
+// with cases:note, encrypted with encryptField, shown on the case page and
+// the review job screen, soft-deleted by the author or a SUPER_ADMIN. Never
+// sent anywhere, never in any export. Like ReviewJob.caseId, caseId carries
+// no foreign key so a hard-deleted case never blocks anything.
+model CaseNote {
+  id             String    @id @default(cuid())
+  caseId         String
+  // The review job the note was written from, when it was.
+  jobId          String?
+  authorEmailHash String
+  // encryptField output; decrypted only for the admin views that may see it.
+  bodyEncrypted  String
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  @@index([caseId, createdAt])
+  @@index([authorEmailHash])
 }

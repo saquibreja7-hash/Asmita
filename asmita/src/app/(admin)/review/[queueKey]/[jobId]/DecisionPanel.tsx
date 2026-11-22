@@ -8,12 +8,13 @@ import { panelState } from "./review-panel-state";
 import { panelShortcut } from "./review-shortcuts";
 
 /*
- * The sticky decision panel of the review screen (WP141). It receives ids
- * and counts only — never subject data, never a survivor's material. The
+ * The sticky decision panel of the review screen (WP141, WP142). It receives
+ * ids and counts only — never subject data, never a survivor's material. The
  * decisions come from the adapter (the existing functions' own labels), the
- * reason stays internal (WP142 builds the reason picker; until then a note
- * is the reason), and the lease rules live on the server: this panel only
- * refuses to submit what the server would refuse anyway.
+ * reason picker offers the queue's active reasons for the chosen decision
+ * and the note stays internal (encrypted on the server, never sent to the
+ * survivor or a platform), and the lease rules live on the server: this
+ * panel only refuses to submit what the server would refuse anyway.
  */
 
 const HEARTBEAT_MS = 4 * 60_000;
@@ -25,6 +26,10 @@ export type DecisionPanelProps = {
   queueName: string;
   /** The adapter's decisions, in button order. Empty for the protected queue. */
   decisions: ReadonlyArray<{ code: string; label: string; reasonKind: "approve" | "reject" | null }>;
+  /** The queue's active reasons per decision code, for the reason picker (WP142). */
+  reasons: Record<string, ReadonlyArray<{ code: string; label: string }>>;
+  /** The queue's guidance, rendered server-side and sanitised (WP142). */
+  guidanceHtml?: string | null;
   requireReasonOnReject: boolean;
   requireReasonOnApprove: boolean;
   /** How many jobs wait in this queue, including this one. */
@@ -43,6 +48,8 @@ export type DecisionPanelProps = {
 // words, never "Error - reload").
 const ERRORS: Record<string, string> = {
   reason_required: "Choose a reason first.",
+  reason_note_required: "Explain this reason in the note.",
+  invalid_reason: "That reason is not offered for this decision. Reload and choose again.",
   unknown_decision: "That decision is not offered for this item.",
   permission_denied: "Your admin role cannot decide this item.",
   rate_limited: "Too many decisions in a short time. Wait a moment, then try again.",
@@ -82,10 +89,11 @@ async function postJob(path: string, jobId: string, body?: Record<string, unknow
 }
 
 export function DecisionPanel(props: DecisionPanelProps) {
-  const { jobId, queueKey, queueName, decisions, left, claimLost, canDecide, protectedQueue } = props;
+  const { jobId, queueKey, queueName, decisions, reasons, left, claimLost, canDecide, protectedQueue } = props;
   const lostMessage = props.lostMessage ?? "Someone else has this now";
   const router = useRouter();
   const [decision, setDecision] = useState<string | null>(null);
+  const [reasonCode, setReasonCode] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,16 +101,20 @@ export function DecisionPanel(props: DecisionPanelProps) {
   // The per-admin off switch, remembered in the browser like the case list's
   // shortcuts (same pattern, CaseTable.tsx).
   const [shortcutsOn, setShortcutsOn] = useState(() => (typeof window === "undefined" ? true : readShortcutsOn()));
-  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const reasonRef = useRef<HTMLSelectElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const guidanceRef = useRef<HTMLDialogElement>(null);
   const helpRef = useRef<HTMLDialogElement>(null);
   const submitRef = useRef<(() => Promise<void>) | null>(null);
   const skipRef = useRef<(() => Promise<void>) | null>(null);
 
   const chosen = decisions.find((entry) => entry.code === decision) ?? null;
-  const { submitDisabled, hint, reasonRequired } = panelState({
+  const offeredReasons = chosen ? (reasons[chosen.code] ?? []) : [];
+  const { submitDisabled, hint, reasonRequired, noteRequired } = panelState({
     decisions,
     decision,
+    reasonCode,
+    reasons,
     note,
     requireReasonOnReject: props.requireReasonOnReject,
     requireReasonOnApprove: props.requireReasonOnApprove,
@@ -120,7 +132,11 @@ export function DecisionPanel(props: DecisionPanelProps) {
     if (!chosen || submitDisabled) return;
     setBusy(true);
     setError(null);
-    const result = await call("decide", { decision: chosen.code, reasonNote: note.trim() || undefined });
+    const result = await call("decide", {
+      decision: chosen.code,
+      reasonCode: reasonCode ?? undefined,
+      reasonNote: note.trim() || undefined,
+    });
     if (!result.ok) {
       setBusy(false);
       if (result.error === "claim_lost" || result.error === "job_closed") {
@@ -190,10 +206,14 @@ export function DecisionPanel(props: DecisionPanelProps) {
         case "decision":
           event.preventDefault();
           setDecision(decisions[shortcut.index].code);
+          setReasonCode(null);
           break;
         case "focusReason":
           event.preventDefault();
-          reasonRef.current?.focus();
+          // r goes to the picker when the chosen decision offers one, and
+          // to the note otherwise.
+          if (offeredReasons.length > 0) reasonRef.current?.focus();
+          else noteRef.current?.focus();
           break;
         case "submit":
           event.preventDefault();
@@ -221,7 +241,7 @@ export function DecisionPanel(props: DecisionPanelProps) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [shortcutsOn, decisions]);
+  }, [shortcutsOn, decisions, offeredReasons.length]);
 
   return (
     <div className="a-card p-4">
@@ -282,7 +302,10 @@ export function DecisionPanel(props: DecisionPanelProps) {
                         className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--brand)]"
                         id={id}
                         name="decision"
-                        onChange={() => setDecision(entry.code)}
+                        onChange={() => {
+                          setDecision(entry.code);
+                          setReasonCode(null);
+                        }}
                         type="radio"
                         value={entry.code}
                       />
@@ -303,17 +326,40 @@ export function DecisionPanel(props: DecisionPanelProps) {
             <p className="muted mt-4 text-xs">Your admin role cannot decide items in this queue.</p>
           )}
 
+          {canDecide && chosen && offeredReasons.length > 0 && (
+            <div className="mt-3">
+              <label className="grid gap-1" htmlFor="decision-reason">
+                <span className="text-xs font-semibold">Reason (internal)</span>
+                <select
+                  aria-describedby="decision-note-hint"
+                  className="field py-1.5 text-xs"
+                  id="decision-reason"
+                  onChange={(event) => setReasonCode(event.target.value || null)}
+                  ref={reasonRef}
+                  value={reasonCode ?? ""}
+                >
+                  <option value="">{reasonRequired ? "Choose a reason…" : "Optional: choose a reason"}</option>
+                  {offeredReasons.map((reason) => (
+                    <option key={reason.code} value={reason.code}>
+                      {reason.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+
           <div className="mt-4">
             <label className="grid gap-1" htmlFor="decision-note">
-              <span className="text-xs font-semibold">Reason (internal)</span>
+              <span className="text-xs font-semibold">Note (internal)</span>
               <textarea
                 aria-describedby="decision-note-hint"
                 className="field min-h-[72px] py-2 text-xs"
                 id="decision-note"
                 maxLength={2000}
                 onChange={(event) => setNote(event.target.value)}
-                placeholder={reasonRequired ? "Required for this decision" : "Optional"}
-                ref={reasonRef}
+                placeholder={noteRequired ? "Required for this reason" : reasonRequired ? "Required for this decision" : "Optional"}
+                ref={noteRef}
                 rows={3}
                 value={note}
               />
@@ -348,9 +394,17 @@ export function DecisionPanel(props: DecisionPanelProps) {
         <h2 className="text-[var(--t-lg)]" id="guidance-title">
           Guidance · {queueName}
         </h2>
-        {/* WP142 writes the per-queue guidance files; until they exist this
-            drawer says so instead of inventing advice. */}
-        <p className="muted mt-3 text-sm">No written guidance for this queue yet.</p>
+        {props.guidanceHtml ? (
+          // The queue's guidance file, rendered and sanitised server-side
+          // (src/lib/review-guidance.ts): read-only Markdown, no raw HTML,
+          // never a link.
+          <div
+            className="mt-3 grid gap-2 text-sm [&_blockquote]:bg-[var(--c-page)] [&_blockquote]:px-3 [&_blockquote]:py-2 [&_h3]:mt-4 [&_h4]:mt-3 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5"
+            dangerouslySetInnerHTML={{ __html: props.guidanceHtml }}
+          />
+        ) : (
+          <p className="muted mt-3 text-sm">No written guidance for this queue yet.</p>
+        )}
         <div className="mt-6 flex justify-end">
           <button className="btn btn-secondary" onClick={() => guidanceRef.current?.close()} type="button">
             Close
