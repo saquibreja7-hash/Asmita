@@ -38,3 +38,16 @@ export const LAB_HUB_KEYS = {
   note: "lab.tools.note",
   beta: "lab.tools.beta",
 } as const satisfies Record<string, MessageKey>;
+
+/*
+ * The two section entries on the Lab hub (docs/lab/open-tools-spec.md,
+ * WP151): "Open tools" and "Free stacks", rendered above the beta tools
+ * in the same grid, in the same card style but without the Beta badge —
+ * they are sections of published guidance, not experiments. The stacks
+ * index page itself arrives with WP153; the /lab/open-tools sitemap
+ * entry is added in this WP, /lab/stacks with its page.
+ */
+export const LAB_HUB_SECTIONS: readonly LabBetaTool[] = [
+  { href: "/lab/open-tools", nameKey: "lab.sections.openTools.name", lineKey: "lab.sections.openTools.line" },
+  { href: "/lab/stacks", nameKey: "lab.sections.stacks.name", lineKey: "lab.sections.stacks.line" },
+] as const;

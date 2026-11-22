@@ -5,7 +5,7 @@ import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
 import { labPublicNumbers } from "@/lib/lab/lab-stats";
-import { LAB_BETA_TOOLS, LAB_HUB_KEYS } from "@/lib/lab/beta-tools";
+import { LAB_BETA_TOOLS, LAB_HUB_KEYS, LAB_HUB_SECTIONS } from "@/lib/lab/beta-tools";
 
 export const metadata: Metadata = {
   title: "AI Lab",
@@ -55,6 +55,17 @@ export default async function LabPage() {
               <h2 id="lab-tools" className="section-title">{t(locale, LAB_HUB_KEYS.title)}</h2>
               <p className="muted mx-auto mt-4 max-w-2xl text-sm leading-[1.7]">{t(locale, LAB_HUB_KEYS.note)}</p>
               <div className="mx-auto mt-8 grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {/* WP151 (docs/lab/open-tools-spec.md): the two section
+                    entries — Open tools and Free stacks — lead the grid in
+                    the same card style, without the Beta badge. */}
+                {LAB_HUB_SECTIONS.map((section) => (
+                  <div key={section.href} className="card">
+                    <h3 className="font-semibold">
+                      <Link className="text-link" href={section.href}>{t(locale, section.nameKey)}</Link>
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--text)]">{t(locale, section.lineKey)}</p>
+                  </div>
+                ))}
                 {LAB_BETA_TOOLS.map((tool) => (
                   <div key={tool.href} className="card">
                     <span className="inline-flex items-center rounded-full border border-[var(--brand)] bg-[var(--brand-soft)] px-3 py-1 text-xs font-semibold tracking-wide text-[var(--brand-strong)]">

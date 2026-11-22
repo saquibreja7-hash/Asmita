@@ -53,6 +53,9 @@ export const siteMap: SiteGroup[] = [
     title: "AI Lab",
     links: [
       { href: "/lab", label: "AI Lab", note: "Research experiments and beta tools; separate from filing a complaint" },
+      { href: "/lab/open-tools", label: "Open tools", note: "Directory of free trust-and-safety tools, and the free stacks built on them" },
+      { href: "/lab/open-tools/how-we-choose", label: "How we choose tools", note: "What 'open' means here, what we check before listing, and how to suggest a tool" },
+      { href: "/lab/stacks", label: "Free stacks", note: "Step-by-step guides combining those tools for one job each" },
       { href: "/lab/trace", label: "Trace a morph" },
       { href: "/lab/detectors", label: "Detector panel" },
       { href: "/lab/protect", label: "Photo protection" },
