@@ -22,18 +22,25 @@ export type FlowLabels = { device: string; hub: string; platforms: string; scann
 const LOOP = 18;
 const STEP_TIMES = [0, 3.5, 5.2, 8.5, 12.4, 13.6];
 
+// The site's light palette (the same colours as the homepage's first scene):
+// a near-white stage, a faint warm-grey grid, teal outlines, coral for the
+// post that comes down, gold for the crawler.
 const C = {
-  bg: 0x07302d,
-  grid: 0x1c5550,
-  teal: 0x2bb3a6,
-  tealDim: 0x1f6f68,
-  mint: 0x9fe3d8,
+  bg: 0xfdfcfb,
+  grid: 0xd9d6d3,
+  teal: 0x0a5e5a,
+  tealDim: 0x6fb3ab,
+  tealSoft: 0xd4e9e6,
+  mint: 0x2f8f86,
   coral: 0xff9473,
-  coralHot: 0xffb59c,
-  gold: 0xf2d27a,
+  coralHot: 0xe0663f,
+  gold: 0xd9b84a,
   white: 0xffffff,
-  tile: 0x154743,
-  tileLit: 0x2a6a63,
+  tile: 0xf1efed,
+  tileLit: 0xe4e1de,
+  tileScan: 0xf3e7b8,
+  bitOff: 0xe3efed,
+  row: 0xd9d6d3,
 };
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
@@ -88,7 +95,7 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
           color,
           transparent: opacity < 1 || additive,
           opacity,
-          blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+          blending: THREE.NormalBlending,
           depthWrite: !additive,
         });
       const lineMat = (color: number, opacity = 1) => new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity });
@@ -108,14 +115,14 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
       grid.position.z = -0.6;
       const gm = grid.material as Material;
       gm.transparent = true;
-      gm.opacity = 0.55;
+      gm.opacity = 0.6;
       scene.add(grid);
 
       // ---- Phone with the 16×16 fingerprint ------------------------------------
       const phone = new THREE.Group();
       phone.position.set(-9, 0, 0);
       scene.add(phone);
-      const body = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 4.6), basic(0x0c3d39));
+      const body = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 4.6), basic(C.tealSoft));
       phone.add(body);
       const bodyFrame = frame(2.6, 4.6, C.teal);
       bodyFrame.position.z = 0.01;
@@ -162,8 +169,11 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
         sheet.position.set(0, 2.6, 0.2 + i * 0.05);
         hub.add(sheet);
         sheets.push(sheet);
+        const sheetFrame = frame(1.5, 2, C.teal);
+        sheetFrame.position.z = 0.005;
+        sheet.add(sheetFrame);
         for (let k = 0; k < 4; k++) {
-          const row = new THREE.Mesh(new THREE.PlaneGeometry(k === 0 ? 0.8 : 1.1, 0.07), basic(k === 0 ? C.tealDim : 0xb9c7c5));
+          const row = new THREE.Mesh(new THREE.PlaneGeometry(k === 0 ? 0.8 : 1.1, 0.07), basic(k === 0 ? C.teal : C.row));
           row.position.set(k === 0 ? -0.15 : 0, 0.65 - k * 0.28, 0.01);
           sheet.add(row);
         }
@@ -224,7 +234,7 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
       const trailGeom = new THREE.BufferGeometry();
       const trailPos = new Float32Array(TRAIL * 3);
       trailGeom.setAttribute("position", new THREE.BufferAttribute(trailPos, 3));
-      const trail = new THREE.Points(trailGeom, new THREE.PointsMaterial({ color: C.coral, size: 0.09, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const trail = new THREE.Points(trailGeom, new THREE.PointsMaterial({ color: C.coral, size: 0.09, transparent: true, opacity: 0.85, blending: THREE.NormalBlending, depthWrite: false }));
       scene.add(trail);
 
       // burst when a post is taken down
@@ -233,7 +243,7 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
       const burstPos = new Float32Array(BURST * 3);
       const burstDir = Array.from({ length: BURST }, () => new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() * 0.8).normalize());
       burstGeom.setAttribute("position", new THREE.BufferAttribute(burstPos, 3));
-      const burst = new THREE.Points(burstGeom, new THREE.PointsMaterial({ color: C.mint, size: 0.08, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const burst = new THREE.Points(burstGeom, new THREE.PointsMaterial({ color: C.mint, size: 0.08, transparent: true, opacity: 0, blending: THREE.NormalBlending, depthWrite: false }));
       scene.add(burst);
 
       // removed check ring
@@ -262,7 +272,7 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
       const motePos = new Float32Array(MOTES * 3);
       const moteSeed = Array.from({ length: MOTES }, () => [Math.random() * 22 - 11, Math.random() * 10 - 5, Math.random() * 3 - 0.5, Math.random() * 0.4 + 0.1]);
       moteGeom.setAttribute("position", new THREE.BufferAttribute(motePos, 3));
-      const motes = new THREE.Points(moteGeom, new THREE.PointsMaterial({ color: C.mint, size: 0.04, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const motes = new THREE.Points(moteGeom, new THREE.PointsMaterial({ color: C.mint, size: 0.04, transparent: true, opacity: 0.45, blending: THREE.NormalBlending, depthWrite: false }));
       scene.add(motes);
 
       // ---- HUD anchors (projected to screen each frame) -----------------------------
@@ -331,7 +341,7 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
         const settled = t > 2.5 && t < 17.2;
         for (let i = 0; i < 256; i++) {
           const on = settled ? BITS[i] : Math.random() < 0.45;
-          bitColor.setHex(on ? (settled ? C.mint : C.teal) : 0x0f4a45);
+          bitColor.setHex(on ? (settled ? C.mint : C.teal) : C.bitOff);
           bits.setColorAt(i, bitColor);
         }
         if (bits.instanceColor) bits.instanceColor.needsUpdate = true;
@@ -398,7 +408,7 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
           const near = beamOn && Math.abs(base.x - beamX) < 0.35;
           const shimmer = 0.5 + 0.5 * Math.sin(t * 1.3 + i * 0.7);
           let color = shimmer > 0.93 ? C.tileLit : C.tile;
-          if (near) color = 0x6b6a3c;
+          if (near) color = C.tileScan;
           let scale = 1;
           let lift = 0;
           if (i === TARGET_A) {
