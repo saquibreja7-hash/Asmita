@@ -150,6 +150,8 @@ describe("when a copy is found", () => {
     expect(text).not.toMatch(/https?:|www\.|\.com|\.org|\.in\b/i);
     expect(html).not.toMatch(/<a\s|href=/i);
     expect(html).not.toMatch(/https?:/);
+    // Not even the site name, the logo image or a bare domain.
+    expect(html).not.toMatch(/meriasmita|<img\s|www\.|\.org/i);
   });
 });
 

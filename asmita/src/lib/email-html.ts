@@ -125,7 +125,7 @@ function shell(input: { lang: string; preheader: string; body: string; footer: s
           </table>
         </td></tr>
         <tr><td align="center" style="padding:18px 6px 0 6px;font-family:${SANS};">
-          <p class="a-muted" style="margin:0;font-size:12px;line-height:1.6;color:${MUTED};">Asmita &middot; meriasmita.org</p>
+          <p class="a-muted" style="margin:0;font-size:12px;line-height:1.6;color:${MUTED};">${input.noLinks ? "Asmita" : "Asmita &middot; meriasmita.org"}</p>
         </td></tr>
       </table>
     </td></tr>
@@ -187,7 +187,7 @@ export function renderEmailHtml(input: EmailHtmlInput): string {
 export function renderNoticeLetterHtml(subject: string, text: string): string {
   const body = `<p class="a-muted" style="margin:0 0 6px 0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED};">Notice</p>
     <p class="a-ink" style="margin:0 0 22px 0;font-size:18px;font-weight:600;line-height:1.4;color:${INK};">${escapeHtml(subject)}</p>
-    <div class="a-text" style="margin:0 0 18px 0;font-family:${SERIF};font-size:15px;line-height:1.65;color:${TEXT};white-space:pre-wrap;word-break:break-word;">${escapeHtml(text)}</div>`;
+    <div class="a-text" style="margin:0 0 18px 0;font-family:${SERIF};font-size:15px;line-height:1.65;color:${TEXT};white-space:pre-wrap;word-break:break-word;">${escapeHtml(text).replace(/\r\n|\n/g, "<br>")}</div>`;
   // No Asmita sign-off block: the signed text carries its own sign-off.
   return shell({ lang: "en", preheader: subject, body, footer: "", signoff: "" });
 }

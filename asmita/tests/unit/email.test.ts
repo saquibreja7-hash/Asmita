@@ -60,7 +60,8 @@ describe("email layouts (redesign)", () => {
     const { renderNoticeLetterHtml } = await import("@/lib/email-html");
     const text = "To: Grievance Officer\n\n1.  Remove <this> & \"that\".\n\nYours faithfully,\nAsmita";
     const html = renderNoticeLetterHtml("Notice ASMITA-2026-00001", text);
-    const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\n/g, "<br>");
+    // Line breaks become <br> so Outlook, which ignores pre-wrap, keeps the layout.
     expect(html).toContain(`white-space:pre-wrap;word-break:break-word;">${escaped}</div>`);
     expect([...html.matchAll(/src="([^"]+)"/g)].map((m) => m[1])).toEqual(["https://meriasmita.org/asmita-wordmark-v2.png"]);
   });
