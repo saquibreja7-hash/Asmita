@@ -177,7 +177,7 @@ describe("registry", () => {
     try {
       const { detectors, skipped } = buildDetectors({ modelsDir: emptyModels });
       expect(detectors).toHaveLength(0);
-      expect(skipped.map((s) => s.id)).toEqual(["openai", "hive", "sightengine", "communityforensics"]);
+      expect(skipped.map((s) => s.id)).toEqual(["openai", "hive", "sightengine", "communityforensics", "gend"]);
       expect(skipped.every((s) => s.reason.length > 0)).toBe(true);
     } finally {
       rmSync(emptyModels, { recursive: true, force: true });

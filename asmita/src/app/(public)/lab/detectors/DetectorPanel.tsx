@@ -19,7 +19,7 @@ type Band = "likely_ai" | "unclear" | "likely_camera";
 type Row = {
   id: string;
   name: string;
-  status: "scored" | "not_configured" | "error";
+  status: "scored" | "not_configured" | "no_face" | "error";
   score?: number;
   band?: Band;
   error?: string;
@@ -31,6 +31,13 @@ const BAND_KEY: Record<Band, Parameters<typeof t>[1]> = {
   likely_ai: "lab.detectors.band.likelyAi",
   unclear: "lab.detectors.band.unclear",
   likely_camera: "lab.detectors.band.likelyCamera",
+};
+
+// GenD only looks for a swapped or reenacted face, so its bands say that, not "AI-made" or "camera photo".
+const GEND_BAND_KEY: Record<Band, Parameters<typeof t>[1]> = {
+  likely_ai: "lab.detectors.gend.band.high",
+  unclear: "lab.detectors.band.unclear",
+  likely_camera: "lab.detectors.gend.band.low",
 };
 
 const ERROR_KEY: Record<string, Parameters<typeof t>[1]> = {
@@ -187,11 +194,35 @@ export function DetectorPanel({ locale }: { locale: Locale }) {
                 key={row.id}
                 className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-5 py-4"
               >
-                <span className="font-medium text-[var(--ink)]">{row.name}</span>
+                <span className="font-medium text-[var(--ink)]">
+                  {row.name}
+                  {row.id === "gend" && (
+                    <span className="mt-1 block text-xs font-normal leading-[1.6] text-[var(--text-muted)]">
+                      {t(locale, "lab.detectors.gend.checks")}{" "}
+                      <a
+                        href="https://arxiv.org/abs/2508.06248"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="link-underline text-[var(--text-muted)]"
+                      >
+                        {t(locale, "lab.detectors.gend.paper")}
+                      </a>
+                      {" · "}
+                      <a
+                        href="https://github.com/yermandy/GenD"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="link-underline text-[var(--text-muted)]"
+                      >
+                        {t(locale, "lab.detectors.gend.code")}
+                      </a>
+                    </span>
+                  )}
+                </span>
                 {row.status === "scored" && typeof row.score === "number" && row.band && (
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-[var(--line)] bg-[var(--page)] px-3 py-1 text-xs font-medium text-[var(--text)]">
-                      {t(locale, BAND_KEY[row.band])}
+                      {t(locale, (row.id === "gend" ? GEND_BAND_KEY : BAND_KEY)[row.band])}
                     </span>
                     <span className="text-sm tabular-nums text-[var(--text)]">
                       {t(locale, "lab.detectors.score")} {row.score} / 100
@@ -201,6 +232,11 @@ export function DetectorPanel({ locale }: { locale: Locale }) {
                 {row.status === "not_configured" && (
                   <span className="rounded-full border border-[var(--line)] bg-[var(--page)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
                     {t(locale, "lab.detectors.row.notConfigured")}
+                  </span>
+                )}
+                {row.status === "no_face" && (
+                  <span className="rounded-full border border-[var(--line)] bg-[var(--page)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
+                    {t(locale, "lab.detectors.row.noFace")}
                   </span>
                 )}
                 {row.status === "error" && (
