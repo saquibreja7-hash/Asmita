@@ -1,8 +1,11 @@
-import { SEXTORTION_LABELS, type SextortionLabel } from "@/lib/lab/sextortion/taxonomy";
+import { SEXTORTION_LABELS, type SextortionLabel } from "./taxonomy";
 
 /*
  * WP116 (docs/research/research-tools-spec.md, Track D): the sextortion
  * lexicon, per taxonomy label.
+ *
+ * NOTE: relative import on purpose — the offline trainer (tsx, no "@"
+ * alias) loads this file through features.ts.
  *
  * Every term is matched as a substring against the NORMALISED views of a
  * pasted message (see normalise.ts):
@@ -389,21 +392,25 @@ export const LEXICON_LABELS: readonly LexiconLabel[] = SEXTORTION_LABELS.filter(
   (label): label is LexiconLabel => label !== "NOT_THREAT",
 );
 
-/*
- * Which labels have at least one term present in the normalised views of a
- * message. Devanagari terms are looked up in the original-script view,
- * romanised and english terms in the latin views (for a latin-only message
- * the two views coincide). A hit is a feature and a sentence for "What we
- * noticed", never a verdict on its own (WP117 requires a core label plus a
- * supporting one before anything is called a likely threat).
- */
+/** The labels with at least one term present in the normalised views of a message. */
 export function lexiconHits(views: { normalised: string; romanised: string }): LexiconLabel[] {
-  const hits: LexiconLabel[] = [];
+  return lexiconMatches(views).map((match) => match.label);
+}
+
+/**
+ * Every term actually present, with its label — the classifier (WP117)
+ * hashes one feature per matched term, which keeps the signal of WHICH
+ * phrase matched (a per-label bit alone would merge all of a label's
+ * phrasings into one feature).
+ */
+export function lexiconMatches(views: { normalised: string; romanised: string }): { label: LexiconLabel; term: string; script: LexiconScript }[] {
+  const matches: { label: LexiconLabel; term: string; script: LexiconScript }[] = [];
   for (const label of LEXICON_LABELS) {
-    const present = SEXTORTION_LEXICON[label].some((entry) =>
-      entry.script === "devanagari" ? views.normalised.includes(entry.term) : views.romanised.includes(entry.term),
-    );
-    if (present) hits.push(label);
+    for (const entry of SEXTORTION_LEXICON[label]) {
+      const present =
+        entry.script === "devanagari" ? views.normalised.includes(entry.term) : views.romanised.includes(entry.term);
+      if (present) matches.push({ label, term: entry.term, script: entry.script });
+    }
   }
-  return hits;
+  return matches;
 }

@@ -7,7 +7,10 @@
     "skipLibCheck": true,
     "noEmit": true,
     "types": ["node"],
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@/lib/*": ["../../asmita/src/lib/*"]
+    }
   },
   "include": ["src", "tests"]
 }

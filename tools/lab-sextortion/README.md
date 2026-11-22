@@ -1,17 +1,22 @@
-# lab-sextortion (WP116)
+# lab-sextortion (WP116 + WP117)
 
-The taxonomy, lexicon and synthetic-data tooling for the Indian sextortion
-message classifier. Spec: `asmita/docs/research/research-tools-spec.md`
-(Track D, WP116). Taxonomy documentation:
-`asmita/docs/lab/sextortion-taxonomy.md`.
+The taxonomy, lexicon, synthetic-data tooling and the classifier trainer
+for the Indian sextortion message classifier. Spec:
+`asmita/docs/research/research-tools-spec.md` (Track D, WP116 and WP117).
+Taxonomy documentation: `asmita/docs/lab/sextortion-taxonomy.md`; the
+classifier's evaluation report: `asmita/docs/lab/sextortion-eval.md`.
 
 What lives where:
 
 - `src/` — the deterministic generator, its slot pools and template
   families (`slots.ts`, `templates.ts`, `generate.ts`, `noise.ts`,
   `rng.ts`), dataset I/O and validators (`dataset.ts`, `validate.ts`,
-  `evalSet.ts`, `cli.ts`). The generator imports the taxonomy from
-  `asmita/src/lib/lab/sextortion/` (the same code the classifier runs).
+  `evalSet.ts`, `cli.ts`), and the WP117 trainer and evaluation
+  (`train.ts`, `evaluate.ts`). The generator and the trainer import the
+  taxonomy, normalisation, lexicon, features and inference code from
+  `asmita/src/lib/lab/sextortion/` (the same code the app runs); the
+  trainer writes the committed model file
+  `asmita/src/lib/lab/sextortion/model.json`.
 - `eval/` — the committed, hand-written evaluation set (see `eval/README.md`).
 - `tests/` — the vitest suite for all of the above.
 - `data/` — the generated training data (gitignored, never committed: this
@@ -23,12 +28,49 @@ Commands:
 
 ```bash
 npm ci
-npm run generate    # write data/generated.jsonl + data/manifest.json
+npm run generate     # write data/generated.jsonl + data/manifest.json
 npm run validate     # full validation of generated data and the eval set
 npm run snapshot     # regenerate eval/vocabulary.json (review the diff!)
 npm run stats        # print dataset counts
+npm run train        # train the classifier, write the app's model.json (~4 min)
+npm run eval-report  # score the committed model on the hand-written eval set
 npm run check        # type-check + tests + validate
 ```
+
+## How the trainer works
+
+`train.ts` rebuilds the generator's dataset in-process (never from disk,
+never the eval set), splits it deterministically — every 6th row of each
+family×script run becomes the tuning split, ~1,973 rows — and extracts the
+SAME hashed features the Worker-side classifier uses (character 2–5-grams
+over both script views, word uni/bi-grams, one feature per matched lexicon
+term; `features.ts` in the app tree is the single implementation both
+sides import). Each taxonomy label gets a one-vs-rest logistic regression:
+plain mini-batch gradient descent with L2 decay, deterministic batch
+order, early stopping on the tuning split's L2-penalised loss, and rare
+positives up-weighted (capped at 5×).
+
+Thresholds are chosen on the tuning split: the midpoint of the gap between
+the highest negative and the lowest positive score when a label separates
+cleanly (the widest margin on both sides), else the F1-optimal cut; then a
+uniform multiplicative shift is applied, as small as possible, until the
+flag rule (a core label AND a supporting label above threshold — a single
+keyword is never enough) reaches precision ≥ 0.95 on the tuning split.
+The run is byte-reproducible: same code, same model file, including the
+recorded training date (a constant in `train.ts`).
+
+The export keeps only weights above a fixed quantization floor, so the
+committed JSON stays under the spec's 2 MB cap while staying reviewable
+in a diff. It records the trainer version, the training date, the
+generator seed and version, the feature hash size and the train/tuning row
+counts.
+
+The hand-written eval set is never used by the trainer — not for training,
+thresholds or early stopping. `npm run eval-report` scores the COMMITTED
+model on it and prints the tables that go into
+`asmita/docs/lab/sextortion-eval.md`: the flag decision for rules-only,
+model, and rules+model, per script, per label, plus the hard-negative
+confusion.
 
 ## How the generator works
 

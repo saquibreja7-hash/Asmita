@@ -5,15 +5,19 @@ import { rowsToJsonl, stats, tokenize, type DatasetRow } from "./dataset.ts";
 import { loadEvalSet, loadEvalSnapshot, writeEvalSnapshot, EVAL_DIR } from "./evalSet.ts";
 import { generateDataset, GENERATOR_SEED, GENERATOR_VERSION } from "./generate.ts";
 import { checkEval, checkGenerated } from "./validate.ts";
+import { trainSextortionModel, TRAINER_VERSION, TRAINED_AT } from "./train.ts";
+import { evalReportMarkdown } from "./evaluate.ts";
 
 /*
- * WP116 (docs/research/research-tools-spec.md, Track D): the lab-sextortion
- * tool's command line.
+ * WP116 + WP117 (docs/research/research-tools-spec.md, Track D): the
+ * lab-sextortion tool's command line.
  *
- *   npm run generate   — write the deterministic dataset to data/ (gitignored)
- *   npm run validate   — full validation of generated data and the eval set
- *   npm run snapshot   — regenerate eval/vocabulary.json after review
- *   npm run stats      — print dataset counts
+ *   npm run generate     — write the deterministic dataset to data/ (gitignored)
+ *   npm run validate     — full validation of generated data and the eval set
+ *   npm run snapshot     — regenerate eval/vocabulary.json after review
+ *   npm run stats        — print dataset counts
+ *   npm run train        — train the classifier, write the app's model.json
+ *   npm run eval-report  — score the committed model on the hand-written eval set
  *
  * The generated training data is never committed (public repo); it is
  * rebuilt from this package's constants in a deterministic way, so nothing
@@ -22,6 +26,7 @@ import { checkEval, checkGenerated } from "./validate.ts";
 
 const TOOL_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(TOOL_DIR, "../data");
+const MODEL_PATH = path.resolve(TOOL_DIR, "../../../asmita/src/lib/lab/sextortion/model.json");
 
 async function writeData() {
   const rows = generateDataset();
@@ -90,13 +95,42 @@ async function printStats() {
   console.log(JSON.stringify(summary, null, 2));
 }
 
+async function train() {
+  const started = Date.now();
+  console.log(`training the WP117 classifier (trainer v${TRAINER_VERSION}, trainedAt ${TRAINED_AT})…`);
+  const { model, labelFits, perLabelThresholds, shift } = trainSextortionModel();
+  const body = JSON.stringify(model) + "\n";
+  await writeFile(MODEL_PATH, body, "utf8");
+  console.log(
+    `rows: ${model.trainRows} train + ${model.tuneRows} tuning (split 1/${"SPLIT_EVERY"}) · hashBits 2^${Math.log2(model.hashBits)} · quantScale ${model.quantScale}`,
+  );
+  console.log("label           epochs  tuneF1  threshold");
+  for (const fit of labelFits) {
+    const choice = perLabelThresholds[labelFits.indexOf(fit)];
+    console.log(
+      `${fit.label.padEnd(24)}${String(fit.epochs).padStart(6)}  ${fit.bestF1.toFixed(3)}  loss ${fit.bestLoss.toFixed(3)}  ${choice.threshold.toFixed(3)} (f1 ${choice.f1.toFixed(3)}, p ${choice.precision.toFixed(3)}, r ${choice.recall.toFixed(3)})`,
+    );
+  }
+  console.log(
+    `flag rule on tuning after shift δ=${shift.shift.toFixed(3)}: precision ${shift.metrics.precision.toFixed(3)} (target ≥ ${(0.95).toFixed(2)}), recall ${shift.metrics.recall.toFixed(3)}, false flags ${shift.metrics.falseFlags} (${shift.negativeFalseFlags} on hard negatives)`,
+  );
+  const bytes = Buffer.byteLength(body, "utf8");
+  console.log(`wrote ${MODEL_PATH} (${(bytes / 1024).toFixed(1)} KiB, spec cap 2048 KiB) in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+}
+
+async function printEvalReport() {
+  console.log(await evalReportMarkdown());
+}
+
 const command = process.argv[2] ?? "validate";
 if (command === "generate") await writeData();
 else if (command === "validate") await validate();
 else if (command === "snapshot") await snapshot();
 else if (command === "stats") await printStats();
+else if (command === "train") await train();
+else if (command === "eval-report") await printEvalReport();
 else {
-  console.error(`unknown command: ${command} (use generate | validate | snapshot | stats)`);
+  console.error(`unknown command: ${command} (use generate | validate | snapshot | stats | train | eval-report)`);
   console.error(`eval dir: ${EVAL_DIR}`);
   process.exitCode = 1;
 }
