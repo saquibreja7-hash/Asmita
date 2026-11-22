@@ -51,7 +51,9 @@ test.describe("message check (/lab/message-check)", () => {
     await page.getByRole("button", { name: "Check the message" }).click();
 
     // Results are announced (role=status) and open with the honest heading.
-    await expect(page.getByRole("status")).toHaveText(/What we noticed/i);
+    // The first check compiles the route and loads the classifier model on the
+    // dev server, which can take longer than the default wait.
+    await expect(page.getByRole("status")).toHaveText(/What we noticed/i, { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "What we noticed" })).toBeVisible();
     await expect(page.getByText(/matches patterns we often see in sextortion/i)).toBeVisible();
 

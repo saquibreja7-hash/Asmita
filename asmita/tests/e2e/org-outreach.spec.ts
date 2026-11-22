@@ -64,7 +64,10 @@ test("an admin publishes a news post and it appears on /news and /news/[slug]", 
   await page.goto("/news");
   await expect(page.getByRole("link", { name: "Playwright news post" })).toBeVisible();
   await page.getByRole("link", { name: "Playwright news post" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Playwright news post");
+  // Wait for the post's own URL first: /news also has an h1, and the first
+  // visit compiles the post page on the dev server.
+  await expect(page).toHaveURL(/\/news\/[^/?#]+$/, { timeout: 30_000 });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Playwright news post", { timeout: 30_000 });
   await expect(page.getByRole("heading", { level: 2, name: "What changed" })).toBeVisible();
 });
 

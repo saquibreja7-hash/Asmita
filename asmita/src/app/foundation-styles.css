@@ -1,4 +1,4 @@
-/* Shared Asmita tokens and typography. See docs/design/03-design-system.md.
+/* Shared Asmita tokens and typography. See DESIGN.md.
    Public page and shared component styles are imported in cascade order. */
 :root {
   color-scheme: light;

@@ -22,4 +22,4 @@ The filing flow handles links as text, generates fingerprints on the device and 
 
 Lead with the action a visitor came to take. Explain what the service can do and what happens next. Ask for only the data the chosen action requires.
 
-See [the brand brief](docs/design/01-brand-brief.md) and [information architecture](docs/design/02-information-architecture.md) for more detail. The repository's `CLAUDE.md` governs behavior and safety boundaries.
+See [DESIGN.md](DESIGN.md) for design, layout and voice. The repository's `CLAUDE.md` governs behavior and safety boundaries.
