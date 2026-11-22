@@ -132,7 +132,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
     <div>
       {step === "age" && (
         <div className="mt-8">
-          <Heading className="section-title outline-none" ref={headingRef} tabIndex={-1}>
+          <Heading className={`${tracking ? "subsection-title" : "section-title"} outline-none`} ref={headingRef} tabIndex={-1}>
             {t(locale, "reg.age.title")}
           </Heading>
           <p className="muted mt-2 text-sm leading-[1.75]">
@@ -207,7 +207,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
 
       {noCase && (
         <div className="mt-8" role="status">
-          <Heading className="section-title outline-none" ref={headingRef} tabIndex={-1}>{t(locale, "track.noCase.title")}</Heading>
+          <Heading className={`${tracking ? "subsection-title" : "section-title"} outline-none`} ref={headingRef} tabIndex={-1}>{t(locale, "track.noCase.title")}</Heading>
           <p className="muted mt-2 text-sm leading-[1.75]">{t(locale, "track.noCase.sub")}</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link className="btn btn-primary" href="/start">{t(locale, "track.noCase.start")}</Link>
@@ -224,7 +224,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
 
       {!noCase && step === "email" && (
         <div className="mt-8">
-          <Heading className="section-title outline-none" ref={headingRef} tabIndex={-1}>
+          <Heading className={`${tracking ? "subsection-title" : "section-title"} outline-none`} ref={headingRef} tabIndex={-1}>
             {t(locale, tracking ? "track.email.title" : "reg.email.title")}
           </Heading>
           <p className="muted mt-2 text-sm leading-[1.75]">
@@ -271,7 +271,7 @@ export function RegisterForm({ locale, mode = "file" }: { locale: Locale; mode?:
 
       {!noCase && step === "otp" && (
         <div className="mt-8">
-          <Heading className="section-title outline-none" ref={headingRef} tabIndex={-1}>
+          <Heading className={`${tracking ? "subsection-title" : "section-title"} outline-none`} ref={headingRef} tabIndex={-1}>
             {t(locale, "reg.otp.title")}
           </Heading>
           <p className="muted mt-2 text-sm leading-[1.75]">

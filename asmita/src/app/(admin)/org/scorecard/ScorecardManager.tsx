@@ -122,7 +122,7 @@ export function ScorecardManager() {
     if (!selected) return;
     const data = await request(`/api/admin/org/scorecard/${selected.id}`, "put", { publish: true }, "The snapshot was not published");
     if (!data) return;
-    setNotice(`Published. /research/platform-scorecard now shows ${selected.period}.`);
+    setNotice(`Published ${selected.period}.`);
     setReload((count) => count + 1);
   }
 

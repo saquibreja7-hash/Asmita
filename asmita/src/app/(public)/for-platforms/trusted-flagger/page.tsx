@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { PLATFORM_DEADLINE_HOURS } from "@/lib/escalation-ladder";
 import { ESCALATION_HOURS } from "@/lib/escalation-engine";
+import { Icon } from "@/components/Icon";
 import { icons, type IconName } from "../icons";
 
 // Trusted-flagger page (docs/org/spec.md, WP57), for platform Trust & Safety
@@ -72,33 +73,23 @@ const reach = [
   "Tell us the outcome — actioned, refused, or acknowledged — and she sees the answer on her case page.",
 ];
 
-function SectionHead({ eyebrow, title, id }: { eyebrow: string; title: string; id: string }) {
-  return (
-    <div className="mx-auto max-w-3xl text-center">
-      <span className="eyebrow">{eyebrow}</span>
-      <h2 id={id} className="section-title mt-4">
-        {title}
-      </h2>
-      <span aria-hidden="true" className="pf-rule mx-auto mt-5" />
-    </div>
-  );
-}
+const Check = () => <Icon name="check" size={16} />;
+const Lock = () => <Icon name="lock" size={16} />;
 
 export default function TrustedFlaggerPage() {
   return (
     <AppShell>
       <div className="page-canvas">
         <section className="hero" aria-label="Notices from Meri Asmita">
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">For platforms</span>
-              <h1 className="page-title mt-5">What a notice from Meri Asmita contains</h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
+          <div className="hero-content container org-hero">
+            <div className="max-w-3xl">
+              <h1 className="page-title">What a notice from Meri Asmita contains</h1>
+              <p className="org-hero-lede !max-w-[44rem]">
                 Notices from this service are survivor-signed complaints about non-consensual intimate imagery. This
                 page tells trust and safety teams exactly what arrives in your inbox, what we checked before sending
                 it, and how to reach us about one.
               </p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <div className="mt-8 flex flex-wrap gap-3">
                 <a className="btn btn-primary btn-arrow !m-0" href="#deadlines">
                   Deadlines
                 </a>
@@ -110,130 +101,130 @@ export default function TrustedFlaggerPage() {
           </div>
         </section>
 
-        <section className="pf-warm section-pad" aria-labelledby="formed-heading">
-          <div className="container">
-            <SectionHead eyebrow="How a notice is formed" title="From her report to your inbox" id="formed-heading" />
-            <ol className="pf-steps mx-auto mt-12 grid max-w-5xl gap-8 lg:grid-cols-4 lg:gap-6">
-              {formation.map((step, i) => (
-                <li className="pf-step" key={step.title}>
-                  <span className="pf-step-dot">{i + 1}</span>
-                  <div>
-                    <h3 className="text-[17px] font-medium text-[var(--ink)]">{step.title}</h3>
-                    <p className="mt-2 text-sm leading-[1.6] text-[var(--text)]">{step.body}</p>
-                  </div>
+        <section className="zone-white" aria-labelledby="formed-heading">
+          <div className="container org-section">
+            <div className="org-head">
+              <h2 id="formed-heading" className="section-title">
+                From her report to your inbox
+              </h2>
+            </div>
+            <ol className="org-steps">
+              {formation.map((step) => (
+                <li key={step.title}>
+                  <h3>{step.title}</h3>
+                  <p>{step.body}</p>
                 </li>
               ))}
             </ol>
-            <p className="muted mx-auto mt-10 max-w-3xl text-center text-sm leading-[1.7]">
-              Some platforms have no verified grievance email. For those, the survivor is directed to your own
-              reporting form with the notice text to paste in, fingerprints included — the same complaint, filed where
-              your process expects it.
+            <p className="org-note">
+              <Icon name="info" />
+              <span>
+                Some platforms have no verified grievance email. For those, the survivor is directed to your own
+                reporting form with the notice text to paste in, fingerprints included — the same complaint, filed where
+                your process expects it.
+              </span>
             </p>
           </div>
         </section>
 
-        <section className="section-pad" aria-labelledby="contents-heading">
-          <div className="container">
-            <SectionHead eyebrow="What arrives" title="What the notice contains — and what it never contains" id="contents-heading" />
-            <div className="pf-split mx-auto mt-12 grid max-w-5xl md:grid-cols-2">
-              <div className="pf-split-half p-7 md:p-9">
-                <div className="flex items-center gap-3">
-                  <span className="pf-chip pf-chip-teal">{icons.check}</span>
-                  <h3 className="subsection-title">Each notice carries</h3>
-                </div>
-                <ul className="mt-6 space-y-4 text-[15px] leading-[1.6] text-[var(--text)]">
-                  <li className="flex gap-3">
-                    <span className="pf-tick pf-tick-teal">{icons.check}</span>
-                    <span>The case reference and her declaration reference</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="pf-tick pf-tick-teal">{icons.check}</span>
-                    <span>The reported link on your service</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="pf-tick pf-tick-teal">{icons.check}</span>
+        <section className="transform-section" aria-labelledby="contents-heading">
+          <div className="container org-section">
+            <div className="org-head">
+              <h2 id="contents-heading" className="section-title">
+                What the notice contains — and what it never contains
+              </h2>
+            </div>
+            <div className="org-columns">
+              <div>
+                <h3>Each notice carries</h3>
+                <ul className="org-check">
+                  <li><Check /><span>The case reference and her declaration reference</span></li>
+                  <li><Check /><span>The reported link on your service</span></li>
+                  <li>
+                    <Check />
                     <span>
                       The complaint the survivor signed, which asks for removal under Rule 3(2)(b) of the IT Rules,
                       2021 as amended in 2026 — the rule the notice itself cites
                     </span>
                   </li>
-                  <li className="flex gap-3">
-                    <span className="pf-tick pf-tick-teal">{icons.check}</span>
-                    <span>The fingerprint annex, when the case has approved fingerprints</span>
-                  </li>
+                  <li><Check /><span>The fingerprint annex, when the case has approved fingerprints</span></li>
                 </ul>
               </div>
-              <div className="pf-split-half pf-split-never p-7 md:p-9">
-                <div className="flex items-center gap-3">
-                  <span className="pf-chip">{icons.lock}</span>
-                  <h3 className="subsection-title">Never in a notice</h3>
-                </div>
-                <ul className="mt-6 space-y-4 text-[15px] leading-[1.6] text-[var(--text)]">
-                  <li className="flex gap-3">
-                    <span className="pf-tick pf-tick-flame">{icons.lock}</span>
-                    <span>The survivor&apos;s name. She is not named, and we hold nothing to hand over but her signed declaration</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="pf-tick pf-tick-flame">{icons.lock}</span>
-                    <span>The content itself. Meri Asmita never retrieves, views or stores it</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="pf-tick pf-tick-flame">{icons.lock}</span>
-                    <span>Fingerprints the survivor did not sign, or that are not approved</span>
-                  </li>
+              <div>
+                <h3>Never in a notice</h3>
+                <ul className="org-check">
+                  <li><Lock /><span>The survivor&apos;s name. She is not named, and we hold nothing to hand over but her signed declaration</span></li>
+                  <li><Lock /><span>The content itself. Meri Asmita never retrieves, views or stores it</span></li>
+                  <li><Lock /><span>Fingerprints the survivor did not sign, or that are not approved</span></li>
                 </ul>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="pf-mist section-pad" aria-labelledby="checks-heading">
-          <div className="container">
-            <SectionHead eyebrow="Before anything is sent" title="What we check first" id="checks-heading" />
-            <div className="mx-auto mt-12 grid max-w-5xl gap-5 md:grid-cols-2">
+        <section className="zone-white" aria-labelledby="checks-heading">
+          <div className="container org-section">
+            <div className="org-head">
+              <h2 id="checks-heading" className="section-title">
+                What we check first
+              </h2>
+            </div>
+            <ul className="org-rows org-rows-2">
               {checks.map((check) => (
-                <div className="pf-card p-7" key={check.title}>
-                  <span className="pf-chip pf-chip-teal">{icons[check.icon]}</span>
-                  <h3 className="mt-5 text-[20px] font-medium leading-[1.3] text-[var(--ink)]">{check.title}</h3>
-                  <p className="mt-3 text-sm leading-[1.65] text-[var(--text)]">{check.body}</p>
-                </div>
+                <li key={check.title}>
+                  <div className="org-row">
+                    <span className="org-row-icon" aria-hidden>
+                      {icons[check.icon]}
+                    </span>
+                    <h3 className="org-row-title">{check.title}</h3>
+                    <p className="org-row-body">{check.body}</p>
+                  </div>
+                </li>
               ))}
+            </ul>
+          </div>
+        </section>
+
+        <section className="transform-section scroll-mt-20" id="deadlines" aria-labelledby="deadlines-heading">
+          <div className="container org-section org-aside">
+            <div className="org-head">
+              <h2 id="deadlines-heading" className="section-title">
+                What the notice asks, and when
+              </h2>
+            </div>
+            <div>
+              <dl className="org-columns">
+                <div className="border-t-2 border-[var(--coral)] pt-5">
+                  <dt className="text-[length:var(--text-heading-sm)] font-semibold leading-none tabular-nums text-[var(--ink)]">{PLATFORM_DEADLINE_HOURS} hours</dt>
+                  <dd className="mt-3 text-[length:var(--text-body)] leading-[1.6] text-[var(--text)]">{PLATFORM_DEADLINE_TEXT}</dd>
+                </div>
+                <div className="border-t-2 border-[var(--coral)] pt-5">
+                  <dt className="text-[length:var(--text-heading-sm)] font-semibold leading-none tabular-nums text-[var(--ink)]">{ESCALATION_HOURS[1]} hours</dt>
+                  <dd className="mt-3 text-[length:var(--text-body)] leading-[1.6] text-[var(--text)]">{PLATFORM_FOLLOW_UP_TEXT}</dd>
+                </div>
+              </dl>
+              <p className="mt-8 max-w-[62ch] text-[length:var(--text-body)] leading-[1.7] text-[var(--text)]">
+                The follow-up is a covering letter that restates the same reviewed complaint text. It stops when your
+                platform answers — acknowledged or refused — and everything stops when the content is removed or the
+                case is resolved. The survivor&apos;s own next steps (a cybercrime.gov.in complaint, an appeal) continue on
+                her case page either way.
+              </p>
             </div>
           </div>
         </section>
 
-        <section className="section-pad scroll-mt-20" id="deadlines" aria-labelledby="deadlines-heading">
-          <div className="container">
-            <SectionHead eyebrow="Deadlines" title="What the notice asks, and when" id="deadlines-heading" />
-            <div className="mx-auto mt-12 grid max-w-5xl gap-5 md:grid-cols-2">
-              <div className="pf-card p-7">
-                <span className="pf-chip pf-chip-teal">{icons.clock}</span>
-                <p className="pf-figure mt-5">{PLATFORM_DEADLINE_HOURS} hours</p>
-                <p className="mt-3 text-sm leading-[1.65] text-[var(--text)]">{PLATFORM_DEADLINE_TEXT}</p>
-              </div>
-              <div className="pf-card p-7">
-                <span className="pf-chip pf-chip-teal">{icons.recheck}</span>
-                <p className="pf-figure mt-5">{ESCALATION_HOURS[1]} hours</p>
-                <p className="mt-3 text-sm leading-[1.65] text-[var(--text)]">{PLATFORM_FOLLOW_UP_TEXT}</p>
-              </div>
+        <section className="zone-white scroll-mt-20" id="reach" aria-labelledby="reach-heading">
+          <div className="container org-section org-aside">
+            <div className="org-head">
+              <h2 id="reach-heading" className="section-title">
+                How to talk to us about a notice
+              </h2>
             </div>
-            <p className="muted mx-auto mt-8 max-w-3xl text-center text-sm leading-[1.7]">
-              The follow-up is a covering letter that restates the same reviewed complaint text. It stops when your
-              platform answers — acknowledged or refused — and everything stops when the content is removed or the
-              case is resolved. The survivor&apos;s own next steps (a cybercrime.gov.in complaint, an appeal) continue on
-              her case page either way.
-            </p>
-          </div>
-        </section>
-
-        <section className="pf-warm section-pad scroll-mt-20" id="reach" aria-labelledby="reach-heading">
-          <div className="container">
-            <SectionHead eyebrow="Reach us" title="How to talk to us about a notice" id="reach-heading" />
-            <div className="pf-asks mx-auto mt-12 max-w-5xl p-7 md:p-9">
-              <ul className="grid gap-x-10 gap-y-3 text-[15px] leading-[1.6] text-[var(--text)] md:grid-cols-2">
+            <div>
+              <ul className="org-check !mt-0">
                 {reach.map((item) => (
-                  <li className="flex gap-3" key={item}>
-                    <span className="pf-tick pf-tick-flame">{icons.check}</span>
+                  <li key={item}>
+                    <Check />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -245,24 +236,24 @@ export default function TrustedFlaggerPage() {
           </div>
         </section>
 
-        <section className="zone-sunset" aria-labelledby="partner-heading">
-          <div className="zone-sunset-content container section-pad text-center">
-            <div className="mx-auto max-w-2xl">
+        <section className="org-cta" aria-labelledby="partner-heading">
+          <div className="container org-cta-inner">
+            <div>
               <h2 id="partner-heading" className="section-title">
                 Become a platform partner
               </h2>
-              <p className="muted mx-auto mt-5 max-w-lg text-base leading-[1.75]">
+              <p>
                 Platforms that join the partner programme receive these notices through one agreed channel, with image
                 fingerprints they can match, and a person to talk to when a case needs attention.
               </p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-primary btn-arrow !m-0" href="/for-platforms">
-                  Join the programme
-                </Link>
-                <Link className="btn btn-secondary btn-arrow !m-0" href="/what-we-do">
-                  What Asmita does
-                </Link>
-              </div>
+            </div>
+            <div className="org-cta-actions">
+              <Link className="btn btn-primary btn-arrow !m-0" href="/for-platforms">
+                Join the programme
+              </Link>
+              <Link className="btn btn-secondary btn-arrow !m-0" href="/what-we-do">
+                What Asmita does
+              </Link>
             </div>
           </div>
         </section>

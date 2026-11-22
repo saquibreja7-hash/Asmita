@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
-import { Illustration } from "@/components/Illustration";
+import { OrgHero } from "@/components/org/OrgHero";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { PostCard, orgPostKindLabel } from "@/components/org/PostCard";
@@ -36,21 +36,12 @@ export default async function NewsPage({
   return (
     <AppShell>
       <div className="page-canvas">
-        <section className="hero" aria-label={t(locale, "org.news.eyebrow")}>
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{t(locale, "org.news.eyebrow")}</span>
-              <h1 className="page-title mt-5">{t(locale, "org.news.title")}</h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">{t(locale, "org.news.sub")}</p>
-            </div>
-            <Illustration name="page-research" eager className="page-hero-art" />
-          </div>
-        </section>
+        <OrgHero title={t(locale, "org.news.title")} lede={t(locale, "org.news.sub")} illustration="page-research" />
 
-        <section className="zone-white section-pad" aria-label={t(locale, "org.news.title")}>
-          <div className="container">
+        <section className="zone-white" aria-label={t(locale, "org.news.title")}>
+          <div className="container org-section">
             {/* Kind filter chips */}
-            <nav aria-label={t(locale, "org.news.filterAll")} className="flex flex-wrap justify-center gap-3">
+            <nav aria-label={t(locale, "org.news.filterAll")} className="flex flex-wrap gap-2">
               <Link
                 href="/news"
                 aria-current={!kind ? "page" : undefined}
@@ -71,12 +62,14 @@ export default async function NewsPage({
             </nav>
 
             {result.posts.length === 0 ? (
-              <div className="mx-auto mt-12 max-w-3xl rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--surface-muted)] p-8 text-center md:p-12">
-                <h2 className="section-title">{t(locale, "org.news.emptyTitle")}</h2>
-                <p className="mx-auto mt-4 max-w-xl text-[16px] leading-[1.65] text-[var(--text)]">{t(locale, "org.news.emptyBody")}</p>
+              <div className="org-empty mt-8">
+                <div>
+                  <h2>{t(locale, "org.news.emptyTitle")}</h2>
+                  <p>{t(locale, "org.news.emptyBody")}</p>
+                </div>
               </div>
             ) : (
-              <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {result.posts.map((post) => (
                   <PostCard key={post.id} post={post} locale={locale} />
                 ))}
@@ -85,7 +78,7 @@ export default async function NewsPage({
 
             {totalPages > 1 && (
               <nav
-                className="mt-12 flex items-center justify-center gap-4"
+                className="mt-10 flex items-center justify-center gap-4"
                 aria-label={t(locale, "org.news.pageLabel").replace("{n}", String(page)).replace("{total}", String(totalPages))}
               >
                 {page > 1 && (

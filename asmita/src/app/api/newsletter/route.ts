@@ -63,7 +63,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const result = await subscribeToNewsletter({ email: fields.email, locale: fields.locale, source: fields.source });
+  const result = await subscribeToNewsletter({
+    email: fields.email,
+    firstName: fields.firstName,
+    locale: fields.locale,
+    source: fields.source,
+  });
   if (result.confirmToken) {
     try {
       await sendNewsletterConfirmEmail(result.email, newsletterConfirmUrl(result.confirmToken));

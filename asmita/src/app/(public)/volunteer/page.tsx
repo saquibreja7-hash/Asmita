@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/layout/AppShell";
-import { Illustration } from "@/components/Illustration";
+import { OrgHero } from "@/components/org/OrgHero";
 import { Icon } from "@/components/Icon";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
-import { StepList } from "@/components/Reading";
 import { VolunteerForm } from "@/components/org/VolunteerForm";
 
 // Volunteer roles, how it works, and the application form (56.4). The
@@ -15,7 +14,8 @@ export const metadata: Metadata = {
   description: "Volunteer with Meri Asmita: legal help, translation, research, design, outreach and workshop facilitation.",
 };
 
-const ROLES = ["legal", "translation", "research", "designTech", "outreach", "facilitation"] as const;
+// Workshop facilitation is not listed: the training programmes were taken out.
+const ROLES = ["legal", "translation", "research", "designTech", "outreach"] as const;
 
 const ROLE_FIELDS = {
   legal: { title: "org.volunteer.role.legal.title", body: "org.volunteer.role.legal.body", time: "org.volunteer.role.legal.time", skills: "org.volunteer.role.legal.skills", icon: "scale" },
@@ -31,72 +31,75 @@ export default async function VolunteerPage() {
   return (
     <AppShell>
       <div className="page-canvas">
-        <section className="hero" aria-label={t(locale, "org.volunteer.eyebrow")}>
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{t(locale, "org.volunteer.eyebrow")}</span>
-              <h1 className="page-title mt-5">{t(locale, "org.volunteer.title")}</h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">{t(locale, "org.volunteer.sub")}</p>
-            </div>
-            <Illustration name="page-about" eager className="page-hero-art" />
+        <OrgHero title={t(locale, "org.volunteer.title")} lede={t(locale, "org.volunteer.sub")} illustration="page-about">
+          <div className="mt-8 flex">
+            <a className="btn btn-primary btn-arrow !m-0" href="#apply">
+              {t(locale, "org.volunteer.formTitle")}
+            </a>
           </div>
-        </section>
+        </OrgHero>
 
-        <section className="zone-white section-pad" aria-labelledby="roles-heading">
-          <div className="container">
-            <h2 id="roles-heading" className="section-title">
-              {t(locale, "org.volunteer.rolesTitle")}
-            </h2>
-            <div className="mt-10 grid gap-6 md:grid-cols-2">
+        <section className="zone-white" aria-labelledby="roles-heading">
+          <div className="container org-section">
+            <div className="org-head">
+              <h2 id="roles-heading" className="section-title">
+                {t(locale, "org.volunteer.rolesTitle")}
+              </h2>
+            </div>
+            <ul className="org-rows org-rows-2">
               {ROLES.map((role) => (
-                <div key={role} className="card p-7">
-                  <div className="flex items-center gap-3">
-                    <span className="icon-tile" aria-hidden>
+                <li key={role}>
+                  <div className="org-row">
+                    <span className="org-row-icon" aria-hidden>
                       <Icon name={ROLE_FIELDS[role].icon} />
                     </span>
-                    <h3 className="text-[20px] font-semibold text-[var(--ink)]">{t(locale, ROLE_FIELDS[role].title)}</h3>
+                    <h3 className="org-row-title">{t(locale, ROLE_FIELDS[role].title)}</h3>
+                    <p className="org-row-body">{t(locale, ROLE_FIELDS[role].body)}</p>
+                    <p className="org-row-meta">
+                      {t(locale, ROLE_FIELDS[role].time)} {t(locale, ROLE_FIELDS[role].skills)}
+                    </p>
                   </div>
-                  <p className="mt-3 text-[16px] leading-[1.6] text-[var(--text)]">{t(locale, ROLE_FIELDS[role].body)}</p>
-                  <p className="muted mt-4 text-sm leading-[1.6]">
-                    <Icon name="clock" size={14} className="mr-1 inline align-[-2px]" /> {t(locale, ROLE_FIELDS[role].time)}
-                  </p>
-                  <p className="muted mt-1 text-sm leading-[1.6]">{t(locale, ROLE_FIELDS[role].skills)}</p>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
 
-            <div className="callout mt-10">
-              <Icon name="shieldCheck" className="mt-0.5 text-[var(--brand)]" />
-              <div>
-                <p className="font-medium">{t(locale, "org.volunteer.privacy")}</p>
-                <p className="mt-1 text-[15px] font-normal">{t(locale, "org.volunteer.privacyBody")}</p>
-              </div>
+            <div className="org-note">
+              <Icon name="shieldCheck" />
+              <p>
+                <strong>{t(locale, "org.volunteer.privacy")}</strong>
+                {t(locale, "org.volunteer.privacyBody")}
+              </p>
             </div>
           </div>
         </section>
 
         <section className="transform-section" aria-labelledby="how-heading">
-          <div className="transform-content container section-pad">
-            <h2 id="how-heading" className="section-title">
-              {t(locale, "org.volunteer.howTitle")}
-            </h2>
-            <StepList
-              steps={[
-                t(locale, "org.volunteer.how1"),
-                t(locale, "org.volunteer.how2"),
-                t(locale, "org.volunteer.how3"),
-                t(locale, "org.volunteer.how4"),
-              ]}
-            />
+          <div className="container org-section">
+            <div className="org-head">
+              <h2 id="how-heading" className="section-title">
+                {t(locale, "org.volunteer.howTitle")}
+              </h2>
+            </div>
+            <ol className="org-steps">
+              {(["org.volunteer.how1", "org.volunteer.how2", "org.volunteer.how3", "org.volunteer.how4"] as const).map((k) => (
+                <li key={k}>
+                  <p>{t(locale, k)}</p>
+                </li>
+              ))}
+            </ol>
           </div>
         </section>
 
-        <section className="zone-white section-pad" id="apply" aria-labelledby="apply-heading">
-          <div className="container max-w-3xl">
-            <h2 id="apply-heading" className="section-title">
-              {t(locale, "org.volunteer.formTitle")}
-            </h2>
-            <VolunteerForm locale={locale} />
+        <section className="zone-white scroll-mt-20" id="apply" aria-labelledby="apply-heading">
+          <div className="container org-section org-aside">
+            <div className="org-head org-aside-sticky">
+              <h2 id="apply-heading" className="section-title">
+                {t(locale, "org.volunteer.formTitle")}
+              </h2>
+            </div>
+            <div className="org-form">
+              <VolunteerForm locale={locale} />
+            </div>
           </div>
         </section>
       </div>

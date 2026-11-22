@@ -20,7 +20,8 @@ test("get-involved renders in English and Hindi", async ({ page }) => {
   await page.goto("/get-involved");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Help us end image-based abuse");
   await expect(page.getByRole("link", { name: "Volunteer" }).first()).toBeVisible();
-  await expect(page.getByText("<TO_FILL: social links>")).toBeVisible();
+  await expect(page.getByText("TO_FILL")).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "LinkedIn" })).toBeVisible();
 
   await page.context().addCookies([{ name: "asmita_lang", value: "hi", url: "http://127.0.0.1:3001" }]);
   await page.goto("/get-involved");
@@ -35,7 +36,6 @@ test("a visitor submits the volunteer form and sees the success state", async ({
   await page.getByLabel("Email", { exact: true }).fill("eli@example.invalid");
   await page.getByLabel("City").fill("Pune");
   await page.getByLabel("State or union territory").selectOption("Maharashtra");
-  await page.getByText("Hindi", { exact: true }).click();
   await page.getByText("Translation and language review").click();
   await page.getByLabel("Time you can give").selectOption({ label: "3 to 5 hours a week" });
   await page
@@ -98,12 +98,11 @@ test("an admin opens a job and it appears on /careers", async ({ browser, page }
   );
 });
 
-test("a newsletter signup shows the check-your-email state", async ({ page }) => {
-  await page.goto("/newsletter");
-  // The footer carries the same inline sign-up with the same label, so the
-  // journey targets the page's own form inside <main>.
-  const main = page.getByRole("main");
-  await main.getByLabel("Email address").fill("reader@example.invalid");
-  await main.getByRole("button", { name: "Sign up" }).click();
-  await expect(page.getByText("Check your email")).toBeVisible({ timeout: 20_000 });
+test("a newsletter signup from the footer shows the check-your-email state", async ({ page }) => {
+  await page.goto("/get-involved");
+  const footer = page.getByRole("contentinfo");
+  await footer.getByLabel("First name").fill("Asha");
+  await footer.getByLabel("Email for the newsletter").fill("reader@example.invalid");
+  await footer.getByRole("button", { name: "Sign up" }).click();
+  await expect(footer.getByText("Check your email to confirm.")).toBeVisible({ timeout: 20_000 });
 });
