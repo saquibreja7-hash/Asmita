@@ -355,6 +355,22 @@
   white-space: nowrap;
 }
 
+/* Keyboard hint chips (review console, WP141). */
+.a-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  padding: 0 var(--s-1);
+  border: 1px solid var(--c-line);
+  border-radius: var(--s-1);
+  background: var(--c-page);
+  color: var(--c-muted);
+  font-size: var(--t-xs);
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+
 .a-chip:hover {
   border-color: var(--c-ink);
 }

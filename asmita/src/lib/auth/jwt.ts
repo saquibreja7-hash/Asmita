@@ -9,6 +9,13 @@ export type SessionClaims = {
   namespace?: "victim" | "admin";
   adminRole?: AdminRole;
   mfaComplete?: boolean;
+  /**
+   * WP144 step-up MFA: when the admin last proved their authenticator (the
+   * sign-in, the enrolment confirmation or POST /api/admin/mfa/step-up),
+   * as epoch seconds. Absent on tokens minted before WP144, which read as
+   * "not fresh" for the actions that need it.
+   */
+  mfaAt?: number;
 };
 
 const ISSUER = "asmita";
@@ -54,6 +61,7 @@ export async function signAdminSession(
     namespace: "admin",
     adminRole: claims.adminRole,
     mfaComplete: claims.mfaComplete,
+    ...(claims.mfaAt !== undefined ? { mfaAt: claims.mfaAt } : {}),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer(ISSUER)
@@ -80,6 +88,7 @@ export async function verifySession(token: string | undefined | null): Promise<S
       namespace: (payload.namespace as SessionClaims["namespace"]) || "victim",
       adminRole: payload.adminRole as SessionClaims["adminRole"],
       mfaComplete: payload.mfaComplete === true,
+      mfaAt: typeof payload.mfaAt === "number" ? payload.mfaAt : undefined,
     };
   } catch {
     return null;

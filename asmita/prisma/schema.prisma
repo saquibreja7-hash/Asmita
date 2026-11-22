@@ -318,6 +318,9 @@ enum AuditEventType {
   LAB_SERVICE_LINK_REVIEWED
   CRAWL_FINDING_LABEL_SET
   CRAWL_FINDING_LABEL_CLEARED
+  // Review console WP143: every routing-rule save, status change, move, and
+  // every queues-admin change. Data carries ids only, never a condition value.
+  REVIEW_RULE_CHANGED
   PARTNER_SHARE_CONSENT_GIVEN
   PARTNER_SHARE_CONSENT_WITHDRAWN
   PARTNER_OUTCOME_REPORTED
@@ -326,6 +329,14 @@ enum AuditEventType {
   WATCH_CONVERTED
   CONTENT_STILL_ONLINE
   CRAWL_WATCH_STARTED
+  // WP142 review console: internal case notes. Data carries ids only,
+  // never the note text.
+  CASE_NOTE_ADDED
+  CASE_NOTE_DELETED
+  // Review console WP145: the one summary event of a bulk review run (the
+  // existing per-item events are unchanged). Data carries counts and ids
+  // only, never an address.
+  ADMIN_BULK_ACTION
 }
 
 enum DeletionJobStatus {
@@ -1669,6 +1680,287 @@ model LabReport {
 
   @@index([chokepointId])
   @@index([status])
+}
+
+// Review console (docs/product/review-console-spec.md, WP140). Queues,
+// leased jobs and decisions over the review subjects that already exist.
+// The source tables stay authoritative: a decision on a job goes through
+// the existing library function for its subject (review-adapters.ts), with
+// that function's permission check and audit event, so the console is a new
+// way to reach decisions, never a new way to make them. Rows carry ids
+// only: never an address, never survivor text.
+enum ReviewSubjectKind {
+  FLAGGED_LINK
+  FINGERPRINT
+  FINDING
+  PARTNER_APPLICATION
+  LAB_REPORT
+}
+
+enum ReviewJobStatus {
+  PENDING
+  CLOSED
+}
+
+enum ReviewEnqueueSource {
+  SYNC
+  RULE
+  MOVED
+  MANUAL
+}
+
+// One review queue. The six system queues are seeded (review-queue-seeds.ts);
+// minor-hold is protected (SUPER_ADMIN only) and takes every kind.
+model ReviewQueue {
+  id                      String            @id
+  key                     String            @unique
+  name                    String
+  description             String?
+  // Null = any kind: only minor-hold, where any subject may land while a
+  // possible minor is involved.
+  subjectKind             ReviewSubjectKind?
+  isDefault               Boolean           @default(false)
+  protected               Boolean           @default(false)
+  sortOrder               Int
+  // WP142 reasons are enforced server-side in decideJob, not only in the UI.
+  requireReasonOnReject   Boolean           @default(true)
+  requireReasonOnApprove Boolean           @default(false)
+  // WP143 queues admin: set when a SUPER_ADMIN archives an empty custom
+  // queue. Archived queues are hidden from the console, receive no jobs and
+  // are refused as rule destinations; rows stay for old decisions' labels.
+  archivedAt             DateTime?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  jobs ReviewJob[]
+
+  @@index([sortOrder])
+}
+
+// One subject waiting for a human. One open job per subject: the partial
+// unique index on (subjectKind, subjectId) WHERE status = 'PENDING' is raw
+// SQL in the migration (Prisma cannot express partial indexes); a second
+// enqueue merges into the open job instead of creating one.
+model ReviewJob {
+  id                  String             @id @default(cuid())
+  queueId             String
+  subjectKind         ReviewSubjectKind
+  // A SubmittedUrl, HashSubmission, CrawlFinding, PlatformPartnerApplication
+  // or LabReport id. Never an address.
+  subjectId           String
+  caseId              String?
+  status              ReviewJobStatus    @default(PENDING)
+  priority            Int                @default(0)
+  // Admin email hash: who holds the lease.
+  claimedBy           String?
+  claimedUntil        DateTime?
+  enqueueSource       ReviewEnqueueSource
+  // WP143 routing rules; null means the kind's default queue.
+  routedByRuleId      String?
+  routedByRuleVersion Int?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  closedAt            DateTime?
+  closedReason        String?
+
+  queue ReviewQueue @relation(fields: [queueId], references: [id])
+
+  @@index([queueId, status, priority(sort: Desc), createdAt])
+  @@index([caseId])
+  @@index([claimedBy, status])
+}
+
+// The decision that closed a job. jobId is unique, so a retried submit is
+// idempotent. The reason note is encryptField output and is internal: it is
+// never sent to a platform or a survivor and never appears in a notice.
+model ReviewDecision {
+  id                String           @id @default(uuid())
+  jobId             String           @unique
+  queueId           String
+  subjectKind       ReviewSubjectKind
+  subjectId         String
+  caseId            String?
+  // "" for system decisions (the sync closing a resolved-elsewhere job).
+  reviewerEmailHash String
+  // e.g. approve, reject, dismiss, label_possible_minor, move, close_stale.
+  decision          String
+  reasonCode        String?
+  // encryptField output; free text, decrypted only for the reviewer UI.
+  reasonNote        String?
+  // When the deciding claim began, for handle-time metrics.
+  claimedAt         DateTime?
+  decidedAt         DateTime
+  // The audit entry of the existing decision function, once writeAuditLog
+  // can return it; null until then.
+  auditEventId      String?
+
+  @@index([queueId])
+  @@index([subjectKind, subjectId])
+  @@index([decidedAt])
+}
+
+// One lease at a time on a job, from claim to decision/skip/release
+// (handle-time metrics).
+model ReviewJobClaim {
+  id                String    @id @default(uuid())
+  jobId             String
+  reviewerEmailHash String
+  claimedAt         DateTime  @default(now())
+  releasedAt        DateTime?
+  // decided | skipped | expired | released
+  outcome           String?
+
+  @@index([jobId])
+  @@index([reviewerEmailHash])
+}
+
+// A reviewer's 30-minute "not for me" on one job.
+model ReviewSkip {
+  reviewerEmailHash String
+  jobId             String
+  until             DateTime
+
+  @@id([reviewerEmailHash, jobId])
+  @@index([until])
+}
+
+// WP142 (review-console-spec.md): the internal reasons a reviewer can pick
+// for a decision, seeded per system queue by review-reason-seeds.ts. A
+// SUPER_ADMIN adds, renames, reorders and deactivates them; a reason is
+// never deleted, so a decision that used it always keeps its label. Reasons
+// are internal: never sent to a platform or a survivor, never in a notice.
+model ReviewReason {
+  id        String   @id @default(cuid())
+  // The queue's key (not its id): stable across queue renames.
+  queueKey  String
+  // The adapter decision the reason belongs to (reject, dismiss, ...).
+  decision  String
+  // Stable machine code, stored on ReviewDecision.reasonCode.
+  code      String
+  label     String
+  active    Boolean  @default(true)
+  sortOrder Int
+  createdAt DateTime @default(now())
+
+  @@unique([queueKey, decision, code])
+  @@index([queueKey, decision, active, sortOrder])
+}
+
+// WP142: internal case notes (the redesign doc's Phase 4 notes). Written
+// with cases:note, encrypted with encryptField, shown on the case page and
+// the review job screen, soft-deleted by the author or a SUPER_ADMIN. Never
+// sent anywhere, never in any export. Like ReviewJob.caseId, caseId carries
+// no foreign key so a hard-deleted case never blocks anything.
+model CaseNote {
+  id             String    @id @default(cuid())
+  caseId         String
+  // The review job the note was written from, when it was.
+  jobId          String?
+  authorEmailHash String
+  // encryptField output; decrypted only for the admin views that may see it.
+  bodyEncrypted  String
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  @@index([caseId, createdAt])
+  @@index([authorEmailHash])
+}
+
+// WP143 (review-console-spec.md): ordered routing rules. A rule only ever
+// chooses a queue and a priority for a subject that already needs a human —
+// it never decides, approves, rejects, dispatches, labels, sends email or
+// changes a gate, and it can never route into or out of the protected
+// minor-hold queue or into a queue of another kind (enforced on save and
+// re-checked at evaluation). Conditions read a fixed, typed allowlist of
+// existing columns only (review-adapters.ts): no survivor free text, no URLs.
+enum ReviewRuleStatus {
+  DRAFT
+  LIVE
+  DISABLED
+}
+
+model ReviewRoutingRule {
+  id                String           @id @default(cuid())
+  name              String
+  description       String?
+  subjectKind       ReviewSubjectKind
+  // Order within the kind; the first LIVE match wins. { all: [...] } or
+  // { any: [...] } of { field, op, value } leaves (one level, no nesting).
+  sequence          Int
+  condition         Json
+  // A queue of the same kind, never protected, never archived.
+  destinationQueueId String
+  priority          Int              @default(0)
+  status            ReviewRuleStatus @default(DRAFT)
+  // Bumped on every save; every version is kept in ReviewRoutingRuleVersion.
+  version           Int              @default(1)
+  // Admin email hash: displayed as a handle, never an email.
+  createdBy         String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([subjectKind, status, sequence])
+}
+
+// Append-only copy of every saved version of a rule (WP143: "version history
+// with who and when"). Rows are never updated or deleted.
+model ReviewRoutingRuleVersion {
+  id                 String           @id @default(uuid())
+  ruleId             String
+  version            Int
+  name               String
+  description        String?
+  subjectKind        ReviewSubjectKind
+  sequence           Int
+  condition          Json
+  destinationQueueId String
+  priority           Int
+  status             ReviewRuleStatus
+  createdBy          String
+  savedAt            DateTime         @default(now())
+
+  @@unique([ruleId, version])
+  @@index([ruleId, savedAt])
+}
+
+// One evaluation of one rule against one job (WP143: "why is this here").
+// Deduplicated per (job, rule, version): a re-run that changes nothing
+// writes nothing, and details carry outcome flags and per-condition booleans
+// only — never a field value, never an address, never survivor text. A DRAFT
+// rule that matches is logged as would_have_matched (shadow mode) and has no
+// effect. Pruned after 90 days by the maintenance cron.
+model ReviewRoutingLog {
+  id          String   @id @default(uuid())
+  jobId       String
+  ruleId      String?
+  ruleVersion Int?
+  matched     Boolean
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  @@unique([jobId, ruleId, ruleVersion])
+  @@index([jobId, createdAt])
+  @@index([ruleId])
+  @@index([createdAt])
+}
+
+// WP144 (review-console-spec.md): queue access. Exactly one of role and
+// adminEmailHash is set (a CHECK in the migration enforces it; partial
+// unique indexes keep one row per target). A queue with no rows keeps
+// today's visibility — every role with the adapter's permission sees it —
+// and rows narrow it: a reviewer then sees the queue only if their role or
+// their own email hash is listed. The protected minor-hold queue ignores
+// rows and stays SUPER_ADMIN only, so no row can ever widen it. Only a
+// review:manage admin may change these rows. Nothing here is survivor data:
+// queue ids, a role enum and admin email hashes only.
+model ReviewQueueAccess {
+  id        String   @id @default(uuid())
+  queueId   String
+  role      AdminRole?
+  adminEmailHash String?
+  createdAt DateTime @default(now())
+
+  @@index([queueId])
 }
 
 // WP114: the curated directory of companies an abuse report can go to —

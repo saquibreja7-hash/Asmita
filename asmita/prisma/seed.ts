@@ -9,6 +9,8 @@ import {
 import { labProviderSeeds } from "./lab-provider-seeds";
 import { platformSeedCreateData, platformSeedUpdateData } from "./platform-seed-data";
 import { templateSeeds } from "./template-seeds";
+import { SYSTEM_REVIEW_QUEUES } from "../src/lib/review-queue-seeds";
+import { SYSTEM_REVIEW_REASONS } from "../src/lib/review-reason-seeds";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -341,6 +343,43 @@ async function main() {
         },
       });
     }
+  }
+
+  // Review console (WP140): the six system queues. Create-only upsert — a
+  // re-seed never clobbers an admin's later renames or edits.
+  for (const queue of SYSTEM_REVIEW_QUEUES) {
+    await prisma.reviewQueue.upsert({
+      where: { key: queue.key },
+      create: {
+        id: queue.id,
+        key: queue.key,
+        name: queue.name,
+        description: queue.description,
+        subjectKind: queue.subjectKind,
+        isDefault: queue.isDefault,
+        protected: queue.protected,
+        sortOrder: queue.sortOrder,
+        requireReasonOnReject: queue.requireReasonOnReject,
+        requireReasonOnApprove: queue.requireReasonOnApprove,
+      },
+      update: {},
+    });
+  }
+
+  // Review console (WP142): the seeded internal reasons. Create-only upsert
+  // as well — a deactivated or renamed reason keeps an admin's decision.
+  for (const reason of SYSTEM_REVIEW_REASONS) {
+    await prisma.reviewReason.upsert({
+      where: {
+        queueKey_decision_code: {
+          queueKey: reason.queueKey,
+          decision: reason.decision,
+          code: reason.code,
+        },
+      },
+      create: { ...reason, active: true },
+      update: {},
+    });
   }
 
   console.log("Seeded platforms, lab providers and notice templates.");

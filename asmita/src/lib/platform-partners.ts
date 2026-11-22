@@ -35,6 +35,7 @@ function devNoDb() {
 }
 
 export async function recordPartnerApplication(input: PartnerApplicationInput): Promise<{ id: string }> {
+  let id: string;
   if (devNoDb()) {
     const record: PartnerApplication = {
       ...input,
@@ -46,25 +47,35 @@ export async function recordPartnerApplication(input: PartnerApplicationInput): 
     if (partnerApplications.length > MAX_MEMORY_APPLICATIONS) {
       partnerApplications.splice(0, partnerApplications.length - MAX_MEMORY_APPLICATIONS);
     }
-    return { id: record.id };
+    id = record.id;
+  } else {
+    const saved = await db.platformPartnerApplication.create({
+      data: {
+        organisationName: input.organisationName,
+        platformName: input.platformName,
+        websiteDomain: input.websiteDomain,
+        platformType: input.platformType,
+        userBase: input.userBase,
+        contactName: encryptField(input.contactName),
+        contactRole: input.contactRole,
+        contactEmail: encryptField(input.contactEmail),
+        contactPhone: input.contactPhone ? encryptField(input.contactPhone) : null,
+        interests: input.interests,
+        message: input.message ? encryptField(input.message) : null,
+      },
+      select: { id: true },
+    });
+    id = saved.id;
   }
-  const saved = await db.platformPartnerApplication.create({
-    data: {
-      organisationName: input.organisationName,
-      platformName: input.platformName,
-      websiteDomain: input.websiteDomain,
-      platformType: input.platformType,
-      userBase: input.userBase,
-      contactName: encryptField(input.contactName),
-      contactRole: input.contactRole,
-      contactEmail: encryptField(input.contactEmail),
-      contactPhone: input.contactPhone ? encryptField(input.contactPhone) : null,
-      interests: input.interests,
-      message: input.message ? encryptField(input.message) : null,
-    },
-    select: { id: true },
-  });
-  return { id: saved.id };
+  // WP140: a new application opens its review-console job at once. The
+  // sign-up never fails because of it; the sync backfills the job.
+  try {
+    const { enqueueForReview } = await import("@/lib/review-jobs");
+    await enqueueForReview("PARTNER_APPLICATION", id);
+  } catch {
+    console.error("review_enqueue_failed");
+  }
+  return { id };
 }
 
 /** Every sign-up, newest first, decrypted for the admin console. */

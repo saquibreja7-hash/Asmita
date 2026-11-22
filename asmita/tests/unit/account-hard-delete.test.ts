@@ -310,6 +310,36 @@ describe("hardDeleteDueUsers (database path)", () => {
     }
   });
 
+  it("removes the review console's notes, jobs and decisions about her case, and only hers", async () => {
+    fake.tables.caseNote = [
+      { id: "n1", caseId: "c1", jobId: "rj1", bodyEncrypted: "enc:analyst-note-about-her" },
+      { id: "n2", caseId: "c2", jobId: null, bodyEncrypted: "enc:other-case-note" },
+    ];
+    fake.tables.reviewJob = [
+      { id: "rj1", caseId: "c1", subjectId: "url1" },
+      { id: "rj2", caseId: "c2", subjectId: "url3" },
+    ];
+    fake.tables.reviewDecision = [
+      { id: "rd1", jobId: "rj1", caseId: "c1", reasonNote: "enc:reason-about-her" },
+      { id: "rd2", jobId: "rj2", caseId: "c2", reasonNote: null },
+    ];
+    fake.tables.reviewJobClaim = [{ id: "rc1", jobId: "rj1" }, { id: "rc2", jobId: "rj2" }];
+    fake.tables.reviewSkip = [{ id: "rs1", jobId: "rj1" }];
+    fake.tables.reviewRoutingLog = [{ id: "rl1", jobId: "rj1" }, { id: "rl2", jobId: "rj2" }];
+
+    expect(await hardDeleteDueUsers(now)).toEqual(["u1"]);
+
+    expect(fake.tables.caseNote.map((r) => r.id)).toEqual(["n2"]);
+    expect(fake.tables.reviewJob.map((r) => r.id)).toEqual(["rj2"]);
+    expect(fake.tables.reviewDecision.map((r) => r.id)).toEqual(["rd2"]);
+    expect(fake.tables.reviewJobClaim.map((r) => r.id)).toEqual(["rc2"]);
+    expect(fake.tables.reviewSkip).toEqual([]);
+    expect(fake.tables.reviewRoutingLog.map((r) => r.id)).toEqual(["rl2"]);
+    const serialized = JSON.stringify(fake.tables);
+    expect(serialized).not.toContain("analyst-note-about-her");
+    expect(serialized).not.toContain("reason-about-her");
+  });
+
   it("writes an audit entry that says exactly what was removed and kept", async () => {
     await hardDeleteDueUsers(now);
     const entries = inMemoryAuditLog.filter((e) => e.eventType === "CASE_HARD_DELETED");

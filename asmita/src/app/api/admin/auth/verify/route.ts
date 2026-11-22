@@ -8,6 +8,7 @@ import { consumeAdminEnrolmentCode } from "@/lib/auth/admin-enrolment";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { verifyOtp } from "@/lib/auth/otp";
 import { signAdminSession } from "@/lib/auth/jwt";
+import { stepUpNow } from "@/lib/auth/step-up";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { writeAuditLog } from "@/lib/audit";
 import { logSecurityEvent } from "@/lib/security-log";
@@ -81,6 +82,9 @@ export async function POST(request: Request) {
     emailHash: admin.emailHash,
     adminRole: access.role,
     mfaComplete: enrolled || skipMfa,
+    // The sign-in itself proved the authenticator (or its email code plus a
+    // one-time enrolment code), so the step-up window starts here (WP144).
+    mfaAt: stepUpNow(),
   });
   await writeAuditLog({
     eventType: "ADMIN_ACTION",

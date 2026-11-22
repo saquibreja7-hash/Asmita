@@ -16,6 +16,7 @@ const NEEDS: Record<AdminPermission, string> = {
   "content:manage": "manage org content",
   "outreach:manage": "manage outreach",
   "lab:manage": "manage the AI Lab",
+  "review:manage": "manage review routing",
 };
 
 /**

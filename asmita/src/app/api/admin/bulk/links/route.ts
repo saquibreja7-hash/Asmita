@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
+import { requireStepUp } from "@/lib/auth/step-up";
 import { db } from "@/lib/db";
 import { isAwaitingReview, reviewSubmittedUrl } from "@/lib/case-ops";
+import { isHeldForPossibleMinor, recordDecisionOnOpenJob } from "@/lib/review-jobs";
 import { writeAuditLog } from "@/lib/audit";
 
 // Approves or rejects up to 50 flagged links at once. Each link goes through
@@ -13,6 +15,35 @@ import { writeAuditLog } from "@/lib/audit";
 // survivor still has to sign. Fingerprints are not bulk-reviewable because
 // approving one can email a platform straight away.
 const MAX_BULK_LINKS = 50;
+// WP144: a bulk decision over this many items needs a fresh authenticator
+// code (step-up MFA); at or below it, the ordinary session is enough.
+const STEP_UP_ABOVE = 10;
+
+function isDevNoDb() {
+  return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
+}
+
+/** The waiting links by id, from the dev store or the database (WP145: the route now works on both). */
+async function loadWaitingLinks(urlIds: string[]): Promise<Map<string, { id: string; caseId: string; status: string; flaggedForReview: boolean }>> {
+  if (isDevNoDb()) {
+    const { cases } = await import("@/lib/store");
+    const wanted = new Set(urlIds);
+    const byId = new Map<string, { id: string; caseId: string; status: string; flaggedForReview: boolean }>();
+    for (const record of cases.values()) {
+      for (const url of record.urls) {
+        if (wanted.has(url.id)) {
+          byId.set(url.id, { id: url.id, caseId: record.id, status: url.status, flaggedForReview: Boolean(url.flaggedForReview) });
+        }
+      }
+    }
+    return byId;
+  }
+  const links = await db.submittedUrl.findMany({
+    where: { id: { in: urlIds } },
+    select: { id: true, caseId: true, status: true, flaggedForReview: true },
+  });
+  return new Map(links.map((link) => [link.id, link]));
+}
 
 const schema = z
   .object({
@@ -20,6 +51,10 @@ const schema = z
     urlIds: z.array(z.string().min(1).max(64)).min(1).max(MAX_BULK_LINKS),
     // The survivor sees a rejection, so it needs a reason.
     reason: z.string().trim().min(3).max(500).optional(),
+    // WP145 bulk safety: the caller states the exact count it is about to
+    // decide (the Flagged page's confirm step, typed by hand above ten
+    // items); the route refuses a mismatch before anything runs.
+    confirmedCount: z.number().int().min(1).max(MAX_BULK_LINKS),
   })
   .strict()
   .refine((value) => value.decision === "approve" || Boolean(value.reason), { message: "reason_required" });
@@ -38,12 +73,18 @@ export async function POST(request: Request) {
   }
   const { decision, reason } = parsed.data;
   const urlIds = Array.from(new Set(parsed.data.urlIds));
+  // WP145: the confirmed count must name exactly what will be decided.
+  if (parsed.data.confirmedCount !== urlIds.length) {
+    return NextResponse.json({ error: "count_not_confirmed" }, { status: 400 });
+  }
 
-  const links = await db.submittedUrl.findMany({
-    where: { id: { in: urlIds } },
-    select: { id: true, caseId: true, status: true, flaggedForReview: true },
-  });
-  const byId = new Map(links.map((link) => [link.id, link]));
+  // WP144: a bulk decision over ten items needs a fresh authenticator code.
+  if (urlIds.length > STEP_UP_ABOVE) {
+    const stepUp = requireStepUp(auth.session);
+    if (!stepUp.ok) return NextResponse.json({ error: stepUp.error }, { status: 403 });
+  }
+
+  const byId = await loadWaitingLinks(urlIds);
 
   const results: ItemResult[] = [];
   for (const urlId of urlIds) {
@@ -56,8 +97,20 @@ export async function POST(request: Request) {
       results.push({ urlId, ok: false, error: "not_awaiting_review" });
       continue;
     }
+    if (await isHeldForPossibleMinor("FLAGGED_LINK", urlId)) {
+      results.push({ urlId, ok: false, error: "minor_hold" });
+      continue;
+    }
     try {
       await reviewSubmittedUrl({ caseId: link.caseId, urlId, decision, reviewerId: auth.session.sub, reason });
+      // WP145: one ReviewDecision per decided item, closing its open console
+      // job (the decision itself went through the existing function above).
+      await recordDecisionOnOpenJob({
+        subjectKind: "FLAGGED_LINK",
+        subjectId: urlId,
+        decision,
+        reviewerEmailHash: auth.session.emailHash,
+      });
       results.push({ urlId, ok: true });
     } catch (err) {
       results.push({ urlId, ok: false, error: err instanceof Error ? err.message : "review_failed" });
@@ -66,7 +119,7 @@ export async function POST(request: Request) {
 
   const succeeded = results.filter((result) => result.ok).length;
   await writeAuditLog({
-    eventType: "ADMIN_ACTION",
+    eventType: "ADMIN_BULK_ACTION",
     entityType: "SubmittedUrl",
     entityId: "bulk",
     actorId: auth.session.sub,

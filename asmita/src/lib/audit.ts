@@ -112,6 +112,43 @@ export async function readAuditTrail(entityId: string, limit = 200): Promise<Arr
   }));
 }
 
+/**
+ * Events for several entities (the case and the item under review, WP141),
+ * oldest first — the same shape and order readAuditTrail returns. Memory
+ * mode filters the in-memory array; the database paths read the newest
+ * `limit` rows for those entities and reverse them.
+ */
+export async function readAuditTrailForEntities(
+  entityIds: string[],
+  limit = 200,
+): Promise<Array<Omit<StoredAuditEvent, "eventType"> & { eventType: string }>> {
+  if (entityIds.length === 0) return [];
+  if (!persistsToDatabase()) {
+    const wanted = new Set(entityIds);
+    return inMemoryAuditLog.filter((event) => event.entityId !== undefined && wanted.has(event.entityId));
+  }
+  const rows = usesWorkerKysely()
+    ? await getWorkerDb().selectFrom("audit_log").selectAll().where("entityId", "in", entityIds)
+        .orderBy("sequence", "desc").limit(limit).execute()
+    : await (await import("@/lib/db")).db.auditLog.findMany({
+      where: { entityId: { in: entityIds } },
+      orderBy: { sequence: "desc" },
+      take: limit,
+    });
+  return rows.reverse().map((row) => ({
+    eventType: row.eventType,
+    ...(row.entityType != null ? { entityType: row.entityType } : {}),
+    ...(row.entityId != null ? { entityId: row.entityId } : {}),
+    ...(row.actorId != null ? { actorId: row.actorId } : {}),
+    ...(row.data != null ? { data: row.data as Record<string, unknown> } : {}),
+    ...(row.ipHash != null ? { ipHash: row.ipHash } : {}),
+    sequence: row.sequence,
+    createdAt: row.createdAt.toISOString(),
+    previousHash: row.previousHash,
+    eventHash: row.eventHash,
+  }));
+}
+
 export function verifyAuditChain() {
   return inMemoryAuditLog.every((event, index) => {
     const previous = index === 0 ? "GENESIS" : inMemoryAuditLog[index - 1]?.eventHash;

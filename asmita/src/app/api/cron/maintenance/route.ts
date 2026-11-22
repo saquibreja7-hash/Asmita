@@ -8,6 +8,8 @@ import type { PlatformDirectoryEntry } from "@/lib/platforms";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 import { pruneRateLimitBuckets } from "@/lib/rate-limit";
 import { countFailedDeletionJobs } from "@/lib/case-ops";
+import { syncReviewJobs } from "@/lib/review-jobs";
+import { pruneRoutingLogs } from "@/lib/review-routing";
 import { runOrgRetention } from "@/lib/org-retention";
 import { latestCompletedScorecardPeriod } from "@/lib/scorecard";
 import { ensureLatestScorecardSnapshot } from "@/lib/scorecard-snapshots";
@@ -29,6 +31,8 @@ export async function GET(request: NextRequest) {
     deliverability?: ReturnType<typeof summarizeDeliverability>;
     rateLimitBucketsPruned?: number;
     failedDeletions?: number;
+    reviewJobs?: { enqueued: number; closed: number; moved: number };
+    routingLogsPruned?: number;
     /** Org pages (WP56): closed submissions and stale newsletter sign-ups. */
     orgRetention?: { submissionsDeleted: number; unconfirmedSubscribersDeleted: number };
     /** Platform scorecard (WP58): the DRAFT snapshot for the quarter that just ended. */
@@ -91,6 +95,20 @@ export async function GET(request: NextRequest) {
         route: "/api/cron/maintenance",
       });
     }
+
+    // Review console (WP140): reconcile the review jobs with the source
+    // tables. The maintenance cron is the sync's reliable run; page loads
+    // only top it up lazily.
+    const reviewJobs = await syncReviewJobs(startedAt);
+    result.reviewJobs = {
+      enqueued: reviewJobs.enqueued,
+      closed: reviewJobs.closed,
+      moved: reviewJobs.moved,
+    };
+
+    // Review console (WP143): the routing log is diagnostics ("why is this
+    // here") and is bounded by its retention, not by anything else.
+    result.routingLogsPruned = await pruneRoutingLogs(startedAt);
 
     result.finishedAt = new Date().toISOString();
     return NextResponse.json(result);

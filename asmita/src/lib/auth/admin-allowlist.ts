@@ -50,6 +50,51 @@ export function isAdminEmail(email: string) {
   return envList("ADMIN_EMAILS").some((item) => item.toLowerCase() === normalized);
 }
 
+/**
+ * The allowlist itself (WP144 Admins page). The env var is the one source:
+ * every admin who can sign in is on it.
+ */
+export function listAllowlistedAdminEmails(): string[] {
+  return envList("ADMIN_EMAILS");
+}
+
+/**
+ * Resolves an email hash back to its allowlisted email, or null. Used by the
+ * MFA reset route so the Admins page can target an admin by hash and no full
+ * email address ever travels to the browser.
+ */
+export function allowlistedEmailByHash(emailHash: string): string | null {
+  if (!emailHash) return null;
+  for (const email of envList("ADMIN_EMAILS")) {
+    if (hashEmail(email) === emailHash) return email;
+  }
+  return null;
+}
+
+/**
+ * The Admins page's opaque target key: the hash OF the admin's email hash
+ * (WP144 e2e: the page must never render the single-step hash either, since
+ * it identifies a person across every console row). A key cannot be turned
+ * back into a hash or an email client-side; only this server-side lookup
+ * against the allowlist resolves it.
+ */
+export function adminTargetKey(emailHash: string): string {
+  return hashEmail(emailHash);
+}
+
+/**
+ * Resolves a target key back to its allowlisted admin's email hash, or null
+ * when no allowlisted admin matches. The resolution runs on the server only.
+ */
+export function allowlistedHashByTargetKey(targetKey: string): string | null {
+  if (!targetKey) return null;
+  for (const email of envList("ADMIN_EMAILS")) {
+    const emailHash = hashEmail(email);
+    if (hashEmail(emailHash) === targetKey) return emailHash;
+  }
+  return null;
+}
+
 export function createAdminIdentity(email: string) {
   const emailHash = hashEmail(email);
   return {

@@ -21,6 +21,10 @@ const db = vi.hoisted(() => {
     hashSubmission: { updateMany: fn(), findMany: fn() },
     partnerFeedEvent: { findMany: fn(), createMany: fn() },
     partnerOutcome: { deleteMany: fn() },
+    // The review console's rows about her case go with it (no jobs here).
+    caseNote: { deleteMany: fn() },
+    reviewJob: { findMany: fn() },
+    reviewDecision: { deleteMany: fn() },
     submittedUrl: { findMany: fn(), findFirst: fn(), findUnique: fn(), create: fn(), updateMany: fn(), deleteMany: fn() },
     platform: { findFirst: fn() },
     // WP33: the partner lookup behind the findings gate and the channel
@@ -62,7 +66,7 @@ const zeroCounts: Array<[Record<string, ReturnType<typeof vi.fn>>, string]> = [
   [db.urlPortalToken, "deleteMany"], [db.linkVerification, "deleteMany"], [db.submittedUrl, "deleteMany"], [db.crawlFinding, "deleteMany"],
   [db.crawlConsent, "deleteMany"], [db.partnerShareConsent, "deleteMany"], [db.hashSubmission, "updateMany"],
   [db.partnerFeedEvent, "createMany"], [db.partnerOutcome, "deleteMany"], [db.feedback, "deleteMany"], [db.adminAccessLog, "updateMany"],
-  [db.case, "updateMany"], [db.sessionToken, "deleteMany"],
+  [db.case, "updateMany"], [db.sessionToken, "deleteMany"], [db.caseNote, "deleteMany"], [db.reviewDecision, "deleteMany"],
   [db.otpToken, "deleteMany"], [db.notice, "deleteMany"],
 ];
 
@@ -73,6 +77,7 @@ beforeEach(() => {
     (q as string[]).join("?").includes('FROM "Case"') ? [{ id: "c1" }] : [{ ...CONSENT, caseId: "c1" }]);
   db.$transaction.mockImplementation(async (run: (tx: typeof db) => unknown) => run(db));
   for (const [delegate, method] of zeroCounts) delegate[method].mockResolvedValue({ count: 0 });
+  db.reviewJob.findMany.mockResolvedValue([]);
 
   db.submittedUrl.findMany.mockResolvedValue([]);
   db.submittedUrl.findFirst.mockResolvedValue(null);

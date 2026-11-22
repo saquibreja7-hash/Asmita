@@ -188,6 +188,6 @@ describe("account erasure, Kysely path", () => {
     // WP28 (ADR 008): the erasure also deletes the case's SSCD embeddings,
     // before the findings they belong to.
     expect(kysely.state.calls.filter((call) => call.op === "delete").map((call) => call.table).sort())
-      .toEqual(["CrawlConsent", "CrawlFinding", "Feedback", "FindingEmbedding", "OtpToken", "PartnerOutcome", "PartnerShareConsent", "SessionToken"]);
+      .toEqual(["CaseNote", "CrawlConsent", "CrawlFinding", "Feedback", "FindingEmbedding", "OtpToken", "PartnerOutcome", "PartnerShareConsent", "ReviewDecision", "SessionToken"]);
   });
 });

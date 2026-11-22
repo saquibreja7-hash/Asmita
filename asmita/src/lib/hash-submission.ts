@@ -163,7 +163,12 @@ export type DisplayHashSubmission = {
 };
 
 /** A dev-store row: a display row plus the video frame list (never displayed). */
-type StoredHashSubmission = DisplayHashSubmission & { videoFrames?: string };
+type StoredHashSubmission = DisplayHashSubmission & {
+  videoFrames?: string;
+  /** Review bookkeeping (WP140's memory path for reviewHashSubmission), like the database columns. */
+  reviewedAt?: string;
+  reviewedById?: string | null;
+};
 
 /** The stored row as every caller sees it: display fields only, never frames. */
 function displayOf(row: StoredHashSubmission): DisplayHashSubmission {
@@ -266,6 +271,23 @@ function isVideoItem(item: HashPayloadItem | VideoPayloadItem): item is VideoPay
   return "kind" in item && item.kind === "video";
 }
 
+/**
+ * WP140: a new pending fingerprint opens its review-console job at once,
+ * rather than at the next sync. Best-effort by design: the sync backfills
+ * the job on any failure, and the submission flow never fails because of it.
+ */
+async function enqueueHashReviews(caseId: string, results: AddHashResult[]): Promise<void> {
+  for (const result of results) {
+    if (!result.ok || result.duplicate) continue;
+    try {
+      const { enqueueForReview } = await import("@/lib/review-jobs");
+      await enqueueForReview("FINGERPRINT", result.submission.id, { caseId });
+    } catch {
+      console.error("review_enqueue_failed");
+    }
+  }
+}
+
 export async function addHashesToCase(
   caseId: string,
   items: Array<HashPayloadItem | VideoPayloadItem>,
@@ -317,6 +339,7 @@ export async function addHashesToCase(
     }
     devStore.set(caseId, existing);
     await writeAuditLog({ eventType: "HASH_SUBMITTED", entityType: "Case", entityId: caseId, data: { accepted: results.filter((r) => r.ok).length } });
+    await enqueueHashReviews(caseId, results);
     return results;
   }
 
@@ -402,6 +425,7 @@ export async function addHashesToCase(
     entityId: caseId,
     data: { accepted: results.filter((r) => r.ok).length },
   });
+  await enqueueHashReviews(caseId, results);
 
   return results;
 }
@@ -424,6 +448,11 @@ export function clearMemoryHashesForCase(caseId: string) {
   if (isDevNoDb()) devHashStore().delete(caseId);
 }
 
+/** Test/dev seam: forgets every dev hash-store record (the reset* twins of the other stores). */
+export function resetMemoryHashStore() {
+  globalThis.__asmitaHashStore = undefined;
+}
+
 export type HashReviewQueueRow = DisplayHashSubmission & {
   caseId: string;
   referenceNumber: string;
@@ -433,6 +462,29 @@ export type HashReviewQueueRow = DisplayHashSubmission & {
 };
 
 export async function listHashReviewQueue(): Promise<HashReviewQueueRow[]> {
+  if (isDevNoDb()) {
+    // The dev store's own queue (WP140): the same predicate as the database
+    // path, so the review console and the hashes page agree without a
+    // database in local development.
+    const { cases } = await import("@/lib/store");
+    const now = Date.now();
+    const rows: HashReviewQueueRow[] = [];
+    for (const [caseId, submissions] of devHashStore()) {
+      const referenceNumber = cases.get(caseId)?.referenceNumber ?? "";
+      for (const submission of submissions) {
+        if (submission.status !== "PENDING_REVIEW") continue;
+        rows.push({
+          ...displayOf(submission),
+          caseId,
+          referenceNumber,
+          ageMinutes: Math.max(0, Math.floor((now - new Date(submission.submittedAt).getTime()) / 60_000)),
+          requestedPlatformId: null,
+          requestedPlatformName: null,
+        });
+      }
+    }
+    return rows;
+  }
   const records = await db.hashSubmission.findMany({
     where: { status: "PENDING_REVIEW" },
     include: {
@@ -466,6 +518,22 @@ export type VerifiedPlatformOption = {
 
 // Cases with at least one admin-approved hash, ready for advisory dispatch.
 export async function listDispatchableHashCases(): Promise<DispatchableCase[]> {
+  if (isDevNoDb()) {
+    // The memory twin: the dev hash store plus the store's own references.
+    const { cases } = await import("@/lib/store");
+    const byCase = new Map<string, DispatchableCase>();
+    for (const [caseId, submissions] of devHashStore()) {
+      const referenceNumber = cases.get(caseId)?.referenceNumber ?? "";
+      for (const submission of submissions) {
+        if (submission.status !== "APPROVED" && submission.status !== "DISPATCHED") continue;
+        const entry = byCase.get(caseId) ?? { caseId, referenceNumber, approvedCount: 0, dispatchedCount: 0 };
+        if (submission.status === "APPROVED") entry.approvedCount += 1;
+        else entry.dispatchedCount += 1;
+        byCase.set(caseId, entry);
+      }
+    }
+    return Array.from(byCase.values()).sort((a, b) => a.referenceNumber.localeCompare(b.referenceNumber));
+  }
   const records = await db.hashSubmission.findMany({
     where: { status: { in: ["APPROVED", "DISPATCHED"] } },
     include: { case: { select: { referenceNumber: true } } },
@@ -530,6 +598,14 @@ export async function listHashPickerPlatforms(): Promise<HashPickerPlatform[]> {
 
 // Keep old export for any existing admin callers.
 export async function listVerifiedDispatchPlatforms(): Promise<VerifiedPlatformOption[]> {
+  if (isDevNoDb()) {
+    // The memory twin: the static directory is the dev store's platform
+    // source of truth, with the same id derivation the picker uses.
+    return platformDirectory
+      .filter((platform) => platform.lastContactVerifiedByHuman && platform.grievanceEmail)
+      .map((platform) => ({ id: devPlatformId(platform.id), name: platform.name }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }
   const platforms = await db.platform.findMany({
     where: {
       isActive: true,
@@ -548,6 +624,31 @@ export async function reviewHashSubmission(input: {
   reviewerId?: string;
   reason?: string;
 }): Promise<DisplayHashSubmission> {
+  if (isDevNoDb()) {
+    // WP140: the memory twin of the review, the same rules as the database
+    // path — only a PENDING_REVIEW row can be decided, the reason stays on
+    // the row and the audit entry is the same — so the review console's
+    // memory backend goes through this function like every other caller.
+    for (const [caseId, submissions] of devHashStore()) {
+      const record = submissions.find((item) => item.id === input.hashSubmissionId);
+      if (!record) continue;
+      if (record.status !== "PENDING_REVIEW") throw new Error("hash_submission_already_reviewed");
+      record.status = input.decision === "approve" ? "APPROVED" : "REJECTED";
+      record.flaggedForReview = false;
+      record.flagReason = input.reason ?? record.flagReason;
+      record.reviewedAt = new Date().toISOString();
+      record.reviewedById = input.reviewerId ?? null;
+      await writeAuditLog({
+        eventType: input.decision === "approve" ? "HASH_APPROVED" : "HASH_REJECTED",
+        entityType: "HashSubmission",
+        entityId: input.hashSubmissionId,
+        actorId: input.reviewerId,
+        data: { caseId, reason: input.reason },
+      });
+      return displayOf(record);
+    }
+    throw new Error("hash_submission_not_found");
+  }
   const record = await db.hashSubmission.findUnique({ where: { id: input.hashSubmissionId } });
   if (!record) throw new Error("hash_submission_not_found");
   if (record.status !== "PENDING_REVIEW") throw new Error("hash_submission_already_reviewed");

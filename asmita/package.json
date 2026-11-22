@@ -16,7 +16,7 @@
     "security:audit": "npm audit --audit-level=high --omit=dev",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
-    "postinstall": "prisma generate && node scripts/copy-c2pa-assets.mjs && node scripts/copy-lab-assets.mjs",
+    "postinstall": "prisma generate && node scripts/copy-c2pa-assets.mjs && node scripts/copy-lab-assets.mjs && node scripts/sync-review-guidance.mjs",
     "seed": "prisma db seed",
     "import:platforms": "tsx scripts/import-platforms-csv.ts",
     "dev:vinext": "vinext dev --port 3001",

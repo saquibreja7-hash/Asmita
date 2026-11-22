@@ -33,6 +33,11 @@ const PAGE_FILES: Record<string, string> = {
   "/admin/milestones": "(admin)/milestones/page.tsx",
   "/admin/audit": "(admin)/audit/page.tsx",
   "/admin/lab": "admin/lab/page.tsx",
+  "/admin/review/rules": "(admin)/review/rules/page.tsx",
+  "/admin/review/settings": "(admin)/review/settings/page.tsx",
+  "/admin/review/decisions": "(admin)/review/decisions/page.tsx",
+  "/admin/review/metrics": "(admin)/review/metrics/page.tsx",
+  "/admin/admins": "(admin)/admins/page.tsx",
   "/admin/lab/registry": "admin/lab/registry/page.tsx",
   "/admin/lab/providers": "admin/lab/providers/page.tsx",
 };
@@ -54,8 +59,12 @@ describe("admin nav and page permissions", () => {
 
   it("shows each role only its own work", () => {
     expect(visibleFor("SUPER_ADMIN")).toHaveLength(items.length);
-    expect(visibleFor("GO_EDITOR")).toEqual(["Needs action", "Platforms", "Platform partners", "Response rates", "Analytics", "Milestones", "Audit"]);
-    expect(visibleFor("SUPPORT_AGENT")).toEqual(["Needs action", "Cases", "New links", "Flagged links", "Fingerprints"]);
-    expect(visibleFor("LEGAL_ADVISOR")).toEqual(["Needs action", "Cases", "New links", "Flagged links", "Fingerprints", "Templates", "Audit"]);
+    // The Review console (WP141) is the one nav item every role sees: each
+    // role can reach at least one queue, and the page filters the rows.
+    // The decisions log (WP145) follows audit:read and the metrics page
+    // metrics:read, like the Insight pages they sit beside.
+    expect(visibleFor("GO_EDITOR")).toEqual(["Needs action", "Review", "Decisions log", "Review metrics", "Platforms", "Platform partners", "Response rates", "Analytics", "Milestones", "Audit"]);
+    expect(visibleFor("SUPPORT_AGENT")).toEqual(["Needs action", "Review", "Cases", "New links", "Flagged links", "Fingerprints"]);
+    expect(visibleFor("LEGAL_ADVISOR")).toEqual(["Needs action", "Review", "Decisions log", "Cases", "New links", "Flagged links", "Fingerprints", "Templates", "Audit"]);
   });
 });
