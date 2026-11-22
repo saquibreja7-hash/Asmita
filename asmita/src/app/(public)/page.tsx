@@ -133,7 +133,13 @@ export default async function HomePage() {
   const hi = locale === "hi";
   const say = (en: string, hindi: string) => (hi ? hindi : en);
   const pick = (pair: readonly [string, string]) => (hi ? pair[1] : pair[0]);
-  const news = (await listPublishedOrgPosts({ kind: "NEWS", perPage: 3 })).posts;
+  // The homepage must render even when the database is unreachable (a
+  // Hyperdrive blip, or the E2E dev server answering its readiness probe
+  // before global setup has created its role): news is optional, so a failed
+  // read shows no news rather than a 500.
+  const news = await listPublishedOrgPosts({ kind: "NEWS", perPage: 3 })
+    .then((result) => result.posts)
+    .catch(() => []);
 
   return (
     <AppShell>
