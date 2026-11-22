@@ -64,6 +64,25 @@ const SUBJECTS: Record<LabChokepointKind, string> = {
   PLATFORM_ACCOUNT: "Abuse report: account on your platform ({{SERVICE_NAME}})",
 };
 
+// WP115 (research-tools-spec.md): the bulk variant — one report to one
+// provider listing every selected service that depends on it. Same voice,
+// same legal paragraph and the same per-kind ask as the single template.
+const BULK_SUBJECTS: Record<LabChokepointKind, (count: number) => string> = {
+  HOST: (count) => `Abuse report: ${count} services hosted on your infrastructure`,
+  CDN: (count) => `Abuse report: ${count} services served through your CDN`,
+  REGISTRAR: (count) => `Abuse report: ${count} domains registered through you`,
+  PAYMENT_PROCESSOR: (count) => `Acceptable-use report: ${count} merchants you process payments for`,
+  APP_STORE: (count) => `Policy report: ${count} apps you distribute`,
+  AD_NETWORK: (count) => `Ad policy report: ${count} publishers in your network`,
+  PLATFORM_ACCOUNT: (count) => `Abuse report: ${count} accounts on your platform`,
+};
+
+// Shared paragraphs, so the single and bulk templates cannot drift apart.
+const INTRO_LINE =
+  "We write from the Asmita AI Lab, an independent research team that studies services which create non-consensual intimate images of women (often called 'nudify' tools, or face-swap and 'undress' generators).";
+const LEGAL_PARAGRAPH =
+  "Non-consensual intimate imagery, including artificially morphed images, is prohibited content in India: under the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021 (Rule 3(1)(b)(ii), no hosting or sharing of content invasive of privacy), and it is covered by the MeitY Standard Operating Procedure on Non-Consensual Intimate Imagery (October 2025). The MeitY SOP expressly covers artificially morphed images.";
+
 export type LabReportTemplateData = {
   serviceName: string;
   serviceKind: LabServiceKind;
@@ -96,13 +115,13 @@ export function fillLabReportTemplate(kind: LabChokepointKind, data: LabReportTe
   const body = [
     `To the abuse team at ${data.provider},`,
     "",
-    "We write from the Asmita AI Lab, an independent research team that studies services which create non-consensual intimate images of women (often called 'nudify' tools, or face-swap and 'undress' generators).",
+    INTRO_LINE,
     "",
     `${roleFor(kind)}. The ${LAB_SERVICE_KIND_LABELS[data.serviceKind]} "${data.serviceName}" creates and distributes such images. Its addresses:`,
     "",
     data.serviceUrls.length > 0 ? data.serviceUrls.join("\n") : "<TO_BE_VERIFIED_BY_HUMAN>",
     "",
-    "Non-consensual intimate imagery, including artificially morphed images, is prohibited content in India: under the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021 (Rule 3(1)(b)(ii), no hosting or sharing of content invasive of privacy), and it is covered by the MeitY Standard Operating Procedure on Non-Consensual Intimate Imagery (October 2025). The MeitY SOP expressly covers artificially morphed images.",
+    LEGAL_PARAGRAPH,
     "",
     "Our evidence and observations:",
     "",
@@ -114,4 +133,52 @@ export function fillLabReportTemplate(kind: LabChokepointKind, data: LabReportTe
     "Asmita AI Lab",
   ].join("\n");
   return { subject, body };
+}
+
+/** One service as the bulk template lists it: name, kind label and addresses. */
+export type LabBulkReportService = {
+  name: string;
+  kind: LabServiceKind;
+  urls: string[];
+};
+
+export type LabBulkReportTemplateData = {
+  provider: string;
+  services: LabBulkReportService[];
+  reportDate: string;
+};
+
+/**
+ * WP115 (research-tools-spec.md): renders one abuse report to one provider
+ * that lists every selected service depending on it — the multi-service
+ * variant of fillLabReportTemplate, for drafting one report for several
+ * services at once. The analyst reviews it exactly as a single report.
+ */
+export function fillLabBulkReportTemplate(kind: LabChokepointKind, data: LabBulkReportTemplateData): { subject: string; body: string } {
+  const count = data.services.length;
+  const list = data.services.map((service, index) => {
+    const addresses = service.urls.length > 0 ? service.urls.join("\n") : "<TO_BE_VERIFIED_BY_HUMAN>";
+    return `${index + 1}. "${service.name}" (${LAB_SERVICE_KIND_LABELS[service.kind]})\n${addresses}`;
+  });
+  const body = [
+    `To the abuse team at ${data.provider},`,
+    "",
+    INTRO_LINE,
+    "",
+    `${roleFor(kind)}. The ${count} ${count === 1 ? "service" : "services"} listed below create${count === 1 ? "s" : ""} and distribute such images:`,
+    "",
+    list.join("\n\n"),
+    "",
+    LEGAL_PARAGRAPH,
+    "",
+    "Our evidence and observations:",
+    "",
+    "Our automated infrastructure scans recorded each listed service as depending on you in the role above. We can share per-service evidence on request.",
+    "",
+    `We ask you to ${ASKS[kind]}. This is a policy complaint to your company as a provider ${count === 1 ? "the service" : "these services"} depend${count === 1 ? "s" : ""} on; it is not a grievance under the IT Rules, which the services' own platforms must handle.`,
+    "",
+    `Date: ${data.reportDate}`,
+    "Asmita AI Lab",
+  ].join("\n");
+  return { subject: BULK_SUBJECTS[kind](count), body };
 }

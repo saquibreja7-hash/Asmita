@@ -1,0 +1,27 @@
+tx-extension-asmita — NOTICES
+
+This package is original Asmita code (BSD-3-Clause; the licence text is in
+LICENSE next to this file).
+
+It implements the SignalExchangeAPI, CredentialHelper and
+ThreatExchangeExtensionManifest interfaces published by Meta's
+ThreatExchange project:
+
+  https://github.com/meta/ThreatExchange
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+  Licensed under the BSD licence ("BSD License For ThreatExchange
+  software"); the text is reproduced in this package's LICENSE file and
+  upstream at https://github.com/meta/ThreatExchange/blob/main/LICENSE .
+
+The `threatexchange` Python package is a required dependency of this
+package (threatexchange>=1.2.18,<2) and is NOT vendored here. No
+ThreatExchange source code, signal type, or model is copied into this
+package; only the interface is implemented, and the vPDQ signal string
+Asmita's feed serves mirrors python-threatexchange's documented
+serialization (threatexchange/extensions/vpdq/vpdq_util.py::vpdq_to_json)
+for interoperability.
+
+Meta's name is used here only to identify the upstream project and its
+licence; nothing here is endorsed by or affiliated with Meta. Asmita is
+not published on PyPI; the owner distributes the wheel built from this
+directory.

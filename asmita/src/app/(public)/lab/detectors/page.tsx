@@ -20,6 +20,9 @@ export const dynamic = "force-dynamic";
 // never claims certainty. Like every Lab tool page it answers 404 while
 // ENABLE_LAB is off, carries the Beta badge, the one-sentence limits note
 // and the site's under-18 pointer, and every string is translated (en, hi).
+// WP113 adds the fourth row: GenD, the Lab's own open-model face-swap
+// detector service, with the credits disclosure every research tool owes
+// its sources.
 
 export default async function DetectorPanelPage() {
   if (!labEnabled()) notFound();
@@ -64,7 +67,50 @@ export default async function DetectorPanelPage() {
             <p className="mx-auto mt-5 max-w-2xl text-[16px] leading-[1.7] text-[var(--text)]">
               {t(locale, "lab.detectors.explainer.body")}
             </p>
+            <p className="muted mx-auto mt-4 max-w-2xl text-sm leading-[1.7]">
+              {t(locale, "lab.detectors.gend.limits")}
+            </p>
             <p className="muted mx-auto mt-6 max-w-2xl text-sm leading-[1.7]">{t(locale, "lab.detectors.privacy")}</p>
+          </div>
+        </section>
+
+        {/* SOURCES AND CREDITS */}
+        <section className="section-pad" aria-labelledby="detectors-credits">
+          <div className="container">
+            <h2 id="detectors-credits" className="section-title">{t(locale, "lab.detectors.credits.title")}</h2>
+            <ul className="mx-auto mt-5 max-w-2xl space-y-4 text-[15px] leading-[1.7] text-[var(--text)]">
+              <li>
+                {t(locale, "lab.detectors.credits.gend")}{" "}
+                <a
+                  href="https://arxiv.org/abs/2508.06248"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link-underline"
+                >
+                  {t(locale, "lab.detectors.gend.paper")}
+                </a>
+                {" · "}
+                <a
+                  href="https://github.com/yermandy/GenD"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link-underline"
+                >
+                  {t(locale, "lab.detectors.gend.code")}
+                </a>
+              </li>
+              <li>
+                {t(locale, "lab.detectors.credits.yunet")}{" "}
+                <a
+                  href="https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link-underline"
+                >
+                  {t(locale, "lab.detectors.credits.zoo")}
+                </a>
+              </li>
+            </ul>
           </div>
         </section>
       </div>

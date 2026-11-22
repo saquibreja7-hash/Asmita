@@ -44,6 +44,12 @@ export default async function LabDashboardPage() {
           <Link href="/admin/lab/services" className="mt-3 inline-block text-sm underline">
             Services and chokepoints
           </Link>
+          <Link href="/admin/lab/registry" className="mt-1 inline-block text-sm underline">
+            Service registry (scans, clusters)
+          </Link>
+          <Link href="/admin/lab/providers" className="mt-1 inline-block text-sm underline">
+            Provider directory and bulk reports
+          </Link>
         </div>
         <div className="a-card p-4">
           <p className="eyebrow">Reports</p>

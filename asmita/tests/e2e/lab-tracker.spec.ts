@@ -2,12 +2,14 @@
 // renders the E2 aggregate numbers from labPublicNumbers(). On the fresh e2e
 // database no Lab row exists, so the page shows the honest empty state; the
 // journey also proves the page never links a service (every anchor inside
-// <main> stays on this site) and that the method is explained in plain words.
-// This spec sorts before lab.spec.ts (which seeds Lab rows for its own
-// journey), so the empty state is what the fresh database still shows. No
-// network, no uploads, nothing invented beyond the page itself.
+// <main> stays on this site, except the WP115 research citations) and that
+// the method is explained in plain words. This spec sorts before lab.spec.ts
+// (which seeds Lab rows for its own journey), so the empty state is what the
+// fresh database still shows. No network, no uploads, nothing invented
+// beyond the page itself.
 
 import { expect, test } from "@playwright/test";
+import { isLabResearchCreditUrl } from "@/lib/lab/research-credits";
 
 test.describe("AI Lab service tracker, WP92", () => {
   test("renders the honest empty state and explains the method", async ({ page }) => {
@@ -32,13 +34,15 @@ test.describe("AI Lab service tracker, WP92", () => {
     await expect(page.getByText(/an automatic check sends one small request to each recorded address/)).toBeVisible();
 
     // No service is ever named or linked: every anchor in the page's content
-    // stays inside this site.
+    // is either an internal link or one of the WP115 research citations.
+    // Research papers are neither a service nor a provider; nothing else
+    // may leave the site.
     const hrefs = await page.locator("main a").evaluateAll((links) =>
       links.map((link) => (link as HTMLAnchorElement).getAttribute("href") ?? ""),
     );
     expect(hrefs.length).toBeGreaterThan(0);
     for (const href of hrefs) {
-      expect(href.startsWith("/")).toBe(true);
+      expect(href.startsWith("/") || isLabResearchCreditUrl(href), `unexpected external link: ${href}`).toBe(true);
     }
   });
 

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as check } from "@/app/api/lab/message-check/route";
 import { createCsrfPair } from "@/lib/csrf";
 import { securityEvents } from "@/lib/security-log";
+import { countsAsFinding, detectedElements } from "@/lib/lab/message-check/elements";
 
 let ipCounter = 10;
 
@@ -31,6 +32,20 @@ function checkRequest(body: unknown, options: { csrf?: boolean; ip?: string } = 
 function sarvamReply(content: string) {
   return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
 }
+
+// Invented everyday messages the committed model labels on its own (also in
+// tools/lab-sextortion/eval/negatives.jsonl, family shortChat).
+const SHORT_HARMLESS = [
+  "hi",
+  "hi there",
+  "good morning",
+  "Abhi aata hoon",
+  "Hi! Are we still on for lunch tomorrow?",
+  "ok",
+  "hii",
+  "Delhi",
+  "Please call me back",
+];
 
 const THREAT =
   "I have your nudes. Send 50000 rupees in bitcoin within 24 hours or I send everything to your family. The proof is at https://proof.example.test/x";
@@ -117,6 +132,68 @@ describe("/api/lab/message-check", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("runs the classifier too: labels, the flag, and stage-chosen advice, never a score", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await check(checkRequest({ text: THREAT }));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      matches: string[];
+      labels: string[];
+      flagged: boolean;
+      advice: string[];
+      summary: string | null;
+    };
+    // The classifier saw the demand and the clock (WP117 labels).
+    expect(body.labels).toContain("DEMAND_MONEY");
+    expect(body.labels).toContain("DEADLINE");
+    expect(body.flagged).toBe(true);
+    // Stage-chosen advice: non-blaming first, reporting last things include.
+    expect(body.advice[0]).toBe("notYourFault");
+    expect(body.advice).toContain("report");
+    // No score, probability or percentage ever leaves the isolate.
+    expect(Object.keys(body).sort()).toEqual(["advice", "flagged", "labels", "matches", "summary"]);
+    expect(JSON.stringify(body)).not.toMatch(/score|percent|probability/i);
+  });
+
+  it("answers a harmless message with no flag, no labels and no advice", async () => {
+    const response = await check(checkRequest({ text: "shaadi ki video bhej do na, dekhne ka mann hai." }));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      matches: string[];
+      labels: string[];
+      flagged: boolean;
+      advice: string[];
+    };
+    expect(body.flagged).toBe(false);
+    expect(body.labels).toEqual([]);
+    expect(body.advice).toEqual([]);
+    expect(body.matches).toEqual([]);
+  });
+
+  // PR #114 review: on short everyday text a single classifier label can
+  // cross its threshold with nothing behind it (DEADLINE on "hi", VICTIM_PLEA
+  // on "ok"). None of these may show a label, advice or the warning headline.
+  it.each(SHORT_HARMLESS)("answers the short harmless message %j with no finding at all", async (text) => {
+    const response = await check(checkRequest({ text }));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      matches: string[];
+      labels: string[];
+      flagged: boolean;
+      advice: string[];
+      minor?: boolean;
+    };
+    expect(body.minor).toBeUndefined();
+    expect(body.flagged).toBe(false);
+    expect(body.labels).toEqual([]);
+    expect(body.advice).toEqual([]);
+    expect(body.matches).toEqual([]);
+    // What the page would show: no element sentence, so no warning headline.
+    const elements = detectedElements(body.matches as never[], body.labels as never[]);
+    expect(countsAsFinding(elements, body.flagged)).toBe(false);
+  });
+
   it("routes a stated age under 18 to the minor pathway before anything runs", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", fetchMock);
@@ -127,6 +204,21 @@ describe("/api/lab/message-check", () => {
     expect(body).toEqual({ minor: true, redirectTo: "/minor-support" });
     // The tool did not run: no analysis, no model call, no link fetched.
     expect(body.matches).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("also routes when only the classifier's MINOR_SIGNAL fires (the rule set alone would miss it)", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("SARVAM_CHAT_KEY", "test-key");
+    // A school statement the WP93 minor rules do not match ("class 10 ki"
+    // is not one of their patterns) but the classifier labels MINOR_SIGNAL.
+    const text = "main class 10 ki student hoon";
+    expect((await import("@/lib/lab/message-check/patterns")).routeToMinorSupport(text)).toBe(false);
+    const response = await check(checkRequest({ text }));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { minor: boolean; redirectTo: string };
+    expect(body).toEqual({ minor: true, redirectTo: "/minor-support" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

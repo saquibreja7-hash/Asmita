@@ -15,12 +15,23 @@ import { GET as getFeed } from "@/app/api/partner/v1/fingerprints/route";
 import { inMemoryAuditLog } from "@/lib/audit";
 import { crawlMemory, resetCrawlMemory } from "@/lib/crawl-store";
 import { hashPartnerKey, issuePartnerKey } from "@/lib/partner-auth";
-import { syncPartnerFeedFingerprints } from "@/lib/partner-feed";
+import { PARTNER_FEED_SETTLE_SECONDS, syncPartnerFeedFingerprints } from "@/lib/partner-feed";
 import { recordPartnerShareConsent, withdrawPartnerShareConsent } from "@/lib/partner-share-consent";
 import { partnerMemory, resetPartnerMemory } from "@/lib/partner-store";
 import { cases, type CaseRecord } from "@/lib/store";
 
 const HEX_A = "ab".repeat(32);
+
+/**
+ * The feed holds back events younger than PARTNER_FEED_SETTLE_SECONDS; these
+ * tests poll right after writing, so they age every memory event past the
+ * window first (all by the same amount, order unchanged).
+ */
+function settleFeed() {
+  for (const event of partnerMemory().feedEvents) {
+    event.createdAt = new Date(new Date(event.createdAt).getTime() - (PARTNER_FEED_SETTLE_SECONDS + 1) * 1000);
+  }
+}
 
 function seedPartner(id: string, overrides: Record<string, unknown> = {}) {
   partnerMemory().partners.set(id, {
@@ -104,6 +115,7 @@ describe("GET /api/partner/v1/fingerprints", () => {
     await seedSharedFingerprint();
     const keyA = await seedKey(seedPartner("partner-a"));
     const keyB = await seedKey(seedPartner("partner-b"));
+    settleFeed();
 
     const pageA = await getFeed(request(keyA));
     const pageB = await getFeed(request(keyB));
@@ -137,6 +149,7 @@ describe("GET /api/partner/v1/fingerprints", () => {
       expect((await getFeed(request(key, bad))).status).toBe(400);
     }
 
+    settleFeed();
     const first = await getFeed(request(key, "?limit=3"));
     const firstBody = (await first.json()) as { events: unknown[]; nextCursor: number };
     expect(firstBody.events).toHaveLength(3);
@@ -154,6 +167,7 @@ describe("GET /api/partner/v1/fingerprints", () => {
     const key = await seedKey(partnerId);
     await seedSharedFingerprint();
     await withdrawPartnerShareConsent("case-1");
+    settleFeed();
 
     const page = await getFeed(request(key));
     expect(await page.json()).toEqual({

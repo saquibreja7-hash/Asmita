@@ -20,6 +20,15 @@ describe("admin permissions", () => {
     expect(listAdminPermissions("GO_EDITOR")).toEqual(["platforms:edit", "metrics:read", "audit:read"]);
   });
 
+  it("gives the org-page permissions to SUPER_ADMIN only (docs/org/spec.md)", () => {
+    expect(hasAdminPermission("SUPER_ADMIN", "content:manage")).toBe(true);
+    expect(hasAdminPermission("SUPER_ADMIN", "outreach:manage")).toBe(true);
+    for (const role of ["LEGAL_ADVISOR", "CASE_REVIEWER", "GO_EDITOR", "SUPPORT_AGENT"] as const) {
+      expect(hasAdminPermission(role, "content:manage")).toBe(false);
+      expect(hasAdminPermission(role, "outreach:manage")).toBe(false);
+    }
+  });
+
   it("grants the AI Lab to SUPER_ADMIN only", () => {
     expect(hasAdminPermission("SUPER_ADMIN", "lab:manage")).toBe(true);
     expect(listAdminPermissions("SUPER_ADMIN")).toContain("lab:manage");

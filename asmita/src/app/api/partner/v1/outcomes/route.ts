@@ -41,7 +41,7 @@ const ERROR_STATUS: Record<string, number> = {
 };
 
 export async function POST(request: Request) {
-  const auth = await authenticatePartner(request, "v1/outcomes", OUTCOME_REQUESTS_PER_HOUR);
+  const auth = await authenticatePartner(request, "v1/outcomes", OUTCOME_REQUESTS_PER_HOUR, "outcomes");
   if (!auth.ok) return auth.response;
 
   const body = await readPartnerBody(request, outcomeSchema);

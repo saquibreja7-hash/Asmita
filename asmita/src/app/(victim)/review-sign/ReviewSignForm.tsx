@@ -10,6 +10,7 @@ import { FormError } from "@/components/FormError";
 import { FormHandoff } from "@/components/FormHandoff";
 import { platformDirectory } from "@/lib/platforms";
 import { checkLink, matchPlatform } from "@/lib/link-check";
+import { signAnswer } from "@/lib/sign-retry";
 import { QUALITY_KEYS, joinNames, linkPlatformName, numbered, qualityLevel } from "./review-summary";
 import { bestFrameQuality } from "@/lib/pdq/vpdq";
 
@@ -77,9 +78,8 @@ function advisoryPreviewUrl(caseId: string, ref: string | null) {
   return ref ? `${base}?templateRef=${encodeURIComponent(ref)}` : base;
 }
 
-function signErrorMessage(locale: Locale, error: string | undefined) {
+function signErrorMessage(locale: Locale, error: string) {
   if (error === "notice_changed_since_preview") return t(locale, "review.sign.error.noticeChanged");
-  if (error === "already_signed") return t(locale, "review.sign.error.alreadySigned");
   if (error === "name_script_unsupported") return t(locale, "review.sign.error.nameScript");
   if (error === "notice_pdf_failed") return t(locale, "review.sign.error.pdf");
   return t(locale, "review.sign.error.timeout");
@@ -299,19 +299,26 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        if (data.error === "notice_changed_since_preview") {
-          // Show the current text and ask for a fresh review and confirmation.
-          const current = await fetch(`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(noticeUrlId)}`);
-          const ref = noticeRef(current);
-          if (ref) {
-            setTemplateRef(ref);
-            setPreviewUrl(noticePreviewUrl(caseId, noticeUrlId, ref));
+        const answer = signAnswer(false, data.error);
+        if (answer.kind === "error") {
+          if (answer.code === "notice_changed_since_preview") {
+            // Show the current text and ask for a fresh review and confirmation.
+            const current = await fetch(`/api/cases/${caseId}/preview-notice?urlId=${encodeURIComponent(noticeUrlId)}`);
+            const ref = noticeRef(current);
+            if (ref) {
+              setTemplateRef(ref);
+              setPreviewUrl(noticePreviewUrl(caseId, noticeUrlId, ref));
+            }
+            setAgreed(false);
           }
-          setAgreed(false);
+          setError(signErrorMessage(locale, answer.code));
+          setStep("sign");
+          return;
         }
-        setError(signErrorMessage(locale, data.error));
-        setStep("sign");
-        return;
+        // 409 already_signed: this notice was signed by an earlier attempt
+        // whose answer never arrived (WP131's dropped exchange). It is
+        // signed, so continue below exactly like a successful sign — the
+        // next notice is fetched, and the journey moves on.
       }
       // Each link has its own notice. If another is ready, sign it here too;
       // the confirmation is given again for every notice.
@@ -353,18 +360,24 @@ export function ReviewSignForm({ locale, email }: { locale: Locale; email: strin
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        if (data.error === "notice_changed_since_preview") {
-          const current = await fetch(`/api/cases/${caseId}/preview-hash-advisory`);
-          const ref = noticeRef(current);
-          if (ref) {
-            setTemplateRef(ref);
-            setPreviewUrl(advisoryPreviewUrl(caseId, ref));
+        const answer = signAnswer(false, data.error);
+        if (answer.kind === "error") {
+          if (answer.code === "notice_changed_since_preview") {
+            const current = await fetch(`/api/cases/${caseId}/preview-hash-advisory`);
+            const ref = noticeRef(current);
+            if (ref) {
+              setTemplateRef(ref);
+              setPreviewUrl(advisoryPreviewUrl(caseId, ref));
+            }
+            setAgreed(false);
           }
-          setAgreed(false);
+          setError(signErrorMessage(locale, answer.code));
+          setStep("hash-sign");
+          return;
         }
-        setError(signErrorMessage(locale, data.error));
-        setStep("hash-sign");
-        return;
+        // 409 already_signed: the advisory was signed by an earlier attempt
+        // whose answer never arrived (WP131's dropped exchange). It is
+        // signed, so continue below exactly like a successful sign.
       }
       if (pendingFormPlatforms.length > 0) {
         await acknowledgeSubmission(caseId);

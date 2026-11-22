@@ -14,10 +14,14 @@
     "Crawl authorisation text (crawl-consent draft on the case page) - legally consequential signing text, English only; the surrounding crawl.* labels are translated",
     "Partner-sharing agreement text (partner-share draft on the case page) - legally consequential, English only; the surrounding partnerShare.* labels are translated",
     "Platform-specific reporting notes in /resources - references English-language UIs",
-    "/privacy - sections s01-s16 were translated 2026-06-16 (commit 03eb3df); the sections added or reworded on 19 November 2026 (WP29: fingerprints, video, crawler, watch, partner-sharing, sscd, platform-partners, and the edited tldr/s01/s03/s04/s05/s07/s08/s09/s10/s13 keys) are English only, per the owner's instruction, until a Hindi pass is run on them"
+    "/privacy - sections s01-s16 were translated 2026-06-16 (commit 03eb3df); the sections added or reworded on 19 November 2026 (WP29: fingerprints, video, crawler, watch, partner-sharing, sscd, platform-partners, and the edited tldr/s01/s03/s04/s05/s07/s08/s09/s10/s13 keys) are English only, per the owner's instruction, until a Hindi pass is run on them",
+    "/for-platforms/trusted-flagger - written for platform Trust & Safety and grievance teams, English only",
+    "/lab/open-tools/[slug] - tool page bodies are written for technical teams, English only (spec Part C6, like /for-platforms); the chrome around the body (breadcrumb, aside, section headings, chips, credit) is translated and the Hindi locale shows a one-line notice",
+    "/lab/stacks/[slug] - stack page bodies are written for technical teams, English only (spec Part C6, like /for-platforms); the chrome around the body (breadcrumb, fact-box labels, step labels, plan columns) is translated and the Hindi locale shows a one-line notice",
+    "/lab/open-tools/how-we-choose - the body is written for technical teams, English only (spec Part C6, like /for-platforms); the chrome around the body (breadcrumb, notice, section headings, the suggest button) is translated and the Hindi locale shows a one-line notice"
   ],
   "machineTranslated": {
-    "by": "Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request. Site-chrome keys added by the web audit (WP39) machine-translated by Hermes (GLM 5.3) on 2026-11-19, same formal register, pending native review.; WP40 strings (2026-11-20) drafted by Hermes (GLM 5.3), pending native review; the WP35 batch (check.hero.report, check.research.line, check.research.read and the reworded check.result.noneFound.body, check.deep.result.none.body, check.disclaimer, plus the deepfakes issue-page strings) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP38 batch (the new check.c2pa.*, check.meta.title, check.google.line, check.deep.unavailable and the reworded check.deep.body, check.deep.consent) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP76 lab.trace.* batch (the /lab/trace page) drafted by Hermes (GLM 5.3), 2026-11-21, same formal register, pending native review; the WP93 lab.message-check.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review; the WP94 lab.stamp.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review; the WP95 lab.spot-the-fake.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review, plus the Hindi tell and scene sentences inside public/lab/spot-the-fake/quiz.json (the quiz manifest), same formal register; the WP96 lab.tools.* hub strings and the /sitemap page's AI Lab labels (2026-11-21) machine translated by Hermes (GLM 5.3), same formal register, pending native review",
+    "by": "Machine translated by Hermes (GLM 5.3), 2026-11-21 for the partnerships pages (docs/org/spec.md, WP57) and the advocacy pages (WP58: org.policy.*, org.research.*, org.scorecard.*, org.press.*, nav.scorecard), 2026-11-20 for the other organization pages (WP56); previously: Sarvam Translate (sarvam-translate:v1, formal), 2026-11-01, at Saquib's request. Site-chrome keys added by the web audit (WP39) machine-translated by Hermes (GLM 5.3) on 2026-11-19, same formal register, pending native review.; WP40 strings (2026-11-20) drafted by Hermes (GLM 5.3), pending native review; the WP35 batch (check.hero.report, check.research.line, check.research.read and the reworded check.result.noneFound.body, check.deep.result.none.body, check.disclaimer, plus the deepfakes issue-page strings) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP38 batch (the new check.c2pa.*, check.meta.title, check.google.line, check.deep.unavailable and the reworded check.deep.body, check.deep.consent) machine translated by Hermes (GLM 5.3), 2026-11-19; the WP76 lab.trace.* batch (the /lab/trace page) drafted by Hermes (GLM 5.3), 2026-11-21, same formal register, pending native review; the WP93 lab.message-check.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review; the WP94 lab.stamp.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review; the WP95 lab.spot-the-fake.* strings (2026-11-21) machine translated by Hermes (GLM 5.3), pending native review, plus the Hindi tell and scene sentences inside public/lab/spot-the-fake/quiz.json (the quiz manifest), same formal register; the WP96 lab.tools.* hub strings and the /sitemap page's AI Lab labels (2026-11-21) machine translated by Hermes (GLM 5.3), same formal register, pending native review; the WP115 lab.tracker.depends.*, lab.tracker.changed.*, lab.tracker.method.depends.* and lab.tracker.research.* strings (2026-11-22) machine translated by Hermes (GLM 5.3), same formal register, pending native review (lab.tracker.depends.payment and lab.tracker.depends.crypto reworded 2026-11-22 to match what is counted, Hindi edited by Claude, pending native review); research-paper and report titles cited on /lab/tracker stay in English in both languages, as citations; WP117 additions to lab.message-check.* (2026-11-22: the classifier's element and advice sentences, the how-this-check-works section and the result limit line) drafted by Hermes (GLM 5.3), same formal register, pending native review; lab.message-check.how.synthetic reworded 2026-11-22 (PR #114 review: the evaluation numbers) by an AI assistant (Claude), same formal register, pending native review; WP113 lab.detectors.* additions (the GenD detector row's note, no-face message, limits line and the sources-and-credits disclosure, 2026-11-22) machine translated by Hermes (GLM 5.3), same formal register, pending native review; WP151 lab.openTools.* and lab.sections.* strings and the /sitemap page's /lab/open-tools label (2026-11-22) machine translated by Hermes (GLM 5.3), same formal register, pending native review. The catalogue's Hindi card summaries (summary.hi) were written with the WP150 data and are noted there. The WP152 lab.openTools.tool.* strings (the tool pages' chrome: breadcrumb, aside labels, section headings, the three credit cards, the code-copy buttons, the closing band and the English-only notice) were machine translated by Hermes (GLM 5.3) on 2026-11-22, same formal register, pending native review. The WP153 lab.stacks.* strings (the stacks index hero and card chrome, and the stack pages' chrome: breadcrumb, fact-box labels, step labels, plan columns and the closing bands) plus the /sitemap page's /lab/stacks label were machine translated by Hermes (GLM 5.3) on 2026-11-22, same formal register, pending native review; the Hindi stack-card text (the hi block on each stack in the WP150 data) was written with this WP and is noted in open-tools-progress.md. The WP155 lab.openTools.how.* strings (the how-we-choose page's chrome: title, lede, section headings) plus the /sitemap page's /lab/open-tools/how-we-choose label were machine translated by Hermes (GLM 5.3) on 2026-11-22, same formal register, pending native review.",
     "keys": [
       "talk.*",
       "privacy.s08.i5.*",
@@ -89,6 +93,17 @@
       "submit.hash.fileHint",
       "review.fingerprints.videoItem",
       "review.fingerprints.video",
+      "org.*",
+      "nav.getInvolved",
+      "nav.getInvolvedOverview",
+      "nav.partner",
+      "nav.volunteer",
+      "nav.careers",
+      "nav.training",
+      "nav.newsletter",
+      "nav.news",
+      "nav.scorecard",
+      "nav.policy",
       "lab.*",
       "review.sign.error.nameRequired",
       "review.sign.error.contact",
@@ -146,23 +161,16 @@
       "lab.message-check.*",
       "lab.stamp.*",
       "lab.spot-the-fake.*",
-      "lab.tools.*"
+      "lab.tools.*",
+      "lab.openTools.*",
+      "lab.sections.*",
+    "lab.stacks.*"
     ],
     "inline": [
       "home helpline card, Talk to us button and Supported by label",
       "about page Sarvam line",
       "footer helpline label",
       "deepfakes issue page definition, what-you-can-do and research line (issue-content-hi.ts, WP35)"
-    ]
-  },
-  "pendingNativeReview": {
-    "note": "Drafted without a native-speaker review; review before treating as final.",
-    "keys": [
-      "crawl.*",
-      "case.found.*",
-      "partnerShare.*",
-      "quickexit.button",
-      "quickexit.buttonAria"
     ]
   },
   "machineTranslatedWp48": {
@@ -179,5 +187,15 @@
       "talk.error.unavailable"
     ],
     "note": "chat.reply.link, chat.reply.minor and chat.reply.private were moved from hard-coded text in the chat route with their wording unchanged; they are covered by the chat.* entry above."
+  },
+  "pendingNativeReview": {
+    "note": "Drafted without a native-speaker review; review before treating as final.",
+    "keys": [
+      "crawl.*",
+      "case.found.*",
+      "quickexit.button",
+      "quickexit.buttonAria",
+      "partnerShare.*"
+    ]
   }
 }

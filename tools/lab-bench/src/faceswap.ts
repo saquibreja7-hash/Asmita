@@ -162,7 +162,14 @@ export async function swapFace(target: Buffer, source: Buffer, targetFace: Detec
     .ensureAlpha()
     .png()
     .toBuffer();
-  const patch = await sharp(scaled).extract(g.window).png().toBuffer();
+  // The geometry clamps the window to its own estimate of the rotated,
+  // scaled canvas, but sharp's rounding can make the real canvas a pixel
+  // smaller. Clamping the extract region here (trimming only the far edge,
+  // never the eye-aligned origin) keeps every alignment number intact.
+  const scaledMeta = await sharp(scaled).metadata();
+  const winWidth = Math.max(1, Math.min(g.window.width, (scaledMeta.width ?? g.window.width) - g.window.left));
+  const winHeight = Math.max(1, Math.min(g.window.height, (scaledMeta.height ?? g.window.height) - g.window.top));
+  const patch = await sharp(scaled).extract({ left: g.window.left, top: g.window.top, width: winWidth, height: winHeight }).png().toBuffer();
 
   // Colour match: shift the patch toward the target face's mean colour.
   const patchMean = await meanColor(patch);
@@ -181,19 +188,36 @@ export async function swapFace(target: Buffer, source: Buffer, targetFace: Detec
   const shifted = shift.some((v) => v !== 0) ? await shiftColors(patch, shift) : patch;
 
   // Feathered elliptical mask over the mapped face box, premultiplied in.
+  // The mask carries the actual (possibly trimmed) patch dimensions; its
+  // centre keeps the window-relative position of the face-box centre.
   const mask = await ellipseMask(
-    g.window.width,
-    g.window.height,
-    g.window.width / 2,
-    g.window.height / 2,
+    winWidth,
+    winHeight,
+    winWidth / 2,
+    winHeight / 2,
     (sourceFace.box.w * g.scale / 2) * FACESWAP_MASK,
     (sourceFace.box.h * g.scale / 2) * FACESWAP_MASK,
   );
   const masked = await sharp(shifted).composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
 
+  // Clip the patch to the target's canvas. The patch position is clamped to
+  // >= 0 but the window itself can overhang the right/bottom edge when the
+  // face box plus its margin is larger than the target (equal-size
+  // portraits do this), and sharp refuses to composite a larger input — the
+  // overhanging part is cut, never the face inside the feathered ellipse.
+  const clipWidth = Math.min(winWidth, targetMeta.width - g.patchPos.x);
+  const clipHeight = Math.min(winHeight, targetMeta.height - g.patchPos.y);
+  const clipped =
+    clipWidth !== winWidth || clipHeight !== winHeight
+      ? await sharp(masked)
+          .extract({ left: 0, top: 0, width: Math.max(1, clipWidth), height: Math.max(1, clipHeight) })
+          .png()
+          .toBuffer()
+      : masked;
+
   const out = await sharp(targetUp)
     .ensureAlpha()
-    .composite([{ input: masked, left: g.patchPos.x, top: g.patchPos.y }])
+    .composite([{ input: clipped, left: g.patchPos.x, top: g.patchPos.y }])
     .png()
     .toBuffer();
   return jpegNearLossless(out);

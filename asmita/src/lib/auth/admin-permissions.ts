@@ -19,6 +19,11 @@ export type AdminPermission =
   | "findings:review"
   // Manage the sites the crawler visits (src/lib/crawl-sources.ts).
   | "crawler:manage"
+  // Organization pages (docs/org/spec.md): posts, jobs, events and, in
+  // WP58, scorecard publishing.
+  | "content:manage"
+  // Organization pages: outreach submissions and the newsletter list.
+  | "outreach:manage"
   // Manage the AI Lab (docs/lab/charter.md): E2 services, chokepoints,
   // reports and its dashboard. SUPER_ADMIN only.
   | "lab:manage"
@@ -40,6 +45,8 @@ const rolePermissions: Record<AdminRole, ReadonlySet<AdminPermission>> = {
     "audit:read",
     "findings:review",
     "crawler:manage",
+    "content:manage",
+    "outreach:manage",
     "lab:manage",
     "review:manage",
   ]),

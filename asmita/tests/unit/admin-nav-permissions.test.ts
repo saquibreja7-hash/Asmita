@@ -17,8 +17,17 @@ const PAGE_FILES: Record<string, string> = {
   "/admin/crawler": "(admin)/crawler/page.tsx",
   "/admin/crawl-sources": "(admin)/crawl-sources/page.tsx",
   "/admin/platforms": "(admin)/platforms/page.tsx",
-  "/admin/partners": "(admin)/partners/page.tsx",
+  // Renamed to platform-partners on this branch (WP57); master's re-export
+  // under src/app/admin/partners points at the same file.
+  "/admin/partners": "(admin)/platform-partners/page.tsx",
   "/admin/templates": "(admin)/templates/page.tsx",
+  "/admin/org/posts": "(admin)/org/posts/page.tsx",
+  "/admin/org/submissions": "(admin)/org/submissions/page.tsx",
+  "/admin/org/jobs": "(admin)/org/jobs/page.tsx",
+  "/admin/org/events": "(admin)/org/events/page.tsx",
+  "/admin/org/partners": "(admin)/org/partners/page.tsx",
+  "/admin/org/newsletter": "(admin)/org/newsletter/page.tsx",
+  "/admin/org/scorecard": "(admin)/org/scorecard/page.tsx",
   "/admin/metrics": "(admin)/response-rates/page.tsx",
   "/admin/analytics": "(admin)/analytics/page.tsx",
   "/admin/milestones": "(admin)/milestones/page.tsx",
@@ -29,6 +38,8 @@ const PAGE_FILES: Record<string, string> = {
   "/admin/review/decisions": "(admin)/review/decisions/page.tsx",
   "/admin/review/metrics": "(admin)/review/metrics/page.tsx",
   "/admin/admins": "(admin)/admins/page.tsx",
+  "/admin/lab/registry": "admin/lab/registry/page.tsx",
+  "/admin/lab/providers": "admin/lab/providers/page.tsx",
 };
 
 const items = ADMIN_NAV.flatMap((group) => group.items);

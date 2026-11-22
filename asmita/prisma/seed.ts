@@ -6,6 +6,7 @@ import {
   PrismaClient,
   UserRole,
 } from "@prisma/client";
+import { labProviderSeeds } from "./lab-provider-seeds";
 import { platformSeedCreateData, platformSeedUpdateData } from "./platform-seed-data";
 import { templateSeeds } from "./template-seeds";
 import { SYSTEM_REVIEW_QUEUES } from "../src/lib/review-queue-seeds";
@@ -272,6 +273,37 @@ async function main() {
     }
   }
 
+  // WP114: the Lab provider directory. Seeds carry only public names and
+  // the provider's own policy/abuse pages (lab-provider-seeds.ts); rows are
+  // created unverified, emails stay empty for an analyst to fill, and a
+  // re-seed never touches a verified row or an analyst's contact or notes.
+  for (const provider of labProviderSeeds) {
+    const existing = await prisma.labProvider.findFirst({
+      where: { name: provider.name, kind: provider.kind },
+      select: { id: true, verifiedAt: true },
+    });
+    const urls = {
+      website: provider.website,
+      abusePageUrl: provider.abusePageUrl,
+      policyUrl: provider.policyUrl,
+    };
+    if (!existing) {
+      await prisma.labProvider.create({
+        data: {
+          name: provider.name,
+          kind: provider.kind,
+          ...urls,
+          abuseEmail: null,
+          notes: null,
+          verifiedById: null,
+          verifiedAt: null,
+        },
+      });
+    } else if (existing.verifiedAt === null) {
+      await prisma.labProvider.update({ where: { id: existing.id }, data: urls });
+    }
+  }
+
   for (const template of templateSeeds) {
     const existing = await prisma.noticeTemplate.findFirst({
       where: {
@@ -350,7 +382,7 @@ async function main() {
     });
   }
 
-  console.log("Seeded platforms and notice templates.");
+  console.log("Seeded platforms, lab providers and notice templates.");
 }
 
 main()
