@@ -88,7 +88,7 @@ async function claimedFlaggedLinkJob() {
   if (!added.ok) throw new Error("expected accepted URL");
   await syncReviewJobs(NOW);
   const queue = await getReviewQueueByKey("links");
-  const claimed = await claimNextJob({ queueId: queue!.id, reviewerEmailHash: "hash-a", now: NOW });
+  const claimed = await claimNextJob({ queueId: queue!.id, role: "CASE_REVIEWER", reviewerEmailHash: "hash-a", now: NOW });
   if (!claimed.job) throw new Error("expected a job");
   return { caseId: record.id, urlId: added.url.id, jobId: claimed.job.id };
 }

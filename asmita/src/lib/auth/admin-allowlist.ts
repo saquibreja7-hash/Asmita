@@ -50,6 +50,27 @@ export function isAdminEmail(email: string) {
   return envList("ADMIN_EMAILS").some((item) => item.toLowerCase() === normalized);
 }
 
+/**
+ * The allowlist itself (WP144 Admins page). The env var is the one source:
+ * every admin who can sign in is on it.
+ */
+export function listAllowlistedAdminEmails(): string[] {
+  return envList("ADMIN_EMAILS");
+}
+
+/**
+ * Resolves an email hash back to its allowlisted email, or null. Used by the
+ * MFA reset route so the Admins page can target an admin by hash and no full
+ * email address ever travels to the browser.
+ */
+export function allowlistedEmailByHash(emailHash: string): string | null {
+  if (!emailHash) return null;
+  for (const email of envList("ADMIN_EMAILS")) {
+    if (hashEmail(email) === emailHash) return email;
+  }
+  return null;
+}
+
 export function createAdminIdentity(email: string) {
   const emailHash = hashEmail(email);
   return {

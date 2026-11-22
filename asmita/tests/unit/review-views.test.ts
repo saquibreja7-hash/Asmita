@@ -272,7 +272,7 @@ describe("the queue preview claims nothing", () => {
     expect(again).toHaveLength(2);
     expect([...reviewMemory().jobs.values()].every((job) => job.claimedBy === null)).toBe(true);
 
-    const claim = await claimNextJob({ queueId: links.id, reviewerEmailHash: ME, now: NOW });
+    const claim = await claimNextJob({ queueId: links.id, role: "CASE_REVIEWER", reviewerEmailHash: ME, now: NOW });
     const mine = await listQueuePreview(links, { emailHash: ME }, NOW);
     const theirs = await listQueuePreview(links, { emailHash: COLLEAGUE }, NOW);
     expect(mine.find((row) => row.jobId === claim.job!.id)?.heldBy).toBe("you");
@@ -298,7 +298,7 @@ describe("the claim state", () => {
     resetReviewMemory();
     await syncReviewJobs(NOW);
     const links = await getReviewQueueByKey("links");
-    const { job } = await claimNextJob({ queueId: links!.id, reviewerEmailHash: ME, now: NOW });
+    const { job } = await claimNextJob({ queueId: links!.id, role: "CASE_REVIEWER", reviewerEmailHash: ME, now: NOW });
     expect(claimHeldBy(job!, ME, NOW)).toBe(true);
     expect(claimHeldBy(job!, COLLEAGUE, NOW)).toBe(false);
     const later = new Date(NOW.getTime() + 11 * 60_000);
@@ -339,7 +339,7 @@ describe("the case context of a job", () => {
     resetReviewMemory();
     await syncReviewJobs(NOW);
     const links = await getReviewQueueByKey("links");
-    const { job } = await claimNextJob({ queueId: links!.id, reviewerEmailHash: ME, now: NOW });
+    const { job } = await claimNextJob({ queueId: links!.id, role: "CASE_REVIEWER", reviewerEmailHash: ME, now: NOW });
     const decided = await decideJob({
       jobId: job!.id,
       me: ME,

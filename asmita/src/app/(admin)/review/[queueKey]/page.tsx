@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { canSeeReviewQueue, claimNextJob, getReviewQueueByKey, maybeSyncReviewJobs } from "@/lib/review-jobs";
+import { claimNextJob, getReviewQueueByKey, maybeSyncReviewJobs, reviewQueueVisibleTo } from "@/lib/review-jobs";
 import { CaughtUp } from "../CaughtUp";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,8 @@ export default async function ClaimNextReviewJobPage({
   const queue = await getReviewQueueByKey(queueKey);
   if (!queue) redirect("/admin/review");
 
-  if (!canSeeReviewQueue(auth.session.adminRole, queue)) {
+  const viewer = { role: auth.session.adminRole, emailHash: auth.session.emailHash };
+  if (!(await reviewQueueVisibleTo(viewer, queue))) {
     return (
       <section>
         <p className="eyebrow">Console · Review</p>
@@ -45,7 +46,7 @@ export default async function ClaimNextReviewJobPage({
   }
 
   await maybeSyncReviewJobs();
-  const { job } = await claimNextJob({ queueId: queue.id, reviewerEmailHash: auth.session.emailHash });
+  const { job } = await claimNextJob({ queueId: queue.id, role: viewer.role, reviewerEmailHash: viewer.emailHash });
   if (!job) return <CaughtUp queueKey={queue.key} />;
 
   const query = (await searchParams) || {};

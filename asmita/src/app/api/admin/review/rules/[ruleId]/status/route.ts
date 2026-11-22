@@ -4,6 +4,7 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { REVIEW_RULE_STATUSES, setRoutingRuleStatus } from "@/lib/review-routing";
+import { requireStepUp } from "@/lib/auth/step-up";
 
 // POST /api/admin/review/rules/[ruleId]/status — switch a rule between
 // DRAFT, LIVE and DISABLED (WP143). The switch is a saved version with its
@@ -28,6 +29,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ rul
   if (!verifyCsrfRequest(request)) return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   const auth = await requireAdmin();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const stepUp = requireStepUp(auth.session);
+  if (!stepUp.ok) return NextResponse.json({ error: stepUp.error }, { status: 403 });
   const { ruleId } = await params;
 
   const parsed = schema.safeParse(await request.json().catch(() => null));

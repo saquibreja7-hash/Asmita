@@ -132,12 +132,22 @@ type MemorySkipRow = { reviewerEmailHash: string; jobId: string; until: Date };
 
 type MemoryReviewQueue = ReviewQueueRow & { createdAt: Date; updatedAt: Date };
 
+/** One queue-access row (WP144): exactly one of role and adminEmailHash. */
+export type ReviewQueueAccessRow = {
+  id: string;
+  queueId: string;
+  role: AdminRole | null;
+  adminEmailHash: string | null;
+};
+
 type MemoryReviewState = {
   queues: Map<string, MemoryReviewQueue>;
   jobs: Map<string, ReviewJobRow>;
   decisions: Map<string, ReviewDecisionRow>;
   claims: MemoryClaimRow[];
   skips: Map<string, MemorySkipRow>;
+  /** WP144 queue access rows. */
+  queueAccess: ReviewQueueAccessRow[];
 };
 
 const memoryGlobals = globalThis as typeof globalThis & { __asmitaReviewStore?: MemoryReviewState };
@@ -153,6 +163,7 @@ export function reviewMemory(): MemoryReviewState {
     decisions: new Map(),
     claims: [],
     skips: new Map(),
+    queueAccess: [],
   };
   return memoryGlobals.__asmitaReviewStore;
 }
@@ -347,6 +358,170 @@ export function canSeeReviewQueue(
 ): boolean {
   if (queue.protected || queue.subjectKind === null) return role === "SUPER_ADMIN";
   return hasAdminPermission(role, reviewVisibilityPermission(queue.subjectKind));
+}
+
+// ---------------------------------------------------------------------------
+// Queue access (WP144). A queue with no ReviewQueueAccess rows keeps today's
+// behaviour above; rows narrow it: a reviewer sees the queue only if their
+// role or their own email hash is listed. The protected minor-hold queue
+// ignores rows and stays SUPER_ADMIN only, so no row can widen it.
+
+/**
+ * The full visibility check against a queue's access rows. The viewer is the
+ * session's role and email hash; rows are the queue's ReviewQueueAccess
+ * rows. A queue with no rows falls back to today's role permission.
+ */
+export function canSeeReviewQueueWithRows(
+  viewer: { role: AdminRole; emailHash: string },
+  queue: { protected: boolean; subjectKind: ReviewSubjectKind | null },
+  rows: Array<{ role: AdminRole | null; adminEmailHash: string | null }>,
+): boolean {
+  if (queue.protected || queue.subjectKind === null) return viewer.role === "SUPER_ADMIN";
+  if (rows.length === 0) return canSeeReviewQueue(viewer.role, queue);
+  return (
+    rows.some((row) => row.role === viewer.role) ||
+    rows.some((row) => row.adminEmailHash !== null && row.adminEmailHash === viewer.emailHash)
+  );
+}
+
+/** The queues the viewer may see, access rows included (WP144). */
+export async function visibleReviewQueues(
+  viewer: { role: AdminRole; emailHash: string },
+  queues: ReviewQueueRow[] = [],
+): Promise<ReviewQueueRow[]> {
+  const list = queues.length > 0 ? queues : await listReviewQueues();
+  const accessRows = await listReviewQueueAccess();
+  return list.filter(
+    (queue) =>
+      queue.archivedAt === null &&
+      canSeeReviewQueueWithRows(
+        viewer,
+        queue,
+        accessRows.filter((row) => row.queueId === queue.id),
+      ),
+  );
+}
+
+/** Whether this viewer may see one queue now, access rows included (WP144). */
+export async function reviewQueueVisibleTo(
+  viewer: { role: AdminRole; emailHash: string },
+  queue: { id: string; protected: boolean; subjectKind: ReviewSubjectKind | null },
+): Promise<boolean> {
+  return canSeeReviewQueueWithRows(viewer, queue, await listReviewQueueAccess(queue.id));
+}
+
+/** Every access row, or one queue's. Rows carry ids and hashes only. */
+export async function listReviewQueueAccess(queueId?: string): Promise<ReviewQueueAccessRow[]> {
+  const toRow = (row: { id: string; queueId: string; role: AdminRole | null; adminEmailHash: string | null }) => ({
+    id: row.id,
+    queueId: row.queueId,
+    role: row.role,
+    adminEmailHash: row.adminEmailHash,
+  });
+  if (isDevNoDb()) {
+    const rows = reviewMemory().queueAccess;
+    return (queueId ? rows.filter((row) => row.queueId === queueId) : rows).map(toRow);
+  }
+  if (usesWorkerKysely()) {
+    let query = getWorkerDb().selectFrom("ReviewQueueAccess").selectAll();
+    if (queueId) query = query.where("queueId", "=", queueId);
+    const rows = await query.execute();
+    return rows.map((row) => toRow(row as Parameters<typeof toRow>[0]));
+  }
+  const { db } = await import("@/lib/db");
+  const rows = await db.reviewQueueAccess.findMany(queueId ? { where: { queueId } } : undefined);
+  return rows.map((row) => toRow(row));
+}
+
+export type QueueAccessResult = { ok: true; row: ReviewQueueAccessRow } | { ok: false; error: string };
+
+async function auditAccessChange(
+  actorId: string,
+  action: string,
+  row: { queueId: string; role: AdminRole | null; adminEmailHash: string | null },
+): Promise<void> {
+  // Access changes are console config: they audit as ADMIN_ACTION with ids
+  // only (the queue id and the granted role or admin hash), like the WP142
+  // reason and WP143 queue changes.
+  await writeAuditLog({
+    eventType: "ADMIN_ACTION",
+    entityType: "ReviewQueueAccess",
+    entityId: row.queueId,
+    actorId,
+    data: { action, role: row.role, adminEmailHash: row.adminEmailHash },
+  });
+}
+
+/**
+ * Narrows a queue: adds one access row naming either a role or one admin
+ * (exactly one of the two). review:manage only; the protected minor-hold
+ * queue and archived queues are refused, and a row that already exists is
+ * returned as-is, so a repeated grant never duplicates.
+ */
+export async function grantReviewQueueAccess(input: {
+  queueId: string;
+  role?: AdminRole;
+  adminEmailHash?: string;
+  callerRole: AdminRole;
+  actorId: string;
+  now?: Date;
+}): Promise<QueueAccessResult> {
+  if (!hasAdminPermission(input.callerRole, "review:manage")) return { ok: false, error: "permission_denied" };
+  const queue = await getReviewQueueById(input.queueId);
+  if (!queue) return { ok: false, error: "queue_not_found" };
+  if (queue.protected || queue.subjectKind === null) return { ok: false, error: "protected_queue" };
+  if (queue.archivedAt !== null) return { ok: false, error: "queue_archived" };
+  const wantsRole = input.role !== undefined;
+  const wantsAdmin = input.adminEmailHash !== undefined && input.adminEmailHash !== "";
+  if (wantsRole === wantsAdmin) return { ok: false, error: "invalid_target" };
+  if (wantsAdmin && !/^[a-f0-9]{16,128}$/.test(input.adminEmailHash!)) return { ok: false, error: "invalid_target" };
+
+  const target = { queueId: queue.id, role: wantsRole ? input.role! : null, adminEmailHash: wantsAdmin ? input.adminEmailHash! : null };
+  const existing = (await listReviewQueueAccess(queue.id)).find(
+    (row) =>
+      (wantsRole && row.role === target.role) ||
+      (wantsAdmin && row.adminEmailHash === target.adminEmailHash),
+  );
+  if (existing) return { ok: true, row: existing };
+
+  const row: ReviewQueueAccessRow = { id: randomUUID(), ...target };
+  if (isDevNoDb()) {
+    reviewMemory().queueAccess.push(row);
+  } else if (usesWorkerKysely()) {
+    await getWorkerDb().insertInto("ReviewQueueAccess").values({ ...row, createdAt: input.now ?? new Date() }).execute();
+  } else {
+    const { db } = await import("@/lib/db");
+    await db.reviewQueueAccess.create({ data: { id: row.id, queueId: row.queueId, role: row.role, adminEmailHash: row.adminEmailHash } });
+  }
+  await auditAccessChange(input.actorId, "grant", target);
+  return { ok: true, row };
+}
+
+/**
+ * Removes one access row by id. review:manage only. The last row of a queue
+ * can be removed like any other: an empty list simply returns the queue to
+ * today's behaviour (every role with the adapter's permission).
+ */
+export async function revokeReviewQueueAccess(input: {
+  accessId: string;
+  callerRole: AdminRole;
+  actorId: string;
+}): Promise<QueueAccessResult> {
+  if (!hasAdminPermission(input.callerRole, "review:manage")) return { ok: false, error: "permission_denied" };
+  const rows = await listReviewQueueAccess();
+  const row = rows.find((entry) => entry.id === input.accessId);
+  if (!row) return { ok: false, error: "access_row_not_found" };
+  if (isDevNoDb()) {
+    const memory = reviewMemory();
+    memory.queueAccess = memory.queueAccess.filter((entry) => entry.id !== row.id);
+  } else if (usesWorkerKysely()) {
+    await getWorkerDb().deleteFrom("ReviewQueueAccess").where("id", "=", row.id).execute();
+  } else {
+    const { db } = await import("@/lib/db");
+    await db.reviewQueueAccess.deleteMany({ where: { id: row.id } });
+  }
+  await auditAccessChange(input.actorId, "revoke", row);
+  return { ok: true, row };
 }
 
 // ---------------------------------------------------------------------------
@@ -872,7 +1047,12 @@ async function closeOpenClaimRows(jobId: string, now: Date, outcome: string) {
 // ---------------------------------------------------------------------------
 // The lease (claim, extend, skip, release)
 
-export type ClaimResult = { job: ReviewJobRow | null; claimId: string | null };
+export type ClaimResult = {
+  job: ReviewJobRow | null;
+  claimId: string | null;
+  /** Set when the queue is not visible to this reviewer (WP144 access). */
+  refused?: "permission_denied";
+};
 
 /**
  * Claims the next job of a queue for a reviewer. One statement on Postgres
@@ -880,14 +1060,26 @@ export type ClaimResult = { job: ReviewJobRow | null; claimId: string | null };
  * memory backend: a reviewer who already holds a job gets the same one back
  * (refresh-safe), an expired lease is handed over, and a job this reviewer
  * skipped in the last 30 minutes is not offered again.
+ *
+ * WP144: the caller's role is checked against the queue's access rows
+ * first, so a narrowed queue refuses a reviewer who is not listed, even if
+ * the route above already checked.
  */
 export async function claimNextJob(input: {
   queueId: string;
+  /** The caller's current admin role, for the access check. */
+  role: AdminRole;
   reviewerEmailHash: string;
   now?: Date;
 }): Promise<ClaimResult> {
   const now = input.now ?? new Date();
   await ensureSystemQueues();
+
+  const queue = await getReviewQueueById(input.queueId);
+  if (!queue) return { job: null, claimId: null, refused: "permission_denied" };
+  if (!(await reviewQueueVisibleTo({ role: input.role, emailHash: input.reviewerEmailHash }, queue))) {
+    return { job: null, claimId: null, refused: "permission_denied" };
+  }
 
   if (isDevNoDb()) {
     const memory = reviewMemory();
@@ -1568,14 +1760,14 @@ export type ReviewQueueSummary = {
  * Per visible queue: how many jobs wait, how old the oldest is, how many
  * arrived in the last four hours and the last day, and how many this
  * reviewer holds right now. Only ids and counts — nothing about a subject.
+ * Visibility is the WP144 access check: rows narrow a queue to the roles
+ * and admins they list, and minor-hold stays SUPER_ADMIN only.
  */
 export async function queueSummaries(
   viewer: { role: AdminRole; emailHash: string },
   now = new Date(),
 ): Promise<ReviewQueueSummary[]> {
-  const queues = (await listReviewQueues())
-    .filter((queue) => queue.archivedAt === null)
-    .filter((queue) => canSeeReviewQueue(viewer.role, queue));
+  const queues = await visibleReviewQueues(viewer);
   const fourHoursAgo = now.getTime() - 4 * 60 * 60_000;
   const dayAgo = now.getTime() - 24 * 60 * 60_000;
 

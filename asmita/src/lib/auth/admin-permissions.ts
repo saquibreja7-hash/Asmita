@@ -57,6 +57,32 @@ export function listAdminPermissions(role: AdminRole) {
   return Array.from(rolePermissions[role]);
 }
 
+/** Every role, in display order (the Admins page's permission matrix, WP144). */
+export const ALL_ADMIN_ROLES: readonly AdminRole[] = [
+  "SUPER_ADMIN",
+  "LEGAL_ADVISOR",
+  "CASE_REVIEWER",
+  "GO_EDITOR",
+  "SUPPORT_AGENT",
+];
+
+/** Every permission, in display order (the Admins page's matrix, WP144). */
+export const ALL_ADMIN_PERMISSIONS: readonly AdminPermission[] = [
+  "cases:read",
+  "cases:review",
+  "cases:note",
+  "findings:review",
+  "crawler:manage",
+  "platforms:edit",
+  "templates:edit",
+  "templates:activate",
+  "metrics:read",
+  "audit:read",
+  "users:manage",
+  "lab:manage",
+  "review:manage",
+];
+
 export function canActivateTemplate(role: AdminRole, reviewedByLegal: boolean) {
   return reviewedByLegal && hasAdminPermission(role, "templates:activate");
 }

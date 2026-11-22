@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { getReviewAdapter, type ReviewAdapterDecision } from "@/lib/review-adapters";
-import { canSeeReviewQueue, getReviewJobWithQueue } from "@/lib/review-jobs";
+import { getReviewJobWithQueue, reviewQueueVisibleTo } from "@/lib/review-jobs";
 import { routingExplanationForJob } from "@/lib/review-routing";
 import { listReviewReasons } from "@/lib/review-reasons";
 import { guidanceHtmlForQueue } from "@/lib/review-guidance";
@@ -55,7 +55,7 @@ export default async function ReviewJobPage({
   // A job the sync moved to another queue keeps its own URL shape.
   if (queue.key !== queueKey) redirect(`/admin/review/${queue.key}/${job.id}`);
 
-  if (!canSeeReviewQueue(auth.session.adminRole, queue)) {
+  if (!(await reviewQueueVisibleTo({ role: auth.session.adminRole, emailHash: auth.session.emailHash }, queue))) {
     return (
       <section>
         <p className="eyebrow">Console · Review</p>

@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { listReviewQueues } from "@/lib/review-jobs";
 import { getReviewAdapter } from "@/lib/review-adapters";
 import { listReviewReasons } from "@/lib/review-reasons";
@@ -8,21 +8,19 @@ import { ReasonsEditor } from "./ReasonsEditor";
 export const dynamic = "force-dynamic";
 
 // Review settings (review-console-spec.md WP142): the internal reasons a
-// reviewer can pick, per queue and decision. SUPER_ADMIN only — WP144 will
-// move the gate to a review:manage permission and add routing rules and
-// queue admin here. Nothing on this page decides anything: a reason is a
-// label a decision may carry, never a new outcome.
+// reviewer can pick, per queue and decision. review:manage (WP144: the
+// owner's permission) gates the page; the library re-checks it. Nothing on
+// this page decides anything: a reason is a label a decision may carry,
+// never a new outcome.
 
 export default async function ReviewSettingsPage() {
-  const auth = await requireAdmin();
-  if (!auth.ok) return null;
-
-  if (auth.session.adminRole !== "SUPER_ADMIN") {
+  const auth = await requireAdminPermission("review:manage");
+  if (!auth.ok) {
     return (
       <section>
         <p className="eyebrow">Console · Review</p>
         <h1 className="mt-3">Not available</h1>
-        <p className="muted mt-6 text-sm">Only a SUPER_ADMIN can change review settings.</p>
+        <p className="muted mt-6 text-sm">Your admin role cannot change review settings.</p>
       </section>
     );
   }

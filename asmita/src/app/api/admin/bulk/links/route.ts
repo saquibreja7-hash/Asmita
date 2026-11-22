@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
+import { requireStepUp } from "@/lib/auth/step-up";
 import { db } from "@/lib/db";
 import { isAwaitingReview, reviewSubmittedUrl } from "@/lib/case-ops";
 import { writeAuditLog } from "@/lib/audit";
@@ -13,6 +14,9 @@ import { writeAuditLog } from "@/lib/audit";
 // survivor still has to sign. Fingerprints are not bulk-reviewable because
 // approving one can email a platform straight away.
 const MAX_BULK_LINKS = 50;
+// WP144: a bulk decision over this many items needs a fresh authenticator
+// code (step-up MFA); at or below it, the ordinary session is enough.
+const STEP_UP_ABOVE = 10;
 
 const schema = z
   .object({
@@ -38,6 +42,12 @@ export async function POST(request: Request) {
   }
   const { decision, reason } = parsed.data;
   const urlIds = Array.from(new Set(parsed.data.urlIds));
+
+  // WP144: a bulk decision over ten items needs a fresh authenticator code.
+  if (urlIds.length > STEP_UP_ABOVE) {
+    const stepUp = requireStepUp(auth.session);
+    if (!stepUp.ok) return NextResponse.json({ error: stepUp.error }, { status: 403 });
+  }
 
   const links = await db.submittedUrl.findMany({
     where: { id: { in: urlIds } },

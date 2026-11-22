@@ -25,6 +25,8 @@ const PAGE_FILES: Record<string, string> = {
   "/admin/audit": "(admin)/audit/page.tsx",
   "/admin/lab": "admin/lab/page.tsx",
   "/admin/review/rules": "(admin)/review/rules/page.tsx",
+  "/admin/review/settings": "(admin)/review/settings/page.tsx",
+  "/admin/admins": "(admin)/admins/page.tsx",
 };
 
 const items = ADMIN_NAV.flatMap((group) => group.items);

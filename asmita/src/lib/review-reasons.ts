@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AdminRole } from "@/lib/auth/admin-permissions";
+import { hasAdminPermission, type AdminRole } from "@/lib/auth/admin-permissions";
 import { SYSTEM_REVIEW_REASONS, REASON_OTHER_CODE } from "@/lib/review-reason-seeds";
 import { getReviewAdapter } from "@/lib/review-adapters";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
@@ -201,10 +201,11 @@ async function getReviewReasonById(reasonId: string): Promise<ReviewReasonRow | 
 export type ReasonAdminResult = { ok: true; reason: ReviewReasonRow } | { ok: false; error: string };
 
 /**
- * Adds a reason to a queue's decision. SUPER_ADMIN only (WP144 will move
- * this gate to the review:manage permission); the decision must be one the
- * queue's adapter actually offers, so a reason can never exist for a
- * decision nobody can take.
+ * Adds a reason to a queue's decision. review:manage only (WP144 moved this
+ * gate from the SUPER_ADMIN role to the permission; the permission is
+ * SUPER_ADMIN's alone today); the decision must be one the queue's adapter
+ * actually offers, so a reason can never exist for a decision nobody can
+ * take.
  */
 export async function addReviewReason(input: {
   queueKey: string;
@@ -214,7 +215,7 @@ export async function addReviewReason(input: {
   role: AdminRole;
   actorId: string;
 }): Promise<ReasonAdminResult> {
-  if (input.role !== "SUPER_ADMIN") return { ok: false, error: "permission_denied" };
+  if (!hasAdminPermission(input.role, "review:manage")) return { ok: false, error: "permission_denied" };
   // Loaded lazily: review-jobs imports this module for decideJob's reason
   // validation, and a dynamic import keeps that cycle out of module init.
   const { getReviewQueueByKey } = await import("@/lib/review-jobs");
@@ -267,7 +268,7 @@ export async function renameReviewReason(input: {
   role: AdminRole;
   actorId: string;
 }): Promise<ReasonAdminResult> {
-  if (input.role !== "SUPER_ADMIN") return { ok: false, error: "permission_denied" };
+  if (!hasAdminPermission(input.role, "review:manage")) return { ok: false, error: "permission_denied" };
   const reason = await getReviewReasonById(input.reasonId);
   if (!reason) return { ok: false, error: "reason_not_found" };
   const label = input.label.trim();
@@ -284,7 +285,7 @@ export async function setReviewReasonActive(input: {
   role: AdminRole;
   actorId: string;
 }): Promise<ReasonAdminResult> {
-  if (input.role !== "SUPER_ADMIN") return { ok: false, error: "permission_denied" };
+  if (!hasAdminPermission(input.role, "review:manage")) return { ok: false, error: "permission_denied" };
   const reason = await getReviewReasonById(input.reasonId);
   if (!reason) return { ok: false, error: "reason_not_found" };
   await updateReasonRow(reason.id, { active: input.active });
@@ -299,7 +300,7 @@ export async function moveReviewReason(input: {
   role: AdminRole;
   actorId: string;
 }): Promise<ReasonAdminResult> {
-  if (input.role !== "SUPER_ADMIN") return { ok: false, error: "permission_denied" };
+  if (!hasAdminPermission(input.role, "review:manage")) return { ok: false, error: "permission_denied" };
   const reason = await getReviewReasonById(input.reasonId);
   if (!reason) return { ok: false, error: "reason_not_found" };
   const group = await listReviewReasons(reason.queueKey, reason.decision);

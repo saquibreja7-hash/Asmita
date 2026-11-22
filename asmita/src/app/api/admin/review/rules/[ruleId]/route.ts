@@ -4,6 +4,7 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { saveRoutingRule, CONDITION_MAX_LEAVES, ROUTING_OPS, RULE_DESCRIPTION_MAX, RULE_NAME_MAX } from "@/lib/review-routing";
+import { requireStepUp } from "@/lib/auth/step-up";
 
 // POST /api/admin/review/rules/[ruleId] — save edits to one routing rule
 // (WP143). Every save is a new append-only version and audits
@@ -56,6 +57,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ rul
   if (!verifyCsrfRequest(request)) return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   const auth = await requireAdmin();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const stepUp = requireStepUp(auth.session);
+  if (!stepUp.ok) return NextResponse.json({ error: stepUp.error }, { status: 403 });
   const { ruleId } = await params;
 
   const parsed = schema.safeParse(await request.json().catch(() => null));

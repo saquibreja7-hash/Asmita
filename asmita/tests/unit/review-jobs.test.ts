@@ -160,10 +160,10 @@ function allReviewRows(): string {
   });
 }
 
-async function claimLinks(emailHash: string, now = NOW) {
+async function claimLinks(emailHash: string, now = NOW, role: Parameters<typeof claimNextJob>[0]["role"] = REVIEWER) {
   const linksQueue = await getReviewQueueByKey("links");
   if (!linksQueue) throw new Error("links queue missing");
-  return claimNextJob({ queueId: linksQueue.id, reviewerEmailHash: emailHash, now });
+  return claimNextJob({ queueId: linksQueue.id, role, reviewerEmailHash: emailHash, now });
 }
 
 async function decide(input: Parameters<typeof decideJob>[0]) {
@@ -509,7 +509,7 @@ describe("decisions", () => {
     const finding = seedFinding({ distance: 30 });
     await syncReviewJobs(NOW);
     const job = [...reviewMemory().jobs.values()].find((item) => item.subjectId === finding.id)!;
-    const firstClaim = await claimNextJob({ queueId: job.queueId, reviewerEmailHash: reviewer("a"), now: NOW });
+    const firstClaim = await claimNextJob({ queueId: job.queueId, role: REVIEWER, reviewerEmailHash: reviewer("a"), now: NOW });
     expect(firstClaim.job?.id).toBe(job.id);
 
     const first = await decide({
@@ -530,6 +530,7 @@ describe("decisions", () => {
     // The same analyst cannot second their own approval (the existing rule).
     const second = await claimNextJob({
       queueId: stored.queueId,
+      role: REVIEWER,
       reviewerEmailHash: reviewer("a"),
       now: new Date(NOW.getTime() + MINUTE),
     });
@@ -554,6 +555,7 @@ describe("decisions", () => {
 
     const claimed = await claimNextJob({
       queueId: job!.queueId,
+      role: REVIEWER,
       reviewerEmailHash: reviewer("a"),
       now: new Date(NOW.getTime() + MINUTE),
     });
@@ -585,7 +587,7 @@ describe("decisions", () => {
     await syncReviewJobs(NOW);
     const job = [...reviewMemory().jobs.values()].find((item) => item.subjectId === application.id);
     expect(job).toBeTruthy();
-    const claimed = await claimNextJob({ queueId: job!.queueId, reviewerEmailHash: reviewer("g"), now: NOW });
+    const claimed = await claimNextJob({ queueId: job!.queueId, role: "GO_EDITOR" as const, reviewerEmailHash: reviewer("g"), now: NOW });
     expect(claimed.job?.id).toBe(job!.id);
 
     const contacted = await decide({
@@ -602,6 +604,7 @@ describe("decisions", () => {
     // "Contacted" released the lease; take it again before declining.
     const reclaimed = await claimNextJob({
       queueId: job!.queueId,
+      role: "GO_EDITOR" as const,
       reviewerEmailHash: reviewer("g"),
       now: new Date(NOW.getTime() + MINUTE),
     });
@@ -627,7 +630,7 @@ describe("decisions", () => {
     await syncReviewJobs(NOW);
     const job = [...reviewMemory().jobs.values()].find((item) => item.subjectId === report.id);
     expect(job).toBeTruthy();
-    const claimed = await claimNextJob({ queueId: job!.queueId, reviewerEmailHash: reviewer("l"), now: NOW });
+    const claimed = await claimNextJob({ queueId: job!.queueId, role: SUPER, reviewerEmailHash: reviewer("l"), now: NOW });
     expect(claimed.job?.id).toBe(job!.id);
 
     const result = await decide({
@@ -668,7 +671,7 @@ describe("minor hold", () => {
     const finding = seedFinding();
     await syncReviewJobs(NOW);
     const job = [...reviewMemory().jobs.values()].find((item) => item.subjectId === finding.id)!;
-    const claimed = await claimNextJob({ queueId: job.queueId, reviewerEmailHash: reviewer("a"), now: NOW });
+    const claimed = await claimNextJob({ queueId: job.queueId, role: REVIEWER, reviewerEmailHash: reviewer("a"), now: NOW });
     expect(claimed.job?.id).toBe(job.id);
 
     const result = await decide({
@@ -696,6 +699,7 @@ describe("minor hold", () => {
 
     const superAdmin = await claimNextJob({
       queueId: (await getReviewQueueByKey(MINOR_HOLD_QUEUE_KEY))!.id,
+      role: SUPER,
       reviewerEmailHash: reviewer("s"),
       now: NOW,
     });

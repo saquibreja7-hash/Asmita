@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { csrfFetch } from "@/lib/client-csrf";
+import { useStepUpPost, type StepUpPostResult } from "../step-up-mfa";
 import type { AdminUrlReviewRow } from "@/lib/admin-cases";
 import { ReviewActions } from "./ReviewActions";
 
@@ -30,6 +30,9 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
   const [error, setError] = useState<string | null>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  // WP144: a bulk decision over 10 items needs a fresh authenticator code;
+  // the shared hook answers that refusal with a code dialog and retries.
+  const { post, stepUpDialog } = useStepUpPost();
 
   const choosable = useMemo(() => rows.filter(selectable).slice(0, MAX), [rows]);
   const referenceOf = useMemo(() => new Map(rows.map((row) => [row.urlId, row.referenceNumber])), [rows]);
@@ -49,30 +52,34 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
     setBusy(true);
     setError(null);
     setResults(null);
-    try {
-      const response = await csrfFetch("/api/admin/bulk/links", {
-        method: "POST",
-        body: JSON.stringify({
-          decision,
-          urlIds: Array.from(selected),
-          ...(decision === "reject" ? { reason } : {}),
-        }),
-      });
-      const body = (await response.json().catch(() => null)) as { results?: Result[]; error?: string } | null;
-      if (!response.ok || !body?.results) {
-        setError(body?.error === "reason_required" ? "Give a reason of at least 3 characters." : "Nothing was changed: the request failed.");
-        return;
-      }
-      setResults(body.results);
-      setSelected(new Set(body.results.filter((result) => !result.ok).map((result) => result.urlId)));
-      setRejecting(false);
-      setReason("");
-      router.refresh();
-    } catch {
-      setError("Nothing was changed: the request failed.");
-    } finally {
-      setBusy(false);
+    const outcome: StepUpPostResult = await post("/api/admin/bulk/links", {
+      decision,
+      urlIds: Array.from(selected),
+      ...(decision === "reject" ? { reason } : {}),
+    });
+    setBusy(false);
+    if (!outcome.ok) {
+      const body = outcome.body as { results?: Result[] } | undefined;
+      if (body?.results) setResults(body.results);
+      setError(
+        outcome.error === "mfa_step_up_required"
+          ? "Nothing was changed: a bulk decision over 10 items needs a fresh authenticator code."
+          : outcome.error === "reason_required"
+            ? "Give a reason of at least 3 characters."
+            : "Nothing was changed: the request failed.",
+      );
+      return;
     }
+    const body = outcome.body as { results?: Result[] } | undefined;
+    if (!body?.results) {
+      setError("Nothing was changed: the request failed.");
+      return;
+    }
+    setResults(body.results);
+    setSelected(new Set(body.results.filter((result) => !result.ok).map((result) => result.urlId)));
+    setRejecting(false);
+    setReason("");
+    router.refresh();
   }
 
   return (
@@ -234,6 +241,7 @@ export function FlaggedTable({ rows, canReview }: { rows: AdminUrlReviewRow[]; c
         </table>
         {rows.length === 0 && <p className="muted p-6 text-center text-sm">No flagged submissions in the queue.</p>}
       </div>
+      {stepUpDialog}
     </>
   );
 }

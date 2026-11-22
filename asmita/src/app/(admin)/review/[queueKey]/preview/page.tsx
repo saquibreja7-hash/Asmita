@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { canSeeReviewQueue, getReviewQueueByKey, maybeSyncReviewJobs } from "@/lib/review-jobs";
+import { getReviewQueueByKey, maybeSyncReviewJobs, reviewQueueVisibleTo } from "@/lib/review-jobs";
 import { listQueuePreview } from "@/lib/review-views";
 import { formatIst } from "@/app/(admin)/cases/case-format";
 import { describeReviewSubject } from "../../subject-view";
@@ -18,7 +18,7 @@ export default async function ReviewQueuePreviewPage({ params }: { params: Promi
   const queue = await getReviewQueueByKey(queueKey);
   if (!queue) notFound();
 
-  if (!canSeeReviewQueue(auth.session.adminRole, queue)) {
+  if (!(await reviewQueueVisibleTo({ role: auth.session.adminRole, emailHash: auth.session.emailHash }, queue))) {
     return (
       <section>
         <p className="eyebrow">Console · Review</p>

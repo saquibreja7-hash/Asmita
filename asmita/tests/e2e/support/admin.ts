@@ -17,6 +17,9 @@ const testAdmins: TestAdmin[] = [
   { sub: "integrity-admin", role: "SUPER_ADMIN" },
   { sub: "admin-1", role: "SUPER_ADMIN" },
   { sub: "e2e-reviewer", role: "CASE_REVIEWER" },
+  // WP144's own target: no other spec signs in as this admin, so the MFA
+  // reset test can clear its enrolment without touching anyone else.
+  { sub: "e2e-access-admin", role: "SUPER_ADMIN" },
 ];
 // e2e-new-admin enrols through the real flow in admin-access.spec.ts.
 const enrolledByFlow = ["e2e-new-admin"];
@@ -31,10 +34,13 @@ export const allAdmins: TestAdmin[] = [
 export const testAdminEmails = allAdmins.map((admin) => testAdminEmail(admin.sub));
 export const testAdminRoles = allAdmins.map((admin) => `${testAdminEmail(admin.sub)}=${admin.role}`);
 
-// A signed admin session, as /api/admin/auth/verify would issue it.
+// A signed admin session, as /api/admin/auth/verify would issue it. The
+// sign-in proves the authenticator, so the session carries a fresh mfaAt
+// claim (WP144 step-up MFA); tests that need a stale one sign their own.
 export function signAdminToken(sub = "e2e-admin", role: "SUPER_ADMIN" | "CASE_REVIEWER" = "SUPER_ADMIN") {
   return new SignJWT({
     role: "ADMIN", adminRole: role, ageOver18: true, emailHash: testAdminHash(sub), namespace: "admin", mfaComplete: true,
+    mfaAt: Math.floor(Date.now() / 1000),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer("asmita")

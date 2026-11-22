@@ -1,12 +1,14 @@
 import { requireAdmin } from "@/lib/auth/require-admin";
 import type { AdminRole } from "@/lib/auth/admin-permissions";
-import { canSeeReviewQueue, getReviewJobWithQueue, type ReviewJobRow, type ReviewQueueRow } from "@/lib/review-jobs";
+import { getReviewJobWithQueue, reviewQueueVisibleTo, type ReviewJobRow, type ReviewQueueRow } from "@/lib/review-jobs";
 
 /*
  * Shared guard for the review-job routes: an authenticated admin who may see
- * the job's queue (the protected minor-hold queue is SUPER_ADMIN only), with
- * the job and queue handed back for the per-kind permission checks. CSRF is
- * checked by each route before this runs, like the other admin routes.
+ * the job's queue — the protected minor-hold queue is SUPER_ADMIN only, and a
+ * queue with WP144 access rows answers only to the roles and admins they
+ * list — with the job and queue handed back for the per-kind permission
+ * checks. CSRF is checked by each route before this runs, like the other
+ * admin routes.
  */
 
 export type JobRouteAuth =
@@ -18,7 +20,11 @@ export async function requireJobAccess(jobId: string): Promise<JobRouteAuth> {
   if (!auth.ok) return { ok: false, status: auth.status, error: auth.error };
   const loaded = await getReviewJobWithQueue(jobId);
   if (!loaded) return { ok: false, status: 404, error: "job_not_found" };
-  if (!canSeeReviewQueue(auth.session.adminRole, loaded.queue)) {
+  const visible = await reviewQueueVisibleTo(
+    { role: auth.session.adminRole, emailHash: auth.session.emailHash },
+    loaded.queue,
+  );
+  if (!visible) {
     return { ok: false, status: 403, error: "permission_denied" };
   }
   return {

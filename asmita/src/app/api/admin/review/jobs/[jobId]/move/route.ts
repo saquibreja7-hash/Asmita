@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfRequest } from "@/lib/csrf";
-import { canSeeReviewQueue, getReviewQueueByKey, moveJob } from "@/lib/review-jobs";
+import { getReviewQueueByKey, moveJob, reviewQueueVisibleTo } from "@/lib/review-jobs";
 import { requireJobAccess } from "../../job-route-guard";
 
 // POST /api/admin/review/jobs/[jobId]/move — move a job to another queue by
 // hand: the move is recorded as the job's closing decision and the subject
 // reopens in the target queue. Moving OUT of the protected minor-hold queue
-// is refused; moving INTO it needs SUPER_ADMIN, like the queue itself.
+// is refused; moving INTO it needs SUPER_ADMIN, like the queue itself. WP144:
+// both the job's queue and the target queue check the access rows.
 
 const schema = z
   .object({
@@ -35,7 +36,9 @@ export async function POST(request: Request, context: { params: Promise<{ jobId:
 
   const target = await getReviewQueueByKey(parsed.data.toQueueKey);
   if (!target) return NextResponse.json({ error: "queue_not_found" }, { status: 404 });
-  if (!canSeeReviewQueue(auth.role, target)) {
+  if (
+    !(await reviewQueueVisibleTo({ role: auth.role, emailHash: auth.reviewerEmailHash }, target))
+  ) {
     return NextResponse.json({ error: "permission_denied" }, { status: 403 });
   }
 

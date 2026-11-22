@@ -4,6 +4,7 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { createRoutingRule, CONDITION_MAX_LEAVES, ROUTING_OPS, RULE_DESCRIPTION_MAX, RULE_NAME_MAX } from "@/lib/review-routing";
+import { requireStepUp } from "@/lib/auth/step-up";
 
 // POST /api/admin/review/rules — create one routing rule as DRAFT v1
 // (review-console-spec.md WP143). review:manage (SUPER_ADMIN only) is
@@ -58,6 +59,8 @@ export async function POST(request: Request) {
   if (!verifyCsrfRequest(request)) return NextResponse.json({ error: "csrf_failed" }, { status: 403 });
   const auth = await requireAdmin();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const stepUp = requireStepUp(auth.session);
+  if (!stepUp.ok) return NextResponse.json({ error: stepUp.error }, { status: 403 });
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid_payload" }, { status: 400 });

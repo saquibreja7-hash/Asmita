@@ -48,7 +48,7 @@ async function claimedLinksJob() {
   const link = await seedFlaggedLink("https://instagram.com/p/example");
   await syncReviewJobs(NOW);
   const queue = await getReviewQueueByKey("links");
-  const { job } = await claimNextJob({ queueId: queue!.id, reviewerEmailHash: "hash-a", now: NOW });
+  const { job } = await claimNextJob({ queueId: queue!.id, role: "CASE_REVIEWER", reviewerEmailHash: "hash-a", now: NOW });
   if (!job) throw new Error("expected a claimed job");
   return { link, job };
 }

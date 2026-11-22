@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { csrfFetch } from "@/lib/client-csrf";
 import type { RoutingFieldDef, RoutingLeaf } from "@/lib/review-routing";
+import { useStepUpPost, type StepUpPostResult } from "../../step-up-mfa";
 
 /*
  * The routing rules builder (review-console-spec.md WP143). Everything it
@@ -11,7 +12,14 @@ import type { RoutingFieldDef, RoutingLeaf } from "@/lib/review-routing";
  * fixed code values — never a subject's data. A rule only ever chooses a
  * queue and a priority; the server re-validates the condition against the
  * kind's allowlist and the destination queue's kind on every save.
+ *
+ * Saving a rule needs a fresh authenticator proof (WP144 step-up MFA): the
+ * shared hook answers the server's mfa_step_up_required with a code dialog
+ * and retries the save once.
  */
+
+/** What the components below post with; the step-up hook provides it. */
+type Post = (path: string, body: Record<string, unknown>) => Promise<StepUpPostResult>;
 
 export type RuleView = {
   id: string;
@@ -78,6 +86,7 @@ const ERRORS: Record<string, string> = {
   rule_not_found: "That rule no longer exists. Reload the page.",
   rate_limited: "Too many changes in a short time. Wait a moment, then try again.",
   csrf_failed: "Your session timed out. Reload the page and try again.",
+  mfa_step_up_required: "Nothing was changed: this needs a fresh authenticator code.",
   request_failed: "Not saved. Reload the page and try again.",
 };
 
@@ -97,17 +106,6 @@ type TestResponse = {
   results?: TestResult[];
   chosenQueue?: { id: string; name: string; viaRuleId: string | null };
 };
-
-async function post(path: string, body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const response = await csrfFetch(path, { method: "POST", body: JSON.stringify(body) });
-    const data = (await response.json().catch(() => null)) as { error?: string } | null;
-    if (response.ok) return { ok: true };
-    return { ok: false, error: data?.error ?? "request_failed" };
-  } catch {
-    return { ok: false, error: "request_failed" };
-  }
-}
 
 function inWords(code: string | undefined): string {
   return ERRORS[code ?? ""] ?? "Not saved. Reload the page and try again.";
@@ -329,6 +327,7 @@ function RuleForm({
   onSaved,
   savePath,
   extraBody,
+  post,
 }: {
   draft: Draft;
   fields: readonly RoutingFieldDef[];
@@ -338,6 +337,7 @@ function RuleForm({
   onSaved: () => void;
   savePath: string;
   extraBody?: Record<string, unknown>;
+  post: Post;
 }) {
   const router = useRouter();
   const [working, setWorking] = useState(draft);
@@ -571,6 +571,7 @@ function RuleCard({
   onEdit,
   onMove,
   editing,
+  post,
 }: {
   rule: RuleView;
   kindView: KindRulesView;
@@ -579,6 +580,7 @@ function RuleCard({
   onEdit: () => void;
   onMove: (direction: "up" | "down") => void;
   editing: boolean;
+  post: Post;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -649,7 +651,7 @@ function RuleCard({
   );
 }
 
-function KindSection({ kindView }: { kindView: KindRulesView }) {
+function KindSection({ kindView, post }: { kindView: KindRulesView; post: Post }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -690,6 +692,7 @@ function KindSection({ kindView }: { kindView: KindRulesView }) {
                 last={index === kindView.rules.length - 1}
                 onEdit={() => setEditingId(rule.id)}
                 onMove={(direction) => void move(rule.id, direction)}
+                post={post}
                 rule={rule}
               />
             ))}
@@ -707,6 +710,7 @@ function KindSection({ kindView }: { kindView: KindRulesView }) {
                     key={rule.id}
                     onCancel={() => setEditingId(null)}
                     onSaved={() => setEditingId(null)}
+                    post={post}
                     queues={kindView.queues}
                     savePath={`/api/admin/review/rules/${rule.id}`}
                   />
@@ -729,6 +733,7 @@ function KindSection({ kindView }: { kindView: KindRulesView }) {
                 idPrefix={`add-${kindView.kind}`}
                 onCancel={() => setAdding(false)}
                 onSaved={() => setAdding(false)}
+                post={post}
                 queues={kindView.queues}
                 savePath="/api/admin/review/rules"
               />
@@ -759,11 +764,13 @@ function KindSection({ kindView }: { kindView: KindRulesView }) {
 }
 
 export function RulesAdmin({ kinds }: { kinds: KindRulesView[] }) {
+  const { post, stepUpDialog } = useStepUpPost();
   return (
     <div>
       {kinds.map((kindView) => (
-        <KindSection key={kindView.kind} kindView={kindView} />
+        <KindSection key={kindView.kind} kindView={kindView} post={post} />
       ))}
+      {stepUpDialog}
     </div>
   );
 }

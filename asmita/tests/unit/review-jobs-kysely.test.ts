@@ -274,7 +274,7 @@ describe("the Kysely claim", () => {
       },
     ];
 
-    const claimed = await claimNextJob({ queueId: queue!.id, reviewerEmailHash: "hash-a", now: NOW });
+    const claimed = await claimNextJob({ queueId: queue!.id, role: "CASE_REVIEWER", reviewerEmailHash: "hash-a", now: NOW });
     expect(claimed.job?.id).toBe("job-1");
     expect(claimed.job?.claimedBy).toBe("hash-a");
 
@@ -302,7 +302,7 @@ describe("the Kysely claim", () => {
   it("answers with no job when the statement returns nothing", async () => {
     const queue = await getReviewQueueByKey("links");
     kysely.state.rawRows = [];
-    const claimed = await claimNextJob({ queueId: queue!.id, reviewerEmailHash: "hash-a", now: NOW });
+    const claimed = await claimNextJob({ queueId: queue!.id, role: "CASE_REVIEWER", reviewerEmailHash: "hash-a", now: NOW });
     expect(claimed).toEqual({ job: null, claimId: null });
   });
 });

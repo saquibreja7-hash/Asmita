@@ -23,6 +23,8 @@ const db = vi.hoisted(() => {
     reviewDecision: { create: fn(), findUnique: fn() },
     reviewJobClaim: { create: fn(), findFirst: fn(), updateMany: fn() },
     reviewSkip: { upsert: fn() },
+    // WP144 queue access: the visibility checks read these.
+    reviewQueueAccess: { findMany: fn(), create: fn(), deleteMany: fn() },
     // WP142 reasons: the seeded create-only upsert, and the code lookup
     // decideJob validates a picked reason with.
     reviewReason: { upsert: fn(), findUnique: fn(), findMany: fn() },
@@ -139,6 +141,10 @@ beforeEach(() => {
   db.reviewRoutingRuleVersion.findMany.mockResolvedValue([]);
   db.reviewRoutingLog.findMany.mockResolvedValue([]);
   db.reviewRoutingLog.createMany.mockResolvedValue({ count: 0 });
+  // WP144: no access rows, so every queue keeps today's visibility.
+  db.reviewQueueAccess.findMany.mockResolvedValue([]);
+  db.reviewQueueAccess.create.mockResolvedValue(null as never);
+  db.reviewQueueAccess.deleteMany.mockResolvedValue({ count: 1 } as never);
   db.reviewJobClaim.create.mockResolvedValue({ id: "claim-new" });
   db.reviewJobClaim.findFirst.mockResolvedValue(null);
   db.reviewJob.updateMany.mockResolvedValue({ count: 1 });
@@ -221,7 +227,7 @@ describe("the Prisma claim", () => {
       },
     ]);
 
-    const claimed = await claimNextJob({ queueId: LINKS_QUEUE.id, reviewerEmailHash: "hash-a", now: NOW });
+    const claimed = await claimNextJob({ queueId: LINKS_QUEUE.id, role: "CASE_REVIEWER", reviewerEmailHash: "hash-a", now: NOW });
     expect(claimed.job?.id).toBe("job-1");
     expect(claimed.claimId).toBe("claim-new");
 
@@ -248,7 +254,7 @@ describe("the Prisma claim", () => {
 
   it("answers with no job when the statement returns nothing", async () => {
     db.$queryRaw.mockResolvedValue([]);
-    const claimed = await claimNextJob({ queueId: LINKS_QUEUE.id, reviewerEmailHash: "hash-a", now: NOW });
+    const claimed = await claimNextJob({ queueId: LINKS_QUEUE.id, role: "CASE_REVIEWER", reviewerEmailHash: "hash-a", now: NOW });
     expect(claimed).toEqual({ job: null, claimId: null });
     expect(db.reviewJobClaim.create).not.toHaveBeenCalled();
   });

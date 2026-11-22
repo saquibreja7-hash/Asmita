@@ -674,7 +674,7 @@ describe("the sync re-routes open jobs", () => {
     const job = [...reviewMemory().jobs.values()].find((entry) => entry.subjectId === urlId)!;
 
     // A reviewer holds the item when the rule arrives.
-    const claimed = await claimNextJob({ queueId: job.queueId, reviewerEmailHash: "hash-a", now: NOW });
+    const claimed = await claimNextJob({ queueId: job.queueId, role: "CASE_REVIEWER", reviewerEmailHash: "hash-a", now: NOW });
     expect(claimed.job?.id).toBe(job.id);
 
     await makeRule({ name: "Big platforms", kind: "FLAGGED_LINK", condition: { all: [{ field: "platformTier", op: "eq", value: "TIER_1" }] }, destinationQueueId: big.id, priority: 5 });
@@ -695,7 +695,7 @@ describe("the sync re-routes open jobs", () => {
     expect(reviewMemory().jobs.get(job.id)!.queueId).toBe(big.id);
 
     // The routed queue works like any other: claiming it hands over the item.
-    const reclaimed = await claimNextJob({ queueId: big.id, reviewerEmailHash: "hash-b", now: new Date(NOW.getTime() + 130_000) });
+    const reclaimed = await claimNextJob({ queueId: big.id, role: "CASE_REVIEWER", reviewerEmailHash: "hash-b", now: new Date(NOW.getTime() + 130_000) });
     expect(reclaimed.job?.id).toBe(job.id);
   });
 

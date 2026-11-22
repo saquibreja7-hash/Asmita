@@ -15,6 +15,8 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/admin/review", label: "Review", permission: null },
       // Routing rules and custom queues (WP143): the owner only.
       { href: "/admin/review/rules", label: "Routing rules", permission: "review:manage" },
+      // The internal reasons (WP142); review:manage from WP144 on.
+      { href: "/admin/review/settings", label: "Review settings", permission: "review:manage" },
     ],
   },
   {
@@ -49,5 +51,9 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     heading: "Lab",
     items: [{ href: "/admin/lab", label: "AI Lab", permission: "lab:manage" }],
   },
-  { heading: "Oversight", items: [{ href: "/admin/audit", label: "Audit", permission: "audit:read" }] },
+  { heading: "Oversight", items: [
+    { href: "/admin/audit", label: "Audit", permission: "audit:read" },
+    // Admins and queue access (WP144): users:manage, the owner alone today.
+    { href: "/admin/admins", label: "Admins", permission: "users:manage" },
+  ] },
 ];

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdminSetup } from "@/lib/auth/require-admin";
 import { confirmAdminMfa } from "@/lib/auth/admin-mfa-store";
 import { signAdminSession } from "@/lib/auth/jwt";
+import { stepUpNow } from "@/lib/auth/step-up";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { writeAuditLog } from "@/lib/audit";
 import { logSecurityEvent } from "@/lib/security-log";
@@ -38,6 +39,8 @@ export async function POST(request: Request) {
     emailHash: auth.session.emailHash,
     adminRole: auth.session.adminRole,
     mfaComplete: true,
+    // The enrolment confirmation proved the authenticator (WP144).
+    mfaAt: stepUpNow(),
   });
   await writeAuditLog({
     eventType: "ADMIN_ACTION", entityType: "Admin", entityId: auth.session.sub,

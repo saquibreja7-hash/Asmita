@@ -1667,3 +1667,22 @@ model ReviewRoutingLog {
   @@index([ruleId])
   @@index([createdAt])
 }
+
+// WP144 (review-console-spec.md): queue access. Exactly one of role and
+// adminEmailHash is set (a CHECK in the migration enforces it; partial
+// unique indexes keep one row per target). A queue with no rows keeps
+// today's visibility — every role with the adapter's permission sees it —
+// and rows narrow it: a reviewer then sees the queue only if their role or
+// their own email hash is listed. The protected minor-hold queue ignores
+// rows and stays SUPER_ADMIN only, so no row can ever widen it. Only a
+// review:manage admin may change these rows. Nothing here is survivor data:
+// queue ids, a role enum and admin email hashes only.
+model ReviewQueueAccess {
+  id        String   @id @default(uuid())
+  queueId   String
+  role      AdminRole?
+  adminEmailHash String?
+  createdAt DateTime @default(now())
+
+  @@index([queueId])
+}
