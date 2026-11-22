@@ -339,6 +339,17 @@ export function createGendDetector(opts: GendOptions = {}): DetectorFactoryResul
   const token = opts.gendToken;
   if (!baseUrl) return { skipped: "LAB_GEND_URL is not set" };
   if (!token) return { skipped: "LAB_GEND_TOKEN is not set" };
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    return { skipped: "LAB_GEND_URL is not a valid URL" };
+  }
+  const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  // Images and the bearer token must never cross the internet in clear text.
+  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLocal)) {
+    return { skipped: "LAB_GEND_URL must be https" };
+  }
   const url = baseUrl.replace(/\/+$/, "");
   const doFetch = opts.fetchFn ?? ((url: string, init?: RequestInit) => fetch(url, init));
 

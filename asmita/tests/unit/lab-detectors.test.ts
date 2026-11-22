@@ -184,6 +184,15 @@ describe("GenD adapter (WP113)", () => {
     if (isSkipped(noUrl)) expect(noUrl.skipped).toBe("LAB_GEND_URL is not set");
   });
 
+  it("refuses a plain-http service URL unless it is local", () => {
+    const remote = createGendDetector({ gendUrl: "http://gend.example.test:8080", gendToken: "test-token" });
+    expect(isSkipped(remote)).toBe(true);
+    if (isSkipped(remote)) expect(remote.skipped).toBe("LAB_GEND_URL must be https");
+    expect(isSkipped(createGendDetector({ gendUrl: "not a url", gendToken: "test-token" }))).toBe(true);
+    expect(isSkipped(createGendDetector({ gendUrl: "https://gend.example.test", gendToken: "test-token" }))).toBe(false);
+    expect(isSkipped(createGendDetector({ gendUrl: "http://localhost:8099", gendToken: "test-token" }))).toBe(false);
+  });
+
   it("posts the exact bytes with the bearer token and maps image_p_fake", async () => {
     const fetchFn: FetchLike = vi.fn(async () =>
       jsonResponse({
@@ -304,6 +313,14 @@ describe("verdict bands", () => {
     expect(bandsDisagree([row("likely_ai"), row(undefined, "not_configured")])).toBe(false);
     expect(bandsDisagree([row("likely_ai"), row(undefined, "error")])).toBe(false);
     expect(bandsDisagree([row(undefined, "error"), row(undefined, "not_configured")])).toBe(false);
+  });
+
+  it("does not count a low or unclear GenD score as disagreement, since GenD only checks face swaps", () => {
+    const row = (band: DetectorRow["band"]): DetectorRow => ({ id: "x", name: "X", status: "scored", band });
+    const gend = (band: DetectorRow["band"]): DetectorRow => ({ ...row(band), id: "gend" });
+    expect(bandsDisagree([row("likely_ai"), gend("likely_camera")])).toBe(false);
+    expect(bandsDisagree([row("likely_ai"), gend("unclear")])).toBe(false);
+    expect(bandsDisagree([row("likely_camera"), gend("likely_ai")])).toBe(true);
   });
 });
 

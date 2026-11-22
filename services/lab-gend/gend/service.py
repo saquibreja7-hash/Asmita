@@ -216,7 +216,7 @@ def create_app(
     handed the finished app), so a broken or missing weight file stops
     startup instead of poisoning requests.
     """
-    app = FastAPI(title="Asmita Lab GenD service", version="0.1.0")
+    app = FastAPI(title="Asmita Lab GenD service", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.settings = settings
 
     if detector is not None:

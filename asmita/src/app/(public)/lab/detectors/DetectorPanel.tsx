@@ -33,6 +33,13 @@ const BAND_KEY: Record<Band, Parameters<typeof t>[1]> = {
   likely_camera: "lab.detectors.band.likelyCamera",
 };
 
+// GenD only looks for a swapped or reenacted face, so its bands say that, not "AI-made" or "camera photo".
+const GEND_BAND_KEY: Record<Band, Parameters<typeof t>[1]> = {
+  likely_ai: "lab.detectors.gend.band.high",
+  unclear: "lab.detectors.band.unclear",
+  likely_camera: "lab.detectors.gend.band.low",
+};
+
 const ERROR_KEY: Record<string, Parameters<typeof t>[1]> = {
   rate_limited: "lab.detectors.error.rateLimited",
   payload_too_large: "lab.detectors.error.tooLarge",
@@ -215,7 +222,7 @@ export function DetectorPanel({ locale }: { locale: Locale }) {
                 {row.status === "scored" && typeof row.score === "number" && row.band && (
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-[var(--line)] bg-[var(--page)] px-3 py-1 text-xs font-medium text-[var(--text)]">
-                      {t(locale, BAND_KEY[row.band])}
+                      {t(locale, (row.id === "gend" ? GEND_BAND_KEY : BAND_KEY)[row.band])}
                     </span>
                     <span className="text-sm tabular-nums text-[var(--text)]">
                       {t(locale, "lab.detectors.score")} {row.score} / 100

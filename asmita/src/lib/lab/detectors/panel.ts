@@ -51,9 +51,18 @@ export function verdictBand(score: number): DetectorBand {
   return "unclear";
 }
 
-/** Bands differ among the detectors that actually scored the image. */
+/**
+ * Bands differ among the detectors that actually scored the image.
+ * GenD only checks for face swaps, so a low GenD score says nothing about a fully generated
+ * image; it counts only when it lands in "likely AI".
+ */
 export function bandsDisagree(rows: DetectorRow[]): boolean {
-  const bands = new Set(rows.filter((row) => row.status === "scored").map((row) => row.band));
+  const bands = new Set(
+    rows
+      .filter((row) => row.status === "scored")
+      .filter((row) => row.id !== "gend" || row.band === "likely_ai")
+      .map((row) => row.band),
+  );
   return bands.size > 1;
 }
 
