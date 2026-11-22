@@ -1247,7 +1247,7 @@
   "org.newsletter.f.errorGeneric": "We could not sign you up just now. Please try again in a moment.",
   "org.newsletter.f.errorRate": "Too many requests from this network. Please try again in an hour.",
   "org.newsletter.f.err.email": "Enter a valid email address.",
-  "org.newsletter.privacyNote": "We store your email only to send the newsletter. Every email has an unsubscribe link.",
+  "org.newsletter.privacyNote": "We keep your first name and email only to send the newsletter. You can ask us to remove them at any time.",
   "org.newsletter.confirmTitle": "One more click",
   "org.newsletter.confirmBody": "Press the button to confirm your subscription.",
   "org.newsletter.confirmButton": "Confirm subscription",

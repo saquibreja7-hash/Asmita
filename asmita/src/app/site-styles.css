@@ -438,6 +438,8 @@ html[lang="hi"] .nav-link { text-transform: none; letter-spacing: 0; }
    language, copyright), three link columns right, helplines and small
    links in the bottom bar. */
 
+/* The teal focus ring would vanish on the teal footer. */
+.site-footer .field:focus-visible { outline-color: #ffffff; }
 .site-footer {
   margin-top: auto;
   position: relative;
@@ -1424,7 +1426,7 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
   font-variant-numeric: tabular-nums;
   transition: background 0.3s ease, color 0.3s ease;
 }
-.notice-flow-steps li.is-active .notice-flow-num { background: var(--coral); color: #ffffff; }
+.notice-flow-steps li.is-active .notice-flow-num { background: var(--coral-ink); color: #ffffff; }
 .notice-flow-steps strong { display: block; font-weight: 600; color: var(--ink); line-height: 1.35; }
 .notice-flow-body { display: block; margin-top: 4px; font-size: 0.9375rem; line-height: 1.55; color: var(--text); }
 @media (prefers-reduced-motion: reduce) {

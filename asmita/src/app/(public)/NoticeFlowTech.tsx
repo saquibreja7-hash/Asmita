@@ -68,7 +68,10 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
     if (!el || !watch || !hudEl) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const probe = document.createElement("canvas");
-    if (!(probe.getContext("webgl2") || probe.getContext("webgl"))) return;
+    const probeContext = probe.getContext("webgl2") || probe.getContext("webgl");
+    if (!probeContext) return;
+    // Release the probe's context at once: browsers cap live WebGL contexts.
+    probeContext.getExtension("WEBGL_lose_context")?.loseContext();
 
     let disposed = false;
     let cleanup: (() => void) | undefined;
@@ -76,9 +79,11 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
     const start = async () => {
       const THREE = await import("three");
       if (disposed) return;
-      setAnimated(true);
 
+      // Show the stage only once a renderer exists; if the context cannot be
+      // made, visitors keep the numbered steps alone, never an empty box.
       const renderer = new THREE.WebGLRenderer({ antialias: true });
+      setAnimated(true);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setClearColor(C.bg, 1);
       renderer.domElement.setAttribute("aria-hidden", "true");
@@ -511,6 +516,7 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
           else material?.dispose?.();
         });
         renderer.dispose();
+        renderer.forceContextLoss();
         renderer.domElement.remove();
       };
     };
@@ -519,7 +525,10 @@ export function NoticeFlowTech({ steps, label, labels }: { steps: FlowStep[]; la
       ([entry]) => {
         if (entry.isIntersecting) {
           lazy.disconnect();
-          void start();
+          // A failed chunk load or WebGL context falls back to the steps alone.
+          start().catch(() => {
+            if (!disposed) setAnimated(false);
+          });
         }
       },
       { rootMargin: "200px" },

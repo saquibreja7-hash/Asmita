@@ -51,12 +51,12 @@ export function NewsletterInlineForm({
       setSent(true);
       return;
     }
-    const payload = ((await response?.json().catch(() => ({}))) ?? {}) as { error?: string };
+    const payload = ((await response?.json().catch(() => ({}))) ?? {}) as { error?: string; field?: string };
     setError(
       payload.error === "rate_limited"
         ? t(locale, "org.newsletter.f.errorRate")
         : payload.error === "invalid_payload"
-          ? t(locale, "org.newsletter.f.err.email")
+          ? t(locale, payload.field === "firstName" ? "org.newsletter.f.err.firstName" : "org.newsletter.f.err.email")
           : variant === "footer"
             ? t(locale, "org.newsletter.footerError")
             : t(locale, "org.newsletter.f.errorGeneric"),
@@ -87,6 +87,7 @@ export function NewsletterInlineForm({
         type="text"
         required
         autoComplete="given-name"
+        maxLength={60}
         className={`field ${compact ? "!min-h-[42px] !py-2 !text-sm" : ""}`}
         placeholder={t(locale, "org.newsletter.f.firstNamePlaceholder")}
         value={firstName}
@@ -121,6 +122,9 @@ export function NewsletterInlineForm({
           {error}
         </p>
       )}
+      <p className={compact ? "mt-2 max-w-xs text-xs leading-relaxed opacity-90" : "muted mt-3 text-sm"}>
+        {t(locale, "org.newsletter.privacyNote")}
+      </p>
     </form>
   );
 }

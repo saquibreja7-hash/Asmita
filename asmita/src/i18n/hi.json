@@ -1247,7 +1247,7 @@
   "org.newsletter.f.errorGeneric": "अभी साइन अप नहीं हो सका। कृपया थोड़ी देर बाद फिर कोशिश कीजिए।",
   "org.newsletter.f.errorRate": "इस नेटवर्क से बहुत अनुरोध आए हैं। कृपया एक घंटे बाद कोशिश कीजिए।",
   "org.newsletter.f.err.email": "एक मान्य ईमेल पता लिखिए।",
-  "org.newsletter.privacyNote": "हम आपका ईमेल केवल न्यूज़लेटर भेजने के लिए रखते हैं। हर ईमेल में सदस्यता बंद करने का लिंक होता है।",
+  "org.newsletter.privacyNote": "हम आपका पहला नाम और ईमेल केवल न्यूज़लेटर भेजने के लिए रखते हैं। आप कभी भी इन्हें हटाने के लिए कह सकते हैं।",
   "org.newsletter.confirmTitle": "एक और क्लिक",
   "org.newsletter.confirmBody": "सदस्यता पक्की करने के लिए बटन दबाइए।",
   "org.newsletter.confirmButton": "सदस्यता पक्की कीजिए",
