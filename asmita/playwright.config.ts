@@ -50,6 +50,11 @@ export default defineConfig({
       DEV_OTP_CODE: "",
       OPENAI_API_KEY: "",
       DIRECT_URL: "",
+      // No GenD service either: lab-detectors.spec.ts asserts the row's
+      // honest "not configured" state, which a stray .env.local must not
+      // turn into a real call.
+      LAB_GEND_URL: "",
+      LAB_GEND_TOKEN: "",
       MAINTENANCE_MODE: "false",
       JWT_SECRET: "e2e-test-only-jwt-secret-32-chars-long",
       CRON_SECRET: "e2e-test-only-cron-secret-32-chars-long",
@@ -61,7 +66,10 @@ export default defineConfig({
   },
   use: {
     baseURL: "http://127.0.0.1:3001",
-    trace: "on-first-retry",
+    // WP101: keep the trace of every failure. The previous "on-first-retry"
+    // setting never wrote one in this suite (no retries are configured), so
+    // an intermittent e2e failure left no network timeline to read.
+    trace: "retain-on-failure",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },

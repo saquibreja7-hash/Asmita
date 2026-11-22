@@ -35,6 +35,45 @@ export type LabReportStatus = (typeof LAB_REPORT_STATUSES)[number];
 export const LAB_REPORT_OUTCOMES = ["ACTIONED", "REFUSED", "NO_REPLY"] as const;
 export type LabReportOutcome = (typeof LAB_REPORT_OUTCOMES)[number];
 
+// WP114 (research-tools-spec.md): the infrastructure registry.
+export const LAB_INFRA_CATEGORIES = [
+  "HOSTING_ASN",
+  "CDN",
+  "REGISTRAR",
+  "NAMESERVER",
+  "MAIL",
+  "TLS_ISSUER",
+  "PAYMENT",
+  "CRYPTO_ADDRESS",
+  "AUTH_SSO",
+  "ANALYTICS_ID",
+  "ADS",
+  "APP_STORE_LINK",
+  "TELEGRAM_LINK",
+  "SOCIAL_LINK",
+  "REFERRAL_LINK",
+  "MODEL_REPO_LINK",
+] as const;
+export type LabInfraCategory = (typeof LAB_INFRA_CATEGORIES)[number];
+
+export const LAB_INFRA_CONFIDENCES = ["HIGH", "MEDIUM", "LOW"] as const;
+export type LabInfraConfidence = (typeof LAB_INFRA_CONFIDENCES)[number];
+
+export const LAB_SERVICE_LINK_REASONS = [
+  "SHARED_ANALYTICS_ID",
+  "SHARED_IP",
+  "SHARED_NAMESERVER_SET",
+  "SHARED_CRYPTO_ADDRESS",
+  "SHARED_TLS_SAN",
+  "ANALYST",
+] as const;
+export type LabServiceLinkReason = (typeof LAB_SERVICE_LINK_REASONS)[number];
+
+// WP115 (research-tools-spec.md): review state for a cluster candidate —
+// scans create CANDIDATE rows, an analyst confirms or dismisses them.
+export const LAB_SERVICE_LINK_STATUSES = ["CANDIDATE", "CONFIRMED", "DISMISSED"] as const;
+export type LabServiceLinkStatus = (typeof LAB_SERVICE_LINK_STATUSES)[number];
+
 /** The latest liveness result for one service URL (JSON in the database). */
 export type LabUrlStatus = { url: string; up: boolean; checkedAt: string };
 
@@ -66,7 +105,8 @@ export type MemoryLabChokepoint = {
 
 export type MemoryLabReport = {
   id: string;
-  chokepointId: string;
+  /** Null on a WP115 bulk report, which lists several services instead. */
+  chokepointId: string | null;
   templateKind: LabChokepointKind;
   channel: LabReportChannel | null;
   subject: string;
@@ -78,20 +118,94 @@ export type MemoryLabReport = {
   providerReference: string | null;
   outcome: LabReportOutcome | null;
   outcomeAt: Date | null;
+  /** WP115 bulk reports: the provider's name and contact copied at draft time, and the listed services. */
+  bulkProviderName: string | null;
+  bulkAbuseContact: string | null;
+  bulkServiceIds: string[];
   createdAt: Date;
   updatedAt: Date;
+};
+
+// WP114: the provider directory, infrastructure scans, normalised findings
+// and service links (research-tools-spec.md). Real names and URLs live in
+// the database only; tests seed invented data.
+export type MemoryLabProvider = {
+  id: string;
+  name: string;
+  kind: LabChokepointKind;
+  website: string;
+  abusePageUrl: string | null;
+  abuseEmail: string | null;
+  policyUrl: string | null;
+  notes: string | null;
+  verifiedById: string | null;
+  verifiedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type MemoryLabInfraScan = {
+  id: string;
+  serviceId: string;
+  url: string;
+  finalUrl: string | null;
+  httpStatus: number | null;
+  scannedAt: Date;
+  signatureVersion: string;
+  error: string | null;
+};
+
+export type MemoryLabInfraFinding = {
+  id: string;
+  scanId: string;
+  serviceId: string;
+  category: LabInfraCategory;
+  providerId: string | null;
+  value: string;
+  evidence: string;
+  confidence: LabInfraConfidence;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+  active: boolean;
+  /** WP115: set when an analyst promotes the finding into a chokepoint. */
+  promotedAt: Date | null;
+  promotedChokepointId: string | null;
+};
+
+export type MemoryLabServiceLink = {
+  id: string;
+  serviceAId: string;
+  serviceBId: string;
+  reason: LabServiceLinkReason;
+  value: string;
+  createdAt: Date;
+  status: LabServiceLinkStatus;
+  reviewedById: string | null;
+  reviewedAt: Date | null;
 };
 
 type LabMemory = {
   services: Map<string, MemoryLabService>;
   chokepoints: Map<string, MemoryLabChokepoint>;
   reports: Map<string, MemoryLabReport>;
+  providers: Map<string, MemoryLabProvider>;
+  infraScans: Map<string, MemoryLabInfraScan>;
+  infraFindings: Map<string, MemoryLabInfraFinding>;
+  serviceLinks: Map<string, MemoryLabServiceLink>;
 };
 
 const globals = globalThis as typeof globalThis & { __asmitaLabStore?: LabMemory };
 
 function emptyMemory(): LabMemory {
-  return { services: new Map(), chokepoints: new Map(), reports: new Map() };
+  return {
+    services: new Map(),
+    chokepoints: new Map(),
+    reports: new Map(),
+    providers: new Map(),
+    infraScans: new Map(),
+    infraFindings: new Map(),
+    serviceLinks: new Map(),
+  };
 }
 
 export function labMemory(): LabMemory {

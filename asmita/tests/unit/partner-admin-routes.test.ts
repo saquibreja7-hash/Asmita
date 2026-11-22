@@ -252,6 +252,31 @@ describe("partner keys routes", () => {
     expect(badLabel.status).toBe(400);
   });
 
+  it("issues keys with the scopes the form ticked, both by default (WP110)", async () => {
+    vi.mocked(requireAdminPermission).mockResolvedValue(adminSession() as never);
+    const partnerId = seedPartner();
+
+    // No scopes in the body (the old console's shape): both.
+    const plain = await issueKey(request("POST", `/api/admin/partners/${partnerId}/keys`, { label: "default" }), params({ partnerId }));
+    expect(plain.status).toBe(201);
+    const plainBody = (await plain.json()) as { keyId: string; key: string };
+    expect(partnerMemory().keys.get(plainBody.keyId)!.scopes).toEqual(["feed", "outcomes"]);
+
+    // The checkboxes' value: only what was ticked.
+    const narrowed = await issueKey(request("POST", `/api/admin/partners/${partnerId}/keys`, { label: "read only", scopes: ["feed"] }), params({ partnerId }));
+    expect(narrowed.status).toBe(201);
+    const narrowedBody = (await narrowed.json()) as { keyId: string; key: string };
+    expect(partnerMemory().keys.get(narrowedBody.keyId)!.scopes).toEqual(["feed"]);
+    const issued = inMemoryAuditLog.filter((entry) => (entry.data as Record<string, unknown>).action === "partner_key_issued").at(-1)!;
+    expect((issued.data as Record<string, unknown>).scopes).toEqual(["feed"]);
+
+    // A scope list the schema refuses: empty, repeated, unknown.
+    for (const bad of [[], ["feed", "feed"], ["feed", "not-a-scope"], "feed"] as unknown[]) {
+      const refused = await issueKey(request("POST", `/api/admin/partners/${partnerId}/keys`, { label: "bad", scopes: bad }), params({ partnerId }));
+      expect(refused.status).toBe(400);
+    }
+  });
+
   it("revokes a key of this partner only, and refuses a repeat", async () => {
     vi.mocked(requireAdminPermission).mockResolvedValue(adminSession() as never);
     const partnerId = seedPartner();

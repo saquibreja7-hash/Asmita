@@ -213,3 +213,228 @@ package's instruction to log there too).
   the tool runs on a portrait folder you provide locally, and only the
   aggregate table would ever be published in e1.md."
 - "Nothing in the survivor complaint workflow changed."
+
+---
+
+## WP76 — E3 morph-to-source tracing (branch feat/lab-trace, 21 November 2026)
+
+The charter's experiment E3: `/lab/trace`, the browser-side tracing library,
+the evidence PDF and the lab-bench `trace` command.
+
+### What was built
+
+- The tracing library under `src/lib/lab/trace/`, inside the Lab import
+  boundary, all pure TypeScript over RGBA buffers so the browser page and
+  the harness run the same code:
+  - `geometry.ts` — the pixel ops: crop, grey-mask, nearest-neighbour
+    resize, the eye-pair similarity transform and its inverse sampling, the
+    2048-long-edge working-copy cap;
+  - `score.ts` — the comparison: whole-image / face-crop / background-mask
+    PDQ (the site's own pdq.ts; E1's margins and grey), SSCD cosine, the
+    aligned 16x16 tile heat map, the honest notes, the evidence bands and
+    the verdict (strong / possible / none; thresholds documented in
+    docs/lab/e3.md and pinned by tests);
+  - `sscd.ts` — the sscd_disc_mixup input tensor (a faithful port of
+    crawler/src/image/sscd-model.ts's tensor half) and the cosine;
+  - `pdf.ts` — the evidence PDF: images side by side with highlighted
+    regions, scores, date/time, method statement, tool version; built with
+    pdf-lib (the notices' library — it is isomorphic, so the browser runs
+    it), English-only with the shared isPdfSafeText guard, standalone
+    (explicitly not part of complaint filing);
+  - `browser.ts` — the in-browser analysis: canvas decode, the landmark
+    tool, onnxruntime-web for SSCD, orchestration with timeouts; every
+    model failure degrades into an honest note, never a failed run.
+- `/lab/trace` (public, behind ENABLE_LAB, en + hi — 51 new keys in both
+  dictionaries, listed as machine translated in hi-review-status.json),
+  linked from the E3 card on `/lab` while the Lab is on. The page states
+  that images stay in the browser, shows each comparison's verdict band
+  with an honest explanation, the notes, the scores, the side-by-side
+  images with the heat-map overlay, and offers the PDF.
+- Models as operator configuration (`src/lib/lab-models.ts`, documented in
+  .env.example): `LAB_SSCD_MODEL_URL` (unset: hashing-only, stated on the
+  page) and `LAB_HUMAN_MODEL_BASE` (default: the landmark library author's
+  model host, the E1 harness's default too). CSP: buildCsp gained a
+  `labTrace` option — `'wasm-unsafe-eval'` (WebAssembly compilation only)
+  and the configured model origins on connect-src, on /lab/trace only, in
+  next.config.ts (dev) and the Worker entry (production).
+- The onnxruntime-web WASM engine and the landmark library's browser IIFE
+  build are copied from node_modules to `public/ort` / `public/human` at
+  install time (`scripts/copy-lab-assets.mjs`, the copy-c2pa-assets
+  discipline), gitignored, never committed. No model weights in the repo.
+- `tools/lab-bench trace <set-dir>` (built by a subagent, reviewed): the
+  same scoring over an E1 set — per probe, all gallery originals ranked,
+  reporting the share of probes whose right source ranks first and the
+  wrong-source strong rate, overall and per transform, against the charter
+  targets (95% / 1%); results.json + pairs.jsonl + trace.md per run.
+- Tests: `tests/unit/lab-trace-score.test.ts` (geometry, tensor, region
+  split, notes), `lab-trace-verdict.test.ts` (every band boundary, the
+  verdict rules, the morph signature, flat-image honesty),
+  `lab-trace-pdf.test.ts` (content builder, WinAnsi refusal, assembled PDF
+  with both images); `tools/lab-bench/tests/trace.test.ts` (ranking,
+  never-strong on unrelated pairs, results shape, degraded modes).
+  Playwright: `tests/e2e/lab-trace.spec.ts` — identical pair → strong band,
+  unrelated pair → no-evidence band, the /lab link, the honest notes and
+  the PDF offer (ENABLE_LAB was already set in the e2e webServer env).
+
+### Verified on this machine
+
+- Real-browser exercise of the full tool (dev server + driven browser):
+  identical synthetic pair → strong band; unrelated pair → no-evidence
+  band; the hashing-only and landmarks-unavailable notes render; the PDF
+  button appears; no console errors, no CSP violations, no horizontal
+  overflow at desktop or 375 px; contrast 7.6–19:1 on every checked element.
+- `npx tsc --noEmit` clean; the three new unit test files pass (38 tests);
+  `tools/lab-bench npm run check` green (12 files / 85 tests, subagent-run
+  and including the imported asmita core).
+- The full repo checks (`check.ps1 -Scope asmita`) ended with ALL CHECKS
+  PASSED: lint 0 errors (4 pre-existing warnings, none in the new files),
+  type-check clean, 201 test files / 1901 tests passed.
+
+### Not verified on this machine
+
+- No real morphs, no real faces, no SSCD model (no LAB_SSCD_MODEL_URL set
+  here): every number came from synthetic images. The SSCD path in
+  `browser.ts` (onnxruntime-web session create + embed) has never executed
+  against the real 98 MB weights; its tensor math is pinned by unit tests
+  and mirrors the crawler's, but the first configured run must be
+  spot-checked.
+- WebGL-backed face detection never ran here (headless Chromium without a
+  GPU): the landmark path was exercised only through its honest degradation
+  (script loads, model init fails, tool continues). Detection on real
+  Indian-face portraits is unmeasured, as in E1.
+- The full Playwright suite runs in the separate verify step;
+  `tests/e2e/lab-trace.spec.ts` follows the conventions of lab.spec.ts and
+  hash-flow.spec.ts but has itself never executed.
+- `npm run build` / workerd smoke were not run (this machine runs lint,
+  type-check and vitest only, per the work package).
+
+### For the owner to approve (user-facing sentences)
+
+English:
+- "The Lab's trace tool is ready to try: on /lab/trace you choose the
+  image under investigation and the original photos it may have come from,
+  and the comparison runs entirely in your browser — nothing is uploaded."
+- "The tool shows what the similarity measures do and do not prove, and the
+  evidence PDF it can produce is a standalone document for NGOs and the
+  police, not part of filing a complaint."
+- "The model-based score switches on only when you configure where the
+  model lives (LAB_SSCD_MODEL_URL); until then the tool says so and
+  compares with image hashing only."
+- "Nothing about this is live in production until you set ENABLE_LAB to
+  true in wrangler.jsonc."
+
+Hindi (machine-translated, pending native review, listed in
+hi-review-status.json):
+- "लैब का ट्रेस उपकरण आज़माने के लिए तैयार है: /lab/trace पर आप जाँच की जाने
+  वाली तस्वीर और वे असली तस्वीरें चुनते हैं जिनसे वह बनी हो सकती है, और पूरी
+  तुलना आपके ब्राउज़र में ही होती है — कुछ भी अपलोड नहीं होता।"
+
+### Decisions made on my own
+
+1. The landmark library is loaded in the browser from our own origin
+   (public/human, copied at install) as a plain script, not bundled: its
+   package's exports map misdeclares the dist subpaths (the E1 harness hit
+   the same quirk in Node), so any bundler's server-side pass resolves the
+   bare import to the Node build and fails on its native TensorFlow
+   dependency. The vendored-script route is bundler-proof in dev and both
+   production builds, and CSP-closed ('self').
+2. onnxruntime-web runs single-threaded on the main thread with proxy
+   disabled (wasmPaths '/ort/'), so the page CSP needs only
+   'wasm-unsafe-eval' — the same keyword /check-image already uses — and
+   no worker-src changes.
+3. Both compared images are capped at a 2048-long-edge working copy and
+   every signal (including whole-image PDQ) runs on that copy: both sides
+   pass through the same pipeline, which is what makes the comparison fair.
+   This means the page's whole-image hash can differ from what the
+   complaint flow's fingerprinting would compute on a huge photo; the trace
+   tool compares pairs, it never submits hashes, so nothing cross-matches
+   wrongly. Documented in e3.md.
+4. The evidence PDF is English-only (pdf-lib's standard fonts cannot draw
+   Devanagari, exactly why the site's signing texts are English-only);
+   the page says so in the visitor's language. The tool version
+   (trace-1.0.0) travels on every result and PDF.
+5. Verdict thresholds are provisional (documented in e3.md, pinned by
+   tests) until a real E1/E3 run: strong needs 3.5 evidence points across
+   at least two measures plus one clear signal; pixel-identical images are
+   strong outright — byte equality needs no inference and no thresholds.
+6. The face-region score counts as evidence only when it matches; a
+   mismatching face never subtracts evidence (with a matching background it
+   IS the morph signature). The breakdown shows both bands so a human sees
+   the signature, not just a number.
+7. The face-landmark backend is pinned to WebGL: it is the fast path on
+   every real phone and desktop this audience uses; where WebGL is absent
+   (headless CI) the tool degrades honestly instead of falling back to a
+   slow CPU or a third-party WASM CDN the CSP does not admit.
+8. The `trace` harness command was built by a parallel subagent against the
+   frozen core API, then reviewed: it imports the site's scoring (never a
+   copy), and its fixture fakes bin embeddings deterministically because
+   the existing E1 fake's statistics collide on same-palette images.
+9. No admin surface was added: E3 produces no stored data (images stay in
+   the browser, results are never persisted), so there is nothing to
+   administer and no `Lab*` table.
+
+---
+
+## WP88 — CI fix: the trace page stated each run-wide honest note twice (branch feat/lab-trace, 21 November 2026)
+
+PR #108's Playwright job failed exactly one test,
+`tests/e2e/lab-trace.spec.ts` › "an identical pair shows the
+strong-evidence band". Nothing about the analysis was wrong — the strong
+band had already rendered, and the spec's other two journeys and the
+rest of the CI suite passed. The failure was a strict-mode violation on
+the honest hashing-only sentence.
+
+### What was wrong and what changed
+
+- The page rendered the run-wide facts twice: the "What this run used"
+  card states them once for the whole run (no SSCD model address
+  configured; the face-landmark model could not load), and the
+  per-comparison notes list then repeated the same sentences, because
+  `NOTE_KEYS` mapped `sscd_model_not_configured` and
+  `landmarks_unavailable` to the very i18n keys that card renders
+  (`lab.trace.sscd.off`, `lab.trace.landmarks.off`).
+- The fix is in `TraceClient.tsx` only: the per-comparison notes list
+  filters out those two run-wide notes, which the card above the
+  comparisons already states exactly once. Pair-specific notes (identical
+  pixels, low image quality, no face in the pair, SSCD inference
+  failure) still render under each comparison, and with more than one
+  original photo each comparison still gets its own notes.
+- The scoring core, the browser pipeline, both dictionaries and both
+  e2e specs are untouched: no note was reworded, weakened or hidden,
+  and no test was changed, skipped or loosened.
+
+### Verified on this machine (Node 22 container)
+
+- The failing CI job's own log (fetched with `gh run view --log-failed`)
+  names the cause: `getByText('Model-based comparison is off: …')`
+  resolved to 2 elements — the capabilities card's `<li>` and the notes
+  list's `<li>`.
+- `e2e-some.sh` (Node 22, Chromium, throwaway Postgres 17) on
+  `tests/e2e/lab-trace.spec.ts` + `tests/e2e/lab.spec.ts`:
+  **4 passed** (39 s), including the previously failing journey.
+- Full `check.sh` (both packages): crawler — lint, type-check,
+  **60 test files / 650 tests**, build ok; asmita — lint 0 errors
+  (4 pre-existing warnings, none in the touched file), type-check clean,
+  `prisma validate` ok, **226 test files / 2194 tests**.
+  `ALL CHECKS PASSED`.
+
+### For the owner to approve
+
+- "The trace tool's honesty notes now each appear once: the run-wide
+  notes (no model configured, landmark model unavailable) sit in the
+  'What this run used' card, and each comparison lists only what is
+  true of that pair."
+
+### Decisions made on my own
+
+- The page was fixed, not the spec: the strict-mode failure was the
+  symptom of a real duplication on the page (the same honest sentence
+  shown twice), so the fix renders each fact once instead of loosening
+  the assertion. The spec keeps asserting the sentence is shown — after
+  the fix, exactly once, which is what a strict locator demands and
+  what a reader wants.
+- The `landmarks_unavailable` note is filtered together with the SSCD
+  one: the same bug class (a run-wide fact rendered once per
+  comparison beside its card entry), even though no current assertion
+  catches it.
+- Not pushed; the PR's CI re-run is the owner's step.

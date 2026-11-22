@@ -52,8 +52,11 @@ describe("org retention", () => {
     await subscribeToNewsletter({ email: "kept@example.invalid", locale: "en", source: "t" });
     // Backdate the stale and the confirmed sign-ups; only the stale one is
     // still PENDING.
-    newsletterSubscribers[0].createdAt = new Date(Date.now() - 8 * 24 * 60 * 60_000).toISOString();
-    newsletterSubscribers[2].createdAt = new Date(Date.now() - 8 * 24 * 60 * 60_000).toISOString();
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60_000).toISOString();
+    for (const index of [0, 2]) {
+      newsletterSubscribers[index].createdAt = eightDaysAgo;
+      newsletterSubscribers[index].updatedAt = eightDaysAgo;
+    }
     newsletterSubscribers[2].status = "CONFIRMED";
     const staleHash = newsletterSubscribers[0].emailHash;
     const confirmedHash = newsletterSubscribers[2].emailHash;
@@ -65,12 +68,27 @@ describe("org retention", () => {
     expect(newsletterSubscribers.some((entry) => entry.emailHash === confirmedHash)).toBe(true);
   });
 
+  it("keeps a re-subscriber's pending row: a fresh sign-up restarts the 7-day clock", async () => {
+    await subscribeToNewsletter({ email: "again@example.invalid", locale: "en", source: "t" });
+    const longAgo = new Date(Date.now() - 30 * 24 * 60 * 60_000).toISOString();
+    newsletterSubscribers[0].createdAt = longAgo;
+    newsletterSubscribers[0].updatedAt = longAgo;
+    // Signing up again reuses the row (old createdAt) with a new token.
+    await subscribeToNewsletter({ email: "again@example.invalid", locale: "en", source: "t" });
+    expect(newsletterSubscribers).toHaveLength(1);
+    expect(newsletterSubscribers[0].createdAt).toBe(longAgo);
+
+    expect(await purgeUnconfirmedNewsletterSignups()).toBe(0);
+    expect(newsletterSubscribers).toHaveLength(1);
+  });
+
   it("reports both sweeps for the maintenance cron", async () => {
     await volunteerSubmission("kept@example.invalid");
     orgSubmissions[0].status = "CLOSED";
     orgSubmissions[0].closedAt = new Date(Date.now() - 400 * 24 * 60 * 60_000).toISOString();
     await subscribeToNewsletter({ email: "pending@example.invalid", locale: "en", source: "t" });
     newsletterSubscribers[0].createdAt = new Date(Date.now() - 9 * 24 * 60 * 60_000).toISOString();
+    newsletterSubscribers[0].updatedAt = newsletterSubscribers[0].createdAt;
 
     const report = await runOrgRetention();
     expect(report).toEqual({ submissionsDeleted: 1, unconfirmedSubscribersDeleted: 1 });

@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The E2 domain-lookup helper (docs/lab/charter.md): host from the URL,
 // name servers from DNS, registrar from the operator-configured RDAP
-// endpoint. Fetch is mocked throughout; invented hosts only (example.test).
+// endpoint, and since WP114 the registrable domain from the Public Suffix
+// List (tldts). Fetch is mocked throughout; invented hosts only
+// (example.test).
 
-import { extractRegistrar, lookupServiceUrl } from "@/lib/lab/lab-lookup";
+import { extractRegistrar, lookupServiceUrl, registrableDomain } from "@/lib/lab/lab-lookup";
 
 function rdapBody(registrar: string, padding = 0) {
   return JSON.stringify({
@@ -104,5 +106,38 @@ describe("extractRegistrar", () => {
     };
     expect(extractRegistrar(rdap)).toBe("Deep Registrar SA");
     expect(extractRegistrar({})).toBeNull();
+  });
+});
+
+describe("registrableDomain (Public Suffix List, WP114)", () => {
+  it("treats multi-label public suffixes correctly", () => {
+    // .co.in is a public suffix: the registrable domain keeps both labels.
+    expect(registrableDomain("example.co.in")).toBe("example.co.in");
+    expect(registrableDomain("www.example.co.in")).toBe("example.co.in");
+    expect(registrableDomain("www.example.co.uk")).toBe("example.co.uk");
+  });
+
+  it("strips subdomains down to the registrable domain", () => {
+    expect(registrableDomain("a.b.example.com")).toBe("example.com");
+    expect(registrableDomain("deep.tool.example.com")).toBe("example.com");
+  });
+
+  it("returns nothing for IP literals, bare suffixes and single labels", () => {
+    expect(registrableDomain("192.168.5.1")).toBeNull();
+    expect(registrableDomain("203.0.113.7")).toBeNull();
+    expect(registrableDomain("2001:db8::1")).toBeNull();
+    expect(registrableDomain("com")).toBeNull();
+    expect(registrableDomain("co.in")).toBeNull();
+    expect(registrableDomain("example")).toBeNull();
+  });
+
+  it("handles internationalised domain names and unknown TLDs", () => {
+    // The IDN example from the Public Suffix List documentation.
+    expect(registrableDomain("пример.рф")).toBe("пример.рф");
+    // Punycode form of the same host.
+    expect(registrableDomain("xn--e1afmkfd.xn--p1ai")).toBe("xn--e1afmkfd.xn--p1ai");
+    // Unknown TLDs fall back to the PSL's implicit "*" rule, so invented
+    // .test hosts still have a registrable domain.
+    expect(registrableDomain("service.example.test")).toBe("example.test");
   });
 });

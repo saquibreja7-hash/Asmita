@@ -64,6 +64,7 @@ export function PartnerManager({ partner, keys }: { partner: PlatformPartnerView
 
   // Keys: issue (shown once), copy, revoke.
   const [keyLabel, setKeyLabel] = useState("");
+  const [keyScopes, setKeyScopes] = useState<string[]>(["feed", "outcomes"]);
   const [keyError, setKeyError] = useState<string | null>(null);
   const [onceKey, setOnceKey] = useState<{ id: string; key: string } | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
@@ -127,8 +128,9 @@ export function PartnerManager({ partner, keys }: { partner: PlatformPartnerView
     setNotice(null);
     const label = keyLabel.trim();
     if (label === "") return setKeyError("Give the key a name first.");
+    if (keyScopes.length === 0) return setKeyError("Pick at least one thing this key may do.");
     setBusy(true);
-    const result = await send("POST", `/api/admin/partners/${partner.id}/keys`, { label });
+    const result = await send("POST", `/api/admin/partners/${partner.id}/keys`, { label, scopes: keyScopes });
     setBusy(false);
     if (!result.ok) return setKeyError(result.message);
     const data = result.data as { keyId?: unknown; key?: unknown } | null;
@@ -356,7 +358,14 @@ export function PartnerManager({ partner, keys }: { partner: PlatformPartnerView
               <tbody>
                 {keys.map((entry) => (
                   <tr key={entry.id}>
-                    <td>{entry.label}</td>
+                    <td>
+                      {entry.label}
+                      <span className="muted block text-xs">
+                        {entry.scopes.includes("feed") ? "Fingerprint feeds" : null}
+                        {entry.scopes.includes("feed") && entry.scopes.includes("outcomes") ? " · " : null}
+                        {entry.scopes.includes("outcomes") ? "Outcome reporting" : null}
+                      </span>
+                    </td>
                     <td className="a-nowrap tabular-nums">{when(entry.createdAt)}</td>
                     <td className="a-nowrap tabular-nums">{entry.lastUsedAt ? when(entry.lastUsedAt) : "Never"}</td>
                     <td className="a-nowrap">
@@ -423,8 +432,43 @@ export function PartnerManager({ partner, keys }: { partner: PlatformPartnerView
               value={keyLabel}
             />
           </Field>
+          <fieldset className="grid gap-1 text-sm">
+            <legend>What this key may do</legend>
+            <label className="flex items-start gap-2">
+              <input
+                checked={keyScopes.includes("feed")}
+                className="mt-1"
+                onChange={(event) =>
+                  setKeyScopes((current) => (event.target.checked ? ["feed", ...current.filter((scope) => scope !== "feed")] : current.filter((scope) => scope !== "feed")))
+                }
+                type="checkbox"
+              />
+              <span>
+                Read the fingerprint feeds
+                <span className="muted block text-xs">
+                  The fingerprint feed and the HMA signal feed. The platform needs this to receive and delete hashes.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input
+                checked={keyScopes.includes("outcomes")}
+                className="mt-1"
+                onChange={(event) =>
+                  setKeyScopes((current) => (event.target.checked ? [...current.filter((scope) => scope !== "outcomes"), "outcomes"] : current.filter((scope) => scope !== "outcomes")))
+                }
+                type="checkbox"
+              />
+              <span>
+                Report outcomes
+                <span className="muted block text-xs">
+                  Tell Asmita what the platform did with a fingerprint or a link on its own domains.
+                </span>
+              </span>
+            </label>
+          </fieldset>
           <div>
-            <button className="btn btn-primary" disabled={busy || keyLabel.trim() === ""} type="submit">
+            <button className="btn btn-primary" disabled={busy || keyLabel.trim() === "" || keyScopes.length === 0} type="submit">
               {busy ? "Issuing…" : "Issue key"}
             </button>
           </div>

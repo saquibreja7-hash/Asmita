@@ -68,7 +68,7 @@ const checks = [
 
 const reach = [
   "Reply to the notice email. The sign-off address is Notice@meriasmita.org, and replies about a case are answered.",
-  "Quote the case reference (format: MA-…) in every reply, so we can find the case without asking the survivor for anything.",
+  "Quote the case reference (format: ASMITA-2026-…) in every reply, so we can find the case without asking the survivor for anything.",
   "Requests for more information about the complaint are passed to the survivor only if they are addressed to Notice@meriasmita.org and quote the case reference. The complainant is not named in the notice.",
   "Tell us the outcome — actioned, refused, or acknowledged — and she sees the answer on her case page.",
 ];

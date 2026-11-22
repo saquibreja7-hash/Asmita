@@ -82,7 +82,10 @@ export async function POST(request: Request) {
   try {
     const rows = form.detailRows(rest);
     const lines = rows.map((row) => `${row.label}: ${row.value}`);
-    await sendOrgInboxNotification(form.inboxSubject(rest), [`Kind: ${kind}`, ...lines].join("\n"));
+    await sendOrgInboxNotification(form.inboxSubject(rest), [`Kind: ${kind}`, ...lines].join("\n"), {
+      kind,
+      submissionId: saved.id,
+    });
     await sendOrgAcknowledgement(String(rest.email ?? ""), form.ackSubject, form.ackLines);
   } catch (err) {
     console.error("[org-submissions] notification email failed:", err);

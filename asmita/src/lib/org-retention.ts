@@ -37,13 +37,17 @@ export async function purgeClosedOrgSubmissions(now = new Date()): Promise<numbe
   return removed.count;
 }
 
-/** Delete newsletter sign-ups that never confirmed within 7 days. */
+/**
+ * Delete newsletter sign-ups that never confirmed within 7 days. The clock is
+ * updatedAt, not createdAt: a re-signup issues a fresh token and restarts the
+ * clock on the existing row, matching confirmNewsletter's own expiry check.
+ */
 export async function purgeUnconfirmedNewsletterSignups(now = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - NEWSLETTER_CONFIRM_TTL_MS);
   if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
     const before = newsletterSubscribers.length;
     const survivors = newsletterSubscribers.filter(
-      (entry) => !(entry.status === "PENDING" && new Date(entry.createdAt) < cutoff),
+      (entry) => !(entry.status === "PENDING" && new Date(entry.updatedAt) < cutoff),
     );
     newsletterSubscribers.length = 0;
     newsletterSubscribers.push(...survivors);
@@ -51,7 +55,7 @@ export async function purgeUnconfirmedNewsletterSignups(now = new Date()): Promi
   }
   const { db } = await import("@/lib/db");
   const removed = await db.newsletterSubscriber.deleteMany({
-    where: { status: "PENDING", createdAt: { lt: cutoff } },
+    where: { status: "PENDING", updatedAt: { lt: cutoff } },
   });
   return removed.count;
 }

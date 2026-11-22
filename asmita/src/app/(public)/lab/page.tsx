@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
 import { labPublicNumbers } from "@/lib/lab/lab-stats";
+import { LAB_BETA_TOOLS, LAB_HUB_KEYS, LAB_HUB_SECTIONS } from "@/lib/lab/beta-tools";
 
 export const metadata: Metadata = {
   title: "AI Lab",
@@ -42,6 +44,44 @@ export default async function LabPage() {
           </div>
         </section>
 
+        {enabled && (
+          // WP96 (docs/lab/beta-spec.md): one card per beta tool, each with
+          // the Beta badge and one line on what it does. The tools 404 while
+          // ENABLE_LAB is off, so the section waits for the same switch — an
+          // off Lab never advertises links that answer 404. The tool pages
+          // themselves stay gated exactly as their WPs built them.
+          <section className="section-pad" aria-labelledby="lab-tools">
+            <div className="container">
+              <h2 id="lab-tools" className="section-title">{t(locale, LAB_HUB_KEYS.title)}</h2>
+              <p className="muted mx-auto mt-4 max-w-2xl text-sm leading-[1.7]">{t(locale, LAB_HUB_KEYS.note)}</p>
+              <div className="mx-auto mt-8 grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {/* WP151 (docs/lab/open-tools-spec.md): the two section
+                    entries — Open tools and Free stacks — lead the grid in
+                    the same card style, without the Beta badge. */}
+                {LAB_HUB_SECTIONS.map((section) => (
+                  <div key={section.href} className="card">
+                    <h3 className="font-semibold">
+                      <Link className="text-link" href={section.href}>{t(locale, section.nameKey)}</Link>
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--text)]">{t(locale, section.lineKey)}</p>
+                  </div>
+                ))}
+                {LAB_BETA_TOOLS.map((tool) => (
+                  <div key={tool.href} className="card">
+                    <span className="inline-flex items-center rounded-full border border-[var(--brand)] bg-[var(--brand-soft)] px-3 py-1 text-xs font-semibold tracking-wide text-[var(--brand-strong)]">
+                      {t(locale, LAB_HUB_KEYS.beta)}
+                    </span>
+                    <h3 className="mt-3 font-semibold">
+                      <Link className="text-link" href={tool.href}>{t(locale, tool.nameKey)}</Link>
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--text)]">{t(locale, tool.lineKey)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
         <section className="zone-white section-pad" aria-labelledby="lab-experiments">
           <div className="container">
             <h2 id="lab-experiments" className="section-title">{t(locale, "lab.experiments.title")}</h2>
@@ -50,6 +90,11 @@ export default async function LabPage() {
                 <div key={experiment.title} className="card">
                   <h3 className="font-semibold">{t(locale, experiment.title)}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-[var(--text)]">{t(locale, experiment.body)}</p>
+                  {enabled && experiment.title === "lab.exp.e3.title" && (
+                    <p className="mt-4">
+                      <Link className="text-link" href="/lab/trace">{t(locale, "lab.exp.e3.cta")} <span aria-hidden>→</span></Link>
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

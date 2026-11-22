@@ -23,6 +23,8 @@ npm run models:fetch        # once: the two pinned ONNX weights (see below)
 npm run build-set -- <portraits-dir> <out-dir>
 npm run match -- <set-dir>
 npm run detect -- <set-dir>
+npm run gend-eval -- <set-dir>
+npm run trace -- <set-dir>
 npm run report -- <run-dir>
 npm test                    # vitest
 npm run check               # type-check + tests
@@ -51,9 +53,33 @@ npm run check               # type-check + tests
 - **detect** runs the detector adapters over every item, skipping any whose
   key (or, for the local model, whose weights file) is unset, and reports
   accuracy and AUC per transform (AUC pools the transform's items with the
-  untouched originals; a pool with one class gets accuracy only). With no
-  adapter available at all (no keys, no fetched weights) the command stops
-  with a message listing what was skipped — it never invents scores.
+  untouched originals; a pool with one class gets accuracy only). Items a
+  face-swap detector answers "no face" on are counted in a `noFace` column,
+  not as errors. With no adapter available at all (no keys, no fetched
+  weights) the command stops with a message listing what was skipped — it
+  never invents scores.
+- **gend-eval** (research-tools spec WP113) is the honest evaluation of the
+  Lab's own GenD service: it takes a built set, keeps only the untouched
+  originals (real) and the face-swap composites (fake), puts every item
+  through the degradation ladder in `src/degrade.ts` (JPEG 95/75/50/30/10,
+  the E1 WhatsApp-style re-encode at long side 1600 and 1280, max side 128,
+  Gaussian blur sigma 1 and 2 — detection and alignment run inside the
+  service, after the degradation) and reports, per condition, ROC-AUC,
+  accuracy at the 0.5 cut and the no-face rate per class, each with a
+  bootstrap 95% CI (seeded, 2000 replicates). Results land in
+  `runs/<stamp>-gend-eval/` (`results.json`, per-item `scores.jsonl`,
+  `gend-eval.md` aggregate table); only aggregate numbers go into
+  `asmita/docs/lab/gend-eval.md`. Needs `LAB_GEND_URL` and `LAB_GEND_TOKEN`.
+- **trace** runs the site's trace scoring core (the exact code the
+  survivor-facing tool runs, imported from `asmita/src/lib/lab/trace/`)
+  over every probe x original pair of a built set and reports the charter
+  E3 metric: the share of probes whose right source ranks first, and the
+  share of probe-vs-non-source pairs the tool calls a strong match.
+  Against the charter targets (right source 95% of the time, at most 1%
+  wrong-source) the run's `trace.md` and stdout report the measured
+  numbers. A missing SSCD model or an unavailable face locator degrades
+  honestly — the pairs are scored without that signal and the results note
+  it.
 - **report** writes `report.md` and `report.html` into the run directory
   (aggregate tables only — no image bytes).
 
@@ -93,6 +119,7 @@ Behind one interface (`src/detectors/`), each skipped unless configured:
 | `hive` | `HIVE_API_KEY` (+ `HIVE_BASE_URL`) | multipart upload, ai-generated class score |
 | `sightengine` | `SIGHTENGINE_USER` + `SIGHTENGINE_SECRET` (+ `SIGHTENGINE_BASE_URL`) | `models=ai-generated` check |
 | `communityforensics` | local weights file | the pinned ViT-S above, sigmoid on one logit |
+| `gend` | `LAB_GEND_URL` + `LAB_GEND_TOKEN` | the Lab's own GenD service (WP112/WP113); no downscale, no-face answers kept honestly |
 
 The three hosted adapters are written from each provider's public API docs
 and are tested here only against invented fixtures with an injected fetch —
@@ -105,9 +132,10 @@ should spot-check the recorded raw responses in the run directory
 - `build-set` writes `images/` plus a `set.json` manifest: ids, transforms,
   labels (a transform of a real photo is `real`; a composite or a dataset
   fake is `fake`), dimensions. Nothing about a person is recorded.
-- `match`/`detect` write `runs/<timestamp>-<kind>/` with `results.json`,
+- `match`/`detect`/`trace` write `runs/<timestamp>-<kind>/` with `results.json`,
   per-pair (`pairs.jsonl`) / per-item (`detections.jsonl`) scores, and the
-  report after `report`. All gitignored.
+  report after `report` (`trace` writes its `trace.md` directly). All
+  gitignored.
 - Portraits folders are research data on local disk: clothed, non-intimate
   photos of consenting adults only. The Lab never generates sexual content.
 - The Pdq hashing is the site's own code (`asmita/src/lib/pdq/pdq.ts`),

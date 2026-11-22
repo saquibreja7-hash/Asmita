@@ -307,7 +307,7 @@ describe("partner keys, Prisma path", () => {
     } as never);
     mocked.platformPartner.findUnique.mockResolvedValue({ status: "ACTIVE" } as never);
 
-    expect(await verifyPartnerKey(key)).toEqual({ ok: true, keyId: "k-1", partnerId: "p-1" });
+    expect(await verifyPartnerKey(key)).toEqual({ ok: true, keyId: "k-1", partnerId: "p-1", scopes: ["feed", "outcomes"] });
     expect(mocked.platformPartnerKey.update).toHaveBeenCalledWith({
       where: { id: "k-1" },
       data: { lastUsedAt: expect.any(Date) },

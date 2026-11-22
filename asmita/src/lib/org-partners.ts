@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { safeLink } from "@/lib/safe-link";
 import { writeAuditLog } from "@/lib/audit";
 
 /*
@@ -43,7 +44,7 @@ export const orgPartnerSchema = z
     name: text(2, 120),
     type: z.enum(ORG_PARTNER_TYPES),
     logoPath: logoPath.optional(),
-    url: z.string().trim().url().max(300).optional(),
+    url: safeLink(300).optional(),
     blurbEn: text(2, 400),
     blurbHi: text(2, 400).optional(),
   })

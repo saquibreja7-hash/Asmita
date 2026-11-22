@@ -484,12 +484,18 @@ export function getOrgInboxEmail() {
 /**
  * Notification to the organization inbox for a public-form submission.
  * With ORG_INBOX_EMAIL unset (local development), the message is logged
- * instead of sent — nothing is lost while no inbox exists.
+ * instead of sent — nothing is lost while no inbox exists. The log line
+ * carries only the form kind and submission id: the subject and body hold the
+ * submitter's name and organisation, which stay out of logs.
  */
-export async function sendOrgInboxNotification(subject: string, text: string) {
+export async function sendOrgInboxNotification(
+  subject: string,
+  text: string,
+  meta: { kind: string; submissionId: string },
+) {
   const inbox = getOrgInboxEmail();
   if (!inbox) {
-    console.warn(JSON.stringify({ event: "org_inbox_notification", subject }));
+    console.warn(JSON.stringify({ event: "org_inbox_notification", kind: meta.kind, submissionId: meta.submissionId }));
     return { id: "org-inbox-logged" };
   }
   if (!process.env.RESEND_API_KEY) {
