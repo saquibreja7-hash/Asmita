@@ -8,6 +8,7 @@ import {
   listInfraScansForService,
   listLabProviders,
   listServiceLinks,
+  providerDependents,
   type LabInfraFindingView,
   type LabInfraScanView,
   type LabProviderView,
@@ -282,28 +283,14 @@ export async function labProviderDirectory(): Promise<LabProviderDirectoryEntry[
   return providers.map((provider) => {
     // Which services depend on this provider: a chokepoint recorded against
     // its name and kind, or an active finding linked to its directory row.
-    const dependents = new Map<string, LabProviderDependent>();
-    const addDependent = (service: LabServiceView, viaChokepoint: boolean, viaFinding: boolean) => {
-      const existing = dependents.get(service.id);
-      if (existing) {
-        existing.viaChokepoint ||= viaChokepoint;
-        existing.viaFinding ||= viaFinding;
-        return;
-      }
-      dependents.set(service.id, {
+    const dependents: LabProviderDependent[] = [];
+    for (const [serviceId, via] of providerDependents(provider, chokepoints, activeFindings)) {
+      const service = services.find((entry) => entry.id === serviceId);
+      if (!service) continue;
+      dependents.push({
         id: service.id, name: service.name, kind: service.kind, urls: service.urls,
-        viaChokepoint, viaFinding,
+        viaChokepoint: via.viaChokepoint, viaFinding: via.viaFinding,
       });
-    };
-    for (const chokepoint of chokepoints) {
-      if (chokepoint.provider !== provider.name || chokepoint.kind !== provider.kind) continue;
-      const service = services.find((entry) => entry.id === chokepoint.serviceId);
-      if (service) addDependent(service, true, false);
-    }
-    for (const finding of activeFindings) {
-      if (finding.providerId !== provider.id) continue;
-      const service = services.find((entry) => entry.id === finding.serviceId);
-      if (service) addDependent(service, false, true);
     }
 
     // Its reports: sent through a chokepoint of this name and kind, or a
@@ -330,7 +317,7 @@ export async function labProviderDirectory(): Promise<LabProviderDirectoryEntry[
 
     return {
       provider,
-      dependents: [...dependents.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      dependents: dependents.sort((a, b) => a.name.localeCompare(b.name)),
       reports: history,
     };
   });

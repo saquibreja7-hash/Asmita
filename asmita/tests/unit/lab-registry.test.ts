@@ -147,6 +147,28 @@ describe("promote a finding to a chokepoint", () => {
     expect(again).toMatchObject({ ok: false, error: "finding_already_promoted" });
   });
 
+  it("makes one chokepoint when the same finding is promoted twice at once", async () => {
+    const created = await createLabProvider(
+      { name: "Example Host Ltd", kind: "HOST", website: "https://example-host.example.test", abuseEmail: "abuse@example-host.example.test" },
+      "admin-1",
+    );
+    if (!created.ok) throw new Error("provider seed failed");
+    const verified = await updateLabProvider(created.provider.id, { verified: true }, "admin-9");
+    if (!verified.ok) throw new Error("provider verify failed");
+    const service = await seedScannedService("Invented tool", "tool.example.test", [
+      extracted("HOSTING_ASN", "203.0.113.9", "Example Host Ltd"),
+    ]);
+    const finding = (await listInfraFindingsForService(service.id))[0]!;
+
+    const results = await Promise.all([
+      promoteFindingToChokepoint(finding.id, {}, "admin-2"),
+      promoteFindingToChokepoint(finding.id, {}, "admin-3"),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toEqual([{ ok: false, error: "finding_already_promoted" }]);
+    expect(await listLabChokepoints()).toHaveLength(1);
+  });
+
   it("never auto-fills the contact from an unverified provider", async () => {
     const provider = await createLabProvider(
       { name: "Example Pay Ltd", kind: "PAYMENT_PROCESSOR", website: "https://example-pay.example.test", abuseEmail: "abuse@example-pay.example.test" },

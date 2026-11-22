@@ -205,3 +205,54 @@ describe("link extractors", () => {
     expect(all.filter((f) => f.value === "js.stripe.com")).toHaveLength(1);
   });
 });
+
+describe("hostile page HTML (review finding: quadratic regex)", () => {
+  const ONE_MB = 1_000_000;
+
+  it("scans 1 MB of `<` in well under a second", () => {
+    const started = performance.now();
+    extractHtmlFindings("<".repeat(ONE_MB));
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
+  it("scans 1 MB of repeated unclosed `<script ` tags in well under a second", () => {
+    const html = "<script ".repeat(Math.ceil(ONE_MB / 8));
+    const started = performance.now();
+    extractHtmlFindings(html);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
+  it("scans 1 MB of repeated unclosed `<a href=` tags in well under a second", () => {
+    const html = "<a href=x ".repeat(Math.ceil(ONE_MB / 10));
+    const started = performance.now();
+    extractHtmlFindings(html);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
+  it("still reads quoted, single-quoted and bare attribute values", () => {
+    const { summary } = findingsOf(
+      `<a class="x" href="https://t.me/example_bot">a</a><a href='https://t.me/other'>b</a><a href=https://t.me/third>c</a>`,
+    );
+    expect(summary).toContain("TELEGRAM_LINK:https://t.me/example_bot");
+    expect(summary).toContain("TELEGRAM_LINK:https://t.me/other");
+    expect(summary).toContain("TELEGRAM_LINK:https://t.me/third");
+  });
+
+  it("does not read data-href as href, nor <abbr> as <a>", () => {
+    const { summary } = findingsOf(`<a data-href="https://t.me/nope">x</a><abbr href="https://t.me/nope2">y</abbr>`);
+    expect(summary.some((s) => s.startsWith("TELEGRAM_LINK"))).toBe(false);
+  });
+
+  it("keeps at most 50 findings per category from one page", () => {
+    const links = Array.from({ length: 80 }, (_, i) => `<a href="https://t.me/channel${i}">x</a>`).join("");
+    const { all } = findingsOf(links);
+    expect(all.filter((f) => f.category === "TELEGRAM_LINK")).toHaveLength(50);
+  });
+
+  it("truncates a long link value to exactly 500 characters including the ellipsis", () => {
+    const { all } = findingsOf(`<a href="https://t.me/${"a".repeat(800)}">x</a>`);
+    const telegram = all.find((f) => f.category === "TELEGRAM_LINK");
+    expect(telegram?.value.length).toBe(500);
+    expect(telegram?.value.endsWith("…")).toBe(true);
+  });
+});

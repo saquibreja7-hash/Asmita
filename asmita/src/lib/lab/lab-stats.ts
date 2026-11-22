@@ -2,6 +2,7 @@ import { listLabChokepoints } from "@/lib/lab/lab-chokepoints";
 import { listLabReports, type LabReportView } from "@/lib/lab/lab-reports";
 import { listLabServices } from "@/lib/lab/lab-services";
 import { listActiveInfraFindings, listInfraFindingsForService, type LabInfraFindingView } from "@/lib/lab/infra/store";
+import { hostMatches, SIGNATURES } from "@/lib/lab/infra/signatures";
 import { LAB_CHOKEPOINT_KINDS, type LabChokepointKind, type LabInfraCategory } from "@/lib/lab/lab-store";
 
 /*
@@ -29,8 +30,9 @@ function maskedCount(count: number): number | null {
 
 /**
  * The dependency categories the public tracker counts (the spec names these
- * four): a card payment processor, a crypto gateway, a CDN, a Telegram bot
- * or channel.
+ * four): an online payment processor (any PAYMENT finding: card processors,
+ * PayPal, crypto checkouts), a crypto wallet address shown on the site, a
+ * CDN, a Telegram bot or channel. The public labels say exactly that.
  */
 export const LAB_PUBLIC_DEPENDENCY_CATEGORIES = [
   { key: "payment", category: "PAYMENT" },
@@ -110,21 +112,65 @@ export type LabPublicNumbers = {
 };
 
 /**
+ * The provider a finding points at, so a switch is a change of company and
+ * not of address: a seeded directory row when there is one; for HOSTING_ASN
+ * the origin AS (else the RDAP network name) recorded in the evidence — the
+ * value is the IP, which rotates inside one host; for host-valued
+ * signature findings (js.stripe.com, m.stripe.network) the signature's
+ * provider name; for app store links the store. null means the provider is
+ * unknown, and an unknown provider never counts as a switch.
+ */
+export function findingProviderKey(finding: Pick<LabInfraFindingView, "category" | "providerId" | "value" | "evidence">): string | null {
+  if (finding.providerId) return `provider:${finding.providerId}`;
+  if (finding.category === "HOSTING_ASN") {
+    const label = finding.evidence.split("→")[1]?.trim() ?? "";
+    if (!label || label === "no RDAP network") return null;
+    const asn = /\bAS\d+\b/.exec(label)?.[0];
+    return asn ? `asn:${asn}` : `network:${label.toLowerCase()}`;
+  }
+  if (finding.category === "APP_STORE_LINK") {
+    try {
+      return `store:${new URL(finding.value).hostname.toLowerCase()}`;
+    } catch {
+      return null;
+    }
+  }
+  const value = finding.value.toLowerCase();
+  for (const signature of SIGNATURES) {
+    if (signature.category !== finding.category) continue;
+    const match = signature.match;
+    if (match.type === "header" && signature.provider === finding.value) return `name:${signature.provider}`;
+    if ("host" in match && hostMatches(value, match.host)) return `name:${signature.provider}`;
+  }
+  // REGISTRAR values are the registrar name; anything else falls back to its value.
+  return `value:${value}`;
+}
+
+/**
  * Whether a service switched a reportable provider after `firstSentAt`: a
- * finding that spans the report date in a switch category stopped being
- * seen, and a different value in the same category first appeared later.
+ * provider live at the report date stopped being seen, and a different
+ * provider in the same category first appeared later. Providers are compared
+ * with findingProviderKey, never by raw value.
  */
 function switchedProviderAfter(findings: LabInfraFindingView[], firstSentAt: string): boolean {
   const reportedAt = new Date(firstSentAt).getTime();
   for (const category of SWITCH_CATEGORIES) {
     const inCategory = findings.filter((finding) => finding.category === category);
     if (inCategory.length < 2) continue;
-    const liveAtReport = inCategory.filter(
-      (finding) => new Date(finding.firstSeenAt).getTime() <= reportedAt && new Date(finding.lastSeenAt).getTime() >= reportedAt,
-    );
-    if (liveAtReport.length === 0) continue;
-    const later = inCategory.filter((finding) => new Date(finding.firstSeenAt).getTime() > reportedAt);
-    if (later.some((next) => liveAtReport.some((previous) => previous.value !== next.value))) return true;
+    const liveAtReport = new Set<string>();
+    for (const finding of inCategory) {
+      if (new Date(finding.firstSeenAt).getTime() > reportedAt || new Date(finding.lastSeenAt).getTime() < reportedAt) continue;
+      const key = findingProviderKey(finding);
+      if (key) liveAtReport.add(key);
+    }
+    if (liveAtReport.size === 0) continue;
+    const later = new Set<string>();
+    for (const finding of inCategory) {
+      if (new Date(finding.firstSeenAt).getTime() <= reportedAt) continue;
+      const key = findingProviderKey(finding);
+      if (key) later.add(key);
+    }
+    if ([...later].some((key) => !liveAtReport.has(key))) return true;
   }
   return false;
 }

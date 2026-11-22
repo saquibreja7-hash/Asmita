@@ -35,6 +35,8 @@ const ERRORS: Record<string, string> = {
   provider_exists: "A provider with that name and kind already exists.",
   provider_not_found: "That provider no longer exists. Reload the page.",
   service_not_found: "One of the selected services no longer exists. Reload the page.",
+  service_not_dependent:
+    "One of the selected services is not recorded as depending on this provider any more. Reload the page.",
   abuse_contact_required:
     "Enter the abuse contact from the provider's own abuse page — it is not filled in until the provider is verified.",
   csrf_failed: "The page session expired. Reload and try again.",

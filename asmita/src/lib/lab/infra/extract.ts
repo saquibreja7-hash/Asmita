@@ -27,22 +27,68 @@ export type ExtractedFinding = {
 
 const MAX_VALUE_LENGTH = 500;
 const MAX_MATCHES_PER_SIGNATURE = 10;
+/** At most this many link or crypto findings per category from one page. */
+const MAX_FINDINGS_PER_CATEGORY = 50;
+/** A tag body longer than this is cut there; real attribute lists are far shorter. */
+const MAX_TAG_LENGTH = 4_096;
+
+/*
+ * The page is a hostile site's HTML (up to 1 MB), so tag scanning must stay
+ * linear: a regex like `<tag\b[^>]*\battr=` rescans to the end of the page
+ * from every `<tag` when no `>` follows, which is quadratic. This scanner
+ * walks each tag body once, stopping at the next `<` or `>` or after
+ * MAX_TAG_LENGTH characters, and only then runs a regex over that bounded
+ * body.
+ */
+function tagBodies(html: string, tag: string): string[] {
+  const bodies: string[] = [];
+  const lower = html.toLowerCase();
+  const needle = `<${tag.toLowerCase()}`;
+  let index = lower.indexOf(needle);
+  while (index !== -1) {
+    const start = index + needle.length;
+    // `<scripts` is not `<script`: the tag name must end here.
+    const nameEnds = start >= lower.length || !/[a-z0-9_:-]/.test(lower[start]);
+    let end = start;
+    const limit = Math.min(lower.length, start + MAX_TAG_LENGTH);
+    while (end < limit) {
+      const code = lower.charCodeAt(end);
+      if (code === 60 /* < */ || code === 62 /* > */) break;
+      end += 1;
+    }
+    if (nameEnds) bodies.push(html.slice(start, end));
+    index = lower.indexOf(needle, Math.max(end, start));
+  }
+  return bodies;
+}
 
 /** Attribute values of one kind, e.g. every `src` of every <script>. */
 function attributeValues(html: string, tag: string, attribute: string): string[] {
   const values: string[] = [];
-  const pattern = new RegExp(`<${tag}\\b[^>]*\\b${attribute}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "gi");
-  for (const match of html.matchAll(pattern)) {
-    const value = match[1] ?? match[2] ?? match[3];
+  const pattern = new RegExp(`(?:^|[\\s"'/])${attribute}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i");
+  for (const body of tagBodies(html, tag)) {
+    const match = pattern.exec(body);
+    const value = match?.[1] ?? match?.[2] ?? match?.[3];
     if (value) values.push(value);
   }
   return values;
+}
+
+/** The text between tags: every `<...>` with no `<` or `>` inside becomes a space (linear). */
+function stripTags(html: string): string {
+  return html.replace(/<[^<>]*>/g, " ");
+}
+
+/** Cheap pre-check before new URL(): a hostile page can carry 100k relative links, and each failed parse throws. */
+function isAbsoluteHttp(value: string): boolean {
+  return /^\s*https?:/i.test(value);
 }
 
 /** Hostnames of the absolute http(s) URLs among the values. */
 function hostsOf(values: string[]): { host: string; url: URL }[] {
   const found: { host: string; url: URL }[] = [];
   for (const value of values) {
+    if (!isAbsoluteHttp(value)) continue;
     try {
       const url = new URL(value);
       if (url.protocol !== "http:" && url.protocol !== "https:") continue;
@@ -167,6 +213,7 @@ function extractLinkFindings(html: string): ExtractedFinding[] {
     ...attributeValues(html, "iframe", "src"),
   ];
   for (const href of hrefs) {
+    if (!isAbsoluteHttp(href)) continue;
     let url: URL;
     try {
       url = new URL(href);
@@ -215,12 +262,12 @@ function extractLinkFindings(html: string): ExtractedFinding[] {
       }
     }
   }
-  return findings;
+  return capPerCategory(findings);
 }
 
 /** Crypto addresses in visible text and links, checksum-validated. */
 function extractCryptoFindings(html: string): ExtractedFinding[] {
-  const visibleText = html.replace(/<[^>]*>/g, " ");
+  const visibleText = stripTags(html);
   const linkText = attributeValues(html, "a", "href").join(" ");
   const findings: ExtractedFinding[] = [];
   for (const address of extractCryptoAddresses(`${visibleText} ${linkText}`)) {
@@ -231,7 +278,7 @@ function extractCryptoFindings(html: string): ExtractedFinding[] {
       confidence: "HIGH",
     });
   }
-  return findings;
+  return capPerCategory(findings);
 }
 
 /** A URL trimmed to a sane finding length, without credentials or fragment. */
@@ -241,7 +288,21 @@ function shortUrl(url: URL): string {
   clone.password = "";
   clone.hash = "";
   const text = clone.toString();
-  return text.length > MAX_VALUE_LENGTH ? `${text.slice(0, MAX_VALUE_LENGTH)}…` : text;
+  // The store refuses values over MAX_VALUE_LENGTH, so the ellipsis fits inside it.
+  return text.length > MAX_VALUE_LENGTH ? `${text.slice(0, MAX_VALUE_LENGTH - 1)}…` : text;
+}
+
+/** Distinct findings, at most MAX_FINDINGS_PER_CATEGORY per category: a page stuffed with links cannot flood the registry. */
+function capPerCategory(findings: ExtractedFinding[]): ExtractedFinding[] {
+  const counts = new Map<string, number>();
+  const kept: ExtractedFinding[] = [];
+  for (const finding of dedupe(findings)) {
+    const count = counts.get(finding.category) ?? 0;
+    if (count >= MAX_FINDINGS_PER_CATEGORY) continue;
+    counts.set(finding.category, count + 1);
+    kept.push(finding);
+  }
+  return kept;
 }
 
 /** One finding per (category, value), first evidence wins. */

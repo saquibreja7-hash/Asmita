@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { inMemoryAuditLog } from "@/lib/audit";
-import { labMemory, resetLabMemory } from "@/lib/lab/lab-store";
+import { labMemory, resetLabMemory, type LabChokepointKind } from "@/lib/lab/lab-store";
 import { createLabService } from "@/lib/lab/lab-services";
 import { createLabProvider, updateLabProvider } from "@/lib/lab/infra/store";
 import {
@@ -52,6 +52,17 @@ async function seedProvider(name: string, kind: "HOST" | "CDN" | "REGISTRAR", em
   return created.provider;
 }
 
+/** Records each service as depending on the provider, through a chokepoint of its name and kind. */
+async function dependOn(provider: { name: string; kind: LabChokepointKind }, ...services: { id: string }[]) {
+  for (const service of services) {
+    const chokepoint = await createLabChokepoint(
+      { serviceId: service.id, kind: provider.kind, provider: provider.name, abuseContact: "abuse@provider.example.test", evidenceNotes: null },
+      "admin-1",
+    );
+    if (!chokepoint.ok) throw new Error("chokepoint seed failed");
+  }
+}
+
 describe("the bulk template", () => {
   it("lists every service with its kind and addresses, and asks the provider kind's ask", () => {
     const filled = fillLabBulkReportTemplate("HOST", {
@@ -89,6 +100,7 @@ describe("drafting one report for several services", () => {
     if (!verified.ok) throw new Error("verify failed");
     const alpha = await seedService("Alpha tool", "alpha.example.test");
     const beta = await seedService("Beta tool", "beta.example.test");
+    await dependOn(provider, alpha, beta);
 
     const drafted = await draftBulkLabReport({ providerId: provider.id, serviceIds: [alpha.id, beta.id] }, "admin-2");
     expect(drafted.ok).toBe(true);
@@ -141,6 +153,7 @@ describe("drafting one report for several services", () => {
     const provider = await seedProvider("Example Pay Ltd", "HOST", "abuse@example-pay.example.test");
     const alpha = await seedService("Alpha tool", "alpha.example.test");
     const beta = await seedService("Beta tool", "beta.example.test");
+    await dependOn(provider, alpha, beta);
 
     // The row has an email but no verification: the analyst must enter it.
     expect(await draftBulkLabReport({ providerId: provider.id, serviceIds: [alpha.id, beta.id] }, "admin-2")).toMatchObject({
@@ -172,6 +185,30 @@ describe("drafting one report for several services", () => {
   });
 });
 
+describe("a bulk report lists only services recorded as depending on the provider", () => {
+  it("refuses a service with no chokepoint against the provider and no linked active finding", async () => {
+    const provider = await seedProvider("Example Host Ltd", "HOST", "abuse@example-host.example.test");
+    const verified = await updateLabProvider(provider.id, { verified: true }, "admin-9");
+    if (!verified.ok) throw new Error("verify failed");
+    const alpha = await seedService("Alpha tool", "alpha.example.test");
+    const beta = await seedService("Beta tool", "beta.example.test");
+    const gamma = await seedService("Gamma tool", "gamma.example.test");
+    await dependOn(provider, alpha, beta);
+    // Gamma depends on a different company of the same kind, and on this
+    // provider's name under a different kind: neither counts.
+    await dependOn({ name: "Other Host Ltd", kind: "HOST" }, gamma);
+    await dependOn({ name: "Example Host Ltd", kind: "CDN" }, gamma);
+
+    expect(await draftBulkLabReport({ providerId: provider.id, serviceIds: [alpha.id, gamma.id] }, "admin-2")).toEqual({
+      ok: false,
+      error: "service_not_dependent",
+    });
+    expect(labMemory().reports.size).toBe(0);
+    const drafted = await draftBulkLabReport({ providerId: provider.id, serviceIds: [alpha.id, beta.id] }, "admin-2");
+    expect(drafted.ok).toBe(true);
+  });
+});
+
 describe("review, send and outcome: exactly like a single report", () => {
   it("edits the draft, refuses the edit after the send, and records the outcome", async () => {
     const provider = await seedProvider("Example Host Ltd", "HOST", "abuse@example-host.example.test");
@@ -179,6 +216,7 @@ describe("review, send and outcome: exactly like a single report", () => {
     if (!verified.ok) throw new Error("verify failed");
     const alpha = await seedService("Alpha tool", "alpha.example.test");
     const beta = await seedService("Beta tool", "beta.example.test");
+    await dependOn(provider, alpha, beta);
 
     const drafted = await draftBulkLabReport({ providerId: provider.id, serviceIds: [alpha.id, beta.id] }, "admin-2");
     if (!drafted.ok) throw new Error("draft failed");
@@ -213,6 +251,7 @@ describe("a bulk report counts for every service it lists", () => {
 
     const alpha = await seedService("Alpha tool", "alpha.example.test");
     const beta = await seedService("Beta tool", "beta.example.test");
+    await dependOn(provider, alpha, beta);
     // The third service is tracked but never reported.
     await seedService("Unreported tool", "unreported.example.test");
 

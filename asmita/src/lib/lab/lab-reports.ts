@@ -13,9 +13,9 @@ import {
   type LabServiceKind,
   type MemoryLabReport,
 } from "@/lib/lab/lab-store";
-import { getLabChokepoint } from "@/lib/lab/lab-chokepoints";
+import { getLabChokepoint, listLabChokepoints } from "@/lib/lab/lab-chokepoints";
 import { listLabServices, type LabServiceView } from "@/lib/lab/lab-services";
-import { getLabProvider } from "@/lib/lab/infra/store";
+import { getLabProvider, listActiveInfraFindings, providerDependents } from "@/lib/lab/infra/store";
 import { fillLabBulkReportTemplate, fillLabReportTemplate } from "@/lib/lab/report-templates";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
 
@@ -355,7 +355,7 @@ export async function draftBulkLabReport(
   actorId: string,
 ): Promise<
   | { ok: true; report: LabReportView }
-  | { ok: false; error: "invalid_payload" | "provider_not_found" | "service_not_found" | "abuse_contact_required" }
+  | { ok: false; error: "invalid_payload" | "provider_not_found" | "service_not_found" | "service_not_dependent" | "abuse_contact_required" }
 > {
   const parsed = labBulkReportDraftSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid_payload" };
@@ -370,6 +370,14 @@ export async function draftBulkLabReport(
     if (!listed.some((entry) => entry.id === service.id)) listed.push(service);
   }
   if (listed.length < 2) return { ok: false, error: "invalid_payload" };
+
+  // The template tells the provider each listed service was recorded as
+  // depending on it, so every one must be: a chokepoint against this
+  // provider or an active finding linked to its directory row (the same
+  // rule as the provider directory).
+  const [chokepoints, activeFindings] = await Promise.all([listLabChokepoints(), listActiveInfraFindings()]);
+  const dependents = providerDependents(provider, chokepoints, activeFindings);
+  if (listed.some((service) => !dependents.has(service.id))) return { ok: false, error: "service_not_dependent" };
 
   const directoryContact = provider.verifiedAt !== null && provider.abuseEmail ? provider.abuseEmail : null;
   const abuseContact = parsed.data.abuseContact ?? directoryContact;

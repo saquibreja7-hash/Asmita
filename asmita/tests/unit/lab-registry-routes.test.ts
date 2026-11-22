@@ -15,6 +15,7 @@ import { csrfCookieName } from "@/lib/cookie-names";
 import { inMemoryAuditLog } from "@/lib/audit";
 import { resetLabMemory, labMemory } from "@/lib/lab/lab-store";
 import { createLabService } from "@/lib/lab/lab-services";
+import { createLabChokepoint } from "@/lib/lab/lab-chokepoints";
 import {
   createLabProvider,
   listLabProviders,
@@ -233,6 +234,13 @@ describe("/api/lab/reports/bulk", () => {
     const alpha = await createLabService({ name: "Alpha tool", kind: "WEBSITE", urls: ["https://alpha.example.test"] }, "admin-1");
     const beta = await createLabService({ name: "Beta tool", kind: "WEBSITE", urls: ["https://beta.example.test"] }, "admin-1");
     if (!alpha.ok || !beta.ok) throw new Error("seed failed");
+    for (const service of [alpha.service, beta.service]) {
+      const chokepoint = await createLabChokepoint(
+        { serviceId: service.id, kind: "HOST", provider: "Example Host Ltd", abuseContact: "abuse@example-host.example.test", evidenceNotes: null },
+        "admin-1",
+      );
+      if (!chokepoint.ok) throw new Error("chokepoint seed failed");
+    }
 
     const noCsrf = await bulkReportsRoute.POST(request("/api/lab/reports/bulk", "POST", { providerId: provider.provider.id, serviceIds: [alpha.service.id, beta.service.id] }, false));
     expect(noCsrf.status).toBe(403);
@@ -259,10 +267,31 @@ describe("/api/lab/reports/bulk", () => {
     const alpha = await createLabService({ name: "Alpha tool", kind: "WEBSITE", urls: ["https://alpha.example.test"] }, "admin-1");
     const beta = await createLabService({ name: "Beta tool", kind: "WEBSITE", urls: ["https://beta.example.test"] }, "admin-1");
     if (!alpha.ok || !beta.ok) throw new Error("seed failed");
+    for (const service of [alpha.service, beta.service]) {
+      const chokepoint = await createLabChokepoint(
+        { serviceId: service.id, kind: "HOST", provider: "Example Host Ltd", abuseContact: "abuse@example-host.example.test", evidenceNotes: null },
+        "admin-1",
+      );
+      if (!chokepoint.ok) throw new Error("chokepoint seed failed");
+    }
 
     const refused = await bulkReportsRoute.POST(request("/api/lab/reports/bulk", "POST", { providerId: provider.provider.id, serviceIds: [alpha.service.id, beta.service.id] }));
     expect(refused.status).toBe(422);
     expect(await refused.json()).toMatchObject({ error: "abuse_contact_required" });
     expect(await listLabProviders()).toHaveLength(1);
+  });
+
+  it("answers 422 service_not_dependent for a service not recorded against the provider", async () => {
+    const provider = await createLabProvider(
+      { name: "Example Host Ltd", kind: "HOST", website: "https://example-host.example.test", abuseEmail: "abuse@example-host.example.test" },
+      "admin-1",
+    );
+    if (!provider.ok) throw new Error("provider seed failed");
+    const alpha = await createLabService({ name: "Alpha tool", kind: "WEBSITE", urls: ["https://alpha.example.test"] }, "admin-1");
+    const beta = await createLabService({ name: "Beta tool", kind: "WEBSITE", urls: ["https://beta.example.test"] }, "admin-1");
+    if (!alpha.ok || !beta.ok) throw new Error("seed failed");
+    const refused = await bulkReportsRoute.POST(request("/api/lab/reports/bulk", "POST", { providerId: provider.provider.id, serviceIds: [alpha.service.id, beta.service.id], abuseContact: "abuse@example-host.example.test" }));
+    expect(refused.status).toBe(422);
+    expect(await refused.json()).toMatchObject({ error: "service_not_dependent" });
   });
 });

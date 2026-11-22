@@ -454,6 +454,33 @@ export async function getLabInfraFinding(id: string): Promise<LabInfraFindingVie
   return rows.length > 0 ? toFindingView(rows[0]!) : null;
 }
 
+/**
+ * Which services depend on a provider, and how: a chokepoint recorded against
+ * its name and kind, or an active finding linked to its directory row. The
+ * provider directory and the bulk report both use this one rule, so a bulk
+ * report only ever tells a provider what the registry actually recorded.
+ */
+export function providerDependents(
+  provider: Pick<LabProviderView, "id" | "name" | "kind">,
+  chokepoints: { serviceId: string; provider: string; kind: LabChokepointKind }[],
+  activeFindings: Pick<LabInfraFindingView, "serviceId" | "providerId" | "active">[],
+): Map<string, { viaChokepoint: boolean; viaFinding: boolean }> {
+  const dependents = new Map<string, { viaChokepoint: boolean; viaFinding: boolean }>();
+  const add = (serviceId: string, viaChokepoint: boolean, viaFinding: boolean) => {
+    const existing = dependents.get(serviceId) ?? { viaChokepoint: false, viaFinding: false };
+    existing.viaChokepoint ||= viaChokepoint;
+    existing.viaFinding ||= viaFinding;
+    dependents.set(serviceId, existing);
+  };
+  for (const chokepoint of chokepoints) {
+    if (chokepoint.provider === provider.name && chokepoint.kind === provider.kind) add(chokepoint.serviceId, true, false);
+  }
+  for (const finding of activeFindings) {
+    if (finding.active && finding.providerId === provider.id) add(finding.serviceId, false, true);
+  }
+  return dependents;
+}
+
 /** Every active finding, across all services — the registry table's evidence base. */
 export async function listActiveInfraFindings(): Promise<LabInfraFindingView[]> {
   let rows: FindingRow[];
@@ -466,6 +493,47 @@ export async function listActiveInfraFindings(): Promise<LabInfraFindingView[]> 
     rows = await db.labInfraFinding.findMany({ where: { active: true } });
   }
   return rows.map(toFindingView);
+}
+
+/**
+ * Claims a finding for promotion: sets promotedAt only while it is still
+ * null, and says whether this call won. Two clicks (or two analysts) racing
+ * on one finding cannot both create a chokepoint.
+ */
+export async function claimFindingPromotion(id: string, now: Date): Promise<boolean> {
+  if (isDevNoDb()) {
+    const row = labMemory().infraFindings.get(id);
+    if (!row || row.promotedAt) return false;
+    row.promotedAt = now;
+    return true;
+  }
+  if (usesWorkerKysely()) {
+    const result = await getWorkerDb().updateTable("LabInfraFinding")
+      .set({ promotedAt: now })
+      .where("id", "=", id)
+      .where("promotedAt", "is", null)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0) === 1;
+  }
+  const { db } = await import("@/lib/db");
+  const result = await db.labInfraFinding.updateMany({ where: { id, promotedAt: null }, data: { promotedAt: now } });
+  return result.count === 1;
+}
+
+/** Undoes a claim that never became a chokepoint (the chokepoint create failed). */
+export async function releaseFindingPromotion(id: string): Promise<void> {
+  if (isDevNoDb()) {
+    const row = labMemory().infraFindings.get(id);
+    if (row && !row.promotedChokepointId) row.promotedAt = null;
+    return;
+  }
+  if (usesWorkerKysely()) {
+    await getWorkerDb().updateTable("LabInfraFinding").set({ promotedAt: null })
+      .where("id", "=", id).where("promotedChokepointId", "is", null).execute();
+    return;
+  }
+  const { db } = await import("@/lib/db");
+  await db.labInfraFinding.updateMany({ where: { id, promotedChokepointId: null }, data: { promotedAt: null } });
 }
 
 /**

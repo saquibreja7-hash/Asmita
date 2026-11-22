@@ -15,6 +15,7 @@ const STATUS: Record<string, number> = {
   invalid_payload: 400,
   provider_not_found: 404,
   service_not_found: 404,
+  service_not_dependent: 422,
   abuse_contact_required: 422,
 };
 

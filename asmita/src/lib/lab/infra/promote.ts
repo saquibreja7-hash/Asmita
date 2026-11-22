@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { CATEGORY_TO_CHOKEPOINT_KIND } from "@/lib/lab/infra/signatures";
-import { getLabInfraFinding, getLabProvider, setFindingPromoted } from "@/lib/lab/infra/store";
+import { claimFindingPromotion, getLabInfraFinding, getLabProvider, releaseFindingPromotion, setFindingPromoted } from "@/lib/lab/infra/store";
 import { createLabChokepoint, type LabChokepointView } from "@/lib/lab/lab-chokepoints";
 import type { LabInfraCategory, LabChokepointKind } from "@/lib/lab/lab-store";
 import type { LabProviderView } from "@/lib/lab/infra/store";
@@ -91,6 +91,11 @@ export async function promoteFindingToChokepoint(
     `Confidence ${finding.confidence}; first seen ${firstSeen}, last seen ${lastSeen}.`,
   ].join(" ").slice(0, 5000);
 
+  // Claim the finding before creating anything: only the call that flips
+  // promotedAt from null goes on, so a double click makes one chokepoint.
+  const now = new Date();
+  if (!(await claimFindingPromotion(finding.id, now))) return { ok: false, error: "finding_already_promoted" };
+
   const created = await createLabChokepoint(
     {
       serviceId: finding.serviceId,
@@ -101,9 +106,11 @@ export async function promoteFindingToChokepoint(
     },
     actorId,
   );
-  if (!created.ok) return created;
+  if (!created.ok) {
+    await releaseFindingPromotion(finding.id);
+    return created;
+  }
 
-  const now = new Date();
   await setFindingPromoted(finding.id, created.chokepoint.id, now);
   await writeAuditLog({
     eventType: "LAB_FINDING_PROMOTED",

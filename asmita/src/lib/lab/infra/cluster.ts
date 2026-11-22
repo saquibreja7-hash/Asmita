@@ -5,6 +5,8 @@ import {
   listInfraFindingsForService,
   type LabInfraFindingView,
 } from "@/lib/lab/infra/store";
+import { registrableDomain } from "@/lib/lab/lab-lookup";
+import { listLabServices } from "@/lib/lab/lab-services";
 import type { LabInfraCategory } from "@/lib/lab/lab-store";
 
 /*
@@ -98,9 +100,33 @@ const REASONS: ClusterReason[] = [
     // the SAN evidence marker.
     reason: "SHARED_TLS_SAN",
     category: "TLS_ISSUER",
-    ownMatches: (finding) => finding.evidence.startsWith("CT SAN"),
+    ownMatches: isSanFinding,
   },
 ];
+
+function isSanFinding(finding: LabInfraFindingView): boolean {
+  return finding.category === "TLS_ISSUER" && finding.evidence.startsWith("CT SAN");
+}
+
+/** Registrable domain → the tracked services whose URLs sit on it. */
+async function serviceIdsByDomain(): Promise<Map<string, Set<string>>> {
+  const byDomain = new Map<string, Set<string>>();
+  for (const service of await listLabServices()) {
+    for (const url of service.urls) {
+      let domain: string | null = null;
+      try {
+        domain = registrableDomain(new URL(url).hostname);
+      } catch {
+        domain = null;
+      }
+      if (!domain) continue;
+      const set = byDomain.get(domain) ?? new Set<string>();
+      set.add(service.id);
+      byDomain.set(domain, set);
+    }
+  }
+  return byDomain;
+}
 
 export type ClusterRunResult = { candidatesCreated: number; reasons: Record<string, number> };
 
@@ -145,5 +171,32 @@ export async function computeClusterCandidates(
     result.reasons[reason] = reasonCount;
     result.candidatesCreated += reasonCount;
   }
+
+  // SHARED_TLS_SAN, second form. The scanner drops a service's own domain
+  // from its SANs, so one certificate covering a.example (service X) and
+  // b.example (service Y) records b.example on X and a.example on Y: equal
+  // values never meet. A SAN that IS another tracked service's registrable
+  // domain links the two, in both directions (X's SAN names Y's domain, or
+  // an earlier scan of Y recorded a SAN naming X's domain).
+  const byDomain = await serviceIdsByDomain();
+  let sanDomainCount = 0;
+  for (const serviceId of scannedServiceIds) {
+    for (const finding of findingsOf(serviceId)) {
+      if (!finding.active || !isSanFinding(finding)) continue;
+      for (const otherId of byDomain.get(finding.value) ?? []) {
+        if (otherId === serviceId) continue;
+        if (await createServiceLink(serviceId, otherId, "SHARED_TLS_SAN", finding.value, now)) sanDomainCount += 1;
+      }
+    }
+    for (const [domain, owners] of byDomain) {
+      if (!owners.has(serviceId)) continue;
+      for (const other of await findActiveFindingsByValue(domain, "TLS_ISSUER")) {
+        if (other.serviceId === serviceId || !isSanFinding(other)) continue;
+        if (await createServiceLink(serviceId, other.serviceId, "SHARED_TLS_SAN", domain, now)) sanDomainCount += 1;
+      }
+    }
+  }
+  result.reasons.SHARED_TLS_SAN = (result.reasons.SHARED_TLS_SAN ?? 0) + sanDomainCount;
+  result.candidatesCreated += sanDomainCount;
   return result;
 }

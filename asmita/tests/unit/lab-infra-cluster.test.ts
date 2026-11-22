@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resetLabMemory } from "@/lib/lab/lab-store";
 import { computeClusterCandidates } from "@/lib/lab/infra/cluster";
 import { recordInfraScan, recordScanFindings, listServiceLinks } from "@/lib/lab/infra/store";
+import { createLabService } from "@/lib/lab/lab-services";
 import type { ExtractedFinding } from "@/lib/lab/infra/extract";
 
 /*
@@ -110,5 +111,40 @@ describe("computeClusterCandidates", () => {
     await recordScanFindings("service-b", scan.id, [], new Set(["ANALYTICS_ID"]), NOW);
     await computeClusterCandidates(["service-a", "service-b"], NOW);
     expect(await linkKeys()).toBe("SHARED_ANALYTICS_ID:service-a~service-b:G-SHARED1234");
+  });
+
+  it("links two services when one certificate covers both of their domains", async () => {
+    // One certificate covers alpha-tool.test (X) and beta-tool.test (Y).
+    // The scanner drops each service's own domain, so X records Y's domain
+    // and Y records X's: the values differ, yet the cert is shared.
+    const x = await createLabService({ name: "X tool", kind: "WEBSITE", urls: ["https://www.alpha-tool.test/"] }, "admin-1");
+    const y = await createLabService({ name: "Y tool", kind: "WEBSITE", urls: ["https://beta-tool.test/"] }, "admin-1");
+    if (!x.ok || !y.ok) throw new Error("seed failed");
+    const xId = x.service.id;
+    const yId = y.service.id;
+    await seedFindings(xId, [finding("TLS_ISSUER", "beta-tool.test", "CT SAN on certificates for alpha-tool.test")], ["TLS_ISSUER"]);
+    const [a, b] = [xId, yId].sort();
+
+    // Only X scanned, and Y has no findings at all: X's SAN names Y's domain.
+    const first = await computeClusterCandidates([xId], NOW);
+    expect(await linkKeys()).toBe(`SHARED_TLS_SAN:${a}~${b}:beta-tool.test`);
+    expect(first.reasons.SHARED_TLS_SAN).toBe(1);
+
+    // Later Y is scanned alone: X's earlier SAN naming Y's domain still
+    // links (no duplicate), and Y's own SAN naming X's domain adds its value.
+    await seedFindings(yId, [finding("TLS_ISSUER", "alpha-tool.test", "CT SAN on certificates for beta-tool.test")], ["TLS_ISSUER"]);
+    await computeClusterCandidates([yId], NOW);
+    expect(await linkKeys()).toBe(
+      `SHARED_TLS_SAN:${a}~${b}:alpha-tool.test | SHARED_TLS_SAN:${a}~${b}:beta-tool.test`,
+    );
+  });
+
+  it("does not link on a certificate issuer name that happens to equal a domain-like value", async () => {
+    const x = await createLabService({ name: "X tool", kind: "WEBSITE", urls: ["https://alpha-tool.test/"] }, "admin-1");
+    const y = await createLabService({ name: "Y tool", kind: "WEBSITE", urls: ["https://beta-tool.test/"] }, "admin-1");
+    if (!x.ok || !y.ok) throw new Error("seed failed");
+    await seedFindings(x.service.id, [finding("TLS_ISSUER", "beta-tool.test", "CT certificate issuer for alpha-tool.test")], ["TLS_ISSUER"]);
+    await computeClusterCandidates([x.service.id], NOW);
+    expect(await linkKeys()).toBe("");
   });
 });
