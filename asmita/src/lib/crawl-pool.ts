@@ -3,6 +3,7 @@ import { sha256 } from "@/lib/hash";
 import { crawlMemory } from "@/lib/crawl-store";
 import { sscdEnabled, sscdModelId, sscdModelVersion } from "@/lib/crawler-flags";
 import { getWorkerDb, usesWorkerKysely } from "@/lib/worker-kysely";
+import { LOW_QUALITY_THRESHOLD } from "@/lib/hash-submission";
 import * as store from "@/lib/store";
 
 /*
@@ -14,7 +15,8 @@ import * as store from "@/lib/store";
  * - the case is open, or the authorisation's re-upload window is still running
  *   (watch-and-verify WP24: CrawlConsent.watchUntil, set when the case was
  *   resolved — crawl-watch.ts);
- * - it has a crawlPoolId, set when that authorisation was signed.
+ * - it has a crawlPoolId, set when that authorisation was signed;
+ * - for an image, its PDQ quality is at least MIN_POOL_QUALITY (50).
  *
  * The pool lists each fingerprint under its crawlPoolId: random, unrelated to
  * the HashSubmission id, and cleared on withdrawal or erasure, so the crawler
@@ -198,8 +200,21 @@ function inPool(candidate: Candidate, coverage: Coverage): candidate is Candidat
   return (
     Boolean(candidate.crawlPoolId) &&
     (POOL_STATUSES as readonly string[]).includes(candidate.status) &&
+    meetsPoolQuality(candidate) &&
     Boolean(coverage.get(candidate.caseId)?.ids.has(candidate.id))
   );
+}
+
+/**
+ * An image fingerprint below PDQ quality 50 stays out of the pool even after
+ * an analyst approves it: such a hash matches unrelated images and would fill
+ * the review queue. Video fingerprints filter their own frames instead
+ * (VPDQ_MIN_FRAME_QUALITY), so the floor applies to images only.
+ */
+export const MIN_POOL_QUALITY = LOW_QUALITY_THRESHOLD;
+
+function meetsPoolQuality(candidate: Candidate): boolean {
+  return candidate.algorithm === "VPDQ" || candidate.quality >= MIN_POOL_QUALITY;
 }
 
 /**
