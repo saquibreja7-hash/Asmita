@@ -125,4 +125,28 @@ describe("swapFace", () => {
     const b = await swapFace(target, source, targetFace, sourceFace);
     expect(a.equals(b)).toBe(true);
   });
+
+  it("clips a patch that overhangs an equal-size target instead of failing", async () => {
+    // Equal-size portraits (the LFW evaluation set is all 250x250 crops):
+    // a face box plus its margin is wider than the canvas, so the extracted
+    // patch would be larger than the target and sharp would refuse. The fix
+    // clips the overhang; the composite must succeed at the target's size.
+    const side = 250;
+    const target = await sharp({ create: { width: side, height: side, channels: 3, background: { r: 10, g: 100, b: 200 } } }).png().toBuffer();
+    const source = await sharp({ create: { width: side, height: side, channels: 3, background: { r: 200, g: 120, b: 30 } } }).png().toBuffer();
+    // A large centred face: 150x150 box -> 150 * (1 + 2*0.35) = 255 px window.
+    const targetFace = face({ box: { x: 50, y: 50, w: 150, h: 150 }, leftEye: { x: 95, y: 120 }, rightEye: { x: 155, y: 120 } });
+    const sourceFace = face({ box: { x: 50, y: 50, w: 150, h: 150 }, leftEye: { x: 95, y: 120 }, rightEye: { x: 155, y: 120 } });
+
+    const out = await swapFace(target, source, targetFace, sourceFace);
+    const meta = await sharp(out).metadata();
+    expect(meta.width).toBe(side);
+    expect(meta.height).toBe(side);
+    // The eye midpoint carries the source's colour, proof the (clipped)
+    // patch landed where the geometry says.
+    const raw = await sharp(out).raw().toBuffer({ resolveWithObject: true });
+    const [r, g, b] = [raw.data[(125 * raw.info.width + 125) * 3]!, raw.data[(125 * raw.info.width + 125) * 3 + 1]!, raw.data[(125 * raw.info.width + 125) * 3 + 2]!];
+    expect(r).toBeGreaterThan(120);
+    expect(g).toBeGreaterThan(60);
+  });
 });

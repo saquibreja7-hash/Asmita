@@ -1,10 +1,11 @@
+import { createGendDetector, type GendOptions } from "./gend.ts";
 import { createHiveDetector, type HiveOptions } from "./hive.ts";
 import { createLocalOnnxDetector, type LocalOnnxOptions } from "./local-onnx.ts";
 import { createOpenAiDetector, type OpenAiOptions } from "./openai.ts";
 import { createSightengineDetector, type SightengineOptions } from "./sightengine.ts";
 import type { Detector, DetectorFactoryResult } from "./types.ts";
 
-export type DetectorRegistryOptions = OpenAiOptions & HiveOptions & SightengineOptions & LocalOnnxOptions;
+export type DetectorRegistryOptions = OpenAiOptions & HiveOptions & SightengineOptions & LocalOnnxOptions & GendOptions;
 
 export type RegistryEntry = { detector: Detector } | { skippedId: string; reason: string };
 
@@ -21,6 +22,7 @@ export function buildDetectors(opts: DetectorRegistryOptions = {}): BuiltDetecto
     { id: "hive", result: createHiveDetector(opts) },
     { id: "sightengine", result: createSightengineDetector(opts) },
     { id: "communityforensics", result: createLocalOnnxDetector(opts) },
+    { id: "gend", result: createGendDetector(opts) },
   ];
   const detectors: Detector[] = [];
   const skipped: Array<{ id: string; reason: string }> = [];
@@ -35,6 +37,7 @@ export * from "./types.ts";
 export { createOpenAiDetector, type OpenAiOptions } from "./openai.ts";
 export { createHiveDetector, hiveScoreFromOutput, type HiveOptions } from "./hive.ts";
 export { createSightengineDetector, sightengineScoreFromResponse, type SightengineOptions } from "./sightengine.ts";
+export { createGendDetector, gendMime, isGendNoFace, GEND_SCORE_TIMEOUT_MS, type GendOptions } from "./gend.ts";
 export {
   createLocalOnnxDetector,
   cfModelPath,

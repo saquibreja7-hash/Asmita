@@ -14,7 +14,7 @@ export function defaultModelsDir(): string {
   return process.env.LAB_BENCH_MODELS_DIR ?? join(import.meta.dirname ?? ".", "..", "models");
 }
 
-export function newRunDir(kind: "match" | "detect" | "trace", runsDir = defaultRunsDir()): string {
+export function newRunDir(kind: "match" | "detect" | "trace" | "gend-eval", runsDir = defaultRunsDir()): string {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}-${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
