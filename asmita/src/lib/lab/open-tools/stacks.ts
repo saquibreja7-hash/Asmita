@@ -22,6 +22,13 @@ export const STACKS: readonly Stack[] = [
     time: "2 to 4 weeks",
     people: "1 engineer, 1 trained reviewer",
     resources: "Free software; one small server or container for HMA and its Postgres database",
+    hi: {
+      title: "अपने प्लेटफ़ॉर्म पर अंतरंग तस्वीरों की वापसी रोकें",
+      forWho:
+        "एक छोटा या मध्यम भारतीय प्लेटफ़ॉर्म (सोशल, डेटिंग, फ़ोरम, फ़ाइल या इमेज होस्टिंग, वयस्क सामग्री), जिसके पास एक या दो इंजीनियर हों।",
+      time: "2 से 4 सप्ताह",
+      people: "1 इंजीनियर, 1 प्रशिक्षित समीक्षक",
+    },
     steps: [
       {
         name: "Write down what you will do with a match",
@@ -168,6 +175,12 @@ export const STACKS: readonly Stack[] = [
     time: "1 to 2 weeks for the first guardrails",
     people: "1 engineer, 1 person for review and policy",
     resources: "Free models; a CPU is enough for the prompt classifier; a GPU only if you add a large policy model",
+    hi: {
+      title: "लोगों को नग्न दिखाने के लिए आपके AI इमेज या वीडियो टूल के दुरुपयोग को रोकें",
+      forWho: "वह टीम जो अपने ऐप में इमेज या वीडियो संपादन या जनरेशन जोड़ रही है।",
+      time: "पहले सुरक्षा उपायों के लिए 1 से 2 सप्ताह",
+      people: "1 इंजीनियर, 1 व्यक्ति समीक्षा और नीति के लिए",
+    },
     steps: [
       {
         name: "Write the rule",
@@ -311,6 +324,13 @@ export const STACKS: readonly Stack[] = [
     time: "1 to 3 months",
     people: "2 or more engineers, a review team",
     resources: "Several servers: Coop needs PostgreSQL, Scylla, ClickHouse and Redis; Osprey needs its own stack",
+    hi: {
+      title: "बड़े पैमाने पर नियम और मानवीय समीक्षा चलाएँ",
+      forWho:
+        "वह प्लेटफ़ॉर्म जिसकी एक ट्रस्ट-ऐंड-सेफ़्टी टीम और एक इंजीनियरिंग टीम है, या जो तेज़ी से बढ़ रहा है।",
+      time: "1 से 3 महीने",
+      people: "2 या अधिक इंजीनियर, एक समीक्षा टीम",
+    },
     steps: [
       {
         name: "Policies and queues first",

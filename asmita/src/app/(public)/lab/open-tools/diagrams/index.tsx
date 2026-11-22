@@ -1,8 +1,10 @@
 /*
  * The diagram catalogue (docs/lab/open-tools-spec.md, Part C4): which
- * reusable drawing illustrates which tool kind. PipelineDiagram, the stack
- * variant, arrives with the stack pages (WP153). Tools with diagram "none"
- * (the two ROOST directories) render no drawing.
+ * reusable drawing illustrates which tool kind. PipelineDiagram, the
+ * stack variant, lives beside these and is rendered by the stack pages
+ * (WP153): the tool pages draw only the five kinds below, so it stays
+ * out of this map (DiagramKind has no "pipeline" value). Tools with
+ * diagram "none" (the two ROOST directories) render no drawing.
  */
 
 import type { DiagramKind } from "@/lib/lab/open-tools/types";

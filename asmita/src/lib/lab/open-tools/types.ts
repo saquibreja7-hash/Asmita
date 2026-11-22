@@ -125,6 +125,24 @@ export interface StackPlan {
   month2: string[];
 }
 
+/**
+ * Hindi renderings of the strings the stacks index card shows (spec Part
+ * C6: the stacks index hero and the stack card text are Hindi, while the
+ * stack page bodies stay English only, like /for-platforms). This mirrors
+ * `summary.hi` on OpenTool: English is primary, the Hindi sits beside it
+ * for the one surface that renders in Hindi.
+ */
+export interface StackCardHi {
+  /** The job, as the index card's h3. */
+  title: string;
+  /** Who the stack is for, the card's bold lead line. */
+  forWho: string;
+  /** The time estimate, for the card's time line. */
+  time: string;
+  /** The people estimate, for the card's time line. */
+  people: string;
+}
+
 /** One free stack (spec Part E). */
 export interface Stack {
   slug: string;
@@ -138,6 +156,8 @@ export interface Stack {
   time: string;
   people: string;
   resources: string;
+  /** Hindi renderings of the index-card strings (spec Part C6). */
+  hi: StackCardHi;
   steps: StackStep[];
   plan: StackPlan;
   /** "What this will not catch": honest gaps. */
