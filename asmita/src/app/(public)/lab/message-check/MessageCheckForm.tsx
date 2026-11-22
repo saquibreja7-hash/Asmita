@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { MESSAGE_CHECK_PATTERN_IDS, type MessageCheckPatternId } from "@/lib/lab/message-check/patterns";
-import { detectedElements, ELEMENT_LABELS } from "@/lib/lab/message-check/elements";
+import { countsAsFinding, detectedElements, ELEMENT_LABELS } from "@/lib/lab/message-check/elements";
 import { SEXTORTION_ADVICE_IDS, type SextortionAdviceId } from "@/lib/lab/sextortion/advice";
 import type { SextortionLabel } from "@/lib/lab/sextortion/taxonomy";
 
@@ -46,7 +46,10 @@ export function MessageCheckForm({ locale }: { locale: Locale }) {
   // The displayed element lists: one sentence per element, labels first,
   // then the rules whose element no label already covers (elements.ts).
   const elements = result ? detectedElements(result.matches, result.labels) : null;
-  const foundSomething = elements !== null && elements.labels.length + elements.rules.length > 0;
+  // The warning headline only for a real finding: the flag, or an element
+  // other than a victim's own plea (the API already drops unbacked labels;
+  // this keeps the page honest whatever it is sent).
+  const foundSomething = elements !== null && result !== null && countsAsFinding(elements, result.flagged);
 
   useEffect(() => {
     if (status === "done" || status === "minor") resultHeadingRef.current?.focus();

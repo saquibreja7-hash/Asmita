@@ -21,8 +21,8 @@ here. Rows are JSONL, one per line:
 - `family`: the documented pattern or hard-negative family the row belongs
   to.
 
-Current size: 133 threats (≥ 120 required) and 194 negatives (≥ 180
-required), 327 rows (≥ 300 required), covering every documented §D pattern
+Current size: 133 threats (≥ 120 required) and 203 negatives (≥ 180
+required), 336 rows (≥ 300 required), covering every documented §D pattern
 and every taxonomy label at least once.
 
 ## Never used for training or tuning

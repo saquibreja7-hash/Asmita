@@ -192,3 +192,12 @@
 {"id": "en-192", "kind": "negative", "family": "dailyChat", "script": "english", "labels": ["NOT_THREAT"], "text": "grandma is better now; video call her tomorrow."}
 {"id": "en-193", "kind": "negative", "family": "dailyChat", "script": "english", "labels": ["NOT_THREAT"], "text": "please pay this month's rent today, the landlord is waiting."}
 {"id": "en-194", "kind": "negative", "family": "dailyChat", "script": "english", "labels": ["NOT_THREAT"], "text": "what was in your tiffin today? send a photo."}
+{"id": "en-195", "kind": "negative", "family": "shortChat", "script": "english", "labels": ["NOT_THREAT"], "text": "hi"}
+{"id": "en-196", "kind": "negative", "family": "shortChat", "script": "english", "labels": ["NOT_THREAT"], "text": "hi there"}
+{"id": "en-197", "kind": "negative", "family": "shortChat", "script": "english", "labels": ["NOT_THREAT"], "text": "good morning"}
+{"id": "en-198", "kind": "negative", "family": "shortChat", "script": "romanised", "labels": ["NOT_THREAT"], "text": "Abhi aata hoon"}
+{"id": "en-199", "kind": "negative", "family": "shortChat", "script": "english", "labels": ["NOT_THREAT"], "text": "Hi! Are we still on for lunch tomorrow?"}
+{"id": "en-200", "kind": "negative", "family": "shortChat", "script": "english", "labels": ["NOT_THREAT"], "text": "ok"}
+{"id": "en-201", "kind": "negative", "family": "shortChat", "script": "english", "labels": ["NOT_THREAT"], "text": "hii"}
+{"id": "en-202", "kind": "negative", "family": "shortChat", "script": "english", "labels": ["NOT_THREAT"], "text": "Delhi"}
+{"id": "en-203", "kind": "negative", "family": "shortChat", "script": "english", "labels": ["NOT_THREAT"], "text": "Please call me back"}

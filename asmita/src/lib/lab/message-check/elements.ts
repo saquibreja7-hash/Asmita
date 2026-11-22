@@ -22,7 +22,7 @@ import { SEXTORTION_LABELS, type SextortionLabel } from "@/lib/lab/sextortion/ta
  */
 
 /** Which labels cover the same element as each rule, so a rule is dropped exactly when a label already says it. */
-const RULE_COVERED_BY: Record<MessageCheckPatternId, readonly SextortionLabel[]> = {
+export const RULE_COVERED_BY: Record<MessageCheckPatternId, readonly SextortionLabel[]> = {
   paymentDemand: ["DEMAND_MONEY", "LOAN_RECOVERY", "REPEAT_DEMAND"],
   deadline: ["DEADLINE"],
   threatContacts: ["THREAT_EXPOSE", "AUDIENCE_FAMILY", "AUDIENCE_PUBLIC"],
@@ -63,4 +63,17 @@ export function detectedElements(
       (id) => fired.has(id) && !RULE_COVERED_BY[id].some((label) => present.has(label)),
     ),
   };
+}
+
+/**
+ * Does a displayed result count as a finding — the "matches patterns we
+ * often see in sextortion" headline and its advice? Yes when the
+ * classifier's combination rule flagged the message, or when any element
+ * other than VICTIM_PLEA is on the list. A victim's plea on its own is the
+ * person's own words, never a warning sign about someone else's message.
+ */
+export function countsAsFinding(elements: DetectedElements, flagged: boolean): boolean {
+  if (flagged) return true;
+  if (elements.rules.length > 0) return true;
+  return elements.labels.some((label) => label !== "VICTIM_PLEA");
 }

@@ -149,7 +149,7 @@ test.describe("message check (/lab/message-check)", () => {
     await expect(how.getByText(/how sextortion actually happens in India/i)).toBeVisible();
     // Synthetic training data and the honest test-set numbers.
     await expect(how.getByText(/trained on synthetic example messages written by Asmita/i)).toBeVisible();
-    await expect(how.getByText(/327 invented examples/i)).toBeVisible();
+    await expect(how.getByText(/336 invented examples/i)).toBeVisible();
     // The bias finding, cited and linked (Sap et al., ACL 2019).
     await expect(how.getByText(/can misjudge some dialects, scripts and ways of writing/i)).toBeVisible();
     const citation = how.getByRole("link", { name: /The Risk of Racial Bias in Hate Speech Detection/ });

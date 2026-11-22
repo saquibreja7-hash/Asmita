@@ -46,9 +46,10 @@ const STAGE_ADVICE: Record<SextortionStage, readonly SextortionAdviceId[]> = {
   impersonated_authority: ["notYourFault", "noPay", "authority", "keepEvidence", "report", "takedown"],
 };
 
-// Elements without a flag (a rule fired, or a label that alone never flags):
-// the general threat-stage advice answers "what do I do" without claiming
-// the message is sextortion.
+// Elements without a flag (a rule fired, or a label backed by a lexicon term
+// or rule; see message-check/findings.ts — an unbacked label or a victim's
+// plea alone never gets here): the general threat-stage advice answers
+// "what do I do" without claiming the message is sextortion.
 const GENERAL_ADVICE: readonly SextortionAdviceId[] = [
   "notYourFault",
   "noPay",

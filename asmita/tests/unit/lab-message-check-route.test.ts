@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as check } from "@/app/api/lab/message-check/route";
 import { createCsrfPair } from "@/lib/csrf";
 import { securityEvents } from "@/lib/security-log";
+import { countsAsFinding, detectedElements } from "@/lib/lab/message-check/elements";
 
 let ipCounter = 10;
 
@@ -31,6 +32,20 @@ function checkRequest(body: unknown, options: { csrf?: boolean; ip?: string } = 
 function sarvamReply(content: string) {
   return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
 }
+
+// Invented everyday messages the committed model labels on its own (also in
+// tools/lab-sextortion/eval/negatives.jsonl, family shortChat).
+const SHORT_HARMLESS = [
+  "hi",
+  "hi there",
+  "good morning",
+  "Abhi aata hoon",
+  "Hi! Are we still on for lunch tomorrow?",
+  "ok",
+  "hii",
+  "Delhi",
+  "Please call me back",
+];
 
 const THREAT =
   "I have your nudes. Send 50000 rupees in bitcoin within 24 hours or I send everything to your family. The proof is at https://proof.example.test/x";
@@ -154,6 +169,29 @@ describe("/api/lab/message-check", () => {
     expect(body.labels).toEqual([]);
     expect(body.advice).toEqual([]);
     expect(body.matches).toEqual([]);
+  });
+
+  // PR #114 review: on short everyday text a single classifier label can
+  // cross its threshold with nothing behind it (DEADLINE on "hi", VICTIM_PLEA
+  // on "ok"). None of these may show a label, advice or the warning headline.
+  it.each(SHORT_HARMLESS)("answers the short harmless message %j with no finding at all", async (text) => {
+    const response = await check(checkRequest({ text }));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      matches: string[];
+      labels: string[];
+      flagged: boolean;
+      advice: string[];
+      minor?: boolean;
+    };
+    expect(body.minor).toBeUndefined();
+    expect(body.flagged).toBe(false);
+    expect(body.labels).toEqual([]);
+    expect(body.advice).toEqual([]);
+    expect(body.matches).toEqual([]);
+    // What the page would show: no element sentence, so no warning headline.
+    const elements = detectedElements(body.matches as never[], body.labels as never[]);
+    expect(countsAsFinding(elements, body.flagged)).toBe(false);
   });
 
   it("routes a stated age under 18 to the minor pathway before anything runs", async () => {

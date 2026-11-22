@@ -6,11 +6,11 @@ Code: `asmita/src/lib/lab/sextortion/` (features, model, classify),
 `tools/lab-sextortion/` (trainer, `npm run train` / `npm run eval-report`).
 
 This document reports what the classifier does on the hand-written
-evaluation set (`tools/lab-sextortion/eval/`, 327 invented examples: 133
-threat-like, 194 hard negatives, all four scripts in both halves). The eval
+evaluation set (`tools/lab-sextortion/eval/`, 336 invented examples: 133
+threat-like, 203 hard negatives, all four scripts in both halves). The eval
 set was written by hand, separately from the generator, and was **never
 used for training, threshold selection or early stopping** — those use only
-a deterministic split of the synthetic data (10,028 train / 1,973 tuning
+a deterministic split of the synthetic data (10,028 train / 1,972 tuning
 rows, seed 20261122). These numbers are the honest output of
 `npm run eval-report` against the committed model (model version 1, trained
 2026-11-22). Regenerate them with that command after any retrain.
@@ -40,8 +40,8 @@ The three systems compared on the eval set, all on the same rows:
 - **model**: the WP117 combination rule above.
 - **rules+model**: either fires — what `/lab/message-check` now runs.
 
-Eval rows: 327 (77 should flag — the threat rows that carry a core and a
-supporting label — and 250 should not: hard negatives plus threat-shaped
+Eval rows: 336 (77 should flag — the threat rows that carry a core and a
+supporting label — and 259 should not: hard negatives plus threat-shaped
 rows the combination rule should leave alone, like pleas and bare claims).
 
 | system | flagged | precision | recall | F1 |
@@ -87,16 +87,16 @@ dialect and script skew is the known failure mode of abuse classifiers.
 | DEMAND_MONEY | 68 | 92.3% | 17.6% | 29.6% |
 | DEMAND_SEXUAL | 8 | 77.8% | 87.5% | 82.4% |
 | DEMAND_THIRD_PARTY | 6 | 100.0% | 100.0% | 100.0% |
-| DEADLINE | 24 | 93.3% | 58.3% | 71.8% |
+| DEADLINE | 24 | 70.0% | 58.3% | 63.6% |
 | AUTHORITY_IMPERSONATION | 16 | 100.0% | 81.3% | 89.7% |
 | PLATFORM_IMPERSONATION | 10 | 100.0% | 50.0% | 66.7% |
 | LOAN_RECOVERY | 10 | 100.0% | 60.0% | 75.0% |
 | CLAIM_HAS_MEDIA | 72 | 90.9% | 41.7% | 57.1% |
 | MORPHING | 16 | 100.0% | 56.3% | 72.0% |
 | REPEAT_DEMAND | 8 | 100.0% | 37.5% | 54.5% |
-| VICTIM_PLEA | 9 | 100.0% | 100.0% | 100.0% |
+| VICTIM_PLEA | 9 | 69.2% | 100.0% | 81.8% |
 | MINOR_SIGNAL | 12 | 100.0% | 83.3% | 90.9% |
-| NOT_THREAT | 194 | 100.0% | 0.0% | 0.0% |
+| NOT_THREAT | 203 | 100.0% | 0.0% | 0.0% |
 
 `NOT_THREAT` is trained but never surfaced: the page must never tell
 someone a message is safe, so a NOT_THREAT firing changes nothing the
@@ -133,7 +133,7 @@ visitor sees (recall 0% is the design working, not a defect).
 | DEMAND_MONEY | 18 | 100.0% | 27.8% | 43.5% |
 | DEMAND_SEXUAL | 2 | 50.0% | 100.0% | 66.7% |
 | DEMAND_THIRD_PARTY | 2 | 100.0% | 100.0% | 100.0% |
-| DEADLINE | 8 | 100.0% | 87.5% | 93.3% |
+| DEADLINE | 8 | 87.5% | 87.5% | 87.5% |
 | AUTHORITY_IMPERSONATION | 5 | 100.0% | 80.0% | 88.9% |
 | PLATFORM_IMPERSONATION | 3 | 100.0% | 33.3% | 50.0% |
 | LOAN_RECOVERY | 3 | 100.0% | 66.7% | 80.0% |
@@ -142,7 +142,7 @@ visitor sees (recall 0% is the design working, not a defect).
 | REPEAT_DEMAND | 2 | 100.0% | 50.0% | 66.7% |
 | VICTIM_PLEA | 3 | 100.0% | 100.0% | 100.0% |
 | MINOR_SIGNAL | 4 | 100.0% | 75.0% | 85.7% |
-| NOT_THREAT | 52 | 100.0% | 0.0% | 0.0% |
+| NOT_THREAT | 53 | 100.0% | 0.0% | 0.0% |
 
 ### mixed
 
@@ -175,16 +175,16 @@ visitor sees (recall 0% is the design working, not a defect).
 | DEMAND_MONEY | 15 | 50.0% | 6.7% | 11.8% |
 | DEMAND_SEXUAL | 2 | 100.0% | 50.0% | 66.7% |
 | DEMAND_THIRD_PARTY | 1 | 100.0% | 100.0% | 100.0% |
-| DEADLINE | 7 | 100.0% | 28.6% | 44.4% |
+| DEADLINE | 7 | 33.3% | 28.6% | 30.8% |
 | AUTHORITY_IMPERSONATION | 3 | 100.0% | 66.7% | 80.0% |
 | PLATFORM_IMPERSONATION | 2 | 100.0% | 50.0% | 66.7% |
 | LOAN_RECOVERY | 2 | 100.0% | 100.0% | 100.0% |
 | CLAIM_HAS_MEDIA | 18 | 100.0% | 16.7% | 28.6% |
 | MORPHING | 3 | 100.0% | 66.7% | 80.0% |
 | REPEAT_DEMAND | 2 | 100.0% | 0.0% | 0.0% |
-| VICTIM_PLEA | 2 | 100.0% | 100.0% | 100.0% |
+| VICTIM_PLEA | 2 | 33.3% | 100.0% | 50.0% |
 | MINOR_SIGNAL | 3 | 100.0% | 66.7% | 80.0% |
-| NOT_THREAT | 53 | 100.0% | 0.0% | 0.0% |
+| NOT_THREAT | 61 | 100.0% | 0.0% | 0.0% |
 
 **The bias picture.** No script collapses: every script flags 41–59% of
 its flag-eligible threats with 100% flag precision, and label-level
@@ -213,15 +213,32 @@ set.
 | workDeadline | 10 | 0 | 0 | 0 | — |
 | schoolChat | 9 | 0 | 0 | 0 | MINOR_SIGNAL ×9 |
 | dailyChat | 15 | 0 | 0 | 0 | — |
+| shortChat | 9 | 0 | 0 | 0 | DEADLINE ×5, VICTIM_PLEA ×4 |
 
-**No hard negative is flagged by any system.** Four families produced a
-single stray label each (a family-chat message about a family group, a bank
-notice with a due date, a loan reminder mentioning an amount, and the
-school-chat rows, where MINOR_SIGNAL firing is the intended routing
-behaviour — those rows carry the label). On the page a stray element
-sentence can appear on a harmless message without the message ever being
-called a sextortion threat; the flag never fires, and the fixed copy says
-a match is a warning sign, not proof.
+**No hard negative is flagged by any system.** Four of the original
+families produced a single stray label each (a family-chat message about a
+family group, a bank notice with a due date, a loan reminder mentioning an
+amount, and the school-chat rows, where MINOR_SIGNAL firing is the intended
+routing behaviour — those rows carry the label).
+
+The `shortChat` family (added after the PR #114 review) is the weak spot
+for single labels: on very short everyday text ("hi", "good morning", "ok",
+"Delhi", "Please call me back") one label crosses its threshold with
+nothing behind it — DEADLINE on five rows, VICTIM_PLEA on four. That is why
+DEADLINE and VICTIM_PLEA precision drop above, mostly in English. The flag
+never fires on them, and the page no longer shows such a label: the
+message-check API reports a classifier label only when the combination
+rule flagged the message, a lexicon term for that same label is in the
+text, or a WP93 rule covering the same element fired; and the warning
+headline and advice appear only for the flag or a backed element other
+than VICTIM_PLEA (`asmita/src/lib/lab/message-check/findings.ts`). These
+nine rows are pinned in the route and findings unit tests. Minor routing
+is unchanged: the raw MINOR_SIGNAL label still routes before any of this.
+
+On the page a WP93 rule or a lexicon-backed label can still show a single
+warning sign on a harmless message without the message ever being called
+a likely sextortion threat; the fixed copy says a match is a warning sign,
+not proof.
 
 ## Minor routing
 

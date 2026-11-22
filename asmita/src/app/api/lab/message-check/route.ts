@@ -10,6 +10,7 @@ import { messageCheckDailyLimit, summariseMessage } from "@/lib/lab/message-chec
 import { classifySextortion } from "@/lib/lab/sextortion/classify";
 import { inferStage } from "@/lib/lab/sextortion/taxonomy";
 import { sextortionAdvice } from "@/lib/lab/sextortion/advice";
+import { backedFindings } from "@/lib/lab/message-check/findings";
 
 /*
  * WP93 + WP117 (docs/lab/beta-spec.md, docs/research/research-tools-spec.md
@@ -28,7 +29,8 @@ import { sextortionAdvice } from "@/lib/lab/sextortion/advice";
  * before the model is ever called.
  *
  * The response carries ids, never prose or scores: rule ids (WP93's stable
- * set), taxonomy labels above their thresholds, the combination rule's
+ * set), taxonomy labels above their thresholds AND backed by the flag, a
+ * lexicon term or a rule (findings.ts), the combination rule's
  * boolean, and advice ids chosen from the stage. The page turns them into
  * plain sentences in both languages.
  */
@@ -120,13 +122,19 @@ export async function POST(request: Request) {
   // the WP117 classifier. The page merges their findings; neither is a
   // verdict, and no score leaves this isolate.
   const matches = checkMessagePatterns(text);
-  // Advice follows the stage the labels evidence (taxonomy.ts); the stage
-  // itself is never shown.
-  const stage = inferStage(classification.labels);
+  // A classifier label alone is never reported: it needs the flag, a
+  // lexicon term for the same label, or a WP93 rule for the same element
+  // behind it, and VICTIM_PLEA on its own is never a finding (findings.ts).
+  // Short harmless text ("hi", "ok") therefore gets no labels, no advice
+  // and the "no common pattern matched" copy.
+  const findings = backedFindings({ text, labels: classification.labels, flagged: classification.flagged, matches });
+  // Advice follows the stage the reported labels evidence (taxonomy.ts);
+  // the stage itself is never shown.
+  const stage = inferStage(findings.labels);
   const advice = sextortionAdvice({
     stage,
     flagged: classification.flagged,
-    detectedSomething: classification.labels.length > 0 || matches.length > 0,
+    detectedSomething: findings.finding,
   });
 
   // One optional Sarvam call for a short plain-language summary. The text in
@@ -134,5 +142,5 @@ export async function POST(request: Request) {
   // the pattern results below still answer.
   const summary = await summariseMessage(locale, text);
 
-  return noStore({ matches, labels: classification.labels, flagged: classification.flagged, advice, summary });
+  return noStore({ matches, labels: findings.labels, flagged: classification.flagged, advice, summary });
 }

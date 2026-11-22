@@ -151,10 +151,20 @@ describe("hard negatives stay below the flag threshold (committed eval set)", ()
     expect([...scripts].sort()).toEqual(["devanagari", "english", "mixed", "romanised"]);
   });
 
-  it("flags none of the 194 hand-written hard negatives", () => {
+  it("flags none of the 203 hand-written hard negatives", () => {
     expect(negatives.length).toBeGreaterThanOrEqual(180);
     const flagged = negatives.filter((row) => classifySextortion(row.text).flagged);
     expect(flagged).toEqual([]);
+  });
+
+  it("never flags the short everyday messages from the PR #114 review", () => {
+    // Invented; the model may still put a stray single label on them, which
+    // the message-check route drops (tests/unit/lab-message-check-findings.test.ts).
+    for (const text of ["hi", "hi there", "good morning", "Abhi aata hoon", "Hi! Are we still on for lunch tomorrow?", "ok", "hii", "Delhi", "Please call me back"]) {
+      expect(classifySextortion(text).flagged, text).toBe(false);
+    }
+    const shortChat = negatives.filter((row) => row.family === "shortChat");
+    expect(shortChat.length).toBe(9);
   });
 
   it("keeps every hard-negative family below the flag rule", () => {
