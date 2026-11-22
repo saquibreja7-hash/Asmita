@@ -786,6 +786,19 @@ export async function getReviewJobWithQueue(jobId: string): Promise<{ job: Revie
   return { job, queue };
 }
 
+/**
+ * True when the subject's open job sits in a protected queue (minor-hold).
+ * Paths that decide outside the console (the bulk links and fingerprints
+ * routes) check this first: a held item gets no decision that continues the
+ * adult flow, whoever asks.
+ */
+export async function isHeldForPossibleMinor(kind: ReviewSubjectKind, subjectId: string): Promise<boolean> {
+  const job = await findOpenJobForSubject(kind, subjectId);
+  if (!job) return false;
+  const queue = await getReviewQueueById(job.queueId);
+  return Boolean(queue?.protected);
+}
+
 async function findOpenJobForSubject(kind: ReviewSubjectKind, subjectId: string): Promise<ReviewJobRow | null> {
   if (isDevNoDb()) {
     const job = [...reviewMemory().jobs.values()].find(

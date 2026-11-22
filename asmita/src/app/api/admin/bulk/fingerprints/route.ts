@@ -4,7 +4,7 @@ import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { requireStepUp } from "@/lib/auth/step-up";
 import { getReviewAdapter } from "@/lib/review-adapters";
-import { recordDecisionOnOpenJob } from "@/lib/review-jobs";
+import { isHeldForPossibleMinor, recordDecisionOnOpenJob } from "@/lib/review-jobs";
 import { writeAuditLog } from "@/lib/audit";
 
 // WP145 bulk safety (review-console-spec.md): approves or rejects up to 50
@@ -60,6 +60,10 @@ export async function POST(request: Request) {
 
   const results: ItemResult[] = [];
   for (const hashId of hashIds) {
+    if (await isHeldForPossibleMinor("FINGERPRINT", hashId)) {
+      results.push({ hashId, ok: false, error: "minor_hold" });
+      continue;
+    }
     const outcome = await adapter.decide(hashId, decision, {
       reviewerId: auth.session.sub,
       reviewerEmailHash: auth.session.emailHash,
