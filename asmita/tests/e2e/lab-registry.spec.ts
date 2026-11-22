@@ -76,16 +76,24 @@ test.describe("AI Lab, WP115 service registry", () => {
 
     // The filters narrow the table by status.
     await admin.getByLabel("Status").selectOption("UNKNOWN");
+    // Each step waits for its own URL first: the service name is already on
+    // the page before the navigation lands, so checking it alone lets the
+    // next click hit a page that is about to be replaced.
     await admin.getByRole("button", { name: "Apply filters" }).click();
+    await expect(admin).toHaveURL(/\/admin\/lab\/registry\?.*status=UNKNOWN/);
     await expect(admin.getByText("E2E registry service " + suffix + " 0")).toBeVisible();
     await admin.getByRole("link", { name: "Clear" }).click();
+    await expect(admin).toHaveURL(/\/admin\/lab\/registry$/);
     await expect(admin.getByText("E2E registry service " + suffix + " 0")).toBeVisible();
 
     // One service's page: addresses, the honest no-findings state, the
     // scan-now action (the invented host cannot resolve, so the scan records
     // errors and fetches nothing), and the other sections.
     await admin.getByRole("link", { name: "E2E registry service " + suffix + " 0" }).click();
-    await expect(admin.getByRole("heading", { name: "E2E registry service " + suffix + " 0" })).toBeVisible();
+    // The first visit compiles the page on the dev server, which can take
+    // longer than the default wait.
+    await expect(admin).toHaveURL(/\/admin\/lab\/registry\/[^/?#]+$/, { timeout: 30_000 });
+    await expect(admin.getByRole("heading", { name: "E2E registry service " + suffix + " 0" })).toBeVisible({ timeout: 30_000 });
     await expect(admin.getByRole("heading", { name: "Addresses and liveness" })).toBeVisible();
     await expect(admin.getByRole("heading", { name: "Infrastructure" })).toBeVisible();
     await expect(admin.getByRole("heading", { name: "Related services" })).toBeVisible();
