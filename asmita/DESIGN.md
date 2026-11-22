@@ -1,238 +1,108 @@
----
-name: Meri Asmita
-description: Warm parchment editorial system with a single teal action, hairline structure, and pill buttons — calm record-keeping for a survivor-support organization.
-colors:
-  parchment: "#f6f3f1"
-  brand-teal: "#0a5e5a"
-  brand-strong: "#08443f"
-  teal-mist: "#d4e9e6"
-  teal-sky: "#9fcac4"
-  mint: "#a7fccd"
-  coral: "#ff9473"
-  crimson: "#f37a0a"
-  gold: "#ecda98"
-  off-black: "#242424"
-  graphite: "#4e4d4d"
-  smoke: "#625f5e"
-  ash: "#cecac8"
-  card-white: "#ffffff"
-  surface-muted: "#efebe8"
-  danger: "#b42318"
-  danger-soft: "#f8e1de"
-  success: "#176b42"
-  success-soft: "#dff5ea"
-  warning: "#9a5b00"
-  warning-soft: "#f3ead0"
-typography:
-  display:
-    fontFamily: "Noto Sans, Noto Sans Devanagari, system-ui, sans-serif"
-    fontWeight: 600
-    letterSpacing: "-0.01em"
-    lineHeight: 1.2
-  body:
-    fontFamily: "Noto Sans, Noto Sans Devanagari, system-ui, sans-serif"
-    fontWeight: 400
-    fontSize: "16px"
-    lineHeight: 1.5
-  label:
-    fontFamily: "Noto Sans, Noto Sans Devanagari, system-ui, sans-serif"
-    fontWeight: 600
-    fontSize: "13px"
-    letterSpacing: "0.08em"
-  reading-body:
-    fontFamily: "Noto Sans, Noto Sans Devanagari, system-ui, sans-serif"
-    fontWeight: 400
-    fontSize: "17px"
-    lineHeight: 1.75
-rounded:
-  box: "12px"
-  cards: "40px"
-  buttons: "100px"
-  pills: "9999px"
-spacing:
-  unit: "8px"
-  gutter: "clamp(20px, 6vw, 96px)"
-  section-gap: "64px"
-  card-padding: "40px"
-  element-gap: "16px"
-components:
-  button-primary:
-    backgroundColor: "{colors.brand-teal}"
-    textColor: "#ffffff"
-    rounded: "{rounded.buttons}"
-    padding: "14px 32px"
-    height: "48px"
-  button-primary-hover:
-    backgroundColor: "{colors.brand-strong}"
-    textColor: "#ffffff"
-  button-secondary:
-    backgroundColor: "transparent"
-    textColor: "{colors.off-black}"
-    rounded: "{rounded.buttons}"
-    padding: "14px 32px"
-    height: "48px"
-  button-secondary-hover:
-    backgroundColor: "{colors.teal-mist}"
-    textColor: "{colors.brand-strong}"
-  card:
-    backgroundColor: "{colors.card-white}"
-    textColor: "{colors.graphite}"
-    rounded: "{rounded.box}"
-    padding: "40px"
-  card-elevated:
-    backgroundColor: "{colors.teal-mist}"
-    textColor: "{colors.off-black}"
-    rounded: "{rounded.box}"
-  input:
-    backgroundColor: "{colors.parchment}"
-    textColor: "{colors.off-black}"
-    rounded: "{rounded.box}"
-    padding: "12px 16px"
-    height: "48px"
-  pill:
-    backgroundColor: "{colors.parchment}"
-    textColor: "{colors.off-black}"
-    rounded: "{rounded.pills}"
-    padding: "10px 18px"
----
+# Asmita design
 
-# Design System: Meri Asmita
+The single source for how the Meri Asmita site looks, reads and behaves. If a rule here and older code disagree, this file wins; fix the code. Owner decisions are marked **(owner)** and are not reopened without the owner.
 
-## Overview
+Last updated: 2026-11-21.
 
-**Creative North Star: "The Calm Ledger"**
+## 1. Principles
 
-Asmita is a survivor-support organization, and the site reads like a carefully kept public record printed on warm paper: a parchment canvas that is never pure white, structure carried entirely by 1px Ash hairlines and type, and exactly one decisive voice per screen — the brand teal fill of a single primary button. Nothing shouts. Pastels (mint, coral, gold, sky) exist only as soft atmospheric washes blurred behind heroes and as one tinted card; they never carry information.
+- **The survivor comes first.** Our first audience is often a survivor on a cheap Android phone, in distress, with little patience for jargon. Calm, fast, obvious paths beat everything else. The site must still look credible to researchers, press, partners and platforms.
+- **Calm authority, not alarm.** Serious and factual. No fear, urgency banners or dramatic language to push action.
+- **Honest about limits.** Never overpromise (no "we will erase it from the whole internet"). Say what we can and cannot do. Never invent metrics, partners or endorsements.
+- **Bilingual by default.** English and Hindi are equal. Every page works fully in both.
 
-Density is airy and generous (section padding clamps from 64px to 120px), type is a humanist sans (Noto Sans, with Noto Sans Devanagari for Hindi) at weight 600 for headings and 400 for body, and every corner is either a soft 12px box, a 40px card, or a full pill button. The result feels official without feeling governmental, warm without being soft about a hard subject.
+## 2. Colour
 
-**Key Characteristics:**
-- Parchment canvas (`#f6f3f1`), cards white, one tinted teal-mist band or elevated card per page.
-- One primary action per screen: brand teal pill; secondary is an ink outline.
-- Hairline Ash borders instead of shadows; depth comes from tone, not elevation.
-- Eyebrow labels (13px, uppercase, 0.08em tracking, teal) sit above every page title and section.
-- Hindi drops letter-spacing and uppercase transforms, gains taller line-height (1.35).
-- Illustrations are flat, friendly webp scenes in `/images/illustrations/`, decorative and aria-hidden.
+Use the semantic tokens in `src/app/foundation-styles.css`. Never hard-code colours in components.
 
-## Colors
+| Token | Use |
+|---|---|
+| `--page` | Page background: plain white `#ffffff` **(owner, 2026-11-21)** |
+| `--card` | Raised surfaces (white) |
+| `--ink` | Headings and main text |
+| `--text` | Body copy |
+| `--text-muted` | Hints and captions only (never body paragraphs) |
+| `--brand` | Deep teal `#0a5e5a`: links, accents, primary buttons |
+| `--brand-strong` | Brand hover; brand text on `--brand-soft` |
+| `--brand-soft` | Teal mist: tinted panels and bands |
+| `--line` | Borders and dividers (light neutral `#e3e1df`) |
+| `--coral`, `--coral-soft`, `--coral-ink` | The logo's warm orange. Fills and rules use `--coral`/`--coral-soft`; text and icons use `--coral-ink` (5:1 on white). Use it for ordered-step markers and warm highlights, never for buttons. |
+| `--danger`, `--warning`, `--success` (+ `-soft`) | Status only, never decoration |
 
-One accent carries every action; pastels are atmosphere only.
+- Teal is the strong colour for actions. No second button colour. Orange is the warm secondary colour for markers and highlights.
+- Gradients only where they carry warmth into a closing band (teal mist into orange soft); never on buttons or text.
+- Old aliases (`--teal`, `--heading`, `--body`, `--muted` and so on) exist for old markup only; don't use them in new code.
+- WCAG 2.1 AA contrast is the floor for every text and background pair. Small teal text on `--brand-soft` uses `--brand-strong`.
+- Light mode only for now.
 
-### Primary
-- **Brand Teal** (#0a5e5a, from the logo): links, accents, the primary button, eyebrow labels, focus rings. Hover state is Brand Strong (#08443f).
-- **Teal Mist** (#d4e9e6): the soft tint for callouts, tinted bands (`.zone-sunset`), icon tiles, table headers, and the one elevated card.
+## 3. Typography
 
-### Secondary
-- **Coral** (#ff9473) and **Crimson** (#f37a0a): decorative washes only (hero blur blobs); never text or actions.
-- **Mint** (#a7fccd) and **Gold** (#ecda98): decorative washes and small accents on dark surfaces.
+- **Noto Sans** for everything, **Noto Sans Devanagari** for Hindi. No italics anywhere.
+- Headings are weight 600. Scale: `.hero-title` (home only), `.page-title`, `.page-title-sm` (case, filing and admin screens), `.section-title`, `.subsection-title`. Card titles are plain `h3` at 20px. The type sizes are the `--text-*` tokens.
+- System monospace only for codes, fingerprints, reference numbers and raw links.
+- **Hindi:** no negative letter-spacing (it breaks matras); `html[lang="hi"]` sets it to 0. Give Hindi headings taller line-height (about 1.35 to 1.45). Never add Latin-only tracking to a shared element without a Hindi override.
+- Long text keeps a readable measure (about 68 characters). Use `text-wrap: pretty` for paragraphs where it helps. Longer text and legal headings stay in normal case.
 
-### Neutral
-- **Parchment** (#f6f3f1): the page background, never pure white.
-- **Off-Black** (#242424): headings and main text (the `--ink` role).
-- **Graphite** (#4e4d4d): body copy (the `--text` role).
-- **Smoke** (#625f5e): hints and captions.
-- **Ash** (#cecac8): every border, divider, and hairline.
-- **Card White** (#ffffff): raised surfaces only (cards, panels, tables).
+## 4. Layout
 
-### Named Rules
-**The One Voice Rule.** Brand teal fills at most one primary button per screen. Its rarity is the point; secondary actions are ink outlines.
-**The No-Shadow Rule.** `--shadow-sm` and `--shadow-soft` are `none`. Structure comes from 1px Ash hairlines and tonal steps, never from drop shadows.
+- Content max width `--page-max-width` (1280px). Side margin `--gutter` grows from 20px to 96px.
+- Editorial pages use `.page-hero` and `.section-pad`, and may open with an illustration that introduces the subject.
+- Urgent help, filing and other task screens use a compact introduction so the first useful action is visible in the first screen on a phone.
+- Prefer a list when several items share one purpose. Combine or remove labels that repeat a heading.
+- Keep breadcrumbs, stage labels, meaningful timing and source or verification details clear.
+- Check both languages at 320px and near the desktop navigation breakpoint.
 
-## Typography
+## 5. Shape and surfaces
 
-**Display Font:** Noto Sans (with Noto Sans Devanagari)
-**Body Font:** Noto Sans (with Noto Sans Devanagari)
+- One corner radius, `--radius-box` (12px), for every button, box, card, panel, input and menu, on every page including admin. Square-cornered design, no pill buttons. **(owner)** Only small chips, badges and step numbers stay round.
+- Three surfaces: the page (parchment), cards (white with a hairline border), and tinted bands (`--brand-soft`: `.zone-sunset`, `.home-help-band`, `.filing-intro`).
+- **No coloured left-border accent stripes** on cards or panels. **(owner)**
 
-**Character:** A single humanist sans does everything; hierarchy is made of weight (400 body / 600 headings), size, and tracking, not family contrast. Devanagari resets negative tracking to 0 and raises heading line-height to 1.35.
+## 6. Components
 
-### Hierarchy
-- **Hero title** (600, clamp 40px→72px, lh 1.06): home page only.
-- **Page title** (600, clamp 34px→56px, lh 1.1, -0.015em): one per page, under an eyebrow.
-- **Section title** (600, clamp 26px→40px, lh 1.15): major sections.
-- **Subsection title** (600, clamp 20px→24px, lh 1.25): card groups and Reading sections.
-- **Card title** (600, 20px, lh 1.2): plain `h3` inside cards.
-- **Body** (400, 16px, lh 1.5; long-form 17px, lh 1.75, ~68ch max): everything else.
-- **Label / eyebrow** (600, 13px, uppercase, 0.08em tracking, teal): the one label style for section markers, table heads, and admin field labels.
+- **Buttons:** two only. `.btn-primary` (teal fill, 12px corners, one per screen) and `.btn-secondary` (outline, teal tint on hover). `.btn-arrow` adds an arrow. Use the shared buttons for actions and plain links for navigation in running text.
+- **Navigation:** groups with dropdowns, defined once in `src/components/layout/nav-config.ts` for both the desktop dropdowns and the phone menu. The group holding the open page is highlighted. The header switches to the compact Menu until the whole desktop menu and its actions fit, and keeps "File a complaint" visible beside Menu at middle widths.
+- **Footer:** the brand column (logo, one-line description, language switch, newsletter) plus **three link columns**: Get help, The issue, Organization. Privacy, Sitemap and Status sit as small links in the bottom bar with the helplines and copyright. Don't add a fourth link column. **(owner)**
+- **Forms:** clear label above each input, minimum 48px height. Errors sit next to the field they belong to, use text (never colour alone), and keep the next action visible.
+- **Optional detail:** use native disclosure (`<details>`).
+- **Overlays and modals:** keep focus inside while open, close on Escape, and return focus to the control that opened them.
 
-### Named Rules
-**The Single Label Rule.** There is one label style — the teal uppercase eyebrow. Do not invent competing label styles.
-**No Italics Rule.** `text-wrap: balance` on headings, no italic anywhere on the site.
+## 7. Illustrations and imagery
 
-## Layout
+- Line-art illustrations from `public/images/illustrations/`, through the `Illustration` component. Prompts for new ones: `docs/design/illustration-drafts/image-prompts.md`.
+- Never on question or signing screens. Never a person on under-18 pages.
+- Calm and human, never graphic. Never depict a victim, intimate content or the harm itself. No "head in hands" stock clichés.
+- Icons: single-line style, rounded caps and joins, 20 to 24px.
 
-Container: `min(1280px, 100% - 2 × gutter)`, gutter `clamp(20px, 6vw, 96px)`, centred. Vertical rhythm is the `.section-pad` clamp (64px→120px top and bottom); the page hero uses slightly less bottom (`.page-hero`). Pages stack zones: `.hero` (parchment + optional blurred wash), alternating `.zone-white` / `.transform-section` zones that stay parchment — rhythm comes from hairlines and type, not colored bands — and close with a teal-mist `.zone-sunset` band. The reading layout (`Reading.tsx`) is a 46rem centred column with a sticky 14rem contents rail on wide screens. The admin console is a single centred column of `.a-card` panels on a 36-char sidebar. Breakpoints follow Tailwind defaults (sm 640, md 768, lg 1024); phones get one column and stacked cards, checked at 360px.
+## 8. Motion
 
-## Elevation & Depth
+- Restrained: hover and transitions 150 to 200ms; at most a subtle fade on entrance.
+- No scroll-jacking, pinned scroll sequences, heavy parallax or custom cursors.
+- Under `prefers-reduced-motion`, no transitions or animations run.
 
-Flat by doctrine. `--shadow-sm: none`, `--shadow-soft: none`; cards are white-on-parchment with an Ash hairline. The only permitted depth cues are tonal (white cards on parchment, teal-mist bands, the dark inverted `.module-dark` card) and one soft filing-card shadow (`0 24px 60px -36px rgba(10,94,90,0.35)`) used on the complaint-filing form card. Atmospheric depth comes from large blurred gradient washes (`.wash`, blur 70px, opacity 0.8) behind hero content, never above it.
+## 9. Accessibility (non-negotiable)
 
-## Shapes
+- WCAG 2.1 AA. Tap targets at least 48×48px. Visible keyboard focus on every interactive element.
+- Semantic HTML, headings in order, labelled inputs, alt text on meaningful images.
+- Never block zoom.
+- The language switch keeps the visitor on the same page.
 
-Two radii for structure and one for action: boxes, cards, panels, inputs, and images all use the soft 12px box radius (`.card-elevated` scenes may use 40px); buttons and pills are fully round (100px). Tags and filter chips are 9999px pills with an Ash hairline and parchment fill, 12px uppercase text. Focus is a 2px brand-teal outline with a 3px offset on every interactive element. There are no left-border accent stripes on cards or callouts — a callout is a teal-mist rounded box with an icon.
+## 10. Content and voice
 
-## Components
+- Plain, human and specific. Short sentences. Explain any legal term you use.
+- Titles and links in the survivor's own words ("Someone is threatening to share my photos"), with the formal term (NCII) second.
+- Safety and helplines come before instructions: 112, then women's helpline 181, Childline 1098 for minors, then NCRP.
+- Say what a notice can and cannot achieve before the survivor signs.
+- Put safety limits inside the instruction they apply to, not on a separate page.
+- Short content warning at the top of pages that discuss distressing material.
+- Copy must translate cleanly into Hindi: no idioms. Banned: pity, "empowerment" clichés, marketing filler.
+- When a route moves, add a redirect from the old path.
 
-### Buttons
-- **Shape:** full pill (100px radius), min-height 48px.
-- **Primary:** brand teal fill, white text, 14px 32px padding; hover deepens to #08443f. One per screen.
-- **Secondary:** transparent with 1px ink outline; hover tints teal-mist with brand-strong text.
-- **Link style:** `.btn-link` / `.text-link` underline with ash decoration that colours on hover; `.arrow-link` is a 14px uppercase link with a trailing → that nudges right on hover.
+## 11. Owner decisions
 
-### Chips (pills / tags)
-- **Style:** parchment fill, 1px ash border, 12px uppercase text with -0.033em tracking, 10px 18px padding, fully round; an optional 6px teal dot leads the text.
-
-### Cards / Containers
-- **Corner:** 12px (`--radius-box`), 1px ash border, white fill, 40px internal padding.
-- **Elevated card:** the one coloured surface — teal-mist fill, transparent border, optional blurred wash art in the top-right corner.
-- **Dark card:** off-black fill, parchment text, mint accents — used sparingly for inverted feature panels.
-
-### Inputs / Fields
-- **Style:** 48px min-height, 1px ash border, parchment fill, 12px radius, 16px text; placeholder in smoke. Focus shifts the border to off-black (filing form uses teal + 4px teal-mist ring). Errors use the `--danger` text colour with field-level messages.
-
-### Navigation
-- Header: wordmark left, eyebrow-style uppercase group links with hover teal-mist tint; on phones a sheet menu. Admin: a dark sidebar of small-caps sections filtered by permission, `.a-card` content panels, teal `a-count` badges.
-- Footer: parchment, hairline top, wordmark + 3 link columns + language toggle, helpline numbers in the bottom bar.
-
-### Illustration
-- Flat friendly webp scenes from `/images/illustrations/` via the `Illustration` component (sized table, aria-hidden, lazy); heroes put the scene right of the copy on wide screens via `.page-hero-split`, under it on phones. Existing set: `page-*` scenes per section, `issue-*`, `audience-*`, `home-hero`, `done-relief`, etc.
-
-## Do's and Don'ts
-
-### Do:
-- **Do** reuse AppShell, the eyebrow → page-title → lede hero pattern, `.section-pad` zones, `.card`, `.data-table`, `Reading.tsx` blocks, and existing `Illustration` scenes before inventing anything new.
-- **Do** keep exactly one `.btn-primary` per screen; make every other action `btn-secondary` or a text link.
-- **Do** use the teal eyebrow for every section label, and `.pill` / `.tag` for filter chips and status marks.
-- **Do** show honest empty states in a bordered `surface-muted` panel with one useful next action, as /research does.
-- **Do** verify 360px phone width: one column, buttons full-width where needed, no horizontal scroll; and keep Hindi labels from wrapping badly (no negative tracking in Devanagari).
-
-### Don't:
-- **Don't** add drop shadows to cards, coloured left-border accent stripes on cards or callouts, or new accent colours.
-- **Don't** use pure white (`#fff`) as a page background, gradients on buttons, or uppercase transforms in Hindi.
-- **Don't** redesign /start or any complaint-workflow screen; org pages are refinements inside this world.
-- **Don't** load a third-party icon set or illustration style; extend `Icon.tsx` (Lucide paths) and `Illustration.tsx` (the `/images/illustrations` set) instead.
-
----
-
-# Asmita design system
-
-## Colors
-
-Use semantic tokens from `src/app/foundation-styles.css`. Parchment `#f6f3f1` is the page background, white `#ffffff` is a raised surface, and deep teal `#0a5e5a` is reserved for actions and links.
-
-## Typography
-
-Use Noto Sans with Noto Sans Devanagari for Hindi. Use monospace for codes, fingerprints and technical references. Give Hindi headings room to breathe and use regular character spacing.
-
-## Layout
-
-Editorial pages can use Asmita’s illustrations to introduce a subject. Urgent help and forms place the first useful action above the fold on a small screen. Prefer a list when several elements share one purpose. Use distinct, descriptive actions on help and task screens. Keep breadcrumbs, stage labels, meaningful timing and source information clear. Combine or remove labels that repeat a heading.
-
-## Interaction
-
-Support keyboard navigation, visible focus and reduced motion. Use native disclosure controls for optional detail. If an overlay covers other controls, keep focus inside it while it is open and restore focus on dismissal. Verify both languages at 320 px and near the desktop navigation breakpoint.
-
-## Components
-
-Use the shared buttons for actions, lists for grouped options and plain links for navigation in running text. Use the standard 12 px corner radius for panels and inputs. Pair form errors with their affected control and keep the next action visible.
-
-See [the full design system](docs/design/03-design-system.md) for maintained component guidance.
+- No Quick Exit button on public pages. **(owner)**
+- No CSS cascade layers (`@layer`). **(owner)**
+- Keep the `/start` page's original design. **(owner)**
+- Nothing about donations yet: no donate buttons, donation asks, fundraising copy or "support us" money language anywhere on the site, until the owner decides otherwise. **(owner)**
+- No coloured left-border accent stripes. **(owner)**
+- Footer: brand plus three link columns. **(owner)**
