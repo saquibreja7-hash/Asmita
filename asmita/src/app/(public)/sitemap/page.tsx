@@ -38,6 +38,7 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/legal": { label: "कानूनी जानकारी" },
   "/sitemap": { label: "साइटमैप" },
   "/lab": { label: "AI लैब", note: "शोध प्रयोग और बीटा टूल; शिकायत दर्ज कराने से अलग" },
+  "/lab/open-tools": { label: "ओपन टूल", note: "मुफ़्त ट्रस्ट-ऐंड-सेफ़्टी टूलों की निर्देशिका और उनसे बने मुफ़्त स्टैक" },
   "/lab/trace": { label: "मॉर्फ़ का स्रोत जाँचें" },
   "/lab/detectors": { label: "डिटेक्टर पैनल" },
   "/lab/protect": { label: "फ़ोटो सुरक्षा" },

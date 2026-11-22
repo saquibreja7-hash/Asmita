@@ -1,0 +1,446 @@
+/*
+ * Open tools and free stacks (docs/lab/open-tools-spec.md, WP151): the
+ * directory page's own styles. Every class is ot- prefixed and built only
+ * from the site's semantic tokens, so the parallel design refresh re-skins
+ * these pages when it merges. Owner rules hold: no @layer, no coloured
+ * left-border accent stripes, one corner radius, teal the only action
+ * colour, orange for markers only, and the single closing-band gradient.
+ */
+
+/* ── Hero ─────────────────────────────────────────────────────── */
+
+.ot-lede {
+  max-width: 68ch;
+  font-size: 1.25rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.ot-hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px 40px;
+}
+
+/* ── The workflow strip ────────────────────────────────────────── */
+
+.ot-directory {
+  padding-bottom: clamp(64px, 8vw, 120px);
+}
+
+.ot-strip-band {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding-block: 28px;
+  margin-bottom: 48px;
+}
+
+.ot-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0 8px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ot-stage {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ot-stage-btn,
+.ot-stage-name {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 10px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--card);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.ot-stage-btn {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.ot-stage-btn:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.ot-stage-btn.is-active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.ot-stage-name.is-on {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.ot-stage-meaning {
+  max-width: 24ch;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* The connector: a thin rule with a small orange dot arriving at the next
+   stage. Orange marks the workflow's direction; the buttons stay neutral. */
+.ot-connector {
+  display: flex;
+  flex: 1 1 16px;
+  min-width: 16px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 24px;
+}
+
+.ot-connector::before {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.ot-connector::after {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--coral);
+}
+
+@media (max-width: 1023px) {
+  .ot-stage-meaning {
+    display: none;
+  }
+
+  .ot-connector {
+    margin-top: 10px;
+  }
+}
+
+/* ── Filters ───────────────────────────────────────────────────── */
+
+.ot-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 56px;
+}
+
+.ot-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.ot-filter-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-right: 4px;
+}
+
+.ot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: var(--card);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+button.ot-chip {
+  cursor: pointer;
+  /* Filter chips are the page's tap targets: 48px, like every button here
+     (spec C1), even at chip scale. */
+  min-height: 48px;
+  padding: 12px 18px;
+  transition: border-color 0.15s ease, background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+button.ot-chip:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+button.ot-chip[aria-pressed="true"] {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+
+.ot-search {
+  max-width: 22rem;
+}
+
+.ot-search label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ot-count {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.ot-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+}
+
+.ot-empty p {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+/* ── Category groups and the card grid ─────────────────────────── */
+
+.ot-group + .ot-group {
+  margin-top: 72px;
+}
+
+.ot-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  margin-top: 32px;
+}
+
+@media (min-width: 640px) {
+  .ot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .ot-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ── The tool card ──────────────────────────────────────────────── */
+
+.ot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--card);
+}
+
+.ot-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ot-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-box);
+}
+
+.ot-tile-teal {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.ot-tile-coral {
+  background: var(--coral-soft);
+  color: var(--coral-ink, #b4461f);
+}
+
+.ot-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ot-chip-licence {
+  min-height: 0;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+.ot-chip-asmita {
+  min-height: 0;
+  padding: 4px 10px;
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+
+.ot-chip-closed {
+  min-height: 0;
+  padding: 4px 10px;
+  color: var(--text-muted);
+}
+
+.ot-card-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.ot-by {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.ot-summary {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text);
+  max-width: 48ch;
+}
+
+.ot-card-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.ot-stage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ot-chip-stage {
+  min-height: 0;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.ot-effort {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.ot-effort-squares {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.ot-effort-sq {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--line);
+}
+
+.ot-effort-sq.on {
+  border-color: var(--coral);
+  background: var(--coral);
+}
+
+/* ── Closing band and the footer line ─────────────────────────── */
+
+.ot-close {
+  background: linear-gradient(
+    110deg,
+    var(--brand-soft) 0%,
+    var(--brand-soft) 35%,
+    var(--coral-soft) 100%
+  );
+  padding-block: clamp(56px, 7vw, 96px);
+}
+
+.ot-close-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.ot-close p {
+  max-width: 52ch;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+.ot-foot {
+  padding-block: 40px 64px;
+}
+
+.ot-foot-line {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.ot-foot-line + .ot-foot-line {
+  margin-top: 6px;
+}
+
+/* Transitions are hover and focus cues only; people who ask for less
+   motion get none. */
+@media (prefers-reduced-motion: reduce) {
+  .ot-stage-btn,
+  button.ot-chip {
+    transition: none;
+  }
+}
