@@ -100,3 +100,36 @@ Registry admin UI, provider reports and public aggregates (Track C, `feat/nudify
 10. `LabReportView.serviceId` became nullable and reports' chokepoint id now comes from the row (bulk rows carry null); the only visible change is on bulk reports, and every existing report view keeps its values.
 11. The admin nav gained two Lab items ("Service registry", "Providers"); the nav-permissions test's page map was extended for them, as that fixture has been for every prior page.
 12. `--coral-ink` (the token the spec names) did not exist in the CSS; it is added to foundation-styles.css as `#9a4508` — a dark orange that keeps marker text at ≥4.5:1 on white, parchment and coral-soft alike.
+
+
+### WP132 done
+
+Fix lane for the first full verify of `feat/nudify-registry` (WP114 + WP115 branch; dev-vm). The watcher's verify (`logs/verify-p2-feat-nudify-registry1/`, `DONE E2E_RC=1 SMOKE_RC=0`) failed 4 of 108 Playwright journeys; the worker smoke, the crawler package and all 2411 unit tests passed. All four failures live in the two WP114/WP115 e2e specs that were written on win-desktop without Playwright and had never executed — no product defect: every fix is in the specs themselves, no assertion was weakened, skipped or deleted, no app or crawler code changed, and the two files' "NOT YET RUN" headers are now truthful run documentation instead.
+
+**The four real causes**
+
+1. `tests/e2e/lab-infra-scan.spec.ts`, cron route: the journey expected `[200, 503]` from `GET /api/lab/cron/infra-scan` sent without a bearer, assuming the e2e harness configures no `CRON_SECRET`. It configures one (`playwright.config.ts`, like production), so the route correctly answered 401 — the same gated contract as every other cron route and the one the file's own second test asserts. The journey now sends the configured secret, the convention `health-check.spec.ts` and `url-retention.spec.ts` already use, and asserts a stronger result: 200, `ran: true`, one service scanned, and `urlsFetched: 0` — the cron path fetches nothing either.
+2. `tests/e2e/lab-registry.spec.ts`, mark-verified: after clicking "Mark verified" the journey kept looking for the row through a filter on a "Mark verified" button — but verification flips that button to "Unverify" (the mutation worked; the verify run's own snapshot shows the row as "verified 2026-11-22"). The verified-state assertion now re-scopes the row to the "Unverify" button. Same assertion, correct locator.
+3. and 4. `tests/e2e/lab-tracker.spec.ts`, English and Hindi: the tracker's honest-empty-state journeys need a database with no Lab rows, and the spec's header documents that invariant (it "sorts before lab.spec.ts, which seeds Lab rows"). The two new specs sort before `lab-tracker.spec.ts` and left their rows behind, so the tracker showed real numbers instead of the empty state. Both new specs now clean up after themselves in `test.afterEach`, deleting exactly the rows they created (matched by their per-run unique name markers) through the same `withAdmin` Postgres helper global-setup uses. The tracker spec itself is untouched, and so is `lab.spec.ts`.
+
+**Hardened while touching the same file.** The infra-scan journey picked "the newest service" by sorting UUIDs with `localeCompare` — it worked only because no other service existed yet; it now finds the service by its unique name, the pattern the registry journey already used. The registry journey's reports-page assertion was re-scoped to the bulk row: the page's chokepoint `<select>` also mentions the provider, and `getByText(...).first()` resolved to that hidden `<option>`, which is never "visible".
+
+**Verified, and how**
+
+- The three failing spec files plus `lab.spec.ts` (the journey that seeds Lab rows after the tracker) through `e2e-some.sh` (Node 22, Chromium, throwaway Postgres 17): 6/6 passed, `E2E_SOME_RC=0`. Two intermediate runs are logged too (`wp132-e2e-some1/2.log`): the first proved the cron and verified-row fixes but exposed the cleanup helper's parameter bug, the second proved the whole registry journey green end to end with only the cleanup failing.
+- The cleanup SQL itself was proven against a real migrated schema outside the suite: synthetic service/chokepoint/finding/scan/link/report/provider rows inserted, both specs' exact statements run (no bind errors), every row gone, the 12 seeded provider rows untouched.
+- Worker smoke through the Node 22 helper (`npm run build:vinext`, `node scripts/prepare-production-wrangler.mjs`, `SMOKE_CRAWLER=1 node scripts/worker-smoke.mjs`, Node 22 container, Postgres 17): "Worker smoke passed" — `SMOKE_RC=0`.
+- Full `check.sh` (Node 22, both packages): crawler lint + type-check + tests + build, asmita lint + type-check + `prisma validate` + the unit suite — printed `ALL CHECKS PASSED` (650 crawler tests and 2411 asmita tests).
+
+**Not verified on this machine**
+
+- The full 108-test Playwright suite was not re-run as one invocation here; the watcher's next verify runs it. The four fixed journeys pass in isolation with the suite's documented file order preserved, and no other spec creates Lab rows before `lab-tracker.spec.ts` (verified by grep: only `lab-infra-scan.spec.ts`, `lab-registry.spec.ts` and `lab.spec.ts` create Lab services).
+- The two Playwright specs still have never run on win-desktop (no Playwright there); they now run green on dev-vm.
+
+**Decisions made myself**
+
+1. The cron-route expectation was the spec's bug, not the route's: 401 without a bearer, once a secret is configured, is the deploy-time contract (the liveness cron route behaves identically and the unit suite enforces it); sending the secret makes the journey prove the weekly run actually happens and still fetches nothing.
+2. Test cleanup deletes only rows carrying the journey's own unique markers, never the seeded provider directory (the "seeded directory rows are all unverified" assertions depend on it) and never another spec's rows. The product rule "no deletes by design" governs the console and the API; the test harness already resets the whole schema between runs (global-setup), so targeted deletes in `afterEach` are the same discipline at journey granularity.
+3. The work-package text both says "Do not append to crawler/docs/v2-progress.md" and ends by asking for the WP132 entry there. Per the WP96/WP101 precedent, the final line wins: decisions made during the work live here, and the `crawler/docs/v2-progress.md` entry was appended only after `check.sh` printed ALL CHECKS PASSED.
+
+**User-facing sentences the owner should approve** — none; no product copy changed, only the two e2e specs.

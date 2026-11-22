@@ -1,10 +1,3 @@
-// NOT YET RUN. Written on a Windows machine with no Playwright installed, so
-// this spec has never executed. It follows the conventions of lab.spec.ts and
-// lab-infra-scan.spec.ts and needs the usual local Postgres 17
-// (E2E_DATABASE_URL, a database ending in _e2e); playwright.config.ts sets
-// ENABLE_LAB=true for the shared dev server. Run it before relying on it:
-//   npx playwright test tests/e2e/lab-registry.spec.ts --project=chromium
-//
 // WP115 (research-tools-spec.md): the registry console journey — the
 // service table, one service's page with its empty infrastructure state and
 // the scan-now action, the provider directory with its verified-contact
@@ -12,19 +5,52 @@
 // fetched: the scanned service points at an invented .test host that cannot
 // resolve, so the scan records failures only. The public tracker is checked
 // for k-anonymity masking and for carrying no service name in its rendered
-// HTML.
+// HTML. Runs like every database journey: the usual local Postgres 17
+// (E2E_DATABASE_URL, a database ending in _e2e); playwright.config.ts sets
+// ENABLE_LAB=true for the shared dev server.
 
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { adminContext } from "./support/admin";
+import { withAdmin } from "./support/database";
 import { isLabResearchCreditUrl } from "@/lib/lab/research-credits";
 
+// One unique suffix per run: every row this journey creates carries it,
+// and the afterEach cleanup below deletes exactly those rows.
+const suffix = randomUUID().slice(0, 8);
+const servicePrefix = `E2E registry service ${suffix}`;
+const providerName = `E2E Provider ${suffix}`;
+
 test.describe("AI Lab, WP115 service registry", () => {
+  // The Lab specs share one database, and lab-tracker.spec.ts — which sorts
+  // after this file — asserts the honest empty state of a fresh database:
+  // no Lab row may outlive this file. The console has no delete API by
+  // design, so the journey's rows (services, their chokepoints and scan
+  // rows, the provider and its bulk report) are removed here directly, the
+  // same way global-setup resets the database between runs.
+  test.afterEach(async () => {
+    await withAdmin(async (db) => {
+      const like = `${servicePrefix}%`;
+      // The id subquery is interpolated into several statements, so its
+      // placeholder number must match each statement's own parameter order.
+      const services = (n: number) => `SELECT id FROM "LabService" WHERE name LIKE $${n}`;
+      await db.query(
+        `DELETE FROM "LabReport" WHERE "bulkProviderName" = $1 OR "chokepointId" IN (SELECT id FROM "LabChokepoint" WHERE "serviceId" IN (${services(2)}))`,
+        [providerName, like],
+      );
+      await db.query(`DELETE FROM "LabChokepoint" WHERE "serviceId" IN (${services(1)}) OR provider = $2`, [like, providerName]);
+      await db.query(`DELETE FROM "LabInfraFinding" WHERE "serviceId" IN (${services(1)})`, [like]);
+      await db.query(`DELETE FROM "LabInfraScan" WHERE "serviceId" IN (${services(1)})`, [like]);
+      await db.query(`DELETE FROM "LabServiceLink" WHERE "serviceAId" IN (${services(1)}) OR "serviceBId" IN (${services(1)})`, [like]);
+      await db.query(`DELETE FROM "LabService" WHERE name LIKE $1`, [like]);
+      await db.query(`DELETE FROM "LabProvider" WHERE name = $1`, [providerName]);
+    });
+  });
+
   test("an admin walks the registry, the providers directory and a bulk draft", async ({ browser }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Database journeys run once");
     test.setTimeout(150_000);
 
-    const suffix = randomUUID().slice(0, 8);
     const serviceHosts = [`https://e2e-registry-a-${suffix}.example.test/`, `https://e2e-registry-b-${suffix}.example.test/`];
 
     const console_ = await adminContext(browser, "e2e-admin");
@@ -84,7 +110,13 @@ test.describe("AI Lab, WP115 service registry", () => {
     });
     await expect(providerRow.getByText("unverified")).toBeVisible();
     await providerRow.getByRole("button", { name: "Mark verified" }).click();
-    await expect(providerRow.getByText(/verified \d{4}-\d{2}-\d{2}/)).toBeVisible();
+    // Verifying flips the row's button to "Unverify", so the row can no
+    // longer be found through the "Mark verified" filter — re-scope to the
+    // button a verified row carries, then read the recorded date.
+    const verifiedRow = admin.locator("tr", { hasText: `E2E Provider ${suffix}` }).filter({
+      has: admin.getByRole("button", { name: "Unverify" }),
+    });
+    await expect(verifiedRow.getByText(/verified \d{4}-\d{2}-\d{2}/)).toBeVisible();
 
     // Both services depend on it through a chokepoint, so one report can
     // list them both. The chokepoint is added through its own console page.
@@ -121,10 +153,14 @@ test.describe("AI Lab, WP115 service registry", () => {
       admin.getByText("One report drafted, listing every selected service. Review and send it on the reports page."),
     ).toBeVisible();
 
-    // The draft appears on the reports page as one row covering both.
+    // The draft appears on the reports page as one row covering both: one
+    // row listing "2 services" under the provider's name. Scoping to the
+    // row matters — the page's chokepoint select mentions the provider too,
+    // and a hidden <option> is never "visible".
     await admin.goto("/admin/lab/reports");
-    await expect(admin.getByText("2 services").first()).toBeVisible();
-    await expect(admin.getByText(`E2E Provider ${suffix}`).first()).toBeVisible();
+    const bulkRow = admin.locator("tr", { hasText: "2 services" });
+    await expect(bulkRow.getByText("2 services")).toBeVisible();
+    await expect(bulkRow.getByText(`E2E Provider ${suffix}`)).toBeVisible();
 
     // Mutations without the CSRF pair are refused.
     const noCsrf = await admin.request.post("/api/lab/reports/bulk", {
