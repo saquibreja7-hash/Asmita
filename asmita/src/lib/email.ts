@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { renderEmailHtml } from "@/lib/email-html";
+import { renderEmailHtml, renderNoticeLetterHtml } from "@/lib/email-html";
 
 const PRIVACY_NOTE = "For your privacy, this email contains no submitted URLs or personal information.";
 
@@ -36,10 +36,12 @@ export async function sendOtp(to: string, otp: string) {
     text: `Your Asmita verification code is ${otp}. It expires in 10 minutes.`,
     html: renderEmailHtml({
       title: "Your verification code",
-      paragraphs: ["Enter this code to continue. It expires in 10 minutes."],
+      paragraphs: ["Enter this code on the page you came from. It works once and expires in 10 minutes."],
       highlight: otp,
       highlightLabel: "Verification code",
-      footerNotes: ["If you did not request this code, you can safely ignore this email."],
+      highlightStyle: "code",
+      preheader: "Your code expires in 10 minutes.",
+      footerNotes: ["Did not ask for this code? You can ignore this email; nothing happens without it."],
     }),
   }));
 }
@@ -61,6 +63,9 @@ export async function sendNoticeDraft(
     to,
     subject,
     text,
+    // The same notice as the text part, laid out as a letter: the body text
+    // is shown verbatim (renderNoticeLetterHtml adds nothing to it).
+    html: renderNoticeLetterHtml(subject, text),
     ...(attachments?.length ? { attachments } : {}),
   }, idempotencyKey ? { idempotencyKey } : undefined));
 }
@@ -442,8 +447,10 @@ export function createWatchCopyFoundEmail(referenceNumber: string) {
     paragraphs: lines,
     highlight: referenceNumber,
     highlightLabel: "Case reference",
-    // No call-to-action button: the email carries no links by rule.
+    // No call-to-action button, logo image or site address: the email
+    // carries no links by rule.
     footerNotes: ["For your privacy, this email names no website and contains no links."],
+    noLinks: true,
   });
   return { subject, text, html };
 }
