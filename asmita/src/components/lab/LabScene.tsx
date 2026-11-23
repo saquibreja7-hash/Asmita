@@ -4,24 +4,187 @@ import { useEffect, useRef, useState } from "react";
 import type * as ThreeNS from "three";
 
 /*
- * Decorative Three.js scenes for the AI Lab (prototype, 2026-11-23).
- * Each scene is abstract — coloured tiles, light, networks — and never shows
- * a real image or a person. The canvas is aria-hidden; the text beside it
- * says what the tool does. Three.js loads only near the screen, never under
- * prefers-reduced-motion or without WebGL (a static gradient shows instead),
- * pauses off screen, and caps the pixel ratio so phones stay cool.
+ * Decorative Three.js scenes for the AI Lab hub. Every scene is abstract —
+ * coloured tiles, light, networks — and never shows a real image or a
+ * person. Each <LabScene> is an empty, aria-hidden box; the text beside it
+ * says what the tool does.
+ *
+ * All scenes share ONE WebGL canvas (browsers cap live contexts, and phones
+ * suffer with many): a fixed, click-through canvas over the page, drawn only
+ * inside each box's rectangle (viewport + scissor), only while the box is on
+ * screen. Three.js loads when the first box comes near the screen, never
+ * under prefers-reduced-motion or without WebGL; the box then keeps its
+ * still CSS gradient instead.
  */
 
-export type LabSceneKind = "hero" | "trace" | "tracker";
+export type LabSceneKind =
+  | "hero"
+  | "trace"
+  | "tracker"
+  | "detectors"
+  | "protect"
+  | "message-check"
+  | "stamp"
+  | "spot-the-fake"
+  | "open-tools"
+  | "stacks";
 
 type Three = typeof ThreeNS;
-type Built = { update: (t: number, dt: number, pointer: { x: number; y: number }) => void; dispose?: () => void };
+type Pointer = { x: number; y: number };
+type Built = { update: (t: number, dt: number, pointer: Pointer) => void; dispose?: () => void };
 type Builder = (THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera) => Built;
 
-// The Lab palette: the site's teal and coral plus violet, amber and sky.
-export const LAB_COLORS = [0x0f8a80, 0xff7a59, 0x7c5cff, 0xf5b52e, 0x38b6ff, 0xe8508a];
+// The Lab palette: teal, coral, violet, amber, sky, pink.
+export const LAB_COLORS = [0x19d3c5, 0xff7a59, 0x8b6cff, 0xffc23d, 0x38b6ff, 0xff4f9a];
+const [TEAL, CORAL, VIOLET, AMBER, SKY, PINK] = LAB_COLORS;
 
-const BUILDERS: Record<LabSceneKind, Builder> = { hero: buildHero, trace: buildTrace, tracker: buildTracker };
+const BUILDERS: Record<LabSceneKind, Builder> = {
+  hero: buildHero,
+  trace: buildTrace,
+  tracker: buildTracker,
+  detectors: buildDetectors,
+  protect: buildProtect,
+  "message-check": buildMessageCheck,
+  stamp: buildStamp,
+  "spot-the-fake": buildSpotTheFake,
+  "open-tools": buildOpenTools,
+  stacks: buildStacks,
+};
+
+/* ------------------------------ the stage ------------------------------ */
+
+type Entry = {
+  el: HTMLElement;
+  scene: ThreeNS.Scene;
+  camera: ThreeNS.PerspectiveCamera;
+  built: Built;
+  t: number;
+  pointer: Pointer;
+};
+
+type Stage = {
+  THREE: Three;
+  renderer: ThreeNS.WebGLRenderer;
+  entries: Set<Entry>;
+  stop: () => void;
+};
+
+let stage: Stage | null = null;
+let starting: Promise<Stage> | null = null;
+
+function canAnimate() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  const probe = document.createElement("canvas");
+  const context = probe.getContext("webgl2") || probe.getContext("webgl");
+  if (!context) return false;
+  // Release the probe's context at once: browsers cap live WebGL contexts.
+  context.getExtension("WEBGL_lose_context")?.loseContext();
+  return true;
+}
+
+async function ensureStage(): Promise<Stage> {
+  if (stage) return stage;
+  if (starting) return starting;
+  starting = (async () => {
+    const THREE = await import("three");
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 0);
+    renderer.autoClear = false;
+    const canvas = renderer.domElement;
+    canvas.className = "lab-stage";
+    canvas.setAttribute("aria-hidden", "true");
+    document.body.appendChild(canvas);
+
+    const entries = new Set<Entry>();
+    const resize = () => renderer.setSize(window.innerWidth, window.innerHeight, false);
+    resize();
+    window.addEventListener("resize", resize);
+
+    let mouseX = -1e6;
+    let mouseY = -1e6;
+    const onMove = (event: PointerEvent) => {
+      mouseX = event.clientX;
+      mouseY = event.clientY;
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+
+    const clock = new THREE.Clock();
+    let raf = 0;
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      if (document.hidden) return;
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      renderer.setScissorTest(false);
+      renderer.clear();
+      renderer.setScissorTest(true);
+      for (const entry of entries) {
+        const r = entry.el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > H || r.right < 0 || r.left > W) continue;
+        const inside = mouseX >= r.left && mouseX <= r.right && mouseY >= r.top && mouseY <= r.bottom;
+        const tx = inside ? ((mouseX - r.left) / r.width) * 2 - 1 : 0;
+        const ty = inside ? -(((mouseY - r.top) / r.height) * 2 - 1) : 0;
+        entry.pointer.x += (tx - entry.pointer.x) * 0.12;
+        entry.pointer.y += (ty - entry.pointer.y) * 0.12;
+        const y = H - r.bottom;
+        renderer.setViewport(r.left, y, r.width, r.height);
+        renderer.setScissor(r.left, y, r.width, r.height);
+        entry.camera.aspect = r.width / r.height;
+        entry.camera.updateProjectionMatrix();
+        entry.t += dt;
+        entry.built.update(entry.t, dt, entry.pointer);
+        renderer.render(entry.scene, entry.camera);
+      }
+    };
+    loop();
+
+    const stop = () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("pointermove", onMove);
+      renderer.dispose();
+      renderer.forceContextLoss();
+      canvas.remove();
+    };
+    stage = { THREE, renderer, entries, stop };
+    return stage;
+  })();
+  try {
+    return await starting;
+  } finally {
+    starting = null;
+  }
+}
+
+function addEntry(s: Stage, el: HTMLElement, kind: LabSceneKind): Entry {
+  const scene = new s.THREE.Scene();
+  const camera = new s.THREE.PerspectiveCamera(35, 1, 0.1, 100);
+  const built = BUILDERS[kind](s.THREE, scene, camera);
+  const entry: Entry = { el, scene, camera, built, t: 0, pointer: { x: 0, y: 0 } };
+  s.entries.add(entry);
+  return entry;
+}
+
+function removeEntry(entry: Entry) {
+  const s = stage;
+  if (!s) return;
+  s.entries.delete(entry);
+  entry.built.dispose?.();
+  entry.scene.traverse((object) => {
+    const mesh = object as ThreeNS.Mesh;
+    mesh.geometry?.dispose?.();
+    const material = mesh.material as ThreeNS.Material | ThreeNS.Material[] | undefined;
+    if (Array.isArray(material)) material.forEach((m) => m.dispose());
+    else material?.dispose?.();
+  });
+  if (s.entries.size === 0) {
+    s.stop();
+    stage = null;
+    glowCache = null;
+  }
+}
 
 export function LabScene({ kind, className = "" }: { kind: LabSceneKind; className?: string }) {
   const host = useRef<HTMLDivElement>(null);
@@ -29,127 +192,44 @@ export function LabScene({ kind, className = "" }: { kind: LabSceneKind; classNa
 
   useEffect(() => {
     const el = host.current;
-    if (!el) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const probe = document.createElement("canvas");
-    const probeContext = probe.getContext("webgl2") || probe.getContext("webgl");
-    if (!probeContext) return;
-    probeContext.getExtension("WEBGL_lose_context")?.loseContext();
-
-    let disposed = false;
-    let cleanup: (() => void) | undefined;
-
-    const start = async () => {
-      const THREE = await import("three");
-      if (disposed) return;
-      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.setClearColor(0x000000, 0);
-      renderer.domElement.setAttribute("aria-hidden", "true");
-      renderer.domElement.style.display = "block";
-      renderer.domElement.style.width = "100%";
-      renderer.domElement.style.height = "100%";
-      el.appendChild(renderer.domElement);
-
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
-      const built = BUILDERS[kind](THREE, scene, camera);
-      setLive(true);
-
-      const resize = () => {
-        const w = el.clientWidth || 1;
-        const h = el.clientHeight || 1;
-        renderer.setSize(w, h, false);
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-      };
-      resize();
-      const ro = new ResizeObserver(resize);
-      ro.observe(el);
-
-      const pointer = { x: 0, y: 0 };
-      const onMove = (event: PointerEvent) => {
-        const r = el.getBoundingClientRect();
-        pointer.x = ((event.clientX - r.left) / r.width) * 2 - 1;
-        pointer.y = -(((event.clientY - r.top) / r.height) * 2 - 1);
-      };
-      const onLeave = () => {
-        pointer.x = 0;
-        pointer.y = 0;
-      };
-      el.addEventListener("pointermove", onMove);
-      el.addEventListener("pointerleave", onLeave);
-
-      let visible = true;
-      const io = new IntersectionObserver(([entry]) => {
-        visible = entry.isIntersecting;
-      });
-      io.observe(el);
-
-      const clock = new THREE.Clock();
-      let t = 0;
-      let raf = 0;
-      const loop = () => {
-        raf = requestAnimationFrame(loop);
-        const dt = Math.min(clock.getDelta(), 0.05);
-        if (!visible || document.hidden) return;
-        t += dt;
-        built.update(t, dt, pointer);
-        renderer.render(scene, camera);
-      };
-      loop();
-
-      cleanup = () => {
-        cancelAnimationFrame(raf);
-        ro.disconnect();
-        io.disconnect();
-        el.removeEventListener("pointermove", onMove);
-        el.removeEventListener("pointerleave", onLeave);
-        built.dispose?.();
-        scene.traverse((object) => {
-          const mesh = object as ThreeNS.Mesh;
-          mesh.geometry?.dispose?.();
-          const material = mesh.material as ThreeNS.Material | ThreeNS.Material[] | undefined;
-          if (Array.isArray(material)) material.forEach((m) => m.dispose());
-          else material?.dispose?.();
-        });
-        renderer.dispose();
-        renderer.forceContextLoss();
-        renderer.domElement.remove();
-      };
-    };
-
-    // Start only when the scene comes near the screen.
+    if (!el || !canAnimate()) return;
+    let cancelled = false;
+    let entry: Entry | null = null;
     const near = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          near.disconnect();
-          start().catch(() => undefined);
-        }
+      ([hit]) => {
+        if (!hit.isIntersecting) return;
+        near.disconnect();
+        ensureStage()
+          .then((s) => {
+            if (cancelled) return;
+            entry = addEntry(s, el, kind);
+            setLive(true);
+          })
+          .catch(() => undefined);
       },
-      { rootMargin: "200px" },
+      { rootMargin: "300px" },
     );
     near.observe(el);
-
     return () => {
-      disposed = true;
+      cancelled = true;
       near.disconnect();
-      cleanup?.();
+      if (entry) removeEntry(entry);
     };
   }, [kind]);
 
   return <div ref={host} className={`lab-scene lab-scene-${kind} ${live ? "is-live" : ""} ${className}`} aria-hidden="true" />;
 }
 
-/* ---------------------------------------------------------------------- */
+/* ------------------------------- helpers ------------------------------- */
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const ease = (x: number) => {
   const k = clamp01(x);
   return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
 };
+const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
 
-function roundedTile(THREE: Three, w: number, h: number, r: number, depth: number) {
+function roundedShape(THREE: Three, w: number, h: number, r: number) {
   const shape = new THREE.Shape();
   shape.moveTo(-w / 2 + r, -h / 2);
   shape.lineTo(w / 2 - r, -h / 2);
@@ -160,9 +240,18 @@ function roundedTile(THREE: Three, w: number, h: number, r: number, depth: numbe
   shape.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
   shape.lineTo(-w / 2, -h / 2 + r);
   shape.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
-  const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 6 });
+  return shape;
+}
+
+function roundedTile(THREE: Three, w: number, h: number, r: number, depth: number) {
+  const geometry = new THREE.ExtrudeGeometry(roundedShape(THREE, w, h, r), { depth, bevelEnabled: false, curveSegments: 6 });
   geometry.translate(0, 0, -depth / 2);
   return geometry;
+}
+
+function roundedOutline(THREE: Three, w: number, h: number, r: number) {
+  const points = roundedShape(THREE, w, h, r).getPoints(10);
+  return new THREE.BufferGeometry().setFromPoints(points.map((p) => new THREE.Vector3(p.x, p.y, 0)));
 }
 
 /** A small canvas texture: a soft gradient "picture" made of blobs, no real image. */
@@ -172,7 +261,7 @@ function blobTexture(THREE: Three, seed: number) {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
-  const pick = (i: number) => `#${LAB_COLORS[(seed + i) % LAB_COLORS.length].toString(16).padStart(6, "0")}`;
+  const pick = (i: number) => hex(LAB_COLORS[(seed + i) % LAB_COLORS.length]);
   const g = ctx.createLinearGradient(0, 0, size, size);
   g.addColorStop(0, pick(0));
   g.addColorStop(1, pick(2));
@@ -192,40 +281,109 @@ function blobTexture(THREE: Three, seed: number) {
   return texture;
 }
 
-/* Hero: a floating grid of colourful "pictures". Now and then one cracks into
- * four shards that drift apart and shift colour (a morph), then snap back to
- * where they came from (traced to the source). Tiles lean toward the pointer. */
+let glowCache: ThreeNS.Texture | null = null;
+/** A soft round glow, shared by every scene's sprites and points. */
+function glowTexture(THREE: Three) {
+  if (glowCache) return glowCache;
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const radial = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  radial.addColorStop(0, "rgba(255,255,255,1)");
+  radial.addColorStop(0.25, "rgba(255,255,255,0.55)");
+  radial.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = radial;
+  ctx.fillRect(0, 0, size, size);
+  glowCache = new THREE.CanvasTexture(canvas);
+  return glowCache;
+}
+
+function glow(THREE: Three, color: number, size: number, opacity = 0.9) {
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: glowTexture(THREE), color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  sprite.scale.setScalar(size);
+  return sprite;
+}
+
+/** A drifting field of coloured dust, behind the main objects. */
+function dust(THREE: Three, count: number, spread: [number, number, number], size = 0.08) {
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const color = new THREE.Color();
+  for (let i = 0; i < count; i += 1) {
+    positions[i * 3] = (Math.random() - 0.5) * spread[0];
+    positions[i * 3 + 1] = (Math.random() - 0.5) * spread[1];
+    positions[i * 3 + 2] = (Math.random() - 0.5) * spread[2] - spread[2] / 2;
+    color.setHex(LAB_COLORS[i % LAB_COLORS.length]);
+    colors.set([color.r, color.g, color.b], i * 3);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  return new THREE.Points(
+    geometry,
+    new THREE.PointsMaterial({
+      size,
+      map: glowTexture(THREE),
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+}
+
+function lean(object: ThreeNS.Object3D, pointer: Pointer, amount = 0.25) {
+  object.rotation.y += (pointer.x * amount - object.rotation.y) * 0.08;
+  object.rotation.x += (-pointer.y * amount * 0.7 - object.rotation.x) * 0.08;
+}
+
+/* -------------------------------- hero -------------------------------- */
+
+/* A floating grid of colourful "pictures". Now and then one cracks into four
+ * shards that drift apart and shift colour (a morph), then snap back to where
+ * they came from (traced to the source). The grid leans toward the pointer. */
 function buildHero(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
-  camera.position.set(0, 0, 16);
   const COLS = 13;
   const ROWS = 5;
   const SIZE = 1.25;
   const GAP = 0.32;
   const group = new THREE.Group();
   scene.add(group);
+  const field = dust(THREE, 260, [30, 12, 8], 0.12);
+  scene.add(field);
 
   const tileGeo = roundedTile(THREE, SIZE, SIZE, 0.16, 0.12);
   const shardGeo = roundedTile(THREE, SIZE / 2 - 0.03, SIZE / 2 - 0.03, 0.08, 0.12);
+  const edgeGeo = roundedOutline(THREE, SIZE + 0.08, SIZE + 0.08, 0.2);
   const textures = Array.from({ length: 8 }, (_, i) => blobTexture(THREE, i));
 
-  type Tile = { mesh: ThreeNS.Mesh; home: ThreeNS.Vector3; phase: number; shards: ThreeNS.Mesh[]; crackAt: number };
+  type Tile = { mesh: ThreeNS.Mesh; edge: ThreeNS.Line; home: ThreeNS.Vector3; phase: number; shards: ThreeNS.Mesh[]; crackAt: number };
   const tiles: Tile[] = [];
   for (let r = 0; r < ROWS; r += 1) {
     for (let c = 0; c < COLS; c += 1) {
       const i = r * COLS + c;
-      const material = new THREE.MeshBasicMaterial({ map: textures[i % textures.length] });
-      const mesh = new THREE.Mesh(tileGeo, material);
+      const mesh = new THREE.Mesh(tileGeo, new THREE.MeshBasicMaterial({ map: textures[i % textures.length] }));
       const home = new THREE.Vector3((c - (COLS - 1) / 2) * (SIZE + GAP), (r - (ROWS - 1) / 2) * (SIZE + GAP), 0);
       mesh.position.copy(home);
       group.add(mesh);
+      const edge = new THREE.Line(
+        edgeGeo,
+        new THREE.LineBasicMaterial({ color: LAB_COLORS[i % LAB_COLORS.length], transparent: true, opacity: 0, blending: THREE.AdditiveBlending }),
+      );
+      group.add(edge);
       const shards: ThreeNS.Mesh[] = [];
       for (let s = 0; s < 4; s += 1) {
-        const shard = new THREE.Mesh(shardGeo, new THREE.MeshBasicMaterial({ color: LAB_COLORS[(i + s) % LAB_COLORS.length], transparent: true, opacity: 0 }));
+        const shard = new THREE.Mesh(shardGeo, new THREE.MeshBasicMaterial({ color: LAB_COLORS[(i + s) % LAB_COLORS.length] }));
         shard.visible = false;
         group.add(shard);
         shards.push(shard);
       }
-      tiles.push({ mesh, home, phase: (c * 0.6 + r * 0.9) % (Math.PI * 2), shards, crackAt: -99 });
+      tiles.push({ mesh, edge, home, phase: (c * 0.6 + r * 0.9) % (Math.PI * 2), shards, crackAt: -99 });
     }
   }
 
@@ -246,24 +404,28 @@ function buildHero(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspecti
       const gridH = ROWS * (SIZE + GAP) + 1.2;
       const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
       camera.position.z = Math.min(gridW / (2 * tanHalf * camera.aspect), Math.max(gridH / (2 * tanHalf), 9)) * 0.98;
-      group.rotation.y += (pointer.x * 0.25 - group.rotation.y) * 0.05;
-      group.rotation.x += (-pointer.y * 0.18 - group.rotation.x) * 0.05;
+      lean(group, pointer, 0.3);
+      field.rotation.z = t * 0.01;
+      field.position.x = Math.sin(t * 0.1) * 0.6;
 
       if (t > nextCrack) {
         const idle = tiles.filter((tile) => t - tile.crackAt > CRACK);
         const pick = idle[Math.floor(Math.random() * idle.length)];
         if (pick) pick.crackAt = t;
-        nextCrack = t + 0.7 + Math.random() * 0.6;
+        nextCrack = t + 0.6 + Math.random() * 0.5;
       }
 
       for (const tile of tiles) {
         const wave = Math.sin(t * 1.1 + tile.phase);
         tile.mesh.position.set(tile.home.x, tile.home.y + wave * 0.08, tile.home.z + wave * 0.35);
         tile.mesh.rotation.set(wave * 0.06, Math.cos(t * 0.9 + tile.phase) * 0.08, 0);
+        tile.edge.position.copy(tile.mesh.position);
+        tile.edge.rotation.copy(tile.mesh.rotation);
 
         const k = (t - tile.crackAt) / CRACK;
         const cracking = k >= 0 && k < 1;
         tile.mesh.visible = !cracking;
+        (tile.edge.material as ThreeNS.LineBasicMaterial).opacity = cracking ? 0.9 * Math.sin(k * Math.PI) : 0;
         tile.shards.forEach((shard, s) => {
           shard.visible = cracking;
           if (!cracking) return;
@@ -277,9 +439,7 @@ function buildHero(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspecti
             tile.mesh.position.z + out * 1.6,
           );
           shard.rotation.set(out * oy * 0.9, out * ox * 0.9, out * (s % 2 ? 1 : -1) * 0.8);
-          const material = shard.material as ThreeNS.MeshBasicMaterial;
-          material.opacity = 0.95;
-          material.color.setHex(LAB_COLORS[(s + Math.floor(t * 2.5)) % LAB_COLORS.length]);
+          (shard.material as ThreeNS.MeshBasicMaterial).color.setHex(LAB_COLORS[(s + Math.floor(t * 2.5)) % LAB_COLORS.length]);
         });
       }
     },
@@ -289,16 +449,23 @@ function buildHero(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspecti
   };
 }
 
-/* Trace: a source picture and a cropped, tilted copy. Matching points light
- * up on both, threads draw between them, and the cropped piece flies back
- * and docks on the source. */
+/* -------------------------------- trace -------------------------------- */
+
+/* A source picture and a cropped, tilted copy. Matching points light up on
+ * both, threads draw between them, and the copy flies back and docks on the
+ * spot it was cut from. */
 function buildTrace(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
   camera.position.set(0, 0, 7.2);
+  const root = new THREE.Group();
+  scene.add(root);
   const texture = blobTexture(THREE, 3);
   const SIZE = 2.6;
   const source = new THREE.Mesh(roundedTile(THREE, SIZE, SIZE, 0.18, 0.08), new THREE.MeshBasicMaterial({ map: texture }));
   source.position.set(-2.1, 0, 0);
-  scene.add(source);
+  root.add(source);
+  const halo = glow(THREE, VIOLET, 5, 0.35);
+  halo.position.set(-2.1, 0, -0.5);
+  root.add(halo);
 
   // The copy shows only the top-right quarter of the same picture, enlarged.
   const copyTexture = texture.clone();
@@ -307,17 +474,12 @@ function buildTrace(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspect
   copyTexture.needsUpdate = true;
   const copy = new THREE.Mesh(roundedTile(THREE, SIZE * 0.82, SIZE * 0.82, 0.18, 0.08), new THREE.MeshBasicMaterial({ map: copyTexture }));
   copy.position.set(2.2, 0, 0);
-  scene.add(copy);
+  root.add(copy);
 
-  // A ghost frame on the source where the crop came from.
-  const frame = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.PlaneGeometry(SIZE / 2, SIZE / 2)),
-    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }),
-  );
+  const frame = new THREE.Line(roundedOutline(THREE, SIZE / 2, SIZE / 2, 0.08), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
   frame.position.set(source.position.x + SIZE / 4, SIZE / 4, 0.1);
-  scene.add(frame);
+  root.add(frame);
 
-  // Matching points: in the crop's space (u, v in 0..1 of the quarter).
   const points = [
     [0.2, 0.3],
     [0.7, 0.2],
@@ -325,23 +487,24 @@ function buildTrace(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspect
     [0.8, 0.8],
     [0.3, 0.85],
   ];
-  const dotGeo = new THREE.CircleGeometry(0.07, 16);
-  const threads: { line: ThreeNS.Line; a: ThreeNS.Vector3; b: ThreeNS.Vector3; dots: ThreeNS.Mesh[]; color: number }[] = [];
+  const threads: { line: ThreeNS.Line; a: ThreeNS.Vector3; b: ThreeNS.Vector3; dots: ThreeNS.Sprite[] }[] = [];
   points.forEach(([u, v], i) => {
     const color = LAB_COLORS[(i + 1) % LAB_COLORS.length];
-    const a = new THREE.Vector3(source.position.x + (u * 0.5) * SIZE, (v * 0.5) * SIZE, 0.12);
+    const a = new THREE.Vector3(source.position.x + u * 0.5 * SIZE, v * 0.5 * SIZE, 0.12);
     const cs = SIZE * 0.82;
     const b = new THREE.Vector3(copy.position.x - cs / 2 + u * cs, -cs / 2 + v * cs, 0.12);
     const dots = [a, b].map((p) => {
-      const dot = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0 }));
+      const dot = glow(THREE, color, 0.5, 0);
       dot.position.copy(p);
-      scene.add(dot);
+      root.add(dot);
       return dot;
     });
-    const geometry = new THREE.BufferGeometry().setFromPoints([a.clone(), a.clone()]);
-    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
-    scene.add(line);
-    threads.push({ line, a, b, dots, color });
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([a.clone(), a.clone()]),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending }),
+    );
+    root.add(line);
+    threads.push({ line, a, b, dots });
   });
 
   const LOOP = 7;
@@ -350,24 +513,20 @@ function buildTrace(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspect
 
   return {
     update(t, _dt, pointer) {
-      scene.rotation.y += (pointer.x * 0.2 - scene.rotation.y) * 0.06;
+      lean(root, pointer, 0.25);
       const k = (t % LOOP) / LOOP;
-      // 0–0.15 copy tilts in; 0.15–0.45 dots and threads; 0.5–0.75 copy flies home; 0.85–1 reset.
       const tilt = ease(k / 0.15);
-      copy.rotation.z = -0.18 * tilt;
       threads.forEach((thread, i) => {
         const start = 0.15 + i * 0.05;
         const draw = ease((k - start) / 0.12);
         const fade = 1 - ease((k - 0.5) / 0.1);
-        thread.dots.forEach((dot) => ((dot.material as ThreeNS.MeshBasicMaterial).opacity = ease((k - start) / 0.04) * fade));
+        thread.dots.forEach((dot) => (dot.material.opacity = ease((k - start) / 0.04) * fade));
         const end = thread.b.clone().lerp(thread.a, 1 - draw);
         const positions = thread.line.geometry.attributes.position as ThreeNS.BufferAttribute;
         positions.setXYZ(0, thread.a.x, thread.a.y, thread.a.z);
         positions.setXYZ(1, end.x, end.y, end.z);
         positions.needsUpdate = true;
         (thread.line.material as ThreeNS.LineBasicMaterial).opacity = 0.9 * fade;
-        // Follow the copy's tilt for the copy-side dot.
-        thread.dots[1].position.copy(thread.b);
       });
       const fly = ease((k - 0.5) / 0.25);
       const back = ease((k - 0.88) / 0.1);
@@ -375,8 +534,8 @@ function buildTrace(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspect
       copy.position.lerpVectors(copyHome, dock, fly * (1 - back));
       copy.scale.setScalar(scale + (1 - scale) * back);
       copy.rotation.z = -0.18 * tilt * (1 - fly);
-      (copy.material as ThreeNS.MeshBasicMaterial).opacity = 1;
       (frame.material as ThreeNS.LineBasicMaterial).opacity = ease((k - 0.7) / 0.08) * (1 - back);
+      halo.material.opacity = 0.25 + 0.35 * ease((k - 0.7) / 0.1) * (1 - back);
     },
     dispose() {
       texture.dispose();
@@ -385,19 +544,20 @@ function buildTrace(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspect
   };
 }
 
-/* Tracker: a slowly turning globe of services linked to each other. One by
- * one, nodes flash and go dark (taken down); the network then lights up again. */
+/* ------------------------------- tracker ------------------------------- */
+
+/* A slowly turning globe of services linked to each other. One by one, nodes
+ * flash and go dark (taken down); the network then lights up again. */
 function buildTracker(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
-  camera.position.set(0, 0, 9);
+  camera.position.set(0, 0, 8.4);
   const globe = new THREE.Group();
   scene.add(globe);
-  const N = 34;
+  const N = 40;
   const R = 2.4;
-  const nodes: { mesh: ThreeNS.Mesh; color: number; downAt: number }[] = [];
+  const nodes: { mesh: ThreeNS.Mesh; halo: ThreeNS.Sprite; color: number }[] = [];
   const positions: ThreeNS.Vector3[] = [];
-  const nodeGeo = new THREE.SphereGeometry(0.12, 16, 12);
+  const nodeGeo = new THREE.SphereGeometry(0.1, 16, 12);
   for (let i = 0; i < N; i += 1) {
-    // Fibonacci sphere: evenly spread points.
     const y = 1 - (i / (N - 1)) * 2;
     const radius = Math.sqrt(1 - y * y);
     const theta = i * 2.399963;
@@ -407,56 +567,509 @@ function buildTracker(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspe
     const mesh = new THREE.Mesh(nodeGeo, new THREE.MeshBasicMaterial({ color }));
     mesh.position.copy(p);
     globe.add(mesh);
-    nodes.push({ mesh, color, downAt: Infinity });
+    const halo = glow(THREE, color, 0.7, 0.8);
+    halo.position.copy(p);
+    globe.add(halo);
+    nodes.push({ mesh, halo, color });
   }
-  // Link each node to its two nearest neighbours.
   const linkPoints: ThreeNS.Vector3[] = [];
   positions.forEach((p, i) => {
-    const nearest = positions
+    positions
       .map((q, j) => ({ j, d: p.distanceTo(q) }))
       .filter((e) => e.j !== i)
       .sort((a, b) => a.d - b.d)
-      .slice(0, 2);
-    nearest.forEach(({ j }) => linkPoints.push(p, positions[j]));
+      .slice(0, 3)
+      .forEach(({ j }) => linkPoints.push(p, positions[j]));
   });
   const links = new THREE.LineSegments(
     new THREE.BufferGeometry().setFromPoints(linkPoints),
-    new THREE.LineBasicMaterial({ color: 0x7c5cff, transparent: true, opacity: 0.35 }),
+    new THREE.LineBasicMaterial({ color: VIOLET, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending }),
   );
   globe.add(links);
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(R * 1.12, 0.015, 8, 120),
-    new THREE.MeshBasicMaterial({ color: 0x38b6ff, transparent: true, opacity: 0.5 }),
-  );
-  ring.rotation.x = Math.PI / 2.3;
-  scene.add(ring);
+  const rings = [SKY, PINK].map((color, i) => {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(R * (1.18 + i * 0.12), 0.012, 8, 160),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
+    );
+    ring.rotation.x = Math.PI / (2.3 + i * 0.6);
+    scene.add(ring);
+    return ring;
+  });
+  const core = glow(THREE, VIOLET, 4.5, 0.25);
+  scene.add(core);
 
-  const order = nodes.map((_, i) => i).sort((a, b) => ((a * 7919) % 31) - ((b * 7919) % 31));
+  const order = nodes.map((_, i) => i).sort((a, b) => ((a * 7919) % 37) - ((b * 7919) % 37));
+  const rankOf = new Map(order.map((node, rank) => [node, rank]));
   const LOOP = 12;
-  const grey = new THREE.Color(0xcfcac6);
+  const dark = new THREE.Color(0x2c2950);
+  const hot = new THREE.Color(CORAL);
 
   return {
     update(t, dt, pointer) {
-      globe.rotation.y += dt * 0.25 + pointer.x * dt * 0.6;
-      globe.rotation.x += (pointer.y * 0.3 - globe.rotation.x) * 0.05;
-      ring.rotation.z += dt * 0.15;
+      globe.rotation.y += dt * 0.25 + pointer.x * dt * 0.8;
+      globe.rotation.x += (pointer.y * 0.35 - globe.rotation.x) * 0.05;
+      rings.forEach((ring, i) => (ring.rotation.z += dt * (0.15 + i * 0.1)));
       const k = (t % LOOP) / LOOP;
-      // Nodes go down over 0.1–0.8 of the loop, then all come back.
-      const goneCount = k < 0.85 ? Math.floor(clamp01((k - 0.1) / 0.7) * N * 0.6) : 0;
+      const downs = Math.floor(N * 0.6);
+      const goneCount = k < 0.85 ? Math.floor(clamp01((k - 0.1) / 0.7) * downs) : 0;
       nodes.forEach((node, i) => {
-        const rank = order.indexOf(i);
+        const rank = rankOf.get(i)!;
         const material = node.mesh.material as ThreeNS.MeshBasicMaterial;
         if (rank < goneCount) {
-          const since = (k - (0.1 + (rank / (N * 0.6)) * 0.7)) * LOOP;
-          const flash = since < 0.35 ? 1.9 - since * 2 : 1;
-          material.color.copy(since < 0.35 ? new THREE.Color(0xff7a59) : grey);
-          node.mesh.scale.setScalar(Math.max(0.55, flash * 0.8));
+          const since = (k - (0.1 + (rank / downs) * 0.7)) * LOOP;
+          const flashing = since < 0.4;
+          material.color.copy(flashing ? hot : dark);
+          node.halo.material.color.copy(flashing ? hot : dark);
+          node.halo.material.opacity = flashing ? 1 : 0.15;
+          node.halo.scale.setScalar(flashing ? 1.6 - since * 2 : 0.5);
         } else {
           material.color.setHex(node.color);
-          node.mesh.scale.setScalar(1 + Math.sin(t * 3 + i) * 0.12);
+          node.halo.material.color.setHex(node.color);
+          node.halo.material.opacity = 0.8;
+          node.halo.scale.setScalar(0.7 + Math.sin(t * 3 + i) * 0.12);
         }
       });
-      (links.material as ThreeNS.LineBasicMaterial).opacity = 0.35 - (goneCount / N) * 0.3;
+      (links.material as ThreeNS.LineBasicMaterial).opacity = 0.5 - (goneCount / N) * 0.4;
+    },
+  };
+}
+
+/* ------------------------------ detectors ------------------------------ */
+
+/* A pixel grid that looks ordinary until a scanner beam sweeps across it:
+ * under the beam, hidden rings of colour light up — the traces a generator
+ * leaves — and fade slowly after it passes. */
+function buildDetectors(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
+  camera.position.set(0, 0, 6.2);
+  const root = new THREE.Group();
+  scene.add(root);
+  const COLS = 22;
+  const ROWS = 12;
+  const CELL = 0.26;
+  const geometry = new THREE.BoxGeometry(CELL * 0.86, CELL * 0.86, 0.05);
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const grid = new THREE.InstancedMesh(geometry, material, COLS * ROWS);
+  root.add(grid);
+  const matrix = new THREE.Matrix4();
+  const color = new THREE.Color();
+  const base = new THREE.Color(0x2b2660);
+  const heat = new Float32Array(COLS * ROWS);
+  const hidden: number[] = [];
+  for (let r = 0; r < ROWS; r += 1) {
+    for (let c = 0; c < COLS; c += 1) {
+      const i = r * COLS + c;
+      matrix.setPosition((c - (COLS - 1) / 2) * CELL, (r - (ROWS - 1) / 2) * CELL, 0);
+      grid.setMatrixAt(i, matrix);
+      grid.setColorAt(i, base);
+      // Hidden pattern: concentric rings around an off-centre point.
+      const d = Math.hypot(c - COLS * 0.62, (r - ROWS * 0.45) * 1.2);
+      hidden.push(Math.abs(Math.sin(d * 0.9)) > 0.75 ? Math.floor(d) % LAB_COLORS.length : -1);
+    }
+  }
+  const beam = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.5, ROWS * CELL + 0.8),
+    new THREE.MeshBasicMaterial({ color: TEAL, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  beam.position.z = 0.1;
+  root.add(beam);
+  const beamLine = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.04, ROWS * CELL + 0.8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending }),
+  );
+  beamLine.position.z = 0.12;
+  root.add(beamLine);
+  const width = COLS * CELL;
+  const LOOP = 4.5;
+  const idle = new THREE.Color(0x4a4290);
+
+  return {
+    update(t, dt, pointer) {
+      lean(root, pointer, 0.3);
+      const k = (t % LOOP) / LOOP;
+      const x = -width / 2 - 0.6 + k * (width + 1.2);
+      beam.position.x = x;
+      beamLine.position.x = x;
+      for (let r = 0; r < ROWS; r += 1) {
+        for (let c = 0; c < COLS; c += 1) {
+          const i = r * COLS + c;
+          const cx = (c - (COLS - 1) / 2) * CELL;
+          if (Math.abs(cx - x) < CELL && hidden[i] >= 0) heat[i] = 1;
+          heat[i] = Math.max(0, heat[i] - dt * 0.35);
+          if (hidden[i] >= 0) {
+            color.lerpColors(base, new THREE.Color(LAB_COLORS[hidden[i]]), heat[i]);
+          } else {
+            color.lerpColors(base, idle, 0.3 + 0.2 * Math.sin(t * 2 + i));
+          }
+          grid.setColorAt(i, color);
+          matrix.setPosition(cx, (r - (ROWS - 1) / 2) * CELL, heat[i] * 0.4);
+          grid.setMatrixAt(i, matrix);
+        }
+      }
+      grid.instanceMatrix.needsUpdate = true;
+      if (grid.instanceColor) grid.instanceColor.needsUpdate = true;
+    },
+  };
+}
+
+/* ------------------------------- protect ------------------------------- */
+
+/* A picture under a shimmering, iridescent cloak. Now and then a morphing
+ * ray comes in and breaks up against the cloak instead of reaching the
+ * picture. */
+function buildProtect(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
+  camera.position.set(0, 0, 7.5);
+  const root = new THREE.Group();
+  scene.add(root);
+  const texture = blobTexture(THREE, 5);
+  const picture = new THREE.Mesh(roundedTile(THREE, 2.2, 2.2, 0.2, 0.08), new THREE.MeshBasicMaterial({ map: texture }));
+  root.add(picture);
+
+  const SEG = 26;
+  const cloakGeo = new THREE.PlaneGeometry(3.4, 3.4, SEG, SEG);
+  const count = cloakGeo.attributes.position.count;
+  cloakGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+  const cloak = new THREE.Points(
+    cloakGeo,
+    new THREE.PointsMaterial({ size: 0.11, map: glowTexture(THREE), vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  cloak.position.z = 0.4;
+  root.add(cloak);
+  const basePositions = Float32Array.from(cloakGeo.attributes.position.array as Float32Array);
+
+  // The incoming ray: a short streak of particles.
+  const RAY = 40;
+  const rayGeo = new THREE.BufferGeometry();
+  rayGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(RAY * 3), 3));
+  const ray = new THREE.Points(
+    rayGeo,
+    new THREE.PointsMaterial({ size: 0.16, color: CORAL, map: glowTexture(THREE), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  root.add(ray);
+  const spread = Array.from({ length: RAY }, () => new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, Math.random() * 1.5));
+
+  const c = new THREE.Color();
+  const LOOP = 5;
+  return {
+    update(t, _dt, pointer) {
+      lean(root, pointer, 0.35);
+      const pos = cloakGeo.attributes.position as ThreeNS.BufferAttribute;
+      const col = cloakGeo.attributes.color as ThreeNS.BufferAttribute;
+      const k = (t % LOOP) / LOOP;
+      const hit = k > 0.35 && k < 0.6 ? Math.sin(((k - 0.35) / 0.25) * Math.PI) : 0;
+      for (let i = 0; i < count; i += 1) {
+        const x = basePositions[i * 3];
+        const y = basePositions[i * 3 + 1];
+        const d = Math.hypot(x - 0.6, y - 0.5);
+        const wave = Math.sin(x * 2.2 + t * 1.6) * 0.12 + Math.cos(y * 2.6 - t * 1.3) * 0.12 + Math.sin(d * 8 - t * 10) * 0.25 * hit * Math.exp(-d);
+        pos.setZ(i, wave);
+        c.setHSL((x * 0.12 + y * 0.09 + t * 0.1 + 1) % 1, 1, 0.5 + wave * 0.5);
+        col.setXYZ(i, c.r, c.g, c.b);
+      }
+      pos.needsUpdate = true;
+      col.needsUpdate = true;
+      const rp = rayGeo.attributes.position as ThreeNS.BufferAttribute;
+      const travel = clamp01((k - 0.1) / 0.28);
+      const burst = clamp01((k - 0.38) / 0.3);
+      for (let i = 0; i < RAY; i += 1) {
+        const lag = i / RAY;
+        if (burst <= 0) {
+          const p = clamp01(travel - lag * 0.3);
+          rp.setXYZ(i, 4.5 - p * 3.9, 3 - p * 2.5, 2.5 - p * 2);
+        } else {
+          const s = spread[i];
+          rp.setXYZ(i, 0.6 + s.x * burst * 1.6, 0.5 + s.y * burst * 1.6, 0.5 + s.z * burst);
+        }
+      }
+      rp.needsUpdate = true;
+      (ray.material as ThreeNS.PointsMaterial).opacity = k < 0.1 ? 0 : 1 - clamp01((k - 0.6) / 0.25);
+    },
+    dispose() {
+      texture.dispose();
+    },
+  };
+}
+
+/* ---------------------------- message check ---------------------------- */
+
+/* Chat bubbles orbit a glowing core. One at a time, a bubble is flagged: it
+ * turns coral, a warning ring pulses around it, and it is pulled aside. */
+function buildMessageCheck(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
+  camera.position.set(0, 1.2, 8.5);
+  camera.lookAt(0, 0, 0);
+  const root = new THREE.Group();
+  scene.add(root);
+  const core = glow(THREE, VIOLET, 3.2, 0.6);
+  root.add(core);
+  const N = 6;
+  const bubbleGeo = roundedTile(THREE, 1.5, 0.85, 0.3, 0.1);
+  const lineGeo = new THREE.PlaneGeometry(1, 0.09);
+  const bubbles = Array.from({ length: N }, (_, i) => {
+    const group = new THREE.Group();
+    const color = [TEAL, SKY, VIOLET, PINK, AMBER, TEAL][i];
+    const body = new THREE.Mesh(bubbleGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 }));
+    group.add(body);
+    [0.18, -0.02, -0.22].forEach((y, j) => {
+      const bar = new THREE.Mesh(lineGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 }));
+      bar.scale.x = [0.95, 0.75, 0.5][j];
+      bar.position.set(-0.55 + bar.scale.x / 2, y, 0.06);
+      group.add(bar);
+    });
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.95, 1.02, 48),
+      new THREE.MeshBasicMaterial({ color: CORAL, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+    );
+    group.add(ring);
+    root.add(group);
+    return { group, body, ring, color };
+  });
+  const hot = new THREE.Color(CORAL);
+  const PER = 2.2;
+  return {
+    update(t, _dt, pointer) {
+      root.rotation.y += (pointer.x * 0.3 - root.rotation.y) * 0.06;
+      const flagged = Math.floor(t / PER) % N;
+      const f = (t % PER) / PER;
+      bubbles.forEach((bubble, i) => {
+        const a = (i / N) * Math.PI * 2 + t * 0.35;
+        const pull = i === flagged ? Math.sin(f * Math.PI) : 0;
+        bubble.group.position.set(Math.cos(a) * (3 + pull * 0.6), Math.sin(t * 1.3 + i) * 0.25 + pull * 0.6, Math.sin(a) * 1.6);
+        bubble.group.lookAt(camera.position);
+        bubble.group.rotation.z += Math.sin(t * 8) * 0.06 * pull;
+        (bubble.body.material as ThreeNS.MeshBasicMaterial).color.setHex(bubble.color).lerp(hot, pull);
+        (bubble.ring.material as ThreeNS.MeshBasicMaterial).opacity = pull;
+        bubble.ring.scale.setScalar(1 + ((t * 2) % 1) * 0.4 * pull);
+      });
+      core.material.opacity = 0.45 + Math.sin(t * 2) * 0.15;
+    },
+  };
+}
+
+/* -------------------------------- stamp -------------------------------- */
+
+/* A holographic seal spins down onto a picture, presses, and leaves a
+ * rainbow credential mark that shimmers and slowly fades. */
+function buildStamp(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
+  camera.position.set(0, -2.6, 9.5);
+  camera.lookAt(0, 0.3, 0);
+  const root = new THREE.Group();
+  scene.add(root);
+  const texture = blobTexture(THREE, 1);
+  const picture = new THREE.Mesh(roundedTile(THREE, 2.8, 2.8, 0.2, 0.08), new THREE.MeshBasicMaterial({ map: texture }));
+  root.add(picture);
+
+  const seal = new THREE.Group();
+  const outer = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.07, 12, 64), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  seal.add(outer);
+  const teeth = new THREE.Mesh(new THREE.TorusGeometry(1.02, 0.05, 6, 24), new THREE.MeshBasicMaterial({ color: AMBER, wireframe: true }));
+  seal.add(teeth);
+  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), new THREE.MeshBasicMaterial({ color: SKY, wireframe: true }));
+  seal.add(star);
+  root.add(seal);
+
+  const mark = new THREE.Mesh(
+    new THREE.RingGeometry(0.55, 0.95, 64),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+  );
+  mark.position.z = 0.06;
+  root.add(mark);
+  const flash = glow(THREE, 0xffffff, 4, 0);
+  flash.position.z = 0.2;
+  root.add(flash);
+
+  const c = new THREE.Color();
+  const LOOP = 5;
+  return {
+    update(t, _dt, pointer) {
+      lean(root, pointer, 0.35);
+      const k = (t % LOOP) / LOOP;
+      const down = ease(k / 0.35);
+      const lift = ease((k - 0.45) / 0.25);
+      seal.position.set(0, 0, 3 - down * 2.85 + lift * 2.85);
+      seal.rotation.z = t * 2.2;
+      star.rotation.y = t * 3;
+      const press = k > 0.35 && k < 0.45 ? Math.sin(((k - 0.35) / 0.1) * Math.PI) : 0;
+      seal.scale.set(1 + press * 0.15, 1 + press * 0.15, 1 - press * 0.5);
+      c.setHSL((t * 0.25) % 1, 0.85, 0.6);
+      (outer.material as ThreeNS.MeshBasicMaterial).color.copy(c);
+      const markOn = k > 0.38 ? 1 - clamp01((k - 0.7) / 0.28) : 0;
+      const markMaterial = mark.material as ThreeNS.MeshBasicMaterial;
+      markMaterial.opacity = markOn * 0.85;
+      markMaterial.color.setHSL((t * 0.4 + 0.5) % 1, 0.9, 0.6);
+      mark.rotation.z = -t * 0.5;
+      flash.material.opacity = press;
+    },
+    dispose() {
+      texture.dispose();
+    },
+  };
+}
+
+/* ---------------------------- spot the fake ---------------------------- */
+
+/* Two cards flip like a game. One is real; the other glitches — its slices
+ * slip sideways with a split-colour shimmer — and gets a coral ring when the
+ * cards turn face up. */
+function buildSpotTheFake(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
+  camera.position.set(0, 0, 7.4);
+  const root = new THREE.Group();
+  scene.add(root);
+  const texture = blobTexture(THREE, 2);
+  const clones: ThreeNS.Texture[] = [];
+  const W = 1.9;
+  const H = 2.5;
+  const back = new THREE.MeshBasicMaterial({ color: 0x2a2458 });
+  const makeCard = (x: number, sliced: boolean) => {
+    const card = new THREE.Group();
+    card.position.x = x;
+    const backFace = new THREE.Mesh(roundedTile(THREE, W, H, 0.2, 0.05), back);
+    backFace.position.z = -0.03;
+    card.add(backFace);
+    const pattern = new THREE.Line(roundedOutline(THREE, W - 0.3, H - 0.3, 0.15), new THREE.LineBasicMaterial({ color: VIOLET }));
+    pattern.position.z = -0.06;
+    card.add(pattern);
+    const slices: ThreeNS.Mesh[] = [];
+    const N = sliced ? 7 : 1;
+    for (let i = 0; i < N; i += 1) {
+      const sliceTexture = texture.clone();
+      sliceTexture.repeat.set(1, 1 / N);
+      sliceTexture.offset.set(0, i / N);
+      sliceTexture.needsUpdate = true;
+      clones.push(sliceTexture);
+      const slice = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.12, (H - 0.12) / N), new THREE.MeshBasicMaterial({ map: sliceTexture }));
+      slice.position.set(0, -H / 2 + 0.06 + ((i + 0.5) * (H - 0.12)) / N, 0.01);
+      card.add(slice);
+      slices.push(slice);
+    }
+    const ring = new THREE.Line(
+      roundedOutline(THREE, W + 0.25, H + 0.25, 0.3),
+      new THREE.LineBasicMaterial({ color: sliced ? CORAL : TEAL, transparent: true, opacity: 0, blending: THREE.AdditiveBlending }),
+    );
+    ring.position.z = 0.02;
+    card.add(ring);
+    root.add(card);
+    return { card, slices, ring };
+  };
+  const left = makeCard(-1.3, false);
+  const right = makeCard(1.3, true);
+  const LOOP = 6;
+  return {
+    update(t, _dt, pointer) {
+      lean(root, pointer, 0.25);
+      const k = (t % LOOP) / LOOP;
+      // Face down, flip up (0.1–0.3), glitch and ring (0.3–0.75), flip down.
+      const up = ease((k - 0.1) / 0.2) * (1 - ease((k - 0.8) / 0.15));
+      [left, right].forEach((side, i) => {
+        side.card.rotation.y = Math.PI * (1 - up) + Math.sin(t * 1.2 + i) * 0.08;
+        side.card.position.y = Math.sin(t * 1.5 + i * 2) * 0.12;
+        (side.ring.material as ThreeNS.LineBasicMaterial).opacity = up > 0.95 && k > 0.45 ? 0.6 + 0.4 * Math.sin(t * 10) : 0;
+      });
+      const glitching = up > 0.9 && k > 0.3 && k < 0.75;
+      right.slices.forEach((slice, i) => {
+        const jitter = glitching && Math.sin(t * 23 + i * 7) > 0.55 ? Math.sin(t * 40 + i) * 0.18 : 0;
+        slice.position.x = jitter;
+        (slice.material as ThreeNS.MeshBasicMaterial).color.setHex(jitter > 0.05 ? PINK : jitter < -0.05 ? SKY : 0xffffff);
+      });
+    },
+    dispose() {
+      texture.dispose();
+      clones.forEach((clone) => clone.dispose());
+    },
+  };
+}
+
+/* ------------------------------ open tools ------------------------------ */
+
+/* A constellation of different tools — each a neon wireframe solid —
+ * orbiting a shared core, linked to it by faint light. */
+function buildOpenTools(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
+  camera.position.set(0, 1, 8.5);
+  camera.lookAt(0, 0, 0);
+  const root = new THREE.Group();
+  scene.add(root);
+  root.add(glow(THREE, TEAL, 3.5, 0.55));
+  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
+  root.add(core);
+  const shapes = [
+    new THREE.TorusKnotGeometry(0.32, 0.1, 64, 8),
+    new THREE.OctahedronGeometry(0.45),
+    new THREE.TorusGeometry(0.38, 0.13, 10, 24),
+    new THREE.ConeGeometry(0.38, 0.7, 6),
+    new THREE.DodecahedronGeometry(0.42),
+    new THREE.BoxGeometry(0.6, 0.6, 0.6),
+  ];
+  const orbiters = shapes.map((geometry, i) => {
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: LAB_COLORS[i], wireframe: true }));
+    root.add(mesh);
+    const halo = glow(THREE, LAB_COLORS[i], 1.4, 0.5);
+    root.add(halo);
+    return { mesh, halo, radius: 2.3 + (i % 3) * 0.45, speed: 0.35 + i * 0.05, tilt: (i - 2.5) * 0.18, phase: i };
+  });
+  const linkGeo = new THREE.BufferGeometry();
+  linkGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(orbiters.length * 6), 3));
+  const links = new THREE.LineSegments(linkGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending }));
+  root.add(links);
+  return {
+    update(t, _dt, pointer) {
+      lean(root, pointer, 0.3);
+      core.rotation.set(t * 0.4, t * 0.6, 0);
+      const lp = linkGeo.attributes.position as ThreeNS.BufferAttribute;
+      orbiters.forEach((o, i) => {
+        const a = t * o.speed + o.phase;
+        o.mesh.position.set(Math.cos(a) * o.radius, Math.sin(a * 1.3) * 0.5 + o.tilt * Math.sin(a) * 2, Math.sin(a) * o.radius * 0.6);
+        o.mesh.rotation.set(t * (0.5 + i * 0.1), t * 0.7, 0);
+        o.halo.position.copy(o.mesh.position);
+        lp.setXYZ(i * 2, 0, 0, 0);
+        lp.setXYZ(i * 2 + 1, o.mesh.position.x, o.mesh.position.y, o.mesh.position.z);
+      });
+      lp.needsUpdate = true;
+    },
+  };
+}
+
+/* -------------------------------- stacks -------------------------------- */
+
+/* Glowing slabs drop one by one and lock into a tower — a stack of tools
+ * set up in order — then lift away and the tower rebuilds. */
+function buildStacks(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
+  camera.position.set(3.4, 2.8, 7.2);
+  camera.lookAt(0, 0.4, 0);
+  const root = new THREE.Group();
+  scene.add(root);
+  const LAYERS = 5;
+  const slabGeo = roundedTile(THREE, 2.4, 2.4, 0.3, 0.32);
+  slabGeo.rotateX(-Math.PI / 2);
+  const edgeGeo = roundedOutline(THREE, 2.4, 2.4, 0.3);
+  const slabs = Array.from({ length: LAYERS }, (_, i) => {
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(slabGeo, new THREE.MeshBasicMaterial({ color: LAB_COLORS[i], transparent: true, opacity: 0.55 }));
+    group.add(body);
+    [0.17, -0.17].forEach((y) => {
+      const edge = new THREE.Line(edgeGeo, new THREE.LineBasicMaterial({ color: LAB_COLORS[i] }));
+      edge.rotation.x = -Math.PI / 2;
+      edge.position.y = y;
+      group.add(edge);
+    });
+    root.add(group);
+    return { group, body };
+  });
+  const base = glow(THREE, VIOLET, 6, 0.4);
+  base.position.y = -0.6;
+  root.add(base);
+  const LOOP = 7;
+  return {
+    update(t, _dt, pointer) {
+      root.rotation.y = t * 0.3 + pointer.x * 0.6;
+      const k = (t % LOOP) / LOOP;
+      const away = ease((k - 0.82) / 0.15);
+      slabs.forEach((slab, i) => {
+        const start = 0.05 + i * 0.12;
+        const drop = ease((k - start) / 0.12);
+        const restY = -0.4 + i * 0.42;
+        slab.group.position.y = restY + (1 - drop) * 4 + away * (2 + i * 0.6);
+        slab.group.rotation.y = (1 - drop) * 1.2;
+        slab.group.visible = k >= start;
+        (slab.body.material as ThreeNS.MeshBasicMaterial).opacity = 0.55 * (1 - away);
+      });
     },
   };
 }
