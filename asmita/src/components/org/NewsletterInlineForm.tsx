@@ -122,9 +122,6 @@ export function NewsletterInlineForm({
           {error}
         </p>
       )}
-      <p className={compact ? "mt-2 max-w-xs text-xs leading-relaxed opacity-90" : "muted mt-3 text-sm"}>
-        {t(locale, "org.newsletter.privacyNote")}
-      </p>
     </form>
   );
 }

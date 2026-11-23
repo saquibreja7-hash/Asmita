@@ -374,9 +374,9 @@ describe("org admin newsletter API", () => {
 
   it("counts by status and exports only confirmed subscribers", async () => {
     await subscribeToNewsletter({ email: "pending@example.invalid", locale: "en", source: "t" });
-    const confirmed = await subscribeToNewsletter({ email: "confirmed@example.invalid", locale: "hi", source: "t" });
-    const { confirmNewsletterSubscriber } = await import("@/lib/org-newsletter");
-    await confirmNewsletterSubscriber(confirmed.confirmToken!);
+    // An older double opt-in sign-up that never confirmed.
+    newsletterSubscribers[0].status = "PENDING";
+    await subscribeToNewsletter({ email: "confirmed@example.invalid", locale: "hi", source: "t" });
 
     const counts = await NEWSLETTER_COUNTS();
     expect(((await counts.json()) as { counts: unknown }).counts).toEqual({

@@ -4,14 +4,13 @@ import { logSecurityEvent } from "@/lib/security-log";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 import { hashEmail } from "@/lib/hash";
-import { sendNewsletterConfirmEmail } from "@/lib/email";
-import { newsletterConfirmUrl, newsletterSignupSchema, subscribeToNewsletter } from "@/lib/org-newsletter";
+import { newsletterSignupSchema, subscribeToNewsletter } from "@/lib/org-newsletter";
 
 /*
- * Newsletter sign-up (docs/org/spec.md, 56.7): double opt-in. The response
- * is identical whether the address is new, pending or already confirmed,
- * so the form cannot be used to find out who is on the list. A failed
- * confirmation email does not fail the submit; the sign-up can be retried.
+ * Newsletter sign-up (docs/org/spec.md, 56.7): one click, no confirmation
+ * email (owner decision, 2026-11-23). The response is identical whether the
+ * address is new or already on the list, so the form cannot be used to find
+ * out who is subscribed.
  */
 
 const MAX_BODY_BYTES = 2 * 1024;
@@ -63,19 +62,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const result = await subscribeToNewsletter({
+  await subscribeToNewsletter({
     email: fields.email,
     firstName: fields.firstName,
     locale: fields.locale,
     source: fields.source,
   });
-  if (result.confirmToken) {
-    try {
-      await sendNewsletterConfirmEmail(result.email, newsletterConfirmUrl(result.confirmToken));
-    } catch (err) {
-      console.error("[newsletter] confirmation email failed:", err);
-      await logSecurityEvent({ event: "email_failed", route: "/api/newsletter", reason: "confirm_email" });
-    }
-  }
   return NextResponse.json({ ok: true });
 }
