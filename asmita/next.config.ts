@@ -50,7 +50,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["127.0.0.1", "localhost", "100.79.129.48", "saquib-notebook"],
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   turbopack: {
     root: projectRoot,
   },
