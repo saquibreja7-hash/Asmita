@@ -14,6 +14,7 @@ export const siteMap: SiteGroup[] = [
   {
     title: "Get help",
     links: [
+      { href: "/help", label: "Help and filing", note: "Every way to get help, and how a complaint works" },
       { href: "/get-help", label: "Get help", note: "Situations, steps, and tools" },
       { href: "/start", label: "Start a case", note: "Begin a confidential report" },
       { href: "/eligibility", label: "Check eligibility" },
@@ -44,6 +45,20 @@ export const siteMap: SiteGroup[] = [
       { href: "/resources/directory", label: "Support directory", note: "Public helplines and services; check current availability" },
       { href: "/resources/legal", label: "Your legal rights" },
       { href: "/faq", label: "FAQ" },
+      { href: "/news", label: "News", note: "Updates, stories, research and campaigns" },
+    ],
+  },
+  {
+    title: "Get involved",
+    links: [
+      { href: "/get-involved", label: "Get involved", note: "Every way to help, in one place" },
+      { href: "/partners", label: "Partner with us", note: "NGOs, legal, police, universities, platforms" },
+      { href: "/partners/ngos", label: "NGOs and helplines" },
+      { href: "/partners/legal", label: "Legal partners" },
+      { href: "/partners/law-enforcement", label: "Police and cyber cells" },
+      { href: "/partners/academic", label: "Universities and researchers" },
+      { href: "/volunteer", label: "Volunteer" },
+      { href: "/careers", label: "Careers" },
     ],
   },
   {
@@ -53,6 +68,9 @@ export const siteMap: SiteGroup[] = [
     title: "AI Lab",
     links: [
       { href: "/lab", label: "AI Lab", note: "Research experiments and beta tools; separate from filing a complaint" },
+      { href: "/lab/open-tools", label: "Open tools", note: "Directory of free trust-and-safety tools, and the free stacks built on them" },
+      { href: "/lab/open-tools/how-we-choose", label: "How we choose tools", note: "What 'open' means here, what we check before listing, and how to suggest a tool" },
+      { href: "/lab/stacks", label: "Free stacks", note: "Step-by-step guides combining those tools for one job each" },
       { href: "/lab/trace", label: "Trace a morph" },
       { href: "/lab/detectors", label: "Detector panel" },
       { href: "/lab/protect", label: "Photo protection" },
@@ -68,8 +86,8 @@ export const siteMap: SiteGroup[] = [
       { href: "/about", label: "About" },
       { href: "/what-we-do", label: "What we do" },
       { href: "/how-it-works", label: "How it works" },
-      { href: "/research", label: "Research" },
       { href: "/for-platforms", label: "For platforms" },
+      { href: "/for-platforms/trusted-flagger", label: "What a notice contains", note: "For trust and safety teams" },
       { href: "/contact", label: "Contact" },
       { href: "/feedback", label: "Feedback" },
     ],

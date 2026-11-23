@@ -1,0 +1,120 @@
+{
+  "signatureVersion": "1",
+  "signatures": [
+    {
+      "id": "stripe-js",
+      "category": "PAYMENT",
+      "provider": "Stripe",
+      "match": { "type": "scriptHost", "host": "js.stripe.com" },
+      "source": "https://docs.stripe.com/js/including"
+    },
+    {
+      "id": "razorpay-checkout-js",
+      "category": "PAYMENT",
+      "provider": "Razorpay",
+      "match": { "type": "scriptHost", "host": "checkout.razorpay.com" },
+      "source": "https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/integration-steps"
+    },
+    {
+      "id": "paypal-js-sdk",
+      "category": "PAYMENT",
+      "provider": "PayPal",
+      "match": { "type": "scriptHost", "host": "www.paypal.com" },
+      "source": "https://developer.paypal.com/sdk/js/v5/configuration"
+    },
+    {
+      "id": "coinbase-commerce-checkout-js",
+      "category": "PAYMENT",
+      "provider": "Coinbase Commerce",
+      "match": { "type": "scriptHost", "host": "commerce.coinbase.com" },
+      "source": "https://docs.cloud.coinbase.com/commerce/docs/pay-button-adding"
+    },
+    {
+      "id": "coinbase-commerce-checkout-link",
+      "category": "PAYMENT",
+      "provider": "Coinbase Commerce",
+      "match": { "type": "linkHost", "host": "commerce.coinbase.com" },
+      "source": "https://docs.cloud.coinbase.com/commerce/docs/pay-button-adding"
+    },
+    {
+      "id": "google-signin",
+      "category": "AUTH_SSO",
+      "provider": "Google",
+      "match": { "type": "scriptHost", "host": "accounts.google.com" },
+      "source": "https://developers.google.com/identity/gsi/web/guides/display-button"
+    },
+    {
+      "id": "apple-signin",
+      "category": "AUTH_SSO",
+      "provider": "Apple",
+      "match": { "type": "scriptHost", "host": "appleid.cdn-apple.com" },
+      "source": "https://developer.apple.com/documentation/signinwithapple/configuring-your-webpage-for-sign-in-with-apple"
+    },
+    {
+      "id": "telegram-login",
+      "category": "AUTH_SSO",
+      "provider": "Telegram",
+      "match": { "type": "scriptHost", "host": "telegram.org" },
+      "source": "https://core.telegram.org/widgets/login"
+    },
+    {
+      "id": "discord-oauth",
+      "category": "AUTH_SSO",
+      "provider": "Discord",
+      "match": { "type": "htmlRegex", "pattern": "discord\\.com/oauth2/authorize" },
+      "source": "https://docs.discord.com/developers/topics/oauth2"
+    },
+    {
+      "id": "cloudflare-cf-ray",
+      "category": "CDN",
+      "provider": "Cloudflare",
+      "match": { "type": "header", "name": "cf-ray", "regex": ".+" },
+      "confidence": "MEDIUM",
+      "source": "https://developers.cloudflare.com/fundamentals/reference/http-headers/"
+    },
+    {
+      "id": "fastly-x-served-by",
+      "category": "CDN",
+      "provider": "Fastly",
+      "match": { "type": "header", "name": "x-served-by", "regex": "^cache-" },
+      "confidence": "MEDIUM",
+      "source": "https://www.fastly.com/documentation/reference/http/http-headers/X-Served-By"
+    },
+    {
+      "id": "akamai-server",
+      "category": "CDN",
+      "provider": "Akamai",
+      "match": { "type": "header", "name": "server", "regex": "^AkamaiGHost$" },
+      "confidence": "MEDIUM",
+      "source": "https://techdocs.akamai.com/purge-cache/docs/purge-content-arl"
+    },
+    {
+      "id": "ga4-measurement-id",
+      "category": "ANALYTICS_ID",
+      "provider": "Google Analytics 4",
+      "match": { "type": "htmlRegex", "pattern": "(?<![A-Z0-9])G-[A-Z0-9]{6,12}(?![A-Z0-9])" },
+      "source": "https://support.google.com/analytics/answer/12270356"
+    },
+    {
+      "id": "gtm-container-id",
+      "category": "ANALYTICS_ID",
+      "provider": "Google Tag Manager",
+      "match": { "type": "htmlRegex", "pattern": "(?<![A-Z0-9])GTM-[A-Z0-9]{4,10}(?![A-Z0-9])" },
+      "source": "https://developers.google.com/tag-platform/gtagjs/configure"
+    },
+    {
+      "id": "meta-pixel-id",
+      "category": "ANALYTICS_ID",
+      "provider": "Meta Pixel",
+      "match": { "type": "htmlRegex", "pattern": "fbq\\(\\s*['\"]init['\"]\\s*,\\s*['\"](\\d{6,})['\"]" },
+      "source": "https://developers.facebook.com/docs/meta-pixel/get-started"
+    },
+    {
+      "id": "google-adsense",
+      "category": "ADS",
+      "provider": "Google AdSense",
+      "match": { "type": "scriptHost", "host": "pagead2.googlesyndication.com" },
+      "source": "https://developers.google.com/adsense/platforms/direct/ad-tags"
+    }
+  ]
+}

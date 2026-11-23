@@ -35,8 +35,10 @@ export type LivenessDeps = {
 };
 
 /** Literal-address and localhost guard: the liveness check only ever fetches public hosts. */
-function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
+export function isPrivateHost(hostname: string): boolean {
+  // new URL(...).hostname keeps the brackets on IPv6 literals; strip them so
+  // the literal checks below see the bare address.
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
   const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (ipv4) {
@@ -46,9 +48,19 @@ function isPrivateHost(hostname: string): boolean {
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
     if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15, benchmarking
     if (a >= 224) return true;
   }
-  if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) return true;
+  if (host.includes(":")) {
+    // IPv6 literals only (a hostname never contains ":"). Anything starting
+    // "::" is unspecified (::), loopback (::1), IPv4-mapped (::ffff:…, which
+    // URL normalises to hex, e.g. ::ffff:7f00:1) or IPv4-compatible — never a
+    // public site's address. fc00::/7 is unique-local; fe80::/10 link-local
+    // and fec0::/10 site-local together are fe80::/9.
+    if (host.startsWith("::")) return true;
+    if (/^f[cd][0-9a-f]{2}:/.test(host)) return true;
+    if (/^fe[89a-f][0-9a-f]:/.test(host)) return true;
+  }
   return false;
 }
 

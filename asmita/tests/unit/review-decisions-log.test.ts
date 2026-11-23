@@ -339,6 +339,21 @@ describe("the CSV export of the filtered set", () => {
     expect(exported.csv).not.toContain("Second copy of the same upload");
   });
 
+  it("neutralises a formula in an admin-editable queue name", async () => {
+    await seedFlaggedLinks(1, "formula");
+    await decideNext({ at: NOW, reasonCode: "duplicate_link" });
+    const linksQueue = await getReviewQueueByKey("links");
+    if (!linksQueue) throw new Error("links queue missing");
+    const stored = [...reviewMemory().queues.values()].find((queue) => queue.id === linksQueue.id);
+    if (!stored) throw new Error("links queue not in memory");
+    stored.name = '=HYPERLINK("https://evil.example.test","x")';
+
+    const exported = await exportDecisionLogCsv(VIEWER, { queueKey: "links" });
+    const row = exported.csv.trimEnd().split("\r\n")[1]!;
+    expect(row).toContain(`"'=HYPERLINK(""https://evil.example.test"",""x"")"`);
+    expect(row).not.toContain(`,"=HYPERLINK`);
+  });
+
   it("exports the filtered set and honours the filters", async () => {
     await seedFlaggedLinks(1, "filtered");
     await decideNext({ at: NOW, reasonCode: "duplicate_link" });
@@ -351,6 +366,28 @@ describe("the CSV export of the filtered set", () => {
     expect(rejects.count).toBe(1);
     expect(rejects.csv).toContain("Rejected");
     expect(rejects.csv).not.toContain('"Approved"');
+  });
+});
+
+describe("protected queues in the log", () => {
+  it("shows minor-hold decisions to a SUPER_ADMIN only", async () => {
+    await seedFlaggedLinks(1, "protected");
+    await decideNext({ at: NOW, reasonCode: "duplicate_link" });
+    const minorHold = await getReviewQueueByKey("minor-hold");
+    if (!minorHold) throw new Error("minor-hold queue missing");
+    const [existing] = [...reviewMemory().decisions.values()];
+    if (!existing) throw new Error("expected a decision");
+    reviewMemory().decisions.set("held-decision", { ...existing, id: "held-decision", jobId: "held-job", queueId: minorHold.id });
+
+    const reviewer = await listDecisionLogPage({ emailHash: ME, role: "CASE_REVIEWER" }, {});
+    expect(reviewer.rows.map((row) => row.decisionId)).not.toContain("held-decision");
+    const noRole = await exportDecisionLogCsv(VIEWER, {});
+    expect(noRole.count).toBe(1);
+    const reviewerOptions = await decisionLogFilterOptions({ emailHash: ME, role: "CASE_REVIEWER" });
+    expect(reviewerOptions.queues.map((queue) => queue.key)).not.toContain("minor-hold");
+
+    const superAdmin = await listDecisionLogPage({ emailHash: ME, role: "SUPER_ADMIN" }, {});
+    expect(superAdmin.rows.map((row) => row.decisionId)).toContain("held-decision");
   });
 });
 

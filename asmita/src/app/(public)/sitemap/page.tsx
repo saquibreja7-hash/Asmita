@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: "Every public page on Asmita, in one place.",
 };
 
-const groupTitlesHi = ["मदद लें", "समस्या को समझें", "हम किसकी मदद करते हैं", "संसाधन", "AI लैब", "अस्मिता के बारे में", "नीतियाँ"] as const;
+const groupTitlesHi = ["मदद लें", "समस्या को समझें", "हम किसकी मदद करते हैं", "संसाधन", "जुड़िए", "AI लैब", "अस्मिता के बारे में", "नीतियाँ"] as const;
 const linksHi: Record<string, { label: string; note?: string }> = {
   "/get-help": { label: "मदद लें", note: "स्थितियाँ, कदम और साधन" },
   "/start": { label: "केस शुरू करें", note: "गोपनीय रिपोर्ट शुरू करें" },
@@ -21,6 +21,7 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/issue": { label: "तस्वीरों के ज़रिए दुर्व्यवहार" },
   "/glossary": { label: "शब्दावली" },
   "/who-we-help": { label: "हम किसकी मदद करते हैं" },
+  "/help": { label: "मदद और शिकायत", note: "मदद के सभी रास्ते, और शिकायत कैसे होती है" },
   "/resources": { label: "संसाधन" },
   "/resources/guides": { label: "व्यावहारिक मार्गदर्शिकाएँ" },
   "/resources/directory": { label: "सहायता सूची", note: "सार्वजनिक सेवाएँ; मौजूदा उपलब्धता जाँचें" },
@@ -29,7 +30,6 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/about": { label: "परिचय" },
   "/what-we-do": { label: "हम क्या करते हैं" },
   "/how-it-works": { label: "प्रक्रिया कैसे काम करती है" },
-  "/research": { label: "शोध" },
   "/for-platforms": { label: "प्लेटफ़ॉर्म के लिए", note: "अंग्रेज़ी में" },
   "/contact": { label: "संपर्क" },
   "/feedback": { label: "प्रतिक्रिया" },
@@ -38,6 +38,9 @@ const linksHi: Record<string, { label: string; note?: string }> = {
   "/legal": { label: "कानूनी जानकारी" },
   "/sitemap": { label: "साइटमैप" },
   "/lab": { label: "AI लैब", note: "शोध प्रयोग और बीटा टूल; शिकायत दर्ज कराने से अलग" },
+  "/lab/open-tools": { label: "ओपन टूल", note: "मुफ़्त ट्रस्ट-ऐंड-सेफ़्टी टूलों की निर्देशिका और उनसे बने मुफ़्त स्टैक" },
+  "/lab/open-tools/how-we-choose": { label: "हम टूल कैसे चुनते हैं", note: "'ओपन' का अर्थ, सूची से पहले की जाँच और सुझाव देने का तरीका" },
+  "/lab/stacks": { label: "मुफ़्त स्टैक", note: "इन्हीं टूलों को एक-एक काम के लिए जोड़ने वाली क़दम-दर-क़दम गाइड" },
   "/lab/trace": { label: "मॉर्फ़ का स्रोत जाँचें" },
   "/lab/detectors": { label: "डिटेक्टर पैनल" },
   "/lab/protect": { label: "फ़ोटो सुरक्षा" },
@@ -55,6 +58,7 @@ export default async function SitemapPage() {
     if (href.startsWith("/who-we-help/")) return { label: audiencesHi[href.slice(13)]?.term };
     return linksHi[href];
   };
+  const groups = siteMap;
   return (
     <AppShell>
       <div className="page-canvas">
@@ -78,7 +82,7 @@ export default async function SitemapPage() {
         <section className="section-pad" aria-label={say("All pages", "सभी पेज")}>
           <div className="container">
             <div className="mx-auto grid max-w-5xl gap-12 sm:grid-cols-2 lg:grid-cols-3">
-              {siteMap.map((group, index) => (
+              {groups.map((group, index) => (
                 <div key={group.title}>
                   <h2 className="subsection-title">{say(group.title, groupTitlesHi[index])}</h2>
                   <ul className="mt-5 space-y-3 border-t border-[var(--line)] pt-5">

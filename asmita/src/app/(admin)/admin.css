@@ -52,10 +52,10 @@
   --color-ash: var(--c-line);
   --color-parchment: var(--c-surface);
   --color-brand-teal: var(--c-accent);
-  --radius-box: var(--s-2);
-  --radius-2xl: var(--s-2);
-  --radius-cards: var(--s-2);
-  --radius-buttons: var(--s-2);
+  --radius-box: 12px;
+  --radius-2xl: 12px;
+  --radius-cards: 12px;
+  --radius-buttons: 12px;
   --card-padding: var(--s-5);
 
   min-height: 100vh;

@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-20T18:30:00.000Z",
+  "title": "Design System: Meri Asmita",
+  "extensions": {
+    "colorMeta": {
+      "brand-teal": { "role": "primary", "displayName": "Brand Teal", "canonical": "#0a5e5a", "tonalRamp": ["#03201f", "#063c39", "#08443f", "#0a5e5a", "#3e8a85", "#9fcac4", "#d4e9e6", "#f0f8f7"] },
+      "parchment": { "role": "neutral", "displayName": "Parchment", "canonical": "#f6f3f1", "tonalRamp": ["#242424", "#4e4d4d", "#625f5e", "#8a8683", "#cecac8", "#e5e0dc", "#efebe8", "#f6f3f1"] },
+      "coral": { "role": "secondary", "displayName": "Wash Coral", "canonical": "#ff9473", "tonalRamp": ["#5c1d0c", "#8f3116", "#c2522f", "#ff9473", "#ffb096", "#ffcbb7", "#ffe6dd", "#fff4ef"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page and section titles; weight 600, tracking -0.01em." },
+      "reading-body": { "displayName": "Reading body", "purpose": "Long-form pages: 17px / 1.75, 68ch max." }
+    },
+    "shadows": [
+      { "name": "none", "value": "none", "purpose": "Cards and panels carry no shadow; Ash hairlines structure them." },
+      { "name": "filing-card", "value": "0 24px 60px -36px rgba(10, 94, 90, 0.35)", "purpose": "The one soft shadow, under the complaint-filing form card only." }
+    ],
+    "motion": [
+      { "name": "ease-state", "value": "0.15s ease", "purpose": "Colour/border transitions on buttons, links, fields." },
+      { "name": "arrow-nudge", "value": "transform translateX(3px) over 0.2s ease", "purpose": "Arrow links and button arrows on hover." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single decisive action per screen; brand teal pill.",
+      "html": "<button class=\"ds-btn-primary\">Get help</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 14px 32px; border-radius: 100px; border: 1px solid #0a5e5a; background: #0a5e5a; color: #fff; font-size: 15px; font-weight: 500; transition: background-color 0.15s ease; cursor: pointer; } .ds-btn-primary:hover { background: #08443f; border-color: #08443f; } .ds-btn-primary:focus-visible { outline: 2px solid #0a5e5a; outline-offset: 3px; }"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ink outline pill; hover tints teal mist.",
+      "html": "<button class=\"ds-btn-secondary\">Read the guide</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 14px 32px; border-radius: 100px; border: 1px solid #242424; background: transparent; color: #242424; font-size: 15px; font-weight: 500; transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease; cursor: pointer; } .ds-btn-secondary:hover { border-color: #0a5e5a; background: #d4e9e6; color: #08443f; } .ds-btn-secondary:focus-visible { outline: 2px solid #0a5e5a; outline-offset: 3px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "White surface, ash hairline, 12px radius, 40px padding.",
+      "html": "<div class=\"ds-card\"><h3>Plain language</h3><p>We write findings anyone can follow.</p></div>",
+      "css": ".ds-card { border: 1px solid #cecac8; border-radius: 12px; background: #ffffff; padding: 40px; box-shadow: none; } .ds-card h3 { font-size: 20px; font-weight: 600; line-height: 1.2; color: #242424; margin: 0; } .ds-card p { font-size: 16px; line-height: 1.35; color: #4e4d4d; margin: 8px 0 0; }"
+    },
+    {
+      "name": "Eyebrow label",
+      "kind": "custom",
+      "refersTo": "label",
+      "description": "The one label style: teal uppercase marker above titles.",
+      "html": "<span class=\"ds-eyebrow\">Research</span>",
+      "css": ".ds-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #0a5e5a; }"
+    },
+    {
+      "name": "Pill tag",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Filter chip / status mark: parchment pill, ash hairline.",
+      "html": "<span class=\"ds-pill\">News</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 9999px; border: 1px solid #cecac8; background: #f6f3f1; font-size: 12px; font-weight: 500; letter-spacing: -0.033em; text-transform: uppercase; color: #242424; }"
+    },
+    {
+      "name": "Input field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Parchment field with ash border; focus turns border off-black.",
+      "html": "<input class=\"ds-input\" type=\"email\" placeholder=\"you@example.com\" />",
+      "css": ".ds-input { width: 100%; min-height: 48px; border: 1px solid #cecac8; background: #f6f3f1; border-radius: 12px; padding: 12px 16px; color: #242424; font-size: 16px; box-sizing: border-box; } .ds-input::placeholder { color: #625f5e; } .ds-input:focus { border-color: #242424; outline: none; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Calm Ledger",
+    "overview": "Asmita's site reads like a carefully kept public record printed on warm paper: a parchment canvas, structure carried by 1px Ash hairlines and type, and exactly one decisive voice per screen — the brand teal fill of a single primary button. Nothing shouts; pastels exist only as blurred atmospheric washes. The result feels official without feeling governmental, warm without being soft about a hard subject.",
+    "keyCharacteristics": [
+      "Parchment canvas, white cards, one teal-mist tinted band or elevated card per page",
+      "One primary action per screen; secondary actions are ink outlines",
+      "Hairline borders instead of shadows",
+      "Teal uppercase eyebrow above every page title and section",
+      "Hindi resets tracking and gains taller line-height",
+      "Flat friendly illustration scenes, aria-hidden and decorative"
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Brand teal fills at most one primary button per screen. Its rarity is the point.", "section": "colors" },
+      { "name": "The No-Shadow Rule", "body": "Structure comes from 1px Ash hairlines and tonal steps, never from drop shadows.", "section": "elevation" },
+      { "name": "The Single Label Rule", "body": "There is one label style — the teal uppercase eyebrow. Do not invent competing label styles.", "section": "typography" }
+    ],
+    "dos": [
+      "Do reuse AppShell, the eyebrow → page-title → lede hero pattern, .section-pad zones, .card, .data-table, Reading.tsx blocks, and existing Illustration scenes before inventing anything new.",
+      "Do keep exactly one .btn-primary per screen.",
+      "Do show honest empty states in a bordered surface-muted panel with one useful next action, as /research does.",
+      "Do verify 360px phone width: one column, no horizontal scroll."
+    ],
+    "donts": [
+      "Don't add drop shadows to cards, coloured left-border accent stripes on cards or callouts, or new accent colours.",
+      "Don't use pure white (#fff) as a page background or uppercase transforms in Hindi.",
+      "Don't redesign /start or any complaint-workflow screen.",
+      "Don't load a third-party icon set or illustration style."
+    ]
+  }
+}

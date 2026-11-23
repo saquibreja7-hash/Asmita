@@ -45,7 +45,19 @@ export const updatePartnerSchema = z
 
 export const partnerStatusSchema = z.object({ status: z.enum(["ACTIVE", "SUSPENDED"]) }).strict();
 
-export const issueKeySchema = z.object({ label: z.string().trim().min(1).max(80) }).strict();
+export const issueKeySchema = z
+  .object({
+    label: z.string().trim().min(1).max(80),
+    // WP110: what the key may do. Both checked by default; at least one
+    // required, no repeats. Absent means both (today's behaviour).
+    scopes: z
+      .array(z.enum(["feed", "outcomes"]))
+      .min(1)
+      .max(2)
+      .refine((scopes: string[]) => new Set(scopes).size === scopes.length, { message: "repeated_scope" })
+      .optional(),
+  })
+  .strict();
 
 export const crawlPermissionSchema = z
   .object({
@@ -81,6 +93,8 @@ export type PlatformPartnerView = {
 export type PlatformPartnerKeyView = {
   id: string;
   label: string;
+  /** WP110: what the key may do — "feed" and/or "outcomes" (absent = both). */
+  scopes: string[];
   createdAt: string;
   revokedAt: string | null;
   lastUsedAt: string | null;
@@ -163,26 +177,27 @@ export async function getPlatformPartner(partnerId: string): Promise<PlatformPar
 }
 
 export async function listPlatformPartnerKeys(partnerId: string): Promise<PlatformPartnerKeyView[]> {
-  type KeyRow = { id: string; label: string; createdAt: Date | string; revokedAt: Date | string | null; lastUsedAt: Date | string | null };
+  type KeyRow = { id: string; label: string; scopes?: string[] | null; createdAt: Date | string; revokedAt: Date | string | null; lastUsedAt: Date | string | null };
   const toView = (row: KeyRow) => ({
     id: row.id,
     label: row.label,
+    scopes: row.scopes && row.scopes.length > 0 ? row.scopes : ["feed", "outcomes"],
     createdAt: new Date(row.createdAt).toISOString(),
     revokedAt: iso(row.revokedAt),
     lastUsedAt: iso(row.lastUsedAt),
   });
   if (isDevNoDb()) {
     return [...partnerMemory().keys.values()].filter((key) => key.partnerId === partnerId)
-      .map((key) => toView(key)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      .map((key) => toView(key as KeyRow)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
   if (usesWorkerKysely()) {
     const rows = await getWorkerDb().selectFrom("PlatformPartnerKey")
-      .select(["id", "label", "createdAt", "revokedAt", "lastUsedAt"])
+      .select(["id", "label", "scopes", "createdAt", "revokedAt", "lastUsedAt"])
       .where("partnerId", "=", partnerId).orderBy("createdAt").execute();
     return rows.map((row) => toView(row as KeyRow));
   }
   const { db } = await import("@/lib/db");
-  const rows = await db.platformPartnerKey.findMany({ where: { partnerId }, orderBy: { createdAt: "asc" } });
+  const rows = await db.platformPartnerKey.findMany({ where: { partnerId }, orderBy: { createdAt: "asc" }, select: { id: true, label: true, scopes: true, createdAt: true, revokedAt: true, lastUsedAt: true } });
   return rows.map((row) => toView(row as unknown as KeyRow));
 }
 
@@ -589,14 +604,14 @@ export async function issuePlatformPartnerKey(
 ): Promise<IssueKeyResult> {
   const partner = await getPlatformPartner(input.partnerId);
   if (!partner) return { ok: false, error: "partner_not_found" };
-  const issued = await issuePartnerKey(input.partnerId, input.label);
+  const issued = await issuePartnerKey(input.partnerId, input.label, input.scopes);
   await writeAuditLog({
     eventType: "ADMIN_ACTION",
     entityType: "PlatformPartner",
     entityId: input.partnerId,
     actorId,
     // Never the key, never its hash; the label is the admin's own name for it.
-    data: { action: "partner_key_issued", keyId: issued.id, label: input.label },
+    data: { action: "partner_key_issued", keyId: issued.id, label: input.label, scopes: issued.scopes },
   });
   return { ok: true, keyId: issued.id, key: issued.key };
 }

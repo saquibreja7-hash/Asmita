@@ -25,10 +25,20 @@ export type DetectionScore = {
   raw?: string;
 };
 
-export type DetectionResult = DetectionScore | { error: string };
+/**
+ * A face-swap detector's honest answer when the image has no detectable
+ * face: not a score, not an error — counted separately by the commands.
+ */
+export type NoFaceResult = { noFace: true };
+
+export type DetectionResult = DetectionScore | NoFaceResult | { error: string };
 
 export function isDetectionScore(r: DetectionResult): r is DetectionScore {
   return typeof (r as DetectionScore).score === "number";
+}
+
+export function isNoFaceResult(r: DetectionResult): r is NoFaceResult {
+  return (r as NoFaceResult).noFace === true;
 }
 
 export interface Detector {

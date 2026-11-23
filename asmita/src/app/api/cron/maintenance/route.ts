@@ -10,6 +10,9 @@ import { pruneRateLimitBuckets } from "@/lib/rate-limit";
 import { countFailedDeletionJobs } from "@/lib/case-ops";
 import { syncReviewJobs } from "@/lib/review-jobs";
 import { pruneRoutingLogs } from "@/lib/review-routing";
+import { runOrgRetention } from "@/lib/org-retention";
+import { latestCompletedScorecardPeriod } from "@/lib/scorecard";
+import { ensureLatestScorecardSnapshot } from "@/lib/scorecard-snapshots";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,6 +33,10 @@ export async function GET(request: NextRequest) {
     failedDeletions?: number;
     reviewJobs?: { enqueued: number; closed: number; moved: number };
     routingLogsPruned?: number;
+    /** Org pages (WP56): closed submissions and stale newsletter sign-ups. */
+    orgRetention?: { submissionsDeleted: number; unconfirmedSubscribersDeleted: number };
+    /** Platform scorecard (WP58): the DRAFT snapshot for the quarter that just ended. */
+    scorecard?: { period: string; created: boolean; error?: string };
     error?: string;
   } = { startedAt: startedAt.toISOString() };
 
@@ -62,6 +69,20 @@ export async function GET(request: NextRequest) {
     }
 
     result.rateLimitBucketsPruned = await pruneRateLimitBuckets();
+
+    // Org pages retention (WP56): closed or declined submissions 12 months
+    // after closing, unconfirmed newsletter sign-ups after 7 days.
+    result.orgRetention = await runOrgRetention(startedAt);
+
+    // Platform scorecard (WP58): the quarter that just ended gets a DRAFT
+    // snapshot, ready for an admin to review. It never recomputes an
+    // existing snapshot, and a failure here must not fail the whole sweep.
+    try {
+      result.scorecard = await ensureLatestScorecardSnapshot(startedAt);
+    } catch (err) {
+      const scorecardError = err instanceof Error ? err.message : String(err);
+      result.scorecard = { period: latestCompletedScorecardPeriod(startedAt), created: false, error: scorecardError };
+    }
 
     // Account deletions that failed are retried every hourly sweep; a person
     // needs to look if any are still failing.

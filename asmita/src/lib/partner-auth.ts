@@ -31,6 +31,21 @@ const KEY_PREFIX = "ppk_";
 // 192-bit key, and a healthy partner poller is never limited.
 const IP_ATTEMPTS_PER_10_MIN = 300;
 
+/**
+ * WP110 (research-tools spec): what a partner key may do on the partner API.
+ * "feed" covers GET /fingerprints and GET /signals, "outcomes" covers
+ * POST /outcomes. Keys are issued with both by default (the console's form
+ * defaults to both and the column default keeps existing keys unchanged).
+ */
+export const PARTNER_KEY_SCOPES = ["feed", "outcomes"] as const;
+export type PartnerKeyScope = (typeof PARTNER_KEY_SCOPES)[number];
+
+/** Normalises an issue-time scope list: absent means both (today's behaviour). */
+function normaliseScopes(scopes: readonly string[] | undefined): PartnerKeyScope[] {
+  if (scopes === undefined || scopes.length === 0) return [...PARTNER_KEY_SCOPES];
+  return PARTNER_KEY_SCOPES.filter((scope) => scopes.includes(scope));
+}
+
 function isDevNoDb() {
   return process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL;
 }
@@ -45,22 +60,27 @@ export function generatePartnerKey() {
 }
 
 /** Issues a key for one partner and stores only its hash. Returns the key once. */
-export async function issuePartnerKey(partnerId: string, label: string): Promise<{ id: string; key: string }> {
+export async function issuePartnerKey(
+  partnerId: string,
+  label: string,
+  scopes?: readonly string[],
+): Promise<{ id: string; key: string; scopes: PartnerKeyScope[] }> {
   const key = generatePartnerKey();
   const keyHash = hashPartnerKey(key);
+  const keyScopes = normaliseScopes(scopes);
   if (isDevNoDb()) {
     const id = randomUUID();
-    partnerMemory().keys.set(id, { id, partnerId, keyHash, label, createdAt: new Date(), revokedAt: null, lastUsedAt: null });
-    return { id, key };
+    partnerMemory().keys.set(id, { id, partnerId, keyHash, label, scopes: keyScopes, createdAt: new Date(), revokedAt: null, lastUsedAt: null });
+    return { id, key, scopes: keyScopes };
   }
   if (usesWorkerKysely()) {
     const id = randomUUID();
-    await getWorkerDb().insertInto("PlatformPartnerKey").values({ id, partnerId, keyHash, label }).execute();
-    return { id, key };
+    await getWorkerDb().insertInto("PlatformPartnerKey").values({ id, partnerId, keyHash, label, scopes: keyScopes }).execute();
+    return { id, key, scopes: keyScopes };
   }
   const { db } = await import("@/lib/db");
-  const row = await db.platformPartnerKey.create({ data: { partnerId, keyHash, label }, select: { id: true } });
-  return { id: row.id, key };
+  const row = await db.platformPartnerKey.create({ data: { partnerId, keyHash, label, scopes: keyScopes }, select: { id: true } });
+  return { id: row.id, key, scopes: keyScopes };
 }
 
 /** Revokes a key by id; false when it is missing or already revoked. */
@@ -81,16 +101,16 @@ export async function revokePartnerKey(id: string): Promise<boolean> {
   return count > 0;
 }
 
-type KeyRow = { id: string; partnerId: string; keyHash: string; revokedAt: Date | null };
+type KeyRow = { id: string; partnerId: string; keyHash: string; scopes: string[] | null; revokedAt: Date | null };
 
 async function findKey(keyHash: string): Promise<KeyRow | null> {
   if (usesWorkerKysely()) {
-    const row = await getWorkerDb().selectFrom("PlatformPartnerKey").select(["id", "partnerId", "keyHash", "revokedAt"])
+    const row = await getWorkerDb().selectFrom("PlatformPartnerKey").select(["id", "partnerId", "keyHash", "scopes", "revokedAt"])
       .where("keyHash", "=", keyHash).executeTakeFirst();
-    return row ? { ...row, revokedAt: row.revokedAt ? new Date(row.revokedAt) : null } : null;
+    return row ? { ...row, scopes: row.scopes ?? null, revokedAt: row.revokedAt ? new Date(row.revokedAt) : null } : null;
   }
   const { db } = await import("@/lib/db");
-  return db.platformPartnerKey.findUnique({ where: { keyHash }, select: { id: true, partnerId: true, keyHash: true, revokedAt: true } });
+  return db.platformPartnerKey.findUnique({ where: { keyHash }, select: { id: true, partnerId: true, keyHash: true, scopes: true, revokedAt: true } });
 }
 
 /** The partner's status: only ACTIVE partners may use the partner routes. */
@@ -114,8 +134,13 @@ async function touchKey(id: string) {
 }
 
 export type PartnerKeyVerification =
-  | { ok: true; keyId: string; partnerId: string }
+  | { ok: true; keyId: string; partnerId: string; scopes: PartnerKeyScope[] }
   | { ok: false; reason: "invalid" | "revoked" | "partner_missing" | "suspended" };
+
+/** Absent scopes read as both — the column default, and rows seeded before it. */
+function scopesOf(row: { scopes?: string[] | null }): PartnerKeyScope[] {
+  return normaliseScopes(row.scopes ?? undefined);
+}
 
 /**
  * Checks one bearer key. The lookup is by a hash of the secret, so its
@@ -130,7 +155,7 @@ export async function verifyPartnerKey(key: string): Promise<PartnerKeyVerificat
     let match: MemoryKeyMatch | null = null;
     // Compare against every key so the time taken does not depend on which matched.
     for (const record of partnerMemory().keys.values()) {
-      if (safeEqual(record.keyHash, keyHash)) match = { keyId: record.id, partnerId: record.partnerId, revoked: record.revokedAt !== null };
+      if (safeEqual(record.keyHash, keyHash)) match = { keyId: record.id, partnerId: record.partnerId, revoked: record.revokedAt !== null, scopes: scopesOf(record) };
     }
     if (!match) return { ok: false, reason: "invalid" };
     if (match.revoked) return { ok: false, reason: "revoked" };
@@ -138,7 +163,7 @@ export async function verifyPartnerKey(key: string): Promise<PartnerKeyVerificat
     if (!partner) return { ok: false, reason: "partner_missing" };
     if (partner.status !== "ACTIVE") return { ok: false, reason: "suspended" };
     partnerMemory().keys.get(match.keyId)!.lastUsedAt = new Date();
-    return { ok: true, keyId: match.keyId, partnerId: match.partnerId };
+    return { ok: true, keyId: match.keyId, partnerId: match.partnerId, scopes: match.scopes };
   }
   // The lookup is by a hash of the secret, so its timing reveals nothing
   // about the secret; the comparison below is constant time anyway.
@@ -149,10 +174,10 @@ export async function verifyPartnerKey(key: string): Promise<PartnerKeyVerificat
   if (!status) return { ok: false, reason: "partner_missing" };
   if (status !== "ACTIVE") return { ok: false, reason: "suspended" };
   await touchKey(record.id).catch(() => undefined);
-  return { ok: true, keyId: record.id, partnerId: record.partnerId };
+  return { ok: true, keyId: record.id, partnerId: record.partnerId, scopes: scopesOf(record) };
 }
 
-type MemoryKeyMatch = { keyId: string; partnerId: string; revoked: boolean };
+type MemoryKeyMatch = { keyId: string; partnerId: string; revoked: boolean; scopes: PartnerKeyScope[] };
 
 const BEARER = /^Bearer ([A-Za-z0-9_-]{16,200})$/;
 
@@ -191,11 +216,20 @@ export async function readPartnerBody<S extends z.ZodType>(
 
 /**
  * Rate limits and key check shared by every partner route. `route` names the
- * per-key limit bucket; `perHour` is that route's budget. The returned
+ * per-key limit bucket; `perHour` is that route's budget. `scope` is the
+ * permission this route needs (WP110): "feed" for the two feeds, "outcomes"
+ * for POST /outcomes — a key issued without it is answered 403
+ * insufficient_scope after the rate-limit accounting, so a wrongly-scoped
+ * key can neither probe unbounded nor escape its bucket. The returned
  * partnerId scopes every query the route makes, so a partner only ever sees
  * its own data (Rule 6).
  */
-export async function authenticatePartner(request: Request, route: string, perHour: number): Promise<PartnerAuth> {
+export async function authenticatePartner(
+  request: Request,
+  route: string,
+  perHour: number,
+  scope: PartnerKeyScope,
+): Promise<PartnerAuth> {
   // Before any database lookup, so guessing keys is throttled.
   const ipLimit = await checkRateLimitAsync(`partner-ip:${getClientIp(request)}`, IP_ATTEMPTS_PER_10_MIN, 10 * 60_000);
   if (!ipLimit.allowed) {
@@ -221,6 +255,11 @@ export async function authenticatePartner(request: Request, route: string, perHo
   if (!keyLimit.allowed) {
     await logSecurityEvent({ event: "rate_limit_exceeded", route: `/api/partner/${route}` });
     return { ok: false, response: partnerJson({ error: "rate_limited" }, 429) };
+  }
+  if (!verification.scopes.includes(scope)) {
+    // The key is valid but was not issued for this route (WP110 scopes).
+    await logSecurityEvent({ event: "auth_failed", route: `/api/partner/${route}`, reason: "insufficient_scope" });
+    return { ok: false, response: partnerJson({ error: "insufficient_scope" }, 403) };
   }
   return { ok: true, keyId: verification.keyId, partnerId: verification.partnerId };
 }

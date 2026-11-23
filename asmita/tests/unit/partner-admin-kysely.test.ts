@@ -329,7 +329,7 @@ describe("partner keys, Kysely path", () => {
     ];
     kysely.state.rows.PlatformPartner = [partnerRow()];
 
-    expect(await verifyPartnerKey(key)).toEqual({ ok: true, keyId: "k-1", partnerId: "p-1" });
+    expect(await verifyPartnerKey(key)).toEqual({ ok: true, keyId: "k-1", partnerId: "p-1", scopes: ["feed", "outcomes"] });
     const touch = callsOn("PlatformPartnerKey").find((call) => call.op === "update")!;
     expect(touch.detail.set).toMatchObject({ lastUsedAt: expect.any(Date) });
 

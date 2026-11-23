@@ -26,6 +26,9 @@ const cronRoutes: Record<string, string> = {
   // Lab E2 (docs/lab/charter.md): daily liveness check of every tracked
   // service URL. Runs only while ENABLE_LAB is on (the route skips itself).
   "45 2 * * *": "/api/lab/cron/liveness",
+  // WP114 (research-tools-spec.md): weekly infrastructure scan of every
+  // tracked service, Monday 03:30 UTC. Skips itself while ENABLE_LAB is off.
+  "30 3 * * 1": "/api/lab/cron/infra-scan",
 };
 
 function configureDatabase(env: WorkerEnv) {

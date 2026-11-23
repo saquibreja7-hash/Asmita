@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const params = Object.fromEntries(new URL(request.url).searchParams.entries());
   const filters = parseDecisionLogFilters(params);
 
-  const exported = await exportDecisionLogCsv({ emailHash: auth.session.emailHash }, filters);
+  const exported = await exportDecisionLogCsv({ emailHash: auth.session.emailHash, role: auth.session.adminRole }, filters);
   await writeAuditLog({
     eventType: "ADMIN_ACTION",
     entityType: "ReviewDecision",

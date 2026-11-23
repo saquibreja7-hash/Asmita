@@ -5,7 +5,7 @@ import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { requireStepUp } from "@/lib/auth/step-up";
 import { db } from "@/lib/db";
 import { isAwaitingReview, reviewSubmittedUrl } from "@/lib/case-ops";
-import { recordDecisionOnOpenJob } from "@/lib/review-jobs";
+import { isHeldForPossibleMinor, recordDecisionOnOpenJob } from "@/lib/review-jobs";
 import { writeAuditLog } from "@/lib/audit";
 
 // Approves or rejects up to 50 flagged links at once. Each link goes through
@@ -95,6 +95,10 @@ export async function POST(request: Request) {
     }
     if (!isAwaitingReview(link)) {
       results.push({ urlId, ok: false, error: "not_awaiting_review" });
+      continue;
+    }
+    if (await isHeldForPossibleMinor("FLAGGED_LINK", urlId)) {
+      results.push({ urlId, ok: false, error: "minor_hold" });
       continue;
     }
     try {

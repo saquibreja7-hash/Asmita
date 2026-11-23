@@ -377,7 +377,10 @@ export function canSeeReviewQueueWithRows(
   rows: Array<{ role: AdminRole | null; adminEmailHash: string | null }>,
 ): boolean {
   if (queue.protected || queue.subjectKind === null) return viewer.role === "SUPER_ADMIN";
-  if (rows.length === 0) return canSeeReviewQueue(viewer.role, queue);
+  // Rows only narrow: a listed role or person still needs the kind's own
+  // permission, so a row can never show a queue to a role that lacks it.
+  if (!canSeeReviewQueue(viewer.role, queue)) return false;
+  if (rows.length === 0) return true;
   return (
     rows.some((row) => row.role === viewer.role) ||
     rows.some((row) => row.adminEmailHash !== null && row.adminEmailHash === viewer.emailHash)
@@ -781,6 +784,19 @@ export async function getReviewJobWithQueue(jobId: string): Promise<{ job: Revie
   const queue = await getReviewQueueById(job.queueId);
   if (!queue) return null;
   return { job, queue };
+}
+
+/**
+ * True when the subject's open job sits in a protected queue (minor-hold).
+ * Paths that decide outside the console (the bulk links and fingerprints
+ * routes) check this first: a held item gets no decision that continues the
+ * adult flow, whoever asks.
+ */
+export async function isHeldForPossibleMinor(kind: ReviewSubjectKind, subjectId: string): Promise<boolean> {
+  const job = await findOpenJobForSubject(kind, subjectId);
+  if (!job) return false;
+  const queue = await getReviewQueueById(job.queueId);
+  return Boolean(queue?.protected);
 }
 
 async function findOpenJobForSubject(kind: ReviewSubjectKind, subjectId: string): Promise<ReviewJobRow | null> {

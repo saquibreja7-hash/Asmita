@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { renderEmailHtml } from "@/lib/email-html";
+import { renderEmailHtml, renderNoticeLetterHtml } from "@/lib/email-html";
 
 const PRIVACY_NOTE = "For your privacy, this email contains no submitted URLs or personal information.";
 
@@ -36,10 +36,12 @@ export async function sendOtp(to: string, otp: string) {
     text: `Your Asmita verification code is ${otp}. It expires in 10 minutes.`,
     html: renderEmailHtml({
       title: "Your verification code",
-      paragraphs: ["Enter this code to continue. It expires in 10 minutes."],
+      paragraphs: ["Enter this code on the page you came from. It works once and expires in 10 minutes."],
       highlight: otp,
       highlightLabel: "Verification code",
-      footerNotes: ["If you did not request this code, you can safely ignore this email."],
+      highlightStyle: "code",
+      preheader: "Your code expires in 10 minutes.",
+      footerNotes: ["Did not ask for this code? You can ignore this email; nothing happens without it."],
     }),
   }));
 }
@@ -61,6 +63,9 @@ export async function sendNoticeDraft(
     to,
     subject,
     text,
+    // The same notice as the text part, laid out as a letter: the body text
+    // is shown verbatim (renderNoticeLetterHtml adds nothing to it).
+    html: renderNoticeLetterHtml(subject, text),
     ...(attachments?.length ? { attachments } : {}),
   }, idempotencyKey ? { idempotencyKey } : undefined));
 }
@@ -442,8 +447,10 @@ export function createWatchCopyFoundEmail(referenceNumber: string) {
     paragraphs: lines,
     highlight: referenceNumber,
     highlightLabel: "Case reference",
-    // No call-to-action button: the email carries no links by rule.
+    // No call-to-action button, logo image or site address: the email
+    // carries no links by rule.
     footerNotes: ["For your privacy, this email names no website and contains no links."],
+    noLinks: true,
   });
   return { subject, text, html };
 }
@@ -473,4 +480,79 @@ function assertEmailSent(result: unknown): EmailSendResult {
     throw new Error(`email_send_failed:${response.error.message || "unknown_resend_error"}`);
   }
   return response.data ? { id: response.data.id, data: response.data } : (result as EmailSendResult);
+}
+
+// ─── Organization pages (docs/org/spec.md, WP56) ─────────────────────
+
+export function getOrgInboxEmail() {
+  return process.env.ORG_INBOX_EMAIL || "";
+}
+
+/**
+ * Notification to the organization inbox for a public-form submission.
+ * With ORG_INBOX_EMAIL unset (local development), the message is logged
+ * instead of sent — nothing is lost while no inbox exists. The log line
+ * carries only the form kind and submission id: the subject and body hold the
+ * submitter's name and organisation, which stay out of logs.
+ */
+export async function sendOrgInboxNotification(
+  subject: string,
+  text: string,
+  meta: { kind: string; submissionId: string },
+) {
+  const inbox = getOrgInboxEmail();
+  if (!inbox) {
+    console.warn(JSON.stringify({ event: "org_inbox_notification", kind: meta.kind, submissionId: meta.submissionId }));
+    return { id: "org-inbox-logged" };
+  }
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-org-inbox" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to: inbox,
+    subject,
+    text,
+  }));
+}
+
+/** A short acknowledgement to a person who submitted a public org form. */
+export async function sendOrgAcknowledgement(to: string, subject: string, lines: string[]) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-org-acknowledgement" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject,
+    text: ["Hello,", "", ...lines.flatMap((line) => [line, ""]), "Meri Asmita"].join("\n"),
+    html: renderEmailHtml({ title: subject, paragraphs: lines, footerNotes: ["You are receiving this because you submitted a form on meriasmita.org."] }),
+  }));
+}
+
+/** The newsletter double-opt-in confirmation email. */
+export async function sendNewsletterConfirmEmail(to: string, confirmUrl: string) {
+  if (!process.env.RESEND_API_KEY) {
+    return { id: "dev-newsletter-confirm" };
+  }
+  return assertEmailSent(await getResend().emails.send({
+    from: getTransactionalEmailFrom(),
+    to,
+    subject: "Confirm your Meri Asmita newsletter",
+    text: [
+      "Hello,",
+      "",
+      "Please confirm that you want to receive the Meri Asmita newsletter.",
+      "Open this link to confirm:",
+      confirmUrl,
+      "",
+      "If you did not sign up, you can ignore this email. Nothing else is sent until you confirm.",
+    ].join("\n"),
+    html: renderEmailHtml({
+      title: "Confirm your subscription",
+      paragraphs: ["Please confirm that you want to receive the Meri Asmita newsletter."],
+      cta: { label: "Confirm subscription", url: confirmUrl },
+      footerNotes: ["If you did not sign up, you can ignore this email. Nothing else is sent until you confirm."],
+    }),
+  }));
 }

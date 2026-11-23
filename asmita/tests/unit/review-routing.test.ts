@@ -185,6 +185,9 @@ function seedLabDraft() {
     providerReference: null,
     outcome: null,
     outcomeAt: null,
+    bulkProviderName: null,
+    bulkAbuseContact: null,
+    bulkServiceIds: [],
     createdAt: NOW,
     updatedAt: NOW,
   };

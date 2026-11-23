@@ -32,10 +32,13 @@ async function createCase(page: import("@playwright/test").Page) {
 
 test("landing and minor-support entry render", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: /Ending image-based abuse in India\./i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Under 18/i }).first()).toBeVisible();
+  // The original homepage lives on unchanged at /help.
+  await page.goto("/help");
   await expect(
     page.getByRole("heading", { name: /You are not alone\. Let's take it down\./i }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: /Under 18/i }).first()).toBeVisible();
 });
 
 test("survivor can call the 24/7 helpline from the home page", async ({ page }) => {
@@ -134,9 +137,13 @@ test("direct visits to protected victim flow redirect to start without session",
 
 test("language toggle persists Hindi preference", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "हिंदी" }).click();
+  // The footer language button opens a drawer listing the languages.
+  await page.locator(".lang-button").click();
+  await page.getByRole("dialog", { name: "Choose language" }).getByRole("button", { name: /हिंदी/ }).click();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "hi");
+  await expect(page.getByRole("heading", { level: 1, name: "भारत में तस्वीरों के ज़रिए होने वाले दुर्व्यवहार को ख़त्म करना।" })).toBeVisible();
+  await page.goto("/help");
   await expect(page.getByRole("heading", { name: "आप अकेली नहीं हैं। आइए इसे हटवाएँ।" })).toBeVisible();
   await page.goto("/get-help");
   await expect(page.getByRole("heading", { name: "तस्वीरों के ज़रिए हुए उत्पीड़न में मदद लें" })).toBeVisible();

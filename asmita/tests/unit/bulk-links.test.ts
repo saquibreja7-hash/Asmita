@@ -29,7 +29,8 @@ import { createCsrfPair } from "@/lib/csrf";
 import { createCase } from "@/lib/store";
 import { addUrlsToCase, cases } from "@/lib/store";
 import { inMemoryAuditLog } from "@/lib/audit";
-import { resetReviewMemory, reviewMemory, syncReviewJobs } from "@/lib/review-jobs";
+import { ensureSystemQueues, getReviewQueueByKey, resetReviewMemory, reviewMemory, syncReviewJobs } from "@/lib/review-jobs";
+import { MINOR_HOLD_QUEUE_KEY } from "@/lib/review-queue-seeds";
 import { POST as bulkLinksRoute } from "@/app/api/admin/bulk/links/route";
 
 const NOW = new Date("2026-11-22T12:00:00Z");
@@ -184,6 +185,22 @@ describe("POST /api/admin/bulk/links", () => {
       succeeded: 1,
       failed: 2,
     });
+  });
+
+  it("never decides a link held in minor-hold, even for a SUPER_ADMIN", async () => {
+    await signIn();
+    const seeded = await seedFlaggedLinks(1, "held", "youtube.com");
+    await ensureSystemQueues();
+    const minorHold = await getReviewQueueByKey(MINOR_HOLD_QUEUE_KEY);
+    const job = [...reviewMemory().jobs.values()].find((item) => item.subjectId === seeded.urlIds[0]);
+    job!.queueId = minorHold!.id;
+
+    const response = await bulkLinksRoute(request({ decision: "approve", urlIds: seeded.urlIds, confirmedCount: 1 }));
+    const body = await response.json();
+    expect(body.results).toEqual([{ urlId: seeded.urlIds[0]!, ok: false, error: "minor_hold" }]);
+    const link = cases.get(seeded.caseId)!.urls.find((url) => url.id === seeded.urlIds[0]);
+    expect(link?.status).not.toBe("NOTICE_QUEUED");
+    expect([...reviewMemory().decisions.values()]).toHaveLength(0);
   });
 
   it("passes the rejection reason to every link", async () => {

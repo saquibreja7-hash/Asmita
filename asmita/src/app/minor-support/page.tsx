@@ -74,7 +74,7 @@ export default async function MinorSupportPage() {
   ];
 
   return (
-    <AppShell>
+    <AppShell withoutNewsletter>
       <QuickExit locale={locale} enableIdle={false} />
       <div className="page-canvas">
         {/* HERO */}

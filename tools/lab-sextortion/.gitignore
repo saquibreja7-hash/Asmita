@@ -1,0 +1,4 @@
+# Generated training data lives here (never committed — public repo, the
+# spec's rule 3). The generator recreates it deterministically: npm run generate.
+data/
+node_modules/

@@ -49,8 +49,8 @@ export default async function DecisionsLogPage({
   });
 
   const [page, options] = await Promise.all([
-    listDecisionLogPage({ emailHash: auth.session.emailHash }, filters, { before: one("before") || undefined }),
-    decisionLogFilterOptions({ emailHash: auth.session.emailHash }),
+    listDecisionLogPage({ emailHash: auth.session.emailHash, role: auth.session.adminRole }, filters, { before: one("before") || undefined }),
+    decisionLogFilterOptions({ emailHash: auth.session.emailHash, role: auth.session.adminRole }),
   ]);
 
   const filterQuery = (extra: Record<string, string> = {}) =>

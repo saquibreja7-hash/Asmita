@@ -52,7 +52,7 @@ async function seedFlaggedLink(url = "https://forum.example.test/post/1") {
   return { caseId: record.id, urlId: result.url.id };
 }
 
-async function grantOnLinks(target: { role?: typeof SUPER | typeof REVIEWER | "GO_EDITOR"; adminEmailHash?: string }) {
+async function grantOnLinks(target: { role?: typeof SUPER | typeof REVIEWER | "GO_EDITOR" | "LEGAL_ADVISOR"; adminEmailHash?: string }) {
   const queue = await linksQueue();
   return grantReviewQueueAccess({
     queueId: queue.id,
@@ -131,15 +131,22 @@ describe("rows narrow a queue", () => {
   });
 
   it("role rows and person rows combine: either one is enough", async () => {
-    await grantOnLinks({ role: "GO_EDITOR" as const });
+    await grantOnLinks({ role: "LEGAL_ADVISOR" as const });
     await grantOnLinks({ adminEmailHash: reviewerA });
     const rows = await listReviewQueueAccess((await linksQueue()).id);
     expect(rows).toHaveLength(2);
 
-    const goEditor = await queueSummaries({ role: "GO_EDITOR" as const, emailHash: reviewerB }, NOW);
-    expect(goEditor.find((row) => row.key === "links")).toBeTruthy();
+    const legalAdvisor = await queueSummaries({ role: "LEGAL_ADVISOR" as const, emailHash: reviewerB }, NOW);
+    expect(legalAdvisor.find((row) => row.key === "links")).toBeTruthy();
     const listedReviewer = await queueSummaries({ role: REVIEWER, emailHash: reviewerA }, NOW);
     expect(listedReviewer.find((row) => row.key === "links")).toBeTruthy();
+  });
+
+  it("a row never widens a queue to a role without the kind's permission", async () => {
+    await grantOnLinks({ role: "GO_EDITOR" as const });
+    const goEditor = await queueSummaries({ role: "GO_EDITOR" as const, emailHash: reviewerB }, NOW);
+    expect(goEditor.find((row) => row.key === "links")).toBeUndefined();
+    expect(await reviewQueueVisibleTo({ role: "GO_EDITOR" as const, emailHash: reviewerB }, await linksQueue())).toBe(false);
   });
 
   it("revoking the last row returns the queue to today's behaviour", async () => {

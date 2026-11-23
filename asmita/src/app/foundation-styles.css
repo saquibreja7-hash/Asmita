@@ -1,9 +1,9 @@
-/* Shared Asmita tokens and typography. See docs/design/03-design-system.md.
+/* Shared Asmita tokens and typography. See DESIGN.md.
    Public page and shared component styles are imported in cascade order. */
 :root {
   color-scheme: light;
   /* Palette */
-  --color-parchment: #f6f3f1;
+  --color-parchment: #ffffff; /* the page: plain white (owner, 2026-11-21) */
   --color-brand-teal: #0a5e5a; /* the logo teal */
   --color-teal-mist: #d4e9e6;
   --color-teal-sky: #9fcac4;
@@ -15,7 +15,7 @@
   --color-ink: #000000;
   --color-graphite: #4e4d4d;
   --color-smoke: #625f5e;
-  --color-ash: #cecac8;
+  --color-ash: #e3e1df;
 
   /* Type scale */
   --text-caption: 0.75rem;
@@ -45,7 +45,7 @@
   --radius-3xl: 40px;
   --radius-full: 100px;
   --radius-cards: var(--radius-box);
-  --radius-buttons: 100px;
+  --radius-buttons: var(--radius-box); /* buttons share the 12px box corner */
   --radius-pills: 9999px;
 
   --shadow-md: rgba(0, 0, 0, 0.1) 0px 0px 10px 0px;
@@ -71,7 +71,8 @@
 
   --coral: var(--color-coral);
   --coral-deep: var(--color-crimson);
-  --coral-soft: #ffe6dd;
+  --coral-soft: #ffeee8;
+  --coral-ink: #b4461f; /* orange for text and icons: 5:1 on white */
   --midnight: var(--color-off-black);
   --midnight-deep: var(--color-ink);
   --heading: var(--ink);
@@ -84,7 +85,7 @@
 
   --background: var(--color-parchment);
   --surface: var(--color-parchment);
-  --surface-muted: #efebe8;
+  --surface-muted: #f6f6f5;
   --foreground: var(--color-off-black);
   --body: var(--text);
   --muted: var(--color-smoke);
@@ -436,12 +437,13 @@ html[lang="hi"] .data-table thead th { letter-spacing: 0; text-transform: none; 
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  background: var(--brand);
-  color: #fff;
+  /* Numbered steps carry the warm orange, site-wide (owner, 2026-11-21). */
+  background: var(--coral-soft);
+  color: var(--coral-ink);
   font-size: 0.875rem;
   font-weight: 600;
 }
-.step-list li::after { content: ""; position: absolute; top: 32px; bottom: 4px; left: 13.5px; width: 1px; background: var(--line); }
+.step-list li::after { content: ""; position: absolute; top: 32px; bottom: 4px; left: 13.5px; width: 1px; background: var(--coral); opacity: 0.45; }
 .step-list li:last-child { padding-bottom: 0; }
 .step-list li:last-child::after { display: none; }
 
@@ -544,7 +546,13 @@ html:has(.quick-exit) {
 }
 
 html:has(.quick-exit) body {
-  padding-bottom: 4.5rem;
+  /* The clearance lives inside the teal footer (see .site-footer below), not
+     as a white strip under it; pages without a footer still get the space. */
+  padding-bottom: 0;
+}
+
+html:has(.quick-exit) .site-footer {
+  padding-bottom: calc(32px + 4.5rem);
 }
 
 @media (max-width: 640px) {
@@ -552,8 +560,8 @@ html:has(.quick-exit) body {
     scroll-padding-bottom: 4rem;
   }
 
-  html:has(.quick-exit) body {
-    padding-bottom: 4rem;
+  html:has(.quick-exit) .site-footer {
+    padding-bottom: calc(32px + 4rem);
   }
 }
 

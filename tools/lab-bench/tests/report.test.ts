@@ -46,10 +46,11 @@ const detectResults: DetectResults = {
       name: "Example detector",
       items: 9,
       errors: 1,
+      noFace: 2,
       overallAccuracy: 0.75,
       perTransform: {
-        faceswap: { n: 3, accuracy: 1, auc: 0.95, meanScoreFake: 0.9, meanScoreReal: null, errors: 0 },
-        original: { n: 3, accuracy: 0.67, auc: null, meanScoreFake: null, meanScoreReal: 0.2, errors: 1 },
+        faceswap: { n: 3, accuracy: 1, auc: 0.95, meanScoreFake: 0.9, meanScoreReal: null, errors: 0, noFace: 2 },
+        original: { n: 3, accuracy: 0.67, auc: null, meanScoreFake: null, meanScoreReal: 0.2, errors: 1, noFace: 0 },
       },
     },
   ],

@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asmita-lab-gend"
+version = "0.1.0"
+description = "GenD deepfake-detector inference service for the Asmita AI Lab (research tools WP112)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+dependencies = [
+    # core: the service itself, no ML weights handling
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "python-multipart>=0.0.9",
+    "opencv-python-headless==4.12.0.88",
+    "numpy>=1.26",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+# the reference runtime (default GEND_RUNTIME=torch)
+torch = [
+    "torch==2.8.0",
+    "transformers==4.56.2",
+    "huggingface-hub>=0.24",
+]
+# the ONNX runtime (GEND_RUNTIME=onnx); drops torch entirely
+onnx = ["onnxruntime==1.21.0"]
+# exporting the ONNX graph from the torch runtime
+export = ["onnx>=1.16"]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+include = ["gend*"]
+
+[tool.setuptools.package-data]
+gend = ["weights_manifest.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["C", "E", "W", "F", "I"]
+ignore = [
+    "C901", # complex condition
+    "E501", # line too long
+    "F401", # imported but unused
+    "F403", # star import
+    "E741", # ambiguous variable name
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["E402"]

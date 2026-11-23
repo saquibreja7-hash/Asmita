@@ -1,3 +1,4 @@
+import { getDomain } from "tldts";
 import { z } from "zod";
 
 /*
@@ -61,7 +62,7 @@ async function defaultResolveNs(host: string): Promise<string[]> {
 }
 
 /** Reads at most `cap` bytes of a response body, then cancels the stream. */
-async function readCapped(response: Response, cap: number): Promise<string> {
+export async function readCapped(response: Response, cap: number): Promise<string> {
   if (!response.body) return "";
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -143,11 +144,15 @@ function vcardName(vcardArray: unknown): string | null {
   return null;
 }
 
-/** The registrable-domain guess for a host: its last two labels. */
-function registrableGuess(host: string): string | null {
-  const labels = host.split(".");
-  if (labels.length < 2) return null;
-  return labels.slice(-2).join(".");
+/**
+ * The registrable domain of a host, via the Public Suffix List (tldts, MIT).
+ * IP literals and bare public suffixes have none; unknown TLDs fall back to
+ * the PSL's implicit "*" rule (the last two labels), so invented .test
+ * hosts in tests still resolve to a registrable domain.
+ */
+export function registrableDomain(host: string): string | null {
+  const normalized = host.toLowerCase().replace(/\.$/, "");
+  return getDomain(normalized);
 }
 
 /**
@@ -167,11 +172,11 @@ export async function lookupServiceUrl(rawUrl: string, deps: LabLookupDeps = {})
   let registrar: string | null = null;
   let rdapChecked = false;
   const base = process.env.LAB_RDAP_BASE_URL;
+  const candidates = registrableDomain(host) !== host
+    ? [host, registrableDomain(host)!]
+    : [host];
   if (base) {
     rdapChecked = true;
-    const candidates = host.includes(".") && registrableGuess(host) !== host
-      ? [host, registrableGuess(host)!]
-      : [host];
     for (const candidate of candidates) {
       const rdap = await rdapLookup(base, candidate, fetchImpl);
       if (rdap) {
