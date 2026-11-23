@@ -4,7 +4,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
-import { labPublicNumbers } from "@/lib/lab/lab-stats";
 import { LAB_BETA_TOOLS, LAB_HUB_KEYS, LAB_HUB_SECTIONS } from "@/lib/lab/beta-tools";
 
 export const metadata: Metadata = {
@@ -16,8 +15,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 // The Lab's public page (docs/lab/charter.md): what the Lab is, the
-// experiments, and — only while ENABLE_LAB is on — the aggregate E2
-// numbers. Every string is translated (en and hi); no service is ever named
+// experiments and the beta tools. Every string is translated (en and hi); no service is ever named
 // or linked here, and no other research data reaches this page.
 
 const EXPERIMENTS = [
@@ -29,7 +27,6 @@ const EXPERIMENTS = [
 export default async function LabPage() {
   const locale = await getLocale();
   const enabled = labEnabled();
-  const numbers = enabled ? await labPublicNumbers() : null;
 
   return (
     <AppShell>
@@ -98,31 +95,6 @@ export default async function LabPage() {
                 </div>
               ))}
             </div>
-          </div>
-        </section>
-
-        <section className="section-pad" aria-labelledby="lab-numbers">
-          <div className="container">
-            <h2 id="lab-numbers" className="section-title">{t(locale, "lab.numbers.title")}</h2>
-            {numbers ? (
-              <div className="mx-auto mt-8 grid max-w-4xl gap-6 sm:grid-cols-3">
-                <div className="card text-center">
-                  <p className="text-3xl font-medium tabular-nums">{numbers.servicesTracked}</p>
-                  <p className="mt-1 text-sm">{t(locale, "lab.numbers.services")}</p>
-                </div>
-                <div className="card text-center">
-                  <p className="text-3xl font-medium tabular-nums">{numbers.servicesTakenDown}</p>
-                  <p className="mt-1 text-sm">{t(locale, "lab.numbers.takenDown")}</p>
-                </div>
-                <div className="card text-center">
-                  <p className="text-3xl font-medium tabular-nums">{numbers.medianDaysToDown === null ? "—" : numbers.medianDaysToDown.toFixed(1)}</p>
-                  <p className="mt-1 text-sm">{t(locale, "lab.numbers.medianDays")}</p>
-                </div>
-              </div>
-            ) : (
-              <p className="muted mx-auto mt-8 max-w-2xl text-sm">{t(locale, "lab.numbers.pending")}</p>
-            )}
-            <p className="muted mx-auto mt-6 max-w-2xl text-sm">{t(locale, "lab.numbers.note")}</p>
           </div>
         </section>
 
