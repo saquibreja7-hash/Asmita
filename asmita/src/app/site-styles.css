@@ -1937,3 +1937,5 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 }
 .calm-sub .lab-tool-hero-visual { background: linear-gradient(150deg, #e3f2ef 0%, #fbf3d9 55%, #ffe8df 100%); }
 .issue-close { background: linear-gradient(135deg, #e3f2ef 0%, #fbf3d9 50%, #ffe8df 100%); }
+/* Illustrations sit on plain white, never a coloured panel. */
+.calm-sub .lab-tool-hero-visual.lab-tool-hero-art { background: var(--card); }
