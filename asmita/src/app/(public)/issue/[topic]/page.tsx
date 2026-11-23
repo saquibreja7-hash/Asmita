@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabSection, LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
+import { Icon } from "@/components/Icon";
+import { BRAND_TONES, ISSUE_TOPIC_STYLE, IssueTopicCards } from "@/components/IssueTopicCards";
 import { getIssueTopic, issueTopics } from "@/lib/issue-content";
 import { issueContentHi } from "@/lib/issue-content-hi";
 import { getLocale } from "@/lib/get-locale";
-import { ItemCards, SectionHeading } from "@/components/Reading";
 import { ReadingTime } from "@/components/ReadingTime";
 import { Illustration, type IllustrationName } from "@/components/Illustration";
 
@@ -50,106 +51,88 @@ export default async function IssueTopicPage({
   const content = locale === "hi" ? issueContentHi[data.slug as keyof typeof issueContentHi] : data;
 
   const others = issueTopics.filter((t) => t.slug !== data.slug).slice(0, 3);
+  const tone = ISSUE_TOPIC_STYLE[data.slug]?.tone ?? "teal";
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="hero" aria-label={content.term}>
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-5xl">
-              <Link href="/issue" className="text-link text-sm font-medium">
-                {say("The issue", "समस्या को समझें")}
+    <LabToolShell variant="calm">
+      <LabToolHero
+        backLabel={say("The issue", "समस्या को समझें")}
+        backHref="/issue"
+        title={content.title}
+        intro={
+          <>
+            <p>{content.definition}</p>
+            {content.research && (
+              <p className="text-[15px] text-[var(--text)]">
+                {content.research.text}{" "}
+                <a className="text-link" href={content.research.url} target="_blank" rel="noopener noreferrer">
+                  {say("Read the survey", "सर्वेक्षण पढ़ें")} <span aria-hidden>↗</span>
+                </a>
+              </p>
+            )}
+          </>
+        }
+        visual={<Illustration name={TOPIC_ART[data.slug] ?? "page-issue"} eager className="issue-hero-art" />}
+      >
+        <p className="issue-meta">
+          {content.term}
+          <ReadingTime label={say("{n} min read", "{n} मिनट में पढ़ें")} />
+        </p>
+      </LabToolHero>
+
+      {/* BODY: what it can look like, and what you can do */}
+      <section className="lab-sub-section" aria-label={say("Details", "विवरण")}>
+        <div className="container issue-body">
+          <div>
+            <header className="lab-section-head">
+              <span className="lab-index" aria-hidden="true">01</span>
+              <h2 className="lab-h2">{say("What it can look like", "यह कैसे दिख सकता है")}</h2>
+            </header>
+            <ul className="issue-examples" role="list">
+              {content.looksLike.map((example, index) => (
+                <li key={index} className={`issue-example issue-tone-${BRAND_TONES[index % BRAND_TONES.length]}`}>
+                  <span className="issue-example-mark" aria-hidden="true">
+                    <Icon name={ISSUE_TOPIC_STYLE[data.slug]?.icon ?? "info"} size={18} />
+                  </span>
+                  <p>{example}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <aside className={`issue-act issue-tone-${tone}`} aria-labelledby="issue-act-title">
+            <span className="issue-topic-icon" aria-hidden="true">
+              <Icon name="heart" size={22} />
+            </span>
+            <h2 id="issue-act-title" className="issue-act-title">
+              {say("What you can do", "आप क्या कर सकते हैं")}
+            </h2>
+            <p className="issue-act-body">{content.whatToDo}</p>
+            <div className="mt-6 flex flex-col gap-3">
+              <Link className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]" href="/get-help">
+                {say("Get help", "मदद लें")}
               </Link>
-              <h1 className="page-title mt-4 max-w-3xl">
-                {content.title}
-              </h1>
-              <p className="font-size-large mt-6 max-w-2xl text-[var(--ink)]">
-                {content.definition}
-              </p>
-              {content.research && (
-                <p className="mt-3 max-w-2xl text-sm leading-[1.7] text-[var(--text-muted)]">
-                  {content.research.text}{" "}
-                  <a className="text-link" href={content.research.url} target="_blank" rel="noopener noreferrer">
-                    {say("Read the survey", "सर्वेक्षण पढ़ें")} <span aria-hidden>↗</span>
-                  </a>
-                </p>
-              )}
-              <p className="eyebrow mt-6">
-                {content.term}<ReadingTime label={say("{n} min read", "{n} मिनट में पढ़ें")} />
-              </p>
+              <Link className="btn btn-secondary !m-0 !min-h-[44px] !text-[15px]" href="/glossary">
+                {say("Glossary of terms", "शब्दावली")}
+              </Link>
             </div>
-            <Illustration name={TOPIC_ART[data.slug] ?? "page-issue"} eager className="page-hero-art" />
-          </div>
-        </section>
+          </aside>
+        </div>
+      </section>
 
-        {/* BODY */}
-        <section className="zone-white section-pad !pt-4" aria-label={say("Details", "विवरण")}>
-          <div className="container">
-            <div className="mx-auto grid max-w-5xl gap-12 lg:grid-cols-[1.4fr_1fr]">
-              {/* What it looks like */}
-              <div>
-                <SectionHeading icon="eyeOff">
-                  {say("What it can look like", "यह कैसे दिख सकता है")}
-                </SectionHeading>
-                <ItemCards items={content.looksLike.map((ex) => ({ body: ex }))} />
-              </div>
-
-              {/* What you can do */}
-              <aside className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 h-fit">
-                <SectionHeading icon="heart">
-                  {say("What you can do", "आप क्या कर सकते हैं")}
-                </SectionHeading>
-                <p className="mt-4 text-[15px] leading-[1.65] text-[var(--text)]">
-                  {content.whatToDo}
-                </p>
-                <div className="mt-6 flex flex-col gap-3">
-                  <Link className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]" href="/get-help">
-                    {say("Get help", "मदद लें")}
-                  </Link>
-                  <Link className="btn btn-secondary !m-0 !min-h-[44px] !text-[15px]" href="/glossary">
-                    {say("Glossary of terms", "शब्दावली")}
-                  </Link>
-                </div>
-              </aside>
-            </div>
-          </div>
-        </section>
-
-        {/* RELATED */}
-        <section className="transform-section" aria-labelledby="related-heading">
-          <div className="transform-content container section-pad">
-            <div className="mx-auto max-w-5xl">
-              <h2
-                id="related-heading"
-                className="section-title"
-              >
-                {say("Read about other forms of abuse", "दुर्व्यवहार के अन्य प्रकार पढ़ें")}
-              </h2>
-              <div className="mt-8 grid gap-4 md:grid-cols-3">
-                {others.map((t) => (
-                  <Link
-                    key={t.slug}
-                    href={`/issue/${t.slug}`}
-                    className="link-card group"
-                  >
-                    <h3 className="link-card-title">
-                      {locale === "hi" ? issueContentHi[t.slug as keyof typeof issueContentHi].term : t.term}
-                    </h3>
-                    <p className="mt-2 flex-1 text-[15px] leading-[1.6] text-[var(--text)]">
-                      {locale === "hi" ? issueContentHi[t.slug as keyof typeof issueContentHi].short : t.short}
-                    </p>
-                    <span className="link-card-more">
-                      {say("Learn more", "और जानें")}
-                      <span className="transition-transform group-hover:translate-x-0.5" aria-hidden>→</span>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-    </AppShell>
+      {/* RELATED */}
+      <LabSection id="related-heading" index="02" title={say("Read about other forms of abuse", "दुर्व्यवहार के अन्य प्रकार पढ़ें")}>
+        <IssueTopicCards
+          moreLabel={say("Learn more", "और जानें")}
+          cards={others.map((t) => ({
+            href: `/issue/${t.slug}`,
+            title: locale === "hi" ? issueContentHi[t.slug as keyof typeof issueContentHi].term : t.term,
+            short: locale === "hi" ? issueContentHi[t.slug as keyof typeof issueContentHi].short : t.short,
+            icon: ISSUE_TOPIC_STYLE[t.slug]?.icon ?? "info",
+            tone: ISSUE_TOPIC_STYLE[t.slug]?.tone,
+          }))}
+        />
+      </LabSection>
+    </LabToolShell>
   );
 }

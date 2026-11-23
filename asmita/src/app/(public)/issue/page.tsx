@@ -1,7 +1,8 @@
 import { Illustration } from "@/components/Illustration";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Icon, type IconName } from "@/components/Icon";
+import { Icon } from "@/components/Icon";
+import { ISSUE_TOPIC_STYLE, IssueTopicCards } from "@/components/IssueTopicCards";
 import { LabSection, LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { issueTopics } from "@/lib/issue-content";
 import { getLocale } from "@/lib/get-locale";
@@ -19,18 +20,6 @@ const hindiTopics = [
   { term: "यौन धमकी और ब्लैकमेल", short: "कोई पैसे या और सामग्री की माँग करके आपकी निजी तस्वीर फैलाने की धमकी देता है।" },
   { term: "निजी जानकारी उजागर करना और नकली पहचान", short: "आपको परेशान करने के लिए निजी जानकारी फैलाना या आपके नाम पर नकली प्रोफ़ाइल बनाना।" },
 ] as const;
-
-// The three brand colours, in turn, one per card.
-const TONES = ["teal", "coral", "gold"] as const;
-
-// One line icon per topic, decorative: the title beside it says the same.
-const TOPIC_ICONS: Record<string, IconName> = {
-  ncii: "eyeOff",
-  deepfakes: "scan",
-  morphing: "overlap",
-  sextortion: "alert",
-  doxxing: "users",
-};
 
 // The Issue hub (2026-11-23 redesign): the shared modern page parts in their
 // calm variant. The copy is unchanged; only the layout is new.
@@ -60,28 +49,17 @@ export default async function IssuePage() {
         title={say("Types of image-based abuse", "तस्वीरों के ज़रिए दुर्व्यवहार के प्रकार")}
         lede={<p>{say("Pick the one closest to your situation, or read them all.", "अपनी स्थिति से मिलता-जुलता विषय चुनें, या सभी पढ़ें।")}</p>}
       >
-        <ul className="issue-topics" role="list">
-          {issueTopics.map((topic, index) => (
-            <li key={topic.slug} className={`issue-topic issue-tone-${TONES[index % TONES.length]}`}>
-              <div className="issue-topic-top">
-                <span className="issue-topic-icon" aria-hidden="true">
-                  <Icon name={TOPIC_ICONS[topic.slug] ?? "info"} size={22} />
-                </span>
-                <span className="issue-topic-n" aria-hidden="true">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-              </div>
-              <h3 className="issue-topic-title">
-                <Link className="lab-card-link" href={`/issue/${topic.slug}`}>
-                  {say(topic.term, hindiTopics[index].term)}
-                </Link>
-              </h3>
-              <p className="issue-topic-short">{say(topic.short, hindiTopics[index].short)}</p>
-              <span className="issue-topic-more" aria-hidden="true">
-                {say("Learn more", "और जानें")} <span className="issue-topic-arrow">→</span>
-              </span>
-            </li>
-          ))}
+        <IssueTopicCards
+          moreLabel={say("Learn more", "और जानें")}
+          cards={issueTopics.map((topic, index) => ({
+            href: `/issue/${topic.slug}`,
+            title: say(topic.term, hindiTopics[index].term),
+            short: say(topic.short, hindiTopics[index].short),
+            icon: ISSUE_TOPIC_STYLE[topic.slug]?.icon ?? "info",
+            tone: ISSUE_TOPIC_STYLE[topic.slug]?.tone,
+            number: index + 1,
+          }))}
+        >
           <li className="issue-topic issue-topic-glossary">
             <div className="issue-topic-top">
               <span className="issue-topic-icon" aria-hidden="true">
@@ -97,7 +75,7 @@ export default async function IssuePage() {
               <span className="issue-topic-arrow">→</span>
             </span>
           </li>
-        </ul>
+        </IssueTopicCards>
       </LabSection>
 
       {/* CLOSING */}
