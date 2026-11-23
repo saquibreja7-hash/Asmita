@@ -181,11 +181,6 @@ async function findByEmailHash(emailHash: string): Promise<NewsletterSubscriber 
   return row ? rowToSubscriber(row) : null;
 }
 
-/** The confirm link in the email. */
-export function newsletterConfirmUrl(confirmToken: string) {
-  return `${appBaseUrl()}/newsletter/confirm?token=${confirmToken}`;
-}
-
 /** The unsubscribe link in every newsletter email. */
 export function newsletterUnsubscribeUrl(unsubscribeToken: string) {
   return `${appBaseUrl()}/newsletter/unsubscribe?token=${unsubscribeToken}`;

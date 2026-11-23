@@ -529,30 +529,3 @@ export async function sendOrgAcknowledgement(to: string, subject: string, lines:
     html: renderEmailHtml({ title: subject, paragraphs: lines, footerNotes: ["You are receiving this because you submitted a form on meriasmita.org."] }),
   }));
 }
-
-/** The newsletter double-opt-in confirmation email. */
-export async function sendNewsletterConfirmEmail(to: string, confirmUrl: string) {
-  if (!process.env.RESEND_API_KEY) {
-    return { id: "dev-newsletter-confirm" };
-  }
-  return assertEmailSent(await getResend().emails.send({
-    from: getTransactionalEmailFrom(),
-    to,
-    subject: "Confirm your Meri Asmita newsletter",
-    text: [
-      "Hello,",
-      "",
-      "Please confirm that you want to receive the Meri Asmita newsletter.",
-      "Open this link to confirm:",
-      confirmUrl,
-      "",
-      "If you did not sign up, you can ignore this email. Nothing else is sent until you confirm.",
-    ].join("\n"),
-    html: renderEmailHtml({
-      title: "Confirm your subscription",
-      paragraphs: ["Please confirm that you want to receive the Meri Asmita newsletter."],
-      cta: { label: "Confirm subscription", url: confirmUrl },
-      footerNotes: ["If you did not sign up, you can ignore this email. Nothing else is sent until you confirm."],
-    }),
-  }));
-}
