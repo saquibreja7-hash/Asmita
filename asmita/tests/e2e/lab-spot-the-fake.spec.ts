@@ -44,7 +44,9 @@ test.describe("spot-the-fake (/lab/spot-the-fake)", () => {
 
     // The manifest loaded: the start button appears.
     const start = page.getByRole("button", { name: "Start the quiz" });
-    await expect(start).toBeVisible();
+    // A cold dev server compiles the page on first visit: give it the budget
+    // the other Lab journeys use.
+    await expect(start).toBeVisible({ timeout: 30_000 });
     await start.click();
 
     for (let round = 1; round <= 10; round++) {

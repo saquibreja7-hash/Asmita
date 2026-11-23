@@ -1908,7 +1908,7 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 
 /* The three brand colours on calm pages: teal, coral, gold, one per card. */
 .issue-tone-teal { --tone-soft: var(--color-teal-mist); --tone-ink: var(--color-brand-teal); --tone-glow: rgba(10, 94, 90, 0.14); }
-.issue-tone-coral { --tone-soft: #ffe2d8; --tone-ink: #b4461f; --tone-glow: rgba(255, 148, 115, 0.22); }
+.issue-tone-coral { --tone-soft: #ffe2d8; --tone-ink: #9c3a14; --tone-glow: rgba(255, 148, 115, 0.22); }
 .issue-tone-gold { --tone-soft: #f6ecc4; --tone-ink: #7d6300; --tone-glow: rgba(236, 218, 152, 0.4); }
 .issue-topic[class*="issue-tone-"] { overflow: hidden; }
 .issue-topic[class*="issue-tone-"]::before {
@@ -2180,7 +2180,7 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 }
 .calm-sub .reading-col > section:first-child { padding-top: clamp(22px, 3vw, 32px); }
 .calm-sub .icon-tile { border-radius: 12px; background: var(--color-teal-mist); color: var(--color-brand-teal); }
-.calm-sub .reading-col section:nth-of-type(3n + 2) .icon-tile { background: #ffe2d8; color: #b4461f; }
+.calm-sub .reading-col section:nth-of-type(3n + 2) .icon-tile { background: #ffe2d8; color: #9c3a14; }
 .calm-sub .reading-col section:nth-of-type(3n + 3) .icon-tile { background: #f6ecc4; color: #7d6300; }
 .calm-sub .next-step {
   border-radius: 16px;
@@ -2237,7 +2237,7 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 .calm-sub .org-rows > li:nth-child(3n + 2) .org-row { --row-glow: rgba(255, 148, 115, 0.2); }
 .calm-sub .org-rows > li:nth-child(3n + 3) .org-row { --row-glow: rgba(236, 218, 152, 0.4); }
 .calm-sub .org-rows > li:nth-child(3n + 1) .org-row-icon:not([class*="tone-"]) { background: var(--color-teal-mist); color: var(--color-brand-teal); }
-.calm-sub .org-rows > li:nth-child(3n + 2) .org-row-icon:not([class*="tone-"]) { background: #ffe2d8; color: #b4461f; }
+.calm-sub .org-rows > li:nth-child(3n + 2) .org-row-icon:not([class*="tone-"]) { background: #ffe2d8; color: #9c3a14; }
 .calm-sub .org-rows > li:nth-child(3n + 3) .org-row-icon:not([class*="tone-"]) { background: #f6ecc4; color: #7d6300; }
 .calm-sub .org-row-icon { border-radius: 12px; }
 .calm-sub a.org-row:hover,
