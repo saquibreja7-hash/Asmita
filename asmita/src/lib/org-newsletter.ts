@@ -6,7 +6,8 @@ import { writeAuditLog } from "@/lib/audit";
 import { csvCell } from "@/lib/csv-cell";
 
 /*
- * Newsletter sign-ups (docs/org/spec.md, WP56), double opt-in. The address
+ * Newsletter sign-ups (docs/org/spec.md, WP56), single opt-in since
+ * 2026-11-23 (sign-ups before then were double opt-in). The address
  * is encrypted at rest; only its sha256 (emailHash) is stored in the clear
  * for dedup. Both the single-use confirm token (7 days) and the
  * per-subscriber unsubscribe token are stored hashed. Newsletter sends go
@@ -85,18 +86,16 @@ export function appBaseUrl() {
 }
 
 /**
- * Sign up, or re-sign-up. The response is the same whether the address is
- * new, pending or already confirmed, so the form can never be used to
- * probe who is on the list. Already-confirmed addresses get no email and
- * no state change.
+ * Sign up, or re-sign-up: one click, no confirmation email (owner decision,
+ * 2026-11-23). The address is on the list as soon as the form is sent. The
+ * response is the same whether the address is new or already on the list,
+ * so the form can never be used to probe who is subscribed.
  */
 export async function subscribeToNewsletter(
   input: Omit<z.infer<typeof newsletterSignupSchema>, "firstName" | "fax"> & { firstName?: string },
 ): Promise<{
   ok: true;
-  /** The confirm token, when a confirmation email is needed. */
-  confirmToken: string | null;
-  /** The per-subscriber unsubscribe token (goes into newsletter emails). */
+  /** The per-subscriber unsubscribe token (goes into newsletter emails), for a new subscriber. */
   unsubscribeToken: string | null;
   email: string;
 }> {
@@ -104,45 +103,52 @@ export async function subscribeToNewsletter(
   const emailHash = hashEmail(email);
   const existing = await findByEmailHash(emailHash);
   if (existing?.status === "CONFIRMED") {
-    return { ok: true, confirmToken: null, unsubscribeToken: null, email };
+    return { ok: true, unsubscribeToken: null, email };
   }
-  const confirmToken = randomBytes(24).toString("hex");
-  const confirmTokenHash = sha256(confirmToken);
   const now = new Date().toISOString();
+  const firstNameEnc = input.firstName ? encryptField(input.firstName) : null;
   if (existing) {
-    // Pending or unsubscribed: a fresh single-use token, clock restarted, and
-    // the first name given this time (unsubscribing cleared the old one).
-    const firstNameEnc = input.firstName ? encryptField(input.firstName) : null;
+    // Pending (an older double opt-in sign-up) or unsubscribed: back on the
+    // list, with the first name given this time (unsubscribing cleared it).
     if (devNoDb()) {
       const current = newsletterSubscribers.find((entry) => entry.emailHash === emailHash);
       if (current) {
-        current.status = "PENDING";
+        current.status = "CONFIRMED";
         current.firstNameEnc = firstNameEnc;
         current.locale = input.locale;
-        current.confirmTokenHash = confirmTokenHash;
+        current.confirmTokenHash = null;
+        current.confirmedAt = now;
+        current.unsubscribedAt = null;
         current.updatedAt = now;
       }
     } else {
       const { db } = await import("@/lib/db");
       await db.newsletterSubscriber.update({
         where: { emailHash },
-        data: { status: "PENDING", firstNameEnc, locale: input.locale, confirmTokenHash, unsubscribedAt: null },
+        data: {
+          status: "CONFIRMED",
+          firstNameEnc,
+          locale: input.locale,
+          confirmTokenHash: null,
+          confirmedAt: new Date(now),
+          unsubscribedAt: null,
+        },
       });
     }
-    return { ok: true, confirmToken, unsubscribeToken: null, email };
+    return { ok: true, unsubscribeToken: null, email };
   }
   const unsubscribeToken = randomBytes(24).toString("hex");
   const record: MemorySubscriber = {
     id: crypto.randomUUID(),
     emailEnc: encryptField(email),
-    firstNameEnc: input.firstName ? encryptField(input.firstName) : null,
+    firstNameEnc,
     emailHash,
     locale: input.locale,
-    status: "PENDING",
-    confirmTokenHash,
+    status: "CONFIRMED",
+    confirmTokenHash: null,
     unsubscribeTokenHash: sha256(unsubscribeToken),
     source: input.source,
-    confirmedAt: null,
+    confirmedAt: now,
     unsubscribedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -154,17 +160,18 @@ export async function subscribeToNewsletter(
     await db.newsletterSubscriber.create({
       data: {
         emailEnc: record.emailEnc,
-        firstNameEnc: record.firstNameEnc ?? null,
+        firstNameEnc,
         emailHash,
         locale: input.locale,
-        status: "PENDING",
-        confirmTokenHash,
+        status: "CONFIRMED",
+        confirmTokenHash: null,
+        confirmedAt: new Date(now),
         unsubscribeTokenHash: record.unsubscribeTokenHash,
         source: input.source,
       },
     });
   }
-  return { ok: true, confirmToken, unsubscribeToken, email };
+  return { ok: true, unsubscribeToken, email };
 }
 
 async function findByEmailHash(emailHash: string): Promise<NewsletterSubscriber | null> {
@@ -174,18 +181,14 @@ async function findByEmailHash(emailHash: string): Promise<NewsletterSubscriber 
   return row ? rowToSubscriber(row) : null;
 }
 
-/** The confirm link in the email. */
-export function newsletterConfirmUrl(confirmToken: string) {
-  return `${appBaseUrl()}/newsletter/confirm?token=${confirmToken}`;
-}
-
 /** The unsubscribe link in every newsletter email. */
 export function newsletterUnsubscribeUrl(unsubscribeToken: string) {
   return `${appBaseUrl()}/newsletter/unsubscribe?token=${unsubscribeToken}`;
 }
 
 /**
- * Confirm a sign-up with the single-use token from the email. Tokens
+ * Confirm an older double opt-in sign-up with the single-use token from its
+ * email (links sent before 2026-11-23 still work). Tokens
  * expire after NEWSLETTER_CONFIRM_TTL_MS; using one clears it.
  */
 export async function confirmNewsletterSubscriber(token: string): Promise<

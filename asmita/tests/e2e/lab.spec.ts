@@ -59,8 +59,8 @@ test.describe("AI Lab, E2", () => {
     // The public page: linked from the footer, aggregates only.
     await page.goto("/lab");
     await expect(page.getByRole("heading", { name: "The experiments" })).toBeVisible();
-    await expect(page.getByText("Services tracked")).toBeVisible();
-    await expect(page.getByText("Aggregate numbers only. We never name or link a service on this page.")).toBeVisible();
+    // The hub never names a tracked service.
+    await expect(page.getByText(serviceName)).toHaveCount(0);
     await expect(page.getByRole("link", { name: "AI Lab" })).toBeVisible();
 
     // WP96 (docs/lab/beta-spec.md): the hub's "Try the beta tools" section —
@@ -72,7 +72,7 @@ test.describe("AI Lab, E2", () => {
       ["Detector panel", "/lab/detectors"],
       ["Photo protection", "/lab/protect"],
       ["Service tracker", "/lab/tracker"],
-      ["Check a message", "/lab/message-check"],
+      ["Sextortion classifier", "/lab/message-check"],
       ["Content Credentials stamp", "/lab/stamp"],
       ["Spot the fake", "/lab/spot-the-fake"],
     ] as const) {

@@ -113,7 +113,7 @@ describe("the how-we-choose page and its Lab gate", () => {
   });
 
   it("carries page metadata", () => {
-    expect(metadata.title).toBe("How we choose tools — Open tools — Asmita AI Lab");
+    expect(metadata.title).toBe("How we choose tools · Open tools · Asmita AI Lab");
     expect((metadata.description ?? "").length).toBeGreaterThan(20);
   });
 

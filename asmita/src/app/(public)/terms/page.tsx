@@ -1,4 +1,5 @@
 ﻿import Link from "next/link";
+import { LabToolHero } from "@/components/lab/LabToolPage";
 import { AppShell } from "@/components/layout/AppShell";
 import { Callout, Fold, ItemCards, NextStep, ReadingLayout, ReadingSection, type TocItem } from "@/components/Reading";
 import { ReadingTime } from "@/components/ReadingTime";
@@ -30,23 +31,18 @@ const title = (id: string) => toc.find((s) => s.id === id)!.title;
 export default function TermsPage() {
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         {/* HERO */}
-        <section className="container page-hero text-center page-hero-split">
-          <div className="mx-auto max-w-2xl">
-            <h1 className="page-title">Terms of use</h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              These Terms set out what you can expect from Asmita, what we
+        <LabToolHero
+          title={`Terms of use`}
+          intro={<p>These Terms set out what you can expect from Asmita, what we
               expect from you, and the legal framework that holds both of
-              us. Written in plain language. Reviewed against Indian law.
-            </p>
-            <p className="muted mt-6 max-w-prose text-sm leading-relaxed">
-              Last updated · 19 November 2026 · Version 0.5 · Draft pending legal
-              review<ReadingTime label="{n} min read" />
-            </p>
-          </div>
-          <Illustration name="page-terms" eager className="page-hero-art" />
-        </section>
+              us. Written in plain language. Reviewed against Indian law.</p>}
+          visual={<Illustration name="page-terms" eager className="issue-hero-art" />}
+        >
+          <p className="issue-meta">Last updated · 19 November 2026 · Version 0.5 · Draft pending legal review<ReadingTime label="{n} min read" /></p>
+        </LabToolHero>
+
 
         <div className="container">
           <div className="hairline" />

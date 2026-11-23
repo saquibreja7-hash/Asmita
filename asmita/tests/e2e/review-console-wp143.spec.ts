@@ -80,8 +80,11 @@ test("a live rule routes a freshly filed link into a custom queue, and the conso
   await expect(linksSection.getByText("Big platforms first")).toBeVisible({ timeout: 30_000 });
   // Rules are born drafts; the owner switches this one Live, which is its
   // second saved version.
-  await linksSection.getByLabel("Status").selectOption("LIVE");
-  await expect(linksSection.getByText("v2")).toBeVisible({ timeout: 30_000 });
+  // Another journey may have left its own rule in this section, so the
+  // controls are reached through this rule's own row.
+  const bigRule = linksSection.getByRole("listitem").filter({ hasText: "Big platforms first" });
+  await bigRule.getByLabel("Status").selectOption("LIVE");
+  await expect(bigRule.getByText("v2")).toBeVisible({ timeout: 30_000 });
 
   // The Test panel: hand-entered values, a dry run. (The label is matched
   // without exact: a wrapping label's text for a select includes the
@@ -150,9 +153,9 @@ test("a live rule routes a freshly filed link into a custom queue, and the conso
   // so the suite leaves routing as it found it (the rule and its versions
   // stay, audited and inspectable, exactly as a disabled rule in production).
   await ownerPage.goto("/admin/review/rules");
-  await linksSection.getByLabel("Status").selectOption("DISABLED");
+  await bigRule.getByLabel("Status").selectOption("DISABLED");
   await expect(linksSection.getByText("Big platforms first")).toBeVisible();
-  await expect(linksSection.getByLabel("Status")).toHaveValue("DISABLED");
+  await expect(bigRule.getByLabel("Status")).toHaveValue("DISABLED");
   await owner.close();
 });
 

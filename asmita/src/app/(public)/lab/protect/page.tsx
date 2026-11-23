@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabCallout, LabSection, LabSteps, LabToolHero, LabToolShell, LabWorkspace } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
@@ -31,48 +30,30 @@ export default async function ProtectPage() {
   const locale = await getLocale();
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="hero" aria-label={t(locale, "lab.eyebrow")}>
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-2xl text-center">
-              <span className="eyebrow">{t(locale, "lab.eyebrow")}</span>
-              <h1 className="page-title mt-5">{t(locale, "lab.protect.title")}</h1>
-              <p className="mt-4">
-                <span className="inline-flex items-center rounded-full border border-[var(--brand)] bg-[var(--brand-soft)] px-3 py-1 text-xs font-semibold tracking-wide text-[var(--brand-strong)]">
-                  {t(locale, "lab.protect.beta")}
-                </span>
-              </p>
-              <p className="font-size-large mx-auto mt-5 max-w-xl text-[var(--ink)]">{t(locale, "lab.protect.intro")}</p>
-              <p className="muted mx-auto mt-4 max-w-xl text-sm leading-[1.7]">{t(locale, "lab.protect.cannotDo")}</p>
-              <p className="mt-6">
-                <Link href="/lab" className="btn btn-secondary">
-                  {t(locale, "lab.protect.back")}
-                </Link>
-              </p>
-            </div>
-          </div>
-        </section>
+    <LabToolShell>
+      <LabToolHero
+        backLabel={t(locale, "lab.protect.back")}
+        badge={t(locale, "lab.protect.beta")}
+        title={t(locale, "lab.protect.title")}
+        intro={
+          <>
+            <p>{t(locale, "lab.protect.intro")}</p>
+            <p className="text-[15px] text-[var(--text)]">{t(locale, "lab.protect.cannotDo")}</p>
+          </>
+        }
+        scene="protect"
+      >
+        <LabCallout icon="lock">{t(locale, "lab.protect.privacy")}</LabCallout>
+      </LabToolHero>
 
-        {/* PANEL */}
-        <section className="section-pad" aria-label={t(locale, "lab.protect.title")}>
-          <div className="container">
-            <ProtectPanel locale={locale} />
-          </div>
-        </section>
+      <LabWorkspace label={t(locale, "lab.protect.title")}>
+        <ProtectPanel locale={locale} />
+      </LabWorkspace>
 
-        {/* HOW THIS WORKS */}
-        <section className="zone-white section-pad" aria-labelledby="protect-explainer">
-          <div className="container">
-            <h2 id="protect-explainer" className="section-title">{t(locale, "lab.protect.explainer.title")}</h2>
-            <p className="mx-auto mt-5 max-w-2xl text-[16px] leading-[1.7] text-[var(--text)]">
-              {t(locale, "lab.protect.explainer.body")}
-            </p>
-            <p className="muted mx-auto mt-6 max-w-2xl text-sm leading-[1.7]">{t(locale, "lab.protect.privacy")}</p>
-          </div>
-        </section>
-      </div>
-    </AppShell>
+      {/* HOW THIS WORKS */}
+      <LabSection id="protect-explainer" index="01" title={t(locale, "lab.protect.explainer.title")} narrow>
+        <LabSteps ordered={false} layout="stack" steps={[<p key="body">{t(locale, "lab.protect.explainer.body")}</p>]} />
+      </LabSection>
+    </LabToolShell>
   );
 }

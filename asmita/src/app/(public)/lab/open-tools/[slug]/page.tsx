@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LabScene } from "@/components/lab/LabScene";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
@@ -43,9 +44,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const tool = getOpenTool(slug);
-  if (!tool) return { title: "Open tools — Asmita AI Lab" };
+  if (!tool) return { title: "Open tools · Asmita AI Lab" };
   return {
-    title: `${tool.name} — Open tools — Asmita AI Lab`,
+    title: `${tool.name} · Open tools · Asmita AI Lab`,
     description: tool.summary.en,
   };
 }
@@ -174,10 +175,11 @@ export default async function OpenToolPage({
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme lab-sub">
         {/* HEADER: notice (Hindi only), breadcrumb, name, maintainer, chips */}
         <header className="ot-tool-head">
-          <div className="container">
+          <div className="container lab-detail-head">
+            <LabScene kind="open-tools" className="lab-detail-scene" />
             {locale === "hi" && (
               <p className="ot-en-note">{t(locale, "lab.openTools.tool.englishNotice")}</p>
             )}

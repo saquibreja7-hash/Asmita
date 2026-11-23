@@ -1,4 +1,5 @@
 import { Illustration } from "@/components/Illustration";
+import { LabToolHero } from "@/components/lab/LabToolPage";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
@@ -30,21 +31,14 @@ export default async function HowItWorksPage() {
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         {/* HERO */}
-        <section className="container page-hero text-center page-hero-split">
-          <div className="mx-auto max-w-2xl">
-            <h1 className="page-title">
-              {t(locale, "hiw.hero.title.1")}{" "}
-              <em className="not-italic text-gradient">{t(locale, "hiw.hero.title.2")}</em>{" "}
-              {t(locale, "hiw.hero.title.3")}
-            </h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "hiw.hero.sub")}
-            </p>
-          </div>
-          <Illustration name="page-how-it-works" eager className="page-hero-art" />
-        </section>
+        <LabToolHero
+          title={`${t(locale, "hiw.hero.title.1")} ${t(locale, "hiw.hero.title.2")} ${t(locale, "hiw.hero.title.3")}`}
+          intro={<p>{t(locale, "hiw.hero.sub")}</p>}
+          visual={<Illustration name="page-how-it-works" eager className="issue-hero-art" />}
+        />
+
 
         <div className="container">
           <div className="hairline" />
@@ -151,16 +145,12 @@ export default async function HowItWorksPage() {
         </div>
 
         {/* CLOSING */}
-        <section className="zone-sunset">
-          <div className="zone-sunset-content container page-hero text-center">
-          <div className="mx-auto max-w-2xl">
-            <h2 className="section-title">
-              {t(locale, "hiw.closing.title")}
-            </h2>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-              {t(locale, "hiw.closing.body")}
-            </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-3">
+        <section className="lab-sub-section">
+          <div className="container">
+            <div className="issue-close">
+              <h2 className="lab-h2">{t(locale, "hiw.closing.title")}</h2>
+              <p className="issue-close-body">{t(locale, "hiw.closing.body")}</p>
+              <div className="mt-10 flex flex-wrap gap-3">
               <Link className="btn btn-primary" href="/start">
                 {t(locale, "hiw.closing.cta1")}
               </Link>
@@ -168,7 +158,7 @@ export default async function HowItWorksPage() {
                 {t(locale, "hiw.closing.cta2")}
               </Link>
             </div>
-          </div>
+            </div>
           </div>
         </section>
       </div>

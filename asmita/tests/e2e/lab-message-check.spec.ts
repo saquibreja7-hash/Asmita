@@ -85,7 +85,7 @@ test.describe("message check (/lab/message-check)", () => {
     ).toBeVisible();
 
     // No AI summary exists without the key: the summary block does not render.
-    await expect(page.getByText("In plain words")).toBeHidden();
+    await expect(page.getByText("In plain words", { exact: true })).toBeHidden();
 
     // The links and numbers in the message were data, never destinations:
     // nothing was fetched from them, and nothing reached Sarvam.
@@ -128,7 +128,7 @@ test.describe("message check (/lab/message-check)", () => {
   test("the page and the results work in Hindi too", async ({ page }) => {
     await page.context().addCookies([{ name: "asmita_lang", value: "hi", url: "http://127.0.0.1:3001" }]);
     await page.goto("/lab/message-check");
-    await expect(page.getByRole("heading", { name: "धमकी भरे संदेश की जाँच करें" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "सेक्सटॉर्शन क्लासिफ़ायर", level: 1 })).toBeVisible();
     await expect(page.getByRole("heading", { name: "अभी क्या करें" })).toBeVisible();
 
     await page.getByLabel("आपको मिला संदेश").fill(THREAT);

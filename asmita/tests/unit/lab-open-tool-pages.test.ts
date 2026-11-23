@@ -265,17 +265,17 @@ describe("the Hindi render of a tool page", () => {
 });
 
 describe("the tool page metadata", () => {
-  it('titles every tool "{name} — Open tools — Asmita AI Lab" and describes it with summary.en', async () => {
+  it('titles every tool "{name} · Open tools · Asmita AI Lab" and describes it with summary.en', async () => {
     for (const tool of OPEN_TOOLS) {
       const metadata = await generateMetadata({ params: Promise.resolve({ slug: tool.slug }) });
-      expect(metadata.title, tool.slug).toBe(`${tool.name} — Open tools — Asmita AI Lab`);
+      expect(metadata.title, tool.slug).toBe(`${tool.name} · Open tools · Asmita AI Lab`);
       expect(metadata.description, tool.slug).toBe(tool.summary.en);
     }
   });
 
   it("falls back for an unknown slug", async () => {
     const metadata = await generateMetadata({ params: Promise.resolve({ slug: "nope" }) });
-    expect(metadata.title).toBe("Open tools — Asmita AI Lab");
+    expect(metadata.title).toBe("Open tools · Asmita AI Lab");
   });
 });
 

@@ -1,7 +1,9 @@
 import { QuickExit } from "@/components/QuickExit";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabSection, LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
+import { Icon, type IconName } from "@/components/Icon";
+import { BRAND_TONES } from "@/components/IssueTopicCards";
 import { getLocale } from "@/lib/get-locale";
 
 /*
@@ -74,7 +76,7 @@ const steps = [
   },
 ] as const;
 
-const tools = [
+const TOOLS = [
   {
     tag: "Report",
     title: "File a complaint",
@@ -97,6 +99,9 @@ const tools = [
     cta: "Find the right help",
   },
 ] as const;
+
+const SCENARIO_ICONS: IconName[] = ["eyeOff", "alert", "lock", "scan", "overlap", "shieldCheck"];
+const TOOL_ICONS: IconName[] = ["notice", "scan", "shieldCheck"];
 
 const hindi = {
   scenarios: [
@@ -123,235 +128,229 @@ const hindi = {
 export default async function GetHelpPage() {
   const locale = await getLocale();
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
+  const tools = TOOLS.map((tool, i) => ({ ...tool, ...(locale === "hi" ? hindi.tools[i] : {}) }));
   return (
-    <AppShell>
+    <LabToolShell variant="calm">
       <QuickExit locale={locale} enableIdle={false} />
-      <div className="page-canvas">
-        {/* HERO + safety first */}
-        <section className="hero" aria-label={say("Get help", "मदद लें")}>
-          <div className="hero-content container py-8 md:py-12">
-            <div className="mx-auto max-w-3xl text-center">
-              <h1 className="page-title">
-                {say("Get help with image-based abuse", "तस्वीरों के ज़रिए हुए उत्पीड़न में मदद लें")}
-              </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
-                {say(
-                  "Free and confidential. Pick the situation that fits, or follow the four steps below. You can go at your own pace.",
-                  "मदद नि:शुल्क और गोपनीय है। अपनी स्थिति चुनें या नीचे दिए चार चरण देखें। अपनी गति से आगे बढ़ें।",
-                )}
-              </p>
-            </div>
-
-            <div className="mx-auto mt-6 flex max-w-3xl flex-wrap justify-center gap-3">
-              <Link className="btn btn-primary btn-arrow" href="/start">{say("File a complaint", "शिकायत दर्ज करें")}</Link>
-              <Link className="btn btn-secondary" href="/minor-support">{say("Under-18 help", "कम उम्र में मदद")}</Link>
-            </div>
-
-            {/* Emergency strip — safety before instructions */}
-            <div className="mx-auto mt-6 max-w-3xl rounded-[var(--radius-box)] surface-card p-5">
-              <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--ink)]">
-                {say("If you need urgent help", "अगर तुरंत मदद चाहिए")}
-              </p>
-              <ul className="mt-4 grid gap-3 text-pretty sm:grid-cols-2">
-                <li className="text-[15px] leading-[1.5] text-[var(--text)]">
-                  <strong>{say("In immediate danger?", "तुरंत खतरा है?")}</strong> {say("Call", "कॉल करें")}{" "}
-                  <a className="text-link" href="tel:112">112</a>.
-                </li>
-                <li className="text-[15px] leading-[1.5] text-[var(--text)]">
-                  <strong>{say("Women’s helpline:", "महिला हेल्पलाइन:")}</strong>{" "}
-                  <a className="text-link" href="tel:181">181</a>. {say("If unavailable, call 112.", "नंबर उपलब्ध न हो तो 112 पर कॉल करें।")}
-                </li>
-                <li className="text-[15px] leading-[1.5] text-[var(--text)]">
-                  <strong>{say("Under 18:", "18 साल से कम:")}</strong> {say("Childline", "बाल हेल्पलाइन")}{" "}
-                  <a className="text-link" href="tel:1098">1098</a>.
-                </li>
-                <li className="text-[15px] leading-[1.5] text-[var(--text)]">
-                  <strong>{say("Report cybercrime:", "साइबर अपराध रिपोर्ट करें:")}</strong>{" "}
-                  <a className="text-link" href="https://cybercrime.gov.in" target="_blank" rel="noopener noreferrer">cybercrime.gov.in</a>{" "}
-                  {say("or", "या")} <a className="text-link" href="tel:1930">1930</a>.
-                </li>
-              </ul>
-            </div>
+      <LabToolHero
+        badge={say("Free and confidential", "मुफ़्त और गोपनीय")}
+        title={say("Get help with image-based abuse", "तस्वीरों के ज़रिए हुए उत्पीड़न में मदद लें")}
+        intro={
+          <p>
+            {say(
+              "Free and confidential. Pick the situation that fits, or follow the four steps below. You can go at your own pace.",
+              "मदद नि:शुल्क और गोपनीय है। अपनी स्थिति चुनें या नीचे दिए चार चरण देखें। अपनी गति से आगे बढ़ें।",
+            )}
+          </p>
+        }
+        visual={
+          <div className="help-urgent">
+            <p className="help-urgent-title">
+              <Icon name="alert" size={18} /> {say("If you need urgent help", "अगर तुरंत मदद चाहिए")}
+            </p>
+            <ul className="help-urgent-list" role="list">
+              <li className="issue-tone-coral">
+                <span>{say("In immediate danger?", "तुरंत खतरा है?")}</span>
+                <a href="tel:112">112</a>
+              </li>
+              <li className="issue-tone-teal">
+                <span>
+                  {say("Women’s helpline", "महिला हेल्पलाइन")}
+                  <small>{say("If unavailable, call 112.", "नंबर उपलब्ध न हो तो 112 पर कॉल करें।")}</small>
+                </span>
+                <a href="tel:181">181</a>
+              </li>
+              <li className="issue-tone-gold">
+                <span>{say("Under 18: Childline", "18 साल से कम: बाल हेल्पलाइन")}</span>
+                <a href="tel:1098">1098</a>
+              </li>
+              <li className="issue-tone-teal">
+                <span>
+                  {say("Report cybercrime", "साइबर अपराध रिपोर्ट करें")}
+                  <small>
+                    <a className="text-link" href="https://cybercrime.gov.in" target="_blank" rel="noopener noreferrer">
+                      cybercrime.gov.in
+                    </a>
+                  </small>
+                </span>
+                <a href="tel:1930">1930</a>
+              </li>
+            </ul>
           </div>
-        </section>
+        }
+      >
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link className="btn btn-primary btn-arrow !m-0" href="/start">
+            {say("File a complaint", "शिकायत दर्ज करें")}
+          </Link>
+          <Link className="btn btn-secondary !m-0" href="/minor-support">
+            {say("Under-18 help", "कम उम्र में मदद")}
+          </Link>
+        </div>
+      </LabToolHero>
 
-        {/* SCENARIOS — survivor voice */}
-        <section className="zone-white section-pad" aria-labelledby="scenarios-heading">
-          <div className="container">
-            <div className="mx-auto max-w-5xl">
-              <h2
-                id="scenarios-heading"
-                className="section-title"
-              >
-                {say("Start with your situation", "अपनी स्थिति से शुरू करें")}
-              </h2>
-              <p className="mt-4 max-w-2xl text-lg leading-[1.6] text-[var(--text)]">
-                {say(
-                  "Whatever is happening, there is a path. Choose the one that sounds closest to yours.",
-                  "जो भी हुआ है, मदद का रास्ता है। अपनी स्थिति के सबसे करीब विकल्प चुनें।",
-                )}
-              </p>
-              <ul className="mt-6 divide-y divide-[var(--line)] border-y border-[var(--line)]">
-                {scenarios.map((scenario, i) => (
-                  <li key={scenario.title} className="py-4">
-                    <details className="faq-item">
-                      <summary>{locale === "hi" ? hindi.scenarios[i].title : scenario.title}</summary>
-                      <p className="max-w-prose text-[var(--text)]">
-                        {locale === "hi" ? hindi.scenarios[i].action : scenario.action}
-                      </p>
-                      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3">
-                        <Link className="text-link" href={scenario.href}>
-                          {scenario.href === "/minor-support" ? say("Get under-18 support", "कम उम्र में मदद लें") : say("File a complaint", "शिकायत दर्ज करें")}
-                        </Link>
-                        {i === 3 && <a className="text-link" href="/check-image">{say("Check the image if you want", "चाहें तो तस्वीर जाँचें")}</a>}
-                      </div>
-                    </details>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* FOUR-STEP SPINE */}
-        <section className="transform-section" aria-labelledby="steps-heading">
-          <div className="transform-content container section-pad">
-            <div className="mx-auto max-w-3xl text-center">
-              <h2
-                id="steps-heading"
-                className="section-title mt-4"
-              >
-                {say("What to do, step by step", "एक-एक चरण में क्या करें")}
-              </h2>
-              <p className="mt-4 text-lg leading-[1.6] text-[var(--text)]">
-                {say(
-                  "The same four steps work for a shared image, a threat, or blackmail. Do what you can, in order.",
-                  "तस्वीर साझा होने, धमकी या ब्लैकमेल की स्थिति में ये चरण मदद कर सकते हैं। जितना संभव हो, क्रम से करें।",
-                )}
-              </p>
-            </div>
-            <ol className="mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-2">
-              {steps.map((s, i) => (
-                <li
-                  key={s.n}
-                  className="rounded-[var(--radius-box)] surface-card p-6"
-                >
-                  <span className="step-badge">
-                    {s.n}
+      {/* SCENARIOS: survivor voice */}
+      <LabSection
+        id="scenarios-heading"
+        index="01"
+        title={say("Start with your situation", "अपनी स्थिति से शुरू करें")}
+        lede={
+          <p>
+            {say(
+              "Whatever is happening, there is a path. Choose the one that sounds closest to yours.",
+              "जो भी हुआ है, मदद का रास्ता है। अपनी स्थिति के सबसे करीब विकल्प चुनें।",
+            )}
+          </p>
+        }
+      >
+        <ul className="help-scenarios" role="list">
+          {scenarios.map((scenario, i) => (
+            <li key={scenario.title} className={`help-scenario issue-tone-${BRAND_TONES[i % BRAND_TONES.length]}`}>
+              <details>
+                <summary>
+                  <span className="issue-topic-icon" aria-hidden="true">
+                    <Icon name={SCENARIO_ICONS[i]} size={20} />
                   </span>
-                  <h3 className="mt-2 text-[18px] font-medium text-[var(--ink)]">
-                    {locale === "hi" ? hindi.steps[i].title : s.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-[1.65] text-[var(--text)]">
-                    {locale === "hi" ? hindi.steps[i].body : s.body}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
-        {/* TOOLS */}
-        <section className="zone-white section-pad" aria-labelledby="tools-heading">
-          <div className="container">
-            <div className="mx-auto max-w-5xl">
-              <h2
-                id="tools-heading"
-                className="section-title"
-              >
-                {say("The tools you can use now", "अभी उपलब्ध साधन")}
-              </h2>
-              <div className="mt-10 grid gap-8 md:grid-cols-3">
-                {tools.map((tool, i) => (
-                  <div key={tool.title} className="flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 shadow-[var(--shadow-sm)]">
-                    <h3 className="mt-3 text-[19px] font-medium text-[var(--ink)]">
-                      {locale === "hi" ? hindi.tools[i].title : tool.title}
-                    </h3>
-                    <p className="mt-3 flex-1 text-sm leading-[1.65] text-[var(--text-muted)]">
-                      {locale === "hi" ? hindi.tools[i].body : tool.body}
-                    </p>
-                    <div className="mt-6">
-                      {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
-                      {tool.href === "/check-image" ? (
-                        <a href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
-                          {locale === "hi" ? hindi.tools[i].cta : tool.cta}
-                        </a>
-                      ) : (
-                        <Link href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
-                          {locale === "hi" ? hindi.tools[i].cta : tool.cta}
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* HONEST OUTCOMES */}
-        <section className="zone-white section-pad !pt-0" aria-labelledby="honest-heading">
-          <div className="container">
-            <div className="mx-auto max-w-5xl">
-              <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--surface-muted)] p-8 md:p-12">
-                <h2
-                  id="honest-heading"
-                  className="section-title"
-                >
-                  {say("What a takedown can and cannot do", "हटाने की कार्रवाई से क्या हो सकता है और क्या नहीं")}
-                </h2>
-                <div className="mt-6 grid gap-8 md:grid-cols-2">
-                  <div>
-                    <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--success)]">
-                      {say("What it can do", "क्या संभव है")}
-                    </p>
-                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-pretty text-[var(--text)]">
-                      <li>{say("Get content removed from platforms that respond.", "कार्रवाई करने वाले प्लेटफ़ॉर्म से सामग्री हटवाई जा सकती है।")}</li>
-                      <li>{say("Ask search engines to stop showing it in results.", "खोज परिणामों से सामग्री हटाने का अनुरोध किया जा सकता है।")}</li>
-                      <li>{say("Track each reported link and submit a new link if content reappears.", "हर रिपोर्ट किए लिंक की स्थिति देखें; सामग्री दोबारा दिखे तो नया लिंक दें।")}</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--warning)]">
-                      {say("What it cannot do", "क्या नहीं हो सकता")}
-                    </p>
-                    <ul className="mt-3 space-y-2 text-[15px] leading-[1.6] text-pretty text-[var(--text)]">
-                      <li>{say("Erase content from the whole internet or private devices.", "पूरे इंटरनेट या निजी डिवाइस से सामग्री मिटाने की गारंटी नहीं है।")}</li>
-                      <li>{say("Force a platform that ignores the law to act instantly.", "किसी प्लेटफ़ॉर्म से तुरंत कार्रवाई करवाने की गारंटी नहीं है।")}</li>
-                      <li>{say("Promise a result. We tell you exactly where things stand.", "किसी परिणाम का वादा नहीं है; हम स्थिति साफ़ बताते हैं।")}</li>
-                    </ul>
+                  <span className="help-scenario-q">{locale === "hi" ? hindi.scenarios[i].title : scenario.title}</span>
+                  <span className="help-scenario-chev" aria-hidden="true">
+                    +
+                  </span>
+                </summary>
+                <div className="help-scenario-a">
+                  <p>{locale === "hi" ? hindi.scenarios[i].action : scenario.action}</p>
+                  <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3">
+                    <Link className="text-link" href={scenario.href}>
+                      {scenario.href === "/minor-support"
+                        ? say("Get under-18 support", "कम उम्र में मदद लें")
+                        : say("File a complaint", "शिकायत दर्ज करें")}
+                    </Link>
+                    {i === 3 && (
+                      <a className="text-link" href="/check-image">
+                        {say("Check the image if you want", "चाहें तो तस्वीर जाँचें")}
+                      </a>
+                    )}
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </section>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </LabSection>
 
-        {/* CLOSING */}
-        <section className="zone-sunset" aria-label={say("Get started", "शुरू करें")}>
-          <div className="zone-sunset-content container section-pad text-center">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="section-title">
-                {say("You do not have to deal with this alone.", "आपको इसका सामना अकेले नहीं करना है।")}
-              </h2>
-              <p className="mx-auto mt-5 max-w-lg text-lg leading-[1.65] text-[var(--text)]">
-                {say(
-                  "Start when you are ready. Every step is confidential, and you stay in control the whole way.",
-                  "जब तैयार हों, तब शुरू करें। हर चरण गोपनीय है और फ़ैसला आपके हाथ में रहता है।",
-                )}
-              </p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-primary btn-arrow !m-0" href="/start">
-                  {say("File a complaint", "शिकायत दर्ज करें")}
-                </Link>
-                <Link className="btn btn-secondary btn-arrow !m-0" href="/resources">
-                  {say("Browse resources", "सहायता सामग्री देखें")}
-                </Link>
+      {/* FOUR-STEP SPINE */}
+      <LabSection
+        id="steps-heading"
+        index="02"
+        title={say("What to do, step by step", "एक-एक चरण में क्या करें")}
+        lede={
+          <p>
+            {say(
+              "The same four steps work for a shared image, a threat, or blackmail. Do what you can, in order.",
+              "तस्वीर साझा होने, धमकी या ब्लैकमेल की स्थिति में ये चरण मदद कर सकते हैं। जितना संभव हो, क्रम से करें।",
+            )}
+          </p>
+        }
+      >
+        <ol className="issue-points" role="list">
+          {steps.map((step, i) => (
+            <li key={step.n} className={`issue-point issue-tone-${BRAND_TONES[i % BRAND_TONES.length]}`}>
+              <span className="issue-point-n" aria-hidden="true">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <h3 className="issue-point-title">{locale === "hi" ? hindi.steps[i].title : step.title}</h3>
+              <p className="issue-point-body">{locale === "hi" ? hindi.steps[i].body : step.body}</p>
+            </li>
+          ))}
+        </ol>
+      </LabSection>
+
+      {/* TOOLS */}
+      <LabSection id="tools-heading" index="03" title={say("The tools you can use now", "अभी उपलब्ध साधन")}>
+        <ul className="issue-topics" role="list">
+          {tools.map((tool, i) => (
+            <li key={tool.href} className={`issue-topic issue-tone-${BRAND_TONES[i % BRAND_TONES.length]}`}>
+              <div className="issue-topic-top">
+                <span className="issue-topic-icon" aria-hidden="true">
+                  <Icon name={TOOL_ICONS[i]} size={22} />
+                </span>
+                <span className="issue-topic-n">{tool.tag}</span>
               </div>
+              <h3 className="issue-topic-title">{tool.title}</h3>
+              <p className="issue-topic-short">{tool.body}</p>
+              <div className="mt-6">
+                {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
+                {tool.href === "/check-image" ? (
+                  <a href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                    {tool.cta}
+                  </a>
+                ) : (
+                  <Link href={tool.href} className="btn btn-primary btn-arrow !m-0 !min-h-[44px] !text-[15px]">
+                    {tool.cta}
+                  </Link>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </LabSection>
+
+      {/* HONEST OUTCOMES */}
+      <LabSection
+        id="honest-heading"
+        index="04"
+        title={say("What a takedown can and cannot do", "हटाने की कार्रवाई से क्या हो सकता है और क्या नहीं")}
+      >
+        <div className="help-honest">
+          <div className="help-honest-col issue-tone-teal">
+            <p className="help-honest-label">
+              <Icon name="check" size={18} /> {say("What it can do", "क्या संभव है")}
+            </p>
+            <ul>
+              <li>{say("Get content removed from platforms that respond.", "कार्रवाई करने वाले प्लेटफ़ॉर्म से सामग्री हटवाई जा सकती है।")}</li>
+              <li>{say("Ask search engines to stop showing it in results.", "खोज परिणामों से सामग्री हटाने का अनुरोध किया जा सकता है।")}</li>
+              <li>
+                {say(
+                  "Track each reported link and submit a new link if content reappears.",
+                  "हर रिपोर्ट किए लिंक की स्थिति देखें; सामग्री दोबारा दिखे तो नया लिंक दें।",
+                )}
+              </li>
+            </ul>
+          </div>
+          <div className="help-honest-col issue-tone-coral">
+            <p className="help-honest-label">
+              <Icon name="x" size={18} /> {say("What it cannot do", "क्या नहीं हो सकता")}
+            </p>
+            <ul>
+              <li>{say("Erase content from the whole internet or private devices.", "पूरे इंटरनेट या निजी डिवाइस से सामग्री मिटाने की गारंटी नहीं है।")}</li>
+              <li>{say("Force a platform that ignores the law to act instantly.", "किसी प्लेटफ़ॉर्म से तुरंत कार्रवाई करवाने की गारंटी नहीं है।")}</li>
+              <li>{say("Promise a result. We tell you exactly where things stand.", "किसी परिणाम का वादा नहीं है; हम स्थिति साफ़ बताते हैं।")}</li>
+            </ul>
+          </div>
+        </div>
+      </LabSection>
+
+      {/* CLOSING */}
+      <section className="lab-sub-section" aria-label={say("Get started", "शुरू करें")}>
+        <div className="container">
+          <div className="issue-close">
+            <h2 className="lab-h2">{say("You do not have to deal with this alone.", "आपको इसका सामना अकेले नहीं करना है।")}</h2>
+            <p className="issue-close-body">
+              {say(
+                "Start when you are ready. Every step is confidential, and you stay in control the whole way.",
+                "जब तैयार हों, तब शुरू करें। हर चरण गोपनीय है और फ़ैसला आपके हाथ में रहता है।",
+              )}
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link className="btn btn-primary btn-arrow !m-0" href="/start">
+                {say("File a complaint", "शिकायत दर्ज करें")}
+              </Link>
+              <Link className="btn btn-secondary btn-arrow !m-0" href="/resources">
+                {say("Browse resources", "सहायता सामग्री देखें")}
+              </Link>
             </div>
           </div>
-        </section>
-      </div>
-    </AppShell>
+        </div>
+      </section>
+    </LabToolShell>
   );
 }

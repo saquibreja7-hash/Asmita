@@ -4,8 +4,8 @@ import { adminContext } from "./support/admin";
 /*
  * Organization pages, WP56 (docs/org/spec.md): the get-involved hub in both
  * languages, the volunteer form, an admin publishing a news post and opening
- * a job through the real admin APIs, and the newsletter 'check your email'
- * state. The full run happens in a separate verify step with a fresh
+ * a job through the real admin APIs, and the one-click newsletter
+ * sign-up. The full run happens in a separate verify step with a fresh
  * database; everything here uses synthetic data only.
  */
 
@@ -98,11 +98,11 @@ test("an admin opens a job and it appears on /careers", async ({ browser, page }
   );
 });
 
-test("a newsletter signup from the footer shows the check-your-email state", async ({ page }) => {
+test("a newsletter signup from the footer is done in one click", async ({ page }) => {
   await page.goto("/get-involved");
   const footer = page.getByRole("contentinfo");
   await footer.getByLabel("First name").fill("Asha");
   await footer.getByLabel("Email for the newsletter").fill("reader@example.invalid");
   await footer.getByRole("button", { name: "Sign up" }).click();
-  await expect(footer.getByText("Check your email to confirm.")).toBeVisible({ timeout: 20_000 });
+  await expect(footer.getByText("You are on the list. Thank you.")).toBeVisible({ timeout: 20_000 });
 });

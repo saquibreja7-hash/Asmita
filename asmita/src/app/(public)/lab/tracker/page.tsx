@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabCallout, LabSection, LabSteps, LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t, type MessageKey } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
@@ -12,7 +12,7 @@ import { LAB_CHOKEPOINT_KINDS, type LabChokepointKind, type LabServiceStatus } f
 export const metadata: Metadata = {
   title: "Service tracker",
   description:
-    "An Asmita AI Lab page: aggregate numbers on the services that make or spread AI-made intimate images — how many are tracked, how many were taken down, and how fast reports work. No service is ever named.",
+    "An Asmita AI Lab page: aggregate numbers on the services that make or spread AI-made intimate images: how many are tracked, how many were taken down, and how fast reports work. No service is ever named.",
 };
 
 export const dynamic = "force-dynamic";
@@ -61,34 +61,22 @@ export default async function TrackerPage() {
   const total = numbers.servicesTracked;
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="hero" aria-label={t(locale, "lab.eyebrow")}>
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-2xl text-center">
-              <span className="eyebrow">{t(locale, "lab.eyebrow")}</span>
-              <h1 className="page-title mt-5">{t(locale, "lab.tracker.title")}</h1>
-              <p className="mt-4">
-                <span className="inline-flex items-center rounded-full border border-[var(--brand)] bg-[var(--brand-soft)] px-3 py-1 text-xs font-semibold tracking-wide text-[var(--brand-strong)]">
-                  {t(locale, "lab.tracker.beta")}
-                </span>
-              </p>
-              <p className="font-size-large mx-auto mt-5 max-w-xl text-[var(--ink)]">{t(locale, "lab.tracker.intro")}</p>
-              <p className="muted mx-auto mt-4 max-w-xl text-sm leading-[1.7]">{t(locale, "lab.tracker.cannotDo")}</p>
-              <p className="mt-6">
-                <Link href="/lab" className="btn btn-secondary">
-                  {t(locale, "lab.tracker.back")}
-                </Link>
-              </p>
-            </div>
-          </div>
-        </section>
+    <LabToolShell>
+      <LabToolHero
+        backLabel={t(locale, "lab.tracker.back")}
+        badge={t(locale, "lab.tracker.beta")}
+        title={t(locale, "lab.tracker.title")}
+        intro={
+          <>
+            <p>{t(locale, "lab.tracker.intro")}</p>
+            <p className="text-[15px] text-[var(--text)]">{t(locale, "lab.tracker.cannotDo")}</p>
+          </>
+        }
+        scene="tracker"
+      />
 
         {/* NUMBERS */}
-        <section className="section-pad" aria-labelledby="tracker-numbers">
-          <div className="container">
-            <h2 id="tracker-numbers" className="section-title">{t(locale, "lab.tracker.numbers.title")}</h2>
+        <LabSection id="tracker-numbers" index="01" title={t(locale, "lab.tracker.numbers.title")}>
 
             {!hasData ? (
               // The honest empty state: no data has been published yet, so no
@@ -102,20 +90,20 @@ export default async function TrackerPage() {
               </div>
             ) : (
               <>
-                <div className="mx-auto mt-8 grid max-w-4xl gap-6 sm:grid-cols-3">
-                  <div className="card text-center">
-                    <p className="text-3xl font-medium tabular-nums">{numbers.servicesTracked}</p>
-                    <p className="mt-1 text-sm">{t(locale, "lab.tracker.stat.services")}</p>
+                <div className="lab-stats">
+                  <div className="lab-stat">
+                    <p className="lab-stat-n">{numbers.servicesTracked}</p>
+                    <p className="lab-stat-label">{t(locale, "lab.tracker.stat.services")}</p>
                   </div>
-                  <div className="card text-center">
-                    <p className="text-3xl font-medium tabular-nums">{numbers.servicesTakenDown}</p>
-                    <p className="mt-1 text-sm">{t(locale, "lab.tracker.stat.takenDown")}</p>
+                  <div className="lab-stat">
+                    <p className="lab-stat-n">{numbers.servicesTakenDown}</p>
+                    <p className="lab-stat-label">{t(locale, "lab.tracker.stat.takenDown")}</p>
                   </div>
-                  <div className="card text-center">
-                    <p className="text-3xl font-medium tabular-nums">
-                      {numbers.medianDaysToDown === null ? "—" : numbers.medianDaysToDown.toFixed(1)}
+                  <div className="lab-stat">
+                    <p className="lab-stat-n">
+                      {numbers.medianDaysToDown === null ? "-" : numbers.medianDaysToDown.toFixed(1)}
                     </p>
-                    <p className="mt-1 text-sm">{t(locale, "lab.tracker.stat.median")}</p>
+                    <p className="lab-stat-label">{t(locale, "lab.tracker.stat.median")}</p>
                   </div>
                 </div>
 
@@ -173,7 +161,7 @@ export default async function TrackerPage() {
                               <td className="px-4 py-3 text-right tabular-nums">{kindNumbers.reported}</td>
                               <td className="px-4 py-3 text-right tabular-nums">{kindNumbers.down}</td>
                               <td className="px-4 py-3 text-right tabular-nums">
-                                {kindNumbers.medianDays === null ? "—" : kindNumbers.medianDays.toFixed(1)}
+                                {kindNumbers.medianDays === null ? "-" : kindNumbers.medianDays.toFixed(1)}
                               </td>
                             </tr>
                           );
@@ -247,36 +235,19 @@ export default async function TrackerPage() {
               </>
             )}
 
-            <p className="muted mx-auto mt-8 max-w-2xl text-center text-sm leading-[1.7]">{t(locale, "lab.tracker.names")}</p>
-          </div>
-        </section>
+            <LabCallout icon="eyeOff">{t(locale, "lab.tracker.names")}</LabCallout>
+        </LabSection>
 
         {/* METHOD, in plain words */}
-        <section className="zone-white section-pad" aria-labelledby="tracker-method">
-          <div className="container">
-            <h2 id="tracker-method" className="section-title">{t(locale, "lab.tracker.method.title")}</h2>
-            <div className="mx-auto mt-8 max-w-2xl space-y-8">
-              <div>
-                <h3 className="font-semibold">{t(locale, "lab.tracker.method.down.title")}</h3>
-                <p className="mt-2 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.tracker.method.down.body")}</p>
+        <LabSection id="tracker-method" index="02" title={t(locale, "lab.tracker.method.title")}>
+          <LabSteps
+            steps={(["down", "liveness", "median", "kinds", "depends"] as const).map((part) => (
+              <div key={part}>
+                <h3 className="text-[17px] font-semibold leading-[1.3] text-[var(--ink)]">{t(locale, `lab.tracker.method.${part}.title`)}</h3>
+                <p className="mt-2">{t(locale, `lab.tracker.method.${part}.body`)}</p>
               </div>
-              <div>
-                <h3 className="font-semibold">{t(locale, "lab.tracker.method.liveness.title")}</h3>
-                <p className="mt-2 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.tracker.method.liveness.body")}</p>
-              </div>
-              <div>
-                <h3 className="font-semibold">{t(locale, "lab.tracker.method.median.title")}</h3>
-                <p className="mt-2 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.tracker.method.median.body")}</p>
-              </div>
-              <div>
-                <h3 className="font-semibold">{t(locale, "lab.tracker.method.kinds.title")}</h3>
-                <p className="mt-2 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.tracker.method.kinds.body")}</p>
-              </div>
-              <div>
-                <h3 className="font-semibold">{t(locale, "lab.tracker.method.depends.title")}</h3>
-                <p className="mt-2 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.tracker.method.depends.body")}</p>
-              </div>
-            </div>
+            ))}
+          />
 
             {/* WP115: the research this work follows. These are the only
                 external links on the page, and the e2e journey checks
@@ -298,9 +269,7 @@ export default async function TrackerPage() {
                 <span className="cta-arrow" aria-hidden>→</span>
               </Link>
             </p>
-          </div>
-        </section>
-      </div>
-    </AppShell>
+        </LabSection>
+    </LabToolShell>
   );
 }

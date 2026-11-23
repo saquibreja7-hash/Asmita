@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LabScene } from "@/components/lab/LabScene";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
@@ -44,9 +45,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const stack = getStack(slug);
-  if (!stack) return { title: "Free stacks — Asmita AI Lab" };
+  if (!stack) return { title: "Free stacks · Asmita AI Lab" };
   return {
-    title: `${stack.title} — Free stacks — Asmita AI Lab`,
+    title: `${stack.title} · Free stacks · Asmita AI Lab`,
     description: stack.lede,
   };
 }
@@ -141,11 +142,12 @@ export default async function StackPage({ params }: { params: Promise<{ slug: st
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme lab-sub">
         {/* HEADER: notice (Hindi only), breadcrumb, title, For: line, lede,
             the three fact boxes */}
         <header className="ot-stack-head">
-          <div className="container">
+          <div className="container lab-detail-head">
+            <LabScene kind="stacks" className="lab-detail-scene" />
             {locale === "hi" && (
               <p className="ot-en-note">{t(locale, "lab.openTools.tool.englishNotice")}</p>
             )}

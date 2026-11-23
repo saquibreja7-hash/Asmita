@@ -36,7 +36,7 @@ export default async function PartnersPage() {
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         <OrgHero title={t(locale, "org.partners.title")} lede={t(locale, "org.partners.sub")} illustration="page-what-we-do" />
 
         <section className="zone-white" aria-labelledby="means-heading">

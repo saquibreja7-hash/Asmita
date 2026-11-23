@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
@@ -11,7 +11,7 @@ import { OpenToolsDirectory } from "./OpenToolsDirectory";
 export const metadata: Metadata = {
   title: "Open tools for trust and safety",
   description:
-    "Free, open-source trust-and-safety tools — hashing, review, detection, provenance — explained by the Asmita AI Lab: what each one does, where it fits in a platform's workflow and how to start.",
+    "Free, open-source trust-and-safety tools (hashing, review, detection, provenance) explained by the Asmita AI Lab: what each one does, where it fits in a platform's workflow and how to start.",
 };
 
 export const dynamic = "force-dynamic";
@@ -27,24 +27,22 @@ export default async function OpenToolsPage() {
   const locale = await getLocale();
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO — left aligned, not centred (Part C3) */}
-        <section className="page-hero" aria-label={t(locale, "lab.openTools.title")}>
-          <div className="container">
-            <span className="eyebrow">{t(locale, "lab.eyebrow")}</span>
-            <h1 className="page-title mt-5">{t(locale, "lab.openTools.title")}</h1>
-            <p className="ot-lede mt-6">{t(locale, "lab.openTools.lede")}</p>
-            <p className="ot-hero-links mt-8">
-              <Link className="text-link" href="/lab/stacks">
-                {t(locale, "lab.openTools.stacksLink")} <span aria-hidden="true">→</span>
-              </Link>
-              <Link className="text-link" href="/lab/open-tools/how-we-choose">
-                {t(locale, "lab.openTools.howLink")}
-              </Link>
-            </p>
-          </div>
-        </section>
+    <LabToolShell>
+      <LabToolHero
+        backLabel={t(locale, "lab.eyebrow")}
+        title={t(locale, "lab.openTools.title")}
+        intro={<p>{t(locale, "lab.openTools.lede")}</p>}
+        scene="open-tools"
+      >
+        <p className="ot-hero-links mt-8">
+          <Link className="text-link" href="/lab/stacks">
+            {t(locale, "lab.openTools.stacksLink")} <span aria-hidden="true">→</span>
+          </Link>
+          <Link className="text-link" href="/lab/open-tools/how-we-choose">
+            {t(locale, "lab.openTools.howLink")}
+          </Link>
+        </p>
+      </LabToolHero>
 
         {/* THE DIRECTORY — workflow strip, filters and the grouped cards */}
         <section className="ot-directory" aria-label={t(locale, "lab.openTools.strip.label")}>
@@ -79,7 +77,6 @@ export default async function OpenToolsPage() {
             </p>
           </div>
         </div>
-      </div>
-    </AppShell>
+    </LabToolShell>
   );
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabCallout, LabSection, LabSteps, LabToolHero, LabToolShell, LabWorkspace } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
@@ -32,72 +32,52 @@ export default async function StampPage() {
   const configured = stampSigningConfigured();
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="container py-8 text-center md:py-14">
-          <div className="mx-auto max-w-2xl">
-            <span className="tag">{t(locale, "lab.stamp.beta")}</span>
-            <h1 className="page-title mt-5">{t(locale, "lab.stamp.title")}</h1>
-            <p className="muted mx-auto mt-6 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "lab.stamp.intro")}
-            </p>
-            <p className="mx-auto mt-4 max-w-lg text-sm leading-[1.7] text-[var(--ink)]">
-              {t(locale, "lab.stamp.cannot")}
-            </p>
-            <p className="mx-auto mt-4 max-w-lg text-sm leading-[1.7]">
-              <span className="text-[var(--ink)]">{t(locale, "lab.stamp.under18")}</span>{" "}
-              <Link href="/minor-support" className="text-link">
-                {t(locale, "lab.stamp.under18.link")}
-              </Link>
-            </p>
-          </div>
-        </section>
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* THE TOOL */}
-        <section className="container py-8 md:py-10">
-          {configured ? (
-            <>
-              <StampForm locale={locale} />
-              <p className="muted mx-auto mt-6 max-w-xl text-center text-xs leading-[1.7]">
-                {t(locale, "lab.stamp.notice.privacy")}
-              </p>
-            </>
-          ) : (
-            <div className="mx-auto max-w-xl">
-              <div className="rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
-                <h2 className="font-display text-[20px] font-normal leading-[1.3] tracking-tight text-[var(--ink)]">
-                  {t(locale, "lab.stamp.notConfigured.title")}
-                </h2>
-                <p className="muted mt-3 text-sm leading-[1.75]">{t(locale, "lab.stamp.notConfigured.body")}</p>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* ABOUT THE STAMP */}
-        <section className="zone-white section-pad" aria-labelledby="stamp-about">
-          <div className="container">
-            <div className="mx-auto max-w-2xl">
-              <h2 id="stamp-about" className="section-title">{t(locale, "lab.stamp.about.title")}</h2>
-              <p className="mt-6 text-[15px] leading-[1.75] text-[var(--text)]">{t(locale, "lab.stamp.about.body1")}</p>
-              <p className="mt-4 text-[15px] leading-[1.75] text-[var(--text)]">{t(locale, "lab.stamp.about.body2")}</p>
-              <p className="muted mt-6 text-xs leading-[1.7]">{t(locale, "lab.stamp.about.note")}</p>
-            </div>
-          </div>
-        </section>
-
-        {/* BACK TO THE LAB */}
-        <section className="container py-8 text-center">
-          <Link href="/lab" className="text-link">
-            {t(locale, "lab.stamp.back")} <span className="cta-arrow" aria-hidden>→</span>
+    <LabToolShell>
+      <LabToolHero
+        backLabel={t(locale, "lab.stamp.back")}
+        badge={t(locale, "lab.stamp.beta")}
+        title={t(locale, "lab.stamp.title")}
+        intro={
+          <>
+            <p>{t(locale, "lab.stamp.intro")}</p>
+            <p className="text-[15px] text-[var(--text)]">{t(locale, "lab.stamp.cannot")}</p>
+          </>
+        }
+        scene="stamp"
+      >
+        <LabCallout icon="shieldCheck">
+          {t(locale, "lab.stamp.under18")}{" "}
+          <Link href="/minor-support" className="text-link">
+            {t(locale, "lab.stamp.under18.link")}
           </Link>
-        </section>
-      </div>
-    </AppShell>
+        </LabCallout>
+      </LabToolHero>
+
+      <LabWorkspace label={t(locale, "lab.stamp.title")}>
+        {configured ? (
+          <>
+            <StampForm locale={locale} />
+            <p className="mt-6 border-t border-[var(--line)] pt-5 text-xs leading-[1.7] text-[var(--text)]">
+              {t(locale, "lab.stamp.notice.privacy")}
+            </p>
+          </>
+        ) : (
+          <div className="mx-auto max-w-xl rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-6">
+            <h2 className="text-[20px] font-semibold leading-[1.3] text-[var(--ink)]">{t(locale, "lab.stamp.notConfigured.title")}</h2>
+            <p className="mt-3 text-sm leading-[1.75] text-[var(--text)]">{t(locale, "lab.stamp.notConfigured.body")}</p>
+          </div>
+        )}
+      </LabWorkspace>
+
+      {/* ABOUT THE STAMP */}
+      <LabSection id="stamp-about" index="01" title={t(locale, "lab.stamp.about.title")} narrow>
+        <LabSteps
+          ordered={false}
+          layout="stack"
+          steps={[<p key="1">{t(locale, "lab.stamp.about.body1")}</p>, <p key="2">{t(locale, "lab.stamp.about.body2")}</p>]}
+        />
+        <p className="mt-5 text-xs leading-[1.7] text-[var(--text)]">{t(locale, "lab.stamp.about.note")}</p>
+      </LabSection>
+    </LabToolShell>
   );
 }

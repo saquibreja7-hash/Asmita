@@ -76,7 +76,7 @@ test.describe("AI Lab, E3 trace tool (/lab/trace)", () => {
 
     // And the evidence PDF offer is there with its standalone-document note.
     await expect(page.getByRole("button", { name: "Download the evidence PDF (in English)" })).toBeVisible();
-    await expect(page.getByText("The PDF is written in English so any platform or officer can read it. It is a standalone research document — it is not part of filing a complaint.")).toBeVisible();
+    await expect(page.getByText("The PDF is written in English so any platform or officer can read it. It is a standalone research document. It is not part of filing a complaint.")).toBeVisible();
   });
 
   test("unrelated images show the no-evidence band", async ({ page }, testInfo) => {

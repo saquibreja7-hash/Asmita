@@ -1,4 +1,5 @@
 import { Illustration } from "@/components/Illustration";
+import { LabToolHero } from "@/components/lab/LabToolPage";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
@@ -46,23 +47,16 @@ export default async function PrivacyPage() {
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         {/* HERO */}
-        <section className="container page-hero text-center page-hero-split">
-          <div className="mx-auto max-w-2xl">
-            <h1 className="page-title">
-              {t(locale, "privacy.hero.title1")}{" "}
-              <em className="not-italic text-gradient">{t(locale, "privacy.hero.gradient")}</em>.
-            </h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "privacy.hero.sub")}
-            </p>
-            <p className="eyebrow mt-6">
-              {t(locale, "privacy.hero.version")}<ReadingTime label={t(locale, "reading.minutes")} />
-            </p>
-          </div>
-          <Illustration name="page-privacy" eager className="page-hero-art" />
-        </section>
+        <LabToolHero
+          title={`${t(locale, "privacy.hero.title1")} ${t(locale, "privacy.hero.gradient")}.`}
+          intro={<p>{t(locale, "privacy.hero.sub")}</p>}
+          visual={<Illustration name="page-privacy" eager className="issue-hero-art" />}
+        >
+          <p className="issue-meta">{t(locale, "privacy.hero.version")}<ReadingTime label={t(locale, "reading.minutes")} /></p>
+        </LabToolHero>
+
 
         <div className="container">
           <div className="hairline" />

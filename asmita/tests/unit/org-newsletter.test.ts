@@ -4,6 +4,7 @@ import { POST as CONFIRM } from "@/app/api/newsletter/confirm/route";
 import { POST as UNSUBSCRIBE } from "@/app/api/newsletter/unsubscribe/route";
 import { createCsrfPair } from "@/lib/csrf";
 import { sha256 } from "@/lib/hash";
+import { encryptField } from "@/lib/encryption";
 import {
   NEWSLETTER_CONFIRM_TTL_MS,
   newsletterCounts,
@@ -13,9 +14,32 @@ import {
   unsubscribeNewsletterSubscriber,
 } from "@/lib/org-newsletter";
 
-// The newsletter double opt-in (docs/org/spec.md, 56.7): hashed single-use
-// tokens, a 7-day confirm window, and non-disclosure — the same response
-// whether an address is new, pending or already confirmed.
+// The newsletter sign-up (docs/org/spec.md, 56.7): one click since
+// 2026-11-23, no confirmation email. Hashed tokens, non-disclosure (the same
+// response whether an address is new or already on the list), and the
+// confirm links already sent for older double opt-in sign-ups keep working.
+
+/** An older double opt-in sign-up still waiting for its confirm link. */
+function legacyPending(email: string, token: string) {
+  const now = new Date().toISOString();
+  newsletterSubscribers.push({
+    id: crypto.randomUUID(),
+    emailEnc: encryptField(email),
+    firstNameEnc: null,
+    emailHash: sha256(email),
+    locale: "en",
+    status: "PENDING",
+    confirmTokenHash: sha256(token),
+    unsubscribeTokenHash: sha256(`${token}-unsub`),
+    source: "newsletter",
+    confirmedAt: null,
+    unsubscribedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+const TOKEN = "ab".repeat(24);
 
 function req(body: unknown, path = "/api/newsletter", options: { csrf?: boolean } = {}) {
   const csrf = createCsrfPair();
@@ -34,78 +58,82 @@ function req(body: unknown, path = "/api/newsletter", options: { csrf?: boolean 
   });
 }
 
-describe("newsletter double opt-in (store)", () => {
+describe("newsletter one-click sign-up (store)", () => {
   beforeEach(() => vi.stubEnv("DATABASE_URL", ""));
   afterEach(() => {
     vi.unstubAllEnvs();
     newsletterSubscribers.splice(0, newsletterSubscribers.length);
   });
 
-  it("signs up as PENDING with hashed tokens and no plaintext email hash", async () => {
+  it("signs up as CONFIRMED straight away, with a hashed unsubscribe token and no plaintext email", async () => {
     const result = await subscribeToNewsletter({ email: "reader@example.invalid", locale: "en", source: "newsletter" });
     expect(result.ok).toBe(true);
-    expect(result.confirmToken).toMatch(/^[a-f0-9]{48}$/);
+    expect(result).not.toHaveProperty("confirmToken");
     expect(result.unsubscribeToken).toMatch(/^[a-f0-9]{48}$/);
     const [saved] = newsletterSubscribers;
-    expect(saved.status).toBe("PENDING");
+    expect(saved.status).toBe("CONFIRMED");
+    expect(saved.confirmedAt).toBeTruthy();
+    expect(saved.confirmTokenHash).toBeNull();
     expect(saved.emailHash).toBe(sha256("reader@example.invalid"));
-    expect(saved.confirmTokenHash).toBe(sha256(result.confirmToken!));
     expect(saved.unsubscribeTokenHash).toBe(sha256(result.unsubscribeToken!));
     // Only the encrypted address is stored, never plaintext.
     expect(saved.emailEnc).not.toContain("reader@example.invalid");
   });
 
-  it("confirms with the token, single use, and clears the confirm token", async () => {
-    const signup = await subscribeToNewsletter({ email: "reader@example.invalid", locale: "hi", source: "newsletter" });
-    expect(signup.confirmToken).toBeTruthy();
-    const confirmed = await confirmNewsletterSubscriber(signup.confirmToken!);
-    expect(confirmed.ok).toBe(true);
+  it("still confirms an older pending sign-up with its link, single use", async () => {
+    legacyPending("reader@example.invalid", TOKEN);
+    const confirmed = await confirmNewsletterSubscriber(TOKEN);
     expect(confirmed.ok && confirmed.email).toBe("reader@example.invalid");
     expect(newsletterSubscribers[0].status).toBe("CONFIRMED");
     expect(newsletterSubscribers[0].confirmTokenHash).toBeNull();
-    // Single use: the same token is refused the second time.
-    expect(await confirmNewsletterSubscriber(signup.confirmToken!)).toEqual({ ok: false, error: "token_invalid" });
+    expect(await confirmNewsletterSubscriber(TOKEN)).toEqual({ ok: false, error: "token_invalid" });
   });
 
-  it("expires confirm tokens after 7 days", async () => {
-    const signup = await subscribeToNewsletter({ email: "slow@example.invalid", locale: "en", source: "footer" });
-    // Wind the clock past the TTL by backdating updatedAt (the issue time).
+  it("expires an older confirm link after 7 days", async () => {
+    legacyPending("slow@example.invalid", TOKEN);
     newsletterSubscribers[0].updatedAt = new Date(Date.now() - NEWSLETTER_CONFIRM_TTL_MS - 60_000).toISOString();
-    expect(await confirmNewsletterSubscriber(signup.confirmToken!)).toEqual({ ok: false, error: "token_invalid" });
+    expect(await confirmNewsletterSubscriber(TOKEN)).toEqual({ ok: false, error: "token_invalid" });
     expect(newsletterSubscribers[0].status).toBe("PENDING");
+  });
+
+  it("signing up again confirms an older pending sign-up without a link", async () => {
+    legacyPending("waiting@example.invalid", TOKEN);
+    await subscribeToNewsletter({ email: "waiting@example.invalid", firstName: "Asha", locale: "hi", source: "footer" });
+    expect(newsletterSubscribers).toHaveLength(1);
+    expect(newsletterSubscribers[0].status).toBe("CONFIRMED");
+    expect(newsletterSubscribers[0].confirmTokenHash).toBeNull();
+    expect(newsletterSubscribers[0].locale).toBe("hi");
   });
 
   it("unsubscribes with the per-subscriber token, idempotently", async () => {
     const signup = await subscribeToNewsletter({ email: "leaving@example.invalid", locale: "en", source: "newsletter" });
-    await confirmNewsletterSubscriber(signup.confirmToken!);
     const first = await unsubscribeNewsletterSubscriber(signup.unsubscribeToken!);
     expect(first.ok && first.email).toBe("leaving@example.invalid");
     expect(newsletterSubscribers[0].status).toBe("UNSUBSCRIBED");
+    expect(newsletterSubscribers[0].firstNameEnc).toBeNull();
     const again = await unsubscribeNewsletterSubscriber(signup.unsubscribeToken!);
     expect(again.ok).toBe(true);
     expect(await unsubscribeNewsletterSubscriber("deadbeef".repeat(6))).toEqual({ ok: false, error: "token_invalid" });
   });
 
-  it("re-signing an unsubscribed address restarts the double opt-in; a confirmed one changes nothing", async () => {
-    const signup = await subscribeToNewsletter({ email: "return@example.invalid", locale: "en", source: "newsletter" });
-    await confirmNewsletterSubscriber(signup.confirmToken!);
+  it("a subscribed address changes nothing; an unsubscribed one is back on the list in one click", async () => {
+    const signup = await subscribeToNewsletter({ email: "return@example.invalid", firstName: "Asha", locale: "en", source: "newsletter" });
     const again = await subscribeToNewsletter({ email: "return@example.invalid", locale: "en", source: "footer" });
-    // Already confirmed: no token, no email, no state change.
-    expect(again.confirmToken).toBeNull();
     expect(again.unsubscribeToken).toBeNull();
     expect(newsletterSubscribers).toHaveLength(1);
     expect(newsletterSubscribers[0].status).toBe("CONFIRMED");
 
     await unsubscribeNewsletterSubscriber(signup.unsubscribeToken!);
-    const back = await subscribeToNewsletter({ email: "return@example.invalid", locale: "en", source: "footer" });
-    expect(back.confirmToken).toBeTruthy();
-    expect(newsletterSubscribers[0].status).toBe("PENDING");
+    await subscribeToNewsletter({ email: "return@example.invalid", firstName: "Asha", locale: "en", source: "footer" });
+    expect(newsletterSubscribers).toHaveLength(1);
+    expect(newsletterSubscribers[0].status).toBe("CONFIRMED");
+    expect(newsletterSubscribers[0].unsubscribedAt).toBeNull();
+    expect(newsletterSubscribers[0].firstNameEnc).toBeTruthy();
   });
 
   it("counts by status", async () => {
-    const first = await subscribeToNewsletter({ email: "a@example.invalid", locale: "en", source: "t" });
-    await subscribeToNewsletter({ email: "b@example.invalid", locale: "en", source: "t" });
-    await confirmNewsletterSubscriber(first.confirmToken!);
+    await subscribeToNewsletter({ email: "a@example.invalid", locale: "en", source: "t" });
+    legacyPending("b@example.invalid", TOKEN);
     const counts = await newsletterCounts();
     expect(counts).toEqual({ pending: 1, confirmed: 1, unsubscribed: 0, total: 2 });
   });
@@ -123,9 +151,10 @@ describe("POST /api/newsletter (routes)", () => {
     expect(response.status).toBe(403);
   });
 
-  it("answers ok for a new address and stores nothing when the honeypot is filled", async () => {
+  it("subscribes a new address in one request and stores nothing when the honeypot is filled", async () => {
     expect((await POST(req({ email: "ok@example.invalid", firstName: "Asha", source: "t" }))).status).toBe(200);
     expect(newsletterSubscribers).toHaveLength(1);
+    expect(newsletterSubscribers[0].status).toBe("CONFIRMED");
     const bot = await POST(req({ email: "bot@example.invalid", firstName: "Asha", source: "t", fax: "1" }));
     expect(bot.status).toBe(200);
     expect(newsletterSubscribers).toHaveLength(1);
@@ -134,9 +163,6 @@ describe("POST /api/newsletter (routes)", () => {
   it("gives the same response for an address that is already confirmed (non-disclosure)", async () => {
     const first = await POST(req({ email: "known@example.invalid", firstName: "Asha", source: "t" }));
     const before = await first.json();
-    const signup = newsletterSubscribers[0];
-    signup.status = "CONFIRMED";
-    signup.confirmTokenHash = null;
     const second = await POST(req({ email: "known@example.invalid", firstName: "Asha", source: "t" }));
     const after = await second.json();
     expect(second.status).toBe(first.status);
@@ -145,20 +171,19 @@ describe("POST /api/newsletter (routes)", () => {
     expect(newsletterSubscribers).toHaveLength(1);
   });
 
-  it("confirms through the API with CSRF and refuses unknown tokens", async () => {
-    const signup = await subscribeToNewsletter({ email: "route@example.invalid", locale: "en", source: "t" });
+  it("confirms an older pending sign-up through the API with CSRF and refuses unknown tokens", async () => {
+    legacyPending("route@example.invalid", TOKEN);
     const bad = await CONFIRM(req({ token: "nonsense-not-hex" }, "/api/newsletter/confirm"));
     expect(bad.status).toBe(400);
-    const noCsrf = await CONFIRM(req({ token: signup.confirmToken }, "/api/newsletter/confirm", { csrf: false }));
+    const noCsrf = await CONFIRM(req({ token: TOKEN }, "/api/newsletter/confirm", { csrf: false }));
     expect(noCsrf.status).toBe(403);
-    const good = await CONFIRM(req({ token: signup.confirmToken }, "/api/newsletter/confirm"));
+    const good = await CONFIRM(req({ token: TOKEN }, "/api/newsletter/confirm"));
     expect(good.status).toBe(200);
     expect(newsletterSubscribers[0].status).toBe("CONFIRMED");
   });
 
   it("unsubscribes through the API", async () => {
     const signup = await subscribeToNewsletter({ email: "gone@example.invalid", locale: "en", source: "t" });
-    await confirmNewsletterSubscriber(signup.confirmToken!);
     const response = await UNSUBSCRIBE(req({ token: signup.unsubscribeToken }, "/api/newsletter/unsubscribe"));
     expect(response.status).toBe(200);
     expect(newsletterSubscribers[0].status).toBe("UNSUBSCRIBED");

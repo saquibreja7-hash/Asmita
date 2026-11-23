@@ -1465,3 +1465,838 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
   .flow-hud > span[data-anchor="hub"],
   .flow-hud > span[data-anchor="platforms"] { display: none; }
 }
+
+/* ===================================================================
+   AI Lab hub (/lab). The page keeps the site's type, text colours and
+   cards, so it sits naturally next to the tool pages behind it; the
+   colour comes from a faint gradient wash and from the Three.js scenes
+   (components/lab/LabScene.tsx), each drawn on its own canvas inside an
+   empty .lab-scene box.
+   =================================================================== */
+.lab-theme {
+  --lab-teal: #19d3c5;
+  --lab-coral: #ff7a59;
+  --lab-violet: #8b6cff;
+  --lab-grad: linear-gradient(100deg, #19d3c5 0%, #38b6ff 28%, #8b6cff 52%, #ff4f9a 76%, #ffc23d 100%);
+  --lab-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  background:
+    radial-gradient(900px 640px at 10% 0%, rgba(124, 92, 255, 0.12), transparent 70%),
+    radial-gradient(760px 600px at 92% 6%, rgba(255, 122, 89, 0.13), transparent 70%),
+    radial-gradient(900px 700px at 50% 42%, rgba(56, 182, 255, 0.08), transparent 70%),
+    radial-gradient(800px 700px at 0% 78%, rgba(25, 211, 197, 0.08), transparent 70%),
+    radial-gradient(800px 700px at 100% 92%, rgba(255, 79, 154, 0.07), transparent 70%),
+    var(--color-parchment);
+}
+
+/* Scene boxes: a still, soft glow until (or unless) the scene draws. */
+.lab-scene {
+  position: relative;
+  background:
+    radial-gradient(35% 55% at 28% 40%, rgba(25, 211, 197, 0.22), transparent 70%),
+    radial-gradient(35% 55% at 68% 42%, rgba(255, 122, 89, 0.2), transparent 70%),
+    radial-gradient(45% 60% at 50% 90%, rgba(124, 92, 255, 0.2), transparent 70%);
+}
+.lab-scene.is-live { background: none; }
+.lab-scene-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---------- hero ---------- */
+.lab-hero { padding: clamp(48px, 8vw, 96px) 0 0; overflow: hidden; }
+.lab-hero-copy { max-width: 980px; }
+.lab-hero-scene { height: clamp(240px, 38vw, 440px); margin: clamp(20px, 3vw, 36px) auto 0; max-width: 1400px; }
+
+/* ---------- sections ---------- */
+.lab-section { padding: clamp(48px, 7vw, 96px) 0; }
+.lab-section-last { padding-bottom: clamp(64px, 9vw, 112px); }
+.lab-section-head { max-width: 760px; margin-bottom: 36px; }
+.lab-index {
+  display: inline-block;
+  font-family: var(--lab-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.2em;
+  color: var(--brand);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid currentColor;
+}
+.lab-h2 {
+  font-size: clamp(1.75rem, 3.4vw, 2.75rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  color: var(--ink);
+}
+.lab-section-note { margin-top: 12px; font-size: 1rem; line-height: 1.7; color: var(--text); }
+
+/* ---------- tool cards ---------- */
+.lab-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 20px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.lab-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-cards);
+  background: var(--card);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.3s;
+}
+/* A thin gradient rim that shows on hover or keyboard focus. */
+.lab-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: var(--lab-grad);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.lab-card:hover,
+.lab-card:focus-within {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 50px -28px rgba(80, 60, 160, 0.35);
+}
+.lab-card:hover::after,
+.lab-card:focus-within::after { opacity: 1; }
+.lab-card-scene {
+  height: 200px;
+  border-bottom: 1px solid var(--line);
+  background-color: #f7f5fc;
+}
+.lab-card-scene.is-live { background: linear-gradient(160deg, #f6f3ff 0%, #fff6f2 55%, #f0f8ff 100%); }
+.lab-card-body { position: relative; flex: 1; padding: 20px 24px 24px; }
+.lab-badge {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--brand);
+  background: var(--brand-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--brand-strong);
+}
+.lab-card-title { font-size: 1.1875rem; line-height: 1.3; font-weight: 650; color: var(--ink); padding-right: 44px; }
+.lab-card-link { color: inherit; text-decoration: none; }
+/* The whole card is the link's hit area. */
+.lab-card-link::after { content: ""; position: absolute; inset: 0; z-index: 1; }
+.lab-card-link:focus-visible { outline: none; }
+.lab-card:has(.lab-card-link:focus-visible) { outline: 2px solid var(--brand); outline-offset: 3px; }
+.lab-card-line { margin-top: 8px; font-size: 0.9375rem; line-height: 1.65; color: var(--text); }
+.lab-card-go {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  transition: transform 0.3s, background 0.3s, color 0.3s;
+}
+.lab-card:hover .lab-card-go,
+.lab-card:focus-within .lab-card-go {
+  transform: rotate(-45deg);
+  background: var(--ink);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* ---------- experiments ---------- */
+.lab-experiments { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); }
+.lab-experiment {
+  position: relative;
+  padding: 28px 26px 30px;
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+  overflow: hidden;
+}
+.lab-experiment::before {
+  content: "";
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  right: -80px;
+  top: -100px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.14;
+  filter: blur(46px);
+  pointer-events: none;
+}
+.lab-accent-teal { --accent: var(--lab-teal); }
+.lab-accent-violet { --accent: var(--lab-violet); }
+.lab-accent-coral { --accent: var(--lab-coral); }
+.lab-experiment-code {
+  display: block;
+  margin-bottom: 14px;
+  font-family: var(--lab-mono);
+  font-size: clamp(2.25rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.lab-text-link { color: var(--brand); text-decoration: underline; text-underline-offset: 4px; font-weight: 600; }
+.lab-text-link:hover { color: var(--ink); }
+
+/* ---------- ethics ---------- */
+.lab-ethics {
+  max-width: 900px;
+  padding: clamp(24px, 4vw, 44px);
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+.lab-ethics-body { margin-top: 14px; font-size: 1.0625rem; line-height: 1.75; color: var(--text); max-width: 68ch; }
+
+@media (max-width: 640px) {
+  .lab-card-scene { height: 180px; }
+  .lab-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lab-card, .lab-card-go { transition: none; }
+  .lab-card:hover, .lab-card:focus-within { transform: none; }
+}
+
+/* ---------- AI Lab tool pages (components/lab/LabToolPage.tsx) ---------- */
+.lab-sub {
+  background:
+    radial-gradient(800px 520px at 0% 0%, rgba(124, 92, 255, 0.1), transparent 70%),
+    radial-gradient(700px 520px at 100% 0%, rgba(255, 122, 89, 0.1), transparent 70%),
+    radial-gradient(900px 700px at 50% 60%, rgba(56, 182, 255, 0.06), transparent 70%),
+    var(--color-parchment);
+}
+.lab-tool-hero { padding: clamp(28px, 5vw, 64px) 0 clamp(24px, 4vw, 48px); }
+.lab-tool-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: center;
+}
+.lab-tool-hero-copy { min-width: 0; }
+.lab-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.lab-back:hover { border-color: var(--ink); transform: translateX(-2px); }
+.lab-badge-hero { margin: 0 0 0 10px; vertical-align: middle; }
+.lab-tool-title { margin-top: 22px; }
+.lab-tool-intro { margin-top: 16px; max-width: 60ch; font-size: clamp(1.0625rem, 1.5vw, 1.1875rem); line-height: 1.7; color: var(--ink); }
+.lab-tool-intro p + p { margin-top: 12px; }
+.lab-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; list-style: none; padding: 0; }
+.lab-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+.lab-fact svg { color: var(--brand); flex-shrink: 0; }
+.lab-tool-hero-visual {
+  position: relative;
+  border-radius: calc(var(--radius-cards) + 6px);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, #f6f3ff 0%, #fff6f2 55%, #f0f8ff 100%);
+  overflow: hidden;
+  box-shadow: 0 30px 60px -40px rgba(80, 60, 160, 0.4);
+}
+.lab-tool-hero-scene { height: clamp(240px, 30vw, 380px); }
+
+/* The tool itself, in a raised panel. */
+.lab-workspace-wrap { padding: 0 0 clamp(40px, 6vw, 72px); }
+.lab-workspace {
+  border-radius: calc(var(--radius-cards) + 6px);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, #f6f3ff 0%, #fff6f2 55%, #f0f8ff 100%);
+  padding: clamp(20px, 3.5vw, 40px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 30px 70px -45px rgba(40, 30, 90, 0.35);
+}
+
+.lab-sub-section { padding: clamp(40px, 6vw, 80px) 0; }
+.lab-sub-section + .lab-sub-section { border-top: 1px solid var(--line); }
+.lab-narrow { max-width: 920px; }
+
+/* Numbered step cards. */
+.lab-steps { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); list-style: none; padding: 0; margin: 0; }
+.lab-step {
+  display: flex;
+  gap: 16px;
+  padding: 22px 22px 24px;
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+.lab-step-n {
+  flex-shrink: 0;
+  font-family: var(--lab-mono);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--brand);
+  padding-top: 3px;
+}
+.lab-step-body { font-size: 0.9875rem; line-height: 1.7; color: var(--text); }
+.lab-step-body strong { color: var(--ink); }
+
+/* Link tiles. */
+.lab-link-cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); list-style: none; padding: 0; margin: 0; }
+.lab-link-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+  transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
+}
+.lab-link-card:hover,
+.lab-link-card:focus-within {
+  transform: translateY(-3px);
+  border-color: var(--ink);
+  box-shadow: 0 20px 40px -28px rgba(40, 30, 90, 0.4);
+}
+.lab-link-card:has(.lab-card-link:focus-visible) { outline: 2px solid var(--brand); outline-offset: 3px; }
+.lab-link-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(140deg, #efeaff, #ffefe9);
+  color: var(--ink);
+}
+.lab-link-text { display: grid; gap: 2px; flex: 1; min-width: 0; font-weight: 600; color: var(--ink); line-height: 1.4; }
+.lab-link-note { font-weight: 400; font-size: 0.875rem; color: var(--text); }
+.lab-link-go { flex-shrink: 0; color: var(--ink); font-size: 1.1rem; }
+
+.lab-callout {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+.lab-callout svg { flex-shrink: 0; margin-top: 2px; }
+
+@media (max-width: 860px) {
+  .lab-tool-hero-grid { grid-template-columns: 1fr; }
+  .lab-tool-hero-scene { height: 220px; }
+}
+.lab-helplines { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); margin-top: 14px; list-style: none; padding: 0; }
+.lab-helpline { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 16px 18px; border-radius: var(--radius-cards); border: 1px solid var(--line); background: var(--card); }
+.lab-helpline-name { font-size: 0.9375rem; color: var(--text); }
+.lab-helpline-number { font-family: var(--lab-mono); font-size: 1.375rem; font-weight: 700; color: var(--ink); text-decoration: none; }
+.lab-helpline-number:hover { color: var(--brand); }
+.lab-steps-stack { grid-template-columns: 1fr; max-width: 860px; }
+.lab-steps-stack .lab-step { padding: 20px 24px; }
+.lab-stats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); margin-top: 8px; }
+.lab-stat { position: relative; padding: 26px 24px; border-radius: var(--radius-cards); border: 1px solid var(--line); background: var(--card); overflow: hidden; }
+.lab-stat::before { content: ""; position: absolute; inset: auto -40px -60px auto; width: 160px; height: 160px; border-radius: 50%; background: radial-gradient(circle, rgba(124, 92, 255, 0.16), transparent 70%); pointer-events: none; }
+.lab-stat-n { font-family: var(--lab-mono); font-size: clamp(2.25rem, 4vw, 3rem); font-weight: 700; line-height: 1; letter-spacing: -0.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.lab-stat-label { margin-top: 10px; font-size: 0.9375rem; color: var(--text); }
+
+/* ---------- Calm pages (The Issue, Who we help, Glossary) ----------
+   The same modern parts as the Lab tool pages, on a softer teal and coral
+   wash: these pages are read by people in distress, so no motion and no
+   loud colour. */
+.calm-sub {
+  background:
+    radial-gradient(800px 520px at 0% 0%, rgba(25, 160, 150, 0.09), transparent 70%),
+    radial-gradient(700px 520px at 100% 0%, rgba(255, 122, 89, 0.09), transparent 70%),
+    radial-gradient(900px 700px at 50% 70%, rgba(56, 182, 255, 0.05), transparent 70%),
+    var(--color-parchment);
+}
+.calm-sub .lab-tool-hero-visual { background: linear-gradient(160deg, #eef8f6 0%, #fff6f1 60%, #f3f8ff 100%); }
+.lab-tool-hero-art { display: grid; place-items: center; padding: clamp(16px, 3vw, 28px); }
+.issue-hero-art { width: 100%; max-width: 440px; height: auto; border-radius: var(--radius-box); }
+
+/* Topic cards: icon tile, quiet number, title, one line, a "Learn more" cue. */
+.issue-topics {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.issue-topic {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 24px 22px;
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+  transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
+}
+.issue-topic:hover,
+.issue-topic:focus-within {
+  transform: translateY(-3px);
+  border-color: var(--ink);
+  box-shadow: 0 22px 44px -30px rgba(30, 40, 60, 0.4);
+}
+.issue-topic:has(.lab-card-link:focus-visible) { outline: 2px solid var(--brand); outline-offset: 3px; }
+.issue-topic-top { display: flex; align-items: center; justify-content: space-between; }
+.issue-topic-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+.issue-topic-n { font-family: var(--lab-mono); font-size: 0.8125rem; letter-spacing: 0.14em; color: var(--text-muted); }
+.issue-topic-title { margin-top: 18px; font-size: 1.1875rem; line-height: 1.3; font-weight: 650; color: var(--ink); }
+.issue-topic-short { margin-top: 8px; flex: 1; font-size: 0.9375rem; line-height: 1.65; color: var(--text); }
+.issue-topic-more { margin-top: 18px; font-size: 0.875rem; font-weight: 600; color: var(--ink); }
+.issue-topic-arrow { display: inline-block; transition: transform 0.25s; }
+.issue-topic:hover .issue-topic-arrow { transform: translateX(3px); }
+.issue-topic-glossary { justify-content: space-between; background: transparent; border-style: dashed; }
+.issue-topic-glossary .issue-topic-icon { background: var(--card); border: 1px solid var(--line); color: var(--ink); }
+
+/* Closing panel. */
+.issue-close {
+  padding: clamp(28px, 4vw, 52px);
+  border-radius: calc(var(--radius-cards) + 6px);
+  border: 1px solid var(--line);
+  background: linear-gradient(150deg, var(--card) 0%, var(--card) 55%, #fff6f1 100%);
+  box-shadow: 0 30px 60px -45px rgba(30, 40, 60, 0.35);
+}
+.issue-close-body { margin-top: 14px; max-width: 56ch; font-size: 1.0625rem; line-height: 1.7; color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .issue-topic, .issue-topic-arrow { transition: none; }
+  .issue-topic:hover, .issue-topic:focus-within { transform: none; }
+}
+
+/* The three brand colours on calm pages: teal, coral, gold, one per card. */
+.issue-tone-teal { --tone-soft: var(--color-teal-mist); --tone-ink: var(--color-brand-teal); --tone-glow: rgba(10, 94, 90, 0.14); }
+.issue-tone-coral { --tone-soft: #ffe2d8; --tone-ink: #9c3a14; --tone-glow: rgba(255, 148, 115, 0.22); }
+.issue-tone-gold { --tone-soft: #f6ecc4; --tone-ink: #7d6300; --tone-glow: rgba(236, 218, 152, 0.4); }
+.issue-topic[class*="issue-tone-"] { overflow: hidden; }
+.issue-topic[class*="issue-tone-"]::before {
+  content: "";
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  right: -70px;
+  top: -90px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--tone-glow), transparent 70%);
+  pointer-events: none;
+}
+.issue-topic[class*="issue-tone-"] .issue-topic-icon { background: var(--tone-soft); color: var(--tone-ink); }
+.issue-topic[class*="issue-tone-"] .issue-topic-n { color: var(--tone-ink); }
+.issue-topic[class*="issue-tone-"]:hover,
+.issue-topic[class*="issue-tone-"]:focus-within { border-color: var(--tone-ink); }
+.issue-topic[class*="issue-tone-"] .issue-topic-more { color: var(--tone-ink); }
+.calm-sub {
+  background:
+    radial-gradient(800px 520px at 0% 0%, rgba(10, 94, 90, 0.1), transparent 70%),
+    radial-gradient(700px 520px at 100% 0%, rgba(255, 148, 115, 0.14), transparent 70%),
+    radial-gradient(900px 640px at 60% 55%, rgba(236, 218, 152, 0.2), transparent 70%),
+    radial-gradient(800px 600px at 0% 100%, rgba(167, 252, 205, 0.12), transparent 70%),
+    var(--color-parchment);
+}
+.calm-sub .lab-tool-hero-visual { background: linear-gradient(150deg, #e3f2ef 0%, #fbf3d9 55%, #ffe8df 100%); }
+.issue-close { background: linear-gradient(135deg, #e3f2ef 0%, #fbf3d9 50%, #ffe8df 100%); }
+/* Illustrations sit on plain white, never a coloured panel. */
+.calm-sub .lab-tool-hero-visual.lab-tool-hero-art { background: var(--card); }
+
+/* Issue topic pages */
+.issue-meta {
+  display: inline-flex;
+  margin-top: 18px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.issue-body {
+  display: grid;
+  gap: clamp(28px, 4vw, 48px);
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .issue-body { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+  .issue-body .issue-act { position: sticky; top: 96px; }
+}
+.issue-examples { display: grid; gap: 12px; list-style: none; padding: 0; margin: 0; }
+.issue-example {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 0.9875rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+.issue-example-mark {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--tone-soft);
+  color: var(--tone-ink);
+}
+.issue-act {
+  position: relative;
+  padding: clamp(22px, 3vw, 30px);
+  border-radius: calc(var(--radius-cards) + 4px);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, var(--card) 0%, var(--card) 45%, var(--tone-soft) 140%);
+  box-shadow: 0 24px 50px -36px rgba(30, 40, 60, 0.4);
+  overflow: hidden;
+}
+.issue-act .issue-topic-icon { background: var(--tone-soft); color: var(--tone-ink); }
+.issue-act-title { margin-top: 16px; font-size: 1.375rem; font-weight: 650; line-height: 1.25; color: var(--ink); }
+.issue-act-body { margin-top: 10px; font-size: 0.9875rem; line-height: 1.7; color: var(--text); }
+
+/* Audience pages: numbered point cards in the three brand colours. */
+.issue-points { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); list-style: none; padding: 0; margin: 0; }
+.issue-point { position: relative; padding: 24px; border-radius: var(--radius-cards); border: 1px solid var(--line); background: var(--card); overflow: hidden; }
+.issue-point::before { content: ""; position: absolute; width: 180px; height: 180px; right: -70px; top: -80px; border-radius: 50%; background: radial-gradient(circle, var(--tone-glow), transparent 70%); pointer-events: none; }
+.issue-point-n { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--tone-soft); color: var(--tone-ink); font-family: var(--lab-mono); font-size: 0.8125rem; font-weight: 700; }
+.issue-point-title { margin-top: 14px; font-size: 1.125rem; font-weight: 650; line-height: 1.3; color: var(--ink); }
+.issue-point-body { margin-top: 8px; font-size: 0.9375rem; line-height: 1.65; color: var(--text); }
+
+/* Glossary: definition cards, two columns, the three brand colours. */
+.glossary-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); margin: 0; }
+.glossary-term { position: relative; padding: 20px 22px; border-radius: var(--radius-cards); border: 1px solid var(--line); background: var(--card); overflow: hidden; }
+.glossary-term::before { content: ""; position: absolute; width: 160px; height: 160px; right: -70px; top: -80px; border-radius: 50%; background: radial-gradient(circle, var(--tone-glow), transparent 70%); pointer-events: none; }
+.glossary-dt { display: flex; align-items: baseline; gap: 12px; font-size: 1.0625rem; font-weight: 650; line-height: 1.35; color: var(--ink); }
+.glossary-n { flex-shrink: 0; font-family: var(--lab-mono); font-size: 0.75rem; font-weight: 700; color: var(--tone-ink); }
+.glossary-dd { margin: 8px 0 0 calc(0.75rem * 2.2 + 12px); font-size: 0.9375rem; line-height: 1.65; color: var(--text); }
+@media (max-width: 640px) { .glossary-grid { grid-template-columns: 1fr; } .glossary-dd { margin-left: 0; } }
+
+/* ---------- Get help ---------- */
+/* Urgent numbers in the hero, where a person in danger sees them first. */
+.help-urgent {
+  width: 100%;
+  padding: clamp(18px, 2.5vw, 26px);
+  border-radius: calc(var(--radius-cards) + 6px);
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: 0 30px 60px -40px rgba(30, 40, 60, 0.4);
+}
+.calm-sub .lab-tool-hero-visual:has(.help-urgent) { background: transparent; border: 0; box-shadow: none; padding: 0; }
+.help-urgent-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.help-urgent-list { display: grid; gap: 10px; margin-top: 14px; list-style: none; padding: 0; }
+.help-urgent-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--tone-soft);
+}
+.help-urgent-list li > span { display: grid; gap: 2px; font-size: 0.9375rem; font-weight: 600; color: var(--ink); }
+.help-urgent-list small { font-size: 0.8125rem; font-weight: 400; color: var(--text); }
+.help-urgent-list li > a {
+  font-family: var(--lab-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--tone-ink);
+  text-decoration: none;
+}
+.help-urgent-list li > a:hover { text-decoration: underline; }
+
+/* Situations: cards that open. */
+.help-scenarios { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); list-style: none; padding: 0; margin: 0; }
+.help-scenario {
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.help-scenario:hover { border-color: var(--tone-ink); }
+.help-scenario details[open] { box-shadow: 0 20px 40px -30px rgba(30, 40, 60, 0.35); }
+.help-scenario summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+.help-scenario summary::-webkit-details-marker { display: none; }
+.help-scenario summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: var(--radius-cards); }
+.help-scenario .issue-topic-icon { width: 40px; height: 40px; flex-shrink: 0; background: var(--tone-soft); color: var(--tone-ink); }
+.help-scenario-q { flex: 1; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--ink); }
+.help-scenario-chev {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-size: 1.1rem;
+  color: var(--ink);
+  transition: transform 0.2s;
+}
+.help-scenario details[open] .help-scenario-chev { transform: rotate(45deg); }
+.help-scenario-a { padding: 0 18px 18px 72px; font-size: 0.9375rem; line-height: 1.65; color: var(--text); }
+
+/* Honest outcomes: can (teal) and cannot (coral). */
+.help-honest { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
+.help-honest-col {
+  padding: 24px 26px;
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, var(--card) 0%, var(--card) 50%, var(--tone-soft) 160%);
+}
+.help-honest-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tone-ink);
+}
+.help-honest-col ul { display: grid; gap: 10px; margin-top: 14px; padding: 0; list-style: none; }
+.help-honest-col li { position: relative; padding-left: 18px; font-size: 0.9875rem; line-height: 1.6; color: var(--text); }
+.help-honest-col li::before { content: ""; position: absolute; left: 0; top: 0.7em; width: 8px; height: 2px; border-radius: 2px; background: var(--tone-ink); }
+@media (max-width: 640px) {
+  .help-scenarios { grid-template-columns: 1fr; }
+  .help-scenario-a { padding-left: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { .help-scenario-chev { transition: none; } }
+@media (min-width: 720px) { .issue-points:has(> li:nth-child(4):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- Under 18 support ---------- */
+.minor-validation {
+  max-width: 40ch;
+  font-size: clamp(1.375rem, 2.6vw, 1.875rem);
+  line-height: 1.45;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.minor-resources { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
+.minor-resource {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px;
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+  text-decoration: none;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+.minor-resource::before {
+  content: "";
+  position: absolute;
+  width: 160px;
+  height: 160px;
+  right: -70px;
+  top: -80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--tone-glow), transparent 70%);
+  pointer-events: none;
+}
+.minor-resource:hover,
+.minor-resource:focus-visible { border-color: var(--tone-ink); transform: translateY(-2px); box-shadow: 0 20px 40px -30px rgba(30, 40, 60, 0.4); }
+.minor-resource-text { display: grid; gap: 6px; }
+.minor-resource-name { font-weight: 650; color: var(--ink); }
+.minor-resource-desc { font-size: 0.9375rem; line-height: 1.6; color: var(--text); }
+.minor-resource-contact { flex-shrink: 0; font-family: var(--lab-mono); font-size: 1rem; font-weight: 700; color: var(--tone-ink); }
+@media (prefers-reduced-motion: reduce) { .minor-resource { transition: none; } .minor-resource:hover { transform: none; } }
+.minor-resource { flex-direction: column; justify-content: flex-start; }
+.minor-resource-contact { margin-top: 4px; }
+.calm-sub .lab-workspace { background: linear-gradient(160deg, #eef8f6 0%, #fffaf0 55%, #fff2ec 100%); }
+
+/* ---------- Reading pages on calm pages (Guides, Legal rights) ----------
+   Each reading section becomes a white card; the section icons take the
+   three brand colours in turn; the next-step boxes and callouts are tinted. */
+.calm-sub .reading-col > section,
+.calm-sub .reading-col > div > section {
+  margin-bottom: 18px;
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-cards) + 4px);
+  background: var(--card);
+}
+.calm-sub .reading-col > section:first-child { padding-top: clamp(22px, 3vw, 32px); }
+.calm-sub .icon-tile { border-radius: 12px; background: var(--color-teal-mist); color: var(--color-brand-teal); }
+.calm-sub .reading-col section:nth-of-type(3n + 2) .icon-tile { background: #ffe2d8; color: #9c3a14; }
+.calm-sub .reading-col section:nth-of-type(3n + 3) .icon-tile { background: #f6ecc4; color: #7d6300; }
+.calm-sub .next-step {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(135deg, #eef8f6 0%, #fffaf0 60%, #fff2ec 100%);
+}
+.calm-sub .callout { border-radius: 14px; background: var(--brand-soft); color: var(--brand-strong); }
+.calm-sub .callout svg { color: var(--brand-strong); }
+/* The contents list beside the guides. */
+.calm-sub aside ol a[href^="#"] { border-radius: 10px; }
+
+/* FAQ: question cards in one column, the answer under the question. */
+.faq-cards { display: grid; gap: 10px; max-width: 880px; list-style: none; padding: 0; margin: 0; }
+.faq-card-answer { padding: 0 18px 18px; font-size: 0.9875rem; line-height: 1.7; color: var(--text); }
+.faq-card-answer p + p { margin-top: 10px; }
+
+/* News: filter chips. */
+.news-chip { background: var(--card); transition: border-color 0.2s; }
+.news-chip:hover { border-color: var(--ink); }
+.news-chip.is-active { border-color: var(--color-brand-teal); background: var(--color-teal-mist); color: var(--color-brand-teal); font-weight: 600; }
+
+/* ---------- Get involved pages (org parts, calm look) ----------
+   Scoped to .calm-sub: the homepage and /start use the same org classes
+   and keep their own look. */
+.calm-sub .zone-white,
+.calm-sub .transform-section { background: transparent; }
+.calm-sub .org-section { border-top-color: var(--line); }
+.calm-sub .org-head h2 { font-size: clamp(1.75rem, 3.4vw, 2.75rem); letter-spacing: -0.02em; }
+
+/* Rows become cards, colours in turn. */
+.calm-sub .org-rows { border-top: 0; gap: 14px; }
+.calm-sub .org-rows > li { border-bottom: 0; }
+.calm-sub .org-row {
+  position: relative;
+  height: 100%;
+  padding: 22px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-cards);
+  background: var(--card);
+  overflow: hidden;
+  transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
+}
+.calm-sub .org-row::before {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  right: -70px;
+  top: -80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--row-glow, rgba(10, 94, 90, 0.12)), transparent 70%);
+  pointer-events: none;
+}
+.calm-sub .org-rows > li:nth-child(3n + 2) .org-row { --row-glow: rgba(255, 148, 115, 0.2); }
+.calm-sub .org-rows > li:nth-child(3n + 3) .org-row { --row-glow: rgba(236, 218, 152, 0.4); }
+.calm-sub .org-rows > li:nth-child(3n + 1) .org-row-icon:not([class*="tone-"]) { background: var(--color-teal-mist); color: var(--color-brand-teal); }
+.calm-sub .org-rows > li:nth-child(3n + 2) .org-row-icon:not([class*="tone-"]) { background: #ffe2d8; color: #9c3a14; }
+.calm-sub .org-rows > li:nth-child(3n + 3) .org-row-icon:not([class*="tone-"]) { background: #f6ecc4; color: #7d6300; }
+.calm-sub .org-row-icon { border-radius: 12px; }
+.calm-sub a.org-row:hover,
+.calm-sub a.org-row:focus-visible { transform: translateY(-3px); border-color: var(--ink); box-shadow: 0 22px 44px -30px rgba(30, 40, 60, 0.4); }
+.calm-sub a.org-row:hover .org-row-title { color: var(--ink); }
+
+/* Steps: numbered cards. */
+.calm-sub .org-steps { gap: 14px; }
+.calm-sub .org-steps > li {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-cards);
+  background: var(--card);
+}
+
+/* Notes and the closing band. */
+.calm-sub .org-note { border-radius: 14px; }
+.calm-sub .org-cta { background: none; }
+.calm-sub .org-cta-inner {
+  margin-top: clamp(24px, 4vw, 48px);
+  margin-bottom: clamp(40px, 6vw, 72px);
+  padding: clamp(28px, 4vw, 52px);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-cards) + 6px);
+  background: linear-gradient(135deg, #e3f2ef 0%, #fbf3d9 50%, #ffe8df 100%);
+  box-shadow: 0 30px 60px -45px rgba(30, 40, 60, 0.35);
+}
+.calm-sub .org-form > form,
+.calm-sub .org-form > div > form { border-radius: calc(var(--radius-cards) + 4px); }
+@media (prefers-reduced-motion: reduce) { .calm-sub .org-row { transition: none; } .calm-sub a.org-row:hover { transform: none; } }
+
+/* One job: the description on a white card under the hero. */
+.job-body {
+  margin: 0;
+  max-width: 880px;
+  padding: clamp(24px, 4vw, 44px);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-cards) + 4px);
+  background: var(--card);
+}
+
+/* Older content cards on calm pages. */
+.calm-sub .surface-card { border: 1px solid var(--line); border-radius: var(--radius-cards); background: var(--card); box-shadow: none; }
+.calm-sub .transform-content { background: transparent; }
+
+/* Corner glows drawn inside each card's own background, not as a shape
+   hanging off its edge: a shape past the edge counts as overflowing
+   content on narrow screens (the open tools audit at 320px). */
+.lab-experiment::before,
+.issue-topic[class*="issue-tone-"]::before,
+.issue-point::before,
+.glossary-term::before,
+.minor-resource::before,
+.calm-sub .org-row::before,
+.lab-stat::before { content: none; }
+.lab-experiment { background: radial-gradient(220px 220px at 100% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%), var(--card); }
+.issue-topic[class*="issue-tone-"],
+.issue-point,
+.glossary-term,
+.minor-resource { background: radial-gradient(180px 180px at 100% 0%, var(--tone-glow), transparent 70%), var(--card); }
+.calm-sub .org-row { background: radial-gradient(180px 180px at 100% 0%, var(--row-glow, rgba(10, 94, 90, 0.12)), transparent 70%), var(--card); }
+.lab-stat { background: radial-gradient(160px 160px at 100% 100%, rgba(124, 92, 255, 0.16), transparent 70%), var(--card); }

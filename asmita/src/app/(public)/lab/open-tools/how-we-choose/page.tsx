@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LabScene } from "@/components/lab/LabScene";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
@@ -23,7 +24,7 @@ import { labEnabled } from "@/lib/lab/flags";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "How we choose tools — Open tools — Asmita AI Lab",
+  title: "How we choose tools · Open tools · Asmita AI Lab",
   description:
     "What 'open' means in the Asmita AI Lab's tool directory, what we check before listing a tool, what we never list, and how to suggest one or report an error.",
 };
@@ -99,11 +100,12 @@ export default async function HowWeChoosePage() {
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme lab-sub">
         {/* HEADER — the tool pages' pattern: notice (Hindi only),
             breadcrumb, title, lede. No hero band and no eyebrow. */}
         <header className="ot-tool-head">
-          <div className="container">
+          <div className="container lab-detail-head">
+            <LabScene kind="open-tools" className="lab-detail-scene" />
             {locale === "hi" && (
               <p className="ot-en-note">{t(locale, "lab.openTools.tool.englishNotice")}</p>
             )}

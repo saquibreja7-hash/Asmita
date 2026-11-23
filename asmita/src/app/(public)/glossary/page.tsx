@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
+import { BRAND_TONES } from "@/components/IssueTopicCards";
 import { glossary } from "@/lib/issue-content";
 import { getLocale } from "@/lib/get-locale";
 import { Illustration } from "@/components/Illustration";
@@ -34,60 +35,56 @@ export default async function GlossaryPage() {
   const locale = await getLocale();
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="hero" aria-label={say("Glossary", "शब्दावली")}>
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-3xl text-center">
-              <h1 className="page-title">
-                {say("Words, in plain language", "शब्दों का सरल अर्थ")}
-              </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
-                {say("The terms you will see on this site and in the law, explained without jargon. You do not need to know any of these to get help.", "इस वेबसाइट और संबंधित नियमों में आने वाले शब्द, सरल भाषा में। मदद लेने के लिए इन सभी शब्दों को जानना ज़रूरी नहीं है।")}
-              </p>
-            </div>
-            <Illustration name="page-glossary" eager className="page-hero-art" />
-          </div>
-        </section>
+    <LabToolShell variant="calm">
+      <LabToolHero
+        badge={say("Glossary", "शब्दावली")}
+        title={say("Words, in plain language", "शब्दों का सरल अर्थ")}
+        intro={
+          <p>
+            {say(
+              "The terms you will see on this site and in the law, explained without jargon. You do not need to know any of these to get help.",
+              "इस वेबसाइट और संबंधित नियमों में आने वाले शब्द, सरल भाषा में। मदद लेने के लिए इन सभी शब्दों को जानना ज़रूरी नहीं है।",
+            )}
+          </p>
+        }
+        visual={<Illustration name="page-glossary" eager className="issue-hero-art" />}
+      />
 
-        {/* TERMS */}
-        <section className="zone-white section-pad" aria-label={say("Terms", "शब्द")}>
-          <div className="container">
-            <dl className="mx-auto max-w-3xl divide-y divide-[var(--line)]">
-              {glossary.map((entry, index) => (
-                <div key={entry.term} className="py-6">
-                  <dt className="font-display text-[1.15rem] font-medium text-[var(--ink)]">
-                    {say(entry.term, hindiGlossary[index].term)}
-                  </dt>
-                  <dd className="mt-2 max-w-[60ch] text-[16px] leading-[1.65] text-[var(--text)]">
-                    {say(entry.definition, hindiGlossary[index].definition)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </section>
-
-        {/* CLOSING */}
-        <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
-          <div className="zone-sunset-content container section-pad text-center">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="section-title">
-                {say("Ready when you are.", "जब आप तैयार हों।")}
-              </h2>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
-                  {say("Get help", "मदद लें")}
-                </Link>
-                <Link className="btn btn-secondary btn-arrow !m-0" href="/issue">
-                  {say("Back to the issue", "समस्या के बारे में पढ़ें")}
-                </Link>
+      {/* TERMS */}
+      <section className="lab-sub-section" aria-label={say("Terms", "शब्द")}>
+        <div className="container">
+          <dl className="glossary-grid">
+            {glossary.map((entry, index) => (
+              <div key={entry.term} className={`glossary-term issue-tone-${BRAND_TONES[index % BRAND_TONES.length]}`}>
+                <dt className="glossary-dt">
+                  <span className="glossary-n" aria-hidden="true">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  {say(entry.term, hindiGlossary[index].term)}
+                </dt>
+                <dd className="glossary-dd">{say(entry.definition, hindiGlossary[index].definition)}</dd>
               </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      {/* CLOSING */}
+      <section className="lab-sub-section" aria-label={say("Get help", "मदद लें")}>
+        <div className="container">
+          <div className="issue-close">
+            <h2 className="lab-h2">{say("Ready when you are.", "जब आप तैयार हों।")}</h2>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
+                {say("Get help", "मदद लें")}
+              </Link>
+              <Link className="btn btn-secondary btn-arrow !m-0" href="/issue">
+                {say("Back to the issue", "समस्या के बारे में पढ़ें")}
+              </Link>
             </div>
           </div>
-        </section>
-      </div>
-    </AppShell>
+        </div>
+      </section>
+    </LabToolShell>
   );
 }

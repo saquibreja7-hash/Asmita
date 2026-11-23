@@ -30,7 +30,7 @@ export default async function VolunteerPage() {
   const locale = await getLocale();
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         <OrgHero title={t(locale, "org.volunteer.title")} lede={t(locale, "org.volunteer.sub")} illustration="page-about">
           <div className="mt-8 flex">
             <a className="btn btn-primary btn-arrow !m-0" href="#apply">

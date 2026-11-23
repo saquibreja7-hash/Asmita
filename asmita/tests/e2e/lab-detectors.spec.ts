@@ -66,7 +66,7 @@ test.describe("AI Lab detector panel, WP90", () => {
     // WP113: the Lab's own GenD row is present, labelled and credited, and
     // honestly "not configured" while LAB_GEND_URL is unset.
     await expect(page.getByText("GenD (open model, CTU Prague)")).toBeVisible();
-    await expect(page.getByText("Checks face swaps and face reenactment — not every AI-made image.")).toBeVisible();
+    await expect(page.getByText("Checks face swaps and face reenactment, not every AI-made image.")).toBeVisible();
     // The paper and code links appear twice on purpose — in the row's note
     // and in the credits disclosure below — and both must point at the
     // sources.
@@ -86,8 +86,8 @@ test.describe("AI Lab detector panel, WP90", () => {
     // The page's sources disclosure (WP113): GenD and YuNet, named and
     // linked, visible without running a check.
     await expect(page.getByRole("heading", { name: "Sources and credits" })).toBeVisible();
-    await expect(page.getByText(/GenD — Deepfake Detection that Generalizes Across Benchmarks/)).toBeVisible();
-    await expect(page.getByText(/YuNet — the face detector that finds and aligns the face/)).toBeVisible();
+    await expect(page.getByText(/GenD: Deepfake Detection that Generalizes Across Benchmarks/)).toBeVisible();
+    await expect(page.getByText(/YuNet: the face detector that finds and aligns the face/)).toBeVisible();
   });
 
   test("renders fully in Hindi, Beta badge included", async ({ browser }) => {

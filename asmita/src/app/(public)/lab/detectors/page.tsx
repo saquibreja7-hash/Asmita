@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabCallout, LabLinkCards, LabSection, LabSteps, LabToolHero, LabToolShell, LabWorkspace } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
@@ -29,91 +28,53 @@ export default async function DetectorPanelPage() {
   const locale = await getLocale();
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="hero" aria-label={t(locale, "lab.eyebrow")}>
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-2xl text-center">
-              <span className="eyebrow">{t(locale, "lab.eyebrow")}</span>
-              <h1 className="page-title mt-5">{t(locale, "lab.detectors.title")}</h1>
-              <p className="mt-4">
-                <span className="inline-flex items-center rounded-full border border-[var(--brand)] bg-[var(--brand-soft)] px-3 py-1 text-xs font-semibold tracking-wide text-[var(--brand-strong)]">
-                  {t(locale, "lab.detectors.beta")}
-                </span>
-              </p>
-              <p className="font-size-large mx-auto mt-5 max-w-xl text-[var(--ink)]">{t(locale, "lab.detectors.intro")}</p>
-              <p className="muted mx-auto mt-4 max-w-xl text-sm leading-[1.7]">{t(locale, "lab.detectors.cannotDo")}</p>
-              <p className="mt-6">
-                <Link href="/lab" className="btn btn-secondary">
-                  {t(locale, "lab.detectors.back")}
-                </Link>
-              </p>
-            </div>
-          </div>
-        </section>
+    <LabToolShell>
+      <LabToolHero
+        backLabel={t(locale, "lab.detectors.back")}
+        badge={t(locale, "lab.detectors.beta")}
+        title={t(locale, "lab.detectors.title")}
+        intro={
+          <>
+            <p>{t(locale, "lab.detectors.intro")}</p>
+            <p className="text-[15px] text-[var(--text)]">{t(locale, "lab.detectors.cannotDo")}</p>
+          </>
+        }
+        scene="detectors"
+      />
 
-        {/* PANEL */}
-        <section className="section-pad" aria-label={t(locale, "lab.detectors.title")}>
-          <div className="container">
-            <DetectorPanel locale={locale} />
-          </div>
-        </section>
+      <LabWorkspace label={t(locale, "lab.detectors.title")}>
+        <DetectorPanel locale={locale} />
+      </LabWorkspace>
 
-        {/* HOW TO READ THIS */}
-        <section className="zone-white section-pad" aria-labelledby="detectors-explainer">
-          <div className="container">
-            <h2 id="detectors-explainer" className="section-title">{t(locale, "lab.detectors.explainer.title")}</h2>
-            <p className="mx-auto mt-5 max-w-2xl text-[16px] leading-[1.7] text-[var(--text)]">
-              {t(locale, "lab.detectors.explainer.body")}
-            </p>
-            <p className="muted mx-auto mt-4 max-w-2xl text-sm leading-[1.7]">
-              {t(locale, "lab.detectors.gend.limits")}
-            </p>
-            <p className="muted mx-auto mt-6 max-w-2xl text-sm leading-[1.7]">{t(locale, "lab.detectors.privacy")}</p>
-          </div>
-        </section>
+      {/* HOW TO READ THIS */}
+      <LabSection id="detectors-explainer" index="01" title={t(locale, "lab.detectors.explainer.title")} narrow>
+        <LabSteps
+          ordered={false}
+          layout="stack"
+          steps={[
+            <p key="body">{t(locale, "lab.detectors.explainer.body")}</p>,
+            <p key="limits">{t(locale, "lab.detectors.gend.limits")}</p>,
+          ]}
+        />
+        <LabCallout icon="lock">{t(locale, "lab.detectors.privacy")}</LabCallout>
+      </LabSection>
 
-        {/* SOURCES AND CREDITS */}
-        <section className="section-pad" aria-labelledby="detectors-credits">
-          <div className="container">
-            <h2 id="detectors-credits" className="section-title">{t(locale, "lab.detectors.credits.title")}</h2>
-            <ul className="mx-auto mt-5 max-w-2xl space-y-4 text-[15px] leading-[1.7] text-[var(--text)]">
-              <li>
-                {t(locale, "lab.detectors.credits.gend")}{" "}
-                <a
-                  href="https://arxiv.org/abs/2508.06248"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="link-underline"
-                >
-                  {t(locale, "lab.detectors.gend.paper")}
-                </a>
-                {" · "}
-                <a
-                  href="https://github.com/yermandy/GenD"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="link-underline"
-                >
-                  {t(locale, "lab.detectors.gend.code")}
-                </a>
-              </li>
-              <li>
-                {t(locale, "lab.detectors.credits.yunet")}{" "}
-                <a
-                  href="https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="link-underline"
-                >
-                  {t(locale, "lab.detectors.credits.zoo")}
-                </a>
-              </li>
-            </ul>
-          </div>
-        </section>
-      </div>
-    </AppShell>
+      {/* SOURCES AND CREDITS */}
+      <LabSection id="detectors-credits" index="02" title={t(locale, "lab.detectors.credits.title")}>
+        <LabLinkCards
+          cards={[
+            { href: "https://arxiv.org/abs/2508.06248", label: t(locale, "lab.detectors.gend.paper"), note: t(locale, "lab.detectors.credits.gend"), icon: "book", external: true },
+            { href: "https://github.com/yermandy/GenD", label: t(locale, "lab.detectors.gend.code"), note: "GenD", icon: "layers", external: true },
+            {
+              href: "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet",
+              label: t(locale, "lab.detectors.credits.zoo"),
+              note: t(locale, "lab.detectors.credits.yunet"),
+              icon: "scan",
+              external: true,
+            },
+          ]}
+        />
+      </LabSection>
+    </LabToolShell>
   );
 }

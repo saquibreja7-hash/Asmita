@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
+import { AUDIENCE_STYLE, IssueTopicCards } from "@/components/IssueTopicCards";
 import { audiences } from "@/lib/audience-content";
 import { getLocale } from "@/lib/get-locale";
 import { Illustration } from "@/components/Illustration";
@@ -23,72 +24,55 @@ export default async function WhoWeHelpPage() {
   const locale = await getLocale();
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="hero" aria-label={say("Who we help", "हम किसकी मदद करते हैं")}>
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-3xl text-center">
-              <h1 className="page-title">
-                {say("Wherever you are coming from", "आपकी स्थिति जो भी हो")}
-              </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
-                {say("Image-based abuse touches survivors, the people around them, and the platforms that carry the content. Find the path that fits you.", "तस्वीरों के ज़रिए दुर्व्यवहार प्रभावित व्यक्ति, उनके करीबी लोगों और सामग्री दिखाने वाले प्लेटफ़ॉर्म से जुड़ा हो सकता है। अपने लिए सही रास्ता चुनें।")}
-              </p>
-            </div>
-            <Illustration name="who-we-help" eager className="page-hero-art" />
-          </div>
-        </section>
+    <LabToolShell variant="calm">
+      <LabToolHero
+        badge={say("Who we help", "हम किसकी मदद करते हैं")}
+        title={say("Wherever you are coming from", "आपकी स्थिति जो भी हो")}
+        intro={
+          <p>
+            {say(
+              "Image-based abuse touches survivors, the people around them, and the platforms that carry the content. Find the path that fits you.",
+              "तस्वीरों के ज़रिए दुर्व्यवहार प्रभावित व्यक्ति, उनके करीबी लोगों और सामग्री दिखाने वाले प्लेटफ़ॉर्म से जुड़ा हो सकता है। अपने लिए सही रास्ता चुनें।",
+            )}
+          </p>
+        }
+        visual={<Illustration name="who-we-help" eager className="issue-hero-art" />}
+      />
 
-        {/* AUDIENCE GRID */}
-        <section className="zone-white section-pad" aria-label={say("Audiences", "किसके लिए मदद")}>
-          <div className="container">
-            <div className="mx-auto max-w-5xl">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {audiences.map((a, index) => (
-                  <Link
-                    key={a.slug}
-                    href={`/who-we-help/${a.slug}`}
-                    className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
-                  >
-                    <h2 className="subsection-title leading-snug">
-                      {say(a.term, hindiAudiences[index].term)}
-                    </h2>
-                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
-                      {say(a.cardLine, hindiAudiences[index].cardLine)}
-                    </p>
-                    <span className="mt-4 inline-block text-sm font-medium text-[var(--ink)]">
-                      {say("Open", "देखें")}{" "}
-                      <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
-                        →
-                      </span>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+      {/* AUDIENCES */}
+      <section className="lab-sub-section" aria-label={say("Audiences", "किसके लिए मदद")}>
+        <div className="container">
+          <IssueTopicCards
+            headingLevel={2}
+            moreLabel={say("Open", "देखें")}
+            cards={audiences.map((a, index) => ({
+              href: `/who-we-help/${a.slug}`,
+              title: say(a.term, hindiAudiences[index].term),
+              short: say(a.cardLine, hindiAudiences[index].cardLine),
+              icon: AUDIENCE_STYLE[a.slug]?.icon ?? "users",
+              tone: AUDIENCE_STYLE[a.slug]?.tone,
+              number: index + 1,
+            }))}
+          />
+        </div>
+      </section>
 
-        {/* CLOSING */}
-        <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
-          <div className="zone-sunset-content container section-pad text-center">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="section-title">
-                {say("Not sure where you fit? Start here.", "समझ नहीं आ रहा कहाँ से शुरू करें? यहाँ आएँ।")}
-              </h2>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
-                  {say("Get help", "मदद लें")}
-                </Link>
-                <Link className="btn btn-secondary btn-arrow !m-0" href="/issue">
-                  {say("Understand the issue", "समस्या को समझें")}
-                </Link>
-              </div>
+      {/* CLOSING */}
+      <section className="lab-sub-section" aria-label={say("Get help", "मदद लें")}>
+        <div className="container">
+          <div className="issue-close">
+            <h2 className="lab-h2">{say("Not sure where you fit? Start here.", "समझ नहीं आ रहा कहाँ से शुरू करें? यहाँ आएँ।")}</h2>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
+                {say("Get help", "मदद लें")}
+              </Link>
+              <Link className="btn btn-secondary btn-arrow !m-0" href="/issue">
+                {say("Understand the issue", "समस्या को समझें")}
+              </Link>
             </div>
           </div>
-        </section>
-      </div>
-    </AppShell>
+        </div>
+      </section>
+    </LabToolShell>
   );
 }

@@ -1,6 +1,6 @@
 import { Illustration } from "@/components/Illustration";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 
@@ -57,76 +57,64 @@ export default async function FaqPage() {
     },
   ];
 
+  const tones = ["teal", "coral", "gold"] as const;
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="container page-hero py-8 text-center page-hero-split md:py-14">
-          <div className="mx-auto max-w-2xl">
-            <h1 className="page-title">
-              {t(locale, "faq.hero.title")}
-            </h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "faq.hero.sub")}
-            </p>
-          </div>
-          <Illustration name="page-faq" eager className="page-hero-art hidden lg:block" />
-        </section>
+    <LabToolShell variant="calm">
+      <LabToolHero
+        badge="FAQ"
+        title={t(locale, "faq.hero.title")}
+        intro={<p>{t(locale, "faq.hero.sub")}</p>}
+        visual={<Illustration name="page-faq" eager className="issue-hero-art" />}
+      />
 
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* FAQ SECTIONS */}
-        {sections.map((section, si) => (
-          <section key={section.eyebrow} className="container py-7 md:py-14">
-            <div className="mx-auto max-w-3xl">
-              <h2 className="section-title">
+      {/* FAQ SECTIONS: one numbered section each, questions as cards that open. */}
+      {sections.map((section, si) => (
+        <section key={section.eyebrow} className="lab-sub-section" aria-labelledby={`faq-section-${si}`}>
+          <div className="container">
+            <header className="lab-section-head">
+              <span className="lab-index" aria-hidden="true">
+                {String(si + 1).padStart(2, "0")}
+              </span>
+              <h2 id={`faq-section-${si}`} className="lab-h2">
                 {section.title}
               </h2>
-
-              <div className="mt-8 border-t border-[var(--line)]">
-                {section.items.map((faq) => (
-                  <details key={faq.question} className="faq-item">
-                    <summary>{faq.question}</summary>
-                    <div className="faq-answer">{faq.answer}</div>
+            </header>
+            <ul className="faq-cards" role="list">
+              {section.items.map((faq) => (
+                <li key={faq.question} className={`help-scenario issue-tone-${tones[si % tones.length]}`}>
+                  <details>
+                    <summary>
+                      <span className="help-scenario-q">{faq.question}</span>
+                      <span className="help-scenario-chev" aria-hidden="true">
+                        +
+                      </span>
+                    </summary>
+                    <div className="faq-card-answer">{faq.answer}</div>
                   </details>
-                ))}
-              </div>
-            </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      ))}
 
-            {si < sections.length - 1 && (
-              <div className="mx-auto mt-14 max-w-3xl">
-                <div className="hairline" />
-              </div>
-            )}
-          </section>
-        ))}
-
+      {/* CLOSING */}
+      <section className="lab-sub-section">
         <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* CLOSING */}
-        <section className="container page-hero text-center">
-          <div className="mx-auto max-w-2xl">
-            <h2 className="section-title">
-              {t(locale, "faq.closing.title")}
-            </h2>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-              {t(locale, "faq.closing.body")}
-            </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-3">
-              <Link className="btn btn-primary" href="/contact">
+          <div className="issue-close">
+            <h2 className="lab-h2">{t(locale, "faq.closing.title")}</h2>
+            <p className="issue-close-body">{t(locale, "faq.closing.body")}</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link className="btn btn-primary !m-0" href="/contact">
                 {t(locale, "faq.closing.cta1")}
               </Link>
-              <Link className="btn btn-secondary" href="/resources">
+              <Link className="btn btn-secondary !m-0" href="/resources">
                 {t(locale, "faq.closing.cta2")}
               </Link>
             </div>
           </div>
-        </section>
-      </div>
-    </AppShell>
+        </div>
+      </section>
+    </LabToolShell>
   );
 }
