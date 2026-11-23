@@ -229,8 +229,12 @@ export default function TrustedFlaggerPage() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-6 text-sm font-medium leading-[1.6] text-[var(--danger)]">
-                &lt;TO_FILL: trust and safety contact&gt;
+              <p className="mt-6 text-[length:var(--text-body)] leading-[1.6] text-[var(--text)]">
+                Trust and safety teams can write to us at{" "}
+                <a className="text-link" href="mailto:grievance@meriasmita.org">
+                  grievance@meriasmita.org
+                </a>
+                .
               </p>
             </div>
           </div>

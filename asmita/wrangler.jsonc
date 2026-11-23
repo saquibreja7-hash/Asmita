@@ -71,7 +71,8 @@
         "ENABLE_PROVENANCE_CHECK": "true",
         "ESCALATION_DRAFTS_REVIEWED": "true",
         "ENABLE_CRAWLER": "true",
-        "ENABLE_LAB": "false"
+        "ENABLE_LAB": "false",
+        "ORG_INBOX_EMAIL": "support@meriasmita.org"
       }
     }
   }
