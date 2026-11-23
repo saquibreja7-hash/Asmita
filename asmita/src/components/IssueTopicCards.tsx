@@ -19,6 +19,8 @@ export type IssueCard = {
   icon: IconName;
   tone?: BrandTone;
   number?: number;
+  /** This card's own cue, in place of the shared moreLabel. */
+  more?: string;
 };
 
 /** `children` are extra <li> tiles appended to the same grid. */
@@ -55,9 +57,9 @@ export function IssueTopicCards({
             </Link>
           </Heading>
           {card.short && <p className="issue-topic-short">{card.short}</p>}
-          {moreLabel && (
+          {(card.more ?? moreLabel) && (
             <span className="issue-topic-more" aria-hidden="true">
-              {moreLabel} <span className="issue-topic-arrow">→</span>
+              {card.more ?? moreLabel} <span className="issue-topic-arrow">→</span>
             </span>
           )}
         </li>
@@ -83,4 +85,11 @@ export const AUDIENCE_STYLE: Record<string, { icon: IconName; tone: BrandTone }>
   parents: { icon: "users", tone: "gold" },
   "young-people": { icon: "shieldCheck", tone: "teal" },
   platforms: { icon: "building", tone: "coral" },
+};
+
+/** Each Resources area's icon and colour. */
+export const RESOURCE_STYLE: Record<string, { icon: IconName; tone: BrandTone }> = {
+  "/resources/guides": { icon: "book", tone: "teal" },
+  "/resources/directory": { icon: "compass", tone: "coral" },
+  "/resources/legal": { icon: "scale", tone: "gold" },
 };

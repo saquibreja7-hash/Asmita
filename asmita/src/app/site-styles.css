@@ -2166,3 +2166,28 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 .minor-resource { flex-direction: column; justify-content: flex-start; }
 .minor-resource-contact { margin-top: 4px; }
 .calm-sub .lab-workspace { background: linear-gradient(160deg, #eef8f6 0%, #fffaf0 55%, #fff2ec 100%); }
+
+/* ---------- Reading pages on calm pages (Guides, Legal rights) ----------
+   Each reading section becomes a white card; the section icons take the
+   three brand colours in turn; the next-step boxes and callouts are tinted. */
+.calm-sub .reading-col > section,
+.calm-sub .reading-col > div > section {
+  margin-bottom: 18px;
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-cards) + 4px);
+  background: var(--card);
+}
+.calm-sub .reading-col > section:first-child { padding-top: clamp(22px, 3vw, 32px); }
+.calm-sub .icon-tile { border-radius: 12px; background: var(--color-teal-mist); color: var(--color-brand-teal); }
+.calm-sub .reading-col section:nth-of-type(3n + 2) .icon-tile { background: #ffe2d8; color: #b4461f; }
+.calm-sub .reading-col section:nth-of-type(3n + 3) .icon-tile { background: #f6ecc4; color: #7d6300; }
+.calm-sub .next-step {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(135deg, #eef8f6 0%, #fffaf0 60%, #fff2ec 100%);
+}
+.calm-sub .callout { border-radius: 14px; background: var(--brand-soft); color: var(--brand-strong); }
+.calm-sub .callout svg { color: var(--brand-strong); }
+/* The contents list beside the guides. */
+.calm-sub aside ol a[href^="#"] { border-radius: 10px; }

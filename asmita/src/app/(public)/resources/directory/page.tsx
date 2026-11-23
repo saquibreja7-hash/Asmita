@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { directory, directoryLastVerified } from "@/lib/resources-content";
 import { directoryHi } from "@/lib/resources-content-hi";
 import { getLocale } from "@/lib/get-locale";
@@ -16,31 +16,19 @@ export default async function DirectoryPage() {
   const locale = await getLocale();
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
   return (
-    <AppShell>
-      <div className="page-canvas">
-        <section className="hero" aria-label={say("Support directory", "सहायता सूची")}>
-          <div className="hero-content container py-8 md:py-14 page-hero-split">
-            <div className="mx-auto max-w-3xl">
-              <p className="text-sm">
-                <Link href="/resources" className="text-link font-medium">
-                  {say("Resources", "संसाधन")}
-                </Link>
-              </p>
-              <h1 className="page-title mt-4">
-                {say("Support directory", "सहायता सूची")}
-              </h1>
-              <p className="font-size-large mt-5 max-w-2xl text-[var(--ink)]">
-                {say("Public helplines and support services in India. Availability and hours can change; check the linked service before relying on it.", "भारत की सार्वजनिक हेल्पलाइन और सहायता सेवाएँ। उपलब्धता और समय बदल सकते हैं; सेवा पर भरोसा करने से पहले उसका लिंक जाँचें।")}
-              </p>
-              <p className="eyebrow mt-6">
-                {say("Last complete directory verification", "पूरी सूची की पिछली जाँच")}: {directoryLastVerified}.
-              </p>
-            </div>
-            <Illustration name="page-directory" eager className="page-hero-art hidden lg:block" />
-          </div>
-        </section>
+    <LabToolShell variant="calm">
+      <LabToolHero
+        backLabel={say("Resources", "संसाधन")}
+        backHref="/resources"
+        title={say("Support directory", "सहायता सूची")}
+        intro={<p>{say("Public helplines and support services in India. Availability and hours can change; check the linked service before relying on it.", "भारत की सार्वजनिक हेल्पलाइन और सहायता सेवाएँ। उपलब्धता और समय बदल सकते हैं; सेवा पर भरोसा करने से पहले उसका लिंक जाँचें।")}</p>}
+        visual={<Illustration name="page-directory" eager className="issue-hero-art" />}
+      >
+        <p className="issue-meta">{say("Last complete directory verification", "पूरी सूची की पिछली जाँच")}: {directoryLastVerified}.</p>
+      </LabToolHero>
 
-        <section className="zone-white section-pad !pt-4" aria-label={say("Directory", "सहायता सूची")}>
+
+        <section className="lab-sub-section !pt-4" aria-label={say("Directory", "सहायता सूची")}>
           <div className="container">
             <div className="mx-auto max-w-3xl space-y-12">
               {directory.map((group, groupIndex) => (
@@ -98,13 +86,11 @@ export default async function DirectoryPage() {
           </div>
         </section>
 
-        <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
-          <div className="zone-sunset-content container section-pad text-center">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="section-title">
-                {say("Want help preparing a report?", "रिपोर्ट तैयार करने में मदद चाहिए?")}
-              </h2>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <section className="lab-sub-section" aria-label={say("Get help", "मदद लें")}>
+          <div className="container">
+            <div className="issue-close">
+              <h2 className="lab-h2">{say("Want help preparing a report?", "रिपोर्ट तैयार करने में मदद चाहिए?")}</h2>
+              <div className="mt-8 flex flex-wrap gap-3">
                 <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
                   {say("Get help", "मदद लें")}
                 </Link>
@@ -115,7 +101,6 @@ export default async function DirectoryPage() {
             </div>
           </div>
         </section>
-      </div>
-    </AppShell>
+    </LabToolShell>
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { guides } from "@/lib/resources-content";
 import { guidesHi } from "@/lib/resources-content-hi";
 import { getLocale } from "@/lib/get-locale";
@@ -44,27 +44,17 @@ export default async function GuidesPage() {
   const locale = await getLocale();
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
   return (
-    <AppShell>
-      <div className="page-canvas">
-        <section className="hero" aria-label={say("Practical guides", "व्यावहारिक मार्गदर्शिकाएँ")}>
-          <div className="hero-content container py-8 md:py-14 page-hero-split">
-            <div className="mx-auto max-w-3xl">
-              <Link href="/resources" className="text-link text-sm font-medium">
-                {say("Resources", "संसाधन")}
-              </Link>
-              <h1 className="page-title mt-4">
-                {say("Practical guides", "व्यावहारिक मार्गदर्शिकाएँ")}
-              </h1>
-              <p className="font-size-large mt-5 max-w-2xl text-[var(--ink)]">
-                {say("Short, plain steps you can follow at your own pace. Do what you can. You do not have to do all of it at once.", "सरल कदम जिन्हें आप अपनी गति से अपना सकते हैं। जो संभव हो वही करें; सब कुछ एक साथ करने की ज़रूरत नहीं है।")}
-              </p>
-              <p className="eyebrow mt-6">
-                {say("3 guides", "3 मार्गदर्शिकाएँ")}<ReadingTime label={t(locale, "reading.minutes")} />
-              </p>
-            </div>
-            <Illustration name="page-guides" eager className="page-hero-art hidden lg:block" />
-          </div>
-        </section>
+    <LabToolShell variant="calm">
+      <LabToolHero
+        backLabel={say("Resources", "संसाधन")}
+        backHref="/resources"
+        title={say("Practical guides", "व्यावहारिक मार्गदर्शिकाएँ")}
+        intro={<p>{say("Short, plain steps you can follow at your own pace. Do what you can. You do not have to do all of it at once.", "सरल कदम जिन्हें आप अपनी गति से अपना सकते हैं। जो संभव हो वही करें; सब कुछ एक साथ करने की ज़रूरत नहीं है।")}</p>}
+        visual={<Illustration name="page-guides" eager className="issue-hero-art" />}
+      >
+        <p className="issue-meta">{say("3 guides", "3 मार्गदर्शिकाएँ")}<ReadingTime label={t(locale, "reading.minutes")} /></p>
+      </LabToolHero>
+
 
         <ReadingLayout
           tocLabel={say("Guides", "मार्गदर्शिकाएँ")}
@@ -88,13 +78,11 @@ export default async function GuidesPage() {
           })}
         </ReadingLayout>
 
-        <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
-          <div className="zone-sunset-content container section-pad text-center">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="section-title">
-                {say("Ready to report?", "रिपोर्ट करने के लिए तैयार हैं?")}
-              </h2>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <section className="lab-sub-section" aria-label={say("Get help", "मदद लें")}>
+          <div className="container">
+            <div className="issue-close">
+              <h2 className="lab-h2">{say("Ready to report?", "रिपोर्ट करने के लिए तैयार हैं?")}</h2>
+              <div className="mt-8 flex flex-wrap gap-3">
                 <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
                   {say("Get help", "मदद लें")}
                 </Link>
@@ -105,7 +93,6 @@ export default async function GuidesPage() {
             </div>
           </div>
         </section>
-      </div>
-    </AppShell>
+    </LabToolShell>
   );
 }

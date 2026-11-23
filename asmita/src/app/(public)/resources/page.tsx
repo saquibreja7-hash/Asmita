@@ -1,7 +1,8 @@
 import { Illustration } from "@/components/Illustration";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
+import { IssueTopicCards, RESOURCE_STYLE } from "@/components/IssueTopicCards";
 import { getLocale } from "@/lib/get-locale";
 
 export const metadata: Metadata = {
@@ -41,69 +42,53 @@ export default async function ResourcesPage() {
   const locale = await getLocale();
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
   return (
-    <AppShell>
-      <div className="page-canvas">
-        <section className="hero" aria-label={say("Resources", "संसाधन")}>
-          <div className="hero-content container py-8 md:py-14 page-hero-split">
-            <div className="mx-auto max-w-3xl text-center">
-              <h1 className="page-title">
-                {say("Practical help, in one place", "व्यावहारिक मदद, एक जगह")}
-              </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
-                {say("Guides you can follow, people you can call, and a plain account of what the law gives you. Take what you need.", "काम की मार्गदर्शिकाएँ, सहायता के लिए संपर्क और अपने कानूनी अधिकारों की सरल जानकारी। जो आपके काम आए, उसे चुनें।")}
-              </p>
-            </div>
-            <Illustration name="page-resources" eager className="page-hero-art hidden lg:block" />
-          </div>
-        </section>
+    <LabToolShell variant="calm">
+      <LabToolHero
+        badge={say("Resources", "संसाधन")}
+        title={say("Practical help, in one place", "व्यावहारिक मदद, एक जगह")}
+        intro={
+          <p>
+            {say(
+              "Guides you can follow, people you can call, and a plain account of what the law gives you. Take what you need.",
+              "काम की मार्गदर्शिकाएँ, सहायता के लिए संपर्क और अपने कानूनी अधिकारों की सरल जानकारी। जो आपके काम आए, उसे चुनें।",
+            )}
+          </p>
+        }
+        visual={<Illustration name="page-resources" eager className="issue-hero-art" />}
+      />
 
-        <section className="zone-white section-pad" aria-label={say("Resource areas", "संसाधनों के प्रकार")}>
-          <div className="container">
-            <div className="mx-auto max-w-5xl">
-              <div className="grid gap-4 md:grid-cols-3">
-                {sections.map((s, index) => (
-                  <Link
-                    key={s.title}
-                    href={s.href}
-                    className="group flex flex-col rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-7 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-soft)]"
-                  >
-                    <h2 className="subsection-title">
-                      {say(s.title, hindiSections[index].title)}
-                    </h2>
-                    <p className="mt-3 flex-1 text-sm leading-[1.6] text-[var(--text-muted)]">
-                      {say(s.body, hindiSections[index].body)}
-                    </p>
-                    <span className="mt-5 inline-block text-sm font-medium text-[var(--ink)]">
-                      {say(s.cta, hindiSections[index].cta)}{" "}
-                      <span className="inline-block transition-transform group-hover:translate-x-0.5" aria-hidden>
-                        →
-                      </span>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+      <section className="lab-sub-section" aria-label={say("Resource areas", "संसाधनों के प्रकार")}>
+        <div className="container">
+          <IssueTopicCards
+            headingLevel={2}
+            cards={sections.map((section, index) => ({
+              href: section.href,
+              title: say(section.title, hindiSections[index].title),
+              short: say(section.body, hindiSections[index].body),
+              more: say(section.cta, hindiSections[index].cta),
+              icon: RESOURCE_STYLE[section.href]?.icon ?? "book",
+              tone: RESOURCE_STYLE[section.href]?.tone,
+              number: index + 1,
+            }))}
+          />
+        </div>
+      </section>
 
-        <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
-          <div className="zone-sunset-content container section-pad text-center">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="section-title">
-                {say("Need to act now?", "अभी कदम उठाना है?")}
-              </h2>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
-                  {say("Get help", "मदद लें")}
-                </Link>
-                <Link className="btn btn-secondary btn-arrow !m-0" href="/resources/directory">
-                  {say("Helplines", "हेल्पलाइन")}
-                </Link>
-              </div>
+      <section className="lab-sub-section" aria-label={say("Get help", "मदद लें")}>
+        <div className="container">
+          <div className="issue-close">
+            <h2 className="lab-h2">{say("Need to act now?", "अभी कदम उठाना है?")}</h2>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
+                {say("Get help", "मदद लें")}
+              </Link>
+              <Link className="btn btn-secondary btn-arrow !m-0" href="/resources/directory">
+                {say("Helplines", "हेल्पलाइन")}
+              </Link>
             </div>
           </div>
-        </section>
-      </div>
-    </AppShell>
+        </div>
+      </section>
+    </LabToolShell>
   );
 }
