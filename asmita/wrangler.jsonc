@@ -72,7 +72,8 @@
         "ESCALATION_DRAFTS_REVIEWED": "true",
         "ENABLE_CRAWLER": "true",
         "ENABLE_LAB": "true",
-        "ORG_INBOX_EMAIL": "support@meriasmita.org"
+        "ORG_INBOX_EMAIL": "support@meriasmita.org",
+        "LAB_SSCD_MODEL_URL": "https://models.meriasmita.org/sscd/sscd_disc_mixup-e65e2a5b.onnx"
       }
     }
   }
