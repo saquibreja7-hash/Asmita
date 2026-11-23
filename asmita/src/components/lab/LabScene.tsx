@@ -9,12 +9,10 @@ import type * as ThreeNS from "three";
  * person. Each <LabScene> is an empty, aria-hidden box; the text beside it
  * says what the tool does.
  *
- * All scenes share ONE WebGL canvas (browsers cap live contexts, and phones
- * suffer with many): a fixed, click-through canvas over the page, drawn only
- * inside each box's rectangle (viewport + scissor), only while the box is on
- * screen. Three.js loads when the first box comes near the screen, never
- * under prefers-reduced-motion or without WebGL; the box then keeps its
- * still CSS gradient instead.
+ * All scenes share one hidden WebGL renderer (see "the stage" below).
+ * Three.js loads when the first box comes near the screen, never under
+ * prefers-reduced-motion or without WebGL; the box then keeps its still
+ * CSS gradient instead.
  */
 
 /** "light": the gradient page (the default); "night": the dark page. */
@@ -65,19 +63,44 @@ const BUILDERS: Record<LabSceneKind, Builder> = {
 
 /* ------------------------------ the stage ------------------------------ */
 
+/*
+ * One hidden WebGL renderer draws every scene (browsers cap live WebGL
+ * contexts, and phones suffer with many). Each <LabScene> box holds an
+ * ordinary 2D canvas in the page flow, so a scene scrolls with its card
+ * exactly, with no lag. Each frame, for every box on screen only, the
+ * renderer draws the scene into its corner and the box's canvas copies it.
+ * Box sizes come from a ResizeObserver and visibility from an
+ * IntersectionObserver, so the loop never measures the page.
+ *
+ * Quality adapts to the device: phones and touch screens render at up to
+ * 1.5x pixels and 30 frames a second; laptops at up to 2x and the display
+ * rate. When no box is on screen the loop stops entirely.
+ */
+
 type Entry = {
   el: HTMLElement;
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
   scene: ThreeNS.Scene;
   camera: ThreeNS.PerspectiveCamera;
   built: Built;
   t: number;
   pointer: Pointer;
+  target: Pointer;
+  width: number;
+  height: number;
+  visible: boolean;
+  resize: ResizeObserver;
+  onMove: (event: PointerEvent) => void;
+  onLeave: () => void;
 };
 
 type Stage = {
   THREE: Three;
   renderer: ThreeNS.WebGLRenderer;
   entries: Set<Entry>;
+  io: IntersectionObserver;
+  wake: () => void;
   stop: () => void;
 };
 
@@ -94,73 +117,111 @@ function canAnimate() {
   return true;
 }
 
+/** Phones and tablets: fewer pixels, fewer frames. */
+function isLowPower() {
+  return window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768;
+}
+
 async function ensureStage(): Promise<Stage> {
   if (stage) return stage;
   if (starting) return starting;
   starting = (async () => {
     const THREE = await import("three");
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const lowPower = isLowPower();
+    const dpr = Math.min(window.devicePixelRatio || 1, lowPower ? 1.5 : 2);
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !lowPower || dpr < 1.5,
+      alpha: true,
+      powerPreference: lowPower ? "low-power" : "high-performance",
+    });
+    renderer.setPixelRatio(1);
     renderer.setClearColor(0x000000, 0);
     renderer.autoClear = false;
-    const canvas = renderer.domElement;
-    canvas.className = "lab-stage";
-    canvas.setAttribute("aria-hidden", "true");
-    document.body.appendChild(canvas);
+    // The renderer's canvas grows to the largest box drawn so far (in device
+    // pixels) and is never shown: each box's own canvas copies from it.
+    let bufferW = 1;
+    let bufferH = 1;
+    const ensureBuffer = (w: number, h: number) => {
+      if (w <= bufferW && h <= bufferH) return;
+      bufferW = Math.max(bufferW, w);
+      bufferH = Math.max(bufferH, h);
+      renderer.setSize(bufferW, bufferH, false);
+    };
 
     const entries = new Set<Entry>();
-    const resize = () => renderer.setSize(window.innerWidth, window.innerHeight, false);
-    resize();
-    window.addEventListener("resize", resize);
+    const io = new IntersectionObserver((hits) => {
+      for (const hit of hits) {
+        for (const entry of entries) if (entry.el === hit.target) entry.visible = hit.isIntersecting;
+      }
+      wake();
+    });
 
-    let mouseX = -1e6;
-    let mouseY = -1e6;
-    const onMove = (event: PointerEvent) => {
-      mouseX = event.clientX;
-      mouseY = event.clientY;
-    };
-    window.addEventListener("pointermove", onMove, { passive: true });
-
+    const frameGap = lowPower ? 1 / 30 : 0;
     const clock = new THREE.Clock();
     let raf = 0;
-    const loop = () => {
-      raf = requestAnimationFrame(loop);
-      const dt = Math.min(clock.getDelta(), 0.05);
-      if (document.hidden) return;
-      const W = window.innerWidth;
-      const H = window.innerHeight;
-      renderer.setScissorTest(false);
-      renderer.clear();
-      renderer.setScissorTest(true);
+    let running = false;
+    let since = 0;
+
+    const draw = (dt: number) => {
       for (const entry of entries) {
-        const r = entry.el.getBoundingClientRect();
-        if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > H || r.right < 0 || r.left > W) continue;
-        const inside = mouseX >= r.left && mouseX <= r.right && mouseY >= r.top && mouseY <= r.bottom;
-        const tx = inside ? ((mouseX - r.left) / r.width) * 2 - 1 : 0;
-        const ty = inside ? -(((mouseY - r.top) / r.height) * 2 - 1) : 0;
-        entry.pointer.x += (tx - entry.pointer.x) * 0.12;
-        entry.pointer.y += (ty - entry.pointer.y) * 0.12;
-        const y = H - r.bottom;
-        renderer.setViewport(r.left, y, r.width, r.height);
-        renderer.setScissor(r.left, y, r.width, r.height);
-        entry.camera.aspect = r.width / r.height;
-        entry.camera.updateProjectionMatrix();
+        if (!entry.visible || entry.width < 2 || entry.height < 2) continue;
+        const w = Math.round(entry.width * dpr);
+        const h = Math.round(entry.height * dpr);
+        ensureBuffer(w, h);
+        if (entry.canvas.width !== w || entry.canvas.height !== h) {
+          entry.canvas.width = w;
+          entry.canvas.height = h;
+        }
+        entry.pointer.x += (entry.target.x - entry.pointer.x) * 0.1;
+        entry.pointer.y += (entry.target.y - entry.pointer.y) * 0.1;
         entry.t += dt;
         entry.built.update(entry.t, dt, entry.pointer);
+        // Draw in the bottom-left corner of the buffer (GL's origin), then
+        // copy that corner; the canvas's top-left is the buffer's top-left.
+        renderer.setScissorTest(true);
+        renderer.setViewport(0, 0, w, h);
+        renderer.setScissor(0, 0, w, h);
+        renderer.clear();
         renderer.render(entry.scene, entry.camera);
+        entry.ctx.clearRect(0, 0, w, h);
+        entry.ctx.drawImage(renderer.domElement, 0, bufferH - h, w, h, 0, 0, w, h);
       }
     };
-    loop();
+
+    const loop = () => {
+      const anyVisible = [...entries].some((entry) => entry.visible);
+      if (!anyVisible || document.hidden) {
+        running = false;
+        return;
+      }
+      raf = requestAnimationFrame(loop);
+      since += Math.min(clock.getDelta(), 0.1);
+      if (since < frameGap) return;
+      const dt = Math.min(since, 1 / 20);
+      since = 0;
+      draw(dt);
+    };
+    const wake = () => {
+      if (running) return;
+      running = true;
+      clock.getDelta();
+      since = 0;
+      raf = requestAnimationFrame(loop);
+    };
+    const onVisibility = () => {
+      if (!document.hidden) wake();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     const stop = () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-      window.removeEventListener("pointermove", onMove);
+      running = false;
+      io.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       renderer.dispose();
       renderer.forceContextLoss();
-      canvas.remove();
     };
-    stage = { THREE, renderer, entries, stop };
+    stage = { THREE, renderer, entries, io, wake, stop };
     return stage;
   })();
   try {
@@ -170,13 +231,93 @@ async function ensureStage(): Promise<Stage> {
   }
 }
 
-function addEntry(s: Stage, el: HTMLElement, kind: LabSceneKind, tone: LabTone): Entry {
+/*
+ * Building a scene and compiling its shaders is the one costly step, and
+ * doing it mid-scroll is what makes a page stutter. So scenes are built one
+ * at a time, in idle moments, well before they reach the screen, and their
+ * shaders are compiled in the background before they first draw.
+ */
+const buildQueue: (() => Promise<void>)[] = [];
+let building = false;
+function enqueueBuild(task: () => Promise<void>) {
+  buildQueue.push(task);
+  if (!building) void drainBuilds();
+}
+async function drainBuilds() {
+  building = true;
+  while (buildQueue.length) {
+    await new Promise<void>((resolve) => {
+      const idle = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+      if (idle) idle(() => resolve(), { timeout: 400 });
+      else setTimeout(resolve, 30);
+    });
+    const task = buildQueue.shift();
+    if (task) await task().catch(() => undefined);
+  }
+  building = false;
+}
+
+async function addEntry(s: Stage, el: HTMLElement, kind: LabSceneKind, tone: LabTone): Promise<Entry | null> {
+  const canvas = document.createElement("canvas");
+  canvas.className = "lab-scene-canvas";
+  canvas.setAttribute("aria-hidden", "true");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  el.appendChild(canvas);
+
   TONE = tone;
   const scene = new s.THREE.Scene();
   const camera = new s.THREE.PerspectiveCamera(35, 1, 0.1, 100);
   const built = BUILDERS[kind](s.THREE, scene, camera);
-  const entry: Entry = { el, scene, camera, built, t: 0, pointer: { x: 0, y: 0 } };
+
+  const setSize = (width: number, height: number) => {
+    entry.width = width;
+    entry.height = height;
+    if (width > 0 && height > 0) {
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+  };
+  // The pointer leans a scene only with a mouse; touch scrolling never does.
+  const onMove = (event: PointerEvent) => {
+    if (event.pointerType !== "mouse") return;
+    const r = el.getBoundingClientRect();
+    entry.target.x = ((event.clientX - r.left) / r.width) * 2 - 1;
+    entry.target.y = -(((event.clientY - r.top) / r.height) * 2 - 1);
+  };
+  const onLeave = () => {
+    entry.target.x = 0;
+    entry.target.y = 0;
+  };
+  const hoverArea = el.closest<HTMLElement>(".lab-card") ?? el;
+  hoverArea.addEventListener("pointermove", onMove, { passive: true });
+  hoverArea.addEventListener("pointerleave", onLeave);
+
+  const resize = new ResizeObserver(([box]) => setSize(box.contentRect.width, box.contentRect.height));
+  const entry: Entry = {
+    el,
+    canvas,
+    ctx,
+    scene,
+    camera,
+    built,
+    t: 0,
+    pointer: { x: 0, y: 0 },
+    target: { x: 0, y: 0 },
+    width: 0,
+    height: 0,
+    visible: false,
+    resize,
+    onMove,
+    onLeave,
+  };
+  const r = el.getBoundingClientRect();
+  setSize(r.width, r.height);
+  // Compile this scene's shaders off the main thread where the browser can.
+  await s.renderer.compileAsync(scene, camera).catch(() => undefined);
+  resize.observe(el);
   s.entries.add(entry);
+  s.io.observe(el);
   return entry;
 }
 
@@ -184,6 +325,12 @@ function removeEntry(entry: Entry) {
   const s = stage;
   if (!s) return;
   s.entries.delete(entry);
+  s.io.unobserve(entry.el);
+  entry.resize.disconnect();
+  const hoverArea = entry.el.closest<HTMLElement>(".lab-card") ?? entry.el;
+  hoverArea.removeEventListener("pointermove", entry.onMove);
+  hoverArea.removeEventListener("pointerleave", entry.onLeave);
+  entry.canvas.remove();
   entry.built.dispose?.();
   entry.scene.traverse((object) => {
     const mesh = object as ThreeNS.Mesh;
@@ -213,14 +360,22 @@ export function LabScene({ kind, tone = "light", className = "" }: { kind: LabSc
         if (!hit.isIntersecting) return;
         near.disconnect();
         ensureStage()
-          .then((s) => {
-            if (cancelled) return;
-            entry = addEntry(s, el, kind, tone);
-            setLive(true);
-          })
+          .then((s) =>
+            enqueueBuild(async () => {
+              if (cancelled) return;
+              const added = await addEntry(s, el, kind, tone);
+              if (!added) return;
+              if (cancelled) {
+                removeEntry(added);
+                return;
+              }
+              entry = added;
+              setLive(true);
+            }),
+          )
           .catch(() => undefined);
       },
-      { rootMargin: "300px" },
+      { rootMargin: "900px 0px" },
     );
     near.observe(el);
     return () => {
@@ -361,26 +516,29 @@ function lean(object: ThreeNS.Object3D, pointer: Pointer, amount = 0.25) {
  * shards that drift apart and shift colour (a morph), then snap back to where
  * they came from (traced to the source). The grid leans toward the pointer. */
 function buildHero(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera): Built {
-  const COLS = 13;
+  // Phones show only the middle of the grid anyway: build just that much.
+  const COLS = isLowPower() ? 7 : 13;
   const ROWS = 5;
   const SIZE = 1.25;
   const GAP = 0.32;
   const group = new THREE.Group();
   scene.add(group);
-  const field = dust(THREE, 260, [30, 12, 8], 0.12);
+  const field = dust(THREE, isLowPower() ? 90 : 260, [30, 12, 8], 0.12);
   scene.add(field);
 
   const tileGeo = roundedTile(THREE, SIZE, SIZE, 0.16, 0.12);
   const shardGeo = roundedTile(THREE, SIZE / 2 - 0.03, SIZE / 2 - 0.03, 0.08, 0.12);
   const edgeGeo = roundedOutline(THREE, SIZE + 0.08, SIZE + 0.08, 0.2);
   const textures = Array.from({ length: 8 }, (_, i) => blobTexture(THREE, i));
+  // One material per picture, shared by every tile that shows it.
+  const tileMaterials = textures.map((map) => new THREE.MeshBasicMaterial({ map }));
 
   type Tile = { mesh: ThreeNS.Mesh; edge: ThreeNS.Line; home: ThreeNS.Vector3; phase: number; shards: ThreeNS.Mesh[]; crackAt: number };
   const tiles: Tile[] = [];
   for (let r = 0; r < ROWS; r += 1) {
     for (let c = 0; c < COLS; c += 1) {
       const i = r * COLS + c;
-      const mesh = new THREE.Mesh(tileGeo, new THREE.MeshBasicMaterial({ map: textures[i % textures.length] }));
+      const mesh = new THREE.Mesh(tileGeo, tileMaterials[i % tileMaterials.length]);
       const home = new THREE.Vector3((c - (COLS - 1) / 2) * (SIZE + GAP), (r - (ROWS - 1) / 2) * (SIZE + GAP), 0);
       mesh.position.copy(home);
       group.add(mesh);
@@ -438,7 +596,8 @@ function buildHero(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspecti
         const k = (t - tile.crackAt) / CRACK;
         const cracking = k >= 0 && k < 1;
         tile.mesh.visible = !cracking;
-        (tile.edge.material as ThreeNS.LineBasicMaterial).opacity = cracking ? 0.9 * Math.sin(k * Math.PI) : 0;
+        tile.edge.visible = cracking;
+        if (cracking) (tile.edge.material as ThreeNS.LineBasicMaterial).opacity = 0.9 * Math.sin(k * Math.PI);
         tile.shards.forEach((shard, s) => {
           shard.visible = cracking;
           if (!cracking) return;
@@ -694,6 +853,7 @@ function buildDetectors(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pers
   const width = COLS * CELL;
   const LOOP = 4.5;
   const idle = new THREE.Color(night() ? 0x4a4290 : 0xd2c8ff);
+  const palette = LAB_COLORS.map((c) => new THREE.Color(c));
 
   return {
     update(t, dt, pointer) {
@@ -709,7 +869,7 @@ function buildDetectors(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pers
           if (Math.abs(cx - x) < CELL && hidden[i] >= 0) heat[i] = 1;
           heat[i] = Math.max(0, heat[i] - dt * 0.35);
           if (hidden[i] >= 0) {
-            color.lerpColors(base, new THREE.Color(LAB_COLORS[hidden[i]]), heat[i]);
+            color.lerpColors(base, palette[hidden[i]], heat[i]);
           } else {
             color.lerpColors(base, idle, 0.3 + 0.2 * Math.sin(t * 2 + i));
           }
@@ -737,7 +897,8 @@ function buildProtect(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspe
   const picture = new THREE.Mesh(roundedTile(THREE, 2.2, 2.2, 0.2, 0.08), new THREE.MeshBasicMaterial({ map: texture }));
   root.add(picture);
 
-  const SEG = 26;
+  // A lighter cloak on phones: the same look with fewer points.
+  const SEG = isLowPower() ? 18 : 26;
   const cloakGeo = new THREE.PlaneGeometry(3.4, 3.4, SEG, SEG);
   const count = cloakGeo.attributes.position.count;
   cloakGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
