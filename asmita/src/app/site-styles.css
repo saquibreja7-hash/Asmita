@@ -1831,3 +1831,77 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 .lab-stat::before { content: ""; position: absolute; inset: auto -40px -60px auto; width: 160px; height: 160px; border-radius: 50%; background: radial-gradient(circle, rgba(124, 92, 255, 0.16), transparent 70%); pointer-events: none; }
 .lab-stat-n { font-family: var(--lab-mono); font-size: clamp(2.25rem, 4vw, 3rem); font-weight: 700; line-height: 1; letter-spacing: -0.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
 .lab-stat-label { margin-top: 10px; font-size: 0.9375rem; color: var(--text); }
+
+/* ---------- Calm pages (The Issue, Who we help, Glossary) ----------
+   The same modern parts as the Lab tool pages, on a softer teal and coral
+   wash: these pages are read by people in distress, so no motion and no
+   loud colour. */
+.calm-sub {
+  background:
+    radial-gradient(800px 520px at 0% 0%, rgba(25, 160, 150, 0.09), transparent 70%),
+    radial-gradient(700px 520px at 100% 0%, rgba(255, 122, 89, 0.09), transparent 70%),
+    radial-gradient(900px 700px at 50% 70%, rgba(56, 182, 255, 0.05), transparent 70%),
+    var(--color-parchment);
+}
+.calm-sub .lab-tool-hero-visual { background: linear-gradient(160deg, #eef8f6 0%, #fff6f1 60%, #f3f8ff 100%); }
+.lab-tool-hero-art { display: grid; place-items: center; padding: clamp(16px, 3vw, 28px); }
+.issue-hero-art { width: 100%; max-width: 440px; height: auto; border-radius: var(--radius-box); }
+
+/* Topic cards: icon tile, quiet number, title, one line, a "Learn more" cue. */
+.issue-topics {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.issue-topic {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 24px 22px;
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+  transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
+}
+.issue-topic:hover,
+.issue-topic:focus-within {
+  transform: translateY(-3px);
+  border-color: var(--ink);
+  box-shadow: 0 22px 44px -30px rgba(30, 40, 60, 0.4);
+}
+.issue-topic:has(.lab-card-link:focus-visible) { outline: 2px solid var(--brand); outline-offset: 3px; }
+.issue-topic-top { display: flex; align-items: center; justify-content: space-between; }
+.issue-topic-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+.issue-topic-n { font-family: var(--lab-mono); font-size: 0.8125rem; letter-spacing: 0.14em; color: var(--text-muted); }
+.issue-topic-title { margin-top: 18px; font-size: 1.1875rem; line-height: 1.3; font-weight: 650; color: var(--ink); }
+.issue-topic-short { margin-top: 8px; flex: 1; font-size: 0.9375rem; line-height: 1.65; color: var(--text); }
+.issue-topic-more { margin-top: 18px; font-size: 0.875rem; font-weight: 600; color: var(--ink); }
+.issue-topic-arrow { display: inline-block; transition: transform 0.25s; }
+.issue-topic:hover .issue-topic-arrow { transform: translateX(3px); }
+.issue-topic-glossary { justify-content: space-between; background: transparent; border-style: dashed; }
+.issue-topic-glossary .issue-topic-icon { background: var(--card); border: 1px solid var(--line); color: var(--ink); }
+
+/* Closing panel. */
+.issue-close {
+  padding: clamp(28px, 4vw, 52px);
+  border-radius: calc(var(--radius-cards) + 6px);
+  border: 1px solid var(--line);
+  background: linear-gradient(150deg, var(--card) 0%, var(--card) 55%, #fff6f1 100%);
+  box-shadow: 0 30px 60px -45px rgba(30, 40, 60, 0.35);
+}
+.issue-close-body { margin-top: 14px; max-width: 56ch; font-size: 1.0625rem; line-height: 1.7; color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .issue-topic, .issue-topic-arrow { transition: none; }
+  .issue-topic:hover, .issue-topic:focus-within { transform: none; }
+}

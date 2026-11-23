@@ -21,10 +21,15 @@ import { LabScene, type LabSceneKind } from "@/components/lab/LabScene";
  * Every string is passed in already translated; nothing here holds text.
  */
 
-export function LabToolShell({ children }: { children: ReactNode }) {
+/**
+ * "lab" pages get the Lab's faint violet wash; "calm" pages (The Issue,
+ * Who we help, the Glossary: read by people in distress) a softer teal and
+ * coral one. The parts below are the same for both.
+ */
+export function LabToolShell({ children, variant = "lab" }: { children: ReactNode; variant?: "lab" | "calm" }) {
   return (
     <AppShell>
-      <div className="page-canvas lab-theme lab-sub">{children}</div>
+      <div className={`page-canvas lab-theme ${variant === "calm" ? "calm-sub" : "lab-sub"}`}>{children}</div>
     </AppShell>
   );
 }
@@ -39,25 +44,30 @@ export function LabToolHero({
   intro,
   facts = [],
   scene,
+  visual,
   children,
 }: {
-  backLabel: string;
+  backLabel?: string;
   backHref?: string;
   badge?: string;
   title: string;
   intro: ReactNode;
   facts?: LabFact[];
   scene?: LabSceneKind;
+  /** Any other visual (an illustration) in place of a scene. */
+  visual?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <section className="lab-tool-hero" aria-label={title}>
       <div className="container lab-tool-hero-grid">
         <div className="lab-tool-hero-copy">
-          <Link className="lab-back" href={backHref}>
-            <span aria-hidden="true">←</span> {backLabel}
-          </Link>
-          {badge && <span className="lab-badge lab-badge-hero">{badge}</span>}
+          {backLabel && (
+            <Link className="lab-back" href={backHref}>
+              <span aria-hidden="true">←</span> {backLabel}
+            </Link>
+          )}
+          {badge && <span className={`lab-badge ${backLabel ? "lab-badge-hero" : ""}`}>{badge}</span>}
           <h1 className="page-title lab-tool-title">{title}</h1>
           <div className="lab-tool-intro">{intro}</div>
           {facts.length > 0 && (
@@ -77,6 +87,7 @@ export function LabToolHero({
             <LabScene kind={scene} className="lab-tool-hero-scene" />
           </div>
         )}
+        {!scene && visual && <div className="lab-tool-hero-visual lab-tool-hero-art">{visual}</div>}
       </div>
     </section>
   );
