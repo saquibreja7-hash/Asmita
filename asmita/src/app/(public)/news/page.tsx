@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
-import { OrgHero } from "@/components/org/OrgHero";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
+import { Illustration } from "@/components/Illustration";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { PostCard, orgPostKindLabel } from "@/components/org/PostCard";
@@ -34,18 +34,22 @@ export default async function NewsPage({
   const filterHref = (filterKind?: OrgPostKind) => (filterKind ? `/news?kind=${filterKind.toLowerCase().replace(/_/g, "-")}` : "/news");
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        <OrgHero title={t(locale, "org.news.title")} lede={t(locale, "org.news.sub")} illustration="page-research" />
+    <LabToolShell variant="calm">
+        <LabToolHero
+          badge={t(locale, "nav.news")}
+          title={t(locale, "org.news.title")}
+          intro={<p>{t(locale, "org.news.sub")}</p>}
+          visual={<Illustration name="page-research" eager className="issue-hero-art" />}
+        />
 
-        <section className="zone-white" aria-label={t(locale, "org.news.title")}>
-          <div className="container org-section">
+        <section className="lab-sub-section !pt-4" aria-label={t(locale, "org.news.title")}>
+          <div className="container">
             {/* Kind filter chips */}
             <nav aria-label={t(locale, "org.news.filterAll")} className="flex flex-wrap gap-2">
               <Link
                 href="/news"
                 aria-current={!kind ? "page" : undefined}
-                className={`pill hover:border-[var(--brand)] ${!kind ? "border-[var(--brand)] bg-[var(--brand-soft)]" : ""}`}
+                className={`pill news-chip ${!kind ? "is-active" : ""}`}
               >
                 {t(locale, "org.news.filterAll")}
               </Link>
@@ -54,7 +58,7 @@ export default async function NewsPage({
                   key={entry}
                   href={filterHref(entry)}
                   aria-current={kind === entry ? "page" : undefined}
-                  className={`pill hover:border-[var(--brand)] ${kind === entry ? "border-[var(--brand)] bg-[var(--brand-soft)]" : ""}`}
+                  className={`pill news-chip ${kind === entry ? "is-active" : ""}`}
                 >
                   {orgPostKindLabel(locale, entry)}
                 </Link>
@@ -98,7 +102,6 @@ export default async function NewsPage({
             )}
           </div>
         </section>
-      </div>
-    </AppShell>
+    </LabToolShell>
   );
 }

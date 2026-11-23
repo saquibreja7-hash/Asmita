@@ -2191,3 +2191,13 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 .calm-sub .callout svg { color: var(--brand-strong); }
 /* The contents list beside the guides. */
 .calm-sub aside ol a[href^="#"] { border-radius: 10px; }
+
+/* FAQ: question cards in one column, the answer under the question. */
+.faq-cards { display: grid; gap: 10px; max-width: 880px; list-style: none; padding: 0; margin: 0; }
+.faq-card-answer { padding: 0 18px 18px; font-size: 0.9875rem; line-height: 1.7; color: var(--text); }
+.faq-card-answer p + p { margin-top: 10px; }
+
+/* News: filter chips. */
+.news-chip { background: var(--card); transition: border-color 0.2s; }
+.news-chip:hover { border-color: var(--ink); }
+.news-chip.is-active { border-color: var(--color-brand-teal); background: var(--color-teal-mist); color: var(--color-brand-teal); font-weight: 600; }

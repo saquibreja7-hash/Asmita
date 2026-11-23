@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LabToolHero } from "@/components/lab/LabToolPage";
 import { Illustration } from "@/components/Illustration";
 import { Callout, ReadingLayout } from "@/components/Reading";
 import { ReadingTime } from "@/components/ReadingTime";
@@ -46,34 +47,29 @@ export function PostDetail({
   const published = post.publishedAt ?? post.createdAt;
   const headings = extractMarkdownHeadings(body);
 
-  return (
-    <div className="page-canvas">
-      <section className="hero" aria-label={title}>
-        <div className="hero-content container page-hero">
-          <div className="mx-auto max-w-3xl text-center">
-            <span className="eyebrow">{orgPostKindLabel(locale, post.kind)}</span>
-            <h1 className="page-title mt-5">{title}</h1>
-            <p className="muted mt-4 text-sm">
-              {t(locale, "org.post.byPrefix")}
-              {post.authorDisplayName} · <time dateTime={published}>{when(published, locale)}</time>
-              <ReadingTime label={t(locale, "reading.minutes")} />
-            </p>
-            <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">{summary}</p>
-          </div>
-        </div>
-      </section>
+  const cover = post.coverIllustration ? (
+    <Illustration name={post.coverIllustration} className="issue-hero-art" />
+  ) : post.coverImagePath ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={post.coverImagePath} alt="" className="issue-hero-art" />
+  ) : undefined;
 
-      {post.coverIllustration && (
-        <div className="container -mt-8 mb-4">
-          <Illustration name={post.coverIllustration} className="mx-auto max-w-2xl rounded-[var(--radius-box)]" />
-        </div>
-      )}
-      {post.coverImagePath && (
-        <div className="container -mt-8 mb-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={post.coverImagePath} alt="" className="mx-auto max-w-2xl rounded-[var(--radius-box)]" />
-        </div>
-      )}
+  return (
+    <div className="page-canvas lab-theme calm-sub">
+      <LabToolHero
+        backLabel={listLabel ?? t(locale, "org.post.notFoundCta")}
+        backHref={listHref}
+        badge={orgPostKindLabel(locale, post.kind)}
+        title={title}
+        intro={<p>{summary}</p>}
+        visual={cover}
+      >
+        <p className="issue-meta">
+          {t(locale, "org.post.byPrefix")}
+          {post.authorDisplayName} · <time dateTime={published}>{when(published, locale)}</time>
+          <ReadingTime label={t(locale, "reading.minutes")} />
+        </p>
+      </LabToolHero>
 
       <ReadingLayout tocLabel={tocLabel} toc={headings.map((heading) => ({ id: heading.id, title: heading.title }))}>
         {inHindi && !hasHindi && (
@@ -118,9 +114,9 @@ export function PostDetail({
       </ReadingLayout>
 
       {related.length > 0 && (
-        <section className="zone-white section-pad" aria-label={t(locale, "org.post.related")}>
+        <section className="lab-sub-section" aria-label={t(locale, "org.post.related")}>
           <div className="container">
-            <h2 className="section-title">{t(locale, "org.post.related")}</h2>
+            <h2 className="lab-h2">{t(locale, "org.post.related")}</h2>
             <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {related.map((entry) => (
                 <PostCard key={entry.id} post={entry} locale={locale} />
