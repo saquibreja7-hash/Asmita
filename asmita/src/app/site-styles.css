@@ -2282,3 +2282,21 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 /* Older content cards on calm pages. */
 .calm-sub .surface-card { border: 1px solid var(--line); border-radius: var(--radius-cards); background: var(--card); box-shadow: none; }
 .calm-sub .transform-content { background: transparent; }
+
+/* Corner glows drawn inside each card's own background, not as a shape
+   hanging off its edge: a shape past the edge counts as overflowing
+   content on narrow screens (the open tools audit at 320px). */
+.lab-experiment::before,
+.issue-topic[class*="issue-tone-"]::before,
+.issue-point::before,
+.glossary-term::before,
+.minor-resource::before,
+.calm-sub .org-row::before,
+.lab-stat::before { content: none; }
+.lab-experiment { background: radial-gradient(220px 220px at 100% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%), var(--card); }
+.issue-topic[class*="issue-tone-"],
+.issue-point,
+.glossary-term,
+.minor-resource { background: radial-gradient(180px 180px at 100% 0%, var(--tone-glow), transparent 70%), var(--card); }
+.calm-sub .org-row { background: radial-gradient(180px 180px at 100% 0%, var(--row-glow, rgba(10, 94, 90, 0.12)), transparent 70%), var(--card); }
+.lab-stat { background: radial-gradient(160px 160px at 100% 100%, rgba(124, 92, 255, 0.16), transparent 70%), var(--card); }
