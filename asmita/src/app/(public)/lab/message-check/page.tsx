@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabCallout, LabLinkCards, LabSection, LabSteps, LabToolHero, LabToolShell, LabWorkspace } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
@@ -34,10 +34,10 @@ const SAP_ACL_2019_URL = "https://aclanthology.org/P19-1163/";
 // the classifier themselves (Apache 2.0, the repository's licence).
 const REPO = "https://github.com/saquibreja7-hash/Asmita/tree/master";
 const REUSE_LINKS = [
-  { key: "lab.message-check.reuse.code", href: `${REPO}/asmita/src/lib/lab/sextortion` },
-  { key: "lab.message-check.reuse.taxonomy", href: `${REPO.replace("/tree/", "/blob/")}/asmita/docs/lab/sextortion-taxonomy.md` },
-  { key: "lab.message-check.reuse.eval", href: `${REPO.replace("/tree/", "/blob/")}/asmita/docs/lab/sextortion-eval.md` },
-  { key: "lab.message-check.reuse.trainer", href: `${REPO}/tools/lab-sextortion` },
+  { key: "lab.message-check.reuse.code", href: `${REPO}/asmita/src/lib/lab/sextortion`, icon: "layers" },
+  { key: "lab.message-check.reuse.taxonomy", href: `${REPO.replace("/tree/", "/blob/")}/asmita/docs/lab/sextortion-taxonomy.md`, icon: "book" },
+  { key: "lab.message-check.reuse.eval", href: `${REPO.replace("/tree/", "/blob/")}/asmita/docs/lab/sextortion-eval.md`, icon: "target" },
+  { key: "lab.message-check.reuse.trainer", href: `${REPO}/tools/lab-sextortion`, icon: "refresh" },
 ] as const;
 
 const NEXT_STEPS = [
@@ -59,131 +59,87 @@ export default async function MessageCheckPage() {
   const locale = await getLocale();
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="container py-8 text-center md:py-14">
-          <div className="mx-auto max-w-2xl">
-            <span className="tag">{t(locale, "lab.message-check.beta")}</span>
-            <h1 className="page-title mt-5">{t(locale, "lab.message-check.title")}</h1>
-            <p className="muted mx-auto mt-6 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "lab.message-check.intro")}
-            </p>
-            <p className="mx-auto mt-4 max-w-lg text-sm leading-[1.7] text-[var(--ink)]">
-              {t(locale, "lab.message-check.cannot")}
-            </p>
-            <p className="mx-auto mt-4 max-w-lg text-sm leading-[1.7]">
-              <span className="text-[var(--ink)]">{t(locale, "lab.message-check.under18")}</span>{" "}
-              <Link href="/minor-support" className="text-link">
-                {t(locale, "lab.message-check.under18.link")}
-              </Link>
-            </p>
-          </div>
-        </section>
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* CHECKER */}
-        <section className="container py-8 md:py-10">
-          <MessageCheckForm locale={locale} />
-          <p className="muted mx-auto mt-6 max-w-xl text-center text-xs leading-[1.7]">
-            {t(locale, "lab.message-check.notice.privacy")}
-          </p>
-          <p className="muted mx-auto mt-2 max-w-xl text-center text-xs leading-[1.7]">
-            {t(locale, "lab.message-check.notice.ai")}
-          </p>
-        </section>
-
-        {/* WHAT TO DO NOW — visible before any check runs: someone in
-            distress should not have to run the tool first to find help. */}
-        <section className="zone-white section-pad" aria-labelledby="message-check-next">
-          <div className="container">
-            <div className="mx-auto max-w-2xl">
-              <h2 id="message-check-next" className="section-title">{t(locale, "lab.message-check.next.title")}</h2>
-              <ol className="mt-6 space-y-4 text-[15px] leading-[1.7] text-[var(--text)]">
-                {NEXT_STEPS.map((key, index) => (
-                  <li key={key} className="flex gap-3">
-                    <span aria-hidden="true" className="min-w-[28px] shrink-0 font-mono text-xs tabular-nums text-[var(--text-muted)] pt-[3px]">
-                      {index + 1}.
-                    </span>
-                    <span>{t(locale, key)}</span>
-                  </li>
-                ))}
-              </ol>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link className="btn btn-primary" href="/start">{t(locale, "lab.message-check.cta.start")}</Link>
-                <Link className="btn btn-secondary" href="/get-help">{t(locale, "lab.message-check.cta.help")}</Link>
-              </div>
-              <div className="mt-8 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] p-5">
-                <p className="text-sm font-medium uppercase tracking-[-0.033em] text-[var(--ink)]">
-                  {t(locale, "lab.message-check.helpline.title")}
-                </p>
-                <ul className="mt-4 grid gap-3 text-pretty sm:grid-cols-3">
-                  {HELPLINES.map(({ key, number }) => (
-                    <li key={number} className="text-[15px] leading-[1.5] text-[var(--text)]">
-                      <strong>{t(locale, key)}:</strong> <a className="text-link" href={`tel:${number}`}>{number}</a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* HOW THIS CHECK WORKS — the research behind the patterns, the
-            synthetic training data, the honest per-script numbers, and the
-            bias finding. Credits and limits, in plain words, both
-            languages. */}
-        <section className="zone-white section-pad" aria-labelledby="message-check-how">
-          <div className="container">
-            <div className="mx-auto max-w-2xl">
-              <h2 id="message-check-how" className="section-title">{t(locale, "lab.message-check.how.title")}</h2>
-              <p className="mt-6 text-[16px] leading-[1.7] text-[var(--text)]">
-                {t(locale, "lab.message-check.how.patterns")}
-              </p>
-              <p className="mt-5 text-[16px] leading-[1.7] text-[var(--text)]">
-                {t(locale, "lab.message-check.how.synthetic")}
-              </p>
-              <p className="mt-5 text-[16px] leading-[1.7] text-[var(--text)]">
-                {t(locale, "lab.message-check.how.bias")}{" "}
-                <a href={SAP_ACL_2019_URL} className="text-link" rel="noopener noreferrer" target="_blank">
-                  {t(locale, "lab.message-check.how.biasCite")}
-                </a>
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* USE IT IN YOUR OWN SERVICE — the classifier is open source; the
-            links go to the code, taxonomy, evaluation report and trainer. */}
-        <section className="section-pad" aria-labelledby="message-check-reuse">
-          <div className="container">
-            <div className="mx-auto max-w-2xl">
-              <h2 id="message-check-reuse" className="section-title">{t(locale, "lab.message-check.reuse.title")}</h2>
-              <p className="mt-6 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.message-check.reuse.body")}</p>
-              <ul className="mt-6 space-y-3 text-[15px] leading-[1.6]">
-                {REUSE_LINKS.map(({ key, href }) => (
-                  <li key={key}>
-                    <a className="text-link" href={href} rel="noopener noreferrer" target="_blank">
-                      {t(locale, key)}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-              <p className="muted mt-6 text-sm leading-[1.7]">{t(locale, "lab.message-check.reuse.limits")}</p>
-            </div>
-          </div>
-        </section>
-
-        {/* BACK TO THE LAB */}
-        <section className="container py-8 text-center">
-          <Link href="/lab" className="text-link">
-            {t(locale, "lab.message-check.back")} <span className="cta-arrow" aria-hidden>→</span>
+    <LabToolShell>
+      <LabToolHero
+        backLabel={t(locale, "lab.eyebrow")}
+        badge={t(locale, "lab.message-check.beta")}
+        title={t(locale, "lab.message-check.title")}
+        intro={
+          <>
+            <p>{t(locale, "lab.message-check.intro")}</p>
+            <p className="text-[15px] text-[var(--text)]">{t(locale, "lab.message-check.cannot")}</p>
+          </>
+        }
+        scene="message-check"
+      >
+        <LabCallout icon="shieldCheck">
+          {t(locale, "lab.message-check.under18")}{" "}
+          <Link href="/minor-support" className="text-link">
+            {t(locale, "lab.message-check.under18.link")}
           </Link>
-        </section>
-      </div>
-    </AppShell>
+        </LabCallout>
+      </LabToolHero>
+
+      <LabWorkspace label={t(locale, "lab.message-check.title")}>
+        <MessageCheckForm locale={locale} />
+        <div className="mt-6 grid gap-2 border-t border-[var(--line)] pt-5 text-xs leading-[1.7] text-[var(--text)] sm:grid-cols-2 sm:gap-6">
+          <p>{t(locale, "lab.message-check.notice.privacy")}</p>
+          <p>{t(locale, "lab.message-check.notice.ai")}</p>
+        </div>
+      </LabWorkspace>
+
+      {/* WHAT TO DO NOW — visible before any check runs: someone in
+          distress should not have to run the tool first to find help. */}
+      <LabSection id="message-check-next" index="01" title={t(locale, "lab.message-check.next.title")}>
+        <LabSteps steps={NEXT_STEPS.map((key) => <p key={key}>{t(locale, key)}</p>)} />
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link className="btn btn-primary" href="/start">{t(locale, "lab.message-check.cta.start")}</Link>
+          <Link className="btn btn-secondary" href="/get-help">{t(locale, "lab.message-check.cta.help")}</Link>
+        </div>
+        <h3 className="mt-10 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--ink)]">
+          {t(locale, "lab.message-check.helpline.title")}
+        </h3>
+        <ul className="lab-helplines" role="list">
+          {HELPLINES.map(({ key, number }) => (
+            <li key={number} className="lab-helpline">
+              <span className="lab-helpline-name">{t(locale, key)}</span>
+              <a className="lab-helpline-number" href={`tel:${number}`}>{number}</a>
+            </li>
+          ))}
+        </ul>
+      </LabSection>
+
+      {/* HOW THIS CHECK WORKS — the research behind the patterns, the
+          synthetic training data, the honest per-script numbers, and the
+          bias finding. */}
+      <LabSection id="message-check-how" index="02" title={t(locale, "lab.message-check.how.title")}>
+        <LabSteps
+          ordered={false}
+          layout="stack"
+          steps={[
+            <p key="patterns">{t(locale, "lab.message-check.how.patterns")}</p>,
+            <p key="synthetic">{t(locale, "lab.message-check.how.synthetic")}</p>,
+            <p key="bias">
+              {t(locale, "lab.message-check.how.bias")}{" "}
+              <a href={SAP_ACL_2019_URL} className="text-link" rel="noopener noreferrer" target="_blank">
+                {t(locale, "lab.message-check.how.biasCite")}
+              </a>
+            </p>,
+          ]}
+        />
+      </LabSection>
+
+      {/* USE IT IN YOUR OWN SERVICE — the classifier is open source; the
+          tiles go to the code, taxonomy, evaluation report and trainer. */}
+      <LabSection
+        id="message-check-reuse"
+        index="03"
+        title={t(locale, "lab.message-check.reuse.title")}
+        lede={<p>{t(locale, "lab.message-check.reuse.body")}</p>}
+      >
+        <LabLinkCards cards={REUSE_LINKS.map(({ key, href, icon }) => ({ href, label: t(locale, key), icon, external: true }))} />
+        <LabCallout icon="alert">{t(locale, "lab.message-check.reuse.limits")}</LabCallout>
+      </LabSection>
+    </LabToolShell>
   );
 }

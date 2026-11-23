@@ -505,6 +505,17 @@ function dust(THREE: Three, count: number, spread: [number, number, number], siz
   );
 }
 
+/**
+ * Pull the camera back on narrow boxes so content `width` units wide still
+ * fits; never closer than `baseZ`. Scenes call this each frame, so a scene
+ * fits a wide hub card and a squarer hero panel alike.
+ */
+function fitWidth(camera: ThreeNS.PerspectiveCamera, baseZ: number, width: number) {
+  const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
+  const z = Math.max(baseZ, width / (2 * tanHalf * camera.aspect));
+  if (Math.abs(camera.position.z - z) > 1e-3) camera.position.setZ(z);
+}
+
 function lean(object: ThreeNS.Object3D, pointer: Pointer, amount = 0.25) {
   object.rotation.y += (pointer.x * amount - object.rotation.y) * 0.08;
   object.rotation.x += (-pointer.y * amount * 0.7 - object.rotation.x) * 0.08;
@@ -685,6 +696,7 @@ function buildTrace(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspect
 
   return {
     update(t, _dt, pointer) {
+      fitWidth(camera, 7.2, 8.6);
       lean(root, pointer, 0.25);
       const k = (t % LOOP) / LOOP;
       const tilt = ease(k / 0.15);
@@ -857,6 +869,7 @@ function buildDetectors(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pers
 
   return {
     update(t, dt, pointer) {
+      fitWidth(camera, 6.2, width + 1.4);
       lean(root, pointer, 0.3);
       const k = (t % LOOP) / LOOP;
       const x = -width / 2 - 0.6 + k * (width + 1.2);
@@ -1001,6 +1014,7 @@ function buildMessageCheck(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.P
   const PER = 2.2;
   return {
     update(t, _dt, pointer) {
+      fitWidth(camera, 8.5, 8.6);
       root.rotation.y += (pointer.x * 0.3 - root.rotation.y) * 0.06;
       const flagged = Math.floor(t / PER) % N;
       const f = (t % PER) / PER;
@@ -1129,6 +1143,7 @@ function buildSpotTheFake(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pe
   const LOOP = 6;
   return {
     update(t, _dt, pointer) {
+      fitWidth(camera, 7.4, 6.6);
       lean(root, pointer, 0.25);
       const k = (t % LOOP) / LOOP;
       // Face down, flip up (0.1–0.3), glitch and ring (0.3–0.75), flip down.
@@ -1185,6 +1200,7 @@ function buildOpenTools(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pers
   root.add(links);
   return {
     update(t, _dt, pointer) {
+      fitWidth(camera, 8.5, 7.6);
       lean(root, pointer, 0.3);
       core.rotation.set(t * 0.4, t * 0.6, 0);
       const lp = linkGeo.attributes.position as ThreeNS.BufferAttribute;
