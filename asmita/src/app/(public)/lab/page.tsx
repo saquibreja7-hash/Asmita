@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
+import { LabScene, type LabSceneKind } from "@/components/lab/LabScene";
 import { LAB_BETA_TOOLS, LAB_HUB_KEYS, LAB_HUB_SECTIONS } from "@/lib/lab/beta-tools";
 
 export const metadata: Metadata = {
@@ -24,6 +25,12 @@ const EXPERIMENTS = [
   { title: "lab.exp.e3.title", body: "lab.exp.e3.body" },
 ] as const;
 
+// Prototype (2026-11-23): the tools with a Three.js scene so far.
+const TOOL_SCENES: Record<string, LabSceneKind | undefined> = {
+  "/lab/trace": "trace",
+  "/lab/tracker": "tracker",
+};
+
 export default async function LabPage() {
   const locale = await getLocale();
   const enabled = labEnabled();
@@ -31,7 +38,7 @@ export default async function LabPage() {
   return (
     <AppShell>
       <div className="page-canvas">
-        <section className="hero" aria-label={t(locale, "lab.eyebrow")}>
+        <section className="hero lab-hero" aria-label={t(locale, "lab.eyebrow")}>
           <div className="hero-content container section-pad page-hero-split">
             <div className="mx-auto max-w-3xl text-center">
               <span className="eyebrow">{t(locale, "lab.eyebrow")}</span>
@@ -39,6 +46,7 @@ export default async function LabPage() {
               <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">{t(locale, "lab.intro")}</p>
             </div>
           </div>
+          <LabScene kind="hero" className="lab-hero-scene" />
         </section>
 
         {enabled && (
@@ -64,7 +72,8 @@ export default async function LabPage() {
                   </div>
                 ))}
                 {LAB_BETA_TOOLS.map((tool) => (
-                  <div key={tool.href} className="card">
+                  <div key={tool.href} className="card lab-tool-card">
+                    {TOOL_SCENES[tool.href] && <LabScene kind={TOOL_SCENES[tool.href]!} className="lab-card-scene" />}
                     <span className="inline-flex items-center rounded-full border border-[var(--brand)] bg-[var(--brand-soft)] px-3 py-1 text-xs font-semibold tracking-wide text-[var(--brand-strong)]">
                       {t(locale, LAB_HUB_KEYS.beta)}
                     </span>

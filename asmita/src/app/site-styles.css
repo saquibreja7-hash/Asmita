@@ -1465,3 +1465,37 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
   .flow-hud > span[data-anchor="hub"],
   .flow-hud > span[data-anchor="platforms"] { display: none; }
 }
+
+/* AI Lab scenes (prototype, 2026-11-23). The canvas is decorative; until
+   Three.js starts (or when it never does: reduced motion, no WebGL) the box
+   shows a still, colourful gradient in the Lab palette. */
+.lab-hero {
+  background:
+    radial-gradient(60% 80% at 12% 10%, rgba(124, 92, 255, 0.14), transparent 70%),
+    radial-gradient(50% 70% at 88% 20%, rgba(255, 122, 89, 0.16), transparent 70%),
+    radial-gradient(60% 80% at 50% 100%, rgba(56, 182, 255, 0.14), transparent 70%);
+}
+.lab-scene {
+  position: relative;
+  background:
+    radial-gradient(40% 60% at 25% 35%, rgba(15, 138, 128, 0.35), transparent 70%),
+    radial-gradient(40% 60% at 70% 40%, rgba(255, 122, 89, 0.35), transparent 70%),
+    radial-gradient(45% 60% at 50% 85%, rgba(124, 92, 255, 0.3), transparent 70%),
+    radial-gradient(35% 50% at 85% 80%, rgba(245, 181, 46, 0.3), transparent 70%);
+  transition: background 0.6s ease;
+}
+.lab-scene.is-live { background: none; }
+.lab-hero-scene { height: clamp(260px, 38vw, 440px); margin: -24px auto 0; max-width: 1200px; }
+.lab-tool-card { overflow: hidden; }
+.lab-card-scene {
+  height: 170px;
+  margin: calc(-1 * var(--card-padding)) calc(-1 * var(--card-padding)) 18px;
+  background-color: #f6f3ff;
+  border-bottom: 1px solid var(--line, #e6e2de);
+}
+.lab-card-scene.is-live {
+  background: linear-gradient(160deg, #f6f3ff 0%, #fff4ef 55%, #eef9ff 100%);
+}
+@media (max-width: 640px) {
+  .lab-card-scene { margin: -20px -20px 16px; height: 150px; }
+}
