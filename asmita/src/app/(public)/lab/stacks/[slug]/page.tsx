@@ -44,9 +44,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const stack = getStack(slug);
-  if (!stack) return { title: "Free stacks — Asmita AI Lab" };
+  if (!stack) return { title: "Free stacks · Asmita AI Lab" };
   return {
-    title: `${stack.title} — Free stacks — Asmita AI Lab`,
+    title: `${stack.title} · Free stacks · Asmita AI Lab`,
     description: stack.lede,
   };
 }

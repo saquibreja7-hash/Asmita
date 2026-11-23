@@ -43,9 +43,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const tool = getOpenTool(slug);
-  if (!tool) return { title: "Open tools — Asmita AI Lab" };
+  if (!tool) return { title: "Open tools · Asmita AI Lab" };
   return {
-    title: `${tool.name} — Open tools — Asmita AI Lab`,
+    title: `${tool.name} · Open tools · Asmita AI Lab`,
     description: tool.summary.en,
   };
 }

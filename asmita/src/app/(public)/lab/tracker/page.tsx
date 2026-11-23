@@ -12,7 +12,7 @@ import { LAB_CHOKEPOINT_KINDS, type LabChokepointKind, type LabServiceStatus } f
 export const metadata: Metadata = {
   title: "Service tracker",
   description:
-    "An Asmita AI Lab page: aggregate numbers on the services that make or spread AI-made intimate images — how many are tracked, how many were taken down, and how fast reports work. No service is ever named.",
+    "An Asmita AI Lab page: aggregate numbers on the services that make or spread AI-made intimate images: how many are tracked, how many were taken down, and how fast reports work. No service is ever named.",
 };
 
 export const dynamic = "force-dynamic";
@@ -113,7 +113,7 @@ export default async function TrackerPage() {
                   </div>
                   <div className="card text-center">
                     <p className="text-3xl font-medium tabular-nums">
-                      {numbers.medianDaysToDown === null ? "—" : numbers.medianDaysToDown.toFixed(1)}
+                      {numbers.medianDaysToDown === null ? "-" : numbers.medianDaysToDown.toFixed(1)}
                     </p>
                     <p className="mt-1 text-sm">{t(locale, "lab.tracker.stat.median")}</p>
                   </div>
@@ -173,7 +173,7 @@ export default async function TrackerPage() {
                               <td className="px-4 py-3 text-right tabular-nums">{kindNumbers.reported}</td>
                               <td className="px-4 py-3 text-right tabular-nums">{kindNumbers.down}</td>
                               <td className="px-4 py-3 text-right tabular-nums">
-                                {kindNumbers.medianDays === null ? "—" : kindNumbers.medianDays.toFixed(1)}
+                                {kindNumbers.medianDays === null ? "-" : kindNumbers.medianDays.toFixed(1)}
                               </td>
                             </tr>
                           );

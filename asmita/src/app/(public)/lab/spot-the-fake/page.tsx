@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Spot the fake: practise recognising AI-made images",
   description:
-    "A ten-round practice game that teaches what manipulation looks like — hands, writing, earrings, light, straight lines and skin. Nothing is stored.",
+    "A ten-round practice game that teaches what manipulation looks like: hands, writing, earrings, light, straight lines and skin. Nothing is stored.",
 };
 
 // The six tells, in the spec's order, taught below the quiz: the quiz is

@@ -23,7 +23,7 @@ import { labEnabled } from "@/lib/lab/flags";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "How we choose tools — Open tools — Asmita AI Lab",
+  title: "How we choose tools · Open tools · Asmita AI Lab",
   description:
     "What 'open' means in the Asmita AI Lab's tool directory, what we check before listing a tool, what we never list, and how to suggest one or report an error.",
 };

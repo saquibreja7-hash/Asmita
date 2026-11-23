@@ -387,7 +387,7 @@ for (const stack of STACKS) {
 
     it("carries the spec's metadata", async () => {
       const metadata = await generateMetadata({ params: Promise.resolve({ slug: stack.slug }) });
-      expect(metadata.title).toBe(`${stack.title} — Free stacks — Asmita AI Lab`);
+      expect(metadata.title).toBe(`${stack.title} · Free stacks · Asmita AI Lab`);
       expect(metadata.description).toBe(stack.lede);
     });
   });

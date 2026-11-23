@@ -11,7 +11,7 @@ import { OpenToolsDirectory } from "./OpenToolsDirectory";
 export const metadata: Metadata = {
   title: "Open tools for trust and safety",
   description:
-    "Free, open-source trust-and-safety tools — hashing, review, detection, provenance — explained by the Asmita AI Lab: what each one does, where it fits in a platform's workflow and how to start.",
+    "Free, open-source trust-and-safety tools (hashing, review, detection, provenance) explained by the Asmita AI Lab: what each one does, where it fits in a platform's workflow and how to start.",
 };
 
 export const dynamic = "force-dynamic";
