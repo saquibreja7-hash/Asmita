@@ -2201,3 +2201,80 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 .news-chip { background: var(--card); transition: border-color 0.2s; }
 .news-chip:hover { border-color: var(--ink); }
 .news-chip.is-active { border-color: var(--color-brand-teal); background: var(--color-teal-mist); color: var(--color-brand-teal); font-weight: 600; }
+
+/* ---------- Get involved pages (org parts, calm look) ----------
+   Scoped to .calm-sub: the homepage and /start use the same org classes
+   and keep their own look. */
+.calm-sub .zone-white,
+.calm-sub .transform-section { background: transparent; }
+.calm-sub .org-section { border-top-color: var(--line); }
+.calm-sub .org-head h2 { font-size: clamp(1.75rem, 3.4vw, 2.75rem); letter-spacing: -0.02em; }
+
+/* Rows become cards, colours in turn. */
+.calm-sub .org-rows { border-top: 0; gap: 14px; }
+.calm-sub .org-rows > li { border-bottom: 0; }
+.calm-sub .org-row {
+  position: relative;
+  height: 100%;
+  padding: 22px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-cards);
+  background: var(--card);
+  overflow: hidden;
+  transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
+}
+.calm-sub .org-row::before {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  right: -70px;
+  top: -80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--row-glow, rgba(10, 94, 90, 0.12)), transparent 70%);
+  pointer-events: none;
+}
+.calm-sub .org-rows > li:nth-child(3n + 2) .org-row { --row-glow: rgba(255, 148, 115, 0.2); }
+.calm-sub .org-rows > li:nth-child(3n + 3) .org-row { --row-glow: rgba(236, 218, 152, 0.4); }
+.calm-sub .org-rows > li:nth-child(3n + 1) .org-row-icon:not([class*="tone-"]) { background: var(--color-teal-mist); color: var(--color-brand-teal); }
+.calm-sub .org-rows > li:nth-child(3n + 2) .org-row-icon:not([class*="tone-"]) { background: #ffe2d8; color: #b4461f; }
+.calm-sub .org-rows > li:nth-child(3n + 3) .org-row-icon:not([class*="tone-"]) { background: #f6ecc4; color: #7d6300; }
+.calm-sub .org-row-icon { border-radius: 12px; }
+.calm-sub a.org-row:hover,
+.calm-sub a.org-row:focus-visible { transform: translateY(-3px); border-color: var(--ink); box-shadow: 0 22px 44px -30px rgba(30, 40, 60, 0.4); }
+.calm-sub a.org-row:hover .org-row-title { color: var(--ink); }
+
+/* Steps: numbered cards. */
+.calm-sub .org-steps { gap: 14px; }
+.calm-sub .org-steps > li {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-cards);
+  background: var(--card);
+}
+
+/* Notes and the closing band. */
+.calm-sub .org-note { border-radius: 14px; }
+.calm-sub .org-cta { background: none; }
+.calm-sub .org-cta-inner {
+  margin-top: clamp(24px, 4vw, 48px);
+  margin-bottom: clamp(40px, 6vw, 72px);
+  padding: clamp(28px, 4vw, 52px);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-cards) + 6px);
+  background: linear-gradient(135deg, #e3f2ef 0%, #fbf3d9 50%, #ffe8df 100%);
+  box-shadow: 0 30px 60px -45px rgba(30, 40, 60, 0.35);
+}
+.calm-sub .org-form > form,
+.calm-sub .org-form > div > form { border-radius: calc(var(--radius-cards) + 4px); }
+@media (prefers-reduced-motion: reduce) { .calm-sub .org-row { transition: none; } .calm-sub a.org-row:hover { transform: none; } }
+
+/* One job: the description on a white card under the hero. */
+.job-body {
+  margin: 0;
+  max-width: 880px;
+  padding: clamp(24px, 4vw, 44px);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-cards) + 4px);
+  background: var(--card);
+}

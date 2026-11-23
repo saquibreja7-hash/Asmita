@@ -31,7 +31,7 @@ export default async function CareersPage() {
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         <OrgHero title={t(locale, "org.careers.title")} lede={t(locale, "org.careers.sub")} illustration="page-about" />
 
         <section className="zone-white" aria-label={t(locale, "org.careers.title")}>

@@ -30,7 +30,7 @@ export default async function GetInvolvedPage() {
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         <OrgHero title={t(locale, "org.getInvolved.title")} lede={t(locale, "org.getInvolved.sub")} illustration="page-about" />
 
         <section className="zone-white" aria-label={t(locale, "org.getInvolved.eyebrow")}>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { renderMarkdown } from "@/lib/markdown";
@@ -71,25 +72,35 @@ export default async function JobPage({ params }: { params: Promise<{ slug: stri
 
   return (
     <AppShell>
-      <div className="page-canvas">
-        <section className="hero" aria-label={job.title}>
-          <div className="hero-content container page-hero">
-            <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">{t(locale, "org.careers.eyebrow")}</span>
-              <h1 className="page-title mt-5">{job.title}</h1>
-              <p className="muted mt-4 text-sm">
-                {t(locale, "org.careers.teamLabel")}: {job.team} · {t(locale, "org.careers.locationLabel")}: {job.location} ·{" "}
-                {t(locale, "org.careers.typeLabel")}: {t(locale, TYPE_KEY[job.type])}
-                {job.closesAt
-                  ? ` · ${t(locale, "org.careers.closesLabel")}: ${new Date(job.closesAt).toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" })}`
-                  : ""}
-              </p>
-            </div>
-          </div>
-        </section>
+      <div className="page-canvas lab-theme calm-sub">
+        <LabToolHero
+          backLabel={t(locale, "org.careers.back")}
+          backHref="/careers"
+          badge={t(locale, "org.careers.eyebrow")}
+          title={job.title}
+          intro={<></>}
+        >
+          <ul className="lab-facts" role="list">
+            <li className="lab-fact">
+              {t(locale, "org.careers.teamLabel")}: {job.team}
+            </li>
+            <li className="lab-fact">
+              {t(locale, "org.careers.locationLabel")}: {job.location}
+            </li>
+            <li className="lab-fact">
+              {t(locale, "org.careers.typeLabel")}: {t(locale, TYPE_KEY[job.type])}
+            </li>
+            {job.closesAt && (
+              <li className="lab-fact">
+                {t(locale, "org.careers.closesLabel")}:{" "}
+                {new Date(job.closesAt).toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" })}
+              </li>
+            )}
+          </ul>
+        </LabToolHero>
 
-        <div className="container py-14 md:py-20">
-          <div className="reading-col mx-auto">
+        <div className="container pb-14 md:pb-20">
+          <div className="reading-col job-body">
             <div className="reading-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(job.descriptionMd) }} />
 
             <div className="next-step mt-10">

@@ -52,7 +52,7 @@ export default async function PartnerTypePage({ params }: { params: Promise<{ ty
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         <OrgHero title={p("title")} lede={p("sub")} illustration={page.illustration as Parameters<typeof OrgHero>[0]["illustration"]} />
 
         <section className="zone-white" aria-labelledby="offer-heading">
