@@ -20,6 +20,9 @@ const hindiTopics = [
   { term: "निजी जानकारी उजागर करना और नकली पहचान", short: "आपको परेशान करने के लिए निजी जानकारी फैलाना या आपके नाम पर नकली प्रोफ़ाइल बनाना।" },
 ] as const;
 
+// The three brand colours, in turn, one per card.
+const TONES = ["teal", "coral", "gold"] as const;
+
 // One line icon per topic, decorative: the title beside it says the same.
 const TOPIC_ICONS: Record<string, IconName> = {
   ncii: "eyeOff",
@@ -59,7 +62,7 @@ export default async function IssuePage() {
       >
         <ul className="issue-topics" role="list">
           {issueTopics.map((topic, index) => (
-            <li key={topic.slug} className="issue-topic">
+            <li key={topic.slug} className={`issue-topic issue-tone-${TONES[index % TONES.length]}`}>
               <div className="issue-topic-top">
                 <span className="issue-topic-icon" aria-hidden="true">
                   <Icon name={TOPIC_ICONS[topic.slug] ?? "info"} size={22} />

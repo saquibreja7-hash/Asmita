@@ -1905,3 +1905,35 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
   .issue-topic, .issue-topic-arrow { transition: none; }
   .issue-topic:hover, .issue-topic:focus-within { transform: none; }
 }
+
+/* The three brand colours on calm pages: teal, coral, gold, one per card. */
+.issue-tone-teal { --tone-soft: var(--color-teal-mist); --tone-ink: var(--color-brand-teal); --tone-glow: rgba(10, 94, 90, 0.14); }
+.issue-tone-coral { --tone-soft: #ffe2d8; --tone-ink: #b4461f; --tone-glow: rgba(255, 148, 115, 0.22); }
+.issue-tone-gold { --tone-soft: #f6ecc4; --tone-ink: #7d6300; --tone-glow: rgba(236, 218, 152, 0.4); }
+.issue-topic[class*="issue-tone-"] { overflow: hidden; }
+.issue-topic[class*="issue-tone-"]::before {
+  content: "";
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  right: -70px;
+  top: -90px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--tone-glow), transparent 70%);
+  pointer-events: none;
+}
+.issue-topic[class*="issue-tone-"] .issue-topic-icon { background: var(--tone-soft); color: var(--tone-ink); }
+.issue-topic[class*="issue-tone-"] .issue-topic-n { color: var(--tone-ink); }
+.issue-topic[class*="issue-tone-"]:hover,
+.issue-topic[class*="issue-tone-"]:focus-within { border-color: var(--tone-ink); }
+.issue-topic[class*="issue-tone-"] .issue-topic-more { color: var(--tone-ink); }
+.calm-sub {
+  background:
+    radial-gradient(800px 520px at 0% 0%, rgba(10, 94, 90, 0.1), transparent 70%),
+    radial-gradient(700px 520px at 100% 0%, rgba(255, 148, 115, 0.14), transparent 70%),
+    radial-gradient(900px 640px at 60% 55%, rgba(236, 218, 152, 0.2), transparent 70%),
+    radial-gradient(800px 600px at 0% 100%, rgba(167, 252, 205, 0.12), transparent 70%),
+    var(--color-parchment);
+}
+.calm-sub .lab-tool-hero-visual { background: linear-gradient(150deg, #e3f2ef 0%, #fbf3d9 55%, #ffe8df 100%); }
+.issue-close { background: linear-gradient(135deg, #e3f2ef 0%, #fbf3d9 50%, #ffe8df 100%); }
