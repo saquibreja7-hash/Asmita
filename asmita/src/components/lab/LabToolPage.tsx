@@ -26,9 +26,18 @@ import { LabScene, type LabSceneKind } from "@/components/lab/LabScene";
  * Who we help, the Glossary: read by people in distress) a softer teal and
  * coral one. The parts below are the same for both.
  */
-export function LabToolShell({ children, variant = "lab" }: { children: ReactNode; variant?: "lab" | "calm" }) {
+export function LabToolShell({
+  children,
+  variant = "lab",
+  withoutNewsletter = false,
+}: {
+  children: ReactNode;
+  variant?: "lab" | "calm";
+  /** Pages where a newsletter sign-up would be out of place (the under-18 page). */
+  withoutNewsletter?: boolean;
+}) {
   return (
-    <AppShell>
+    <AppShell withoutNewsletter={withoutNewsletter}>
       <div className={`page-canvas lab-theme ${variant === "calm" ? "calm-sub" : "lab-sub"}`}>{children}</div>
     </AppShell>
   );

@@ -1,6 +1,7 @@
 import { QuickExit } from "@/components/QuickExit";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
+import { Icon } from "@/components/Icon";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 
@@ -73,131 +74,114 @@ export default async function MinorSupportPage() {
     },
   ];
 
+  const tones = ["teal", "coral", "gold"] as const;
   return (
-    <AppShell withoutNewsletter>
+    <LabToolShell variant="calm" withoutNewsletter>
       <QuickExit locale={locale} enableIdle={false} />
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="container py-8 md:py-14">
-          <div className="mx-auto max-w-2xl">
-            <p className="muted mt-3 text-xs tracking-wide">
+      <LabToolHero
+        title={`${t(locale, "minor.hero.title.1")} ${t(locale, "minor.hero.title.2")}`}
+        intro={
+          <>
+            <p>{t(locale, "minor.hero.sub")}</p>
+            <p className="text-xs tracking-wide text-[var(--text)]">
               {t(locale, "minor.langNote")} <span lang="hi">हिंदी</span>
             </p>
-            <h1 className="page-title-sm mt-3">
-              {t(locale, "minor.hero.title.1")}
-              <br />
-              <em className="not-italic text-gradient">{t(locale, "minor.hero.title.2")}</em>
-            </h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "minor.hero.sub")}
-            </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <a href="tel:1098" className="btn btn-primary">{locale === "hi" ? "चाइल्डलाइन 1098 पर कॉल करें" : "Call Childline 1098"}</a>
-              <a href="tel:112" className="btn btn-secondary">{locale === "hi" ? "आपात स्थिति में 112" : "Emergency 112"}</a>
+          </>
+        }
+        visual={
+          <div className="help-urgent">
+            <ul className="help-urgent-list" role="list">
+              <li className="issue-tone-teal">
+                <span>{locale === "hi" ? "चाइल्डलाइन 1098 पर कॉल करें" : "Call Childline 1098"}</span>
+                <a href="tel:1098">1098</a>
+              </li>
+              <li className="issue-tone-coral">
+                <span>{locale === "hi" ? "आपात स्थिति में 112" : "Emergency 112"}</span>
+                <a href="tel:112">112</a>
+              </li>
+            </ul>
+          </div>
+        }
+      />
+
+      {/* VALIDATION */}
+      <section className="lab-sub-section">
+        <div className="container">
+          <p className="minor-validation">{t(locale, "minor.validation")}</p>
+        </div>
+      </section>
+
+      {/* RESOURCE GROUPS */}
+      {groups.map((group, gi) => (
+        <section key={group.eyebrow} className="lab-sub-section" aria-labelledby={`minor-group-${gi}`}>
+          <div className="container">
+            <header className="lab-section-head">
+              <span className="lab-index" aria-hidden="true">
+                {String(gi + 1).padStart(2, "0")}
+              </span>
+              <h2 id={`minor-group-${gi}`} className="lab-h2">
+                {group.title}
+              </h2>
+              <p className="lab-section-note">{group.subtitle}</p>
+            </header>
+            <div className="minor-resources">
+              {group.items.map((item, ii) => (
+                <a
+                  key={item.name}
+                  href={item.href}
+                  target={item.external ? "_blank" : undefined}
+                  rel={item.external ? "noopener noreferrer" : undefined}
+                  aria-label={
+                    item.external ? `${item.name} - ${item.contact} (opens in new tab)` : `${item.name} - call ${item.contact}`
+                  }
+                  className={`minor-resource issue-tone-${tones[(gi + ii) % tones.length]}`}
+                >
+                  <span className="minor-resource-text">
+                    <span className="minor-resource-name">{item.name}</span>
+                    <span className="minor-resource-desc">{item.description}</span>
+                  </span>
+                  <span className="minor-resource-contact">
+                    {item.contact} {item.external ? "↗" : "→"}
+                  </span>
+                </a>
+              ))}
             </div>
           </div>
         </section>
+      ))}
 
+      {/* WHY NOT ASMITA */}
+      <section className="lab-sub-section" aria-labelledby="minor-why-not">
         <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* VALIDATION */}
-        <section className="container section-pad">
-          <div className="mx-auto max-w-3xl">
-            <p className="text-xl leading-[1.55] font-semibold text-[var(--ink)] md:text-2xl md:leading-[1.5]">
-              {t(locale, "minor.validation")}
-            </p>
-          </div>
-        </section>
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* RESOURCE GROUPS */}
-        {groups.map((group, gi) => (
-          <div key={group.eyebrow}>
-            <section className="container section-pad">
-              <div className="mx-auto max-w-3xl">
-                <h2 className="section-title leading-[1.35]">
-                  {group.title}
-                </h2>
-                <p className="muted mt-2 text-sm leading-[1.7]">{group.subtitle}</p>
-                <div className="mt-6 space-y-3">
-                  {group.items.map((item) => (
-                    <a
-                      key={item.name}
-                      href={item.href}
-                      target={item.external ? "_blank" : undefined}
-                      rel={item.external ? "noopener noreferrer" : undefined}
-                      aria-label={
-                        item.external
-                          ? `${item.name} - ${item.contact} (opens in new tab)`
-                          : `${item.name} - call ${item.contact}`
-                      }
-                      className="flex items-start justify-between gap-6 rounded-[var(--radius-box)] border border-[var(--line)] bg-[var(--card)] px-6 py-5 transition-colors hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]"
-                    >
-                      <div>
-                        <p className="font-medium text-[var(--ink)]">{item.name}</p>
-                        <p className="muted mt-1 text-sm leading-[1.65]">{item.description}</p>
-                      </div>
-                      <span className="shrink-0 text-[15px] font-medium text-[var(--brand-strong)] md:text-[18px]">
-                        {item.contact} {item.external ? "↗" : "→"}
-                      </span>
-                    </a>
-                  ))}
-                </div>
-              </div>
-            </section>
-            {gi < groups.length - 1 && (
-              <div className="container">
-                <div className="hairline" />
-              </div>
-            )}
-          </div>
-        ))}
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* WHY NOT ASMITA */}
-        <section className="container section-pad">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="section-title leading-[1.35]">
+          <div className="issue-act issue-tone-gold">
+            <span className="issue-topic-icon" aria-hidden="true">
+              <Icon name="shieldCheck" size={22} />
+            </span>
+            <h2 id="minor-why-not" className="issue-act-title">
               {t(locale, "minor.whyNot.title")}
             </h2>
-            <p className="muted mt-5 max-w-lg text-base leading-[1.75] md:text-[17px]">
-              {t(locale, "minor.whyNot.body")}
-            </p>
+            <p className="issue-act-body">{t(locale, "minor.whyNot.body")}</p>
           </div>
-        </section>
-
-        <div className="container">
-          <div className="hairline" />
         </div>
+      </section>
 
-        {/* CLOSING */}
-        <section className="container page-hero text-center">
-          <div className="mx-auto max-w-2xl">
-            <h2 className="section-title leading-[1.35]">
-              {t(locale, "minor.closing.title")}
-            </h2>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.75] md:text-lg">
-              {t(locale, "minor.closing.body")}
-            </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-3">
-              <a className="btn btn-primary" href="tel:1098">
+      {/* CLOSING */}
+      <section className="lab-sub-section">
+        <div className="container">
+          <div className="issue-close">
+            <h2 className="lab-h2">{t(locale, "minor.closing.title")}</h2>
+            <p className="issue-close-body">{t(locale, "minor.closing.body")}</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <a className="btn btn-primary !m-0" href="tel:1098">
                 {t(locale, "minor.closing.cta1")}
               </a>
-              <Link className="btn btn-secondary" href="/">
+              <Link className="btn btn-secondary !m-0" href="/">
                 {t(locale, "minor.closing.cta2")}
               </Link>
             </div>
           </div>
-        </section>
-      </div>
-    </AppShell>
+        </div>
+      </section>
+    </LabToolShell>
   );
 }
