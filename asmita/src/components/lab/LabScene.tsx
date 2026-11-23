@@ -17,6 +17,9 @@ import type * as ThreeNS from "three";
  * still CSS gradient instead.
  */
 
+/** "light": the gradient page (the default); "night": the dark page. */
+export type LabTone = "light" | "night";
+
 export type LabSceneKind =
   | "hero"
   | "trace"
@@ -33,6 +36,15 @@ type Three = typeof ThreeNS;
 type Pointer = { x: number; y: number };
 type Built = { update: (t: number, dt: number, pointer: Pointer) => void; dispose?: () => void };
 type Builder = (THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera) => Built;
+
+// The tone of the scene being built. Builders run synchronously inside
+// addEntry, which sets this first; the helpers below read it.
+let TONE: LabTone = "light";
+const night = () => TONE === "night";
+/** Glow adds light on the dark page; on the light page it would wash out to white. */
+const blendMode = (THREE: Three) => (night() ? THREE.AdditiveBlending : THREE.NormalBlending);
+/** Lines and wireframes that were white on the dark page are deep ink on the light one. */
+const fg = () => (night() ? 0xffffff : 0x2a2160);
 
 // The Lab palette: teal, coral, violet, amber, sky, pink.
 export const LAB_COLORS = [0x19d3c5, 0xff7a59, 0x8b6cff, 0xffc23d, 0x38b6ff, 0xff4f9a];
@@ -158,7 +170,8 @@ async function ensureStage(): Promise<Stage> {
   }
 }
 
-function addEntry(s: Stage, el: HTMLElement, kind: LabSceneKind): Entry {
+function addEntry(s: Stage, el: HTMLElement, kind: LabSceneKind, tone: LabTone): Entry {
+  TONE = tone;
   const scene = new s.THREE.Scene();
   const camera = new s.THREE.PerspectiveCamera(35, 1, 0.1, 100);
   const built = BUILDERS[kind](s.THREE, scene, camera);
@@ -186,7 +199,7 @@ function removeEntry(entry: Entry) {
   }
 }
 
-export function LabScene({ kind, className = "" }: { kind: LabSceneKind; className?: string }) {
+export function LabScene({ kind, tone = "light", className = "" }: { kind: LabSceneKind; tone?: LabTone; className?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const [live, setLive] = useState(false);
 
@@ -202,7 +215,7 @@ export function LabScene({ kind, className = "" }: { kind: LabSceneKind; classNa
         ensureStage()
           .then((s) => {
             if (cancelled) return;
-            entry = addEntry(s, el, kind);
+            entry = addEntry(s, el, kind, tone);
             setLive(true);
           })
           .catch(() => undefined);
@@ -215,7 +228,7 @@ export function LabScene({ kind, className = "" }: { kind: LabSceneKind; classNa
       near.disconnect();
       if (entry) removeEntry(entry);
     };
-  }, [kind]);
+  }, [kind, tone]);
 
   return <div ref={host} className={`lab-scene lab-scene-${kind} ${live ? "is-live" : ""} ${className}`} aria-hidden="true" />;
 }
@@ -302,7 +315,7 @@ function glowTexture(THREE: Three) {
 
 function glow(THREE: Three, color: number, size: number, opacity = 0.9) {
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: glowTexture(THREE), color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }),
+    new THREE.SpriteMaterial({ map: glowTexture(THREE), color, transparent: true, opacity, blending: blendMode(THREE), depthWrite: false }),
   );
   sprite.scale.setScalar(size);
   return sprite;
@@ -331,7 +344,7 @@ function dust(THREE: Three, count: number, spread: [number, number, number], siz
       vertexColors: true,
       transparent: true,
       opacity: 0.8,
-      blending: THREE.AdditiveBlending,
+      blending: blendMode(THREE),
       depthWrite: false,
     }),
   );
@@ -373,7 +386,7 @@ function buildHero(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspecti
       group.add(mesh);
       const edge = new THREE.Line(
         edgeGeo,
-        new THREE.LineBasicMaterial({ color: LAB_COLORS[i % LAB_COLORS.length], transparent: true, opacity: 0, blending: THREE.AdditiveBlending }),
+        new THREE.LineBasicMaterial({ color: LAB_COLORS[i % LAB_COLORS.length], transparent: true, opacity: 0, blending: blendMode(THREE) }),
       );
       group.add(edge);
       const shards: ThreeNS.Mesh[] = [];
@@ -476,7 +489,7 @@ function buildTrace(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspect
   copy.position.set(2.2, 0, 0);
   root.add(copy);
 
-  const frame = new THREE.Line(roundedOutline(THREE, SIZE / 2, SIZE / 2, 0.08), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
+  const frame = new THREE.Line(roundedOutline(THREE, SIZE / 2, SIZE / 2, 0.08), new THREE.LineBasicMaterial({ color: fg(), transparent: true, opacity: 0 }));
   frame.position.set(source.position.x + SIZE / 4, SIZE / 4, 0.1);
   root.add(frame);
 
@@ -501,7 +514,7 @@ function buildTrace(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspect
     });
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([a.clone(), a.clone()]),
-      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending }),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9, blending: blendMode(THREE) }),
     );
     root.add(line);
     threads.push({ line, a, b, dots });
@@ -583,13 +596,13 @@ function buildTracker(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspe
   });
   const links = new THREE.LineSegments(
     new THREE.BufferGeometry().setFromPoints(linkPoints),
-    new THREE.LineBasicMaterial({ color: VIOLET, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending }),
+    new THREE.LineBasicMaterial({ color: VIOLET, transparent: true, opacity: 0.5, blending: blendMode(THREE) }),
   );
   globe.add(links);
   const rings = [SKY, PINK].map((color, i) => {
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(R * (1.18 + i * 0.12), 0.012, 8, 160),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, blending: blendMode(THREE) }),
     );
     ring.rotation.x = Math.PI / (2.3 + i * 0.6);
     scene.add(ring);
@@ -601,7 +614,7 @@ function buildTracker(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspe
   const order = nodes.map((_, i) => i).sort((a, b) => ((a * 7919) % 37) - ((b * 7919) % 37));
   const rankOf = new Map(order.map((node, rank) => [node, rank]));
   const LOOP = 12;
-  const dark = new THREE.Color(0x2c2950);
+  const dark = new THREE.Color(night() ? 0x2c2950 : 0xd5cfee);
   const hot = new THREE.Color(CORAL);
 
   return {
@@ -652,7 +665,7 @@ function buildDetectors(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pers
   root.add(grid);
   const matrix = new THREE.Matrix4();
   const color = new THREE.Color();
-  const base = new THREE.Color(0x2b2660);
+  const base = new THREE.Color(night() ? 0x2b2660 : 0xece8ff);
   const heat = new Float32Array(COLS * ROWS);
   const hidden: number[] = [];
   for (let r = 0; r < ROWS; r += 1) {
@@ -668,19 +681,19 @@ function buildDetectors(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pers
   }
   const beam = new THREE.Mesh(
     new THREE.PlaneGeometry(0.5, ROWS * CELL + 0.8),
-    new THREE.MeshBasicMaterial({ color: TEAL, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: TEAL, transparent: true, opacity: 0.25, blending: blendMode(THREE), depthWrite: false }),
   );
   beam.position.z = 0.1;
   root.add(beam);
   const beamLine = new THREE.Mesh(
     new THREE.PlaneGeometry(0.04, ROWS * CELL + 0.8),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending }),
+    new THREE.MeshBasicMaterial({ color: fg(), transparent: true, opacity: 0.9, blending: blendMode(THREE) }),
   );
   beamLine.position.z = 0.12;
   root.add(beamLine);
   const width = COLS * CELL;
   const LOOP = 4.5;
-  const idle = new THREE.Color(0x4a4290);
+  const idle = new THREE.Color(night() ? 0x4a4290 : 0xd2c8ff);
 
   return {
     update(t, dt, pointer) {
@@ -730,7 +743,7 @@ function buildProtect(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspe
   cloakGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
   const cloak = new THREE.Points(
     cloakGeo,
-    new THREE.PointsMaterial({ size: 0.11, map: glowTexture(THREE), vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+    new THREE.PointsMaterial({ size: 0.11, map: glowTexture(THREE), vertexColors: true, transparent: true, blending: blendMode(THREE), depthWrite: false }),
   );
   cloak.position.z = 0.4;
   root.add(cloak);
@@ -742,12 +755,13 @@ function buildProtect(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspe
   rayGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(RAY * 3), 3));
   const ray = new THREE.Points(
     rayGeo,
-    new THREE.PointsMaterial({ size: 0.16, color: CORAL, map: glowTexture(THREE), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+    new THREE.PointsMaterial({ size: 0.16, color: CORAL, map: glowTexture(THREE), transparent: true, blending: blendMode(THREE), depthWrite: false }),
   );
   root.add(ray);
   const spread = Array.from({ length: RAY }, () => new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, Math.random() * 1.5));
 
   const c = new THREE.Color();
+  const lightness = night() ? 0.5 : 0.55;
   const LOOP = 5;
   return {
     update(t, _dt, pointer) {
@@ -762,7 +776,7 @@ function buildProtect(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspe
         const d = Math.hypot(x - 0.6, y - 0.5);
         const wave = Math.sin(x * 2.2 + t * 1.6) * 0.12 + Math.cos(y * 2.6 - t * 1.3) * 0.12 + Math.sin(d * 8 - t * 10) * 0.25 * hit * Math.exp(-d);
         pos.setZ(i, wave);
-        c.setHSL((x * 0.12 + y * 0.09 + t * 0.1 + 1) % 1, 1, 0.5 + wave * 0.5);
+        c.setHSL((x * 0.12 + y * 0.09 + t * 0.1 + 1) % 1, 1, lightness + wave * 0.5);
         col.setXYZ(i, c.r, c.g, c.b);
       }
       pos.needsUpdate = true;
@@ -816,7 +830,7 @@ function buildMessageCheck(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.P
     });
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.95, 1.02, 48),
-      new THREE.MeshBasicMaterial({ color: CORAL, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: CORAL, transparent: true, opacity: 0, blending: blendMode(THREE), side: THREE.DoubleSide }),
     );
     group.add(ring);
     root.add(group);
@@ -868,11 +882,11 @@ function buildStamp(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Perspect
 
   const mark = new THREE.Mesh(
     new THREE.RingGeometry(0.55, 0.95, 64),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: blendMode(THREE), side: THREE.DoubleSide }),
   );
   mark.position.z = 0.06;
   root.add(mark);
-  const flash = glow(THREE, 0xffffff, 4, 0);
+  const flash = glow(THREE, night() ? 0xffffff : AMBER, 4, 0);
   flash.position.z = 0.2;
   root.add(flash);
 
@@ -917,14 +931,14 @@ function buildSpotTheFake(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pe
   const clones: ThreeNS.Texture[] = [];
   const W = 1.9;
   const H = 2.5;
-  const back = new THREE.MeshBasicMaterial({ color: 0x2a2458 });
+  const back = new THREE.MeshBasicMaterial({ color: night() ? 0x2a2458 : 0x7b61ff });
   const makeCard = (x: number, sliced: boolean) => {
     const card = new THREE.Group();
     card.position.x = x;
     const backFace = new THREE.Mesh(roundedTile(THREE, W, H, 0.2, 0.05), back);
     backFace.position.z = -0.03;
     card.add(backFace);
-    const pattern = new THREE.Line(roundedOutline(THREE, W - 0.3, H - 0.3, 0.15), new THREE.LineBasicMaterial({ color: VIOLET }));
+    const pattern = new THREE.Line(roundedOutline(THREE, W - 0.3, H - 0.3, 0.15), new THREE.LineBasicMaterial({ color: night() ? VIOLET : 0xffffff }));
     pattern.position.z = -0.06;
     card.add(pattern);
     const slices: ThreeNS.Mesh[] = [];
@@ -942,7 +956,7 @@ function buildSpotTheFake(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pe
     }
     const ring = new THREE.Line(
       roundedOutline(THREE, W + 0.25, H + 0.25, 0.3),
-      new THREE.LineBasicMaterial({ color: sliced ? CORAL : TEAL, transparent: true, opacity: 0, blending: THREE.AdditiveBlending }),
+      new THREE.LineBasicMaterial({ color: sliced ? CORAL : TEAL, transparent: true, opacity: 0, blending: blendMode(THREE) }),
     );
     ring.position.z = 0.02;
     card.add(ring);
@@ -987,7 +1001,7 @@ function buildOpenTools(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pers
   const root = new THREE.Group();
   scene.add(root);
   root.add(glow(THREE, TEAL, 3.5, 0.55));
-  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
+  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 1), new THREE.MeshBasicMaterial({ color: fg(), wireframe: true }));
   root.add(core);
   const shapes = [
     new THREE.TorusKnotGeometry(0.32, 0.1, 64, 8),
@@ -1006,7 +1020,7 @@ function buildOpenTools(THREE: Three, scene: ThreeNS.Scene, camera: ThreeNS.Pers
   });
   const linkGeo = new THREE.BufferGeometry();
   linkGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(orbiters.length * 6), 3));
-  const links = new THREE.LineSegments(linkGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending }));
+  const links = new THREE.LineSegments(linkGeo, new THREE.LineBasicMaterial({ color: fg(), transparent: true, opacity: night() ? 0.18 : 0.25, blending: blendMode(THREE) }));
   root.add(links);
   return {
     update(t, _dt, pointer) {

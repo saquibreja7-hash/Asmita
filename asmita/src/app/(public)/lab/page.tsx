@@ -4,7 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
-import { LabScene, type LabSceneKind } from "@/components/lab/LabScene";
+import { LabScene, type LabSceneKind, type LabTone } from "@/components/lab/LabScene";
 import { LAB_BETA_TOOLS, LAB_HUB_KEYS, LAB_HUB_SECTIONS } from "@/lib/lab/beta-tools";
 
 export const metadata: Metadata = {
@@ -18,8 +18,10 @@ export const dynamic = "force-dynamic";
 // The Lab's public page (docs/lab/charter.md): what the Lab is, the
 // experiments and the beta tools. Every string is translated (en and hi); no
 // service is ever named or linked here, and no other research data reaches
-// this page. The hub has its own look (.lab-theme, site-styles.css): a night
-// "observatory" with one decorative Three.js scene per tool (LabScene).
+// this page. The hub has its own look (.lab-theme, site-styles.css): a light
+// gradient page with one decorative Three.js scene per tool (LabScene).
+// ?look=night shows the dark "observatory" version of the same page, kept
+// for comparison while the design is chosen.
 
 const EXPERIMENTS = [
   { title: "lab.exp.e1.title", body: "lab.exp.e1.body", accent: "teal" },
@@ -45,8 +47,13 @@ function splitExperimentTitle(title: string): [string | null, string] {
   return parts.length === 2 ? [parts[0], parts[1]] : [null, title];
 }
 
-export default async function LabPage() {
+export default async function LabPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const locale = await getLocale();
+  const tone: LabTone = (await searchParams)?.look === "night" ? "night" : "light";
   const enabled = labEnabled();
   const cards = [
     ...LAB_HUB_SECTIONS.map((entry) => ({ ...entry, beta: false })),
@@ -55,7 +62,7 @@ export default async function LabPage() {
 
   return (
     <AppShell>
-      <div className="page-canvas lab-theme">
+      <div className={`page-canvas lab-theme ${tone === "night" ? "lab-night" : "lab-light"}`}>
         <section className="lab-hero" aria-label={t(locale, "lab.eyebrow")}>
           <div className="container lab-hero-copy">
             <span className="lab-eyebrow">
@@ -65,7 +72,7 @@ export default async function LabPage() {
             <h1 className="lab-title">{t(locale, "lab.title")}</h1>
             <p className="lab-lede">{t(locale, "lab.intro")}</p>
           </div>
-          <LabScene kind="hero" className="lab-hero-scene" />
+          <LabScene kind="hero" tone={tone} className="lab-hero-scene" />
         </section>
 
         {enabled && (
@@ -83,7 +90,7 @@ export default async function LabPage() {
               <ul className="lab-grid" role="list">
                 {cards.map((card, i) => (
                   <li key={card.href} className="lab-card" style={{ ["--i" as string]: i }}>
-                    <LabScene kind={SCENES[card.href] ?? "open-tools"} className="lab-card-scene" />
+                    <LabScene kind={SCENES[card.href] ?? "open-tools"} tone={tone} className="lab-card-scene" />
                     <div className="lab-card-body">
                       {card.beta && <span className="lab-badge">{t(locale, LAB_HUB_KEYS.beta)}</span>}
                       <h3 className="lab-card-title">

@@ -9,7 +9,8 @@ import { MessageCheckForm } from "./MessageCheckForm";
 
 /*
  * WP93 + WP117 (docs/lab/beta-spec.md, docs/research/research-tools-spec.md
- * Track D): the public message check tool, /lab/message-check. A visitor
+ * Track D): the public sextortion classifier, /lab/message-check (named
+ * "Sextortion classifier" since 2026-11-23; the URL stays). A visitor
  * pastes the text of a threatening message; the WP93 pattern rules and the
  * WP117 classifier both run in code and the optional short summary comes
  * from Sarvam. Text only — no images, no links followed — and nothing is
@@ -20,14 +21,24 @@ import { MessageCheckForm } from "./MessageCheckForm";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Check a threatening message",
+  title: "Sextortion classifier",
   description:
-    "Paste the text of a threatening message or chat and see which sextortion patterns it matches — code rules plus a small classifier, each explained in plain words. Nothing is stored or logged.",
+    "An open-source sextortion classifier: paste the text of a message and see which sextortion patterns it matches, each explained in plain words, or run the same model in your own platform or helpline. Nothing is stored or logged.",
 };
 
 // The bias citation the "How this check works" section links to (the paper
 // is open access; the sources file records it as P19-1163).
 const SAP_ACL_2019_URL = "https://aclanthology.org/P19-1163/";
+
+// The open-source pieces a platform, helpline or researcher needs to run
+// the classifier themselves (Apache 2.0, the repository's licence).
+const REPO = "https://github.com/saquibreja7-hash/Asmita/tree/master";
+const REUSE_LINKS = [
+  { key: "lab.message-check.reuse.code", href: `${REPO}/asmita/src/lib/lab/sextortion` },
+  { key: "lab.message-check.reuse.taxonomy", href: `${REPO.replace("/tree/", "/blob/")}/asmita/docs/lab/sextortion-taxonomy.md` },
+  { key: "lab.message-check.reuse.eval", href: `${REPO.replace("/tree/", "/blob/")}/asmita/docs/lab/sextortion-eval.md` },
+  { key: "lab.message-check.reuse.trainer", href: `${REPO}/tools/lab-sextortion` },
+] as const;
 
 const NEXT_STEPS = [
   "lab.message-check.next.noPay",
@@ -141,6 +152,27 @@ export default async function MessageCheckPage() {
                   {t(locale, "lab.message-check.how.biasCite")}
                 </a>
               </p>
+            </div>
+          </div>
+        </section>
+
+        {/* USE IT IN YOUR OWN SERVICE — the classifier is open source; the
+            links go to the code, taxonomy, evaluation report and trainer. */}
+        <section className="section-pad" aria-labelledby="message-check-reuse">
+          <div className="container">
+            <div className="mx-auto max-w-2xl">
+              <h2 id="message-check-reuse" className="section-title">{t(locale, "lab.message-check.reuse.title")}</h2>
+              <p className="mt-6 text-[16px] leading-[1.7] text-[var(--text)]">{t(locale, "lab.message-check.reuse.body")}</p>
+              <ul className="mt-6 space-y-3 text-[15px] leading-[1.6]">
+                {REUSE_LINKS.map(({ key, href }) => (
+                  <li key={key}>
+                    <a className="text-link" href={href} rel="noopener noreferrer" target="_blank">
+                      {t(locale, key)}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted mt-6 text-sm leading-[1.7]">{t(locale, "lab.message-check.reuse.limits")}</p>
             </div>
           </div>
         </section>
