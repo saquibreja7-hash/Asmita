@@ -1,4 +1,5 @@
 import { Illustration } from "@/components/Illustration";
+import { LabToolHero } from "@/components/lab/LabToolPage";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { STATUS_URL } from "@/components/layout/Footer";
@@ -35,33 +36,28 @@ const channels = [
 export default function ContactPage() {
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         {/* HERO */}
-        <section className="container page-hero text-center page-hero-split">
-          <div className="mx-auto max-w-2xl">
-            <h1 className="page-title">
-              Reach the{" "}
-              <em className="not-italic text-gradient">Asmita</em> team.
-            </h1>
-            <p className="muted mx-auto mt-7 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              Pick the inbox that matches what you need. If you are not sure, use the first one.
-            </p>
-            <p className="mx-auto mt-5 max-w-lg text-base leading-[1.7] md:text-lg">
-              To talk now, call our 24/7 helpline{" "}
-              <a href={`tel:${HELPLINE.tel}`} className="link-underline font-medium text-[var(--ink)]">
-                {HELPLINE.display}
-              </a>
-              . An AI assistant helps you file a complaint step by step, in any Indian language.
-            </p>
-            <div className="mt-6 flex justify-center">
-              {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
-              <a className="btn btn-secondary" href="/talk">
-                Talk to us from your browser
-              </a>
-            </div>
+        <LabToolHero
+          title={`Reach the Asmita team.`}
+          intro={<p>Pick the inbox that matches what you need. If you are not sure, use the first one.</p>}
+          visual={<Illustration name="page-contact" eager className="issue-hero-art" />}
+        >
+          <p className="mt-5 max-w-xl text-base leading-[1.7] text-[var(--ink)]">
+            To talk now, call our 24/7 helpline{" "}
+            <a href={`tel:${HELPLINE.tel}`} className="link-underline font-medium text-[var(--ink)]">
+              {HELPLINE.display}
+            </a>
+            . An AI assistant helps you file a complaint step by step, in any Indian language.
+          </p>
+          <div className="mt-6 flex">
+            {/* A full page load, not <Link>: /talk's own headers allow the microphone. */}
+            <a className="btn btn-secondary !m-0" href="/talk">
+              Talk to us from your browser
+            </a>
           </div>
-          <Illustration name="page-contact" eager className="page-hero-art" />
-        </section>
+        </LabToolHero>
+
 
         <div className="container">
           <div className="hairline" />

@@ -1,4 +1,5 @@
 import { Illustration } from "@/components/Illustration";
+import { LabToolHero } from "@/components/lab/LabToolPage";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
@@ -60,23 +61,16 @@ export default async function WhatWeDoPage() {
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
   return (
     <AppShell>
-      <div className="page-canvas">
-        <section className="hero" aria-label={say("What we do", "हम क्या करते हैं")}>
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-3xl text-center">
-              <h1 className="page-title">
-                {say("Tools for taking action on content", "सामग्री पर कार्रवाई के साधन")}
-              </h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
-                {say(
+      <div className="page-canvas lab-theme calm-sub">
+        <LabToolHero
+          title={say("Tools for taking action on content", "सामग्री पर कार्रवाई के साधन")}
+          intro={<p>{say(
                   "Not just advice. Asmita is built to help you take real action, and built so your image never has to leave your device to do it.",
                   "अस्मिता आपको कार्रवाई के चरण समझने और आगे बढ़ने में मदद करती है। इसके लिए आपकी तस्वीर को आपके डिवाइस से बाहर जाने की ज़रूरत नहीं है।",
-                )}
-              </p>
-            </div>
-            <Illustration name="page-what-we-do" eager className="page-hero-art" />
-          </div>
-        </section>
+                )}</p>}
+          visual={<Illustration name="page-what-we-do" eager className="issue-hero-art" />}
+        />
+
 
         {/* CAPABILITIES */}
         <section className="zone-white section-pad" aria-label={say("Capabilities", "उपलब्ध साधन")}>
@@ -149,13 +143,11 @@ export default async function WhatWeDoPage() {
           </div>
         </section>
 
-        <section className="zone-sunset" aria-label={say("Get help", "मदद लें")}>
-          <div className="zone-sunset-content container section-pad text-center">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="section-title">
-                {say("See it work for your situation.", "अपनी स्थिति के मुताबिक रास्ता देखें।")}
-              </h2>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <section className="lab-sub-section" aria-label={say("Get help", "मदद लें")}>
+          <div className="container">
+            <div className="issue-close">
+              <h2 className="lab-h2">{say("See it work for your situation.", "अपनी स्थिति के मुताबिक रास्ता देखें।")}</h2>
+              <div className="mt-8 flex flex-wrap gap-3">
                 <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">{say("Get help", "मदद लें")}</Link>
                 <Link className="btn btn-secondary btn-arrow !m-0" href="/about">{say("About Asmita", "अस्मिता के बारे में")}</Link>
               </div>

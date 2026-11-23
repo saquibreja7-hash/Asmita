@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LabToolHero } from "@/components/lab/LabToolPage";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { Illustration } from "@/components/Illustration";
@@ -140,31 +141,27 @@ function SectionHead({ eyebrow, title, id }: { eyebrow: string; title: string; i
 export default function ForPlatformsPage() {
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme calm-sub">
         {/* HERO (unchanged by design) */}
-        <section className="hero" aria-label="For platforms">
-          <div className="hero-content container section-pad page-hero-split">
-            <div className="mx-auto max-w-3xl text-center">
-              <span className="eyebrow">For platforms</span>
-              <h1 className="page-title mt-5">Help survivors faster. Keep abuse off your platform.</h1>
-              <p className="font-size-large mx-auto mt-5 max-w-2xl text-[var(--ink)]">
-                Asmita receives reports from survivors across India about intimate images shared without their consent. Partner platforms get
-                those reports through one agreed channel, with fingerprints they can match, so content comes down quickly and stays down.
-              </p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <LabToolHero
+          badge="For platforms"
+          title={`Help survivors faster. Keep abuse off your platform.`}
+          intro={<p>Asmita receives reports from survivors across India about intimate images shared without their consent. Partner platforms get
+                those reports through one agreed channel, with fingerprints they can match, so content comes down quickly and stays down.</p>}
+          visual={<Illustration name="page-what-we-do" eager className="issue-hero-art" />}
+        >
+          <div className="mt-8 flex flex-wrap gap-3">
                 <a className="btn btn-primary btn-arrow !m-0" href="#register">Become a partner</a>
                 <a className="btn btn-secondary !m-0" href="#how">How it works</a>
               </div>
-              <p className="muted mt-6 text-sm">The partner programme is opening now. We bring platforms on one at a time.</p>
-              <p className="mt-3">
-                <Link className="arrow-link" href="/for-platforms/trusted-flagger">
-                  Trust &amp; safety teams: see what a notice contains
-                </Link>
-              </p>
-            </div>
-            <Illustration name="page-what-we-do" eager className="page-hero-art" />
-          </div>
-        </section>
+          <p className="mt-6 text-sm text-[var(--text)]">The partner programme is opening now. We bring platforms on one at a time.</p>
+          <p className="mt-3">
+            <Link className="arrow-link" href="/for-platforms/trusted-flagger">
+              Trust &amp; safety teams: see what a notice contains
+            </Link>
+          </p>
+        </LabToolHero>
+
 
         {/* WHY NOW: warm band, three law cards */}
         <section className="pf-warm section-pad" aria-labelledby="why-heading">
@@ -308,18 +305,11 @@ export default function ForPlatformsPage() {
         </section>
 
         {/* CONTACT, with the envelope */}
-        <section className="zone-sunset" aria-labelledby="contact-heading">
-          <div className="zone-sunset-content container section-pad">
-            <div className="mx-auto max-w-2xl">
-              <div className="text-center">
-                <h2 id="contact-heading" className="section-title">
-                  Prefer to talk first?
-                </h2>
-                <span aria-hidden="true" className="pf-rule mx-auto mt-5" />
-                <p className="muted mx-auto mt-5 max-w-lg text-base leading-[1.75]">
-                  Write to us and tell us a little about your platform. We are happy to walk your Trust &amp; Safety team through how it works.
-                </p>
-                <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <section className="lab-sub-section">
+          <div className="container">
+            <div className="issue-close">
+              <h2 className="lab-h2">None</h2>
+              <div className="mt-8 flex flex-wrap gap-3">
                   <a className="btn btn-primary btn-arrow !m-0" href="mailto:hello@meriasmita.org?subject=Platform%20partner%20programme">
                     hello@meriasmita.org
                   </a>
@@ -327,7 +317,6 @@ export default function ForPlatformsPage() {
                     What Asmita does
                   </Link>
                 </div>
-              </div>
             </div>
           </div>
         </section>

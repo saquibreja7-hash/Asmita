@@ -2278,3 +2278,7 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
   border-radius: calc(var(--radius-cards) + 4px);
   background: var(--card);
 }
+
+/* Older content cards on calm pages. */
+.calm-sub .surface-card { border: 1px solid var(--line); border-radius: var(--radius-cards); background: var(--card); box-shadow: none; }
+.calm-sub .transform-content { background: transparent; }
