@@ -1826,3 +1826,8 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 .lab-helpline-number:hover { color: var(--brand); }
 .lab-steps-stack { grid-template-columns: 1fr; max-width: 860px; }
 .lab-steps-stack .lab-step { padding: 20px 24px; }
+.lab-stats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 8px; }
+.lab-stat { position: relative; padding: 26px 24px; border-radius: var(--radius-cards); border: 1px solid var(--line); background: var(--card); overflow: hidden; }
+.lab-stat::before { content: ""; position: absolute; inset: auto -40px -60px auto; width: 160px; height: 160px; border-radius: 50%; background: radial-gradient(circle, rgba(124, 92, 255, 0.16), transparent 70%); pointer-events: none; }
+.lab-stat-n { font-family: var(--lab-mono); font-size: clamp(2.25rem, 4vw, 3rem); font-weight: 700; line-height: 1; letter-spacing: -0.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.lab-stat-label { margin-top: 10px; font-size: 0.9375rem; color: var(--text); }

@@ -141,7 +141,7 @@ export default async function StackPage({ params }: { params: Promise<{ slug: st
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme lab-sub">
         {/* HEADER: notice (Hindi only), breadcrumb, title, For: line, lede,
             the three fact boxes */}
         <header className="ot-stack-head">

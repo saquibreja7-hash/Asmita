@@ -174,7 +174,7 @@ export default async function OpenToolPage({
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme lab-sub">
         {/* HEADER: notice (Hindi only), breadcrumb, name, maintainer, chips */}
         <header className="ot-tool-head">
           <div className="container">

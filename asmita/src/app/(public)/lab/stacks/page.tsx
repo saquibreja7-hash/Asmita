@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t, type Locale } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
@@ -74,16 +74,13 @@ export default async function StacksPage() {
   const locale = await getLocale();
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO — left aligned, not centred (Part C3) */}
-        <section className="page-hero" aria-label={t(locale, "lab.stacks.title")}>
-          <div className="container">
-            <span className="eyebrow">{t(locale, "lab.eyebrow")}</span>
-            <h1 className="page-title mt-5">{t(locale, "lab.stacks.title")}</h1>
-            <p className="ot-lede mt-6">{t(locale, "lab.stacks.lede")}</p>
-          </div>
-        </section>
+    <LabToolShell>
+      <LabToolHero
+        backLabel={t(locale, "lab.eyebrow")}
+        title={t(locale, "lab.stacks.title")}
+        intro={<p>{t(locale, "lab.stacks.lede")}</p>}
+        scene="stacks"
+      />
 
         {/* THE THREE CARDS */}
         <section className="ot-stacks-list" aria-labelledby="ot-stacks-heading">
@@ -113,7 +110,6 @@ export default async function StacksPage() {
             </div>
           </div>
         </section>
-      </div>
-    </AppShell>
+    </LabToolShell>
   );
 }

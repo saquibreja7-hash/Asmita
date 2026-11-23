@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabCallout, LabSection, LabSteps, LabToolHero, LabToolShell, LabWorkspace } from "@/components/lab/LabToolPage";
 import { getLocale } from "@/lib/get-locale";
 import { t } from "@/lib/i18n";
 import { labEnabled } from "@/lib/lab/flags";
@@ -41,80 +41,64 @@ export default async function SpotTheFakePage() {
   const locale = await getLocale();
 
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO */}
-        <section className="container py-8 text-center md:py-14">
-          <div className="mx-auto max-w-2xl">
-            <span className="tag">{t(locale, "lab.spot-the-fake.beta")}</span>
-            <h1 className="page-title mt-5">{t(locale, "lab.spot-the-fake.title")}</h1>
-            <p className="muted mx-auto mt-6 max-w-lg text-base leading-[1.7] md:text-lg md:leading-[1.7]">
-              {t(locale, "lab.spot-the-fake.intro")}
-            </p>
-            <p className="mx-auto mt-4 max-w-lg text-sm leading-[1.7] text-[var(--ink)]">
-              {t(locale, "lab.spot-the-fake.cannot")}
-            </p>
-            <p className="mx-auto mt-4 max-w-lg text-sm leading-[1.7]">
-              <span className="text-[var(--ink)]">{t(locale, "lab.spot-the-fake.under18")}</span>{" "}
-              <Link href="/minor-support" className="text-link">
-                {t(locale, "lab.spot-the-fake.under18.link")}
-              </Link>
-            </p>
-          </div>
-        </section>
-
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        {/* THE QUIZ */}
-        <section className="container py-8 md:py-10">
-          <SpotTheFakeQuiz locale={locale} />
-          <p className="muted mx-auto mt-6 max-w-xl text-center text-xs leading-[1.7]">
-            {t(locale, "lab.spot-the-fake.notice.privacy")}
-          </p>
-        </section>
-
-        {/* THE SIX TELLS + WHAT THE GAME TEACHES */}
-        <section className="zone-white section-pad" aria-labelledby="spot-the-fake-tells">
-          <div className="container">
-            <div className="mx-auto max-w-2xl">
-              <h2 id="spot-the-fake-tells" className="section-title">
-                {t(locale, "lab.spot-the-fake.tells.title")}
-              </h2>
-              <ul className="mt-8 grid gap-x-10 sm:grid-cols-2">
-                {TELLS.map((tell) => (
-                  <li key={tell.title} className="border-t border-[var(--line)] py-4">
-                    <h3 className="font-display text-[18px] font-normal leading-[1.3] tracking-tight text-[var(--ink)]">
-                      {t(locale, tell.title)}
-                    </h3>
-                    <p className="muted mt-2 text-sm leading-[1.7]">{t(locale, tell.body)}</p>
-                  </li>
-                ))}
-              </ul>
-
-              <h2 className="section-title mt-14">{t(locale, "lab.spot-the-fake.about.title")}</h2>
-              <p className="mt-6 text-[15px] leading-[1.75] text-[var(--text)]">{t(locale, "lab.spot-the-fake.about.body1")}</p>
-              <p className="mt-4 text-[15px] leading-[1.75] text-[var(--text)]">{t(locale, "lab.spot-the-fake.about.body2")}</p>
-
-              {/* If the image that worries them is real: the bridge to the
-                  tools that actually do something about it. */}
-              <p className="mt-6 text-[15px] leading-[1.75] text-[var(--text)]">{t(locale, "lab.spot-the-fake.worried")}</p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Link className="btn btn-primary" href="/check-image">{t(locale, "lab.spot-the-fake.worried.check")}</Link>
-                <Link className="btn btn-secondary" href="/get-help">{t(locale, "lab.spot-the-fake.worried.help")}</Link>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* BACK TO THE LAB */}
-        <section className="container py-8 text-center">
-          <Link href="/lab" className="text-link">
-            {t(locale, "lab.spot-the-fake.back")} <span className="cta-arrow" aria-hidden>→</span>
+    <LabToolShell>
+      <LabToolHero
+        backLabel={t(locale, "lab.spot-the-fake.back")}
+        badge={t(locale, "lab.spot-the-fake.beta")}
+        title={t(locale, "lab.spot-the-fake.title")}
+        intro={
+          <>
+            <p>{t(locale, "lab.spot-the-fake.intro")}</p>
+            <p className="text-[15px] text-[var(--text)]">{t(locale, "lab.spot-the-fake.cannot")}</p>
+          </>
+        }
+        scene="spot-the-fake"
+      >
+        <LabCallout icon="shieldCheck">
+          {t(locale, "lab.spot-the-fake.under18")}{" "}
+          <Link href="/minor-support" className="text-link">
+            {t(locale, "lab.spot-the-fake.under18.link")}
           </Link>
-        </section>
-      </div>
-    </AppShell>
+        </LabCallout>
+      </LabToolHero>
+
+      <LabWorkspace label={t(locale, "lab.spot-the-fake.title")}>
+        <SpotTheFakeQuiz locale={locale} />
+        <p className="mt-6 border-t border-[var(--line)] pt-5 text-xs leading-[1.7] text-[var(--text)]">
+          {t(locale, "lab.spot-the-fake.notice.privacy")}
+        </p>
+      </LabWorkspace>
+
+      {/* THE SIX TELLS: the quiz is practice, this list is the lesson a
+          visitor can come back to. */}
+      <LabSection id="spot-the-fake-tells" index="01" title={t(locale, "lab.spot-the-fake.tells.title")}>
+        <LabSteps
+          steps={TELLS.map((tell) => (
+            <div key={tell.title}>
+              <h3 className="text-[17px] font-semibold leading-[1.3] text-[var(--ink)]">{t(locale, tell.title)}</h3>
+              <p className="mt-2">{t(locale, tell.body)}</p>
+            </div>
+          ))}
+        />
+      </LabSection>
+
+      {/* WHAT THE GAME TEACHES, and the bridge to the tools that actually
+          do something about a worrying real image. */}
+      <LabSection id="spot-the-fake-about" index="02" title={t(locale, "lab.spot-the-fake.about.title")} narrow>
+        <LabSteps
+          ordered={false}
+          layout="stack"
+          steps={[
+            <p key="1">{t(locale, "lab.spot-the-fake.about.body1")}</p>,
+            <p key="2">{t(locale, "lab.spot-the-fake.about.body2")}</p>,
+          ]}
+        />
+        <p className="mt-8 text-[16px] leading-[1.7] text-[var(--ink)]">{t(locale, "lab.spot-the-fake.worried")}</p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link className="btn btn-primary" href="/check-image">{t(locale, "lab.spot-the-fake.worried.check")}</Link>
+          <Link className="btn btn-secondary" href="/get-help">{t(locale, "lab.spot-the-fake.worried.help")}</Link>
+        </div>
+      </LabSection>
+    </LabToolShell>
   );
 }

@@ -99,7 +99,7 @@ export default async function HowWeChoosePage() {
 
   return (
     <AppShell>
-      <div className="page-canvas">
+      <div className="page-canvas lab-theme lab-sub">
         {/* HEADER — the tool pages' pattern: notice (Hindi only),
             breadcrumb, title, lede. No hero band and no eyebrow. */}
         <header className="ot-tool-head">

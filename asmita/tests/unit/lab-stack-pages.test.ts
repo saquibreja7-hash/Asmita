@@ -148,7 +148,7 @@ describe("the stacks index gates and metadata", () => {
 describe("the stacks index", () => {
   it("renders the hero and one card per stack, in the data's order", async () => {
     const html = await indexMarkup();
-    expect(html).toContain('<h1 class="page-title mt-5">Free stacks</h1>');
+    expect(html).toContain('<h1 class="page-title lab-tool-title">Free stacks</h1>');
     expect(html).toContain("Ready-made combinations of open tools for a specific job");
     expect(html).toContain("Three stacks for three kinds of organisation");
 
@@ -189,7 +189,7 @@ describe("the stacks index", () => {
 
   it("renders the Hindi hero and card text", async () => {
     const html = await indexMarkup("hi");
-    expect(html).toContain('<h1 class="page-title mt-5">मुफ़्त स्टैक</h1>');
+    expect(html).toContain('<h1 class="page-title lab-tool-title">मुफ़्त स्टैक</h1>');
     expect(html).toContain("तीन तरह की संस्थाओं के लिए तीन स्टैक");
     for (const stack of STACKS) {
       expect(html, stack.slug).toContain(`<p class="ot-stacks-who">${stack.hi.forWho}</p>`);
