@@ -2165,3 +2165,4 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 @media (prefers-reduced-motion: reduce) { .minor-resource { transition: none; } .minor-resource:hover { transform: none; } }
 .minor-resource { flex-direction: column; justify-content: flex-start; }
 .minor-resource-contact { margin-top: 4px; }
+.calm-sub .lab-workspace { background: linear-gradient(160deg, #eef8f6 0%, #fffaf0 55%, #fff2ec 100%); }
