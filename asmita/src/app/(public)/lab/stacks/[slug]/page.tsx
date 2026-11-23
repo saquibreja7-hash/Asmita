@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LabScene } from "@/components/lab/LabScene";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
@@ -145,7 +146,8 @@ export default async function StackPage({ params }: { params: Promise<{ slug: st
         {/* HEADER: notice (Hindi only), breadcrumb, title, For: line, lede,
             the three fact boxes */}
         <header className="ot-stack-head">
-          <div className="container">
+          <div className="container lab-detail-head">
+            <LabScene kind="stacks" className="lab-detail-scene" />
             {locale === "hi" && (
               <p className="ot-en-note">{t(locale, "lab.openTools.tool.englishNotice")}</p>
             )}

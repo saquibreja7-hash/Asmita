@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LabScene } from "@/components/lab/LabScene";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
@@ -103,7 +104,8 @@ export default async function HowWeChoosePage() {
         {/* HEADER — the tool pages' pattern: notice (Hindi only),
             breadcrumb, title, lede. No hero band and no eyebrow. */}
         <header className="ot-tool-head">
-          <div className="container">
+          <div className="container lab-detail-head">
+            <LabScene kind="open-tools" className="lab-detail-scene" />
             {locale === "hi" && (
               <p className="ot-en-note">{t(locale, "lab.openTools.tool.englishNotice")}</p>
             )}

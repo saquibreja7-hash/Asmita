@@ -1357,3 +1357,207 @@ button.ot-chip[aria-pressed="true"] {
 }
 
 
+
+/* ---------- AI Lab detail pages: each open tool, each stack, How we choose ----------
+   The pages keep their markup (lab-open-tools.css lays them out); this block
+   brings them into the Lab's look, scoped to .lab-sub: a proper header band,
+   numbered section labels, steps as cards, a quieter sticky "At a glance",
+   white chips and tiles. No new colours: the site's ink, text, line and brand. */
+
+/* Header band */
+.lab-sub .ot-tool-head,
+.lab-sub .ot-stack-head {
+  padding-top: clamp(32px, 5vw, 64px);
+  padding-bottom: clamp(32px, 5vw, 56px);
+  border-bottom: 1px solid var(--line);
+}
+.lab-sub .ot-breadcrumb { gap: 6px; font-size: 0.8125rem; }
+.lab-sub .ot-breadcrumb .text-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.2s;
+}
+.lab-sub .ot-breadcrumb .text-link:hover { border-color: var(--ink); }
+.lab-sub .ot-crumb-sep { color: var(--line); }
+.lab-sub .ot-crumb-here { padding: 5px 4px; color: var(--text); font-weight: 500; }
+.lab-sub .ot-tool-title,
+.lab-sub .ot-stack-title,
+.lab-sub .ot-tool-head .page-title { margin-top: 22px; max-width: 22ch; }
+.lab-sub .ot-tool-by { margin-top: 14px; font-size: 1.125rem; color: var(--text); }
+.lab-sub .ot-stack-lede { max-width: 64ch; font-size: 1.125rem; line-height: 1.7; color: var(--ink); }
+.lab-sub .ot-stack-for { max-width: 64ch; }
+
+/* Chips: white pills; the licence chip in ink. */
+.lab-sub .ot-chip {
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 500;
+}
+.lab-sub .ot-chip-licence { background: var(--ink); border-color: var(--ink); color: #fff; }
+.lab-sub .ot-chip-asmita { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-strong); }
+
+/* The stack's three facts as tiles. */
+.lab-sub .ot-stack-facts { gap: 12px; }
+.lab-sub .ot-stack-fact {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-cards);
+  background: var(--card);
+}
+.lab-sub .ot-stack-fact dt {
+  font-family: var(--lab-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.lab-sub .ot-stack-fact dd { margin-top: 6px; font-weight: 600; color: var(--ink); }
+
+/* Body rhythm and numbered section labels. */
+.lab-sub .ot-tool-body,
+.lab-sub .ot-stack-body,
+.lab-sub .ot-how-body { padding-top: clamp(36px, 5vw, 64px); }
+.lab-sub .ot-tool-main,
+.lab-sub .ot-stack-body,
+.lab-sub .ot-how-main { counter-reset: lab-sec; }
+.lab-sub .ot-section + .ot-section {
+  margin-top: clamp(40px, 5vw, 64px);
+  padding-top: clamp(40px, 5vw, 64px);
+  border-top: 1px solid var(--line);
+}
+.lab-sub .ot-section > .section-title {
+  counter-increment: lab-sec;
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+  letter-spacing: -0.015em;
+}
+.lab-sub .ot-section > .section-title::before {
+  content: counter(lab-sec, decimal-leading-zero);
+  display: block;
+  width: fit-content;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid currentColor;
+  font-family: var(--lab-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  color: var(--brand);
+}
+.lab-sub .ot-prose { color: var(--text); }
+
+/* Steps as cards, with a square numeral. */
+.lab-sub .ot-steps { gap: 10px; }
+.lab-sub .ot-steps > li {
+  max-width: none;
+  padding: 16px 18px 16px 62px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-cards);
+  background: var(--card);
+}
+.lab-sub .ot-step-n {
+  left: 16px;
+  top: 15px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-family: var(--lab-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+/* Bullets: a short brand-coloured bar instead of a grey dot. */
+.lab-sub .ot-bullets > li::before {
+  top: 0.78em;
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--brand);
+}
+
+/* At a glance: a calm, raised card. */
+.lab-sub .ot-glance {
+  border-radius: calc(var(--radius-cards) + 4px);
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: 0 24px 50px -36px rgba(40, 30, 90, 0.35);
+}
+.lab-sub .ot-glance-title { font-size: 1.125rem; }
+.lab-sub .ot-glance-list dt {
+  font-family: var(--lab-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.lab-sub .ot-glance-list dd { color: var(--ink); }
+
+/* Cards inside the body. */
+.lab-sub .ot-credit,
+.lab-sub .ot-stack-notes,
+.lab-sub .ot-stack-plan-col,
+.lab-sub .ot-stack-closecard {
+  border-radius: var(--radius-cards);
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: none;
+}
+.lab-sub .ot-stack-plan { gap: 14px; }
+.lab-sub .ot-stack-plan-col { padding: 20px 22px; }
+.lab-sub .ot-stack-plan-title {
+  font-family: var(--lab-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.lab-sub .ot-stack-stepnum {
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--lab-mono);
+}
+.lab-sub .ot-stack-label { color: var(--ink); }
+.lab-sub .ot-stack-done {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+.lab-sub .ot-stack-done .ot-stack-label { color: var(--brand-strong); }
+
+/* Sources: a numbered, hairline-separated list. */
+.lab-sub .ot-sources > li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.lab-sub .ot-sources > li:last-child { border-bottom: 0; }
+
+/* The closing band: a white panel, not a gradient. */
+.lab-sub .ot-close { background: none; }
+.lab-sub .ot-close-inner {
+  border-radius: calc(var(--radius-cards) + 6px);
+  border: 1px solid var(--line);
+  background: var(--card);
+  padding: clamp(28px, 4vw, 48px);
+  box-shadow: 0 30px 60px -45px rgba(40, 30, 90, 0.35);
+}
+.lab-detail-head { position: relative; }
+.lab-detail-head > :not(.lab-detail-scene) { position: relative; }
+.lab-detail-scene { display: none; }
+@media (min-width: 1024px) {
+  .lab-detail-head { padding-right: 360px; }
+  .lab-detail-scene { display: block; position: absolute; right: 0; top: 50%; width: 320px; height: 240px; transform: translateY(-50%); border-radius: calc(var(--radius-cards) + 6px); border: 1px solid var(--line); background: linear-gradient(160deg, #f6f3ff 0%, #fff6f2 55%, #f0f8ff 100%); overflow: hidden; }
+}
+@media (min-width: 1024px) { .lab-detail-scene.is-live { background: linear-gradient(160deg, #f6f3ff 0%, #fff6f2 55%, #f0f8ff 100%); } }
+.lab-tool-hero-visual .lab-scene.is-live { background: none; }
+/* A stack step already carries its own number badge: no second label. */
+.lab-sub .ot-section > :has(> .ot-stack-stepnum)::before { content: none; }
+.lab-sub .ot-stack-body .ot-section > .section-title::before { content: none; }
