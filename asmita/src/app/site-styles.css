@@ -2300,3 +2300,32 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
 .minor-resource { background: radial-gradient(180px 180px at 100% 0%, var(--tone-glow), transparent 70%), var(--card); }
 .calm-sub .org-row { background: radial-gradient(180px 180px at 100% 0%, var(--row-glow, rgba(10, 94, 90, 0.12)), transparent 70%), var(--card); }
 .lab-stat { background: radial-gradient(160px 160px at 100% 100%, rgba(124, 92, 255, 0.16), transparent 70%), var(--card); }
+
+/* Newsletter confirm and unsubscribe: one centred white panel. */
+.newsletter-panel {
+  max-width: 640px;
+  margin: clamp(24px, 6vw, 72px) auto;
+  padding: clamp(24px, 4vw, 44px);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-cards) + 6px);
+  background: var(--card);
+  box-shadow: 0 30px 60px -45px rgba(30, 40, 60, 0.35);
+}
+
+/* Sitemap: one soft card per group. */
+.sitemap-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+}
+.sitemap-card {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-cards) + 4px);
+  background: radial-gradient(120% 80% at 100% 0%, var(--tone-soft), transparent 60%), var(--card);
+}
+.sitemap-card-title {
+  font-size: 1.125rem;
+  font-weight: 650;
+  color: var(--tone-ink);
+}

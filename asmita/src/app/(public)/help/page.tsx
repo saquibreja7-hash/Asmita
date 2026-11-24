@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { Illustration } from "@/components/Illustration";
 import { getLocale } from "@/lib/get-locale";
 import { SupporterLogos } from "@/components/layout/Supporters";
@@ -13,8 +13,7 @@ export const metadata: Metadata = {
 };
 
 /*
- * /help: the original homepage, kept unchanged when the homepage became the organization's front page. Editorial system from DESIGN.md: parchment canvas, serif headlines at 400,
- * monospace for every functional string, pill buttons, hairline cards, one teal action.
+ * /help: the original homepage, now in the calm site design (LabToolShell, white illustrations).
  */
 
 // Each audience can have its own scene, shown while its button is hovered.
@@ -120,39 +119,33 @@ export default async function HelpPage() {
   const locale = await getLocale();
   const say = (en: string, hi: string) => locale === "hi" ? hi : en;
   return (
-    <AppShell>
-      <div className="page-canvas">
-        {/* HERO: what Asmita does on the left, an illustration on the right. */}
-        <section className="home-hero">
-          <div className="container relative z-[1] grid items-center gap-10 pb-14 pt-14 md:pb-20 md:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
-            <div>
-              <h1 className="hero-title max-w-3xl">
-                {say("You are not alone. Let's take it down.", "आप अकेली नहीं हैं। आइए इसे हटवाएँ।")}
-              </h1>
-              <p className="font-size-large mt-6 max-w-xl text-[var(--text)]">
-                {say(
-                  "Asmita offers free, confidential help in India for intimate images shared without consent. Share the links, sign the notice, and we handle the platforms. Your photos never leave your phone.",
-                  "अस्मिता भारत में बिना सहमति साझा की गई अंतरंग तस्वीरों को हटवाने के लिए मुफ़्त और गोपनीय मदद देती है। लिंक साझा करें, सूचना पर हस्ताक्षर करें, और प्लेटफ़ॉर्म से हम बात करेंगे। आपकी तस्वीरें कभी आपके फ़ोन से बाहर नहीं जातीं।",
-                )}
-              </p>
-              <div className="mt-9 flex flex-wrap items-center gap-3">
-                <Link className="btn btn-primary btn-arrow" href="/start">
-                  {say("File a complaint", "शिकायत दर्ज करें")}
-                </Link>
-                <Link className="btn btn-secondary" href="/how-it-works">
-                  {say("How it works", "यह कैसे काम करता है")}
-                </Link>
-              </div>
-              <ul className="home-hero-trust mt-8">
-                <li>{say("Free, always", "मुफ़्त, हमेशा")}</li>
-                <li>{say("No ID or Aadhaar needed", "किसी आईडी या आधार की आवश्यकता नहीं")}</li>
-                <li>{say("Your photo never leaves your device", "आपकी फोटो कभी भी आपके डिवाइस से बाहर नहीं जाती")}</li>
-              </ul>
-            </div>
-
-            <Illustration name="home-hero" eager className="mx-auto max-w-[380px] lg:max-w-[600px]" />
-          </div>
-        </section>
+    <LabToolShell variant="calm">
+      <LabToolHero
+        title={say("You are not alone. Let's take it down.", "आप अकेली नहीं हैं। आइए इसे हटवाएँ।")}
+        intro={
+          <p>
+            {say(
+              "Asmita offers free, confidential help in India for intimate images shared without consent. Share the links, sign the notice, and we handle the platforms. Your photos never leave your phone.",
+              "अस्मिता भारत में बिना सहमति साझा की गई अंतरंग तस्वीरों को हटवाने के लिए मुफ़्त और गोपनीय मदद देती है। लिंक साझा करें, सूचना पर हस्ताक्षर करें, और प्लेटफ़ॉर्म से हम बात करेंगे। आपकी तस्वीरें कभी आपके फ़ोन से बाहर नहीं जातीं।",
+            )}
+          </p>
+        }
+        visual={<Illustration name="home-hero" eager className="issue-hero-art" />}
+      >
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <Link className="btn btn-primary btn-arrow !m-0" href="/start">
+            {say("File a complaint", "शिकायत दर्ज करें")}
+          </Link>
+          <Link className="btn btn-secondary !m-0" href="/how-it-works">
+            {say("How it works", "यह कैसे काम करता है")}
+          </Link>
+        </div>
+        <ul className="home-hero-trust mt-8">
+          <li>{say("Free, always", "मुफ़्त, हमेशा")}</li>
+          <li>{say("No ID or Aadhaar needed", "किसी आईडी या आधार की आवश्यकता नहीं")}</li>
+          <li>{say("Your photo never leaves your device", "आपकी फोटो कभी भी आपके डिवाइस से बाहर नहीं जाती")}</li>
+        </ul>
+      </LabToolHero>
 
         <HomeHelpBand locale={locale} />
 
@@ -328,34 +321,28 @@ export default async function HelpPage() {
         </section>
 
         {/* CLOSING */}
-        <section className="relative overflow-hidden section-pad">
-          <div
-            className="wash wash-sky-mint"
-            aria-hidden
-            style={{ width: "40vw", height: "40vw", maxWidth: 600, maxHeight: 600, bottom: "-20vw", right: "-8vw" }}
-          />
-          <div className="container relative z-[1]">
-            <div className="pledge-block">
-              <p className="pledge-label">{say("The Asmita promise", "अस्मिता का वादा")}</p>
-              <p className="pledge-quote">{say("You do not have to deal with this alone.", "आपको इसका सामना अकेले नहीं करना है।")}</p>
-              <p className="mt-6 text-[16px] leading-[1.5] text-[var(--text)]">
+        <section className="lab-sub-section">
+          <div className="container">
+            <div className="issue-close">
+              <p className="lab-badge">{say("The Asmita promise", "अस्मिता का वादा")}</p>
+              <h2 className="lab-h2 mt-4">{say("You do not have to deal with this alone.", "आपको इसका सामना अकेले नहीं करना है।")}</h2>
+              <p className="issue-close-body">
                 {say(
                   "Start a confidential report, or read how it works first. In your language, on your terms.",
                   "गोपनीय रिपोर्ट शुरू करें, या पहले प्रक्रिया समझें। अपनी भाषा में, अपनी गति से।",
                 )}
               </p>
-              <div className="mt-10 flex flex-wrap justify-center gap-3">
-                <Link className="btn btn-primary btn-arrow" href="/get-help">
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link className="btn btn-primary btn-arrow !m-0" href="/get-help">
                   {say("Get help", "मदद लें")}
                 </Link>
-                <Link className="btn btn-secondary" href="/faq">
+                <Link className="btn btn-secondary !m-0" href="/faq">
                   {say("Read the FAQ", "सवाल-जवाब पढ़ें")}
                 </Link>
               </div>
             </div>
           </div>
         </section>
-      </div>
-    </AppShell>
+    </LabToolShell>
   );
 }

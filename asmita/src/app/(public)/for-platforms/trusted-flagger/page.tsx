@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { PLATFORM_DEADLINE_HOURS } from "@/lib/escalation-ladder";
 import { ESCALATION_HOURS } from "@/lib/escalation-engine";
 import { Icon } from "@/components/Icon";
@@ -78,28 +78,28 @@ const Lock = () => <Icon name="lock" size={16} />;
 
 export default function TrustedFlaggerPage() {
   return (
-    <AppShell>
-      <div className="page-canvas">
-        <section className="hero" aria-label="Notices from Meri Asmita">
-          <div className="hero-content container org-hero">
-            <div className="max-w-3xl">
-              <h1 className="page-title">What a notice from Meri Asmita contains</h1>
-              <p className="org-hero-lede !max-w-[44rem]">
-                Notices from this service are survivor-signed complaints about non-consensual intimate imagery. This
-                page tells trust and safety teams exactly what arrives in your inbox, what we checked before sending
-                it, and how to reach us about one.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <a className="btn btn-primary btn-arrow !m-0" href="#deadlines">
-                  Deadlines
-                </a>
-                <Link className="btn btn-secondary !m-0" href="#reach">
-                  Reach us
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
+    <LabToolShell variant="calm">
+      <LabToolHero
+        backLabel="For platforms"
+        backHref="/for-platforms"
+        title="What a notice from Meri Asmita contains"
+        intro={
+          <p>
+            Notices from this service are survivor-signed complaints about non-consensual intimate imagery. This page
+            tells trust and safety teams exactly what arrives in your inbox, what we checked before sending it, and how
+            to reach us about one.
+          </p>
+        }
+      >
+        <div className="mt-8 flex flex-wrap gap-3">
+          <a className="btn btn-primary btn-arrow !m-0" href="#deadlines">
+            Deadlines
+          </a>
+          <Link className="btn btn-secondary !m-0" href="#reach">
+            Reach us
+          </Link>
+        </div>
+      </LabToolHero>
 
         <section className="zone-white" aria-labelledby="formed-heading">
           <div className="container org-section">
@@ -240,28 +240,27 @@ export default function TrustedFlaggerPage() {
           </div>
         </section>
 
-        <section className="org-cta" aria-labelledby="partner-heading">
-          <div className="container org-cta-inner">
-            <div>
-              <h2 id="partner-heading" className="section-title">
+        <section className="lab-sub-section" aria-labelledby="partner-heading">
+          <div className="container">
+            <div className="issue-close">
+              <h2 id="partner-heading" className="lab-h2">
                 Become a platform partner
               </h2>
-              <p>
+              <p className="issue-close-body">
                 Platforms that join the partner programme receive these notices through one agreed channel, with image
                 fingerprints they can match, and a person to talk to when a case needs attention.
               </p>
-            </div>
-            <div className="org-cta-actions">
-              <Link className="btn btn-primary btn-arrow !m-0" href="/for-platforms">
-                Join the programme
-              </Link>
-              <Link className="btn btn-secondary btn-arrow !m-0" href="/what-we-do">
-                What Asmita does
-              </Link>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link className="btn btn-primary btn-arrow !m-0" href="/for-platforms">
+                  Join the programme
+                </Link>
+                <Link className="btn btn-secondary btn-arrow !m-0" href="/what-we-do">
+                  What Asmita does
+                </Link>
+              </div>
             </div>
           </div>
         </section>
-      </div>
-    </AppShell>
+    </LabToolShell>
   );
 }
