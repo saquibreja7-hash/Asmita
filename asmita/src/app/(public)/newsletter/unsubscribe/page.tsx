@@ -27,12 +27,12 @@ export default async function NewsletterUnsubscribePage({
 
   return (
     <AppShell>
-      <div className="page-canvas">
-        <section className="hero" aria-label={t(locale, "org.newsletter.unsubTitle")}>
-          <div className="hero-content container page-hero">
-            <div className="mx-auto max-w-xl text-center">
-              <span className="eyebrow">{t(locale, "org.newsletter.eyebrow")}</span>
-              <h1 className="page-title mt-5">{t(locale, "org.newsletter.unsubTitle")}</h1>
+      <div className="page-canvas lab-theme calm-sub">
+        <section className="lab-sub-section" aria-label={t(locale, "org.newsletter.unsubTitle")}>
+          <div className="container">
+            <div className="newsletter-panel">
+              <span className="lab-badge">{t(locale, "org.newsletter.eyebrow")}</span>
+              <h1 className="page-title mt-4">{t(locale, "org.newsletter.unsubTitle")}</h1>
               <div className="mt-8 text-left">
                 {valid ? (
                   <NewsletterTokenAction locale={locale} token={token} action="unsubscribe" />

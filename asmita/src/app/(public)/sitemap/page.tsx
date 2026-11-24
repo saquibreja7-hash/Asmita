@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { LabToolHero, LabToolShell } from "@/components/lab/LabToolPage";
 import { siteMap } from "@/lib/site-map";
 import { issueContentHi } from "@/lib/issue-content-hi";
 import { audiencesHi } from "@/lib/audience-content-hi";
@@ -60,32 +60,19 @@ export default async function SitemapPage() {
   };
   const groups = siteMap;
   return (
-    <AppShell>
-      <div className="page-canvas">
-        <section className="hero" aria-label={say("Sitemap", "साइटमैप")}>
-          <div className="hero-content container section-pad">
-            <div className="mx-auto max-w-5xl">
-              <h1 className="page-title mt-5 max-w-3xl">
-                {say("Every page, in one place", "हर पेज, एक जगह")}
-              </h1>
-              <p className="font-size-large mt-5 max-w-2xl">
-                {say("Case pages you open after signing in are private and are not listed here.", "लॉग इन करने के बाद खुलने वाले निजी केस पेज यहाँ सूचीबद्ध नहीं हैं।")}
-              </p>
-            </div>
-          </div>
-        </section>
+    <LabToolShell variant="calm">
+      <LabToolHero
+        title={say("Every page, in one place", "हर पेज, एक जगह")}
+        intro={<p>{say("Case pages you open after signing in are private and are not listed here.", "लॉग इन करने के बाद खुलने वाले निजी केस पेज यहाँ सूचीबद्ध नहीं हैं।")}</p>}
+      />
 
-        <div className="container">
-          <div className="hairline" />
-        </div>
-
-        <section className="section-pad" aria-label={say("All pages", "सभी पेज")}>
+        <section className="lab-sub-section" aria-label={say("All pages", "सभी पेज")}>
           <div className="container">
-            <div className="mx-auto grid max-w-5xl gap-12 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="sitemap-grid">
               {groups.map((group, index) => (
-                <div key={group.title}>
-                  <h2 className="subsection-title">{say(group.title, groupTitlesHi[index])}</h2>
-                  <ul className="mt-5 space-y-3 border-t border-[var(--line)] pt-5">
+                <div key={group.title} className={`sitemap-card ${["issue-tone-teal", "issue-tone-coral", "issue-tone-gold"][index % 3]}`}>
+                  <h2 className="sitemap-card-title">{say(group.title, groupTitlesHi[index])}</h2>
+                  <ul className="mt-4 space-y-3">
                     {group.links.map((link) => (
                       <li key={link.href}>
                         {/* A full page load for /check-image: its own headers allow the C2PA WASM reader. */}
@@ -109,7 +96,6 @@ export default async function SitemapPage() {
             </div>
           </div>
         </section>
-      </div>
-    </AppShell>
+    </LabToolShell>
   );
 }
