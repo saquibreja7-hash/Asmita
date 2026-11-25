@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { createOtpForEmail } from "@/lib/auth/otp";
-import { resolveAdminRole } from "@/lib/auth/admin-allowlist";
+import { resolveAnyAdminRole } from "@/lib/auth/admin-allowlist";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { sendOtp } from "@/lib/email";
 import { hashEmail } from "@/lib/hash";
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   // Whether this address is an admin must not show in the response: the same
   // rate limits apply to every address, and a non-admin gets the same success
   // reply, with no code stored or sent.
-  const access = resolveAdminRole(parsed.data.email);
+  const access = await resolveAnyAdminRole(parsed.data.email);
   const emailHash = hashEmail(parsed.data.email);
   const devBypass = process.env.NODE_ENV !== "production" && Boolean(process.env.DEV_OTP_CODE);
   if (!devBypass) {

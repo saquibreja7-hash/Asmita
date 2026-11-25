@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { verifyAdminSession } from "@/lib/auth/jwt";
 import type { SessionClaims } from "@/lib/auth/jwt";
 import { hasAdminPermission, type AdminPermission } from "@/lib/auth/admin-permissions";
-import { resolveAdminRoleByHash } from "@/lib/auth/admin-allowlist";
+import { resolveAnyAdminRoleByHash } from "@/lib/auth/admin-allowlist";
 import { getAdminMfaEnrolment } from "@/lib/auth/admin-mfa-store";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { logSecurityEvent } from "@/lib/security-log";
@@ -29,7 +29,7 @@ export async function requireAdminSetup() {
   // Every session issued since sub-roles exist carries one; a token without
   // it was not minted by this app's sign-in and gets nothing.
   const current = session.adminRole
-    ? resolveAdminRoleByHash(session.emailHash)
+    ? await resolveAnyAdminRoleByHash(session.emailHash)
     : { ok: false as const, reason: "session_role_missing" };
   if (!current.ok) {
     await logSecurityEvent({ event: "admin_denied", actorHash: session.emailHash || undefined, reason: current.reason });

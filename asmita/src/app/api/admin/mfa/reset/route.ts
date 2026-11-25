@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
-import { allowlistedEmailByHash, allowlistedHashByTargetKey, resolveAdminRole } from "@/lib/auth/admin-allowlist";
+import { anyAdminEmailByHash, anyAdminHashByTargetKey, resolveAnyAdminRole } from "@/lib/auth/admin-allowlist";
 import { resetAdminMfa } from "@/lib/auth/admin-mfa-store";
 import { issueAdminEnrolmentCode } from "@/lib/auth/admin-enrolment";
 import { requireStepUp } from "@/lib/auth/step-up";
@@ -55,8 +55,8 @@ export async function POST(request: Request) {
   // Admins page never has to carry the address itself; a target key goes
   // through the same allowlist resolution one step further (hash of hash).
   const email = parsed.data.email
-    ?? allowlistedEmailByHash(parsed.data.emailHash ?? "")
-    ?? (parsed.data.adminKey ? allowlistedEmailByHash(allowlistedHashByTargetKey(parsed.data.adminKey) ?? "") : null);
+    ?? (await anyAdminEmailByHash(parsed.data.emailHash ?? ""))
+    ?? (parsed.data.adminKey ? await anyAdminEmailByHash((await anyAdminHashByTargetKey(parsed.data.adminKey)) ?? "") : null);
   if (!email) {
     return NextResponse.json({ error: "not_an_admin" }, { status: 400 });
   }
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   // An allowlisted email with no valid role can never sign in, so an
   // enrolment code for it would be useless. The caller is a SUPER_ADMIN, so
   // the specific reason is safe to return.
-  const role = resolveAdminRole(email);
+  const role = await resolveAnyAdminRole(email);
   if (!role.ok) {
     return NextResponse.json({
       error: role.reason === "not_allowlisted" ? "not_an_admin" : "admin_role_invalid",

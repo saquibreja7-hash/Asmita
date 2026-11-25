@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfRequest } from "@/lib/csrf";
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { allowlistedHashByTargetKey } from "@/lib/auth/admin-allowlist";
+import { anyAdminHashByTargetKey } from "@/lib/auth/admin-allowlist";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { requireStepUp } from "@/lib/auth/step-up";
 import { grantReviewQueueAccess } from "@/lib/review-jobs";
@@ -55,7 +55,7 @@ export async function POST(request: Request, context: { params: Promise<{ queueI
     queueId,
     role: parsed.data.role,
     adminEmailHash:
-      parsed.data.adminEmailHash ?? (allowlistedHashByTargetKey(parsed.data.adminKey ?? "") ?? undefined),
+      parsed.data.adminEmailHash ?? ((await anyAdminHashByTargetKey(parsed.data.adminKey ?? "")) ?? undefined),
     callerRole: auth.session.adminRole,
     actorId: auth.session.sub,
   });

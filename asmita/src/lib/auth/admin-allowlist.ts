@@ -1,5 +1,6 @@
 import { hashEmail } from "@/lib/hash";
 import type { AdminRole } from "@/lib/auth/admin-permissions";
+import { getConsoleAdmin, listConsoleAdmins } from "@/lib/auth/console-admins";
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set([
   "SUPER_ADMIN",
@@ -101,4 +102,56 @@ export function createAdminIdentity(email: string) {
     id: `admin-${emailHash.slice(0, 24)}`,
     emailHash,
   };
+}
+
+/*
+ * The two admin sources together (console-admins.ts): the environment
+ * allowlist first (the owners, always authoritative), then admins added from
+ * the console. Everything that decides who may sign in, and with which role,
+ * goes through these.
+ */
+
+/** True when the admin comes from ADMIN_EMAILS (an owner the console cannot change). */
+export function isEnvironmentAdminHash(emailHash: string): boolean {
+  return Boolean(emailHash) && envList("ADMIN_EMAILS").some((email) => hashEmail(email) === emailHash);
+}
+
+export async function resolveAnyAdminRoleByHash(emailHash: string): Promise<AdminRoleResolution> {
+  if (isEnvironmentAdminHash(emailHash)) return resolveAdminRoleByHash(emailHash);
+  const stored = await getConsoleAdmin(emailHash).catch(() => null);
+  if (!stored) return { ok: false, reason: "not_allowlisted" };
+  return ADMIN_ROLES.has(stored.role) ? { ok: true, role: stored.role as AdminRole } : { ok: false, reason: "role_unknown" };
+}
+
+export async function resolveAnyAdminRole(email: string): Promise<AdminRoleResolution> {
+  // The environment list is matched as written; console admins are stored
+  // lower-cased (console-admins.ts).
+  if (isEnvironmentAdminHash(hashEmail(email))) return resolveAdminRoleByHash(hashEmail(email));
+  return resolveAnyAdminRoleByHash(hashEmail(email.trim().toLowerCase()));
+}
+
+/** Every admin email from both sources, environment first, without duplicates. */
+export async function listAllAdminEmails(): Promise<{ email: string; source: "environment" | "console" }[]> {
+  const env = envList("ADMIN_EMAILS").map((email) => ({ email, source: "environment" as const }));
+  const envHashes = new Set(env.map((row) => hashEmail(row.email)));
+  const stored = await listConsoleAdmins().catch(() => []);
+  return [
+    ...env,
+    ...stored.filter((row) => !envHashes.has(row.emailHash)).map((row) => ({ email: row.email, source: "console" as const })),
+  ];
+}
+
+export async function anyAdminEmailByHash(emailHash: string): Promise<string | null> {
+  const fromEnv = allowlistedEmailByHash(emailHash);
+  if (fromEnv) return fromEnv;
+  return (await getConsoleAdmin(emailHash).catch(() => null))?.email ?? null;
+}
+
+export async function anyAdminHashByTargetKey(targetKey: string): Promise<string | null> {
+  if (!targetKey) return null;
+  for (const { email } of await listAllAdminEmails()) {
+    const emailHash = hashEmail(email);
+    if (hashEmail(emailHash) === targetKey) return emailHash;
+  }
+  return null;
 }

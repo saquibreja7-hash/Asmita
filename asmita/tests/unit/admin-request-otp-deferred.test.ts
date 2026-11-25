@@ -19,7 +19,7 @@ vi.mock("@/lib/security-log", () => ({ logSecurityEvent: (...args: unknown[]) =>
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimitAsync: async () => ({ allowed: true }) }));
 vi.mock("@/lib/csrf", () => ({ verifyCsrfRequest: () => true }));
 vi.mock("@/lib/auth/admin-allowlist", () => ({
-  resolveAdminRole: (email: string) => (email === "admin@example.invalid" ? { ok: true, role: "SUPER_ADMIN" } : { ok: false, reason: "not_allowlisted" }),
+  resolveAnyAdminRole: async (email: string) => (email === "admin@example.invalid" ? { ok: true, role: "SUPER_ADMIN" } : { ok: false, reason: "not_allowlisted" }),
 }));
 
 import { POST } from "@/app/api/admin/auth/request-otp/route";

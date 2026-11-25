@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { devFlagEnabled } from "@/lib/dev-flags";
 import { z } from "zod";
-import { createAdminIdentity, resolveAdminRole } from "@/lib/auth/admin-allowlist";
+import { createAdminIdentity, resolveAnyAdminRole } from "@/lib/auth/admin-allowlist";
 import { verifyAdminTotp } from "@/lib/auth/admin-mfa";
 import { getAdminMfaSecret, touchAdminMfa } from "@/lib/auth/admin-mfa-store";
 import { consumeAdminEnrolmentCode } from "@/lib/auth/admin-enrolment";
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   }
   // A non-admin gets the same 401 and the same rate limit as a wrong code, so
   // the response does not show whether an address is an admin.
-  const access = resolveAdminRole(parsed.data.email);
+  const access = await resolveAnyAdminRole(parsed.data.email);
   const admin = createAdminIdentity(parsed.data.email);
   const attempts = await checkRateLimitAsync(`admin-verify:${admin.emailHash}`, 5, 15 * 60_000);
   if (!attempts.allowed) {
