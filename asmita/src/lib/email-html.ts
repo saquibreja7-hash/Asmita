@@ -18,8 +18,7 @@ const INK = "#1c2321";
 const TEXT = "#3a4442";
 const MUTED = "#6b7672";
 const LINE = "#e6e2da";
-const PAGE = "#f4f6f5"; // a quiet grey-green behind the card
-const BAND = "#ffffff"; // the header stays white, like the site header, so the teal logo reads in both themes
+const PAGE = "#f3f4f2"; // a quiet paper grey behind the letter
 const CARD = "#ffffff";
 
 const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans','Noto Sans Devanagari',Arial,sans-serif";
@@ -73,23 +72,32 @@ function logoUrl() {
 
 function wordmark(noLinks = false) {
   if (noLinks) {
-    return `<span style="display:inline-block;font-family:${SANS};font-size:26px;font-weight:600;line-height:56px;letter-spacing:-0.5px;color:${BRAND};">asmita</span>`;
+    return `<span style="display:inline-block;font-family:${SANS};font-size:22px;font-weight:600;line-height:42px;letter-spacing:-0.4px;color:${BRAND};">asmita</span>`;
   }
-  // 316x112 source shown at 158x56 (2x for sharp phones). The alt text is
-  // styled so a blocked image still reads as the wordmark.
-  return `<img src="${escapeHtml(logoUrl())}" width="158" height="56" alt="Asmita" style="display:block;border:0;outline:none;text-decoration:none;height:auto;max-width:158px;font-family:${SANS};font-size:26px;font-weight:600;line-height:56px;color:${BRAND};">`;
+  // 316x112 source shown at 120x42 (sharp on phones). The alt text is styled
+  // so a blocked image still reads as the wordmark.
+  return `<img src="${escapeHtml(logoUrl())}" width="120" height="42" alt="Asmita" style="display:block;border:0;outline:none;text-decoration:none;height:auto;max-width:120px;font-family:${SANS};font-size:22px;font-weight:600;line-height:42px;color:${BRAND};">`;
+}
+
+/** Today's date in India, e.g. "26 Nov 2026", shown top right like a letter. */
+function letterDate() {
+  return new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
 }
 
 function signoff(noLinks = false) {
-  const team = `<p class="a-ink" style="margin:0 0 3px 0;font-size:15px;font-weight:700;color:${INK};">Team Asmita</p>`;
-  if (noLinks) return team;
-  return `${team}
-    <p style="margin:2px 0 0 0;font-size:13px;"><a href="https://meriasmita.org" class="a-brand" style="color:${BRAND};text-decoration:none;font-weight:600;">meriasmita.org</a></p>`;
+  const close = `<p class="a-text" style="margin:0;font-size:16px;line-height:1.75;color:${TEXT};">With care,<br><strong class="a-ink" style="color:${INK};">Team Asmita</strong></p>`;
+  if (noLinks) return close;
+  return `${close}
+    <p style="margin:4px 0 0 0;font-size:13px;"><a href="https://meriasmita.org" class="a-brand" style="color:${BRAND};text-decoration:none;font-weight:600;">meriasmita.org</a></p>`;
 }
 
-function shell(input: { lang: string; preheader: string; body: string; footer: string; signoff: string; noLinks?: boolean }) {
+// The "quiet letter" layout (owner choice, 2026-11-26): no colour blocks or
+// banners, the logo and date at the top, the message as a short note, a
+// hairline above the footer. Discreet on a shared phone.
+function shell(input: { lang: string; preheader: string; body: string; footer: string; signoff: string; noLinks?: boolean; dated?: boolean }) {
   // The preheader padding keeps inbox previews from pulling body text.
   const preheader = `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(input.preheader)}${"&#8199;&#65279;&#847;".repeat(40)}</div>`;
+  const date = input.dated ? `<td align="right" class="a-muted" style="font-family:${SANS};font-size:12px;color:${MUTED};">${escapeHtml(letterDate())}</td>` : "";
   return `<!doctype html>
 <html lang="${input.lang}">
 <head>
@@ -100,33 +108,31 @@ function shell(input: { lang: string; preheader: string; body: string; footer: s
 <style>
   @media (prefers-color-scheme: dark) {
     .a-page { background:#121615 !important; }
-    .a-card { background:#1b2120 !important; border-color:#2c3533 !important; }
+    .a-card { background:#1b2120 !important; }
     .a-ink { color:#eef2f1 !important; }
     .a-text { color:#c9d2cf !important; }
     .a-muted { color:#94a19d !important; }
     .a-box { background:#173330 !important; border-color:#24504b !important; }
     .a-brand { color:#7fd1c5 !important; }
     .a-line { border-color:#2c3533 !important; }
-    .a-band { background:${BAND} !important; border-color:${LINE} !important; }
+    .a-logo { background:#ffffff !important; }
   }
 </style>
 </head>
 <body style="margin:0;padding:0;background:${PAGE};" class="a-page">
   ${preheader}
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-page" style="background:${PAGE};">
-    <tr><td align="center" style="padding:32px 14px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-card" style="background:${CARD};border:1px solid ${LINE};border-radius:20px;overflow:hidden;">
-            <tr><td align="left" class="a-band a-line" style="background:${BAND};padding:26px 36px 22px 36px;border-bottom:1px solid ${LINE};">${wordmark(input.noLinks)}</td></tr>
-            <tr><td style="padding:38px 36px 6px 36px;font-family:${SANS};">${input.body}</td></tr>
-            ${input.signoff ? `<tr><td style="padding:0 36px 8px 36px;font-family:${SANS};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td class="a-line" style="border-top:1px solid ${LINE};padding-top:24px;">${input.signoff}</td></tr></table></td></tr>` : ""}
-            ${input.footer ? `<tr><td style="padding:14px 36px 30px 36px;font-family:${SANS};">${input.footer}</td></tr>` : `<tr><td style="padding:0 0 24px 0;"></td></tr>`}
-          </table>
+    <tr><td align="center" style="padding:28px 12px 36px 12px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-card" style="max-width:540px;background:${CARD};border-radius:8px;">
+        <tr><td style="padding:30px 34px 0 34px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td align="left"><span class="a-logo" style="display:inline-block;border-radius:6px;">${wordmark(input.noLinks)}</span></td>
+            ${date}
+          </tr></table>
         </td></tr>
-        <tr><td align="center" style="padding:18px 6px 0 6px;font-family:${SANS};">
-          <p class="a-muted" style="margin:0;font-size:12px;line-height:1.6;color:${MUTED};">${input.noLinks ? "Asmita" : "Asmita &middot; meriasmita.org"}</p>
-        </td></tr>
+        <tr><td style="padding:26px 34px 4px 34px;font-family:${SANS};">${input.body}</td></tr>
+        ${input.signoff ? `<tr><td style="padding:6px 34px 0 34px;font-family:${SANS};">${input.signoff}</td></tr>` : ""}
+        ${input.footer ? `<tr><td style="padding:24px 34px 30px 34px;font-family:${SANS};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td class="a-line" style="border-top:1px solid ${LINE};padding-top:16px;">${input.footer}</td></tr></table></td></tr>` : `<tr><td style="padding:0 0 26px 0;"></td></tr>`}
       </table>
     </td></tr>
   </table>
@@ -134,36 +140,36 @@ function shell(input: { lang: string; preheader: string; body: string; footer: s
 </html>`;
 }
 
-/** Survivor-facing email: heading, short paragraphs, an optional boxed value and button. */
+/** Survivor-facing email: a short note, an optional boxed value and a link. */
 export function renderEmailHtml(input: EmailHtmlInput): string {
   const paragraphs = input.paragraphs
-    .map((p) => `<p class="a-text" style="margin:0 0 16px 0;font-size:16px;line-height:1.7;color:${TEXT};">${escapeHtml(p)}</p>`)
+    .map((p) => `<p class="a-text" style="margin:0 0 18px 0;font-size:16px;line-height:1.75;color:${TEXT};">${escapeHtml(p)}</p>`)
     .join("");
 
   let highlight = "";
   if (input.highlight) {
     const isCode = input.highlightStyle === "code";
     const label = input.highlightLabel
-      ? `<p class="a-muted" style="margin:0 0 10px 0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED};">${escapeHtml(input.highlightLabel)}</p>`
+      ? `<p class="a-muted" style="margin:0 0 8px 0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED};">${escapeHtml(input.highlightLabel)}</p>`
       : "";
-    const value = `<p class="a-brand" style="margin:0;font-family:${MONO};font-size:${isCode ? "36px" : "22px"};font-weight:700;letter-spacing:${isCode ? "0.28em" : "0.06em"};line-height:1.2;color:${BRAND};">${escapeHtml(input.highlight)}</p>`;
-    highlight = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 22px 0;">
-      <tr><td class="a-box" align="${isCode ? "center" : "left"}" style="background:${BRAND_SOFT};border:1px solid #cfe5e0;border-radius:14px;padding:${isCode ? "26px 16px" : "20px 24px"};">${label}${value}</td></tr>
+    const value = `<p class="a-brand" style="margin:0;font-family:${MONO};font-size:${isCode ? "32px" : "19px"};font-weight:700;letter-spacing:${isCode ? "0.26em" : "0.04em"};line-height:1.25;color:${BRAND};">${escapeHtml(input.highlight)}</p>`;
+    highlight = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 24px 0;">
+      <tr><td class="a-box" align="left" style="background:${BRAND_SOFT};border:1px solid #d6e8e4;border-radius:10px;padding:${isCode ? "20px 22px" : "16px 20px"};">${label}${value}</td></tr>
     </table>`;
   }
 
+  // A plain underlined link, like a note, with the address written out for
+  // clients that strip links.
   const cta = input.cta
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 14px 0;"><tr><td style="border-radius:999px;background:${BRAND};">
-         <a href="${escapeHtml(input.cta.url)}" style="display:inline-block;padding:13px 26px;font-family:${SANS};font-size:15px;font-weight:600;line-height:1;color:#ffffff;text-decoration:none;border-radius:999px;">${escapeHtml(input.cta.label)}</a>
-       </td></tr></table>
-       <p class="a-muted" style="margin:0 0 18px 0;font-size:12px;line-height:1.6;color:${MUTED};word-break:break-all;">Or open: ${escapeHtml(input.cta.url)}</p>`
+    ? `<p style="margin:0 0 6px 0;font-size:16px;line-height:1.75;"><a href="${escapeHtml(input.cta.url)}" class="a-brand" style="color:${BRAND};font-weight:600;text-decoration:underline;text-underline-offset:3px;">${escapeHtml(input.cta.label)}</a></p>
+       <p class="a-muted" style="margin:0 0 24px 0;font-size:12px;line-height:1.6;color:${MUTED};word-break:break-all;">${escapeHtml(input.cta.url)}</p>`
     : "";
 
   const footer = [...(input.footerNotes ?? []), SAFETY_NOTE]
-    .map((n) => `<p class="a-muted" style="margin:0 0 8px 0;font-size:12.5px;line-height:1.6;color:${MUTED};">${escapeHtml(n)}</p>`)
+    .map((n) => `<p class="a-muted" style="margin:0 0 6px 0;font-size:12px;line-height:1.6;color:${MUTED};">${escapeHtml(n)}</p>`)
     .join("");
 
-  const body = `<p class="a-ink" style="margin:0 0 20px 0;font-size:23px;font-weight:700;line-height:1.35;letter-spacing:-0.2px;color:${INK};">${escapeHtml(input.title)}</p>
+  const body = `<p class="a-ink" style="margin:0 0 16px 0;font-size:19px;font-weight:700;line-height:1.4;color:${INK};">${escapeHtml(input.title)}</p>
     ${paragraphs}
     ${highlight}
     ${cta}`;
@@ -175,6 +181,7 @@ export function renderEmailHtml(input: EmailHtmlInput): string {
     footer,
     signoff: signoff(input.noLinks),
     noLinks: input.noLinks,
+    dated: true,
   });
 }
 
