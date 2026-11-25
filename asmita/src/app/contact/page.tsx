@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { STATUS_URL } from "@/components/layout/Footer";
 import { HELPLINE } from "@/lib/helpline";
+import { LINKEDIN_URL } from "@/lib/social";
 
 const channels = [
   {
@@ -99,6 +100,13 @@ export default function ContactPage() {
                 </div>
               ))}
             </div>
+            <p className="muted mt-8 text-sm leading-[1.75]">
+              For news and updates, follow{" "}
+              <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" className="link-underline font-medium text-[var(--ink)]">
+                Meri Asmita on LinkedIn
+              </a>
+              .
+            </p>
           </div>
         </section>
 

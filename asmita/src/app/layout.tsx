@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SmoothScroll } from "@/components/layout/SmoothScroll";
 import { cookies } from "next/headers";
 import { Noto_Sans } from "next/font/google";
 import { COOKIE_BASE_NAMES } from "@/lib/cookie-names";
@@ -82,6 +83,7 @@ export default async function RootLayout({
       className={`${sans.variable} h-full antialiased`}
     >
       <body className="min-h-full">
+        <SmoothScroll />
         {/* Hindi pages: the Devanagari text is set in Noto Sans Devanagari,
             whose @font-face only starts loading once the stylesheet has been
             parsed — late enough for the glyphs to pop in on slow connections.

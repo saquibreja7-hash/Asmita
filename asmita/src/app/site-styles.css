@@ -2329,3 +2329,18 @@ a.org-row:focus-visible .org-row-arrow { color: var(--brand); transform: transla
   font-weight: 650;
   color: var(--tone-ink);
 }
+
+/* Footer LinkedIn link, under the tagline. */
+.site-footer-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 12px;
+  color: #ffffff;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  text-underline-offset: 4px;
+}
+.site-footer-social:hover { text-decoration-color: #ffffff; }
