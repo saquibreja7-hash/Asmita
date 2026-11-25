@@ -37,7 +37,7 @@
     "@vinext/cloudflare": "1.3.0",
     "@vladmandic/human": "^3.3.6",
     "docx": "^9.7.1",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.10",
     "exifr": "^7.1.3",
     "jose": "^6.2.3",
     "kysely": "^0.28.17",
