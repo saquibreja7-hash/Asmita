@@ -21,7 +21,8 @@ test("get-involved renders in English and Hindi", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Help us end image-based abuse");
   await expect(page.getByRole("link", { name: "Volunteer" }).first()).toBeVisible();
   await expect(page.getByText("TO_FILL")).toHaveCount(0);
-  await expect(page.getByRole("img", { name: "LinkedIn" })).toBeVisible();
+  // The follow row is now a real link to the LinkedIn page.
+  await expect(page.getByRole("main").locator("a[href=\"https://www.linkedin.com/company/meriasmita\"]")).toBeVisible();
 
   await page.context().addCookies([{ name: "asmita_lang", value: "hi", url: "http://127.0.0.1:3001" }]);
   await page.goto("/get-involved");
