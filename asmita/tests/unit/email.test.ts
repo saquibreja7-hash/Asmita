@@ -63,7 +63,7 @@ describe("email layouts (redesign)", () => {
     const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\n/g, "<br>");
     // Line breaks become <br> so Outlook, which ignores pre-wrap, keeps the layout.
     expect(html).toContain(`white-space:pre-wrap;word-break:break-word;">${escaped}</div>`);
-    expect([...html.matchAll(/src="([^"]+)"/g)].map((m) => m[1])).toEqual(["https://meriasmita.org/asmita-wordmark-v2.png"]);
+    expect([...html.matchAll(/src="([^"]+)"/g)].map((m) => m[1])).toEqual(["https://meriasmita.org/asmita-email-logo.png"]);
   });
 
   it("survivor emails carry no remote resources, a neutral preview line and the safety note", async () => {
@@ -71,7 +71,7 @@ describe("email layouts (redesign)", () => {
     const html = renderEmailHtml({ title: "Your verification code", paragraphs: ["Enter this code."], highlight: "123456", highlightStyle: "code" });
     // The one image is Asmita's own logo from its own site; nothing else remote.
     const srcs = [...html.matchAll(/src="([^"]+)"/g)].map((m) => m[1]);
-    expect(srcs).toEqual(["https://meriasmita.org/asmita-wordmark-v2.png"]);
+    expect(srcs).toEqual(["https://meriasmita.org/asmita-email-logo.png"]);
     expect(html).toContain('alt="Asmita"');
     expect(html).not.toMatch(/url\(/i);
     expect(html.toLowerCase()).not.toContain("free and confidential");

@@ -18,8 +18,8 @@ const INK = "#1c2321";
 const TEXT = "#3a4442";
 const MUTED = "#6b7672";
 const LINE = "#e6e2da";
-const PAGE = "#eef4f2"; // a soft teal tint behind the card
-const BAND = "#e3f0ed"; // light header band, so the teal logo reads in both themes
+const PAGE = "#f4f6f5"; // a quiet grey-green behind the card
+const BAND = "#ffffff"; // the header stays white, like the site header, so the teal logo reads in both themes
 const CARD = "#ffffff";
 
 const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans','Noto Sans Devanagari',Arial,sans-serif";
@@ -65,19 +65,19 @@ export type EmailHtmlInput = {
   noLinks?: boolean;
 };
 
-/** Asmita's logo, served from Asmita's own site (the same file as the site header). */
+/** Asmita's logo, served from Asmita's own site (the site header logo, cropped to its edges). */
 function logoUrl() {
   const base = (process.env.NEXT_PUBLIC_APP_URL || "https://meriasmita.org").replace(/\/+$/, "");
-  return `${base}/asmita-wordmark-v2.png`;
+  return `${base}/asmita-email-logo.png`;
 }
 
 function wordmark(noLinks = false) {
   if (noLinks) {
-    return `<span style="display:inline-block;font-family:${SERIF};font-size:28px;line-height:47px;color:${BRAND};">Asmita</span>`;
+    return `<span style="display:inline-block;font-family:${SANS};font-size:26px;font-weight:600;line-height:56px;letter-spacing:-0.5px;color:${BRAND};">asmita</span>`;
   }
-  // 317x94 source shown at 160x47. The alt text is styled so a blocked image
-  // still reads as the wordmark.
-  return `<img src="${escapeHtml(logoUrl())}" width="160" height="47" alt="Asmita" style="display:inline-block;border:0;outline:none;text-decoration:none;height:auto;max-width:160px;font-family:${SERIF};font-size:28px;line-height:47px;color:${BRAND};">`;
+  // 316x112 source shown at 158x56 (2x for sharp phones). The alt text is
+  // styled so a blocked image still reads as the wordmark.
+  return `<img src="${escapeHtml(logoUrl())}" width="158" height="56" alt="Asmita" style="display:block;border:0;outline:none;text-decoration:none;height:auto;max-width:158px;font-family:${SANS};font-size:26px;font-weight:600;line-height:56px;color:${BRAND};">`;
 }
 
 function signoff(noLinks = false) {
@@ -107,7 +107,7 @@ function shell(input: { lang: string; preheader: string; body: string; footer: s
     .a-box { background:#173330 !important; border-color:#24504b !important; }
     .a-brand { color:#7fd1c5 !important; }
     .a-line { border-color:#2c3533 !important; }
-    .a-band { background:${BAND} !important; }
+    .a-band { background:${BAND} !important; border-color:${LINE} !important; }
   }
 </style>
 </head>
@@ -117,8 +117,8 @@ function shell(input: { lang: string; preheader: string; body: string; footer: s
     <tr><td align="center" style="padding:32px 14px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
         <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-card" style="background:${CARD};border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(15,79,73,0.10);">
-            <tr><td align="center" class="a-band" style="background:${BAND};padding:30px 32px;">${wordmark(input.noLinks)}</td></tr>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="a-card" style="background:${CARD};border:1px solid ${LINE};border-radius:20px;overflow:hidden;">
+            <tr><td align="left" class="a-band a-line" style="background:${BAND};padding:26px 36px 22px 36px;border-bottom:1px solid ${LINE};">${wordmark(input.noLinks)}</td></tr>
             <tr><td style="padding:38px 36px 6px 36px;font-family:${SANS};">${input.body}</td></tr>
             ${input.signoff ? `<tr><td style="padding:0 36px 8px 36px;font-family:${SANS};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td class="a-line" style="border-top:1px solid ${LINE};padding-top:24px;">${input.signoff}</td></tr></table></td></tr>` : ""}
             ${input.footer ? `<tr><td style="padding:14px 36px 30px 36px;font-family:${SANS};">${input.footer}</td></tr>` : `<tr><td style="padding:0 0 24px 0;"></td></tr>`}
@@ -146,9 +146,9 @@ export function renderEmailHtml(input: EmailHtmlInput): string {
     const label = input.highlightLabel
       ? `<p class="a-muted" style="margin:0 0 10px 0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED};">${escapeHtml(input.highlightLabel)}</p>`
       : "";
-    const value = `<p class="a-brand" style="margin:0;font-family:${MONO};font-size:${isCode ? "34px" : "22px"};font-weight:600;letter-spacing:${isCode ? "0.32em" : "0.06em"};line-height:1.2;color:${BRAND};">${escapeHtml(input.highlight)}</p>`;
+    const value = `<p class="a-brand" style="margin:0;font-family:${MONO};font-size:${isCode ? "36px" : "22px"};font-weight:700;letter-spacing:${isCode ? "0.28em" : "0.06em"};line-height:1.2;color:${BRAND};">${escapeHtml(input.highlight)}</p>`;
     highlight = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 22px 0;">
-      <tr><td class="a-box" align="${isCode ? "center" : "left"}" style="background:${BRAND_SOFT};border-radius:12px;padding:${isCode ? "24px 16px" : "20px 24px"};">${label}${value}</td></tr>
+      <tr><td class="a-box" align="${isCode ? "center" : "left"}" style="background:${BRAND_SOFT};border:1px solid #cfe5e0;border-radius:14px;padding:${isCode ? "26px 16px" : "20px 24px"};">${label}${value}</td></tr>
     </table>`;
   }
 
