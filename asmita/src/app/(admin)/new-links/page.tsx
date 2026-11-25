@@ -9,6 +9,7 @@ import {
   parseSeenCookie,
 } from "@/lib/admin-new-links";
 import { MarkSeen } from "./MarkSeen";
+import { InboxTabs } from "../InboxTabs";
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING_REVIEW: "Needs review",
@@ -32,6 +33,7 @@ export default async function NewLinksPage() {
 
   return (
     <section>
+      <InboxTabs current="new-links" />
       <MarkSeen unseen={unseen} />
       <p className="eyebrow">Console · New links</p>
       <h1 className="mt-3">Links added to existing cases</h1>

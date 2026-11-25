@@ -68,6 +68,7 @@ export function BlockedHostsManager({ blockedHosts, crawlerEnabled = true }: { b
     setNotice(null);
     setBusy(true);
     try {
+      if (!window.confirm("Remove this host from the blocked list? The crawler may visit it again.")) return;
       const response = await csrfFetch("/api/admin/crawl-blocked-hosts", { method: "DELETE", body: JSON.stringify({ id: entry.id }) });
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;

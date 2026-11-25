@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { maybeSyncReviewJobs, queueSummaries } from "@/lib/review-jobs";
 import { QueueList, type ReviewQueueRowView } from "./QueueList";
+import { InboxTabs } from "../InboxTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +30,9 @@ export default async function ReviewQueueListPage() {
 
   return (
     <section>
+      <InboxTabs current="review" />
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="eyebrow">Console · Review</p>
           <h1 className="mt-3">Review</h1>
         </div>
         {/* Hidden from the nav model for now: the page refuses every role

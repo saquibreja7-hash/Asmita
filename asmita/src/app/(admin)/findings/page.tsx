@@ -4,6 +4,7 @@ import { crawlerEnabled } from "@/lib/crawler-auth";
 import { adminFor } from "../page-permission";
 import { CrawlerOffBanner } from "./CrawlerOffBanner";
 import { LABEL_TEXT, labelList, noticeLabel, platformLabel, reviewLabel, shortDate, sortFindings, sscdMatchLine, STATUS_LABELS } from "./finding-view";
+import { InboxTabs } from "../InboxTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export default async function FindingsPage({
 
   return (
     <section>
+      <InboxTabs current="findings" />
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <p className="eyebrow">Console · Crawler</p>

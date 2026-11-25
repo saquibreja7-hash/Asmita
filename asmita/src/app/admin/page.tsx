@@ -79,32 +79,63 @@ export default async function NeedsActionPage() {
   }
 
   // Case queues lead; directory upkeep sits beside the work, not above it.
-  const caseTiles = tiles.filter((tile) => tile.href.startsWith("/admin/cases") || tile.href.startsWith("/admin/review"));
-  const upkeep = tiles.filter((tile) => !tile.href.startsWith("/admin/cases") && !tile.href.startsWith("/admin/review"));
+  // Within the work, what is overdue comes first, then anything waiting;
+  // queues that are clear fold into one quiet line instead of a wall of
+  // "Clear" tiles.
+  const isCaseTile = (tile: Tile) => tile.href.startsWith("/admin/cases") || tile.href.startsWith("/admin/review");
+  const caseTiles = tiles.filter(isCaseTile);
+  const upkeep = tiles.filter((tile) => !isCaseTile(tile));
+  const waiting = caseTiles
+    .filter((tile) => tile.count > 0)
+    .sort((a, b) => Number(b.urgent) - Number(a.urgent) || b.count - a.count);
+  const clear = caseTiles.filter((tile) => tile.count === 0);
+  const upkeepWaiting = upkeep.filter((tile) => tile.count > 0);
+  const total = waiting.reduce((sum, tile) => sum + tile.count, 0) + upkeepWaiting.reduce((sum, tile) => sum + tile.count, 0);
+  const overdue = waiting.some((tile) => tile.urgent);
 
   return (
     <section>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1>Needs action</h1>
-        <p className="muted text-xs tabular-nums">Updated {formatIst(now)}</p>
+      <div className="a-home-head">
+        <div>
+          <p className="eyebrow">Needs action</p>
+          <h1 className="mt-2">
+            {tiles.length === 0
+              ? "Nothing here for your role"
+              : total === 0
+                ? "All clear"
+                : `${total} ${total === 1 ? "thing needs" : "things need"} you`}
+          </h1>
+          <p className="muted mt-2 text-sm">
+            {overdue
+              ? "Some work is overdue. It is listed first."
+              : total === 0
+                ? "No case, fingerprint, finding or directory item is waiting on a person."
+                : "Nothing is overdue."}{" "}
+            <span className="tabular-nums">Updated {formatIst(now)}.</span>
+          </p>
+        </div>
+        <Link className="btn btn-primary !m-0" href="/admin/review">
+          Open the Inbox
+        </Link>
       </div>
 
-      {tiles.length === 0 && <p className="muted mt-6">Your admin role has no queues.</p>}
-
-      {caseTiles.length > 0 && (
-        <ul aria-label="Case queues" className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {caseTiles.map((tile) => (
-            <li className="last:odd:col-span-2 md:last:odd:col-span-1" key={tile.title}>
+      {waiting.length > 0 && (
+        <ul aria-label="Work waiting" className="a-home-grid mt-6">
+          {waiting.map((tile) => (
+            <li key={tile.title}>
               <Link className="a-stat" data-urgent={tile.urgent} href={tile.href}>
                 <p className="muted">{tile.title}</p>
-                <p className="a-stat-value mt-2" data-empty={tile.count === 0}>
-                  {tile.count === 0 ? "Clear" : tile.count}
-                </p>
+                <p className="a-stat-value mt-2">{tile.count}</p>
                 <TileLines lines={tile.lines} />
               </Link>
             </li>
           ))}
         </ul>
+      )}
+      {clear.length > 0 && (
+        <p className="muted mt-4 text-sm">
+          Clear: {clear.map((tile) => tile.title.toLowerCase()).join(", ")}.
+        </p>
       )}
 
       <div className="mt-8 grid gap-8 xl:grid-cols-3">
