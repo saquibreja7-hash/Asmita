@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { t, type Locale } from "@/lib/i18n";
 import { HELPLINE } from "@/lib/helpline";
+import { LINKEDIN_ICON_PATH, LINKEDIN_URL } from "@/lib/social";
 import { LanguageDrawer } from "@/components/layout/LanguageDrawer";
 import { NewsletterInlineForm } from "@/components/org/NewsletterInlineForm";
 
@@ -116,6 +117,12 @@ export function Footer({ locale, withoutNewsletter = false }: { locale: Locale; 
                   government body.
                 </p>
               )}
+              <a className="site-footer-social" href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d={LINKEDIN_ICON_PATH} />
+                </svg>
+                {isHi ? "LinkedIn पर फ़ॉलो करें" : "Follow us on LinkedIn"}
+              </a>
             </div>
             {/* The minor-support path collects nothing, so it hides the newsletter. */}
             {!withoutNewsletter && (

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LINKEDIN_URL } from "@/lib/social";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
@@ -55,7 +56,8 @@ export default async function JobPage({ params }: { params: Promise<{ slug: stri
     hiringOrganization: {
       "@type": "NGO",
       name: "Meri Asmita",
-      sameAs: siteUrl(),
+      url: siteUrl(),
+      sameAs: [LINKEDIN_URL],
     },
     datePosted: job.createdAt,
     validThrough: job.closesAt ?? undefined,
