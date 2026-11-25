@@ -31,8 +31,11 @@ export function AdminNav({
   return (
     <aside aria-label="Admin navigation" className="a-side">
       <div className="a-bar">
-        <Link className="a-brand" href="/admin">
-          Asmita <small>Console</small>
+        <Link className="a-brand" href="/admin" aria-label="Asmita console home">
+          {/* The site header logo, cropped to its edges. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/asmita-logo-cropped.png" alt="" width={316} height={112} className="a-brand-logo" />
+          <small>Console</small>
         </Link>
         <button
           aria-controls="admin-menu"

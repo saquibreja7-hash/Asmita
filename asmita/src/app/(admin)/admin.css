@@ -185,10 +185,16 @@
 
 .a-brand {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--s-2);
   font-size: var(--t-md);
   font-weight: 600;
+}
+
+.a-brand-logo {
+  display: block;
+  width: auto;
+  height: 30px;
 }
 
 .a-brand small {
