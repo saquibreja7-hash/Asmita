@@ -1,11 +1,17 @@
 import { listNoticeTemplateRows } from "@/lib/admin-dashboard";
+import { requireAdminPermission } from "@/lib/auth/require-admin";
+import { hasAdminPermission } from "@/lib/auth/admin-permissions";
 import { deniedFor } from "../page-permission";
+import { TemplateReviewActions } from "./TemplateReviewActions";
 
 export const dynamic = "force-dynamic";
 
 export default async function TemplatesPage() {
   const denied = await deniedFor("templates:edit");
   if (denied) return denied;
+  const auth = await requireAdminPermission("templates:edit");
+  // Legal advisors and super admins (templates:activate) record reviews.
+  const canReview = auth.ok && hasAdminPermission(auth.session.adminRole, "templates:activate");
   const rows = await listNoticeTemplateRows();
   const unreviewed = rows.filter((row) => row.isActive && !row.reviewedByLegal).length;
 
@@ -75,6 +81,9 @@ export default async function TemplatesPage() {
                   ) : (
                     <p className="text-[var(--danger)]">Not reviewed</p>
                   )}
+                  {canReview && (
+                    <TemplateReviewActions templateId={row.id} reviewed={row.reviewedByLegal} subject={row.subject} body={row.body} />
+                  )}
                 </td>
                 <td className="p-4">
                   {!row.isActive
@@ -89,7 +98,7 @@ export default async function TemplatesPage() {
         </table>
         {rows.length === 0 && (
           <p className="muted p-6 text-center text-sm">
-            No templates in the database. Run the seed to create them.
+            No templates in the database yet. They are created by the deploy seed.
           </p>
         )}
       </div>

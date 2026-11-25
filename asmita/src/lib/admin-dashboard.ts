@@ -30,6 +30,7 @@ export type NoticeTemplateRow = {
   templateType: string;
   platformName: string | null;
   subject: string;
+  body: string;
   version: number;
   isActive: boolean;
   reviewedByLegal: boolean;
@@ -224,6 +225,7 @@ export async function listNoticeTemplateRows(): Promise<NoticeTemplateRow[]> {
       id: true,
       templateType: true,
       subjectTemplate: true,
+      bodyTemplate: true,
       version: true,
       isActive: true,
       reviewedByLegal: true,
@@ -237,6 +239,7 @@ export async function listNoticeTemplateRows(): Promise<NoticeTemplateRow[]> {
     templateType: row.templateType,
     platformName: row.platform?.name ?? null,
     subject: row.subjectTemplate,
+    body: row.bodyTemplate,
     version: row.version,
     isActive: row.isActive,
     reviewedByLegal: row.reviewedByLegal,
