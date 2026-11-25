@@ -40,6 +40,9 @@ test.describe("spot-the-fake (/lab/spot-the-fake)", () => {
   });
 
   test("plays all ten rounds, sees a tell after every answer, and a score at the end", async ({ page }) => {
+    // The cold compile below may take up to 30s on its own, and ten rounds
+    // follow it: the default 30s test budget cannot hold both.
+    test.setTimeout(90_000);
     await page.goto("/lab/spot-the-fake");
 
     // The manifest loaded: the start button appears.
