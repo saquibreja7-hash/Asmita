@@ -80,6 +80,10 @@ export async function POST(request: Request) {
   }
 
   const row = await addConsoleAdmin(email, parsed.data.role, g.session.sub);
+  // A new admin always starts from a fresh authenticator: clear any device
+  // left from an earlier time this address was an admin (say, if a removal
+  // stopped before its MFA reset ran).
+  await resetAdminMfa(row.emailHash);
   const { code, expiresAt } = await issueAdminEnrolmentCode(row.emailHash, g.session.sub);
   await audit(g.session.sub, row.emailHash, { action: "ADMIN_ADDED", role: parsed.data.role, enrolmentCodeIssued: true });
   return NextResponse.json({ ok: true, enrolmentCode: code, expiresAt: expiresAt.toISOString() });
@@ -122,8 +126,10 @@ export async function DELETE(request: Request) {
   if (current.ok && current.role === "SUPER_ADMIN" && (await superAdminCount()) <= 1) {
     return NextResponse.json({ error: "last_super_admin" }, { status: 409 });
   }
-  await removeConsoleAdmin(emailHash);
+  // Reset the authenticator first, so a failure here leaves the admin in
+  // place (and the removal retryable) rather than removed with a live device.
   await resetAdminMfa(emailHash);
+  await removeConsoleAdmin(emailHash);
   await audit(g.session.sub, emailHash, { action: "ADMIN_REMOVED", role: current.ok ? current.role : null });
   return NextResponse.json({ ok: true });
 }
