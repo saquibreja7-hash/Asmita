@@ -41,7 +41,7 @@ async function leftInQueue(page: Page): Promise<number> {
 }
 
 test("the review loop: start reviewing, approve with a reason, skip on, catch up", async ({ browser, page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   // The links queue is shared with the rest of the suite: resolve what
   // other specs left waiting, seed this spec's own case, then resolve
   // anything that arrived meanwhile, so this case's links are the queue's
@@ -127,10 +127,12 @@ test("the review loop: start reviewing, approve with a reason, skip on, catch up
 
   // Skip the rest, one keypress each, until the queue is caught up. Every
   // successful skip navigates (to the next job or the caught-up page), so
-  // waiting for the URL to change keeps the keypresses in step. The cap
-  // leaves room for a flagged link another spec file filed mid-test.
+  // waiting for the URL to change keeps the keypresses in step. Other spec
+  // files share this queue and can file flagged links while this runs, so
+  // the loop is bounded by time rather than by this spec's own count.
   const caughtUp = adminPage.getByRole("heading", { name: "You're all caught up" });
-  for (let i = 0; i < FLAG_COUNT * 2; i += 1) {
+  const skipDeadline = Date.now() + 120_000;
+  for (let i = 0; i < 200 && Date.now() < skipDeadline; i += 1) {
     if (await caughtUp.isVisible().catch(() => false)) break;
     const urlBefore = adminPage.url();
     await adminPage.keyboard.press("s");
