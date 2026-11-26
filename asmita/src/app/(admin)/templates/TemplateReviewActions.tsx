@@ -6,7 +6,7 @@ import { useStepUpPost } from "../step-up-mfa";
 
 const MESSAGES: Record<string, string> = {
   mfa_step_up_required: "Nothing was changed: this needs a fresh authenticator code.",
-  legal_reviewer_required: "Only a legal advisor or a site owner can record or withdraw a legal review.",
+  legal_reviewer_required: "Only a legal advisor or super admin set up by the site owner can record or withdraw a legal review.",
   already_reviewed: "This template already has a recorded review.",
   not_reviewed: "This template has no review to withdraw.",
   no_database: "No database in this environment, so nothing can be recorded.",

@@ -97,6 +97,18 @@ describe("POST /api/admin/templates/[id]/legal-review", () => {
     }
   });
 
+  it("refuses a legal advisor added from the console", async () => {
+    consoleAdminMock.role = "LEGAL_ADVISOR";
+    try {
+      await signIn("legal-review-console-legal@example.invalid", "LEGAL_ADVISOR", Math.floor(Date.now() / 1000));
+      const response = await POST(request(approve), params);
+      expect(response.status).toBe(403);
+      expect(dbMock.noticeTemplate.update).not.toHaveBeenCalled();
+    } finally {
+      consoleAdminMock.role = null;
+    }
+  });
+
   it("needs a fresh authenticator proof", async () => {
     await signIn(LEGAL, "LEGAL_ADVISOR");
     const response = await POST(request(approve), params);

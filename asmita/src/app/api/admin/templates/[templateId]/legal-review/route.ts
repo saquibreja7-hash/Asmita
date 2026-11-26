@@ -14,9 +14,10 @@ import { logSecurityEvent } from "@/lib/security-log";
  * reviewer sets reviewedByLegal. Code and seeds never do; this route only
  * writes what a signed-in LEGAL_ADVISOR or SUPER_ADMIN (templates:activate)
  * decides, with a fresh authenticator proof, the reviewer's name, and an
- * explicit confirmation that they read the full text. A SUPER_ADMIN added
- * from the console cannot approve: only a LEGAL_ADVISOR or an owner listed
- * in ADMIN_EMAILS can, so the legal gate never rests on a console grant. Every decision is in
+ * explicit confirmation that they read the full text. Only admins listed
+ * in ADMIN_EMAILS (set by the owner in the Worker's config) can approve;
+ * anyone added from the console, whatever their role, cannot, so a console
+ * grant can never open the legal gate. Every decision is in
  * the audit log with the template's version.
  */
 
@@ -36,7 +37,7 @@ export async function POST(request: Request, context: { params: Promise<{ templa
   const auth = await requireAdminPermission("templates:activate");
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  if (auth.session.adminRole !== "LEGAL_ADVISOR" && !isEnvironmentAdminHash(auth.session.emailHash)) {
+  if (!isEnvironmentAdminHash(auth.session.emailHash)) {
     return NextResponse.json({ error: "legal_reviewer_required" }, { status: 403 });
   }
 
