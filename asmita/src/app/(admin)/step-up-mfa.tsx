@@ -22,9 +22,13 @@ type Waiting = {
   settle: (result: StepUpPostResult) => void;
 };
 
-async function rawPost(path: string, body: Record<string, unknown>, method: "POST" | "DELETE"): Promise<StepUpPostResult> {
+type Method = "POST" | "PATCH" | "DELETE";
+
+async function rawPost(path: string, body: Record<string, unknown>, method: Method): Promise<StepUpPostResult> {
   try {
-    const response = await csrfFetch(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
+    // A DELETE carries a body only when the caller gives one (the Admins page's removal does).
+    const withBody = method !== "DELETE" || Object.keys(body).length > 0;
+    const response = await csrfFetch(path, { method, ...(withBody ? { body: JSON.stringify(body) } : {}) });
     const data = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (response.ok) return { ok: true, body: data ?? undefined };
     return { ok: false, error: typeof data?.error === "string" ? data.error : "request_failed" };
@@ -39,7 +43,7 @@ export function useStepUpPost() {
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState("");
 
-  async function post(path: string, body: Record<string, unknown>, method: "POST" | "DELETE" = "POST"): Promise<StepUpPostResult> {
+  async function post(path: string, body: Record<string, unknown>, method: Method = "POST"): Promise<StepUpPostResult> {
     const first = await rawPost(path, body, method);
     if (first.error !== "mfa_step_up_required") return first;
     // A fresh dialog starts empty; the input below takes focus on mount.

@@ -1,4 +1,4 @@
-import { adminTargetKey, createAdminIdentity, listAllowlistedAdminEmails, resolveAdminRole } from "@/lib/auth/admin-allowlist";
+import { adminTargetKey, createAdminIdentity, listAllAdminEmails, resolveAnyAdminRole } from "@/lib/auth/admin-allowlist";
 import type { AdminRole } from "@/lib/auth/admin-permissions";
 import { getAdminMfaEnrolment } from "@/lib/auth/admin-mfa-store";
 import { readAuditTrailForEntities } from "@/lib/audit";
@@ -43,6 +43,8 @@ export type AdminDirectoryRow = {
   lastSignInAt: string | null;
   /** The review queues this admin can reach, by name. */
   queueNames: string[];
+  /** Environment owners cannot be changed from the console; console admins can. */
+  source: "environment" | "console";
 };
 
 /** Masks an email for display: first character, stars, the domain. */
@@ -59,8 +61,8 @@ export function maskAdminEmail(email: string): string {
  * queue names — no address, nothing about a survivor.
  */
 export async function listAdminDirectory(): Promise<AdminDirectoryRow[]> {
-  const emails = listAllowlistedAdminEmails();
-  const identities = emails.map((email) => ({ email, ...createAdminIdentity(email) }));
+  const emails = await listAllAdminEmails();
+  const identities = emails.map(({ email, source }) => ({ email, source, ...createAdminIdentity(email) }));
 
   const [queues, accessRows, signIns] = await Promise.all([
     listReviewQueues(),
@@ -71,7 +73,7 @@ export async function listAdminDirectory(): Promise<AdminDirectoryRow[]> {
 
   const rows: AdminDirectoryRow[] = [];
   for (const identity of identities) {
-    const resolution = resolveAdminRole(identity.email);
+    const resolution = await resolveAnyAdminRole(identity.email);
     const role = resolution.ok ? resolution.role : null;
     const roleProblem = resolution.ok ? null : resolution.reason === "role_missing" ? "role_missing" : "role_unknown";
     const enrolment = await getAdminMfaEnrolment(identity.emailHash);
@@ -97,6 +99,7 @@ export async function listAdminDirectory(): Promise<AdminDirectoryRow[]> {
       mfaEnrolled: enrolment !== null,
       lastSignInAt: lastSignIn ? new Date(lastSignIn.createdAt).toISOString() : null,
       queueNames,
+      source: identity.source,
     });
   }
   return rows;

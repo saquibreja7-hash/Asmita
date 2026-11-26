@@ -264,6 +264,7 @@ export function PostsManager({ kinds, statuses }: { kinds: OrgPostKind[]; status
   }
 
   async function remove(post: OrgPost) {
+    if (!window.confirm(`Delete "${post.titleEn}"? This cannot be undone.`)) return;
     setRowError(null);
     setNotice(null);
     setBusy(true);

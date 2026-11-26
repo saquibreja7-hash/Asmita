@@ -3,6 +3,7 @@ import Link from "next/link";
 import { FlaggedTable } from "./FlaggedTable";
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { deniedFor } from "../page-permission";
+import { InboxTabs } from "../InboxTabs";
 
 export default async function FlaggedPage({
   searchParams,
@@ -48,6 +49,7 @@ export default async function FlaggedPage({
 
   return (
     <section>
+      <InboxTabs current="flagged" />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="eyebrow">

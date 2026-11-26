@@ -84,7 +84,8 @@ describe("crawler admin sources never fetch or embed addresses", () => {
   });
   it("gates nav links by permission", () => {
     const find = (href: string) => ADMIN_NAV.flatMap((g) => g.items).find((i) => i.href === href);
-    expect(find("/admin/findings")?.permission).toBe("findings:review");
+    // Findings is an Inbox tab now (InboxTabs.tsx), gated the same way.
+    expect(readFileSync(join(process.cwd(), "src/app/(admin)/InboxTabs.tsx"), "utf8")).toMatch(/"\/admin\/findings", label: "Crawler findings", permission: "findings:review"/);
     expect(find("/admin/crawler")?.permission).toBe("findings:review");
     expect(find("/admin/crawl-sources")?.permission).toBe("crawler:manage");
     expect(hasAdminPermission("SUPER_ADMIN", "crawler:manage")).toBe(true);

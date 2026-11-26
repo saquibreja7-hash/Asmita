@@ -1,10 +1,10 @@
 import { requireAdminPermission } from "@/lib/auth/require-admin";
 import { hasAdminPermission, ALL_ADMIN_PERMISSIONS, ALL_ADMIN_ROLES } from "@/lib/auth/admin-permissions";
-import { allowlistedEmailByHash } from "@/lib/auth/admin-allowlist";
+import { anyAdminEmailByHash } from "@/lib/auth/admin-allowlist";
 import { listAdminDirectory, maskAdminEmail } from "@/lib/admin-directory";
 import { listReviewQueueAccess, listReviewQueues } from "@/lib/review-jobs";
 import { formatIst } from "../cases/case-format";
-import { AdminResetButton, GrantAccessForm, RevokeAccessButton } from "./AdminsPanel";
+import { AddAdminForm, AdminResetButton, AdminRoleControls, GrantAccessForm, RevokeAccessButton } from "./AdminsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +45,16 @@ export default async function AdminsPage() {
     canManageAccess ? listReviewQueueAccess() : Promise.resolve([]),
   ]);
 
+  // Addresses for the access rows, from both admin sources (server side only).
+  const emailByHash = new Map<string, string>();
+  for (const row of accessRows) {
+    const hash = row.adminEmailHash ?? "";
+    if (hash && !emailByHash.has(hash)) {
+      const email = await anyAdminEmailByHash(hash);
+      if (email) emailByHash.set(hash, email);
+    }
+  }
+
   const accessQueues = queues
     .filter((queue) => queue.archivedAt === null && !queue.protected && queue.subjectKind !== null)
     .map((queue) => ({
@@ -57,11 +67,13 @@ export default async function AdminsPage() {
           id: row.id,
           label: row.role
             ? `Role: ${row.role.replaceAll("_", " ").toLowerCase()}`
-            : allowlistedEmailByHash(row.adminEmailHash ?? "")
-              ? `${maskAdminEmail(allowlistedEmailByHash(row.adminEmailHash ?? "")!)} (${(row.adminEmailHash ?? "").slice(0, 4)})`
+            : emailByHash.get(row.adminEmailHash ?? "")
+              ? `${maskAdminEmail(emailByHash.get(row.adminEmailHash ?? "")!)} (${(row.adminEmailHash ?? "").slice(0, 4)})`
               : `Reviewer ${(row.adminEmailHash ?? "").slice(0, 4)}`,
         })),
     }));
+
+  const superAdmins = admins.filter((admin) => admin.role === "SUPER_ADMIN").length;
 
   // The grant form offers the allowlisted admins who can actually sign in.
   const adminOptions = admins
@@ -77,12 +89,23 @@ export default async function AdminsPage() {
       <p className="eyebrow">Console · Admins</p>
       <h1 className="mt-3">Admins</h1>
       <p className="muted mt-3 max-w-2xl text-sm">
-        Every admin on the allowlist (ADMIN_EMAILS), with the role each has in ADMIN_ROLES. Roles are read-only here:
-        change them in the environment and re-deploy — this page never changes a role, so there is only one source of
-        truth. Addresses are masked; a full address is never shown.
+        Add people here and give each one a role. Owners set in the server environment (ADMIN_EMAILS) are marked
+        &quot;Owner&quot; and can only be changed there. Addresses are masked; a full address is never shown.
       </p>
+      {superAdmins < 2 && (
+        <p className="a-card mt-4 p-4 text-sm" role="note">
+          <strong>Only one super admin.</strong> If they lose their authenticator, nobody can reset it from the
+          console. Add a second super admin below, so either can reset the other. The last-resort recovery is the
+          server script described in docs/ops/admin-recovery.md.
+        </p>
+      )}
 
       <div className="mt-6">
+        <h2>Add an admin</h2>
+        <AddAdminForm />
+      </div>
+
+      <div className="mt-10">
         <h2>Admins</h2>
         <ul className="a-card mt-4">
           {admins.map((admin) => (
@@ -90,6 +113,8 @@ export default async function AdminsPage() {
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="font-mono font-medium">
                   {admin.maskedEmail} <span className="muted text-xs">({admin.handle})</span>
+                  {admin.source === "environment" && <span className="muted ml-2 text-xs">· Owner</span>}
+                  {admin.emailHash === auth.session.emailHash && <span className="muted ml-2 text-xs">· You</span>}
                 </p>
                 <p className="muted text-xs">
                   {admin.role
@@ -109,9 +134,12 @@ export default async function AdminsPage() {
                   : ""}
               </p>
               {admin.role && <AdminResetButton targetKey={admin.targetKey} maskedEmail={admin.maskedEmail} />}
+              {admin.role && admin.source === "console" && admin.emailHash !== auth.session.emailHash && (
+                <AdminRoleControls targetKey={admin.targetKey} maskedEmail={admin.maskedEmail} role={admin.role} />
+              )}
             </li>
           ))}
-          {admins.length === 0 && <li className="muted p-6 text-sm">No admins are allowlisted (ADMIN_EMAILS).</li>}
+          {admins.length === 0 && <li className="muted p-6 text-sm">No admins yet.</li>}
         </ul>
       </div>
 

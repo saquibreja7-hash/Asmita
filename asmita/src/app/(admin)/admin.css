@@ -185,10 +185,16 @@
 
 .a-brand {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--s-2);
   font-size: var(--t-md);
   font-weight: 600;
+}
+
+.a-brand-logo {
+  display: block;
+  width: auto;
+  height: 30px;
 }
 
 .a-brand small {
@@ -463,4 +469,36 @@
       content-visibility: visible;
     }
   }
+}
+
+/* Inbox tabs (InboxTabs.tsx): one row of links above every review list. */
+.a-tabs { margin-bottom: var(--s-5); }
+.a-tabs ul { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: var(--s-2) 0 0; padding: 0; list-style: none; }
+.a-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: var(--t-sm);
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--card, #fff);
+}
+.a-tab:hover { border-color: var(--brand); }
+.a-tab-current { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+/* Needs action (src/app/admin/page.tsx): a headline count and the work waiting. */
+.a-home-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+.a-home-grid {
+  display: grid;
+  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
 }

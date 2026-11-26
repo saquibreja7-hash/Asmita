@@ -63,8 +63,8 @@ describe("admin nav and page permissions", () => {
     // role can reach at least one queue, and the page filters the rows.
     // The decisions log (WP145) follows audit:read and the metrics page
     // metrics:read, like the Insight pages they sit beside.
-    expect(visibleFor("GO_EDITOR")).toEqual(["Needs action", "Review", "Decisions log", "Review metrics", "Platforms", "Platform partners", "Response rates", "Analytics", "Milestones", "Audit"]);
-    expect(visibleFor("SUPPORT_AGENT")).toEqual(["Needs action", "Review", "Cases", "New links", "Flagged links", "Fingerprints"]);
-    expect(visibleFor("LEGAL_ADVISOR")).toEqual(["Needs action", "Review", "Decisions log", "Cases", "New links", "Flagged links", "Fingerprints", "Templates", "Audit"]);
+    expect(visibleFor("GO_EDITOR")).toEqual(["Needs action", "Inbox", "Platforms", "Platform partners", "Response rates", "Analytics", "Milestones", "Review metrics", "Decisions log", "Audit log"]);
+    expect(visibleFor("SUPPORT_AGENT")).toEqual(["Needs action", "Inbox", "Cases"]);
+    expect(visibleFor("LEGAL_ADVISOR")).toEqual(["Needs action", "Inbox", "Cases", "Templates", "Decisions log", "Audit log"]);
   });
 });

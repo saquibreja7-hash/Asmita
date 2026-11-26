@@ -9,6 +9,7 @@ import {
 import HashDispatchForm from "./HashDispatchForm";
 import { HashesTable, type HashesRowView } from "./HashesTable";
 import { deniedFor } from "../page-permission";
+import { InboxTabs } from "../InboxTabs";
 
 export default async function HashQueuePage() {
   const denied = await deniedFor("cases:read");
@@ -17,6 +18,7 @@ export default async function HashQueuePage() {
   if (process.env.ENABLE_HASH_UPLOAD !== "true") {
     return (
       <section>
+        <InboxTabs current="hashes" />
         <p className="eyebrow">
           Console · Fingerprints
         </p>
@@ -39,6 +41,7 @@ export default async function HashQueuePage() {
 
   return (
     <section>
+      <InboxTabs current="hashes" />
       <div>
         <p className="eyebrow">
           Console · Fingerprints

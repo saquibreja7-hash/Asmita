@@ -76,6 +76,7 @@ export function CaseNotes({
     setBusy(true);
     setError(null);
     try {
+      if (!window.confirm("Delete this note? This cannot be undone.")) return;
       const response = await csrfFetch(`/api/admin/case-notes/${noteId}`, { method: "DELETE" });
       const data = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) {

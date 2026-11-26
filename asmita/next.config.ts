@@ -54,6 +54,24 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: projectRoot,
   },
+  // The console's pages live in the (admin) route group, so each one also
+  // answered at a top-level address (/cases, /templates, ...). One address
+  // per page: every such address redirects to its /admin/... page. None of
+  // these names is used by a public or survivor page.
+  async redirects() {
+    const same = ["admins", "analytics", "audit", "cases", "crawl-sources", "crawler", "findings", "hashes", "milestones", "new-links", "org", "platforms", "review", "templates"];
+    const renamed: Record<string, string> = { flagged: "queue", "platform-partners": "partners", "response-rates": "metrics" };
+    return [
+      ...same.flatMap((name) => [
+        { source: `/${name}`, destination: `/admin/${name}`, permanent: false },
+        { source: `/${name}/:path*`, destination: `/admin/${name}/:path*`, permanent: false },
+      ]),
+      ...Object.entries(renamed).flatMap(([from, to]) => [
+        { source: `/${from}`, destination: `/admin/${to}`, permanent: false },
+        { source: `/${from}/:path*`, destination: `/admin/${to}/:path*`, permanent: false },
+      ]),
+    ];
+  },
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },

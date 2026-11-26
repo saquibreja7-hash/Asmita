@@ -1413,6 +1413,17 @@ model RateLimitBucket {
 // One-time code a SUPER_ADMIN (or the bootstrap script) issues so a named
 // admin can sign in once and enrol an authenticator. Stored hashed, single
 // use, short-lived. Replaces the shared ADMIN_TOTP_SECRET bootstrap.
+/// An admin added from the console (/admin/admins). ADMIN_EMAILS/ADMIN_ROLES
+/// stay the owners and always win. See src/lib/auth/console-admins.ts.
+model ConsoleAdmin {
+  emailHash      String   @id
+  emailEncrypted String
+  role           String
+  addedBy        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model AdminEnrolmentCode {
   emailHash String   @id
   codeHash  String

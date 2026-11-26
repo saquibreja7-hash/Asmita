@@ -25,14 +25,34 @@ export function AdminNav({
   // Remembering where the menu was opened closes it on the next page.
   const [openOn, setOpenOn] = useState<string | null>(null);
   const open = openOn === pathname;
-  const isCurrent = (href: string) =>
-    href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`);
+  // The console's pages also exist at their (admin) route-group paths
+  // (/hashes for /admin/hashes); next.config.ts redirects those, but the
+  // server render can still see the group path. Compare on the /admin form
+  // so the server and the browser agree on the current entry.
+  const RENAMED: Record<string, string> = { flagged: "queue", "platform-partners": "partners", "response-rates": "metrics" };
+  const path = pathname.startsWith("/admin")
+    ? pathname
+    : `/admin${pathname.replace(/^\/([^/]+)/, (_, first: string) => `/${RENAMED[first] ?? first}`)}`;
+  const matches = (href: string) =>
+    href === "/admin" ? path === "/admin" : path === href || path.startsWith(`${href}/`);
+  // An entry is current on its own page and on the pages it lists in `also`.
+  // The Inbox (/admin/review) is not current on the review settings and
+  // reports pages that live under /admin/review/; those have entries of their own.
+  const otherEntries = groups.flatMap((group) => group.items).map((item) => item.href);
+  const isCurrent = (item: { href: string; also?: string[] }) => {
+    if ((item.also ?? []).some(matches)) return true;
+    if (!matches(item.href)) return false;
+    return !otherEntries.some((href) => href !== item.href && href.startsWith(`${item.href}/`) && matches(href));
+  };
 
   return (
     <aside aria-label="Admin navigation" className="a-side">
       <div className="a-bar">
-        <Link className="a-brand" href="/admin">
-          Asmita <small>Console</small>
+        <Link className="a-brand" href="/admin" aria-label="Asmita console home">
+          {/* The site header logo, cropped to its edges. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/asmita-logo-cropped.png" alt="" width={316} height={112} className="a-brand-logo" />
+          <small>Console</small>
         </Link>
         <button
           aria-controls="admin-menu"
@@ -52,7 +72,7 @@ export function AdminNav({
               {group.heading && <p className="a-nav-heading">{group.heading}</p>}
               {group.items.map((item) => (
                 <Link
-                  aria-current={isCurrent(item.href) ? "page" : undefined}
+                  aria-current={isCurrent(item) ? "page" : undefined}
                   className="a-nav-link"
                   href={item.href}
                   key={item.href}
@@ -64,7 +84,7 @@ export function AdminNav({
                       <span className="sr-only"> cases waiting</span>
                     </span>
                   ) : null}
-                  {item.href === "/admin/new-links" && newLinks ? (
+                  {item.href === "/admin/review" && newLinks ? (
                     <span className="a-count">
                       {newLinks}
                       <span className="sr-only"> new links</span>
