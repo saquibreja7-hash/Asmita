@@ -15,6 +15,12 @@ vi.mock("@/lib/db", () => ({ db: dbMock }));
 const auditMock = vi.hoisted(() => ({ writeAuditLog: vi.fn() }));
 vi.mock("@/lib/audit", () => auditMock);
 
+const consoleAdminMock = vi.hoisted(() => ({ role: null as string | null }));
+vi.mock("@/lib/auth/console-admins", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/console-admins")>()),
+  getConsoleAdmin: vi.fn(async () => (consoleAdminMock.role ? { role: consoleAdminMock.role } : null)),
+}));
+
 import { signAdminSession } from "@/lib/auth/jwt";
 import { createCsrfPair } from "@/lib/csrf";
 import { hashEmail } from "@/lib/hash";
@@ -33,7 +39,7 @@ function request(body: unknown) {
   });
 }
 
-async function signIn(email: string, role: "LEGAL_ADVISOR" | "CASE_REVIEWER", mfaAt?: number) {
+async function signIn(email: string, role: "LEGAL_ADVISOR" | "CASE_REVIEWER" | "SUPER_ADMIN", mfaAt?: number) {
   authCookie.token = await signAdminSession({
     sub: `synthetic-${role}`,
     emailHash: hashEmail(email),
@@ -76,6 +82,19 @@ describe("POST /api/admin/templates/[id]/legal-review", () => {
     const response = await POST(request(approve), params);
     expect(response.status).toBe(403);
     expect(dbMock.noticeTemplate.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a super admin added from the console, who is not an owner", async () => {
+    consoleAdminMock.role = "SUPER_ADMIN";
+    try {
+      await signIn("legal-review-console@example.invalid", "SUPER_ADMIN", Math.floor(Date.now() / 1000));
+      const response = await POST(request(approve), params);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: "legal_reviewer_required" });
+      expect(dbMock.noticeTemplate.update).not.toHaveBeenCalled();
+    } finally {
+      consoleAdminMock.role = null;
+    }
   });
 
   it("needs a fresh authenticator proof", async () => {
