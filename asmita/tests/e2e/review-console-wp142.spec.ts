@@ -159,6 +159,8 @@ test("internal notes: written from the job screen, read on the case page, delete
   await adminPage.goto(`/admin/cases/${seeded.referenceNumber}`);
   await expect(adminPage.getByRole("heading", { name: "Notes" })).toBeVisible();
   await expect(adminPage.getByRole("list", { name: "Internal case notes" })).toContainText("She will call back in the evening.");
+  // Deleting asks first; accept the confirmation.
+  adminPage.once("dialog", (dialog) => void dialog.accept());
   await adminPage.getByRole("button", { name: "Delete" }).click();
   // The note's text leaves the page. (Asserted on the text, not the list:
   // the list itself disappears once the case's last note is gone.)

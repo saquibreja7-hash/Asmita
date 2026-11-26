@@ -225,9 +225,11 @@ test("minor-hold is invisible to a CASE_REVIEWER, visible only to a SUPER_ADMIN"
   const reviewerPage = await reviewer.newPage();
   await reviewerPage.goto("/admin/review");
   await expect(reviewerPage.getByRole("heading", { name: "Review" })).toBeVisible();
-  // The reviewer sees the complaint queues...
-  await expect(reviewerPage.getByRole("listitem").filter({ hasText: "Flagged links" })).toBeVisible();
-  await expect(reviewerPage.getByRole("listitem").filter({ hasText: "Fingerprints" })).toBeVisible();
+  // The reviewer sees the complaint queues (rows on the page, not the
+  // Inbox tabs above them, which carry the same names)...
+  const queueRow = (name: string) => reviewerPage.locator("li:not(.a-tabs li)").filter({ hasText: name });
+  await expect(queueRow("Flagged links")).toBeVisible();
+  await expect(queueRow("Fingerprints")).toBeVisible();
   // ...and never the protected queue, not even as a row.
   await expect(reviewerPage.getByText("Possible minor")).toHaveCount(0);
   // Direct entry is refused with the page's own words.
